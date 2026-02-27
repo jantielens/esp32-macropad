@@ -1,0 +1,394 @@
+name: ESP32 Build
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # Validate version and changelog for PRs
+  validate-release:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.check-version.outputs.changed }}
+      changelog_updated: ${{ steps.check-changelog.outputs.updated }}
+      new_version: ${{ steps.check-version.outputs.new_version }}
+      old_version: ${{ steps.check-version.outputs.old_version }}
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Check version change
+      id: check-version
+      run: |
+        # Get version from PR branch
+        NEW_MAJOR=$(grep "#define VERSION_MAJOR" src/version.h | grep -o '[0-9]\+' | head -1)
+        NEW_MINOR=$(grep "#define VERSION_MINOR" src/version.h | grep -o '[0-9]\+' | head -1)
+        NEW_PATCH=$(grep "#define VERSION_PATCH" src/version.h | grep -o '[0-9]\+' | head -1)
+        NEW_VERSION="$NEW_MAJOR.$NEW_MINOR.$NEW_PATCH"
+        
+        # Get version from base branch
+        git fetch origin ${{ github.base_ref }}
+        git checkout origin/${{ github.base_ref }} -- src/version.h
+        OLD_MAJOR=$(grep "#define VERSION_MAJOR" src/version.h | grep -o '[0-9]\+' | head -1)
+        OLD_MINOR=$(grep "#define VERSION_MINOR" src/version.h | grep -o '[0-9]\+' | head -1)
+        OLD_PATCH=$(grep "#define VERSION_PATCH" src/version.h | grep -o '[0-9]\+' | head -1)
+        OLD_VERSION="$OLD_MAJOR.$OLD_MINOR.$OLD_PATCH"
+        
+        echo "old_version=$OLD_VERSION" >> $GITHUB_OUTPUT
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        
+        if [ "$NEW_VERSION" != "$OLD_VERSION" ]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "✅ Version changed: $OLD_VERSION → $NEW_VERSION"
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "ℹ️ Version unchanged: $OLD_VERSION"
+        fi
+    
+    - name: Check changelog update
+      id: check-changelog
+      run: |
+        # Checkout PR branch again
+        git checkout ${{ github.head_ref }}
+        
+        NEW_VERSION="${{ steps.check-version.outputs.new_version }}"
+        VERSION_CHANGED="${{ steps.check-version.outputs.changed }}"
+        
+        if [ "$VERSION_CHANGED" == "true" ]; then
+          # Version changed - check for versioned section
+          if grep -q "\[${NEW_VERSION}\]" CHANGELOG.md; then
+            echo "updated=true" >> $GITHUB_OUTPUT
+            echo "✅ Changelog contains [$NEW_VERSION] section"
+          else
+            echo "updated=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Changelog missing [$NEW_VERSION] section"
+          fi
+        else
+          # Version unchanged - check for Unreleased content
+          # Extract Unreleased section and check if it has content beyond the header
+          UNRELEASED_CONTENT=$(sed -n '/## \[Unreleased\]/,/## \[/p' CHANGELOG.md | grep -v "^## \[" | grep -v "^$" | grep -v "^---" | wc -l)
+          if [ "$UNRELEASED_CONTENT" -gt 0 ]; then
+            echo "updated=true" >> $GITHUB_OUTPUT
+            echo "✅ Changelog has [Unreleased] content"
+          else
+            echo "updated=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Changelog [Unreleased] section is empty"
+          fi
+        fi
+
+  # Generate build matrix from config.sh
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      project_name: ${{ steps.set-matrix.outputs.project_name }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Generate board matrix from config.sh
+      id: set-matrix
+      run: |
+        # Source config.sh and extract FQBN_TARGETS and PROJECT_NAME
+        source config.sh
+        
+        # Export PROJECT_NAME for artifact naming
+        echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
+        
+        # Build JSON array for matrix (deterministic order)
+        boards_json="["
+        first=true
+        mapfile -t board_names < <(printf '%s\n' "${!FQBN_TARGETS[@]}" | sort)
+        for board_name in "${board_names[@]}"; do
+          fqbn="${FQBN_TARGETS[$board_name]}"
+          if [ "$first" = true ]; then
+            first=false
+          else
+            boards_json+=","
+          fi
+          boards_json+="{\"name\":\"$board_name\",\"fqbn\":\"$fqbn\"}"
+        done
+        boards_json+="]"
+        
+        echo "matrix={\"board\":$boards_json}" >> $GITHUB_OUTPUT
+        echo "Generated matrix: {\"board\":$boards_json}"
+
+  compile-flags-doc:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Regenerate compile-time flags doc
+      run: |
+        python3 tools/compile_flags_report.py md --out docs/compile-time-flags.md
+
+    - name: Ensure docs are up to date
+      run: |
+        if ! git diff --exit-code -- docs/compile-time-flags.md; then
+          echo "docs/compile-time-flags.md is out of date." >&2
+          echo "Run: python3 tools/compile_flags_report.py md --out docs/compile-time-flags.md" >&2
+          echo "Then commit the updated docs/compile-time-flags.md to your branch." >&2
+          echo "" >&2
+          git --no-pager diff -- docs/compile-time-flags.md | head -n 200 >&2
+          exit 1
+        fi
+
+  build:
+    needs: [prepare-matrix, compile-flags-doc]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    
+    - name: Cache arduino-cli
+      uses: actions/cache@v4
+      with:
+        path: |
+          bin/arduino-cli
+          ~/.arduino15
+        key: ${{ runner.os }}-arduino-cli-${{ hashFiles('setup.sh', 'arduino-libraries.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-arduino-cli-
+    
+    - name: Install arduino-cli and ESP32 platform
+      run: |
+        chmod +x setup.sh
+        ./setup.sh
+
+    - name: Install custom partition tables
+      run: |
+        chmod +x tools/install-custom-partitions.sh
+        ./tools/install-custom-partitions.sh
+    
+    - name: Compile firmware for ${{ matrix.board.name }}
+      run: |
+        chmod +x build.sh
+        ./build.sh ${{ matrix.board.name }}
+    
+    - name: Check for build artifacts
+      run: |
+        BOARD_DIR="build/${{ matrix.board.name }}"
+        if [ ! -d "$BOARD_DIR" ] || [ -z "$(ls -A "$BOARD_DIR"/*.bin 2>/dev/null)" ]; then
+          echo "Error: Firmware binary not found for ${{ matrix.board.name }}"
+          exit 1
+        fi
+        echo "Build successful for ${{ matrix.board.name }}!"
+        ls -lh "$BOARD_DIR"/
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ needs.prepare-matrix.outputs.project_name }}-${{ matrix.board.name }}
+        path: |
+          build/${{ matrix.board.name }}/*.bin
+          build/${{ matrix.board.name }}/*.elf
+        retention-days: 30
+    
+    - name: Generate build summary
+      run: |
+        echo "## Build Summary - ${{ matrix.board.name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Board:** ${{ matrix.board.name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**FQBN:** ${{ matrix.board.fqbn }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Firmware Files" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+        for file in build/${{ matrix.board.name }}/*.bin; do
+          if [ -f "$file" ]; then
+            size=$(ls -lh "$file" | awk '{print $5}')
+            name=$(basename "$file")
+            echo "| $name | $size |" >> $GITHUB_STEP_SUMMARY
+          fi
+        done
+
+  # Post PR comment with release instructions
+  pr-comment:
+    if: github.event_name == 'pull_request'
+    needs: [validate-release, build]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Generate PR comment
+      id: comment
+      run: |
+        VERSION_CHANGED="${{ needs.validate-release.outputs.version_changed }}"
+        CHANGELOG_UPDATED="${{ needs.validate-release.outputs.changelog_updated }}"
+        NEW_VERSION="${{ needs.validate-release.outputs.new_version }}"
+        OLD_VERSION="${{ needs.validate-release.outputs.old_version }}"
+        
+        # Create comment body
+        cat > comment.md << 'EOF'
+        ## 🔍 Build & Release Validation
+        
+        ### Version Check
+        EOF
+        
+        if [ "$VERSION_CHANGED" == "true" ]; then
+          cat >> comment.md << EOF
+        ✅ **Version updated:** \`$OLD_VERSION\` → \`$NEW_VERSION\`
+        EOF
+        else
+          cat >> comment.md << EOF
+        ℹ️ **Version unchanged:** \`$OLD_VERSION\`
+        
+        > If this PR introduces changes, consider bumping the version in \`src/version.h\`
+        EOF
+        fi
+        
+        cat >> comment.md << 'EOF'
+        
+        ### Changelog Check
+        EOF
+        
+        if [ "$CHANGELOG_UPDATED" == "true" ]; then
+          if [ "$VERSION_CHANGED" == "true" ]; then
+            cat >> comment.md << EOF
+        ✅ **Changelog updated:** Found \`[$NEW_VERSION]\` section in \`CHANGELOG.md\`
+        EOF
+          else
+            cat >> comment.md << EOF
+        ✅ **Changelog updated:** Found content in \`[Unreleased]\` section
+        EOF
+          fi
+        else
+          if [ "$VERSION_CHANGED" == "true" ]; then
+            cat >> comment.md << EOF
+        ⚠️ **Changelog missing entry:** No \`[$NEW_VERSION]\` section found in \`CHANGELOG.md\`
+        
+        > Add release notes for version \`$NEW_VERSION\` before merging
+        EOF
+          else
+            cat >> comment.md << EOF
+        ⚠️ **Changelog missing changes:** \`[Unreleased]\` section is empty
+        
+        > Add change description to \`[Unreleased]\` section before merging
+        EOF
+          fi
+        fi
+        
+        cat >> comment.md << 'EOF'
+        
+        ---
+        
+        EOF
+        
+        # Add release instructions if ready
+        if [ "$VERSION_CHANGED" == "true" ] && [ "$CHANGELOG_UPDATED" == "true" ]; then
+          cat >> comment.md << EOF
+        ### 🚀 Ready to Release!
+        
+        This PR is prepared for release **v$NEW_VERSION**.
+        
+        **Quick Release (Recommended):**
+        Comment on this PR with one of:
+        - \`/release\` - Merge PR and create stable release
+        - \`/release-beta\` - Merge PR and create beta release (v$NEW_VERSION-beta.1)
+        - \`/release-beta 2\` - Merge PR and create beta 2
+        - \`/merge-only\` - Just merge PR without creating a tag
+        
+        **Manual Release (Full Control):**
+        \`\`\`bash
+        # 1. Merge PR via GitHub UI, then:
+        git checkout main
+        git pull
+        
+        # 2. Create and push the release tag
+        git tag -a v$NEW_VERSION -m "Release v$NEW_VERSION"
+        git push origin v$NEW_VERSION
+        \`\`\`
+        
+        The [Release Workflow](https://github.com/${{ github.repository }}/blob/main/.github/workflows/release.yml) will automatically:
+        - ✅ Build firmware for all board variants
+        - ✅ Extract changelog notes for v$NEW_VERSION
+        - ✅ Create GitHub Release with firmware binaries
+        - ✅ Generate SHA256 checksums
+        
+        **Release page:** \`https://github.com/${{ github.repository }}/releases/tag/v$NEW_VERSION\`
+        EOF
+        else
+          cat >> comment.md << 'EOF'
+        ### 📋 Before Merging
+        
+        This PR is not yet ready for release. Complete these steps:
+        
+        EOF
+          
+          if [ "$VERSION_CHANGED" != "true" ]; then
+            cat >> comment.md << EOF
+        - [ ] Bump version in \`src/version.h\` (currently \`$OLD_VERSION\`) **OR** add changes to \`[Unreleased]\` section
+        EOF
+          fi
+          
+          if [ "$CHANGELOG_UPDATED" != "true" ]; then
+            if [ "$VERSION_CHANGED" == "true" ]; then
+              cat >> comment.md << EOF
+        - [ ] Add \`[$NEW_VERSION]\` section to \`CHANGELOG.md\` with release notes
+        EOF
+            else
+              cat >> comment.md << EOF
+        - [ ] Add changes to \`[Unreleased]\` section in \`CHANGELOG.md\`
+        EOF
+            fi
+          fi
+          
+          cat >> comment.md << 'EOF'
+        
+        **Option 1: Prepare for immediate release**
+        ```bash
+        ./create-release.sh X.Y.Z "Release description"
+        ```
+        
+        **Option 2: Delay release (combine with future changes)**
+        - Keep version unchanged
+        - Add changes to `[Unreleased]` section in CHANGELOG.md
+        - Create release later with combined changes
+        EOF
+        fi
+        
+        cat >> comment.md << 'EOF'
+        
+        ---
+        
+        <sub>🤖 This comment is automatically updated on each commit</sub>
+        EOF
+        
+        cat comment.md
+    
+    - name: Find existing comment
+      id: find-comment
+      uses: peter-evans/find-comment@v3
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: '🔍 Build & Release Validation'
+    
+    - name: Create or update PR comment
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        comment-id: ${{ steps.find-comment.outputs.comment-id }}
+        issue-number: ${{ github.event.pull_request.number }}
+        body-path: comment.md
+        edit-mode: replace

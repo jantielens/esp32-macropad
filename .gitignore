@@ -1,0 +1,42 @@
+# Build output
+build/
+bin/arduino-cli
+
+# Generated ESP Web Tools installer site
+site/
+
+# Generated LVGL PNG assets
+src/app/png_assets.cpp
+src/app/png_assets.h
+
+# Auto-generated web assets
+src/app/web_assets.h
+src/app/project_branding.h
+src/app/github_release_config.h
+src/app/repo_slug_config.h
+
+# Arduino CLI configuration
+.arduino15/
+.cli-config.yml
+arduino-cli.yaml
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# Repo-local sample workspace (not part of the template firmware)
+/sample/

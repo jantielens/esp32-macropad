@@ -1,0 +1,29 @@
+<header>
+            <h1>{{PROJECT_DISPLAY_NAME}}</h1>
+            <div class="version-badges">
+                <span id="firmware-version" class="version-badge">Firmware v-.-.-</span>
+                <span id="chip-info" class="version-badge">--- rev -</span>
+                <span id="cpu-cores" class="version-badge">- Core</span>
+                <span id="cpu-freq" class="version-badge">--- MHz</span>
+                <span id="flash-size" class="version-badge">-- MB Flash</span>
+                <span id="psram-status" class="version-badge">No PSRAM</span>
+                <span id="health-badge" class="version-badge health-badge" style="cursor: pointer;">
+                    <span class="health-status-dot" id="health-status-dot"></span>
+                    <span id="health-cpu" class="health-metric">CPU --</span>
+                    <span class="health-expand-icon">⋮</span>
+                </span>
+            </div>
+            <nav class="nav-tabs">
+                <a href="/" class="nav-tab" data-page="home">Home</a>
+                <a href="/network.html" class="nav-tab" data-page="network">Network</a>
+                <a href="/firmware.html" class="nav-tab" data-page="firmware">Firmware</a>
+            </nav>
+        </header>
+
+        <div id="status-message" class="message" style="display:none;"></div>
+
+        <div id="content-wrapper" style="position: relative;">
+            <div id="form-loading-overlay" class="form-loading-overlay">
+                <div class="spinner" style="width: 50px; height: 50px;"></div>
+                <p style="margin-top: 15px; color: #667eea; font-weight: 600;">Loading configuration...</p>
+            </div>

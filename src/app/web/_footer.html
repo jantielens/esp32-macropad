@@ -1,0 +1,163 @@
+        </div>
+        
+        <!-- Floating Action Footer -->
+        <div class="floating-action-footer">
+            <div class="button-group">
+                <button type="submit" class="btn btn-primary">Save and Reboot</button>
+                <button type="button" id="save-only-btn" class="btn btn-secondary">Save</button>
+                <button type="button" id="reboot-btn" class="btn btn-secondary">Reboot</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Health Widget Overlay (Expanded View) -->
+    <div style="position: fixed; top: 24px; right: 24px; z-index: 1000;">
+        <div class="health-widget-expanded" id="health-expanded" style="display:none;">
+            <div class="health-header">
+                <div class="health-status-dot" id="health-status-dot-expanded"></div>
+                <span>Device Health</span>
+                <button type="button" id="health-close" class="health-close-btn">✕</button>
+            </div>
+            <div class="health-stats">
+                <!-- Point-in-time metrics (shown when device-side history is unavailable) -->
+                <div id="health-points-wrap">
+                    <div class="health-stat">
+                        <span class="health-label">CPU Usage</span>
+                        <span class="health-value" id="health-point-cpu-value">--</span>
+                    </div>
+                    <div class="health-stat">
+                        <span class="health-label">Internal Free Heap</span>
+                        <span class="health-value" id="health-point-heap-value">--</span>
+                    </div>
+                    <div class="health-stat" id="health-point-psram-wrap" style="display:none;">
+                        <span class="health-label">PSRAM Free</span>
+                        <span class="health-value" id="health-point-psram-value">--</span>
+                    </div>
+                    <div class="health-stat">
+                        <span class="health-label">Internal Largest Block</span>
+                        <span class="health-value" id="health-point-largest-value">--</span>
+                    </div>
+                </div>
+
+                <!-- Sparklines (device-side history via /api/health/history) -->
+                <div id="health-sparklines-wrap" style="display:none;">
+                    <div class="health-sparkline" id="health-sparkline-cpu-wrap">
+                        <div class="health-sparkline-row">
+                            <span class="health-label">CPU Usage</span>
+                            <span class="health-value" id="health-sparkline-cpu-value">--</span>
+                        </div>
+                        <canvas id="health-sparkline-cpu" width="260" height="44"></canvas>
+                    </div>
+
+                    <div class="health-sparkline" id="health-sparkline-heap-wrap">
+                        <div class="health-sparkline-row">
+                            <span class="health-label">Internal Free Heap</span>
+                            <span class="health-value" id="health-sparkline-heap-value">--</span>
+                        </div>
+                        <canvas id="health-sparkline-heap" width="260" height="44"></canvas>
+                    </div>
+
+                    <div class="health-sparkline" id="health-sparkline-psram-wrap" style="display:none;">
+                        <div class="health-sparkline-row">
+                            <span class="health-label">PSRAM Free</span>
+                            <span class="health-value" id="health-sparkline-psram-value">--</span>
+                        </div>
+                        <canvas id="health-sparkline-psram" width="260" height="44"></canvas>
+                    </div>
+
+                    <div class="health-sparkline" id="health-sparkline-largest-wrap">
+                        <div class="health-sparkline-row">
+                            <span class="health-label">Internal Largest Block</span>
+                            <span class="health-value" id="health-sparkline-largest-value">--</span>
+                        </div>
+                        <canvas id="health-sparkline-largest" width="260" height="44"></canvas>
+                    </div>
+                </div>
+
+                <!-- System -->
+                <div class="health-stat">
+                    <span class="health-label">Uptime</span>
+                    <span class="health-value" id="health-uptime">--</span>
+                </div>
+                <div class="health-stat">
+                    <span class="health-label">Reset Reason</span>
+                    <span class="health-value" id="health-reset">--</span>
+                </div>
+                <div class="health-stat">
+                    <span class="health-label">Core Temp</span>
+                    <span class="health-value" id="health-temp">--</span>
+                </div>
+                <!-- Memory -->
+                <div class="health-stat">
+                    <span class="health-label">Free Heap</span>
+                    <span class="health-value" id="health-heap">--</span>
+                </div>
+                <div class="health-stat">
+                    <span class="health-label">Min Free Heap</span>
+                    <span class="health-value" id="health-heap-min">--</span>
+                </div>
+                <div class="health-stat">
+                    <span class="health-label">Internal Min Free Heap</span>
+                    <span class="health-value" id="health-internal-min">--</span>
+                </div>
+                <div class="health-stat">
+                    <span class="health-label">Internal Heap Fragmentation</span>
+                    <span class="health-value" id="health-heap-frag">--</span>
+                </div>
+                <div class="health-stat" id="health-psram-min-wrap" style="display:none;">
+                    <span class="health-label">PSRAM Min Free Heap</span>
+                    <span class="health-value" id="health-psram-min">--</span>
+                </div>
+                <div class="health-stat" id="health-psram-frag-wrap" style="display:none;">
+                    <span class="health-label">PSRAM Fragmentation</span>
+                    <span class="health-value" id="health-psram-frag">--</span>
+                </div>
+                <!-- Storage -->
+                <div class="health-stat">
+                    <span class="health-label">Flash Usage</span>
+                    <span class="health-value" id="health-flash">--</span>
+                </div>
+                <div class="health-stat">
+                    <span class="health-label">Filesystem</span>
+                    <span class="health-value" id="health-fs">--</span>
+                </div>
+                <!-- Network -->
+                <div class="health-stat">
+                    <span class="health-label">IP Address</span>
+                    <span class="health-value" id="health-ip">--</span>
+                </div>
+                <div class="health-stat">
+                    <span class="health-label">WiFi RSSI</span>
+                    <span class="health-value" id="health-rssi">--</span>
+                </div>
+
+                <!-- MQTT -->
+                <div class="health-stat">
+                    <span class="health-label">MQTT</span>
+                    <span class="health-value" id="health-mqtt">--</span>
+                </div>
+
+                <!-- Display -->
+                <div class="health-stat" id="health-display-row" style="display:none;">
+                    <span class="health-label">Display</span>
+                    <span class="health-value" id="health-display">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="reboot-overlay" class="reboot-overlay" style="display:none;">
+        <div class="reboot-modal">
+            <div id="reboot-spinner" class="spinner"></div>
+            <h2 id="reboot-title">Device Rebooting</h2>
+            <p id="reboot-message">Please wait while the device restarts...</p>
+            <div id="reboot-progress-container" style="margin: 25px 0; display: none;">
+                <div class="progress-bar" style="height: 30px; background: #e0e0e0; border-radius: 15px; overflow: hidden;">
+                    <div id="reboot-progress-fill" style="height: 100%; width: 0%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s;"></div>
+                </div>
+                <div id="reboot-progress-text" style="margin-top: 10px; font-size: 18px; font-weight: 600; color: #667eea;">0%</div>
+            </div>
+            <p id="reboot-submessage" class="small">This page will automatically refresh when ready</p>
+            <div id="reconnect-status" class="reconnect-status"></div>
+        </div>
+    </div>

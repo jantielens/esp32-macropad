@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Device Health Dashboard</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js" defer></script>
+  </head>
+  <body class="dashboard-page">
+    <header class="header">
+      <div class="container">
+        <h1>Device Health Dashboard</h1>
+        <p class="subhead">Live health telemetry from your device over HTTP.</p>
+        <div class="badges">
+          <a class="badge badge-link" href="./index.html">Back to installer</a>
+          <span class="badge">Plotly charts</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="panel panel-connection">
+        <div class="panel-title">Device connection</div>
+        <div class="panel-sub">Connect using the device URL (IP or mDNS).</div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="deviceBase">Device URL</label>
+            <input id="deviceBase" type="url" placeholder="http://192.168.1.50" autocomplete="off" />
+            <small>Example: http://esp32.local</small>
+          </div>
+          <div class="field">
+            <label for="authUsername">Basic Auth Username (optional)</label>
+            <input id="authUsername" type="text" autocomplete="username" />
+          </div>
+          <div class="field">
+            <label for="authPassword">Basic Auth Password (optional)</label>
+            <input id="authPassword" type="password" autocomplete="current-password" />
+          </div>
+        </div>
+        <div class="ota-actions">
+          <button id="connect-btn" class="ota-btn" type="button">Connect</button>
+          <button id="disconnect-btn" class="ota-btn secondary" type="button" disabled>Disconnect</button>
+          <button id="clear-btn" class="ota-btn ghost" type="button">Clear chart</button>
+        </div>
+        <div id="dashboard-status" class="status">Idle.</div>
+      </section>
+
+      <section id="health-panel" class="panel panel-dashboard is-hidden">
+        <div class="panel-title">Live health chart</div>
+        <div class="dashboard-grid">
+          <div id="chart-wrap" class="chart-wrap">
+            <div id="health-chart" class="chart"></div>
+          </div>
+          <aside class="dashboard-side">
+            <div class="side-section">
+              <div class="side-title">Latest values</div>
+              <div id="latest-values" class="meta-list">
+                <div>Not connected.</div>
+              </div>
+            </div>
+            <div class="side-section">
+              <div class="side-title">Device</div>
+              <div id="device-meta" class="meta-list">
+                <div>Not connected.</div>
+              </div>
+            </div>
+            <div class="side-section">
+              <div class="side-title">Logs (USB)</div>
+              <p class="muted">Log streaming via USB will be added in the future.</p>
+              <button id="logs-btn" class="ota-btn" type="button" disabled>Connect Logs via USB</button>
+              <label class="toggle-row">
+                <input id="overlay-logs" type="checkbox" disabled />
+                Overlay log markers on chart
+              </label>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <script src="./dashboard.js" defer></script>
+  </body>
+</html>

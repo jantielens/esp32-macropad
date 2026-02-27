@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Project-specific configuration overrides (optional)
+#
+# Copy this file to `config.project.sh` in your project repo.
+# Keeping project-specific branding + board targets in a separate file makes it
+# much easier to merge upstream template updates (config.sh changes rarely need
+# conflicts resolved).
+
+# Project branding
+PROJECT_NAME="my-iot-device"
+PROJECT_DISPLAY_NAME="My IoT Device"
+
+# Board targets for this project
+# (You can replace the full array; it overrides the defaults from config.sh)
+#
+# Board configuration (FQBN - Fully Qualified Board Name)
+# Define target boards as an associative array: ["board-name"]="FQBN"
+# - Board name is the key (used for directories, script arguments, CI/CD matrix)
+# - FQBN is the value (used by arduino-cli for compilation)
+# - Multiple board names can share the same FQBN (different board_overrides.h)
+#
+# USB Serial Support (CDCOnBoot):
+# - ESP32-C3, C6, S3: Add `:CDCOnBoot=cdc` to enable USB serial output
+# - ESP32 (classic): No USB-OTG, uses hardware UART - no CDC parameter needed
+# - To check if a board needs CDC: `arduino-cli board details <FQBN> | grep CDCOnBoot`
+#
+# Custom Partition Schemes (PartitionScheme):
+# Some ESP32 boards (notably ESP32-C3 “Super Mini” variants) can run out of flash
+# space for OTA-enabled firmware as projects grow.
+#
+# Examples:
+#   ["esp32-nodisplay"]="esp32:esp32:esp32"                                       # Classic ESP32 dev module (no display)
+
+#   ["esp32c3_ota_1_9mb"]="esp32:esp32:nologo_esp32c3_super_mini:CDCOnBoot=cdc,PartitionScheme=ota_1_9mb"    # ESP32-C3 w/ custom partitions (example)
+#   ["esp32c6"]="esp32:esp32:esp32c6:CDCOnBoot=cdc"                              # ESP32-C6 (USB CDC)
+#   ["cyd-v2"]="esp32:esp32:esp32"                                                # CYD display v2 (same FQBN as classic ESP32)
+#
+# declare -A FQBN_TARGETS=(
+#     ["esp32-nodisplay"]="esp32:esp32:esp32"
+#     ["esp32c3"]="esp32:esp32:nologo_esp32c3_super_mini:CDCOnBoot=cdc"
+# )

@@ -1,0 +1,318 @@
+name: ESP32 Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Matches v0.0.1, v1.0.0, v1.2.3-beta.1, etc.
+
+permissions:
+  contents: read
+
+jobs:
+  # Generate build matrix from config.sh
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      version: ${{ steps.extract-version.outputs.version }}
+      is_prerelease: ${{ steps.extract-version.outputs.is_prerelease }}
+      project_name: ${{ steps.set-matrix.outputs.project_name }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Extract version from tag
+      id: extract-version
+      run: |
+        # Extract version from tag (remove 'v' prefix)
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+        
+        # Check if this is a pre-release (contains hyphen)
+        if [[ "$VERSION" == *-* ]]; then
+          echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          echo "Pre-release detected"
+        else
+          echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          echo "Stable release"
+        fi
+    
+    - name: Generate board matrix from config.sh
+      id: set-matrix
+      run: |
+        # Source config.sh and extract FQBN_TARGETS and PROJECT_NAME
+        source config.sh
+        
+        # Export PROJECT_NAME for artifact naming
+        echo "project_name=$PROJECT_NAME" >> $GITHUB_OUTPUT
+        
+        # Build JSON array for matrix
+        boards_json="["
+        first=true
+        for board_name in "${!FQBN_TARGETS[@]}"; do
+          fqbn="${FQBN_TARGETS[$board_name]}"
+          if [ "$first" = true ]; then
+            first=false
+          else
+            boards_json+=","
+          fi
+          boards_json+="{\"name\":\"$board_name\",\"fqbn\":\"$fqbn\"}"
+        done
+        boards_json+="]"
+        
+        echo "matrix={\"board\":$boards_json}" >> $GITHUB_OUTPUT
+        echo "Generated matrix: {\"board\":$boards_json}"
+
+  build:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    
+    - name: Cache arduino-cli
+      uses: actions/cache@v4
+      with:
+        path: |
+          bin/arduino-cli
+          ~/.arduino15
+        key: ${{ runner.os }}-arduino-cli-${{ hashFiles('setup.sh', 'arduino-libraries.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-arduino-cli-
+    
+    - name: Install arduino-cli and ESP32 platform
+      run: |
+        chmod +x setup.sh
+        ./setup.sh
+
+    - name: Install custom partition tables
+      run: |
+        chmod +x tools/install-custom-partitions.sh
+        ./tools/install-custom-partitions.sh
+    
+    - name: Compile firmware for ${{ matrix.board.name }}
+      run: |
+        chmod +x build.sh
+        ./build.sh ${{ matrix.board.name }}
+    
+    - name: Check for build artifacts
+      run: |
+        BOARD_DIR="build/${{ matrix.board.name }}"
+        if [ ! -d "$BOARD_DIR" ] || [ -z "$(ls -A "$BOARD_DIR"/*.bin 2>/dev/null)" ]; then
+          echo "Error: Firmware binary not found for ${{ matrix.board.name }}"
+          exit 1
+        fi
+        echo "Build successful for ${{ matrix.board.name }}!"
+        ls -lh "$BOARD_DIR"/
+    
+    - name: Rename artifacts with version
+      run: |
+        VERSION="${{ needs.prepare-matrix.outputs.version }}"
+        PROJECT_NAME="${{ needs.prepare-matrix.outputs.project_name }}"
+        BOARD_DIR="build/${{ matrix.board.name }}"
+
+        # Explicitly package the correct firmware images.
+        # - app.ino.bin: app-only image
+        # - app.ino.bootloader.bin: bootloader
+        # - app.ino.partitions.bin: partition table
+        # - boot_app0.bin: OTA boot helper (from ESP32 core)
+        # - app.ino.merged.bin: legacy merged image (flash at offset 0; may overwrite NVS)
+
+          APP_BIN="$BOARD_DIR/app.ino.bin"
+          BOOTLOADER_BIN="$BOARD_DIR/app.ino.bootloader.bin"
+          PARTITIONS_BIN="$BOARD_DIR/app.ino.partitions.bin"
+          MERGED_BIN="$BOARD_DIR/app.ino.merged.bin"
+
+        if [ ! -f "$APP_BIN" ]; then
+          echo "Error: app-only firmware not found: $APP_BIN"
+          exit 1
+        fi
+        if [ ! -f "$BOOTLOADER_BIN" ]; then
+          echo "Error: bootloader firmware not found: $BOOTLOADER_BIN"
+          exit 1
+        fi
+        if [ ! -f "$PARTITIONS_BIN" ]; then
+          echo "Error: partitions binary not found: $PARTITIONS_BIN"
+          exit 1
+        fi
+        if [ ! -f "$MERGED_BIN" ]; then
+          echo "Error: merged firmware not found: $MERGED_BIN"
+          exit 1
+        fi
+
+        cp "$APP_BIN" "$BOARD_DIR/$PROJECT_NAME-${{ matrix.board.name }}-v$VERSION.bin"
+        echo "Created: $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION.bin"
+
+        cp "$BOOTLOADER_BIN" "$BOARD_DIR/$PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-bootloader.bin"
+        echo "Created: $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-bootloader.bin"
+
+        cp "$PARTITIONS_BIN" "$BOARD_DIR/$PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-partitions.bin"
+        echo "Created: $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-partitions.bin"
+
+        # boot_app0.bin is provided by the installed ESP32 core.
+        ESP32_HW_BASE="$HOME/.arduino15/packages/esp32/hardware/esp32"
+        ESP32_DIR=$(ls -1d "$ESP32_HW_BASE"/*/ 2>/dev/null | sort -V | tail -n 1 || true)
+        ESP32_DIR="${ESP32_DIR%/}"
+        BOOT_APP0_SRC="$ESP32_DIR/tools/partitions/boot_app0.bin"
+        if [ ! -f "$BOOT_APP0_SRC" ]; then
+          echo "Error: boot_app0.bin not found in ESP32 core: $BOOT_APP0_SRC"
+          exit 1
+        fi
+
+        cp "$BOOT_APP0_SRC" "$BOARD_DIR/$PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-boot_app0.bin"
+        echo "Created: $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-boot_app0.bin"
+
+        cp "$MERGED_BIN" "$BOARD_DIR/$PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-merged.bin"
+        echo "Created: $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-merged.bin"
+        
+        # Find and rename .elf file
+        ELF_FILE=$(find "$BOARD_DIR" -name "*.elf" -type f | head -n 1)
+        if [ -n "$ELF_FILE" ]; then
+          cp "$ELF_FILE" "$BOARD_DIR/$PROJECT_NAME-${{ matrix.board.name }}-v$VERSION.elf"
+          echo "Created: $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION.elf"
+        fi
+        
+        ls -lh "$BOARD_DIR"/$PROJECT_NAME-*-v$VERSION.*
+    
+    - name: Generate build metadata
+      run: |
+        VERSION="${{ needs.prepare-matrix.outputs.version }}"
+        PROJECT_NAME="${{ needs.prepare-matrix.outputs.project_name }}"
+        BOARD_DIR="build/${{ matrix.board.name }}"
+        
+        cat > "$BOARD_DIR/build-info-${{ matrix.board.name }}.txt" <<EOF
+        ESP32 Firmware Build Information
+        =================================
+        
+        Project: $PROJECT_NAME
+        Board: ${{ matrix.board.name }}
+        FQBN: ${{ matrix.board.fqbn }}
+        Version: $VERSION
+        Git Tag: ${GITHUB_REF#refs/tags/}
+        Git Commit: ${GITHUB_SHA:0:7}
+        Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        Repository: ${{ github.repository }}
+        Workflow: ${{ github.workflow }}
+        
+        Firmware Files:
+        - $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION.bin (app-only image)
+        - $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-bootloader.bin (bootloader)
+        - $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-partitions.bin (partition table)
+        - $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-boot_app0.bin (OTA boot helper)
+        - $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-merged.bin (legacy merged image; may overwrite NVS)
+        - $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION.elf (debug symbols)
+        
+        Flash Command (multi-part; preserves NVS by default):
+        esptool.py --chip auto --port /dev/ttyUSB0 --baud 921600 write_flash \
+          0x0 $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-bootloader.bin \
+          0x8000 $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-partitions.bin \
+          0xE000 $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-boot_app0.bin \
+          0x10000 $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION.bin
+        EOF
+        
+        cat "$BOARD_DIR/build-info-${{ matrix.board.name }}.txt"
+    
+    - name: Upload versioned artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ needs.prepare-matrix.outputs.project_name }}-${{ matrix.board.name }}-v${{ needs.prepare-matrix.outputs.version }}
+        path: |
+          build/${{ matrix.board.name }}/${{ needs.prepare-matrix.outputs.project_name }}-*-v${{ needs.prepare-matrix.outputs.version }}.bin
+          build/${{ matrix.board.name }}/${{ needs.prepare-matrix.outputs.project_name }}-*-v${{ needs.prepare-matrix.outputs.version }}-bootloader.bin
+          build/${{ matrix.board.name }}/${{ needs.prepare-matrix.outputs.project_name }}-*-v${{ needs.prepare-matrix.outputs.version }}-partitions.bin
+          build/${{ matrix.board.name }}/${{ needs.prepare-matrix.outputs.project_name }}-*-v${{ needs.prepare-matrix.outputs.version }}-boot_app0.bin
+          build/${{ matrix.board.name }}/${{ needs.prepare-matrix.outputs.project_name }}-*-v${{ needs.prepare-matrix.outputs.version }}-merged.bin
+          build/${{ matrix.board.name }}/${{ needs.prepare-matrix.outputs.project_name }}-*-v${{ needs.prepare-matrix.outputs.version }}.elf
+          build/${{ matrix.board.name }}/build-info-*.txt
+        retention-days: 90
+    
+    - name: Prepare release files (app + merged)
+      run: |
+        PROJECT_NAME="${{ needs.prepare-matrix.outputs.project_name }}"
+        mkdir -p release-files-${{ matrix.board.name }}
+        cp build/${{ matrix.board.name }}/$PROJECT_NAME-*-v${{ needs.prepare-matrix.outputs.version }}.bin release-files-${{ matrix.board.name }}/
+        cp build/${{ matrix.board.name }}/$PROJECT_NAME-*-v${{ needs.prepare-matrix.outputs.version }}-bootloader.bin release-files-${{ matrix.board.name }}/
+        cp build/${{ matrix.board.name }}/$PROJECT_NAME-*-v${{ needs.prepare-matrix.outputs.version }}-partitions.bin release-files-${{ matrix.board.name }}/
+        cp build/${{ matrix.board.name }}/$PROJECT_NAME-*-v${{ needs.prepare-matrix.outputs.version }}-boot_app0.bin release-files-${{ matrix.board.name }}/
+        cp build/${{ matrix.board.name }}/$PROJECT_NAME-*-v${{ needs.prepare-matrix.outputs.version }}-merged.bin release-files-${{ matrix.board.name }}/
+    
+    - name: Upload release files
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ needs.prepare-matrix.outputs.project_name }}-release-${{ matrix.board.name }}-v${{ needs.prepare-matrix.outputs.version }}
+        path: release-files-${{ matrix.board.name }}/*.bin
+        retention-days: 90
+
+  release:
+    needs: [prepare-matrix, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for creating releases
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Extract changelog for this version
+      id: changelog
+      run: |
+        chmod +x tools/extract-changelog.sh
+        VERSION="${{ needs.prepare-matrix.outputs.version }}"
+        
+        # Extract changelog section for this version
+        CHANGELOG_CONTENT=$(./tools/extract-changelog.sh "$VERSION")
+        
+        if [ -z "$CHANGELOG_CONTENT" ]; then
+          echo "Warning: No changelog entry found for version $VERSION"
+          CHANGELOG_CONTENT="Release version $VERSION"
+        fi
+        
+        # Save to file for GitHub Release
+        echo "$CHANGELOG_CONTENT" > release-notes.md
+        
+        echo "Changelog content:"
+        cat release-notes.md
+    
+    - name: Download release artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: ${{ needs.prepare-matrix.outputs.project_name }}-release-*-v${{ needs.prepare-matrix.outputs.version }}
+        path: release-artifacts
+    
+    - name: Organize release files
+      run: |
+        mkdir -p release-files
+
+        # Move .bin files (includes app-only and merged) to release-files directory
+        find release-artifacts -type f -name "*.bin" -exec mv {} release-files/ \;
+        
+        echo "Release files:"
+        ls -lh release-files/
+    
+    - name: Generate SHA256 checksums
+      run: |
+        cd release-files
+        sha256sum *.bin > SHA256SUMS.txt
+        echo "Checksums generated:"
+        cat SHA256SUMS.txt
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release v${{ needs.prepare-matrix.outputs.version }}
+        body_path: release-notes.md
+        files: release-files/*
+        draft: false
+        prerelease: ${{ needs.prepare-matrix.outputs.is_prerelease }}
+        generate_release_notes: false # Keep release notes strictly from CHANGELOG.md
+      env:
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}

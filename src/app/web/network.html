@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+{{HEADER}}
+<body>
+    <div class="container">
+        {{NAV}}
+
+        <!-- Initial Setup Notice (shown in AP mode only) -->
+        <div id="setup-notice" class="setup-notice" style="display:none;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 24px;">📡</span>
+                <div>
+                    <strong>Initial Setup</strong>
+                    <p style="margin: 4px 0 0 0; font-size: 14px; color: #ffffff;">Enter your WiFi credentials to connect the device to your network. Optionally, choose a memorable device name — it will determine the mDNS address you'll use to access the device after it connects.</p>
+                </div>
+            </div>
+        </div>
+
+        <form id="config-form">
+            <!-- WiFi and Device Settings (2-column on desktop) -->
+            <div class="grid-2col">
+            <!-- WiFi Settings Section -->
+            <section class="section">
+                <h2>📶 WiFi Settings</h2>
+                <div class="form-group">
+                    <label for="wifi_ssid">WiFi SSID</label>
+                    <input type="text" id="wifi_ssid" name="wifi_ssid" maxlength="31" required>
+                    <small>Network name (max 31 characters)</small>
+                </div>
+                <div class="form-group">
+                    <label for="wifi_password">WiFi Password</label>
+                    <input type="password" id="wifi_password" name="wifi_password" maxlength="63">
+                    <small>Leave empty if network is open</small>
+                </div>
+            </section>
+
+            <!-- Device Settings Section -->
+            <section class="section">
+                <h2>🔧 Device Settings</h2>
+                <div class="form-group">
+                    <label for="device_name">Device Name</label>
+                    <input type="text" id="device_name" name="device_name" maxlength="31" required>
+                    <small>Can include spaces and special characters</small>
+                </div>
+                <div class="form-group">
+                    <label>mDNS Name</label>
+                    <div id="device_name_sanitized" class="mdns-label">esp32-xxxx.local</div>
+                    <small>Auto-generated from device name for network discovery</small>
+                </div>
+            </section>
+            </div>
+
+            <!-- Network Configuration Section (full-width) -->
+            <section class="section">
+                <h2>🌐 Network Configuration (Optional)</h2>
+                <div class="form-group">
+                    <label for="fixed_ip">Fixed IP Address</label>
+                    <input type="text" id="fixed_ip" name="fixed_ip" maxlength="15" placeholder="e.g. 192.168.1.100">
+                    <small>Leave empty for DHCP</small>
+                </div>
+                <div class="form-group">
+                    <label for="subnet_mask">Subnet Mask</label>
+                    <input type="text" id="subnet_mask" name="subnet_mask" maxlength="15" placeholder="e.g. 255.255.255.0">
+                    <small>Required if fixed IP is set</small>
+                </div>
+                <div class="form-group">
+                    <label for="gateway">Gateway</label>
+                    <input type="text" id="gateway" name="gateway" maxlength="15" placeholder="e.g. 192.168.1.1">
+                    <small>Required if fixed IP is set</small>
+                </div>
+                <div class="form-group">
+                    <label for="dns1">DNS Server 1</label>
+                    <input type="text" id="dns1" name="dns1" maxlength="15" placeholder="Defaults to gateway">
+                    <small>Optional - defaults to gateway if not provided</small>
+                </div>
+                <div class="form-group">
+                    <label for="dns2">DNS Server 2</label>
+                    <input type="text" id="dns2" name="dns2" maxlength="15" placeholder="Optional">
+                    <small>Optional - leave empty if not needed</small>
+                </div>
+            </section>
+
+            <!-- MQTT Settings Section (full-width) -->
+            <section class="section" id="mqtt-settings-section">
+                <h2>🏠 MQTT Transport (Optional)</h2>
+                <div class="form-group">
+                    <label for="mqtt_host">MQTT Host</label>
+                    <input type="text" id="mqtt_host" name="mqtt_host" maxlength="63" placeholder="e.g. homeassistant.local">
+                    <small>Hostname or IP address of your MQTT broker</small>
+                </div>
+                <div class="form-group">
+                    <label for="mqtt_port">MQTT Port</label>
+                    <input type="number" id="mqtt_port" name="mqtt_port" min="0" max="65535" placeholder="1883">
+                    <small>Defaults to 1883 when empty/0</small>
+                </div>
+                <div class="form-group">
+                    <label for="mqtt_username">MQTT Username</label>
+                    <input type="text" id="mqtt_username" name="mqtt_username" maxlength="31" placeholder="Optional">
+                    <small>Leave empty for anonymous access</small>
+                </div>
+                <div class="form-group">
+                    <label for="mqtt_password">MQTT Password</label>
+                    <input type="password" id="mqtt_password" name="mqtt_password" maxlength="63" placeholder="Optional">
+                    <small>Leave empty to keep existing password</small>
+                </div>
+                <div class="form-group">
+                    <small>
+                        Modes: leave MQTT Host empty = don't connect. Set MQTT Host and use the Cycle Interval (Operating Mode & Cadence) to control periodic health publishes.
+                        MQTT payload scope is configured on the Home page.
+                    </small>
+                </div>
+            </section>
+
+            <!-- Security Section (full-width) -->
+            <section class="section" id="security-section">
+                <h2>🔒 Security (Optional)</h2>
+                <div class="form-group">
+                    <label for="basic_auth_enabled">
+                        <input type="checkbox" id="basic_auth_enabled" name="basic_auth_enabled" style="margin-right: 8px;">
+                        Enable HTTP Basic Auth (STA mode only)
+                    </label>
+                    <small>
+                        When enabled, the web portal and all <code>/api/*</code> endpoints require a username and password in STA/full mode.
+                        AP/captive portal mode stays open for initial setup.
+                    </small>
+                </div>
+                <div class="form-group">
+                    <label for="basic_auth_username">Username</label>
+                    <input type="text" id="basic_auth_username" name="basic_auth_username" maxlength="31" placeholder="e.g. admin">
+                    <small>Required when enabling Basic Auth</small>
+                </div>
+                <div class="form-group">
+                    <label for="basic_auth_password">Password</label>
+                    <input type="password" id="basic_auth_password" name="basic_auth_password" maxlength="63" placeholder="Optional">
+                    <small>Leave empty to keep existing password</small>
+                </div>
+                <div class="form-group">
+                    <small style="color:#b45309;">
+                        Warning: If you forget credentials, recovery requires reflashing the device.
+                    </small>
+                </div>
+            </section>
+
+            {{FOOTER}}
+        </form>
+    </div>
+
+    <div id="captive-portal-warning" class="reboot-overlay" style="display:none;">
+        <div class="reboot-modal">
+            <h2>Reconnection Required</h2>
+            <p>After saving, this captive portal window will close when the device reboots.</p>
+            <p style="margin: 20px 0;">To access the device again, open your browser and go to:</p>
+            <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border: 2px solid #667eea;">
+                <code id="device-mdns-address" style="font-size: 18px; color: #667eea; font-weight: 600;">http://device.local</code>
+            </div>
+            <p class="small" style="color: #666; margin-bottom: 20px;">Tip: Save this address or bookmark it for easy access</p>
+            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 25px;">
+                <button id="continue-save-btn" class="btn btn-primary" style="width: auto; min-width: 150px;">Continue and Save</button>
+                <button id="cancel-save-btn" class="btn" style="width: auto; min-width: 100px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="reboot-overlay" class="reboot-overlay" style="display:none;">
+        <div class="reboot-modal">
+            <div id="reboot-spinner" class="spinner"></div>
+            <h2 id="reboot-title">Device Rebooting</h2>
+            <p id="reboot-message">Please wait while the device restarts...</p>
+            <div id="reboot-progress-container" style="margin: 25px 0; display: none;">
+                <div class="progress-bar" style="height: 30px; background: #e0e0e0; border-radius: 15px; overflow: hidden;">
+                    <div id="reboot-progress-fill" style="height: 100%; width: 0%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s;"></div>
+                </div>
+                <div id="reboot-progress-text" style="margin-top: 10px; font-size: 18px; font-weight: 600; color: #667eea;">0%</div>
+            </div>
+            <p id="reboot-submessage" class="small">This page will automatically refresh when ready</p>
+            <div id="reconnect-status" class="reconnect-status"></div>
+        </div>
+    </div>
+
+    <script src="/portal.js"></script>
+</body>
+</html>

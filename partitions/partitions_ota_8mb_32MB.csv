@@ -1,0 +1,20 @@
+# Custom partition table for 32MB flash with OTA support (ESP32-P4)
+#
+# Goal:
+# - Dual OTA partitions (~8 MB each) for safe firmware updates
+# - NVS for configuration storage
+# - Coredump for crash diagnostics
+# - Small SPIFFS for future use
+#
+# Notes:
+# - Offsets (except nvs/otadata) must be aligned to 0x10000 (64KB)
+# - The FQBN option `PartitionScheme=ota_8mb_32MB` must match this filename (without .csv)
+# - Total: 32 MB (0x2000000)
+#
+# Name,    Type, SubType,  Offset,     Size,       Flags
+nvs,       data, nvs,      0x9000,     0x5000,
+otadata,   data, ota,      0xE000,     0x2000,
+app0,      app,  ota_0,    0x10000,    0x800000,
+app1,      app,  ota_1,    0x810000,   0x800000,
+coredump,  data, coredump, 0x1010000,  0x10000,
+spiffs,    data, spiffs,   0x1020000,  0xFE0000,

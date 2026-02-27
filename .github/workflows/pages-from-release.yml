@@ -1,0 +1,203 @@
+name: Deploy Release to Installer Site (Github Pages)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag to deploy (e.g. v0.0.26)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy (stable releases only)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'release' || github.event.release.prerelease == false
+
+    steps:
+      - name: Checkout (default branch)
+        uses: actions/checkout@v4
+
+      - name: Resolve tag + ensure stable
+        id: release_meta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            tag_name="${{ github.event.release.tag_name }}"
+          else
+            tag_name="${{ inputs.tag_name }}"
+          fi
+
+          echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
+
+          # Enforce stable releases only, even when run manually.
+          is_prerelease=$(gh release view "$tag_name" --repo "${{ github.repository }}" --json isPrerelease --jq '.isPrerelease')
+          echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
+
+          if [[ "$is_prerelease" == "true" ]]; then
+            echo "Refusing to deploy prerelease: $tag_name" >&2
+            exit 1
+          fi
+
+      - name: Download release assets (multi-part)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          tag_name="${{ steps.release_meta.outputs.tag_name }}"
+          VERSION="${tag_name#v}"
+          echo "Downloading release assets for $tag_name"
+
+          mkdir -p release-assets
+          # app-only + multi-part prerequisites
+          gh release download "$tag_name" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets \
+            --pattern "*-v${VERSION}.bin"
+
+          gh release download "$tag_name" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets \
+            --pattern "*-bootloader.bin"
+
+          gh release download "$tag_name" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets \
+            --pattern "*-partitions.bin"
+
+          gh release download "$tag_name" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets \
+            --pattern "*-boot_app0.bin"
+
+          echo "Downloaded assets:"
+          ls -lh release-assets
+
+      - name: Fetch release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag_name="${{ steps.release_meta.outputs.tag_name }}"
+          gh release view "$tag_name" --repo "${{ github.repository }}" --json body --jq '.body' > release-notes.md
+          echo "Fetched release notes (first 40 lines):"
+          sed -n '1,40p' release-notes.md
+
+      - name: Rehydrate build/ folders for site generator
+        run: |
+          set -euo pipefail
+          source config.sh
+
+          tag_name="${{ steps.release_meta.outputs.tag_name }}"
+          VERSION="${tag_name#v}"
+          PROJECT_NAME="$PROJECT_NAME"
+
+          for board_name in "${!FQBN_TARGETS[@]}"; do
+            shopt -s nocasematch
+            if [[ "$board_name" == *"beta"* ]] || [[ "$board_name" == *"experimental"* ]]; then
+              echo "Skipping beta board: $board_name"
+              continue
+            fi
+
+            app_path="release-assets/$PROJECT_NAME-$board_name-v$VERSION.bin"
+            bootloader_path="release-assets/$PROJECT_NAME-$board_name-v$VERSION-bootloader.bin"
+            partitions_path="release-assets/$PROJECT_NAME-$board_name-v$VERSION-partitions.bin"
+            boot_app0_path="release-assets/$PROJECT_NAME-$board_name-v$VERSION-boot_app0.bin"
+
+            if [[ ! -f "$app_path" ]]; then
+              echo "Error: app firmware not found for $board_name (expected $(basename "$app_path"))"
+              exit 1
+            fi
+            if [[ ! -f "$bootloader_path" ]]; then
+              echo "Error: bootloader not found for $board_name (expected $(basename "$bootloader_path"))"
+              exit 1
+            fi
+            if [[ ! -f "$partitions_path" ]]; then
+              echo "Error: partitions not found for $board_name (expected $(basename "$partitions_path"))"
+              exit 1
+            fi
+            if [[ ! -f "$boot_app0_path" ]]; then
+              echo "Error: boot_app0 not found for $board_name (expected $(basename "$boot_app0_path"))"
+              exit 1
+            fi
+
+            mkdir -p "build/$board_name"
+            cp "$app_path" "build/$board_name/app.ino.bin"
+            cp "$bootloader_path" "build/$board_name/app.ino.bootloader.bin"
+            cp "$partitions_path" "build/$board_name/app.ino.partitions.bin"
+            cp "$boot_app0_path" "build/$board_name/boot_app0.bin"
+          done
+
+      - name: Build installer site (latest stable)
+        run: |
+          chmod +x tools/build-esp-web-tools-site.sh
+          RELEASE_TAG="${{ steps.release_meta.outputs.tag_name }}" RELEASE_NOTES_PATH="release-notes.md" ./tools/build-esp-web-tools-site.sh site
+
+      - name: Check Pages status
+        id: pages_status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          api_url="https://api.github.com/repos/${{ github.repository }}/pages"
+          status=$(curl -s -o /tmp/pages.json -w "%{http_code}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$api_url")
+
+          if [[ "$status" == "200" ]]; then
+            echo "GitHub Pages is enabled."
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$status" == "404" ]]; then
+            echo "GitHub Pages is not configured. Skipping Pages deployment."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unexpected response from GitHub Pages API ($status)." >&2
+            cat /tmp/pages.json >&2 || true
+            exit 1
+          fi
+
+      - name: Configure Pages
+        if: steps.pages_status.outputs.enabled == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: steps.pages_status.outputs.enabled == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        if: steps.pages_status.outputs.enabled == 'true'
+        uses: actions/deploy-pages@v4
+
+      - name: Pages deploy summary
+        if: always()
+        run: |
+          echo "## Firmware installer (GitHub Pages)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Triggered by: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "Tag: ${{ steps.release_meta.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- pages-enabled: ${{ steps.pages_status.outputs.enabled }}" >> $GITHUB_STEP_SUMMARY
+          echo "- deploy-pages: ${{ steps.deployment.outcome }}" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.pages_status.outputs.enabled }}" != "true" ]]; then
+            echo "- note: GitHub Pages not configured; deployment skipped" >> $GITHUB_STEP_SUMMARY
+          fi

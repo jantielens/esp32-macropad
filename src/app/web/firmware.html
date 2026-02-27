@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+{{HEADER}}
+<body data-page="firmware">
+    <div class="container">
+        {{NAV}}
+
+        <!-- Online Firmware Update (GitHub Pages) -->
+        <section class="section ota-section" id="online-update-section">
+            <h2>🌐 Online Update (GitHub Pages)</h2>
+            <p style="margin-bottom: 10px; color: #666;">
+                This opens the GitHub Pages updater and passes this device address:
+                <strong id="github-pages-device">—</strong>
+            </p>
+            <a id="github-pages-link" class="btn btn-warning" href="#" target="_blank" rel="noreferrer">Open Updater</a>
+        </section>
+
+        <!-- Firmware Update Section -->
+        <section class="section ota-section">
+            <h2>📦 Manual Update (Upload)</h2>
+            <div class="form-group">
+                <label for="firmware-file">Upload Firmware (.bin)</label>
+                <input type="file" id="firmware-file" accept=".bin" class="file-input">
+                <small>Upload app.ino.bin from build directory</small>
+            </div>
+            <button type="button" id="upload-btn" class="btn btn-warning" disabled>Upload Firmware</button>
+        </section>
+
+        <!-- Factory Reset Section -->
+        <section class="section">
+            <h2>🔄 Factory Reset</h2>
+            <p style="margin-bottom: 16px; color: #666;">Reset all configuration to factory defaults. This will erase WiFi settings, device name, and all custom settings. The device will restart in AP mode.</p>
+            <button type="button" id="reset-btn" class="btn btn-danger">Factory Reset</button>
+        </section>
+        
+        {{FOOTER}}
+
+    <script src="/portal.js"></script>
+</body>
+</html>

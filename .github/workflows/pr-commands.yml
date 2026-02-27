@@ -1,0 +1,247 @@
+name: PR Commands
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  handle-command:
+    # Only run on PR comments
+    if: github.event.issue.pull_request != null
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check if comment is a command
+      id: check-command
+      run: |
+        COMMENT="${{ github.event.comment.body }}"
+        
+        if [[ "$COMMENT" =~ ^/release$ ]]; then
+          echo "command=release" >> $GITHUB_OUTPUT
+          echo "Command detected: /release"
+        elif [[ "$COMMENT" =~ ^/release-beta ]]; then
+          # Extract beta number if provided (e.g., /release-beta 2)
+          BETA_NUM=$(echo "$COMMENT" | grep -oP '/release-beta\s+\K\d+' || echo "1")
+          echo "command=release-beta" >> $GITHUB_OUTPUT
+          echo "beta_number=$BETA_NUM" >> $GITHUB_OUTPUT
+          echo "Command detected: /release-beta $BETA_NUM"
+        elif [[ "$COMMENT" =~ ^/merge-only$ ]]; then
+          echo "command=merge-only" >> $GITHUB_OUTPUT
+          echo "Command detected: /merge-only"
+        else
+          echo "command=none" >> $GITHUB_OUTPUT
+          echo "No command detected"
+        fi
+    
+    - name: Check user permissions
+      if: steps.check-command.outputs.command != 'none'
+      id: check-permissions
+      uses: actions/github-script@v7
+      with:
+        script: |
+          try {
+            const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.payload.comment.user.login
+            });
+            
+            const hasPermission = ['admin', 'write'].includes(permission.permission);
+            core.setOutput('allowed', hasPermission);
+            
+            if (!hasPermission) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `❌ @${context.payload.comment.user.login} You need write permissions to use release commands.`
+              });
+            }
+            return hasPermission;
+          } catch (error) {
+            core.setFailed(error.message);
+            return false;
+          }
+    
+    - name: React to command
+      if: steps.check-command.outputs.command != 'none' && steps.check-permissions.outputs.allowed == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.reactions.createForIssueComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            comment_id: context.payload.comment.id,
+            content: 'rocket'
+          });
+    
+    - name: Checkout repository
+      if: steps.check-command.outputs.command != 'none' && steps.check-permissions.outputs.allowed == 'true'
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        # Use PAT instead of GITHUB_TOKEN to allow triggering release workflow
+        # GITHUB_TOKEN doesn't trigger workflows on tag push (security feature)
+        token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+    
+    - name: Get PR details
+      if: steps.check-command.outputs.command != 'none' && steps.check-permissions.outputs.allowed == 'true'
+      id: pr-details
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: pr } = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.issue.number
+          });
+          
+          core.setOutput('head_ref', pr.head.ref);
+          core.setOutput('base_ref', pr.base.ref);
+          core.setOutput('mergeable', pr.mergeable);
+          core.setOutput('merged', pr.merged);
+          
+          return pr;
+    
+    - name: Check if PR is mergeable
+      if: steps.check-command.outputs.command != 'none' && steps.check-permissions.outputs.allowed == 'true'
+      run: |
+        if [ "${{ steps.pr-details.outputs.merged }}" == "true" ]; then
+          echo "❌ PR is already merged"
+          exit 1
+        fi
+        
+        if [ "${{ steps.pr-details.outputs.mergeable }}" != "true" ]; then
+          echo "❌ PR has merge conflicts or is not ready to merge"
+          exit 1
+        fi
+    
+    - name: Extract version from PR branch
+      if: steps.check-command.outputs.command != 'none' && steps.check-permissions.outputs.allowed == 'true'
+      id: get-version
+      run: |
+        git fetch origin ${{ steps.pr-details.outputs.head_ref }}
+        git checkout origin/${{ steps.pr-details.outputs.head_ref }}
+        
+        VERSION_MAJOR=$(grep "#define VERSION_MAJOR" src/version.h | grep -o '[0-9]\+' | head -1)
+        VERSION_MINOR=$(grep "#define VERSION_MINOR" src/version.h | grep -o '[0-9]\+' | head -1)
+        VERSION_PATCH=$(grep "#define VERSION_PATCH" src/version.h | grep -o '[0-9]\+' | head -1)
+        VERSION="$VERSION_MAJOR.$VERSION_MINOR.$VERSION_PATCH"
+        
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version detected: $VERSION"
+    
+    - name: Merge PR
+      if: steps.check-command.outputs.command != 'none' && steps.check-permissions.outputs.allowed == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const command = '${{ steps.check-command.outputs.command }}';
+          const version = '${{ steps.get-version.outputs.version }}';
+          
+          let commitMessage = '';
+          if (command === 'release') {
+            commitMessage = `Merge PR #${context.issue.number} - Release v${version}`;
+          } else if (command === 'release-beta') {
+            const betaNum = '${{ steps.check-command.outputs.beta_number }}';
+            commitMessage = `Merge PR #${context.issue.number} - Beta release v${version}-beta.${betaNum}`;
+          } else {
+            commitMessage = `Merge PR #${context.issue.number}`;
+          }
+          
+          await github.rest.pulls.merge({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.issue.number,
+            merge_method: 'merge',
+            commit_title: commitMessage
+          });
+          
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: `✅ PR merged successfully by @${context.payload.comment.user.login}`
+          });
+    
+    - name: Create release tag
+      if: |
+        (steps.check-command.outputs.command == 'release' || steps.check-command.outputs.command == 'release-beta') &&
+        steps.check-permissions.outputs.allowed == 'true'
+      run: |
+        VERSION="${{ steps.get-version.outputs.version }}"
+        COMMAND="${{ steps.check-command.outputs.command }}"
+        
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Switch to base branch and pull
+        git checkout ${{ steps.pr-details.outputs.base_ref }}
+        git pull origin ${{ steps.pr-details.outputs.base_ref }}
+        
+        # Create tag
+        if [ "$COMMAND" == "release" ]; then
+          TAG="v${VERSION}"
+          git tag -a "$TAG" -m "Release v${VERSION}"
+        else
+          BETA_NUM="${{ steps.check-command.outputs.beta_number }}"
+          TAG="v${VERSION}-beta.${BETA_NUM}"
+          git tag -a "$TAG" -m "Beta release v${VERSION}-beta.${BETA_NUM}"
+        fi
+        
+        # Push tag
+        git push origin "$TAG"
+        
+        echo "Created and pushed tag: $TAG"
+    
+    - name: Post success comment
+      if: |
+        (steps.check-command.outputs.command == 'release' || steps.check-command.outputs.command == 'release-beta') &&
+        steps.check-permissions.outputs.allowed == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const version = '${{ steps.get-version.outputs.version }}';
+          const command = '${{ steps.check-command.outputs.command }}';
+          
+          let tag = '';
+          let releaseType = '';
+          
+          if (command === 'release') {
+            tag = `v${version}`;
+            releaseType = 'stable release';
+          } else {
+            const betaNum = '${{ steps.check-command.outputs.beta_number }}';
+            tag = `v${version}-beta.${betaNum}`;
+            releaseType = 'beta release';
+          }
+          
+          const body = '🚀 **' + releaseType.charAt(0).toUpperCase() + releaseType.slice(1) + ' Created!**\n\n' +
+            'Tag `' + tag + '` has been created and pushed.\n\n' +
+            'The [Release Workflow](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/workflows/release.yml) is now building firmware.\n\n' +
+            '📦 **Release page:** https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/releases/tag/' + tag + '\n\n' +
+            '🔄 **Workflow run:** https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/workflows/release.yml';
+          
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: body
+          });
+    
+    - name: Handle errors
+      if: failure() && steps.check-permissions.outputs.allowed == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: `❌ Command failed. Check the [workflow logs](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`
+          });
