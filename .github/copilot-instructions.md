@@ -1,8 +1,8 @@
-# Copilot Instructions for ESP32 Template Project
+# Copilot Instructions for ESP32 Macropad Project
 
 ## Project Overview
 
-ESP32 Arduino development template using `arduino-cli` for headless builds. Designed for WSL2/Linux environments with local toolchain installation (no system dependencies).
+ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devices with touch screens. Built with `arduino-cli` for headless builds. Designed for WSL2/Linux environments with local toolchain installation (no system dependencies). All supported boards have a display and touch input.
 
 ## Architecture
 
@@ -41,10 +41,11 @@ ESP32 Arduino development template using `arduino-cli` for headless builds. Desi
 - **Output**: Compiled binaries in `./build/<board-name>/` directories
 - **Board Targets**: Multi-board support via `FQBN_TARGETS` associative array in `config.sh`
   - Board name → FQBN mapping allows multiple board variants with same FQBN
-  - `["esp32-nodisplay"]="esp32:esp32:esp32"` → `build/esp32-nodisplay/` (ESP32 Dev Module, no display)
-  - `["esp32c6"]="esp32:esp32:esp32c6:CDCOnBoot=cdc"` → `build/esp32c6/` (ESP32-C6 Dev Module)
-  - `["cyd-v2"]="esp32:esp32:esp32"` → `build/cyd-v2/` (CYD v2 - same FQBN as esp32, different config)
-  - `["esp32-p4-lcd4b"]="esp32:esp32:esp32p4:FlashSize=32M,PSRAM=enabled,PartitionScheme=ota_8mb_32MB"` → `build/esp32-p4-lcd4b/` (Waveshare ESP32-P4-WIFI6-Touch-LCD-4B, 720×720 MIPI-DSI + GT911 touch, 32MB Flash + 32MB PSRAM)
+  - `["esp32-4848S040"]` → `build/esp32-4848S040/` (ESP32-S3, 480×480 ST7701 RGB + GT911 touch, 16MB + OPI PSRAM)
+  - `["jc3248w535"]` → `build/jc3248w535/` (ESP32-S3, 16MB + OPI PSRAM)
+  - `["jc3636w518"]` → `build/jc3636w518/` (ESP32-S3, 16MB + OPI PSRAM)
+  - `["esp32-p4-lcd4b"]` → `build/esp32-p4-lcd4b/` (ESP32-P4 Waveshare, 720×720 MIPI-DSI + GT911 touch, 32MB + 32MB PSRAM)
+  - `["jc4880p433"]` → `build/jc4880p433/` (ESP32-P4 GUITION, 480×800 MIPI-DSI ST7701 + GT911 touch, 16MB + 32MB PSRAM)
 
 ## Critical Developer Workflows
 
@@ -59,20 +60,20 @@ ESP32 Arduino development template using `arduino-cli` for headless builds. Desi
 ./build.sh
 
 # Or build specific board
-./build.sh esp32-nodisplay                   # Compile for ESP32 Dev Module (no display)
-./build.sh cyd-v2                            # Compile for CYD v2 display board
-./build.sh esp32c6      # Compile for ESP32-C6 Dev Module
+./build.sh esp32-4848S040                    # Compile for ESP32-S3-4848S040
+./build.sh jc3636w518                        # Compile for JC3636W518
+./build.sh esp32-p4-lcd4b                    # Compile for Waveshare ESP32-P4
 
 # Upload (board name required when multiple boards configured)
-./upload.sh esp32-nodisplay                   # Auto-detects /dev/ttyUSB0 or /dev/ttyACM0
-./upload.sh cyd-v2                            # Auto-detects /dev/ttyUSB0 or /dev/ttyACM0
+./upload.sh esp32-4848S040                   # Auto-detects /dev/ttyUSB0 or /dev/ttyACM0
+./upload.sh jc4880p433                       # Auto-detects /dev/ttyUSB0 or /dev/ttyACM0
 
 # Monitor
 ./monitor.sh            # Serial monitor at 115200 baud
 
 # Convenience scripts
-./bum.sh esp32-nodisplay                   # Build + Upload + Monitor
-./um.sh cyd-v2                             # Upload + Monitor
+./bum.sh jc3248w535                        # Build + Upload + Monitor
+./um.sh esp32-p4-lcd4b                     # Upload + Monitor
 ```
 
 All scripts use absolute paths via `SCRIPT_DIR` resolution - they work from any directory.
@@ -89,7 +90,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution - they work from any 
   - Board management: `FQBN_TARGETS` array, `get_board_name()`, `list_boards()`, `get_fqbn_for_board()`
 - Scripts work from any directory due to absolute path resolution
 - Multi-board scripts require board name parameter when multiple targets are configured
-- To reduce merge conflicts in template-based projects, `config.sh` can source an optional `config.project.sh` with project-specific overrides.
+- `config.sh` can source an optional `config.project.sh` with project-specific overrides.
 
 ### Arduino Code Standards
 - Use `Serial.begin(115200)` for consistency with monitor.sh default
