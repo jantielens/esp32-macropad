@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Pad selector with 1-indexed "Pad 1–8" naming
 - **Display/touch improvements** — `goBack()` navigation, board-specific UI scale tiers and display shapes
 - **LittleFS migration** — filesystem health monitoring with `fs_health` module
-- **Board config** — added `DISPLAY_SHAPE`, `UI_SCALE_TIER`, `HAS_PAD_SCREEN` flags for all boards
+- **Board config** — added `DISPLAY_SHAPE` and `UI_SCALE_TIER` for all boards
 
 ### Changed
 - Partition tables updated for LittleFS support (6MB and 8MB variants)

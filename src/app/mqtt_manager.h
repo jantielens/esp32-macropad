@@ -39,9 +39,8 @@ public:
 		// Immediate publish API (topic is full topic string)
 		bool publishImmediate(const char *topic, const char *payload, bool retained);
 
-		// Subscribe helpers
+		// Subscribe helper
 		bool subscribe(const char *topic);
-		bool unsubscribe(const char *topic);
 
 		// Topic helpers
 		const char *baseTopic() const { return _base_topic; }

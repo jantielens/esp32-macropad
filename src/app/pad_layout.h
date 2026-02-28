@@ -92,18 +92,3 @@ static inline void pad_compute_grid(
         out_rects[i].h = rs * tile_h + (rs - 1) * gap;
     }
 }
-
-// Compute base tile dimensions (without spanning) for a grid.
-// Useful for determining icon sizes, font layout decisions, etc.
-static inline void pad_get_tile_size(
-    uint8_t cols, uint8_t rows,
-    uint16_t display_w, uint16_t display_h,
-    uint16_t* out_tile_w, uint16_t* out_tile_h)
-{
-    const uint8_t gap = pad_get_scale_info().gap;
-    const uint16_t safe_w = display_w - 2 * PIXEL_SHIFT_MARGIN;
-    const uint16_t safe_h = display_h - 2 * PIXEL_SHIFT_MARGIN;
-
-    *out_tile_w = (safe_w - (cols - 1) * gap) / cols;
-    *out_tile_h = (safe_h - (rows - 1) * gap) / rows;
-}

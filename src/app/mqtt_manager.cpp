@@ -105,12 +105,6 @@ bool MqttManager::subscribe(const char *topic) {
 		return ok;
 }
 
-bool MqttManager::unsubscribe(const char *topic) {
-		if (!topic || !topic[0]) return false;
-		if (!_client.connected()) return false;
-		return _client.unsubscribe(topic);
-}
-
 void MqttManager::installCallback() {
 		_client.setCallback([](char* topic, uint8_t* payload, unsigned int length) {
 				mqtt_sub_store_set(topic, payload, length);

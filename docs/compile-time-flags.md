@@ -238,6 +238,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_device_api.cpp
   - src/app/web_portal_display.cpp
   - src/app/web_portal_display.h
+  - src/app/web_portal_pad.cpp
+  - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp
 - **HAS_MQTT**
   - src/app/app.ino
@@ -249,6 +251,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
+  - src/app/mqtt_sub_store.cpp
+  - src/app/mqtt_sub_store.h
+  - src/app/screens/pad_screen.cpp
   - src/app/sensors/bme280_sensor.cpp
   - src/app/sensors/bme280_sensor.h
   - src/app/sensors/dummy_sensor.cpp
@@ -256,6 +261,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/ld2410_out_sensor.cpp
   - src/app/sensors/sensor_manager.cpp
   - src/app/sensors/sensor_manager.h
+  - src/app/web_portal_pad.cpp
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp

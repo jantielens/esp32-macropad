@@ -5,9 +5,9 @@
 #include <stdint.h>
 
 // ============================================================================
-// Pad Config — per-page button configuration stored on FFat
+// Pad Config — per-page button configuration stored on LittleFS
 // ============================================================================
-// Each page (0–7) is stored as /config/pad_N.json on FFat.
+// Each page (0–7) is stored as /config/pad_N.json on LittleFS.
 // The REST API saves raw JSON to preserve all fields (including future ones).
 // pad_config_load() parses only the fields needed for rendering.
 
