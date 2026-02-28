@@ -40,6 +40,10 @@ DisplayManager* displayManager = nullptr;
 DisplayManager::DisplayManager(DeviceConfig* cfg) 
 		: driver(nullptr), display(nullptr), config(cfg), currentScreen(nullptr), previousScreen(nullptr), pendingScreen(nullptr), 
 			infoScreen(cfg, this), testScreen(this), fpsScreen(this),
+			padScreens{
+				PadScreen(0, this), PadScreen(1, this), PadScreen(2, this), PadScreen(3, this),
+				PadScreen(4, this), PadScreen(5, this), PadScreen(6, this), PadScreen(7, this)
+			},
 							lvglTaskHandle(nullptr), lvglTaskAlloc{}, lvglMutex(nullptr),
 						presentTaskHandle(nullptr), presentTaskAlloc{}, presentSem(nullptr), sharedLvTimerUs(0),
 						screenCount(0), buf(nullptr), buf2(nullptr), flushPending(false), pendingSplashStatusSet(false) {
@@ -72,6 +76,13 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		#if HAS_TOUCH && LV_USE_CANVAS
 		availableScreens[screenCount++] = {"touch_test", "Touch Test", &touchTestScreen};
 		#endif
+
+		// Register pad screens (pad_0 through pad_7)
+		for (uint8_t i = 0; i < MAX_PAD_PAGES && screenCount < MAX_SCREENS; i++) {
+				static const char* pad_ids[] = {"pad_0", "pad_1", "pad_2", "pad_3", "pad_4", "pad_5", "pad_6", "pad_7"};
+				static const char* pad_names[] = {"Pad 1", "Pad 2", "Pad 3", "Pad 4", "Pad 5", "Pad 6", "Pad 7", "Pad 8"};
+				availableScreens[screenCount++] = {pad_ids[i], pad_names[i], &padScreens[i]};
+		}
 }
 
 DisplayManager::~DisplayManager() {
@@ -102,6 +113,9 @@ DisplayManager::~DisplayManager() {
 		#if HAS_TOUCH && LV_USE_CANVAS
 		touchTestScreen.destroy();
 		#endif
+		for (uint8_t i = 0; i < MAX_PAD_PAGES; i++) {
+				padScreens[i].destroy();
+		}
 		
 		// Delete display driver
 		if (driver) {
@@ -512,6 +526,9 @@ void DisplayManager::init() {
 		#if HAS_TOUCH && LV_USE_CANVAS
 		touchTestScreen.create();
 		#endif
+		for (uint8_t i = 0; i < MAX_PAD_PAGES; i++) {
+				padScreens[i].create();
+		}
 
 		// Show splash immediately
 		showSplash();
@@ -626,6 +643,13 @@ bool DisplayManager::showScreen(const char* screen_id) {
 		return false;
 }
 
+bool DisplayManager::goBack() {
+		if (!previousScreen) return false;
+		pendingScreen = previousScreen;
+		LOGI("Display", "Queued go-back");
+		return true;
+}
+
 const char* DisplayManager::getCurrentScreenId() {
 		// Return ID of current screen (nullptr if splash or unknown)
 		for (size_t i = 0; i < screenCount; i++) {
@@ -679,6 +703,13 @@ void display_manager_show_screen(const char* screen_id, bool* success) {
 				result = displayManager->showScreen(screen_id);
 		}
 		if (success) *success = result;
+}
+
+bool display_manager_go_back() {
+		if (displayManager) {
+				return displayManager->goBack();
+		}
+		return false;
 }
 
 const char* display_manager_get_current_screen_id() {

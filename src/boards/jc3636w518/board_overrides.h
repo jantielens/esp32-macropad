@@ -28,6 +28,12 @@
 // Select CST816S (Wire I2C) as the touch HAL backend.
 #define TOUCH_DRIVER TOUCH_DRIVER_CST816S_WIRE
 
+// ============================================================================
+// Pad Layout
+// ============================================================================
+#define DISPLAY_SHAPE DISPLAY_SHAPE_ROUND
+#define UI_SCALE_TIER UI_SCALE_MEDIUM
+
 // ---------------------------------------------------------------------------
 // Display geometry
 // ---------------------------------------------------------------------------

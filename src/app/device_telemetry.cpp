@@ -947,15 +947,15 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 				FSHealthStats fs;
 				fs_health_get(&fs);
 
-				if (!fs.ffat_partition_present) {
+				if (!fs.storage_partition_present) {
 						doc["fs_mounted"] = nullptr;
 						doc["fs_used_bytes"] = nullptr;
 						doc["fs_total_bytes"] = nullptr;
 				} else {
-						doc["fs_mounted"] = fs.ffat_mounted ? true : false;
-						if (fs.ffat_mounted && fs.ffat_total_bytes > 0) {
-								doc["fs_used_bytes"] = (uint64_t)fs.ffat_used_bytes;
-								doc["fs_total_bytes"] = (uint64_t)fs.ffat_total_bytes;
+						doc["fs_mounted"] = fs.storage_mounted ? true : false;
+						if (fs.storage_mounted && fs.storage_total_bytes > 0) {
+								doc["fs_used_bytes"] = (uint64_t)fs.storage_used_bytes;
+								doc["fs_total_bytes"] = (uint64_t)fs.storage_total_bytes;
 						} else {
 								doc["fs_used_bytes"] = nullptr;
 								doc["fs_total_bytes"] = nullptr;

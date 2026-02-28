@@ -14,19 +14,19 @@ extern "C" {
 // - /api/health must never mount/probe filesystems (avoid heap churn and latency)
 // - Filesystem availability/type is cached at boot (partition table)
 // - Usage numbers are only reported after some other subsystem has mounted the FS
-//   and provided totals via fs_health_set_ffat_usage().
+//   and provided totals via fs_health_set_storage_usage().
 
 typedef struct FSHealthStats {
-		bool ffat_partition_present;
-		bool ffat_mounted;
-		uint32_t ffat_used_bytes;
-		uint32_t ffat_total_bytes;
+		bool storage_partition_present;
+		bool storage_mounted;
+		uint32_t storage_used_bytes;
+		uint32_t storage_total_bytes;
 } FSHealthStats;
 
 void fs_health_init();
 
-// Called by subsystems that successfully mounted FFat.
-void fs_health_set_ffat_usage(uint32_t used_bytes, uint32_t total_bytes);
+// Called by subsystems that successfully mounted LittleFS.
+void fs_health_set_storage_usage(uint32_t used_bytes, uint32_t total_bytes);
 
 // Returns cached stats (always succeeds after fs_health_init()).
 void fs_health_get(FSHealthStats* out);

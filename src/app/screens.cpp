@@ -23,6 +23,8 @@
 
 #include "screens/fps_screen.cpp"
 
+#include "screens/pad_screen.cpp"
+
 #endif // HAS_DISPLAY
 
 // ============================================================================

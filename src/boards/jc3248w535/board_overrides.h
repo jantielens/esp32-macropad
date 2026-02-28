@@ -28,6 +28,12 @@
 // Select AXS15231B (I2C) as the touch HAL backend.
 #define TOUCH_DRIVER   TOUCH_DRIVER_AXS15231B_I2C
 
+// ============================================================================
+// Pad Layout
+// ============================================================================
+#define DISPLAY_SHAPE DISPLAY_SHAPE_RECT
+#define UI_SCALE_TIER UI_SCALE_SMALL
+
 // Physical panel resolution (portrait)
 // Panel width in pixels.
 #define DISPLAY_WIDTH  320

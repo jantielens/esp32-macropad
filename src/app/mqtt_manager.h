@@ -39,6 +39,10 @@ public:
 		// Immediate publish API (topic is full topic string)
 		bool publishImmediate(const char *topic, const char *payload, bool retained);
 
+		// Subscribe helpers
+		bool subscribe(const char *topic);
+		bool unsubscribe(const char *topic);
+
 		// Topic helpers
 		const char *baseTopic() const { return _base_topic; }
 		const char *availabilityTopic() const { return _availability_topic; }
@@ -49,6 +53,7 @@ public:
 
 private:
 		void ensureConnected();
+		void installCallback();
 		void publishAvailability(bool online);
 		void publishDiscoveryOncePerBoot();
 		void publishHealthNow();

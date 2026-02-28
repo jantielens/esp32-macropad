@@ -276,6 +276,27 @@
 #define DISPLAY_DRIVER DISPLAY_DRIVER_TFT_ESPI  // Default to TFT_eSPI
 #endif
 
+// Display shape constants (used by pad layout engine for grid/curated decisions)
+#define DISPLAY_SHAPE_RECT   0  // Rectangular (landscape or portrait)
+#define DISPLAY_SHAPE_SQUARE 1  // Square
+#define DISPLAY_SHAPE_ROUND  2  // Circular panel
+
+// Default display shape (boards override in board_overrides.h)
+#ifndef DISPLAY_SHAPE
+#define DISPLAY_SHAPE DISPLAY_SHAPE_RECT
+#endif
+
+// UI scale tier constants (selects font sizes and spacing for pad layout)
+#define UI_SCALE_SMALL   0  // 320px-class displays
+#define UI_SCALE_MEDIUM  1  // 360-480px displays
+#define UI_SCALE_LARGE   2  // 480-720px displays
+#define UI_SCALE_XLARGE  3  // 720px+ displays
+
+// Default UI scale tier (boards override in board_overrides.h)
+#ifndef UI_SCALE_TIER
+#define UI_SCALE_TIER UI_SCALE_MEDIUM
+#endif
+
 // DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
 #ifndef ST7703_DPI_CLK_HZ
 #define ST7703_DPI_CLK_HZ 38000000L

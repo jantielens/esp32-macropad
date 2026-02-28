@@ -29,6 +29,12 @@
 #define TOUCH_DRIVER   TOUCH_DRIVER_XPT2046
 
 // ============================================================================
+// Pad Layout
+// ============================================================================
+#define DISPLAY_SHAPE DISPLAY_SHAPE_RECT
+#define UI_SCALE_TIER UI_SCALE_SMALL
+
+// ============================================================================
 // Display Controller Config (TFT_eSPI)
 // ============================================================================
 // Must match library's User_Setup.h or use build flags

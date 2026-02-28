@@ -1013,6 +1013,142 @@ footer {
     line-height: 1.2;
 }
 
+/* Pad Configuration */
+.pad-controls {
+    margin-bottom: 16px;
+}
+
+.pad-controls-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.pad-grid {
+    display: grid;
+    gap: 6px;
+    padding: 12px;
+    background: #1c1c1e;
+    border-radius: 12px;
+    min-height: 80px;
+}
+
+.pad-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    min-height: 64px;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.15s;
+    text-align: center;
+    padding: 6px 4px;
+    overflow: hidden;
+    word-break: break-word;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.pad-cell:active {
+    transform: scale(0.96);
+}
+
+.pad-cell-empty {
+    border: 2px dashed #48484a;
+    background: transparent;
+    color: #636366;
+    font-size: 20px;
+}
+
+.pad-cell-empty:hover {
+    border-color: #8e8e93;
+    background: rgba(255,255,255,0.04);
+}
+
+.pad-cell-btn {
+    border: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.pad-cell-btn:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+.pad-cell-label-top {
+    font-size: 10px;
+    opacity: 0.7;
+    line-height: 1.2;
+}
+
+.pad-cell-label-center {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.pad-cell-label-bottom {
+    font-size: 10px;
+    opacity: 0.7;
+    line-height: 1.2;
+}
+
+.pad-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.pad-empty-state {
+    text-align: center;
+    color: #8e8e93;
+    padding: 20px;
+}
+
+.pad-empty-state p {
+    margin: 4px 0;
+}
+
+.pad-edit-modal {
+    max-width: 520px;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+    padding: 0;
+}
+
+.pad-edit-modal h2 {
+    margin: 0;
+    font-size: 20px;
+    padding: 24px 32px 16px;
+    flex-shrink: 0;
+}
+
+.pad-edit-body {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    padding: 0 32px;
+}
+
+.pad-edit-body .form-group {
+    margin-bottom: 12px;
+}
+
+.pad-edit-footer {
+    display: flex;
+    gap: 12px;
+    padding: 16px 32px 24px;
+    flex-shrink: 0;
+    border-top: 1px solid #e5e5ea;
+}
+
+.pad-edit-modal .btn {
+    min-width: 0;
+}
+
 /* Responsive Design */
 @media (min-width: 640px) {
     body {
