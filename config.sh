@@ -55,9 +55,9 @@ PROJECT_DISPLAY_NAME="ESP32 Macropad"
 #   ["cyd-v2"]="esp32:esp32:esp32"                                                # CYD display v2 (same FQBN as classic ESP32)
 
 declare -A FQBN_TARGETS=(
-    ["esp32-4848S040"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB,CDCOnBoot=default" # ESP32-S3-4848S040 (480x480 ST7701 RGB + GT911 touch; 16MB + OPI PSRAM; hardware UART)
-    ["jc3248w535"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3248W535 (16MB + OPI PSRAM)
-    ["jc3636w518"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3636W518 (16MB + OPI PSRAM)
+    ["esp32-4848S040"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB,CDCOnBoot=default" # ESP32-S3-4848S040 (480x480 ST7701 RGB + GT911 touch; 16MB + OPI PSRAM; hardware UART)
+    ["jc3248w535"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3248W535 (16MB + OPI PSRAM)
+    ["jc3636w518"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3636W518 (16MB + OPI PSRAM)
     ["esp32-p4-lcd4b"]="esp32:esp32:esp32p4:FlashSize=32M,PSRAM=enabled,PartitionScheme=ota_8mb_32MB" # ESP32-P4 Waveshare WIFI6-Touch-LCD-4B (720x720 MIPI-DSI + GT911 touch; 32MB + 32MB PSRAM)
     ["jc4880p433"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 (480x800 MIPI-DSI ST7701 + GT911 touch; 16MB + 32MB PSRAM)
 )

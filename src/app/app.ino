@@ -4,6 +4,7 @@
 #include "web_portal.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
+#include "mqtt_sub_store.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
 #include "ble_advertiser.h"
@@ -19,6 +20,7 @@
 
 #if HAS_DISPLAY
 #include "display_manager.h"
+#include "pad_config.h"
 #include "screen_saver_manager.h"
 #endif
 
@@ -225,6 +227,11 @@ void setup()
 	screen_saver_manager_init(&device_config);
 	#endif
 
+	#if HAS_DISPLAY
+	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
+	pad_config_init();
+	#endif
+
 	const PublishTransport transport = power_config_parse_publish_transport(&device_config);
 	const bool ble_only_always_on = (boot_mode == PowerMode::AlwaysOn) && (transport == PublishTransport::Ble) && (strlen(device_config.wifi_ssid) == 0);
 
@@ -273,6 +280,7 @@ void setup()
 	char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
 	config_manager_sanitize_device_name(device_config.device_name, sanitized, sizeof(sanitized));
 	mqtt_manager.begin(&device_config, device_config.device_name, sanitized);
+	mqtt_sub_store_init();
 	#endif
 
 	last_heartbeat_ms = millis();
@@ -286,8 +294,12 @@ void setup()
 	display_manager_set_splash_status("Ready!");
 	delay(2000);  // 2 seconds to see splash + status updates
 
-	// Navigate to info screen
-	display_manager_show_info();
+	// Navigate to pad_0 if configured, otherwise info screen
+	if (pad_config_exists(0)) {
+		display_manager_show_screen("pad_0", nullptr);
+	} else {
+		display_manager_show_info();
+	}
 
 	// Start the screen saver inactivity timer after the first runtime screen is visible.
 	// This avoids counting boot + splash time as "inactivity".

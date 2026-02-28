@@ -1,0 +1,23 @@
+# Custom partition table for 16MB flash with OTA support (ESP32-S3)
+#
+# Goal:
+# - Dual OTA partitions (3 MB each) for safe firmware updates
+# - NVS for configuration storage
+# - Coredump for crash diagnostics
+# - LittleFS storage partition (~9.8 MB) for pad configs and future use
+#
+# Based on Espressif app3M_fat9M_16MB layout, with FAT replaced by
+# SPIFFS subtype (used by LittleFS on ESP32).
+#
+# Notes:
+# - Offsets (except nvs/otadata) must be aligned to 0x10000 (64KB)
+# - The FQBN option `PartitionScheme=ota_3mb_16MB` must match this filename (without .csv)
+# - Total: 16 MB (0x1000000)
+#
+# Name,    Type, SubType,  Offset,     Size,       Flags
+nvs,       data, nvs,      0x9000,     0x5000,
+otadata,   data, ota,      0xE000,     0x2000,
+app0,      app,  ota_0,    0x10000,    0x300000,
+app1,      app,  ota_1,    0x310000,   0x300000,
+storage,   data, spiffs,   0x610000,   0x9E0000,
+coredump,  data, coredump, 0xFF0000,   0x10000,

@@ -22,7 +22,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 160
+Total flags: 125
 
 ### Features (HAS_*)
 
@@ -40,14 +40,13 @@ Total flags: 160
 ### Selectors (*_DRIVER)
 
 - **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
-- **ILI9341_2_DRIVER** default: `(no default)` — These macros are consumed by the TFT_eSPI library itself.
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
 ### Hardware (Geometry)
 
 - **DISPLAY_HEIGHT** default: `(no default)` — Panel height in pixels.
-- **DISPLAY_ROTATION** default: `(no default)` — UI rotation (LVGL).
-- **DISPLAY_WIDTH** default: `(no default)` — Panel width in pixels.
+- **DISPLAY_ROTATION** default: `(no default)` — UI rotation.
+- **DISPLAY_WIDTH** default: `(no default)` — Display geometry
 
 ### Hardware (Pins)
 
@@ -89,33 +88,13 @@ Total flags: 160
 - **LED_PIN** default: `2` — GPIO for the built-in LED (only used when HAS_BUILTIN_LED is true).
 - **SENSOR_I2C_SCL** default: `-1` — I2C SCL pin for sensors.
 - **SENSOR_I2C_SDA** default: `-1` — I2C pins for sensors. Use -1 to keep default Wire pins.
-- **TFT_BL** default: `(no default)` — TFT_eSPI: backlight pin.
-- **TFT_CS** default: `(no default)` — TFT_eSPI: CS pin.
-- **TFT_DC** default: `(no default)` — TFT_eSPI: DC pin.
-- **TFT_MISO** default: `(no default)` — TFT_eSPI: MISO pin.
-- **TFT_MOSI** default: `(no default)` — TFT_eSPI: MOSI pin.
-- **TFT_RST** default: `(no default)` — TFT_eSPI: RST pin (-1 = none).
-- **TFT_SCLK** default: `(no default)` — TFT_eSPI: SCLK pin.
-- **TOUCH_CS** default: `(no default)` — TFT_eSPI touch: CS pin.
 - **TOUCH_I2C_SCL** default: `(no default)` — Touch I2C SCL pin.
 - **TOUCH_I2C_SDA** default: `(no default)` — Touch I2C SDA pin.
 - **TOUCH_INT** default: `(no default)` — Touch interrupt pin (-1 = not connected).
-- **TOUCH_IRQ** default: `(no default)` — TFT_eSPI touch: IRQ pin (optional).
-- **TOUCH_MISO** default: `(no default)` — TFT_eSPI touch: MISO pin.
-- **TOUCH_MOSI** default: `(no default)` — TFT_eSPI touch: MOSI pin.
 - **TOUCH_RST** default: `-1` — Touch reset pin (-1 = no hardware reset, GT911 boots normally).
-- **TOUCH_SCLK** default: `(no default)` — TFT_eSPI touch: SCLK pin.
-- **XPT2046_CLK** default: `(no default)` — XPT2046 CLK pin.
-- **XPT2046_CS** default: `(no default)` — XPT2046 CS pin.
-- **XPT2046_IRQ** default: `(no default)` — XPT2046 IRQ pin.
-- **XPT2046_MISO** default: `(no default)` — XPT2046 MISO pin.
-- **XPT2046_MOSI** default: `(no default)` — XPT2046 MOSI pin.
 
 ### Limits & Tuning
 
-- **CONFIG_BT_NIMBLE_MAX_BONDS** default: `(no default)` — NimBLE max bonded devices (tuning for small footprint)
-- **CONFIG_BT_NIMBLE_MAX_CCCDS** default: `(no default)` — NimBLE max CCCDs
-- **CONFIG_BT_NIMBLE_MAX_CONNECTIONS** default: `(no default)` — NimBLE max connections
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
@@ -123,13 +102,9 @@ Total flags: 160
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
 - **MEMORY_TRIPWIRE_INTERNAL_MIN_BYTES** default: `0` — Default: disabled (0). Enable per-board if you want early warning logs.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
-- **SPI_FREQUENCY** default: `(no default)` — TFT_eSPI: SPI write frequency (Hz).
-- **SPI_READ_FREQUENCY** default: `(no default)` — TFT_eSPI: SPI read frequency (Hz).
-- **SPI_TOUCH_FREQUENCY** default: `(no default)` — TFT_eSPI: SPI touch frequency (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
 - **TFT_BACKLIGHT_PWM_FREQ** default: `1000` — Lower frequencies give wider dimming range but may cause audible coil whine.
-- **TFT_SPI_FREQUENCY** default: `(no default)` — TFT SPI clock frequency.
 - **TFT_SPI_FREQ_HZ** default: `(no default)` — QSPI clock frequency (Hz).
 - **TOUCH_I2C_FREQ_HZ** default: `(no default)` — I2C frequency (Hz).
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS** default: `5000` — Timeout for an incomplete /api/config upload (ms) before freeing the buffer.
@@ -140,19 +115,9 @@ Total flags: 160
 
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
-- **CONFIG_BT_NIMBLE_LOG_LEVEL** default: `(no default)` — NimBLE host log level
-- **CONFIG_BT_NIMBLE_MSYS1_BLOCK_COUNT** default: `(no default)` — NimBLE msys1 block count
-- **CONFIG_BT_NIMBLE_ROLE_BROADCASTER** default: `(no default)` — NimBLE role: broadcaster
-- **CONFIG_BT_NIMBLE_ROLE_CENTRAL** default: `(no default)` — NimBLE role: central
-- **CONFIG_BT_NIMBLE_ROLE_OBSERVER** default: `(no default)` — NimBLE role: observer
-- **CONFIG_BT_NIMBLE_ROLE_PERIPHERAL** default: `(no default)` — NimBLE role: peripheral (required)
-- **CONFIG_NIMBLE_CPP_LOG_LEVEL** default: `(no default)` — NimBLE C++ wrapper log level
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
-- **DISPLAY_COLOR_ORDER_BGR** default: `(no default)` — Panel uses BGR byte order.
-- **DISPLAY_DRIVER_ILI9341_2** default: `(no default)` — Use the ILI9341_2 controller setup in TFT_eSPI.
-- **DISPLAY_INVERSION_ON** default: `(no default)` — Enable display inversion (panel-specific).
-- **DISPLAY_NEEDS_GAMMA_FIX** default: `(no default)` — Apply gamma correction fix for this panel variant.
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
+- **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
 - **HEALTH_HISTORY_ENABLED** default: `1` — Enable device-side health history ring buffer for charting in the web portal
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
@@ -190,7 +155,7 @@ Total flags: 160
 - **ST7703_VSYNC_PULSE_WIDTH** default: `4` — VSYNC pulse width in lines.
 - **TFT_BACKLIGHT_DUTY_MAX** default: `255` — Duty cycle at full saturation (before constant DC).
 - **TFT_BACKLIGHT_DUTY_MIN** default: `0` — Duty cycle where backlight first turns on.
-- **TFT_BACKLIGHT_ON** default: `(no default)` — Backlight "on" level.
+- **TFT_BACKLIGHT_ON** default: `(no default)` — Backlight active level.
 - **TFT_BACKLIGHT_PWM_CHANNEL** default: `0` — LEDC channel used for backlight PWM.
 - **TOUCH_CAL_X_MAX** default: `(no default)` — Touch calibration: X maximum.
 - **TOUCH_CAL_X_MIN** default: `(no default)` — Touch calibration: X minimum.
@@ -200,7 +165,7 @@ Total flags: 160
 - **TOUCH_I2C_ADDR_ALT** default: `(no default)` — Optional alternate address (GT911 can be 0x5D or 0x14 depending on INT strap).
 - **TOUCH_I2C_BUS** default: `1` — ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
 - **TOUCH_I2C_PORT** default: `(no default)` — I2C controller index.
-- **USE_HSPI_PORT** default: `(no default)` — CYD uses HSPI for the display.
+- **UI_SCALE_TIER** default: `UI_SCALE_MEDIUM` — Default UI scale tier (boards override in board_overrides.h)
 <!-- END COMPILE_FLAG_REPORT:FLAGS -->
 
 ## Board Matrix: Features (generated)
@@ -210,12 +175,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 | board-name | HAS_BACKLIGHT | HAS_BLE | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-nodisplay |  |  |  |  |  | ✅ |  |  |  |  |
-| cyd-v2 | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
 | esp32-4848S040 | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
 | jc3248w535 | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
 | jc3636w518 | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
-| esp32c3-withsensors |  | ✅ |  | ✅ |  | ✅ |  | ✅ |  |  |
 | esp32-p4-lcd4b | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
 | jc4880p433 | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
@@ -225,12 +187,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 | board-name | DISPLAY_DRIVER | TOUCH_DRIVER |
 | --- | --- | --- |
-| esp32-nodisplay | — | — |
-| cyd-v2 | DISPLAY_DRIVER_TFT_ESPI | TOUCH_DRIVER_XPT2046 |
 | esp32-4848S040 | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
 | jc3248w535 | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
 | jc3636w518 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
-| esp32c3-withsensors | — | — |
 | esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
@@ -279,6 +238,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_device_api.cpp
   - src/app/web_portal_display.cpp
   - src/app/web_portal_display.h
+  - src/app/web_portal_pad.cpp
+  - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp
 - **HAS_MQTT**
   - src/app/app.ino
@@ -290,6 +251,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
+  - src/app/mqtt_sub_store.cpp
+  - src/app/mqtt_sub_store.h
+  - src/app/screens/pad_screen.cpp
   - src/app/sensors/bme280_sensor.cpp
   - src/app/sensors/bme280_sensor.h
   - src/app/sensors/dummy_sensor.cpp
@@ -297,6 +261,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/ld2410_out_sensor.cpp
   - src/app/sensors/sensor_manager.cpp
   - src/app/sensors/sensor_manager.h
+  - src/app/web_portal_pad.cpp
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp
@@ -341,12 +306,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS**
   - src/app/app.ino
   - src/app/board_config.h
-- **DISPLAY_INVERSION_ON**
-  - src/app/drivers/tft_espi_driver.cpp
-- **DISPLAY_NEEDS_GAMMA_FIX**
-  - src/app/drivers/tft_espi_driver.cpp
 - **DISPLAY_ROTATION**
   - src/app/touch_manager.cpp
+- **DISPLAY_SHAPE**
+  - src/app/board_config.h
 - **HEALTH_HISTORY_ENABLED**
   - src/app/app.ino
   - src/app/board_config.h
@@ -469,8 +432,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **TFT_BACKLIGHT_PWM_FREQ**
   - src/app/board_config.h
-- **TFT_BL**
-  - src/app/drivers/tft_espi_driver.cpp
 - **TFT_SPI_FREQ_HZ**
   - src/app/drivers/arduino_gfx_st77916_driver.cpp
 - **TOUCH_CAL_X_MAX**
@@ -496,16 +457,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **TOUCH_INT**
   - src/app/drivers/axs15231b_touch_driver.cpp
   - src/app/drivers/gt911_touch_driver.cpp
-- **TOUCH_MISO**
-  - src/app/drivers/xpt2046_driver.cpp
-- **TOUCH_MOSI**
-  - src/app/drivers/xpt2046_driver.cpp
 - **TOUCH_RST**
   - src/app/board_config.h
   - src/app/drivers/gt911_touch_driver.cpp
   - src/app/drivers/wire_cst816s_touch_driver.cpp
-- **TOUCH_SCLK**
-  - src/app/drivers/xpt2046_driver.cpp
+- **UI_SCALE_TIER**
+  - src/app/board_config.h
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS**
   - src/app/board_config.h
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES**

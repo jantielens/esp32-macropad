@@ -1182,6 +1182,519 @@ async function handleScreenChange(event) {
 /**
  * Initialize page on DOM ready
  */
+// ===== PAD CONFIGURATION =====
+
+const padState = {
+    page: 0,
+    rawJson: null,   // Original GET response (for merge-on-save)
+    cols: 3,
+    rows: 2,
+    buttons: [],     // Working copy: array of button objects (by grid position key "col,row")
+    editCol: 0,
+    editRow: 0,
+};
+
+function padInit() {
+    const section = document.getElementById('pad-config-section');
+    if (!section) return;
+
+    document.getElementById('pad-page-select').addEventListener('change', (e) => {
+        padState.page = parseInt(e.target.value);
+        padLoadPage(padState.page);
+    });
+    document.getElementById('pad-cols').addEventListener('change', (e) => {
+        padState.cols = parseInt(e.target.value);
+        padRenderGrid();
+    });
+    document.getElementById('pad-rows').addEventListener('change', (e) => {
+        padState.rows = parseInt(e.target.value);
+        padRenderGrid();
+    });
+
+    document.getElementById('pad-save-btn').addEventListener('click', padSavePage);
+    document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
+    document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
+
+    // Dialog buttons
+    document.getElementById('pad-edit-ok').addEventListener('click', padDialogOk);
+    document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
+    document.getElementById('pad-edit-cancel').addEventListener('click', padDialogClose);
+
+    // Close dialog on overlay click
+    document.getElementById('pad-edit-overlay').addEventListener('click', (e) => {
+        if (e.target.id === 'pad-edit-overlay') padDialogClose();
+    });
+
+    // Wait for deviceInfoCache to be ready, then show section + load
+    const waitForInfo = () => {
+        if (deviceInfoCache) {
+            if (deviceInfoCache.has_display === true) {
+                section.style.display = 'block';
+                padPopulateScreenDropdown();
+                padLoadPage(0);
+            }
+        } else {
+            setTimeout(waitForInfo, 200);
+        }
+    };
+    waitForInfo();
+}
+
+function padPopulateScreenDropdown() {
+    const ids = ['pad-edit-action-target', 'pad-edit-lp-action-target'];
+    ids.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel || !deviceInfoCache || !deviceInfoCache.available_screens) return;
+        while (sel.options.length > 1) sel.remove(1);
+        deviceInfoCache.available_screens.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.name;
+            sel.appendChild(opt);
+        });
+    });
+}
+
+function padActionTypeChanged(prefix) {
+    const pfx = (prefix === 'lp') ? 'lp-action' : 'action';
+    const type = document.getElementById('pad-edit-' + pfx + '-type').value;
+    document.getElementById('pad-edit-' + pfx + '-screen-group').style.display = (type === 'screen') ? '' : 'none';
+    document.getElementById('pad-edit-' + pfx + '-mqtt-group').style.display = (type === 'mqtt') ? '' : 'none';
+}
+
+async function padLoadPage(page) {
+    padState.page = page;
+    padState.rawJson = null;
+    padState.buttons = [];
+
+    try {
+        const resp = await fetch('/api/pad?page=' + page);
+        if (resp.status === 404) {
+            // No config for this page — show empty grid
+            padState.cols = 3;
+            padState.rows = 2;
+            document.getElementById('pad-cols').value = padState.cols;
+            document.getElementById('pad-rows').value = padState.rows;
+            padRenderGrid();
+            return;
+        }
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+        const json = await resp.json();
+        padState.rawJson = json;
+        padState.cols = json.cols || 3;
+        padState.rows = json.rows || 2;
+
+        document.getElementById('pad-cols').value = padState.cols;
+        document.getElementById('pad-rows').value = padState.rows;
+
+        // Index buttons by "col,row" for easy lookup
+        padState.buttons = [];
+        if (json.buttons && Array.isArray(json.buttons)) {
+            json.buttons.forEach(b => {
+                padState.buttons.push(Object.assign({}, b));
+            });
+        }
+
+        padRenderGrid();
+    } catch (err) {
+        console.error('padLoadPage error:', err);
+        showMessage('Failed to load Pad ' + (page + 1), 'error');
+        padRenderGrid();
+    }
+}
+
+function padFindButton(col, row) {
+    return padState.buttons.find(b => b.col === col && b.row === row);
+}
+
+function padIsCellOccupied(col, row) {
+    // Check if any button occupies this cell (via its span)
+    for (const b of padState.buttons) {
+        const bc = b.col, br = b.row;
+        const cs = b.col_span || 1, rs = b.row_span || 1;
+        if (col >= bc && col < bc + cs && row >= br && row < br + rs) {
+            return b;
+        }
+    }
+    return null;
+}
+
+function padRenderGrid() {
+    const grid = document.getElementById('pad-grid');
+    const emptyState = document.getElementById('pad-empty-state');
+    if (!grid) return;
+
+    const cols = padState.cols;
+    const rows = padState.rows;
+
+    grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+    grid.innerHTML = '';
+
+    if (emptyState) emptyState.style.display = 'none';
+
+    // Track which cells are "covered" by a spanning button
+    const covered = new Set();
+
+    // First pass: place buttons with spans
+    for (const b of padState.buttons) {
+        const bc = b.col, br = b.row;
+        const cs = Math.min(b.col_span || 1, cols - bc);
+        const rs = Math.min(b.row_span || 1, rows - br);
+        if (bc >= cols || br >= rows) continue; // Out of current grid
+
+        for (let dc = 0; dc < cs; dc++) {
+            for (let dr = 0; dr < rs; dr++) {
+                if (dc === 0 && dr === 0) continue;
+                covered.add((bc + dc) + ',' + (br + dr));
+            }
+        }
+    }
+
+    // Second pass: render cells
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const key = c + ',' + r;
+            if (covered.has(key)) continue; // Skip cells covered by a span
+
+            const btn = padFindButton(c, r);
+            const cell = document.createElement('div');
+            cell.classList.add('pad-cell');
+
+            if (btn) {
+                cell.classList.add('pad-cell-btn');
+                const cs = Math.min(btn.col_span || 1, cols - c);
+                const rs = Math.min(btn.row_span || 1, rows - r);
+                if (cs > 1) cell.style.gridColumn = 'span ' + cs;
+                if (rs > 1) cell.style.gridRow = 'span ' + rs;
+
+                const bg = padColorToHex(btn.bg_color, '#333333');
+                const fg = padColorToHex(btn.fg_color, '#ffffff');
+                cell.style.background = bg;
+                cell.style.color = fg;
+
+                const borderColor = padColorToHex(btn.border_color, '#000000');
+                const borderWidth = (btn.border_width !== undefined) ? btn.border_width : 1;
+                const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
+                cell.style.border = borderWidth + 'px solid ' + borderColor;
+                cell.style.borderRadius = cornerRadius + 'px';
+
+                if (btn.label_top) {
+                    const el = document.createElement('div');
+                    el.className = 'pad-cell-label-top';
+                    el.textContent = btn.label_top;
+                    cell.appendChild(el);
+                }
+                const centerText = btn.label_center || '•';
+                const elc = document.createElement('div');
+                elc.className = 'pad-cell-label-center';
+                elc.textContent = centerText;
+                cell.appendChild(elc);
+                if (btn.label_bottom) {
+                    const el = document.createElement('div');
+                    el.className = 'pad-cell-label-bottom';
+                    el.textContent = btn.label_bottom;
+                    cell.appendChild(el);
+                }
+
+                cell.addEventListener('click', () => padDialogOpen(c, r));
+            } else {
+                cell.classList.add('pad-cell-empty');
+                cell.textContent = '+';
+                cell.addEventListener('click', () => padDialogOpen(c, r));
+            }
+
+            grid.appendChild(cell);
+        }
+    }
+}
+
+function padColorToHex(val, fallback) {
+    if (val === undefined || val === null) return fallback;
+    if (typeof val === 'string') {
+        if (val.startsWith('#')) return val;
+        // Try parsing as hex number string
+        const n = parseInt(val, 16);
+        if (!isNaN(n)) return '#' + n.toString(16).padStart(6, '0');
+        return val || fallback;
+    }
+    if (typeof val === 'number') {
+        return '#' + (val & 0xFFFFFF).toString(16).padStart(6, '0');
+    }
+    return fallback;
+}
+
+function padHexToInt(hex) {
+    if (!hex || hex === '') return undefined;
+    return parseInt(hex.replace('#', ''), 16);
+}
+
+function padDialogOpen(col, row) {
+    padState.editCol = col;
+    padState.editRow = row;
+
+    const btn = padFindButton(col, row) || {};
+
+    document.getElementById('pad-edit-title').textContent =
+        'Button [' + col + ', ' + row + ']';
+
+    document.getElementById('pad-edit-label-top').value = btn.label_top || '';
+    document.getElementById('pad-edit-label-center').value = btn.label_center || '';
+    document.getElementById('pad-edit-label-bottom').value = btn.label_bottom || '';
+
+    document.getElementById('pad-edit-bg-color').value = padColorToHex(btn.bg_color, '#333333');
+    document.getElementById('pad-edit-fg-color').value = padColorToHex(btn.fg_color, '#ffffff');
+    document.getElementById('pad-edit-border-color').value = padColorToHex(btn.border_color, '#000000');
+    document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 1;
+    document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
+
+    // Populate col_span / row_span dropdowns based on available space
+    const maxCs = padState.cols - col;
+    const maxRs = padState.rows - row;
+    const csSel = document.getElementById('pad-edit-col-span');
+    const rsSel = document.getElementById('pad-edit-row-span');
+    csSel.innerHTML = '';
+    rsSel.innerHTML = '';
+    for (let i = 1; i <= maxCs; i++) {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = i;
+        if (i === (btn.col_span || 1)) o.selected = true;
+        csSel.appendChild(o);
+    }
+    for (let i = 1; i <= maxRs; i++) {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = i;
+        if (i === (btn.row_span || 1)) o.selected = true;
+        rsSel.appendChild(o);
+    }
+
+    // Tap action
+    const tapAct = btn.action || {};
+    document.getElementById('pad-edit-action-type').value = tapAct.type || '';
+    document.getElementById('pad-edit-action-target').value = tapAct.target || '';
+    if (document.getElementById('pad-edit-action-target').selectedIndex < 0)
+        document.getElementById('pad-edit-action-target').value = '';
+    document.getElementById('pad-edit-action-topic').value = tapAct.topic || '';
+    document.getElementById('pad-edit-action-payload').value = tapAct.payload || '';
+    padActionTypeChanged('tap');
+
+    // Long-press action
+    const lpAct = btn.lp_action || {};
+    document.getElementById('pad-edit-lp-action-type').value = lpAct.type || '';
+    document.getElementById('pad-edit-lp-action-target').value = lpAct.target || '';
+    if (document.getElementById('pad-edit-lp-action-target').selectedIndex < 0)
+        document.getElementById('pad-edit-lp-action-target').value = '';
+    document.getElementById('pad-edit-lp-action-topic').value = lpAct.topic || '';
+    document.getElementById('pad-edit-lp-action-payload').value = lpAct.payload || '';
+    padActionTypeChanged('lp');
+
+    // MQTT label bindings
+    const topBind = btn.label_top_bind || {};
+    const centerBind = btn.label_center_bind || {};
+    const bottomBind = btn.label_bottom_bind || {};
+    document.getElementById('pad-edit-bind-top-topic').value = topBind.topic || '';
+    document.getElementById('pad-edit-bind-top-path').value = topBind.path || '';
+    document.getElementById('pad-edit-bind-top-format').value = topBind.format || '';
+    document.getElementById('pad-edit-bind-center-topic').value = centerBind.topic || '';
+    document.getElementById('pad-edit-bind-center-path').value = centerBind.path || '';
+    document.getElementById('pad-edit-bind-center-format').value = centerBind.format || '';
+    document.getElementById('pad-edit-bind-bottom-topic').value = bottomBind.topic || '';
+    document.getElementById('pad-edit-bind-bottom-path').value = bottomBind.path || '';
+    document.getElementById('pad-edit-bind-bottom-format').value = bottomBind.format || '';
+
+    // Auto-open bindings section if any binding is set
+    const hasBindings = topBind.topic || centerBind.topic || bottomBind.topic;
+    document.getElementById('pad-edit-bindings-section').open = !!hasBindings;
+
+    // Toggle state binding
+    const stateBind = btn.state_bind || {};
+    document.getElementById('pad-edit-state-topic').value = stateBind.topic || '';
+    document.getElementById('pad-edit-state-path').value = stateBind.path || '';
+    document.getElementById('pad-edit-state-on-value').value = stateBind.on_value || 'ON';
+
+    // Auto-open state section if configured
+    document.getElementById('pad-edit-state-section').open = !!stateBind.topic;
+
+    document.getElementById('pad-edit-overlay').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function padDialogClose() {
+    document.getElementById('pad-edit-overlay').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function padDialogOk() {
+    const col = padState.editCol;
+    const row = padState.editRow;
+
+    // Remove existing button at this position
+    padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
+
+    // Build new button object — only include fields with values
+    const btn = { col: col, row: row };
+
+    const cs = parseInt(document.getElementById('pad-edit-col-span').value);
+    const rs = parseInt(document.getElementById('pad-edit-row-span').value);
+    if (cs > 1) btn.col_span = cs;
+    if (rs > 1) btn.row_span = rs;
+
+    const lt = document.getElementById('pad-edit-label-top').value.trim();
+    const lc = document.getElementById('pad-edit-label-center').value.trim();
+    const lb = document.getElementById('pad-edit-label-bottom').value.trim();
+    if (lt) btn.label_top = lt;
+    if (lc) btn.label_center = lc;
+    if (lb) btn.label_bottom = lb;
+
+    const bgHex = document.getElementById('pad-edit-bg-color').value;
+    const fgHex = document.getElementById('pad-edit-fg-color').value;
+    btn.bg_color = padHexToInt(bgHex);
+    btn.fg_color = padHexToInt(fgHex);
+    btn.border_color = padHexToInt(document.getElementById('pad-edit-border-color').value);
+    const bw = parseInt(document.getElementById('pad-edit-border-width').value);
+    btn.border_width = isNaN(bw) ? 1 : bw;
+    const cr = parseInt(document.getElementById('pad-edit-corner-radius').value);
+    btn.corner_radius = isNaN(cr) ? 8 : cr;
+
+    // Tap action
+    const tapType = document.getElementById('pad-edit-action-type').value;
+    if (tapType) {
+        const act = { type: tapType };
+        if (tapType === 'screen') act.target = document.getElementById('pad-edit-action-target').value;
+        if (tapType === 'mqtt') {
+            act.topic = document.getElementById('pad-edit-action-topic').value.trim();
+            act.payload = document.getElementById('pad-edit-action-payload').value.trim();
+        }
+        btn.action = act;
+    }
+
+    // Long-press action
+    const lpType = document.getElementById('pad-edit-lp-action-type').value;
+    if (lpType) {
+        const act = { type: lpType };
+        if (lpType === 'screen') act.target = document.getElementById('pad-edit-lp-action-target').value;
+        if (lpType === 'mqtt') {
+            act.topic = document.getElementById('pad-edit-lp-action-topic').value.trim();
+            act.payload = document.getElementById('pad-edit-lp-action-payload').value.trim();
+        }
+        btn.lp_action = act;
+    }
+
+    // MQTT label bindings
+    function readBinding(prefix) {
+        const topic = document.getElementById('pad-edit-bind-' + prefix + '-topic').value.trim();
+        if (!topic) return undefined;
+        const bind = { topic: topic };
+        const path = document.getElementById('pad-edit-bind-' + prefix + '-path').value.trim();
+        const fmt = document.getElementById('pad-edit-bind-' + prefix + '-format').value.trim();
+        if (path) bind.path = path;
+        if (fmt) bind.format = fmt;
+        return bind;
+    }
+    const topBind = readBinding('top');
+    const centerBind = readBinding('center');
+    const bottomBind = readBinding('bottom');
+    if (topBind) btn.label_top_bind = topBind;
+    if (centerBind) btn.label_center_bind = centerBind;
+    if (bottomBind) btn.label_bottom_bind = bottomBind;
+
+    // Toggle state binding
+    const stateTopic = document.getElementById('pad-edit-state-topic').value.trim();
+    if (stateTopic) {
+        const sb = { topic: stateTopic };
+        const statePath = document.getElementById('pad-edit-state-path').value.trim();
+        const stateOnVal = document.getElementById('pad-edit-state-on-value').value.trim();
+        if (statePath) sb.path = statePath;
+        sb.on_value = stateOnVal || 'ON';
+        btn.state_bind = sb;
+    }
+
+    padState.buttons.push(btn);
+    padDialogClose();
+    padRenderGrid();
+}
+
+function padDialogClear() {
+    const col = padState.editCol;
+    const row = padState.editRow;
+    padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
+    padDialogClose();
+    padRenderGrid();
+}
+
+async function padSavePage() {
+    // Merge-on-save: start with rawJson as base, overlay our changes
+    const payload = padState.rawJson ? Object.assign({}, padState.rawJson) : {};
+    payload.layout = payload.layout || 'grid';
+    payload.cols = padState.cols;
+    payload.rows = padState.rows;
+    payload.buttons = padState.buttons.map(b => Object.assign({}, b));
+
+    // Convert color ints to hex strings for JSON
+    payload.buttons.forEach(b => {
+        if (typeof b.bg_color === 'number') b.bg_color = b.bg_color.toString(16).padStart(6, '0');
+        if (typeof b.fg_color === 'number') b.fg_color = b.fg_color.toString(16).padStart(6, '0');
+        if (typeof b.border_color === 'number') b.border_color = b.border_color.toString(16).padStart(6, '0');
+    });
+
+    try {
+        const resp = await fetch('/api/pad?page=' + padState.page, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || 'HTTP ' + resp.status);
+        }
+        showMessage('Pad ' + (padState.page + 1) + ' saved', 'success');
+        // Reload to get canonical version from device
+        padLoadPage(padState.page);
+    } catch (err) {
+        console.error('padSavePage error:', err);
+        showMessage('Save failed: ' + err.message, 'error');
+    }
+}
+
+async function padDeletePage() {
+    if (!confirm('Delete Pad ' + (padState.page + 1) + '? This cannot be undone.')) return;
+
+    try {
+        const resp = await fetch('/api/pad?page=' + padState.page, { method: 'DELETE' });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || 'HTTP ' + resp.status);
+        }
+        showMessage('Pad ' + (padState.page + 1) + ' deleted', 'success');
+        padState.rawJson = null;
+        padState.buttons = [];
+        padState.cols = 3;
+        padState.rows = 2;
+        document.getElementById('pad-cols').value = padState.cols;
+        document.getElementById('pad-rows').value = padState.rows;
+        padRenderGrid();
+    } catch (err) {
+        console.error('padDeletePage error:', err);
+        showMessage('Delete failed: ' + err.message, 'error');
+    }
+}
+
+async function padShowOnDevice() {
+    const screenId = 'pad_' + padState.page;
+    try {
+        const resp = await fetch('/api/display/screen', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ screen: screenId }),
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        showMessage('Showing ' + screenId + ' on device', 'success');
+    } catch (err) {
+        console.error('padShowOnDevice error:', err);
+        showMessage('Failed to switch screen', 'error');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize navigation highlighting
     initNavigation();
@@ -1258,6 +1771,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize health widget
     initHealthWidget();
+
+    // Initialize pad configuration UI
+    padInit();
 });
 
 // ===== HEALTH WIDGET =====
@@ -2121,9 +2637,9 @@ function renderHealth(health) {
         } else if (!health.fs_mounted) {
             fsEl.textContent = 'Not mounted';
         } else if (health.fs_used_bytes !== null && health.fs_total_bytes !== null) {
-            fsEl.textContent = `FFat ${formatBytes(health.fs_used_bytes)} / ${formatBytes(health.fs_total_bytes)}`;
+            fsEl.textContent = `Storage ${formatBytes(health.fs_used_bytes)} / ${formatBytes(health.fs_total_bytes)}`;
         } else {
-            fsEl.textContent = 'FFat mounted';
+            fsEl.textContent = 'Storage mounted';
         }
     }
 

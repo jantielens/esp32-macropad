@@ -211,8 +211,290 @@
                 </div>
             </section>
 
+            <!-- Pad Configuration Section (hidden if no display) -->
+            <section class="section" id="pad-config-section" style="display:none;">
+                <h2>🎛️ Pad Configuration</h2>
+
+                <!-- Controls row -->
+                <div class="pad-controls">
+                    <div class="pad-controls-row">
+                        <div class="form-group" style="margin-bottom:0; flex:1; min-width:100px;">
+                            <label for="pad-page-select">Pad</label>
+                            <select id="pad-page-select">
+                                <option value="0">Pad 1</option>
+                                <option value="1">Pad 2</option>
+                                <option value="2">Pad 3</option>
+                                <option value="3">Pad 4</option>
+                                <option value="4">Pad 5</option>
+                                <option value="5">Pad 6</option>
+                                <option value="6">Pad 7</option>
+                                <option value="7">Pad 8</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
+                            <label for="pad-cols">Cols</label>
+                            <select id="pad-cols">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3" selected>3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
+                            <label for="pad-rows">Rows</label>
+                            <select id="pad-rows">
+                                <option value="1">1</option>
+                                <option value="2" selected>2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visual grid preview -->
+                <div id="pad-grid" class="pad-grid"></div>
+
+                <!-- Empty state -->
+                <div id="pad-empty-state" class="pad-empty-state" style="display:none;">
+                    <p>No configuration for this page yet.</p>
+                    <p><small>Adjust columns and rows above, then click empty cells to add buttons.</small></p>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="pad-actions">
+                    <button type="button" id="pad-save-btn" class="btn btn-primary" style="flex:1 1 120px;">Save Page</button>
+                    <button type="button" id="pad-show-btn" class="btn btn-secondary" style="flex:1 1 120px;">Show on Device</button>
+                    <button type="button" id="pad-delete-btn" class="btn btn-secondary" style="flex:1 1 80px; color:#ff3b30; border-color:#ff3b30;">Delete</button>
+                </div>
+
+                <small style="margin-top:8px; display:block;">Click a cell to edit its button. Pad uses its own Save — not the main form.</small>
+            </section>
+
             {{FOOTER}}
         </form>
+    </div>
+
+    <!-- Pad Button Edit Dialog -->
+    <div id="pad-edit-overlay" class="reboot-overlay" style="display:none;">
+        <div class="reboot-modal pad-edit-modal">
+            <h2 id="pad-edit-title">Edit Button</h2>
+
+            <div class="pad-edit-body">
+                <div class="form-group">
+                    <label for="pad-edit-label-top">Top Label</label>
+                    <input type="text" id="pad-edit-label-top" maxlength="31" placeholder="e.g. Living Room">
+                </div>
+                <div class="form-group">
+                    <label for="pad-edit-label-center">Center Label</label>
+                    <input type="text" id="pad-edit-label-center" maxlength="31" placeholder="e.g. 21.5°C">
+                </div>
+                <div class="form-group">
+                    <label for="pad-edit-label-bottom">Bottom Label</label>
+                    <input type="text" id="pad-edit-label-bottom" maxlength="31" placeholder="e.g. Lights">
+                </div>
+
+                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
+
+                <!-- MQTT Label Bindings (collapsible) -->
+                <details id="pad-edit-bindings-section">
+                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">MQTT Label Bindings</summary>
+                    <small style="display:block; margin-bottom:12px; color:#86868b;">Subscribe to MQTT topics to show live values on labels.</small>
+
+                    <fieldset style="border:1px solid #e5e5ea; border-radius:8px; padding:12px; margin-bottom:8px;">
+                        <legend style="font-size:0.85em; color:#86868b;">Top Label Binding</legend>
+                        <div class="form-group">
+                            <label for="pad-edit-bind-top-topic">MQTT Topic</label>
+                            <input type="text" id="pad-edit-bind-top-topic" maxlength="127" placeholder="e.g. sensors/living-room/state">
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:2;">
+                                <label for="pad-edit-bind-top-path">JSON Path</label>
+                                <input type="text" id="pad-edit-bind-top-path" maxlength="47" placeholder="e.g. temperature (. = raw)">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-bind-top-format">Format</label>
+                                <input type="text" id="pad-edit-bind-top-format" maxlength="23" placeholder="e.g. %.1f°C">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <fieldset style="border:1px solid #e5e5ea; border-radius:8px; padding:12px; margin-bottom:8px;">
+                        <legend style="font-size:0.85em; color:#86868b;">Center Label Binding</legend>
+                        <div class="form-group">
+                            <label for="pad-edit-bind-center-topic">MQTT Topic</label>
+                            <input type="text" id="pad-edit-bind-center-topic" maxlength="127" placeholder="e.g. sensors/living-room/state">
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:2;">
+                                <label for="pad-edit-bind-center-path">JSON Path</label>
+                                <input type="text" id="pad-edit-bind-center-path" maxlength="47" placeholder="e.g. temperature (. = raw)">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-bind-center-format">Format</label>
+                                <input type="text" id="pad-edit-bind-center-format" maxlength="23" placeholder="e.g. %.1f°C">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <fieldset style="border:1px solid #e5e5ea; border-radius:8px; padding:12px;">
+                        <legend style="font-size:0.85em; color:#86868b;">Bottom Label Binding</legend>
+                        <div class="form-group">
+                            <label for="pad-edit-bind-bottom-topic">MQTT Topic</label>
+                            <input type="text" id="pad-edit-bind-bottom-topic" maxlength="127" placeholder="e.g. sensors/living-room/state">
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:2;">
+                                <label for="pad-edit-bind-bottom-path">JSON Path</label>
+                                <input type="text" id="pad-edit-bind-bottom-path" maxlength="47" placeholder="e.g. humidity (. = raw)">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-bind-bottom-format">Format</label>
+                                <input type="text" id="pad-edit-bind-bottom-format" maxlength="23" placeholder="e.g. %s%%">
+                            </div>
+                        </div>
+                    </fieldset>
+                </details>
+
+                <!-- Toggle State (collapsible) -->
+                <details id="pad-edit-state-section">
+                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Toggle State</summary>
+                    <small style="display:block; margin-bottom:12px; color:#86868b;">Dim button text when MQTT state doesn't match the "ON" value.</small>
+
+                    <div class="form-group">
+                        <label for="pad-edit-state-topic">State Topic</label>
+                        <input type="text" id="pad-edit-state-topic" maxlength="127" placeholder="e.g. home/lights/living-room/state">
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <div class="form-group" style="flex:2;">
+                            <label for="pad-edit-state-path">JSON Path</label>
+                            <input type="text" id="pad-edit-state-path" maxlength="47" placeholder="e.g. state (. = raw)">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label for="pad-edit-state-on-value">ON Value</label>
+                            <input type="text" id="pad-edit-state-on-value" maxlength="31" placeholder="e.g. ON" value="ON">
+                        </div>
+                    </div>
+                </details>
+
+                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
+
+                <div style="display:flex; gap:12px;">
+                    <div class="form-group" style="flex:1;">
+                        <label for="pad-edit-bg-color">Background</label>
+                        <input type="color" id="pad-edit-bg-color" value="#333333" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label for="pad-edit-fg-color">Text Color</label>
+                        <input type="color" id="pad-edit-fg-color" value="#ffffff" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:12px; margin-top:4px;">
+                    <div class="form-group" style="flex:1;">
+                        <label for="pad-edit-border-color">Border</label>
+                        <input type="color" id="pad-edit-border-color" value="#000000" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label for="pad-edit-border-width">Border Width</label>
+                        <input type="number" id="pad-edit-border-width" min="0" max="10" value="1" style="width:100%;">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label for="pad-edit-corner-radius">Radius</label>
+                        <input type="number" id="pad-edit-corner-radius" min="0" max="50" value="8" style="width:100%;">
+                    </div>
+                </div>
+
+                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
+
+                <div style="display:flex; gap:12px;">
+                    <div class="form-group" style="flex:1;">
+                        <label for="pad-edit-col-span">Col Span</label>
+                        <select id="pad-edit-col-span"></select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label for="pad-edit-row-span">Row Span</label>
+                        <select id="pad-edit-row-span"></select>
+                    </div>
+                </div>
+
+                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
+
+                <!-- Tap Action -->
+                <div class="form-group">
+                    <label for="pad-edit-action-type">Tap Action</label>
+                    <select id="pad-edit-action-type" onchange="padActionTypeChanged('tap')">
+                        <option value="">(none)</option>
+                        <option value="screen">Navigate to Screen</option>
+                        <option value="back">Navigate Back</option>
+                        <option value="mqtt">MQTT Publish</option>
+                    </select>
+                </div>
+                <div id="pad-edit-action-screen-group" style="display:none;">
+                    <div class="form-group">
+                        <label for="pad-edit-action-target">Target Screen</label>
+                        <select id="pad-edit-action-target">
+                            <option value="">(none)</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="pad-edit-action-mqtt-group" style="display:none;">
+                    <div class="form-group">
+                        <label for="pad-edit-action-topic">MQTT Topic</label>
+                        <input type="text" id="pad-edit-action-topic" maxlength="127" placeholder="e.g. home/light/toggle">
+                    </div>
+                    <div class="form-group">
+                        <label for="pad-edit-action-payload">MQTT Payload</label>
+                        <input type="text" id="pad-edit-action-payload" maxlength="127" placeholder="e.g. ON">
+                    </div>
+                </div>
+
+                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
+
+                <!-- Long-Press Action -->
+                <div class="form-group">
+                    <label for="pad-edit-lp-action-type">Long-Press Action</label>
+                    <select id="pad-edit-lp-action-type" onchange="padActionTypeChanged('lp')">
+                        <option value="">(none)</option>
+                        <option value="screen">Navigate to Screen</option>
+                        <option value="back">Navigate Back</option>
+                        <option value="mqtt">MQTT Publish</option>
+                    </select>
+                </div>
+                <div id="pad-edit-lp-action-screen-group" style="display:none;">
+                    <div class="form-group">
+                        <label for="pad-edit-lp-action-target">Target Screen</label>
+                        <select id="pad-edit-lp-action-target">
+                            <option value="">(none)</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="pad-edit-lp-action-mqtt-group" style="display:none;">
+                    <div class="form-group">
+                        <label for="pad-edit-lp-action-topic">MQTT Topic</label>
+                        <input type="text" id="pad-edit-lp-action-topic" maxlength="127" placeholder="e.g. home/light/toggle">
+                    </div>
+                    <div class="form-group">
+                        <label for="pad-edit-lp-action-payload">MQTT Payload</label>
+                        <input type="text" id="pad-edit-lp-action-payload" maxlength="127" placeholder="e.g. OFF">
+                    </div>
+                </div>
+            </div>
+
+            <div class="pad-edit-footer">
+                <button type="button" id="pad-edit-ok" class="btn btn-primary" style="flex:1;">OK</button>
+                <button type="button" id="pad-edit-clear" class="btn btn-secondary" style="flex:1; color:#ff3b30; border-color:#ff3b30;">Clear</button>
+                <button type="button" id="pad-edit-cancel" class="btn btn-secondary" style="flex:1;">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <script src="/portal.js"></script>

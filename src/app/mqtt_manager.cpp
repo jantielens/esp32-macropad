@@ -6,6 +6,7 @@
 
 #include "ha_discovery.h"
 #include "device_telemetry.h"
+#include "mqtt_sub_store.h"
 #include "power_manager.h"
 #include "power_config.h"
 #include "log_manager.h"
@@ -32,6 +33,7 @@ void MqttManager::begin(const DeviceConfig *config, const char *friendly_name, c
 		snprintf(_health_state_topic, sizeof(_health_state_topic), "%s/health/state", _base_topic);
 
 		_client.setBufferSize(MQTT_MAX_PACKET_SIZE);
+		installCallback();
 
 		_discovery_published_this_boot = false;
 		_last_reconnect_attempt_ms = 0;
@@ -89,6 +91,24 @@ bool MqttManager::publishJson(const char *topic, JsonDocument &doc, bool retaine
 
 bool MqttManager::publishImmediate(const char *topic, const char *payload, bool retained) {
 		return publish(topic, payload, retained);
+}
+
+bool MqttManager::subscribe(const char *topic) {
+		if (!topic || !topic[0]) return false;
+		if (!_client.connected()) return false;
+		bool ok = _client.subscribe(topic);
+		if (ok) {
+				LOGI("MQTT", "Subscribed: %s", topic);
+		} else {
+				LOGW("MQTT", "Subscribe failed: %s", topic);
+		}
+		return ok;
+}
+
+void MqttManager::installCallback() {
+		_client.setCallback([](char* topic, uint8_t* payload, unsigned int length) {
+				mqtt_sub_store_set(topic, payload, length);
+		});
 }
 
 void MqttManager::publishAvailability(bool online) {
@@ -223,6 +243,10 @@ void MqttManager::ensureConnected() {
 				if (power_manager_should_publish_mqtt_discovery()) {
 						publishDiscoveryOncePerBoot();
 				}
+
+				// Re-subscribe to all tracked subscription topics.
+				// On first connect, this also scans pad configs to discover topics.
+				mqtt_sub_store_subscribe_all();
 
 				// Publish a single retained state after connect so HA entities have values,
 				// even when periodic publishing is disabled (interval = 0).

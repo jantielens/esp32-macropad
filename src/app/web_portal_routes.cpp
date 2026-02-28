@@ -6,6 +6,7 @@
 #include "web_portal_display.h"
 #include "web_portal_firmware.h"
 #include "web_portal_ota.h"
+#include "web_portal_pad.h"
 #include "web_portal_pages.h"
 
 #include "board_config.h"
@@ -113,6 +114,20 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				handleSetDisplayScreen
 		);
 		registerOptions("/api/display/screen");
+
+		// Pad config API
+		registerOptions("/api/pad");
+		server->on("/api/pad", HTTP_GET, handleGetPadConfig);
+		server->on(
+				"/api/pad",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostPadConfig
+		);
+		server->on("/api/pad", HTTP_DELETE, handleDeletePadConfig);
 #endif
 
 		// OTA upload endpoint
