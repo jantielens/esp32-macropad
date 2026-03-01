@@ -31,6 +31,9 @@ get_bootloader_offset_dec_for_chip_family() {
     "ESP32"|"ESP32-S2")
       echo 4096  # 0x1000
       ;;
+    "ESP32-P4")
+      echo 8192  # 0x2000
+      ;;
     *)
       echo 0
       ;;
@@ -102,7 +105,9 @@ get_chip_family_for_fqbn() {
   IFS=':' read -r _pkg _arch board_id _rest <<< "$fqbn"
   board_id="${board_id,,}"
 
-  if [[ "$board_id" == *"esp32s3"* ]]; then
+  if [[ "$board_id" == *"esp32p4"* ]]; then
+    echo "ESP32-P4"
+  elif [[ "$board_id" == *"esp32s3"* ]]; then
     echo "ESP32-S3"
   elif [[ "$board_id" == *"esp32s2"* ]]; then
     echo "ESP32-S2"
@@ -116,7 +121,9 @@ get_chip_family_for_fqbn() {
     echo "ESP32-H2"
   else
     # Fallback for odd FQBN formats (keep behavior compatible).
-    if [[ "$fqbn" == *"esp32s3"* ]]; then
+    if [[ "$fqbn" == *"esp32p4"* ]]; then
+      echo "ESP32-P4"
+    elif [[ "$fqbn" == *"esp32s3"* ]]; then
       echo "ESP32-S3"
     elif [[ "$fqbn" == *"esp32s2"* ]]; then
       echo "ESP32-S2"

@@ -534,20 +534,22 @@ void DisplayManager::init() {
 		showSplash();
 		
 		// Create LVGL rendering task
-		// Stack size increased to 8KB for ESP32-S3 and larger displays
+		// Stack size: 16KB to accommodate image rendering (draw pipeline
+		// for lv_image with RGB565 source needs ~10-12 KB with transforms).
 		// On dual-core: pin to configured core (LVGL_TASK_CORE)
 		// On single-core: runs on Core 0 (time-sliced with Arduino loop)
-		// Stack allocated in PSRAM when available to save internal RAM (~8 KB).
+		// Stack allocated in PSRAM when available to save internal RAM.
+		static constexpr uint32_t kLvglStack = 16384;
 		#if CONFIG_FREERTOS_UNICORE
-	if (!rtos_create_task_psram_stack(lvglTask, "LVGL", 8192, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc)) {
-				xTaskCreate(lvglTask, "LVGL", 8192, this, LVGL_TASK_PRIORITY, &lvglTaskHandle);
+	if (!rtos_create_task_psram_stack(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc)) {
+				xTaskCreate(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle);
 				LOGI("Display", "Rendering task created (single-core, internal stack)");
 		} else {
 				LOGI("Display", "Rendering task created (single-core, PSRAM stack)");
 		}
 		#else
-		if (!rtos_create_task_psram_stack_pinned(lvglTask, "LVGL", 8192, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE)) {
-				xTaskCreatePinnedToCore(lvglTask, "LVGL", 8192, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, LVGL_TASK_CORE);
+		if (!rtos_create_task_psram_stack_pinned(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE)) {
+				xTaskCreatePinnedToCore(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, LVGL_TASK_CORE);
 				LOGI("Display", "Rendering task created (Core %d, internal stack)", LVGL_TASK_CORE);
 		} else {
 				LOGI("Display", "Rendering task created (Core %d, PSRAM stack)", LVGL_TASK_CORE);

@@ -4,6 +4,9 @@
 #include "screen.h"
 #include "../pad_config.h"
 #include "../pad_layout.h"
+#if HAS_IMAGE_FETCH
+#include "../image_fetch.h"
+#endif
 #include <lvgl.h>
 
 class DisplayManager;
@@ -46,6 +49,13 @@ struct ButtonTile {
     uint32_t bg_color_rgb;    // Original bg color (for tap flash restore)
     ButtonAction action;      // Tap action
     ButtonAction lp_action;   // Long-press action
+#if HAS_IMAGE_FETCH
+    lv_obj_t* bg_image;       // Background image widget (or nullptr)
+    image_slot_t image_slot;  // Image fetch slot (-1 = none)
+    lv_image_dsc_t img_dsc;   // LVGL image descriptor for current frame
+    uint16_t* owned_pixels;   // Tile-owned copy of pixel data (PSRAM)
+    size_t owned_pixels_size; // Byte size of owned_pixels buffer
+#endif
 };
 
 class PadScreen : public Screen {
@@ -76,6 +86,9 @@ private:
     void clearTiles();
     void pollMqttBindings();
     void pollToggleState();
+#if HAS_IMAGE_FETCH
+    void pollImageFrames();
+#endif
 
     // Event callbacks
     static void onTap(lv_event_t* e);

@@ -26,6 +26,9 @@
 #define CONFIG_JSON_PATH_MAX_LEN       48
 #define CONFIG_FORMAT_MAX_LEN          24
 #define CONFIG_STATE_ON_VALUE_MAX_LEN  32
+#define CONFIG_BG_IMAGE_URL_MAX_LEN   256
+#define CONFIG_BG_IMAGE_USER_MAX_LEN   32
+#define CONFIG_BG_IMAGE_PASS_MAX_LEN   64
 
 // Action types (string constants for type field)
 #define ACTION_TYPE_NONE    ""
@@ -90,6 +93,12 @@ struct ScreenButtonConfig {
 
     // Toggle state binding (dim button when OFF)
     StateBinding state_bind;
+
+    // Background image (fetched from URL, displayed as tile background)
+    char bg_image_url[CONFIG_BG_IMAGE_URL_MAX_LEN];       // empty = no image
+    char bg_image_user[CONFIG_BG_IMAGE_USER_MAX_LEN];     // HTTP Basic Auth user
+    char bg_image_password[CONFIG_BG_IMAGE_PASS_MAX_LEN]; // HTTP Basic Auth password
+    uint32_t bg_image_interval_ms;                        // 0 = fetch once, >0 = periodic
 };
 
 // Page-level config

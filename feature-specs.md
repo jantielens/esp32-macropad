@@ -28,7 +28,7 @@ Protect LCD panels from burn-in and reduce power draw by fading the backlight to
 |---|---|
 | Feature flag | `HAS_DISPLAY` (compile-time) |
 | Optional flag | `HAS_TOUCH` — enables wake-on-touch |
-| Optional flag | `HAS_IMAGE_API` — pauses background image fetching during sleep |
+| Optional flag | `HAS_IMAGE_FETCH` — pauses background image fetching during sleep |
 | Display HAL | Must expose `setBacklightBrightness(uint8_t 0-100)` or at minimum `setBacklight(bool)` |
 | LVGL | `lv_layer_top()` for sleep overlay, `lv_timer_create` for scheduled callbacks |
 | FreeRTOS | `portMUX_TYPE` spinlocks for cross-task signaling |
@@ -329,7 +329,7 @@ Provide a multi-page, fully customizable button grid that adapts to any display 
 |---|---|
 | Feature flag | `HAS_DISPLAY` (compile-time) |
 | Optional flag | `HAS_MQTT` — for button actions, live labels, toggle state, HA event entities |
-| Optional flag | `HAS_IMAGE_API` — for background image fetching (JPEG/PNG from URL) |
+| Optional flag | `HAS_IMAGE_FETCH` — for background image fetching (JPEG/PNG from URL) |
 | Filesystem | FFat partition for per-page JSON config and icon storage |
 | LVGL | Container objects, image objects, label objects |
 | Icon Store | For button icons |
@@ -589,20 +589,26 @@ No `cols`/`rows` fields — the layout name fully determines button count and po
 
 **Background images:**
 
-17. **Image fetch**: Buttons with `bg_image_url` set fetch JPEG/PNG snapshots from the URL. Images are decoded, scaled to tile size, and displayed behind button text/icons.
-18. **Refresh interval**: `bg_image_interval_ms` controls auto-refresh (0 = fetch once). Useful for webcam snapshots.
-19. **Cached across hide/show**: Decoded pixel buffers are owned by the screen instance and survive `hide()`/`show()` cycles.
-20. **Authentication**: Optional HTTP Basic Auth per button (`bg_image_user`/`bg_image_password`).
+17. **Image fetch**: Buttons with `bg_image_url` set fetch JPEG/PNG snapshots from the URL. A single dedicated FreeRTOS fetch task round-robins through all active image slots, downloading one at a time. Images are decoded to RGB565 pixel buffers (decode once, draw cheap) and displayed behind button text/icons.
+18. **Cover-mode scaling**: Fetched images are scaled to fill the entire button area using CSS `object-fit: cover` semantics — `scale = max(target_w/src_w, target_h/src_h)`, bilinear resample, center-crop. No letterboxing, no stretching. For JPEG, the decoder's built-in downscale (1/2, 1/4, 1/8) is used to get close to target size first, then fine-scale — saves decode RAM for large source images.
+19. **Refresh interval**: `bg_image_interval_ms` controls auto-refresh (0 = fetch once). Useful for webcam snapshots.
+20. **Cached across hide/show**: Decoded pixel buffers survive `hide()`/`show()` cycles. When navigating back to a page with image buttons, the previously-decoded images display immediately while the fetch task begins a new refresh cycle in the background.
+21. **Authentication**: Optional HTTP Basic Auth per button (`bg_image_user`/`bg_image_password`).
+22. **Visibility-gated fetching**: Only the currently visible pad page's image slots are actively fetched. When navigating away, the fetch task pauses (HTTP connections close, no new requests). When navigating back, the task resumes. Buffers are retained across page switches.
+23. **Screen saver pause**: When the screen saver activates, all image fetching stops. Fetching resumes when the screen saver deactivates (if the pad page is still the active screen).
+24. **Double-buffered frames**: Each image slot has two PSRAM pixel buffers (front/back). The fetch task writes to the back buffer; on completion, an atomic pointer swap makes the new frame visible. LVGL only reads the front buffer, so no mutex is needed for frame handoff.
+25. **Lazy slot allocation**: Pixel buffers are only allocated for buttons that have `bg_image_url` set. No upfront allocation for the full page.
 
 **Persistence:**
 
-21. **FFat JSON storage**: Each page's config is stored at `/config/pad_N.json`.
-22. **Live update on save**: After a POST to `/api/pad`, icons are pre-cached, the in-memory config is updated, and `ui_generation` is bumped. The LVGL task detects the generation change and rebuilds tiles without a reboot.
-23. **MQTT resubscribe**: After saving a page with new subscribe topics, the MQTT manager is notified to update subscriptions.
+26. **LittleFS JSON storage**: Each page's config is stored at `/config/pad_N.json`.
+27. **Live update on save**: After a POST to `/api/pad`, icons are pre-cached, the in-memory config is updated, and `ui_generation` is bumped. The LVGL task detects the generation change and rebuilds tiles without a reboot.
+28. **MQTT resubscribe**: After saving a page with new subscribe topics, the MQTT manager is notified to update subscriptions.
+29. **Image re-fetch on save**: After saving a page, old image slots are cancelled and new slots are started for any buttons with `bg_image_url`.
 
 **Pixel shift:**
 
-24. **Burn-in prevention**: The content wrapper container is offset by the screen saver's pixel shift `(dx, dy)` each frame. The 4px margin on all sides provides space for this shift without pushing content off-screen.
+30. **Burn-in prevention**: The content wrapper container is offset by the screen saver's pixel shift `(dx, dy)` each frame. The 4px margin on all sides provides space for this shift without pushing content off-screen.
 
 ### Configuration
 
@@ -689,7 +695,7 @@ No `cols`/`rows` fields — the layout name fully determines button count and po
 | **Screen navigation** | `display_manager_show_screen(screen_id)` for tap/long-press navigation. Enables multi-page workflows (page 1 button navigates to page 3) |
 | **Icon Store** | `icon_store_lookup()` for button icons; `icon_store_preload_buttons()` after save |
 | **Screen saver** | Pixel shift via `screen_saver_manager_get_pixel_shift()`. Margin of `PIXEL_SHIFT_MARGIN` (4px) reserved on all sides |
-| **Image fetch** | `button_image_fetch_start/stop()` for background images; paused during screen saver sleep |
+| **Image fetch** | `image_fetch_request/cancel()` for background images; `image_fetch_pause/resume()` for screen saver and screen visibility |
 
 ### Reference Implementation
 
@@ -701,8 +707,10 @@ No `cols`/`rows` fields — the layout name fully determines button count and po
 | [src/app/screens/pad_screen.h](src/app/screens/pad_screen.h) | Screen class with runtime state, MQTT label/state integration |
 | [src/app/screens/pad_screen.cpp](src/app/screens/pad_screen.cpp) | LVGL tile creation, click/long-press handlers, runtime updates, image fetch lifecycle |
 | [src/app/screens/button_runtime.h](src/app/screens/button_runtime.h) | Shared helpers: tap flash, runtime label/color application, HA event publishing |
-| [src/app/screens/button_image_fetch.h](src/app/screens/button_image_fetch.h) | Background image fetch API (JPEG/PNG decode, per-slot buffers) |
-| [src/app/screens/button_image_fetch.cpp](src/app/screens/button_image_fetch.cpp) | FreeRTOS fetch task, HTTP client, JPEG/PNG decode, frame handoff |
+| [src/app/image_decoder.h](src/app/image_decoder.h) | Stateless decode+scale API (JPEG via tjpgd, PNG via lodepng) — reusable by pad and future webcam screen |
+| [src/app/image_decoder.cpp](src/app/image_decoder.cpp) | Format detection, decode to RGB565, cover-mode scale with center-crop |
+| [src/app/image_fetch.h](src/app/image_fetch.h) | Slot-based image fetch API: request, cancel, pause, resume, poll for new frames |
+| [src/app/image_fetch.cpp](src/app/image_fetch.cpp) | Single FreeRTOS task, round-robin fetch, HTTP client, double-buffered PSRAM slots |
 | [src/app/web_portal_pad.cpp](src/app/web_portal_pad.cpp) | REST API handlers for GET/POST/DELETE |
 | [src/app/board_config.h](src/app/board_config.h) | Default `DISPLAY_SHAPE`, `UI_SCALE_TIER`, `CURATED_LAYOUTS`, font enable flags |
 
@@ -718,6 +726,10 @@ No `cols`/`rows` fields — the layout name fully determines button count and po
 - **Lazy tile creation**: Tiles are created in `update()`, not `create()`, because config is loaded from FFat after the screen object is constructed.
 - **ui_generation counter**: A single `uint8_t` counter bumped on every save. The LVGL task compares its cached value with the live one. On mismatch, tiles are destroyed and recreated. This avoids complex diff logic.
 - **MQTT label coalescing (200ms)**: Home Assistant often publishes multiple entity state changes in rapid succession. Coalescing prevents per-label LVGL redraws and reduces PSRAM bus contention on RGB panels.
-- **Background image pixel ownership**: The screen instance owns decoded pixel buffers (PSRAM `uint16_t*`), not the fetch task. Images survive screen hide/show cycles.
+- **Background image pixel ownership**: The image_fetch module owns decoded pixel buffers (PSRAM `uint16_t*`) in double-buffered slots. The fetch task writes to the back buffer and atomically swaps pointers on completion. LVGL reads the front buffer without locking. Buffers survive screen hide/show cycles.
+- **Shared image decode module**: `image_decoder.h/cpp` is split from `image_fetch.h/cpp` so decode+scale can be reused by a future full-screen webcam viewer without pulling in the fetch task's slot management.
+- **Single fetch task + round-robin**: One FreeRTOS task cycles through active slots, fetching the oldest slot first. This avoids WiFi contention from parallel HTTP connections and keeps the pattern simple. Initial page load is progressive — images appear one-by-one.
+- **Cover-mode scaling**: Images are scaled to fill the tile using `max(tw/sw, th/sh)`, bilinear interpolation, center-crop. For JPEG, the decoder's built-in 1/2, 1/4, 1/8 downscale is used as a first pass to reduce decode buffer size before fine-scaling.
+- **tjpgd + lodepng (LVGL built-in)**: Both decoders ship with the LVGL 9.5 library. Called directly as C libraries (not via LVGL's decoder pipeline) because decoding happens in the fetch task, outside of LVGL's drawing context. esp_jpeg is not available on ESP32-P4, which rules it out as a cross-platform option.
 - **Color parsing flexibility**: The REST API accepts `#RRGGBB`, `RRGGBB`, `0xRRGGBB`, or plain uint32. Output is always `#RRGGBB`.
 - **Curated layout forward-compatibility**: Phase 1 only implements `"layout": "grid"`. Unknown layout type strings (e.g., `"round_7"`) fall back to grid 3×3. When Phase 2 adds the curated layout registry, these layout names will resolve to their hardcoded button positions. No config migration needed.
