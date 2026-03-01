@@ -37,6 +37,7 @@ struct ImageSlot {
     uint32_t interval_ms;      // 0 = fetch once
     uint32_t last_fetch_ms;    // millis() of last successful fetch
     bool fetched_once;         // true after first successful fetch
+    ImageScaleMode scale_mode; // Cover or letterbox
 
     // Double-buffered pixel data
     uint16_t* front_buf;       // Read by LVGL (stable pointer)
@@ -229,6 +230,7 @@ static void fetch_task(void* param) {
         int8_t next = -1;
         uint32_t now = (uint32_t)millis();
         int8_t scan_start = (last_slot + 1 < IMAGE_SLOT_MAX) ? last_slot + 1 : 0;
+        uint32_t min_wait_ms = IDLE_DELAY_MS;  // Shortest time until any slot is due
 
         // Round-robin: scan from last_slot+1 through all slots
         for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
@@ -248,14 +250,18 @@ static void fetch_task(void* param) {
                     next = idx;
                     break;
                 }
+                // Track how long until this slot becomes due
+                uint32_t remaining = s.interval_ms - elapsed;
+                if (remaining < min_wait_ms) min_wait_ms = remaining;
             }
         }
 
         xSemaphoreGive(g_mutex);
 
         if (next < 0) {
-            // No slot ready — sleep and retry
-            vTaskDelay(pdMS_TO_TICKS(IDLE_DELAY_MS));
+            // No slot ready — sleep until the soonest slot is due
+            if (min_wait_ms < 10) min_wait_ms = 10;  // Floor to avoid busy-spin
+            vTaskDelay(pdMS_TO_TICKS(min_wait_ms));
             continue;
         }
 
@@ -273,6 +279,7 @@ static void fetch_task(void* param) {
         char pass[SLOT_PASS_MAX_LEN];
         uint16_t tw = slot.target_w;
         uint16_t th = slot.target_h;
+        ImageScaleMode sm = slot.scale_mode;
         strlcpy(url, slot.url, sizeof(url));
         strlcpy(user, slot.user, sizeof(user));
         strlcpy(pass, slot.pass, sizeof(pass));
@@ -299,7 +306,7 @@ static void fetch_task(void* param) {
         // Decode + scale to RGB565
         uint16_t* pixels = nullptr;
         size_t pixel_size = 0;
-        bool decoded = image_decode_to_rgb565(raw_data, raw_len, tw, th, &pixels, &pixel_size);
+        bool decoded = image_decode_to_rgb565(raw_data, raw_len, tw, th, sm, &pixels, &pixel_size);
         heap_caps_free(raw_data);
 
         if (!decoded || !pixels) {
@@ -370,7 +377,8 @@ void image_fetch_init() {
 
 image_slot_t image_fetch_request(
     const char* url, const char* user, const char* pass,
-    uint16_t target_w, uint16_t target_h, uint32_t interval_ms)
+    uint16_t target_w, uint16_t target_h, uint32_t interval_ms,
+    ImageScaleMode scale_mode)
 {
     if (!url || !url[0] || target_w == 0 || target_h == 0) return IMAGE_SLOT_INVALID;
     if (!g_mutex) return IMAGE_SLOT_INVALID;
@@ -401,6 +409,7 @@ image_slot_t image_fetch_request(
     s.target_w = target_w;
     s.target_h = target_h;
     s.interval_ms = interval_ms;
+    s.scale_mode = scale_mode;
 
     xSemaphoreGive(g_mutex);
 

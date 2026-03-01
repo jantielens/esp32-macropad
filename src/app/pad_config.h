@@ -99,6 +99,7 @@ struct ScreenButtonConfig {
     char bg_image_user[CONFIG_BG_IMAGE_USER_MAX_LEN];     // HTTP Basic Auth user
     char bg_image_password[CONFIG_BG_IMAGE_PASS_MAX_LEN]; // HTTP Basic Auth password
     uint32_t bg_image_interval_ms;                        // 0 = fetch once, >0 = periodic
+    bool bg_image_letterbox;                              // true = letterbox (fit + black bars), false = cover (fill + crop)
 };
 
 // Page-level config

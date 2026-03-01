@@ -25,8 +25,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `screens/` - Screen base class and implementations (splash, info, test, touch test)
   - Conditional compilation: Only selected drivers are compiled via `display_drivers.cpp` / `touch_drivers.cpp` (Arduino doesn’t auto-compile subdir `.cpp`)
 - **Image Fetch Subsystem**: Background HTTP(S) image download, decode, and scaling (compile-time gated by `HAS_IMAGE_FETCH`)
-  - `image_decoder.cpp/h` - Stateless JPEG (tjpgd) / PNG (lodepng) decode + cover-mode bilinear scale to RGB565
-  - `image_fetch.cpp/h` - Slot-based FreeRTOS background fetcher with per-slot pause/resume and double-buffered PSRAM frames
+  - `image_decoder.cpp/h` - Stateless JPEG (tjpgd) / PNG (lodepng) decode + bilinear scale to RGB565 (cover or letterbox mode)
+  - `image_fetch.cpp/h` - Slot-based FreeRTOS background fetcher with per-slot pause/resume, double-buffered PSRAM frames, and per-slot scale mode (cover/letterbox)
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode and transport parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
@@ -187,7 +187,7 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/ble_advertiser.cpp/h` - BLE BTHome advertiser (compile-time gated by `HAS_BLE`)
 - `src/app/wifi_manager.cpp/h` - WiFi connect + mDNS (replaces inline connect logic)
 - `src/app/portal_idle.cpp/h` - Portal idle timeout in Config/AP modes
-- `src/app/image_decoder.cpp/h` - JPEG/PNG decode + cover-mode bilinear scale to RGB565 (compile-time gated by `HAS_IMAGE_FETCH`)
+- `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
 - `src/app/image_fetch.cpp/h` - Slot-based background image fetcher with per-slot pause/resume (compile-time gated by `HAS_IMAGE_FETCH`)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task

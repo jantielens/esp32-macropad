@@ -1520,6 +1520,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-bg-image-user').value = btn.bg_image_user || '';
     document.getElementById('pad-edit-bg-image-password').value = '';
     document.getElementById('pad-edit-bg-image-interval').value = (btn.bg_image_interval_ms !== undefined) ? btn.bg_image_interval_ms : 0;
+    document.getElementById('pad-edit-bg-image-letterbox').checked = !!btn.bg_image_letterbox;
     document.getElementById('pad-edit-image-section').open = !!btn.bg_image_url;
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
@@ -1626,6 +1627,7 @@ function padDialogOk() {
         if (imgPass) btn.bg_image_password = imgPass;
         const imgInterval = parseInt(document.getElementById('pad-edit-bg-image-interval').value);
         if (!isNaN(imgInterval) && imgInterval >= 0) btn.bg_image_interval_ms = imgInterval;
+        if (document.getElementById('pad-edit-bg-image-letterbox').checked) btn.bg_image_letterbox = true;
     }
 
     padState.buttons.push(btn);
