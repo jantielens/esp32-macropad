@@ -383,9 +383,10 @@ void PadScreen::buildTiles() {
         tile.owned_pixels_size = 0;
 
         if (bcfg.bg_image_url[0]) {
+            ImageScaleMode sm = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;
             tile.image_slot = image_fetch_request(
                 bcfg.bg_image_url, bcfg.bg_image_user, bcfg.bg_image_password,
-                r.w, r.h, bcfg.bg_image_interval_ms);
+                r.w, r.h, bcfg.bg_image_interval_ms, sm);
 
             if (tile.image_slot != IMAGE_SLOT_INVALID) {
                 // Create LVGL image widget as background (behind labels)

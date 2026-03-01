@@ -180,6 +180,129 @@ static bool cover_scale_rgba8888_to_565(
 }
 
 // ============================================================================
+// Letterbox-mode scale: bilinear resample + fit inside + black bars → RGB565
+// ============================================================================
+// Source is RGB888 (3 bytes/pixel, BGR byte order from tjpgd).
+
+static bool letterbox_scale_rgb888_to_565(
+    const uint8_t* src, int src_w, int src_h,
+    uint16_t* dst, int dst_w, int dst_h)
+{
+    if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
+
+    // Pre-fill with black
+    memset(dst, 0, (size_t)dst_w * dst_h * 2);
+
+    // Fit: use min scale so the entire image is visible
+    float scale_x = (float)dst_w / (float)src_w;
+    float scale_y = (float)dst_h / (float)src_h;
+    float scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+    int scaled_w = (int)(src_w * scale + 0.5f);
+    int scaled_h = (int)(src_h * scale + 0.5f);
+    int offset_x = (dst_w - scaled_w) / 2;
+    int offset_y = (dst_h - scaled_h) / 2;
+
+    for (int dy = 0; dy < scaled_h; dy++) {
+        float src_yf = (float)dy / scale;
+        int sy0 = (int)src_yf;
+        float fy = src_yf - sy0;
+        int sy1 = sy0 + 1;
+        if (sy0 < 0) { sy0 = 0; fy = 0; }
+        if (sy1 >= src_h) sy1 = src_h - 1;
+
+        uint16_t* row_out = dst + (size_t)(dy + offset_y) * dst_w + offset_x;
+
+        for (int dx = 0; dx < scaled_w; dx++) {
+            float src_xf = (float)dx / scale;
+            int sx0 = (int)src_xf;
+            float fx = src_xf - sx0;
+            int sx1 = sx0 + 1;
+            if (sx0 < 0) { sx0 = 0; fx = 0; }
+            if (sx1 >= src_w) sx1 = src_w - 1;
+
+            // BGR byte order from tjpgd
+            const uint8_t* p00 = src + ((size_t)sy0 * src_w + sx0) * 3;
+            const uint8_t* p10 = src + ((size_t)sy0 * src_w + sx1) * 3;
+            const uint8_t* p01 = src + ((size_t)sy1 * src_w + sx0) * 3;
+            const uint8_t* p11 = src + ((size_t)sy1 * src_w + sx1) * 3;
+
+            float w00 = (1.0f - fx) * (1.0f - fy);
+            float w10 = fx * (1.0f - fy);
+            float w01 = (1.0f - fx) * fy;
+            float w11 = fx * fy;
+
+            uint8_t b = (uint8_t)(p00[0] * w00 + p10[0] * w10 + p01[0] * w01 + p11[0] * w11 + 0.5f);
+            uint8_t g = (uint8_t)(p00[1] * w00 + p10[1] * w10 + p01[1] * w01 + p11[1] * w11 + 0.5f);
+            uint8_t r = (uint8_t)(p00[2] * w00 + p10[2] * w10 + p01[2] * w01 + p11[2] * w11 + 0.5f);
+
+            row_out[dx] = pack_rgb565(r, g, b);
+        }
+
+        if ((dy & 0x0F) == 0) taskYIELD();
+    }
+    return true;
+}
+
+// Same but for RGBA8888 source (4 bytes/pixel, alpha discarded)
+static bool letterbox_scale_rgba8888_to_565(
+    const uint8_t* src, int src_w, int src_h,
+    uint16_t* dst, int dst_w, int dst_h)
+{
+    if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
+
+    memset(dst, 0, (size_t)dst_w * dst_h * 2);
+
+    float scale_x = (float)dst_w / (float)src_w;
+    float scale_y = (float)dst_h / (float)src_h;
+    float scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+    int scaled_w = (int)(src_w * scale + 0.5f);
+    int scaled_h = (int)(src_h * scale + 0.5f);
+    int offset_x = (dst_w - scaled_w) / 2;
+    int offset_y = (dst_h - scaled_h) / 2;
+
+    for (int dy = 0; dy < scaled_h; dy++) {
+        float src_yf = (float)dy / scale;
+        int sy0 = (int)src_yf;
+        float fy = src_yf - sy0;
+        int sy1 = sy0 + 1;
+        if (sy0 < 0) { sy0 = 0; fy = 0; }
+        if (sy1 >= src_h) sy1 = src_h - 1;
+
+        uint16_t* row_out = dst + (size_t)(dy + offset_y) * dst_w + offset_x;
+
+        for (int dx = 0; dx < scaled_w; dx++) {
+            float src_xf = (float)dx / scale;
+            int sx0 = (int)src_xf;
+            float fx = src_xf - sx0;
+            int sx1 = sx0 + 1;
+            if (sx0 < 0) { sx0 = 0; fx = 0; }
+            if (sx1 >= src_w) sx1 = src_w - 1;
+
+            const uint8_t* p00 = src + ((size_t)sy0 * src_w + sx0) * 4;
+            const uint8_t* p10 = src + ((size_t)sy0 * src_w + sx1) * 4;
+            const uint8_t* p01 = src + ((size_t)sy1 * src_w + sx0) * 4;
+            const uint8_t* p11 = src + ((size_t)sy1 * src_w + sx1) * 4;
+
+            float w00 = (1.0f - fx) * (1.0f - fy);
+            float w10 = fx * (1.0f - fy);
+            float w01 = (1.0f - fx) * fy;
+            float w11 = fx * fy;
+
+            uint8_t r = (uint8_t)(p00[0] * w00 + p10[0] * w10 + p01[0] * w01 + p11[0] * w11 + 0.5f);
+            uint8_t g = (uint8_t)(p00[1] * w00 + p10[1] * w10 + p01[1] * w01 + p11[1] * w11 + 0.5f);
+            uint8_t b = (uint8_t)(p00[2] * w00 + p10[2] * w10 + p01[2] * w01 + p11[2] * w11 + 0.5f);
+
+            row_out[dx] = pack_rgb565(r, g, b);
+        }
+
+        if ((dy & 0x0F) == 0) taskYIELD();
+    }
+    return true;
+}
+
+// ============================================================================
 // JPEG decode via tjpgd
 // ============================================================================
 
@@ -335,6 +458,7 @@ static bool decode_png(const uint8_t* data, size_t len,
 bool image_decode_to_rgb565(
     const uint8_t* data, size_t len,
     uint16_t target_w, uint16_t target_h,
+    ImageScaleMode scale_mode,
     uint16_t** out_pixels, size_t* out_size)
 {
     if (out_pixels) *out_pixels = nullptr;
@@ -361,16 +485,26 @@ bool image_decode_to_rgb565(
         uint8_t* rgb888 = nullptr;
         int src_w = 0, src_h = 0;
         if (decode_jpeg(data, len, &rgb888, &src_w, &src_h)) {
-            LOGD(TAG, "JPEG %dx%d → cover %ux%u", src_w, src_h, target_w, target_h);
-            ok = cover_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h);
+            const char* mode_str = (scale_mode == IMAGE_SCALE_LETTERBOX) ? "letterbox" : "cover";
+            LOGD(TAG, "JPEG %dx%d → %s %ux%u", src_w, src_h, mode_str, target_w, target_h);
+            if (scale_mode == IMAGE_SCALE_LETTERBOX) {
+                ok = letterbox_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h);
+            } else {
+                ok = cover_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h);
+            }
             heap_caps_free(rgb888);
         }
     } else if (fmt == IMAGE_FORMAT_PNG) {
         uint8_t* rgba = nullptr;
         int src_w = 0, src_h = 0;
         if (decode_png(data, len, &rgba, &src_w, &src_h)) {
-            LOGD(TAG, "PNG %dx%d → cover %ux%u", src_w, src_h, target_w, target_h);
-            ok = cover_scale_rgba8888_to_565(rgba, src_w, src_h, out, target_w, target_h);
+            const char* mode_str = (scale_mode == IMAGE_SCALE_LETTERBOX) ? "letterbox" : "cover";
+            LOGD(TAG, "PNG %dx%d → %s %ux%u", src_w, src_h, mode_str, target_w, target_h);
+            if (scale_mode == IMAGE_SCALE_LETTERBOX) {
+                ok = letterbox_scale_rgba8888_to_565(rgba, src_w, src_h, out, target_w, target_h);
+            } else {
+                ok = cover_scale_rgba8888_to_565(rgba, src_w, src_h, out, target_w, target_h);
+            }
             free(rgba);  // lodepng uses malloc
         }
     }

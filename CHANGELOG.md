@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-03-01
+
+### Added
+- **Letterbox image scaling** — new `ImageScaleMode` option for button background images
+  - `IMAGE_SCALE_LETTERBOX`: fit image inside target area with black bars (CSS object-fit: contain)
+  - `IMAGE_SCALE_COVER` (default): existing fill + center-crop behavior preserved
+  - Per-button `bg_image_letterbox` config field in pad JSON
+  - Web portal: "Letterbox" checkbox in button image background editor
+- **Smart idle sleep for image fetch** — fetch task now sleeps only until the soonest slot is due, instead of a fixed 500ms delay; improves responsiveness for short refresh intervals
+
 ## [1.2.0] - 2026-03-01
 
 ### Added

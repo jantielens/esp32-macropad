@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "image_decoder.h"
 
 // ============================================================================
 // Image Fetch — slot-based background image fetcher
@@ -50,11 +51,13 @@ void image_fetch_init();
 // Request a new image slot.  Returns a slot_id or IMAGE_SLOT_INVALID on failure.
 //   url         — HTTP(S) URL to fetch (must remain valid / be copied internally)
 //   user, pass  — optional HTTP Basic Auth credentials (empty string = no auth)
-//   target_w/h  — desired pixel dimensions (cover-mode scale)
+//   target_w/h  — desired pixel dimensions
 //   interval_ms — 0 = fetch once, >0 = periodic refresh
+//   scale_mode  — IMAGE_SCALE_COVER or IMAGE_SCALE_LETTERBOX
 image_slot_t image_fetch_request(
     const char* url, const char* user, const char* pass,
-    uint16_t target_w, uint16_t target_h, uint32_t interval_ms);
+    uint16_t target_w, uint16_t target_h, uint32_t interval_ms,
+    ImageScaleMode scale_mode = IMAGE_SCALE_COVER);
 
 // Cancel a slot and free its PSRAM buffers.
 void image_fetch_cancel(image_slot_t slot);

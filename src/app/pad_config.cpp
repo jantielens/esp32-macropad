@@ -146,6 +146,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     strlcpy(btn->bg_image_user, obj["bg_image_user"] | "", CONFIG_BG_IMAGE_USER_MAX_LEN);
     strlcpy(btn->bg_image_password, obj["bg_image_password"] | "", CONFIG_BG_IMAGE_PASS_MAX_LEN);
     btn->bg_image_interval_ms = obj["bg_image_interval_ms"] | (uint32_t)0;
+    btn->bg_image_letterbox = obj["bg_image_letterbox"] | false;
 }
 
 // ============================================================================
