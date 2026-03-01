@@ -77,8 +77,13 @@ private:
 		
 		// Screen management
 		Screen* currentScreen;
-		Screen* previousScreen;  // Track previous screen for return navigation
 		Screen* pendingScreen;   // Deferred screen switch (processed in lvglTask)
+
+		// Screen history stack for multi-step back navigation
+		static constexpr size_t SCREEN_HISTORY_MAX = 8;
+		Screen* screenHistory[SCREEN_HISTORY_MAX];
+		size_t screenHistoryCount;
+		bool skipHistoryPush;    // Set by goBack() to avoid pushing when navigating back
 
 		// Defer small LVGL UI updates (like splash status) to the LVGL task.
 		char pendingSplashStatus[96];

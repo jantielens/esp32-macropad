@@ -38,7 +38,8 @@ static uint16_t g_perf_frames_in_window = 0;
 DisplayManager* displayManager = nullptr;
 
 DisplayManager::DisplayManager(DeviceConfig* cfg) 
-		: driver(nullptr), display(nullptr), config(cfg), currentScreen(nullptr), previousScreen(nullptr), pendingScreen(nullptr), 
+		: driver(nullptr), display(nullptr), config(cfg), currentScreen(nullptr), pendingScreen(nullptr),
+		screenHistoryCount(0), skipHistoryPush(false), 
 			infoScreen(cfg, this), testScreen(this), fpsScreen(this),
 			padScreens{
 				PadScreen(0, this), PadScreen(1, this), PadScreen(2, this), PadScreen(3, this),
@@ -258,7 +259,19 @@ void DisplayManager::lvglTask(void* pvParameter) {
 								mgr->currentScreen->hide();
 						}
 
-						mgr->previousScreen = mgr->currentScreen;
+						// Push current screen onto history (skip for splash and goBack)
+						if (mgr->currentScreen && !mgr->skipHistoryPush
+								&& mgr->currentScreen != &mgr->splashScreen) {
+								if (mgr->screenHistoryCount < SCREEN_HISTORY_MAX) {
+										mgr->screenHistory[mgr->screenHistoryCount++] = mgr->currentScreen;
+								} else {
+										memmove(&mgr->screenHistory[0], &mgr->screenHistory[1],
+												(SCREEN_HISTORY_MAX - 1) * sizeof(Screen*));
+										mgr->screenHistory[SCREEN_HISTORY_MAX - 1] = mgr->currentScreen;
+								}
+						}
+						mgr->skipHistoryPush = false;
+
 						mgr->currentScreen = target;
 						mgr->currentScreen->show();
 						mgr->pendingScreen = nullptr;
@@ -646,9 +659,10 @@ bool DisplayManager::showScreen(const char* screen_id) {
 }
 
 bool DisplayManager::goBack() {
-		if (!previousScreen) return false;
-		pendingScreen = previousScreen;
-		LOGI("Display", "Queued go-back");
+		if (screenHistoryCount == 0) return false;
+		pendingScreen = screenHistory[--screenHistoryCount];
+		skipHistoryPush = true;
+		LOGI("Display", "Queued go-back (history depth: %zu)", screenHistoryCount);
 		return true;
 }
 
