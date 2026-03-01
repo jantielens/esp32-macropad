@@ -1515,6 +1515,13 @@ function padDialogOpen(col, row) {
     // Auto-open state section if configured
     document.getElementById('pad-edit-state-section').open = !!stateBind.topic;
 
+    // Image background
+    document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
+    document.getElementById('pad-edit-bg-image-user').value = btn.bg_image_user || '';
+    document.getElementById('pad-edit-bg-image-password').value = '';
+    document.getElementById('pad-edit-bg-image-interval').value = (btn.bg_image_interval_ms !== undefined) ? btn.bg_image_interval_ms : 0;
+    document.getElementById('pad-edit-image-section').open = !!btn.bg_image_url;
+
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
 }
@@ -1607,6 +1614,18 @@ function padDialogOk() {
         if (statePath) sb.path = statePath;
         sb.on_value = stateOnVal || 'ON';
         btn.state_bind = sb;
+    }
+
+    // Image background
+    const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();
+    if (imgUrl) {
+        btn.bg_image_url = imgUrl;
+        const imgUser = document.getElementById('pad-edit-bg-image-user').value.trim();
+        const imgPass = document.getElementById('pad-edit-bg-image-password').value;
+        if (imgUser) btn.bg_image_user = imgUser;
+        if (imgPass) btn.bg_image_password = imgPass;
+        const imgInterval = parseInt(document.getElementById('pad-edit-bg-image-interval').value);
+        if (!isNaN(imgInterval) && imgInterval >= 0) btn.bg_image_interval_ms = imgInterval;
     }
 
     padState.buttons.push(btn);

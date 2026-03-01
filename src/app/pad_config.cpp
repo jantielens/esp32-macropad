@@ -140,6 +140,12 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
 
     // Toggle state binding
     parse_state_binding(obj["state_bind"], &btn->state_bind);
+
+    // Background image fields
+    strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);
+    strlcpy(btn->bg_image_user, obj["bg_image_user"] | "", CONFIG_BG_IMAGE_USER_MAX_LEN);
+    strlcpy(btn->bg_image_password, obj["bg_image_password"] | "", CONFIG_BG_IMAGE_PASS_MAX_LEN);
+    btn->bg_image_interval_ms = obj["bg_image_interval_ms"] | (uint32_t)0;
 }
 
 // ============================================================================

@@ -254,6 +254,12 @@
 #define HAS_DISPLAY false
 #endif
 
+// Enable background image fetch for pad button tiles.
+// Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
+#ifndef HAS_IMAGE_FETCH
+#define HAS_IMAGE_FETCH HAS_DISPLAY
+#endif
+
 // Display driver selection
 // Available drivers:
 //   DISPLAY_DRIVER_TFT_ESPI (1) - Bodmer's TFT_eSPI (supports ILI9341, ST7789, etc.)

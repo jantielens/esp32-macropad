@@ -7,6 +7,9 @@
 #include "../mqtt_manager.h"
 #include "../mqtt_sub_store.h"
 #endif
+#if HAS_IMAGE_FETCH
+#include "../image_fetch.h"
+#endif
 
 #include <esp_heap_caps.h>
 #include <string.h>
@@ -86,10 +89,21 @@ void PadScreen::show() {
     if (screen) {
         lv_screen_load(screen);
     }
+#if HAS_IMAGE_FETCH
+    for (uint8_t i = 0; i < tileCount; i++) {
+        if (tiles[i].image_slot != IMAGE_SLOT_INVALID)
+            image_fetch_resume_slot(tiles[i].image_slot);
+    }
+#endif
 }
 
 void PadScreen::hide() {
-    // Nothing needed — LVGL handles screen switching
+#if HAS_IMAGE_FETCH
+    for (uint8_t i = 0; i < tileCount; i++) {
+        if (tiles[i].image_slot != IMAGE_SLOT_INVALID)
+            image_fetch_pause_slot(tiles[i].image_slot);
+    }
+#endif
 }
 
 void PadScreen::update() {
@@ -101,6 +115,9 @@ void PadScreen::update() {
         // Config unchanged — just poll MQTT bindings and toggle state
         pollMqttBindings();
         pollToggleState();
+#if HAS_IMAGE_FETCH
+        pollImageFrames();
+#endif
         return;
     }
 
@@ -114,10 +131,27 @@ void PadScreen::update() {
 
 void PadScreen::clearTiles() {
     for (uint8_t i = 0; i < tileCount; i++) {
+#if HAS_IMAGE_FETCH
+        // Cancel fetch slot first (stops background task from touching buffers)
+        if (tiles[i].image_slot != IMAGE_SLOT_INVALID) {
+            image_fetch_cancel(tiles[i].image_slot);
+            tiles[i].image_slot = IMAGE_SLOT_INVALID;
+        }
+#endif
+        // Delete LVGL objects before freeing pixel data they reference
         if (tiles[i].obj) {
             lv_obj_delete(tiles[i].obj);
             tiles[i].obj = nullptr;
         }
+#if HAS_IMAGE_FETCH
+        tiles[i].bg_image = nullptr;
+        if (tiles[i].owned_pixels) {
+            heap_caps_free(tiles[i].owned_pixels);
+            tiles[i].owned_pixels = nullptr;
+            tiles[i].owned_pixels_size = 0;
+        }
+        memset(&tiles[i].img_dsc, 0, sizeof(tiles[i].img_dsc));
+#endif
     }
     tileCount = 0;
     bindingCount = 0;
@@ -340,6 +374,33 @@ void PadScreen::buildTiles() {
         lv_obj_add_event_cb(obj, onTap, LV_EVENT_SHORT_CLICKED, &tiles[i]);
         lv_obj_add_event_cb(obj, onLongPress, LV_EVENT_LONG_PRESSED, &tiles[i]);
 
+#if HAS_IMAGE_FETCH
+        // Request background image fetch if URL is configured
+        tile.bg_image = nullptr;
+        tile.image_slot = IMAGE_SLOT_INVALID;
+        memset(&tile.img_dsc, 0, sizeof(tile.img_dsc));
+        tile.owned_pixels = nullptr;
+        tile.owned_pixels_size = 0;
+
+        if (bcfg.bg_image_url[0]) {
+            tile.image_slot = image_fetch_request(
+                bcfg.bg_image_url, bcfg.bg_image_user, bcfg.bg_image_password,
+                r.w, r.h, bcfg.bg_image_interval_ms);
+
+            if (tile.image_slot != IMAGE_SLOT_INVALID) {
+                // Create LVGL image widget as background (behind labels)
+                tile.bg_image = lv_image_create(obj);
+                lv_obj_set_size(tile.bg_image, r.w, r.h);
+                lv_obj_set_align(tile.bg_image, LV_ALIGN_CENTER);
+                lv_obj_clear_flag(tile.bg_image, LV_OBJ_FLAG_CLICKABLE);
+                // Move to back so labels render on top
+                lv_obj_move_to_index(tile.bg_image, 0);
+
+                LOGD(TAG, "Tile %u: image slot %d for %.40s", i, tile.image_slot, bcfg.bg_image_url);
+            }
+        }
+#endif
+
         tileCount++;
     }
 
@@ -516,6 +577,53 @@ void PadScreen::pollToggleState() {
     }
 #endif
 }
+
+// ============================================================================
+// Image Frame Polling
+// ============================================================================
+
+#if HAS_IMAGE_FETCH
+void PadScreen::pollImageFrames() {
+    for (uint8_t i = 0; i < tileCount; i++) {
+        ButtonTile& tile = tiles[i];
+        if (tile.image_slot == IMAGE_SLOT_INVALID || !tile.bg_image) continue;
+
+        if (!image_fetch_has_new_frame(tile.image_slot)) continue;
+
+        uint16_t fw = 0, fh = 0;
+        const uint16_t* pixels = image_fetch_get_frame(tile.image_slot, &fw, &fh);
+        if (!pixels || fw == 0 || fh == 0) continue;
+
+        // Copy frame into tile-owned buffer so LVGL has a stable pointer
+        // independent of the fetch task's double-buffer rotation.
+        size_t needed = (size_t)fw * fh * 2;
+        if (tile.owned_pixels_size < needed) {
+            if (tile.owned_pixels) heap_caps_free(tile.owned_pixels);
+            tile.owned_pixels = (uint16_t*)heap_caps_malloc(needed, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            tile.owned_pixels_size = tile.owned_pixels ? needed : 0;
+        }
+        if (!tile.owned_pixels) {
+            image_fetch_ack_frame(tile.image_slot);
+            continue;
+        }
+        memcpy(tile.owned_pixels, pixels, needed);
+        image_fetch_ack_frame(tile.image_slot);
+
+        // Build LVGL image descriptor pointing to our owned copy
+        lv_image_dsc_t& dsc = tile.img_dsc;
+        dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+        dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+        dsc.header.flags = 0;
+        dsc.header.w = fw;
+        dsc.header.h = fh;
+        dsc.header.stride = fw * 2;
+        dsc.data_size = (uint32_t)needed;
+        dsc.data = (const uint8_t*)tile.owned_pixels;
+
+        lv_image_set_src(tile.bg_image, &dsc);
+    }
+}
+#endif
 
 void PadScreen::onSwipe(lv_event_t* e) {
     PadScreen* self = (PadScreen*)lv_event_get_user_data(e);

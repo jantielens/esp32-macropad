@@ -22,7 +22,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 125
+Total flags: 126
 
 ### Features (HAS_*)
 
@@ -31,6 +31,7 @@ Total flags: 125
 - **HAS_BUILTIN_LED** default: `false` — Enable built-in status LED support.
 - **HAS_BUTTON** default: `false` — User Button (optional)
 - **HAS_DISPLAY** default: `false` — Enable display + LVGL UI support.
+- **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
 - **HAS_SENSOR_DUMMY** default: `false` — Enable dummy sensor adapter (synthetic values for testing).
@@ -173,13 +174,13 @@ Total flags: 125
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_BACKLIGHT | HAS_BLE | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
-| jc3248w535 | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
-| jc3636w518 | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
-| esp32-p4-lcd4b | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
-| jc4880p433 | ✅ |  |  |  | ✅ | ✅ |  |  |  | ✅ |
+| board-name | HAS_BACKLIGHT | HAS_BLE | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3248w535 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3636w518 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| esp32-p4-lcd4b | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc4880p433 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -241,6 +242,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp
+- **HAS_IMAGE_FETCH**
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/screens/pad_screen.cpp
+  - src/app/screens/pad_screen.h
 - **HAS_MQTT**
   - src/app/app.ino
   - src/app/board_config.h

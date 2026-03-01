@@ -321,32 +321,165 @@ MQTT broker → mqtt_manager → pad_screen_on_mqtt_message()
 
 ## Phase 7: Background Image Fetch
 
-**Goal:** Buttons with `bg_image_url` fetch JPEG/PNG snapshots and display them as tile backgrounds.
+**Goal:** Buttons with `bg_image_url` fetch JPEG/PNG snapshots and display them as tile backgrounds. Reusable image decode module for future webcam screen.
+
+### Architecture
+
+**Two modules:**
+
+| Module | Responsibility |
+|---|---|
+| `image_decoder.h/cpp` | Stateless decode+scale: JPEG/PNG → RGB565 cover-mode scaled pixel buffer. No FreeRTOS dependency. Reusable by future webcam screen |
+| `image_fetch.h/cpp` | Slot-based fetch manager: single FreeRTOS task, HTTP download, round-robin, double-buffered PSRAM frames, pause/resume |
+
+**Fetch pattern:** Single FreeRTOS task + round-robin through active slots. One HTTP connection at a time — avoids WiFi contention. Initial page load is progressive (images appear one-by-one).
+
+**Decode pattern:** Download raw bytes to PSRAM temp buffer → detect format from magic bytes → decode to intermediate RGB888/RGB565 → cover-mode scale+crop to target tile size → write RGB565 to back buffer → atomic pointer swap.
 
 ### Files to create
 
 | File | Contents |
 |---|---|
-| `src/app/screens/button_image_fetch.h` | API: `button_image_fetch_start(url, user, password, interval_ms, tile_w, tile_h, slot_index)`, `button_image_fetch_stop(slot_index)`, `button_image_fetch_get_frame(slot_index, &pixels, &w, &h)`. Frame double-buffer management |
-| `src/app/screens/button_image_fetch.cpp` | FreeRTOS task: HTTP GET → decode JPEG/PNG → scale to tile size → write to back buffer → swap. Uses PSRAM for pixel buffers. HTTP Basic Auth support. Interval-based re-fetch. Pauses during screen saver sleep |
+| `src/app/image_decoder.h` | `image_decode_to_rgb565(data, len, target_w, target_h, &out_pixels, &out_size)` — returns PSRAM-allocated RGB565 buffer. Format auto-detected from magic bytes (`FF D8` = JPEG, `89 50 4E 47` = PNG) |
+| `src/app/image_decoder.cpp` | JPEG decode via `tjpgd` (LVGL built-in), PNG decode via `lodepng` (LVGL built-in). Called as direct C library calls, not via LVGL's decoder pipeline. Cover-mode scale: `scale = max(tw/sw, th/sh)`, bilinear resample, center-crop to `target_w × target_h`. For JPEG, uses decoder's built-in downscale (1/2, 1/4, 1/8) to get close to target size first — saves decode RAM for large source images |
+| `src/app/image_fetch.h` | Slot-based API: `image_fetch_init()`, `image_fetch_request(slot_id, url, user, pass, target_w, target_h, interval_ms)`, `image_fetch_cancel(slot_id)`, `image_fetch_pause()`, `image_fetch_resume()`, `image_fetch_has_new_frame(slot_id)`, `image_fetch_get_frame(slot_id)` → `lv_img_dsc_t*`. Struct: `ImageSlot` (url, auth, target size, interval, front/back pixel buffers, new_frame flag, last_fetch_ms) |
+| `src/app/image_fetch.cpp` | Single FreeRTOS task created via `rtos_create_task_psram_stack_pinned()`. Round-robin: find next active slot where `millis() - last_fetch_ms >= interval_ms` (or `interval_ms == 0` and never fetched). HTTP GET via `HTTPClient` + `WiFiClientSecure` (for HTTPS). Basic auth via `http.setAuthorization()`. Download to PSRAM temp buffer → `image_decode_to_rgb565()` → copy to back buffer → atomic pointer swap → set `new_frame = true`. On error: log and skip to next slot. Pause: set flag, task `vTaskDelay`s in a loop. Resume: clear flag. |
 
 ### Files to modify
 
 | File | Change |
 |---|---|
-| `src/app/screens/pad_screen.cpp` | On tile create: if `bg_image_url` set, start fetch for that slot. On `update()`: check for new frame, set as LVGL image source. On tile destroy: stop fetch. On `hide()`: pause all fetches. On `show()`: resume |
+| `src/app/pad_config.h` | Add 4 fields to `ScreenButtonConfig`: `bg_image_url[256]`, `bg_image_user[32]`, `bg_image_password[64]`, `bg_image_interval_ms`. Add max-length constants |
+| `src/app/pad_config.cpp` | Parse/serialize 4 new JSON fields (`bg_image_url`, `bg_image_user`, `bg_image_password`, `bg_image_interval_ms`) |
+| `src/app/screens/pad_screen.h` | Add `int8_t image_slot` to `ButtonTile` struct (−1 = no image). Add `lv_obj_t* bg_image` LVGL image widget pointer |
+| `src/app/screens/pad_screen.cpp` | On tile create: if `bg_image_url[0]`, call `image_fetch_request()`. On `update()`: poll `image_fetch_has_new_frame()`, update LVGL image source. On tile destroy: `image_fetch_cancel()`. On `hide()`: `image_fetch_pause()`. On `show()`: `image_fetch_resume()` + re-request for all active slots. On config save: cancel old slots, request new |
+| `src/app/board_config.h` | Add `HAS_IMAGE_FETCH` flag (default `true` for `HAS_DISPLAY` boards) |
+| `src/app/lv_conf.h` | Enable `LV_USE_TJPGD 1` and `LV_USE_LODEPNG 1` |
+| `src/app/screen_saver_manager.cpp` | On sleep: call `image_fetch_pause()`. On wake: call `image_fetch_resume()` if pad page is active |
+| `src/app/web/home.html` | Add "Image Background" section to button editor dialog: URL, Auth User, Auth Password, Refresh Interval fields |
+| `src/app/web/portal.js` | Add `bg_image_url`, `bg_image_user`, `bg_image_password`, `bg_image_interval_ms` to form builder, `buildConfigFromForm()`, and `loadConfig()` |
+| `src/app/web_portal_pad.cpp` | Image fields auto-serialize via existing raw JSON preservation — no changes needed unless we add server-side validation |
+
+### Image decode pipeline
+
+```
+HTTP response body (raw JPEG/PNG bytes, PSRAM temp buffer)
+    │
+    ├─ Magic byte detection: FF D8 → JPEG, 89 50 4E 47 → PNG
+    │
+    ├─ JPEG path:
+    │   ├─ Get image info (width, height) via tjpgd JD_PREPARE
+    │   ├─ Select best built-in downscale (1/1, 1/2, 1/4, 1/8) to get
+    │   │   closest-to-target dimensions without going below target
+    │   ├─ Decode to RGB888 intermediate buffer (PSRAM)
+    │   └─ Cover-mode scale + RGB888→RGB565 in one pass
+    │
+    ├─ PNG path:
+    │   ├─ lodepng_decode32() → RGBA8888 intermediate buffer (PSRAM)
+    │   └─ Cover-mode scale + RGBA→RGB565 in one pass (alpha discarded)
+    │
+    └─ Output: target_w × target_h RGB565 buffer (PSRAM)
+```
+
+### Cover-mode scaling algorithm
+
+```
+// CSS object-fit: cover — fill target, center-crop excess
+src_aspect = (float)src_w / src_h
+dst_aspect = (float)target_w / target_h
+
+if (src_aspect > dst_aspect) {
+    // Source is wider → scale by height, crop sides
+    scale = (float)target_h / src_h
+    scaled_w = src_w * scale    // > target_w
+    crop_x = (scaled_w - target_w) / 2
+    crop_y = 0
+} else {
+    // Source is taller → scale by width, crop top/bottom
+    scale = (float)target_w / src_w
+    scaled_h = src_h * scale    // > target_h
+    crop_x = 0
+    crop_y = (scaled_h - target_h) / 2
+}
+
+// Bilinear resample from src → target with (crop_x, crop_y) offset
+// Combined with colorspace conversion (RGB888→RGB565) in one pass
+```
+
+### Double-buffer frame handoff
+
+```
+ImageSlot:
+    uint16_t* front_buf;     // Read by LVGL (atomic pointer)
+    uint16_t* back_buf;      // Written by fetch task
+    volatile bool new_frame;  // Set by fetch task, cleared by update()
+    lv_img_dsc_t img_dsc;    // LVGL descriptor pointing to front_buf
+
+Fetch task:
+    decode to back_buf
+    swap(front_buf, back_buf)    // Atomic pointer swap
+    new_frame = true
+
+LVGL update():
+    if (new_frame) {
+        img_dsc.data = (uint8_t*)front_buf
+        lv_image_set_src(bg_image_obj, &img_dsc)
+        new_frame = false
+    }
+```
+
+### Lifecycle state machine
+
+| Event | Action |
+|-------|--------|
+| **Pad page shown** | `image_fetch_resume()`, re-request all slots for visible page. Old frames display immediately |
+| **Pad page hidden** | `image_fetch_pause()` — task stops cycling, HTTP connections close. PSRAM buffers kept |
+| **Screen saver activates** | `image_fetch_pause()` — no background fetches during sleep |
+| **Screen saver deactivates** | `image_fetch_resume()` if pad page is still the active screen |
+| **Config save (POST /api/pad)** | Cancel old slots for page → rebuild tiles → request new slots for buttons with URLs |
+| **Page delete** | Cancel all slots for that page, free PSRAM buffers |
+| **Tile destruction** | `image_fetch_cancel(slot)` — frees both front and back buffers |
+
+### Web UI fields
+
+Add "Image Background" collapsible section to button editor dialog:
+
+| Field | Input type | Placeholder | Helper text |
+|-------|-----------|-------------|-------------|
+| Image URL | text | `http://camera.local/snapshot.jpg` | JPEG or PNG snapshot URL |
+| Auth User | text | _(empty)_ | Optional HTTP Basic Auth |
+| Auth Password | password | _(empty)_ | Optional |
+| Refresh Interval (ms) | number | `0` | 0 = fetch once, 5000 = every 5s |
 
 ### Gating
 
-- Compile-time: `HAS_IMAGE_API` flag (not all boards have enough RAM for image decode)
+- Compile-time: `HAS_IMAGE_FETCH` flag (default `true` for `HAS_DISPLAY` boards)
+- LVGL decoders: `LV_USE_TJPGD 1`, `LV_USE_LODEPNG 1` in lv_conf.h
 - Runtime: images are optional per-button; buttons without `bg_image_url` are unaffected
+- No external Arduino libraries needed — tjpgd and lodepng ship with LVGL 9.5
+
+### PSRAM budget
+
+| Board | Grid | Tile W×H | Per slot (2× RGB565) | 16 slots |
+|-------|------|----------|---------------------|----------|
+| cyd-v2 | 4×3 | 76×76 | 23 KB | 368 KB |
+| jc3248w535 | 3×5 | 102×92 | 37 KB | 592 KB |
+| esp32-4848S040 | 4×4 | 115×115 | 53 KB | 848 KB |
+| jc4880p433 | 3×5 | 155×156 | 97 KB | 1.5 MB |
+| esp32-p4-lcd4b | 4×4 | 175×175 | 122 KB | 2.0 MB |
+
+Plus ~100–200 KB temporary decode buffer per fetch. All boards have ≥8 MB PSRAM — no concern.
 
 ### Verification
 
-- Configure button with `bg_image_url` pointing to a test JPEG
-- Verify image appears as button background with text/icon overlaid
-- Test refresh interval (set to 5000ms, verify periodic updates)
-- Test screen saver: images pause during sleep, resume on wake
+- `./build.sh` — compiles for all boards
+- Test: configure button with `bg_image_url` pointing to a test JPEG (e.g., `http://<server>/test.jpg`)
+- Verify image appears scaled to fill button (cover mode, no letterboxing)
+- Test PNG URL → verify format auto-detection works
+- Test refresh interval (set to 5000ms, verify periodic updates in serial log)
+- Test page navigation: images survive hide/show, display old frame immediately on return
+- Test screen saver: verify no HTTP activity in sleep (serial log), fetches resume on wake
+- Test web UI: configure image URL via button editor, save, verify fetch starts
 
 ---
 
@@ -390,8 +523,10 @@ Phases 4 and 5 can be developed in parallel after Phase 3 is complete.
 | `src/app/screens/pad_screen.h` | 5 | Screen class declaration |
 | `src/app/screens/pad_screen.cpp` | 5 | LVGL rendering, events, runtime updates |
 | `src/app/screens/button_runtime.h` | 5 | Shared button helpers (tap flash, HA events, navigation) |
-| `src/app/screens/button_image_fetch.h` | 7 | Image fetch API |
-| `src/app/screens/button_image_fetch.cpp` | 7 | HTTP fetch, decode, double buffer |
+| `src/app/image_decoder.h` | 7 | Stateless JPEG/PNG decode + cover-mode scale API |
+| `src/app/image_decoder.cpp` | 7 | tjpgd + lodepng decode, bilinear scale, RGB565 output |
+| `src/app/image_fetch.h` | 7 | Slot-based image fetch API (request, cancel, pause, resume, poll) |
+| `src/app/image_fetch.cpp` | 7 | Single FreeRTOS task, round-robin, HTTP client, double-buffered PSRAM |
 
 ### Modified files (6+)
 
@@ -415,5 +550,7 @@ Phases 4 and 5 can be developed in parallel after Phase 3 is complete.
 | **RAM usage with 64-button pages** | Buttons stored on FFat, only active page's LVGL objects in RAM. `ScreenButtonConfig` is large (~1.5KB per button) but only deserialized into a temporary buffer during JSON parse |
 | **Flash size from 3 new fonts** | ~80KB for Montserrat 12+32+36. All boards have ≥16MB flash — acceptable |
 | **JSON body size for 64-button POST** | May exceed current `WEB_PORTAL_CONFIG_MAX_JSON_BYTES` (4096). Increase or use chunked/streaming parse. A 64-button page with all fields is ~50KB; realistic configs (10-20 buttons, sparse fields) are 2-8KB |
-| **PSRAM contention from image decode** | Image fetch runs on a dedicated FreeRTOS task at low priority. Double-buffer prevents LVGL from reading partially-decoded frames. Gated by `HAS_IMAGE_API` |
+| **PSRAM contention from image decode** | Single fetch task at low priority. Round-robin avoids parallel HTTP connections. Double-buffer with atomic pointer swap prevents LVGL from reading partially-decoded frames. Gated by `HAS_IMAGE_FETCH` |
+| **Large source images** | JPEG decoder's built-in 1/2, 1/4, 1/8 downscale reduces intermediate buffer size. Temporary decode buffer freed immediately after scale+copy |
+| **esp_jpeg not on ESP32-P4** | Using LVGL's built-in tjpgd (same underlying engine) which is available on all platforms |
 | **Round display corner buttons** | Hardware clips naturally. No software work needed. May look odd with very large grids (8×8 on 360px round) — but that's a user choice |

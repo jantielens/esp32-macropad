@@ -24,6 +24,10 @@
 #include "screen_saver_manager.h"
 #endif
 
+#if HAS_IMAGE_FETCH
+#include "image_fetch.h"
+#endif
+
 #if HAS_TOUCH
 #include "touch_manager.h"
 #endif
@@ -293,6 +297,10 @@ void setup()
 	// Show splash for minimum duration to ensure visibility
 	display_manager_set_splash_status("Ready!");
 	delay(2000);  // 2 seconds to see splash + status updates
+
+	#if HAS_IMAGE_FETCH
+	image_fetch_init();
+	#endif
 
 	// Navigate to pad_0 if configured, otherwise info screen
 	if (pad_config_exists(0)) {
