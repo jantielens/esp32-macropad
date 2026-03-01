@@ -42,6 +42,7 @@ void screen_saver_manager_wake();
 
 bool screen_saver_manager_is_asleep();
 ScreenSaverStatus screen_saver_manager_get_status();
+void screen_saver_manager_get_pixel_shift(int* dx, int* dy);
 
 #else
 
@@ -69,6 +70,7 @@ inline void screen_saver_manager_sleep_now() {}
 inline void screen_saver_manager_wake() {}
 inline bool screen_saver_manager_is_asleep() { return false; }
 inline ScreenSaverStatus screen_saver_manager_get_status() { return {false, ScreenSaverState::Awake, 0, 0, 0}; }
+inline void screen_saver_manager_get_pixel_shift(int*, int*) {}
 
 #endif // HAS_DISPLAY
 

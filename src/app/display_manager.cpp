@@ -5,6 +5,7 @@
 #include "display_manager.h"
 #include "log_manager.h"
 #include "rtos_task_utils.h"
+#include "screen_saver_manager.h"
 
 #include <esp_timer.h>
 
@@ -282,6 +283,14 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 						const char* screenId = mgr->getScreenIdForInstance(mgr->currentScreen);
 						LOGI("Display", "Switched to %s", screenId ? screenId : "(unregistered)");
+
+						// Apply current pixel shift offset (burn-in prevention).
+						if (mgr->currentScreen != &mgr->splashScreen) {
+								int dx = 0, dy = 0;
+								screen_saver_manager_get_pixel_shift(&dx, &dy);
+								lv_obj_set_style_translate_x(lv_scr_act(), dx, 0);
+								lv_obj_set_style_translate_y(lv_scr_act(), dy, 0);
+						}
 				}
 				
 				// Handle LVGL rendering (animations, timers, etc.)

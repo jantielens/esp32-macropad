@@ -263,6 +263,8 @@ When `HAS_DISPLAY` is enabled, the firmware includes a screen saver manager that
 - Wake fades back to the configured `backlight_brightness`.
 - On touch devices, wake can optionally be triggered by touch (`screen_saver_wake_on_touch`).
 - While dimming/asleep/fading in, touch input is suppressed so “wake gestures” can’t click through into LVGL UI navigation.
+- **Sleep overlay**: When entering `Asleep`, a full-screen black LVGL object is created on `lv_layer_top()` so RGB panels physically drive black pixels (reduces LC stress). The overlay is removed *before* the backlight rises during wake.
+- **Pixel shift**: Each sleep cycle advances a counter through 81 unique positions in a 9×9 grid (±4 px on each axis) using coprime stride 34. On wake (and on screen switch), `lv_obj_set_style_translate_x/y` is applied to `lv_scr_act()`. Pad layouts reserve `PIXEL_SHIFT_MARGIN` (4 px) insets to prevent clipping.
 
 **Configuration / APIs:**
 - Config fields are exposed via `GET/POST /api/config` (only when `HAS_DISPLAY`).
