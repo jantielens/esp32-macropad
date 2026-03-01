@@ -66,9 +66,15 @@ void image_fetch_cancel_all();
 void image_fetch_pause_slot(image_slot_t slot);
 void image_fetch_resume_slot(image_slot_t slot);
 
-// Pause/resume all active slots (e.g., screen saver).
+// Pause/resume all active slots (e.g., config reload).
 void image_fetch_pause();
 void image_fetch_resume();
+
+// Global suspend gate — independent of per-slot pause.
+// Used by the screen saver to stop all fetching while the display is off
+// without disturbing per-page pause state.
+void image_fetch_suspend();
+void image_fetch_unsuspend();
 
 // Check if a slot has a new frame since last acknowledgement.
 bool image_fetch_has_new_frame(image_slot_t slot);

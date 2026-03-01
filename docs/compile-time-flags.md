@@ -245,6 +245,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/image_decoder.cpp
+  - src/app/image_decoder.h
+  - src/app/image_fetch.cpp
+  - src/app/image_fetch.h
+  - src/app/screen_saver_manager.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen.h
 - **HAS_MQTT**

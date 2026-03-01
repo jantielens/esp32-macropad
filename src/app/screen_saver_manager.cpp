@@ -5,6 +5,9 @@
 #include "screen_saver_manager.h"
 #include "log_manager.h"
 #include "display_manager.h"
+#if HAS_IMAGE_FETCH
+#include "image_fetch.h"
+#endif
 
 #if HAS_TOUCH
 #include "touch_manager.h"
@@ -86,6 +89,16 @@ static void start_fade(ScreenSaverState newState, uint8_t from, uint8_t to, uint
 		g_fade_from = from;
 		g_fade_to = to;
 		g_target_brightness = to;
+
+#if HAS_IMAGE_FETCH
+		// Suspend/unsuspend image fetching on sleep/wake transitions.
+		// Uses the global gate so per-slot pause state (page visibility) is preserved.
+		if (newState == ScreenSaverState::FadingOut) {
+				image_fetch_suspend();
+		} else if (newState == ScreenSaverState::FadingIn) {
+				image_fetch_unsuspend();
+		}
+#endif
 
 		// If duration is 0, apply immediately.
 		if (duration_ms == 0) {

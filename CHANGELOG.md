@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - LVGL task stack increased from 8 KB to 16 KB to prevent overflow when rendering scaled images
 - WiFiClientSecure heap-allocated only for HTTPS URLs to reduce fetch task stack pressure
+- ESP Web Tools flash site: ESP32-P4 boards now correctly identified as `ESP32-P4` chip family with bootloader offset 0x2000 (previously fell through to classic `ESP32` with wrong offset 0x1000)
 
 ## [1.1.0] - 2026-02-28
 

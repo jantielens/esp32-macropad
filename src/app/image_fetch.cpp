@@ -58,6 +58,7 @@ static RtosTaskPsramAlloc g_task_alloc;
 static const uint32_t FETCH_TASK_STACK_WORDS = 16384;
 static const UBaseType_t FETCH_TASK_PRIORITY = 2;  // Below LVGL (4), above idle
 static const uint32_t IDLE_DELAY_MS = 500;
+static volatile bool g_suspended = false;  // Global gate (screen saver)
 static const uint32_t HTTP_TIMEOUT_MS = 10000;
 static const uint32_t MAX_DOWNLOAD_WALL_MS = 30000;  // 30s total wall-clock limit
 static const size_t   MAX_DOWNLOAD_SIZE = 2 * 1024 * 1024;  // 2 MB
@@ -233,7 +234,7 @@ static void fetch_task(void* param) {
         for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
             int8_t idx = (scan_start + i) % IMAGE_SLOT_MAX;
             ImageSlot& s = g_slots[idx];
-            if (!s.active || s.paused) continue;
+            if (!s.active || s.paused || g_suspended) continue;
 
             // Check if this slot is due for a fetch
             if (!s.fetched_once) {
@@ -459,6 +460,16 @@ void image_fetch_resume() {
         if (g_slots[i].active) g_slots[i].paused = false;
     }
     LOGD(TAG, "Resumed all");
+}
+
+void image_fetch_suspend() {
+    g_suspended = true;
+    LOGD(TAG, "Suspended (screen saver)");
+}
+
+void image_fetch_unsuspend() {
+    g_suspended = false;
+    LOGD(TAG, "Unsuspended (screen saver)");
 }
 
 bool image_fetch_has_new_frame(image_slot_t slot) {
