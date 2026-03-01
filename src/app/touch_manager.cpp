@@ -31,6 +31,10 @@ TouchManager* touchManager = nullptr;
 static uint32_t g_lvgl_suppress_until_ms = 0;
 static bool g_lvgl_force_released = false;
 static bool g_prev_lvgl_pressed = false;
+// After suppression ends, require a genuine release before accepting new presses.
+// This prevents stale "touched" state in drivers (e.g., GT911 lastTouched flag)
+// from replaying as a phantom click.
+static bool g_require_release = false;
 
 TouchManager::TouchManager() 
 		: driver(nullptr), indev(nullptr), lvglRegisterPending(false) {
@@ -52,11 +56,25 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		if (g_lvgl_force_released || ((int32_t)(g_lvgl_suppress_until_ms - now) > 0)) {
 				data->state = LV_INDEV_STATE_RELEASED;
 				g_prev_lvgl_pressed = false;
+				g_require_release = true;
 				return;
 		}
 		
 		uint16_t x, y;
-		if (manager->driver->getTouch(&x, &y)) {
+		const bool touched = manager->driver->getTouch(&x, &y);
+
+		// After suppression ends, wait for a genuine release before forwarding presses.
+		// Drivers like GT911 can retain stale "touched" state across the suppression window.
+		if (g_require_release) {
+				if (!touched) {
+						g_require_release = false;
+				}
+				data->state = LV_INDEV_STATE_RELEASED;
+				g_prev_lvgl_pressed = false;
+				return;
+		}
+
+		if (touched) {
 				data->state = LV_INDEV_STATE_PRESSED;
 				data->point.x = x;
 				data->point.y = y;
