@@ -304,6 +304,41 @@
 
                 <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
 
+                <!-- Icon (collapsible) -->
+                <details id="pad-edit-icon-section">
+                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Icon</summary>
+                    <small style="display:block; margin-bottom:12px; color:#86868b;">Display an icon centered on the button.</small>
+
+                    <div class="form-group">
+                        <label for="pad-edit-icon-type">Icon Type</label>
+                        <select id="pad-edit-icon-type" onchange="padIconTypeChanged()">
+                            <option value="">(none)</option>
+                            <option value="emoji">Emoji</option>
+                            <option value="mi">Material Symbol</option>
+                        </select>
+                    </div>
+
+                    <div id="pad-edit-icon-emoji-group" style="display:none;">
+                        <div class="form-group">
+                            <label for="pad-edit-icon-emoji">Emoji</label>
+                            <input type="text" id="pad-edit-icon-emoji" maxlength="15" placeholder="e.g. ☀️ 🔌 💡">
+                            <small>Paste or type an emoji character.</small>
+                        </div>
+                    </div>
+
+                    <div id="pad-edit-icon-mi-group" style="display:none;">
+                        <div class="form-group">
+                            <label for="pad-edit-icon-mi">Symbol Name</label>
+                            <input type="text" id="pad-edit-icon-mi" maxlength="31" placeholder="e.g. power_settings_new">
+                            <small>Name from <a href="https://fonts.google.com/icons" target="_blank" style="color:#007aff;">Material Symbols</a>.</small>
+                        </div>
+                    </div>
+
+                    <div id="pad-edit-icon-preview-box" class="pad-icon-preview" style="display:none;">
+                        <canvas id="pad-edit-icon-canvas" width="64" height="64"></canvas>
+                    </div>
+                </details>
+
                 <!-- MQTT Label Bindings (collapsible) -->
                 <details id="pad-edit-bindings-section">
                     <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">MQTT Label Bindings</summary>

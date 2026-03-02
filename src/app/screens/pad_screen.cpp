@@ -1,5 +1,6 @@
 #include "pad_screen.h"
 #include "../display_manager.h"
+#include "../icon_store.h"
 #include "../log_manager.h"
 #include "../pad_config.h"
 #include "../pad_layout.h"
@@ -275,6 +276,35 @@ void PadScreen::buildTiles() {
             lv_obj_clear_flag(lbl_center, LV_OBJ_FLAG_CLICKABLE);
         }
 
+        // Icon image (shown when icon_id is set and icon is cached)
+        lv_obj_t* icon_img = nullptr;
+        if (bcfg.icon_id[0]) {
+            char icon_key[CONFIG_ICON_ID_MAX_LEN];
+            icon_store_build_key(pageIndex, bcfg.col, bcfg.row,
+                                 icon_key, sizeof(icon_key));
+            IconRef ref;
+            if (icon_store_lookup(icon_key, &ref)) {
+                icon_img = lv_image_create(obj);
+                lv_image_set_src(icon_img, ref.dsc);
+
+                // Center icon in the space between labels.
+                // LV_ALIGN_CENTER is the center of the full content area;
+                // offset by half the difference of top/bottom label heights.
+                const int16_t top_h = bcfg.label_top[0] ?
+                    lv_font_get_line_height(scale.font_small) : 0;
+                const int16_t bot_h = bcfg.label_bottom[0] ?
+                    lv_font_get_line_height(scale.font_small) : 0;
+                const int16_t y_ofs = (top_h - bot_h) / 2;
+                lv_obj_align(icon_img, LV_ALIGN_CENTER, 0, y_ofs);
+
+                lv_obj_clear_flag(icon_img, LV_OBJ_FLAG_CLICKABLE);
+                if (ref.kind == ICON_KIND_MONO) {
+                    lv_obj_set_style_image_recolor(icon_img, fg, 0);
+                    lv_obj_set_style_image_recolor_opa(icon_img, LV_OPA_COVER, 0);
+                }
+            }
+        }
+
         // Bottom label
         lv_obj_t* lbl_bottom = nullptr;
         if (bcfg.label_bottom[0]) {
@@ -294,6 +324,7 @@ void PadScreen::buildTiles() {
         tile.label_top = lbl_top;
         tile.label_center = lbl_center;
         tile.label_bottom = lbl_bottom;
+        tile.icon_img = icon_img;
         tile.bg_color_rgb = bcfg.bg_color_rgb;
         tile.page = pageIndex;
         tile.col = bcfg.col;

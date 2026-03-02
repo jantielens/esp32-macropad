@@ -1194,6 +1194,207 @@ const padState = {
     editRow: 0,
 };
 
+// --- Icon Support ---
+
+let padTileSizesCache = null;
+
+// Lazy-load Material Symbols font
+let _materialSymbolsLoaded = false;
+function padEnsureMaterialSymbols() {
+    if (_materialSymbolsLoaded) return Promise.resolve();
+    return new Promise((resolve) => {
+        _materialSymbolsLoaded = true;
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,1,0';
+        link.onload = () => document.fonts.ready.then(resolve);
+        link.onerror = resolve;
+        document.head.appendChild(link);
+    });
+}
+
+function padIconIdToType(iconId) {
+    if (!iconId) return { type: '', value: '' };
+    if (iconId.startsWith('emoji_')) return { type: 'emoji', value: iconId.substring(6) };
+    if (iconId.startsWith('mi_')) return { type: 'mi', value: iconId.substring(3) };
+    return { type: '', value: '' };
+}
+
+function padBuildIconId() {
+    const type = document.getElementById('pad-edit-icon-type').value;
+    if (type === 'emoji') {
+        const val = document.getElementById('pad-edit-icon-emoji').value.trim();
+        return val ? 'emoji_' + val : '';
+    }
+    if (type === 'mi') {
+        const val = document.getElementById('pad-edit-icon-mi').value.trim();
+        return val ? 'mi_' + val : '';
+    }
+    return '';
+}
+
+function padIconTypeChanged() {
+    const type = document.getElementById('pad-edit-icon-type').value;
+    document.getElementById('pad-edit-icon-emoji-group').style.display = (type === 'emoji') ? '' : 'none';
+    document.getElementById('pad-edit-icon-mi-group').style.display = (type === 'mi') ? '' : 'none';
+    if (type === 'mi') padEnsureMaterialSymbols();
+    padUpdateIconPreview();
+}
+
+function padUpdateIconPreview() {
+    const box = document.getElementById('pad-edit-icon-preview-box');
+    const canvas = document.getElementById('pad-edit-icon-canvas');
+    if (!box || !canvas) return;
+    const type = document.getElementById('pad-edit-icon-type').value;
+
+    if (!type) { box.style.display = 'none'; return; }
+
+    const size = 64;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+
+    if (type === 'emoji') {
+        const emoji = document.getElementById('pad-edit-icon-emoji').value.trim();
+        if (!emoji) { box.style.display = 'none'; return; }
+        ctx.font = (size * 0.75) + 'px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, size / 2, size / 2);
+        padCenterCanvasContent(ctx, size, size);
+    } else if (type === 'mi') {
+        const name = document.getElementById('pad-edit-icon-mi').value.trim();
+        if (!name) { box.style.display = 'none'; return; }
+        ctx.font = size + 'px "Material Symbols Outlined"';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(name, size / 2, size / 2);
+        padCenterCanvasContent(ctx, size, size);
+    }
+
+    box.style.display = '';
+}
+
+function padCenterCanvasContent(ctx, w, h) {
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const px = imgData.data;
+    let minY = h, maxY = 0;
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            if (px[(y * w + x) * 4 + 3] > 0) {
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+                break;
+            }
+        }
+    }
+    if (minY >= maxY) return;
+    const contentMid = (minY + maxY) / 2;
+    const canvasMid = h / 2;
+    const shift = Math.round(canvasMid - contentMid);
+    if (shift === 0) return;
+    ctx.clearRect(0, 0, w, h);
+    ctx.putImageData(imgData, 0, shift);
+}
+
+function padRenderIconOnCanvas(canvas, iconId, width, height) {
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
+
+    const parsed = padIconIdToType(iconId);
+    if (parsed.type === 'emoji') {
+        const fontSize = Math.floor(Math.min(width, height) * 0.75);
+        ctx.font = fontSize + 'px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(parsed.value, width / 2, height / 2);
+        padCenterCanvasContent(ctx, width, height);
+    } else if (parsed.type === 'mi') {
+        const fontSize = Math.min(width, height);
+        ctx.font = fontSize + 'px "Material Symbols Outlined"';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(parsed.value, width / 2, height / 2);
+        padCenterCanvasContent(ctx, width, height);
+    }
+}
+
+function padCanvasToPNG(canvas) {
+    return new Promise(function(resolve, reject) {
+        canvas.toBlob(function(blob) {
+            if (blob) resolve(blob);
+            else reject(new Error('Canvas toBlob failed'));
+        }, 'image/png');
+    });
+}
+
+async function padGetTileSizes() {
+    if (padTileSizesCache &&
+        padTileSizesCache.cols === padState.cols &&
+        padTileSizesCache.rows === padState.rows) {
+        return padTileSizesCache;
+    }
+    const resp = await fetch('/api/pad/tile_sizes?cols=' + padState.cols + '&rows=' + padState.rows);
+    if (!resp.ok) throw new Error('Failed to get tile sizes');
+    const data = await resp.json();
+    data.cols = padState.cols;
+    data.rows = padState.rows;
+    padTileSizesCache = data;
+    return data;
+}
+
+async function padUploadPageIcons() {
+    // Always delete old page icons (cleans up removed icons)
+    await fetch('/api/icons/page?page=' + padState.page, { method: 'DELETE' });
+
+    const iconButtons = padState.buttons.filter(b => b.icon_id);
+    if (iconButtons.length === 0) return;
+
+    const tileSizes = await padGetTileSizes();
+    const baseW = tileSizes.tile_w - tileSizes.padding * 2;
+    const baseH = tileSizes.tile_h - tileSizes.padding * 2;
+
+    const needsMi = iconButtons.some(b => b.icon_id.startsWith('mi_'));
+    if (needsMi) await padEnsureMaterialSymbols();
+
+    const canvas = document.createElement('canvas');
+
+    for (const btn of iconButtons) {
+        const cs = btn.col_span || 1;
+        const rs = btn.row_span || 1;
+        // LVGL content area = tile - 2*padding - 2*border_width
+        const bw = (btn.border_width !== undefined) ? btn.border_width : 1;
+        const fullW = baseW * cs + tileSizes.gap * (cs - 1) - bw * 2;
+        const fullH = baseH * rs + tileSizes.gap * (rs - 1) - bw * 2;
+        const kind = btn.icon_id.startsWith('mi_') ? 1 : 0;
+
+        // Reserve space for top/bottom labels (font_small_h each)
+        const labelH = tileSizes.font_small_h || 0;
+        const topReserve = btn.label_top ? labelH : 0;
+        const bottomReserve = btn.label_bottom ? labelH : 0;
+        const iconW = fullW;
+        const iconH = fullH - topReserve - bottomReserve;
+
+        padRenderIconOnCanvas(canvas, btn.icon_id, iconW, iconH);
+        const pngBlob = await padCanvasToPNG(canvas);
+        const key = 'pad_' + padState.page + '_' + btn.col + '_' + btn.row;
+
+        const resp = await fetch('/api/icons/install?id=' + encodeURIComponent(key) + '&kind=' + kind, {
+            method: 'POST',
+            headers: { 'Content-Type': 'image/png' },
+            body: pngBlob,
+        });
+        if (!resp.ok) {
+            console.error('Icon upload failed for ' + key);
+        }
+    }
+}
+
 function padInit() {
     const section = document.getElementById('pad-config-section');
     if (!section) return;
@@ -1219,6 +1420,12 @@ function padInit() {
     document.getElementById('pad-edit-ok').addEventListener('click', padDialogOk);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
     document.getElementById('pad-edit-cancel').addEventListener('click', padDialogClose);
+
+    // Icon input live preview
+    const iconEmoji = document.getElementById('pad-edit-icon-emoji');
+    if (iconEmoji) iconEmoji.addEventListener('input', padUpdateIconPreview);
+    const iconMi = document.getElementById('pad-edit-icon-mi');
+    if (iconMi) iconMi.addEventListener('input', padUpdateIconPreview);
 
     // Close dialog on overlay click
     document.getElementById('pad-edit-overlay').addEventListener('click', (e) => {
@@ -1385,11 +1592,28 @@ function padRenderGrid() {
                     el.textContent = btn.label_top;
                     cell.appendChild(el);
                 }
-                const centerText = btn.label_center || '•';
-                const elc = document.createElement('div');
-                elc.className = 'pad-cell-label-center';
-                elc.textContent = centerText;
-                cell.appendChild(elc);
+                if (btn.icon_id) {
+                    const iconParsed = padIconIdToType(btn.icon_id);
+                    if (iconParsed.type === 'emoji') {
+                        const el = document.createElement('div');
+                        el.className = 'pad-cell-icon';
+                        el.textContent = iconParsed.value;
+                        cell.appendChild(el);
+                    } else if (iconParsed.type === 'mi') {
+                        padEnsureMaterialSymbols();
+                        const el = document.createElement('span');
+                        el.className = 'material-symbols-outlined pad-cell-icon';
+                        el.textContent = iconParsed.value;
+                        el.style.color = fg;
+                        cell.appendChild(el);
+                    }
+                } else {
+                    const centerText = btn.label_center || '•';
+                    const elc = document.createElement('div');
+                    elc.className = 'pad-cell-label-center';
+                    elc.textContent = centerText;
+                    cell.appendChild(elc);
+                }
                 if (btn.label_bottom) {
                     const el = document.createElement('div');
                     el.className = 'pad-cell-label-bottom';
@@ -1523,6 +1747,14 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-bg-image-letterbox').checked = !!btn.bg_image_letterbox;
     document.getElementById('pad-edit-image-section').open = !!btn.bg_image_url;
 
+    // Icon
+    const iconParsed = padIconIdToType(btn.icon_id || '');
+    document.getElementById('pad-edit-icon-type').value = iconParsed.type;
+    document.getElementById('pad-edit-icon-emoji').value = (iconParsed.type === 'emoji') ? iconParsed.value : '';
+    document.getElementById('pad-edit-icon-mi').value = (iconParsed.type === 'mi') ? iconParsed.value : '';
+    document.getElementById('pad-edit-icon-section').open = !!btn.icon_id;
+    padIconTypeChanged();
+
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
 }
@@ -1630,6 +1862,10 @@ function padDialogOk() {
         if (document.getElementById('pad-edit-bg-image-letterbox').checked) btn.bg_image_letterbox = true;
     }
 
+    // Icon
+    const iconId = padBuildIconId();
+    if (iconId) btn.icon_id = iconId;
+
     padState.buttons.push(btn);
     padDialogClose();
     padRenderGrid();
@@ -1659,6 +1895,9 @@ async function padSavePage() {
     });
 
     try {
+        // Upload icons before saving config (firmware preloads icons on save)
+        await padUploadPageIcons();
+
         const resp = await fetch('/api/pad?page=' + padState.page, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1681,6 +1920,9 @@ async function padDeletePage() {
     if (!confirm('Delete Pad ' + (padState.page + 1) + '? This cannot be undone.')) return;
 
     try {
+        // Delete page icons
+        await fetch('/api/icons/page?page=' + padState.page, { method: 'DELETE' });
+
         const resp = await fetch('/api/pad?page=' + padState.page, { method: 'DELETE' });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));

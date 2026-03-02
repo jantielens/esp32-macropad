@@ -441,7 +441,7 @@ static bool decode_png(const uint8_t* data, size_t len,
 
     if (pw == 0 || ph == 0 || pw > 4096 || ph > 4096) {
         LOGE(TAG, "PNG invalid dims %ux%u", pw, ph);
-        free(pixels);
+        lv_free(pixels);  // lodepng uses lv_malloc
         return false;
     }
 
@@ -492,7 +492,7 @@ bool image_decode_to_rgb565(
             } else {
                 ok = cover_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h);
             }
-            heap_caps_free(rgb888);
+            free(rgb888);
         }
     } else if (fmt == IMAGE_FORMAT_PNG) {
         uint8_t* rgba = nullptr;
@@ -505,7 +505,7 @@ bool image_decode_to_rgb565(
             } else {
                 ok = cover_scale_rgba8888_to_565(rgba, src_w, src_h, out, target_w, target_h);
             }
-            free(rgba);  // lodepng uses malloc
+            lv_free(rgba);  // lodepng uses lv_malloc
         }
     }
 

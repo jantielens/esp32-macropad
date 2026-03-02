@@ -5,6 +5,7 @@
 #include "web_portal_device_api.h"
 #include "web_portal_display.h"
 #include "web_portal_firmware.h"
+#include "web_portal_icons.h"
 #include "web_portal_ota.h"
 #include "web_portal_pad.h"
 #include "web_portal_pages.h"
@@ -115,6 +116,10 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		);
 		registerOptions("/api/display/screen");
 
+		// Pad tile sizes (registered before /api/pad to avoid prefix match)
+		registerOptions("/api/pad/tile_sizes");
+		server->on("/api/pad/tile_sizes", HTTP_GET, handleGetTileSizes);
+
 		// Pad config API
 		registerOptions("/api/pad");
 		server->on("/api/pad", HTTP_GET, handleGetPadConfig);
@@ -128,6 +133,35 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				handlePostPadConfig
 		);
 		server->on("/api/pad", HTTP_DELETE, handleDeletePadConfig);
+
+		// Icon store API
+		registerOptions("/api/icons/install");
+		server->on(
+				"/api/icons/install",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostIconInstall
+		);
+
+		registerOptions("/api/icons/page");
+		server->on("/api/icons/page", HTTP_DELETE, handleDeletePageIcons);
+
+		registerOptions("/api/icons/installed");
+		server->on("/api/icons/installed", HTTP_GET, handleGetInstalledIcons);
+
+		// Icon debug endpoints
+		registerOptions("/api/icons/files");
+		server->on("/api/icons/files", HTTP_GET, handleGetIconFiles);
+
+		registerOptions("/api/icons/cache");
+		server->on("/api/icons/cache", HTTP_GET, handleGetIconCache);
+
+		registerOptions("/api/icons/file");
+		server->on("/api/icons/file", HTTP_GET, handleGetIconFile);
+		server->on("/api/icons/file", HTTP_DELETE, handleDeleteIconFile);
 #endif
 
 		// OTA upload endpoint

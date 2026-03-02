@@ -20,6 +20,7 @@
 
 #if HAS_DISPLAY
 #include "display_manager.h"
+#include "icon_store.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #endif
@@ -234,6 +235,10 @@ void setup()
 	#if HAS_DISPLAY
 	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
 	pad_config_init();
+
+	// Initialize icon store and preload icons for all pad pages
+	icon_store_init();
+	icon_store_preload_pad_pages();
 	#endif
 
 	const PublishTransport transport = power_config_parse_publish_transport(&device_config);
