@@ -44,6 +44,9 @@ bool ha_discovery_publish_binary_sensor_config_with_topic_suffix(
 	const char *entity_category
 );
 
+// Publish HA event entity discovery for pad button presses.
+bool ha_discovery_publish_button_event_config(MqttManager &mqtt);
+
 #endif // HAS_MQTT
 
 #endif // HA_DISCOVERY_H

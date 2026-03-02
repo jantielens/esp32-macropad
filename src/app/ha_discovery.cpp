@@ -64,6 +64,11 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 
 		// Sensor adapters self-register their discovery entries.
 		sensor_manager_publish_ha_discovery(mqtt);
+
+		// Pad button press event entity
+		#if HAS_DISPLAY
+		ha_discovery_publish_button_event_config(mqtt);
+		#endif
 }
 
 bool ha_discovery_publish_binary_sensor_config(
@@ -233,6 +238,47 @@ bool ha_discovery_publish_sensor_config(
 		if (doc.overflowed()) {
 				// Payload too large for this StaticJsonDocument size.
 				// mqtt.publishJson() will also fail if serialization exceeds MQTT_MAX_PACKET_SIZE.
+				return false;
+		}
+
+		return mqtt.publishJson(topic, doc, true);
+}
+
+bool ha_discovery_publish_button_event_config(MqttManager &mqtt) {
+		char topic[160];
+		snprintf(topic, sizeof(topic), "homeassistant/event/%s/button_press/config", mqtt.sanitizedName());
+
+		StaticJsonDocument<768> doc;
+
+		doc["~"] = mqtt.baseTopic();
+		doc["name"] = "Button Press";
+
+		char ha_object_id[96];
+		snprintf(ha_object_id, sizeof(ha_object_id), "%s_button_press", mqtt.sanitizedName());
+		doc["object_id"] = ha_object_id;
+
+		char uniq_id[96];
+		snprintf(uniq_id, sizeof(uniq_id), "%s_button_press", mqtt.sanitizedName());
+		doc["uniq_id"] = uniq_id;
+
+		doc["stat_t"] = "~/event";
+
+		JsonArray evt_types = doc["event_types"].to<JsonArray>();
+		evt_types.add("press");
+		evt_types.add("hold");
+
+		doc["avty_t"] = "~/availability";
+		doc["pl_avail"] = "online";
+		doc["pl_not_avail"] = "offline";
+
+		JsonObject dev = doc["dev"].to<JsonObject>();
+		JsonArray ids = dev["ids"].to<JsonArray>();
+		ids.add(mqtt.sanitizedName());
+		dev["name"] = mqtt.friendlyName();
+		dev["mdl"] = PROJECT_DISPLAY_NAME;
+		dev["sw"] = FIRMWARE_VERSION;
+
+		if (doc.overflowed()) {
 				return false;
 		}
 

@@ -6,6 +6,7 @@
 #if HAS_MQTT
 #include "../mqtt_manager.h"
 #include "../mqtt_sub_store.h"
+#include <ArduinoJson.h>
 #endif
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
@@ -294,6 +295,9 @@ void PadScreen::buildTiles() {
         tile.label_center = lbl_center;
         tile.label_bottom = lbl_bottom;
         tile.bg_color_rgb = bcfg.bg_color_rgb;
+        tile.page = pageIndex;
+        tile.col = bcfg.col;
+        tile.row = bcfg.row;
         memcpy(&tile.action, &bcfg.action, sizeof(ButtonAction));
         memcpy(&tile.lp_action, &bcfg.lp_action, sizeof(ButtonAction));
 
@@ -473,6 +477,31 @@ static void execute_action(const ButtonAction& act, const char* label) {
     }
 }
 
+// Publish HA event entity payload for a button press/hold
+#if HAS_MQTT
+static void publish_button_event(const ButtonTile* tile, const char* event_type) {
+    if (!mqtt_manager.connected()) return;
+
+    char topic[128];
+    snprintf(topic, sizeof(topic), "%s/event", mqtt_manager.baseTopic());
+
+    StaticJsonDocument<256> doc;
+    doc["event_type"] = event_type;
+    doc["page"] = tile->page;
+    doc["col"] = tile->col;
+    doc["row"] = tile->row;
+
+    // Pick the most prominent label text
+    const char* label = "";
+    if (tile->label_center) label = lv_label_get_text(tile->label_center);
+    if ((!label || !label[0]) && tile->label_top) label = lv_label_get_text(tile->label_top);
+    if ((!label || !label[0]) && tile->label_bottom) label = lv_label_get_text(tile->label_bottom);
+    if (label && label[0]) doc["label"] = label;
+
+    mqtt_manager.publishJson(topic, doc, false);
+}
+#endif
+
 void PadScreen::onTap(lv_event_t* e) {
     ButtonTile* tile = (ButtonTile*)lv_event_get_user_data(e);
     if (!tile || !tile->obj) return;
@@ -481,6 +510,10 @@ void PadScreen::onTap(lv_event_t* e) {
     do_tap_flash(tile->obj, tile->bg_color_rgb);
 
     execute_action(tile->action, "Tap");
+
+#if HAS_MQTT
+    publish_button_event(tile, "press");
+#endif
 }
 
 void PadScreen::onLongPress(lv_event_t* e) {
@@ -491,6 +524,10 @@ void PadScreen::onLongPress(lv_event_t* e) {
     do_tap_flash(tile->obj, tile->bg_color_rgb);
 
     execute_action(tile->lp_action, "LP");
+
+#if HAS_MQTT
+    publish_button_event(tile, "hold");
+#endif
 }
 
 // ============================================================================
