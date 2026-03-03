@@ -244,6 +244,7 @@ void PadScreen::buildTiles() {
         lv_obj_set_style_border_color(obj, rgb_to_lv(bcfg.border_color_rgb), 0);
         lv_obj_set_style_border_width(obj, bcfg.border_width_px, 0);
         lv_obj_set_style_radius(obj, bcfg.corner_radius_px, 0);
+        lv_obj_set_style_clip_corner(obj, true, 0);
         lv_obj_set_style_pad_all(obj, 4, 0);
 
         lv_color_t fg = rgb_to_lv(bcfg.fg_color_rgb);
