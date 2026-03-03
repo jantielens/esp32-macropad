@@ -350,10 +350,11 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
         return false;
     }
 
-    g_generation++;
-
-    // Update RAM cache from the just-written file (safe here — web server task has internal stack)
+    // Update RAM cache BEFORE bumping generation so the LVGL task
+    // always reads fresh data when it detects the new generation.
     cache_update(page);
+
+    g_generation++;
 
     // Update fs_health stats
     fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
@@ -379,7 +380,7 @@ bool pad_config_delete(uint8_t page) {
         return false;
     }
 
-    // Clear RAM cache
+    // Clear RAM cache before bumping generation (same ordering rationale as save)
     free(g_cache[page]);
     g_cache[page] = nullptr;
 
