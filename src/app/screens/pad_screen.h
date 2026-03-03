@@ -46,7 +46,11 @@ struct ButtonTile {
     lv_obj_t* label_top;      // Top label (Font S) or nullptr
     lv_obj_t* label_center;   // Center label (Font L) or nullptr
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr
+    lv_obj_t* icon_img;       // Icon image widget (or nullptr)
     uint32_t bg_color_rgb;    // Original bg color (for tap flash restore)
+    uint8_t page;             // Page index (for HA event)
+    uint8_t col;              // Grid column (for HA event)
+    uint8_t row;              // Grid row (for HA event)
     ButtonAction action;      // Tap action
     ButtonAction lp_action;   // Long-press action
 #if HAS_IMAGE_FETCH

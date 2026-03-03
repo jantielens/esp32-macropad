@@ -27,6 +27,9 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Image Fetch Subsystem**: Background HTTP(S) image download, decode, and scaling (compile-time gated by `HAS_IMAGE_FETCH`)
   - `image_decoder.cpp/h` - Stateless JPEG (tjpgd) / PNG (lodepng) decode + bilinear scale to RGB565 (cover or letterbox mode)
   - `image_fetch.cpp/h` - Slot-based FreeRTOS background fetcher with per-slot pause/resume, double-buffered PSRAM frames, and per-slot scale mode (cover/letterbox)
+- **Icon Store Subsystem**: PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
+  - `icon_store.cpp/h` - LittleFS I/O, lodepng decode with R↔B swap, growable PSRAM cache
+  - `web_portal_icons.cpp/h` - REST API for icon upload, delete, list, and debug endpoints
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode and transport parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
@@ -121,7 +124,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution - they work from any 
 - 2-column grid on desktop (≥768px) using `.grid-2col` class
 - Sections stack vertically on mobile (<768px)
 - Network page: WiFi + Device Settings side-by-side, Network Config full-width
-- Home page: Hello World + Sample Settings side-by-side
+- Home page: Operating Mode settings + Pad Editor (when display enabled)
 
 **REST API Design**:
 - All endpoints under `/api/*` namespace
@@ -189,6 +192,8 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/portal_idle.cpp/h` - Portal idle timeout in Config/AP modes
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
 - `src/app/image_fetch.cpp/h` - Slot-based background image fetcher with per-slot pause/resume (compile-time gated by `HAS_IMAGE_FETCH`)
+- `src/app/icon_store.cpp/h` - PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
+- `src/app/web_portal_icons.cpp/h` - Icon store REST API (upload, delete, list, debug endpoints)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface
@@ -215,7 +220,7 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template
-- `src/app/web/home.html` - Home page (Hello World + Sample Settings)
+- `src/app/web/home.html` - Home page (Operating Mode, BLE Advertising, Pad Editor)
 - `src/app/web/network.html` - Network configuration page
 - `src/app/web/firmware.html` - Firmware page (online update, manual upload, factory reset)
 - `src/app/web/portal.css` - Styles (gradients, animations, responsive grid)

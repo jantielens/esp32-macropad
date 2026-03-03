@@ -142,10 +142,10 @@ void TestScreen::update() {
 		// Static screen - no dynamic updates needed
 }
 
-// Touch event callback - navigate to InfoScreen
+// Touch event callback - navigate to previous screen
 void TestScreen::touchEventCallback(lv_event_t* e) {
 		TestScreen* instance = (TestScreen*)lv_event_get_user_data(e);
 		if (instance && instance->displayMgr) {
-				instance->displayMgr->showInfo();
+				instance->displayMgr->goBack();
 		}
 }

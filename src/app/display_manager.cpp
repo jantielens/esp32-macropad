@@ -5,6 +5,7 @@
 #include "display_manager.h"
 #include "log_manager.h"
 #include "rtos_task_utils.h"
+#include "screen_saver_manager.h"
 
 #include <esp_timer.h>
 
@@ -38,8 +39,12 @@ static uint16_t g_perf_frames_in_window = 0;
 DisplayManager* displayManager = nullptr;
 
 DisplayManager::DisplayManager(DeviceConfig* cfg) 
-		: driver(nullptr), display(nullptr), config(cfg), currentScreen(nullptr), previousScreen(nullptr), pendingScreen(nullptr), 
+		: driver(nullptr), display(nullptr), config(cfg), currentScreen(nullptr), pendingScreen(nullptr),
+		screenHistoryCount(0), skipHistoryPush(false), 
 			infoScreen(cfg, this), testScreen(this), fpsScreen(this),
+			#if HAS_TOUCH && LV_USE_CANVAS
+			touchTestScreen(this),
+			#endif
 			padScreens{
 				PadScreen(0, this), PadScreen(1, this), PadScreen(2, this), PadScreen(3, this),
 				PadScreen(4, this), PadScreen(5, this), PadScreen(6, this), PadScreen(7, this)
@@ -258,7 +263,19 @@ void DisplayManager::lvglTask(void* pvParameter) {
 								mgr->currentScreen->hide();
 						}
 
-						mgr->previousScreen = mgr->currentScreen;
+						// Push current screen onto history (skip for splash and goBack)
+						if (mgr->currentScreen && !mgr->skipHistoryPush
+								&& mgr->currentScreen != &mgr->splashScreen) {
+								if (mgr->screenHistoryCount < SCREEN_HISTORY_MAX) {
+										mgr->screenHistory[mgr->screenHistoryCount++] = mgr->currentScreen;
+								} else {
+										memmove(&mgr->screenHistory[0], &mgr->screenHistory[1],
+												(SCREEN_HISTORY_MAX - 1) * sizeof(Screen*));
+										mgr->screenHistory[SCREEN_HISTORY_MAX - 1] = mgr->currentScreen;
+								}
+						}
+						mgr->skipHistoryPush = false;
+
 						mgr->currentScreen = target;
 						mgr->currentScreen->show();
 						mgr->pendingScreen = nullptr;
@@ -269,6 +286,14 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 						const char* screenId = mgr->getScreenIdForInstance(mgr->currentScreen);
 						LOGI("Display", "Switched to %s", screenId ? screenId : "(unregistered)");
+
+						// Apply current pixel shift offset (burn-in prevention).
+						if (mgr->currentScreen != &mgr->splashScreen) {
+								int dx = 0, dy = 0;
+								screen_saver_manager_get_pixel_shift(&dx, &dy);
+								lv_obj_set_style_translate_x(lv_scr_act(), dx, 0);
+								lv_obj_set_style_translate_y(lv_scr_act(), dy, 0);
+						}
 				}
 				
 				// Handle LVGL rendering (animations, timers, etc.)
@@ -646,9 +671,10 @@ bool DisplayManager::showScreen(const char* screen_id) {
 }
 
 bool DisplayManager::goBack() {
-		if (!previousScreen) return false;
-		pendingScreen = previousScreen;
-		LOGI("Display", "Queued go-back");
+		if (screenHistoryCount == 0) return false;
+		pendingScreen = screenHistory[--screenHistoryCount];
+		skipHistoryPush = true;
+		LOGI("Display", "Queued go-back (history depth: %zu)", screenHistoryCount);
 		return true;
 }
 

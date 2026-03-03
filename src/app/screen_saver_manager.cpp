@@ -20,6 +20,47 @@ namespace {
 
 DeviceConfig* g_config = nullptr;
 ScreenSaverState g_state = ScreenSaverState::Awake;
+
+// Sleep overlay: opaque black layer on lv_layer_top() while asleep.
+// Prevents stale content from showing through on displays without true backlight off.
+static lv_obj_t* g_overlay = nullptr;
+
+static void create_sleep_overlay() {
+		if (g_overlay) return;
+		if (!displayManager) return;
+		displayManager->lock();
+		g_overlay = lv_obj_create(lv_layer_top());
+		lv_obj_remove_style_all(g_overlay);
+		lv_obj_set_size(g_overlay, LV_PCT(100), LV_PCT(100));
+		lv_obj_set_style_bg_color(g_overlay, lv_color_black(), 0);
+		lv_obj_set_style_bg_opa(g_overlay, LV_OPA_COVER, 0);
+		displayManager->unlock();
+}
+
+static void remove_sleep_overlay() {
+		if (!g_overlay) return;
+		if (!displayManager) return;
+		displayManager->lock();
+		lv_obj_del(g_overlay);
+		g_overlay = nullptr;
+		displayManager->unlock();
+}
+
+// Pixel shift: sub-pixel offset that advances each sleep cycle.
+// Covers a 9×9 grid (−4..+4 in each axis) = 81 positions.
+static uint8_t g_pixel_shift_counter = 0;
+
+// Centralised state-entry helpers so sleep/wake side-effects live in one place.
+static void enter_asleep() {
+		g_state = ScreenSaverState::Asleep;
+		g_pixel_shift_counter = (g_pixel_shift_counter + 34) % 81;
+		create_sleep_overlay();
+}
+
+static void enter_awake() {
+		g_state = ScreenSaverState::Awake;
+		remove_sleep_overlay();
+}
 bool g_prev_enabled = false;
 
 uint32_t g_last_activity_ms = 0;
@@ -104,7 +145,7 @@ static void start_fade(ScreenSaverState newState, uint8_t from, uint8_t to, uint
 		if (duration_ms == 0) {
 				g_current_brightness = to;
 				apply_brightness(to);
-				g_state = (to == 0) ? ScreenSaverState::Asleep : ScreenSaverState::Awake;
+				(to == 0) ? enter_asleep() : enter_awake();
 				return;
 		}
 
@@ -178,6 +219,22 @@ static void handle_pending_requests() {
 						return;
 				}
 
+				// Remove sleep overlay before fade-in so the screen is visible.
+				remove_sleep_overlay();
+
+				// Apply the new pixel shift offset to the active screen.
+				int dx, dy;
+				screen_saver_manager_get_pixel_shift(&dx, &dy);
+				if (displayManager) {
+						displayManager->lock();
+						lv_obj_t* scr = lv_scr_act();
+						if (scr) {
+								lv_obj_set_style_translate_x(scr, dx, 0);
+								lv_obj_set_style_translate_y(scr, dy, 0);
+						}
+						displayManager->unlock();
+				}
+
 				#if HAS_TOUCH
 				// Swallow wake interactions so swipe-to-wake doesn't click through into LVGL.
 				// We suppress for (fade_in + small buffer) and only when waking from sleep/dimming.
@@ -207,7 +264,7 @@ static void update_fade() {
 		if (elapsed >= g_fade_duration_ms) {
 				g_current_brightness = g_fade_to;
 				apply_brightness(g_fade_to);
-				g_state = (g_fade_to == 0) ? ScreenSaverState::Asleep : ScreenSaverState::Awake;
+				(g_fade_to == 0) ? enter_asleep() : enter_awake();
 				return;
 		}
 
@@ -371,6 +428,13 @@ ScreenSaverStatus screen_saver_manager_get_status() {
 		}
 
 		return status;
+}
+
+void screen_saver_manager_get_pixel_shift(int* dx, int* dy) {
+		int col = (int)(g_pixel_shift_counter % 9) - 4;
+		int row = (int)(g_pixel_shift_counter / 9) - 4;
+		if (dx) *dx = col;
+		if (dy) *dy = row;
 }
 
 #endif // HAS_DISPLAY

@@ -258,6 +258,12 @@
                             </select>
                         </div>
                     </div>
+                    <div class="pad-controls-row" style="margin-top:6px;">
+                        <div class="form-group" style="margin-bottom:0; flex:1;">
+                            <label for="pad-name">Pad Name</label>
+                            <input type="text" id="pad-name" maxlength="31" placeholder="(optional)" style="padding:6px 10px;">
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Visual grid preview -->
@@ -271,9 +277,26 @@
 
                 <!-- Action buttons -->
                 <div class="pad-actions">
-                    <button type="button" id="pad-save-btn" class="btn btn-primary" style="flex:1 1 120px;">Save Page</button>
+                    <button type="button" id="pad-save-btn" class="btn btn-primary" style="flex:1 1 120px;">Save Pad</button>
                     <button type="button" id="pad-show-btn" class="btn btn-secondary" style="flex:1 1 120px;">Show on Device</button>
-                    <button type="button" id="pad-delete-btn" class="btn btn-secondary" style="flex:1 1 80px; color:#ff3b30; border-color:#ff3b30;">Delete</button>
+                    <div class="pad-more-wrap" style="position:relative; flex:0 0 auto;">
+                        <button type="button" id="pad-more-btn" class="btn btn-secondary" style="min-width:80px;">More ▾</button>
+                        <div id="pad-more-menu" class="pad-more-menu" style="display:none;">
+                            <button type="button" id="pad-fill-btn" disabled>Fill Pad</button>
+                            <button type="button" id="pad-copy-btn">Copy Pad</button>
+                            <button type="button" id="pad-paste-btn" disabled>Paste Pad</button>
+                            <hr>
+                            <button type="button" id="pad-export-btn">Export Pad</button>
+                            <button type="button" id="pad-import-btn">Import Pad</button>
+                            <input type="file" id="pad-import-file" accept=".json" style="display:none;">
+                            <hr>
+                            <button type="button" id="device-export-btn">Export Device Config</button>
+                            <button type="button" id="device-import-btn">Import Device Config</button>
+                            <input type="file" id="device-import-file" accept=".json" style="display:none;">
+                            <hr>
+                            <button type="button" id="pad-delete-btn" style="color:#ff3b30;">Clear Pad</button>
+                        </div>
+                    </div>
                 </div>
 
                 <small style="margin-top:8px; display:block;">Click a cell to edit its button. Pad uses its own Save — not the main form.</small>
@@ -303,6 +326,41 @@
                 </div>
 
                 <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
+
+                <!-- Icon (collapsible) -->
+                <details id="pad-edit-icon-section">
+                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Icon</summary>
+                    <small style="display:block; margin-bottom:12px; color:#86868b;">Display an icon centered on the button.</small>
+
+                    <div class="form-group">
+                        <label for="pad-edit-icon-type">Icon Type</label>
+                        <select id="pad-edit-icon-type" onchange="padIconTypeChanged()">
+                            <option value="">(none)</option>
+                            <option value="emoji">Emoji</option>
+                            <option value="mi">Material Symbol</option>
+                        </select>
+                    </div>
+
+                    <div id="pad-edit-icon-emoji-group" style="display:none;">
+                        <div class="form-group">
+                            <label for="pad-edit-icon-emoji">Emoji</label>
+                            <input type="text" id="pad-edit-icon-emoji" maxlength="15" placeholder="e.g. ☀️ 🔌 💡">
+                            <small>Paste or type an emoji character.</small>
+                        </div>
+                    </div>
+
+                    <div id="pad-edit-icon-mi-group" style="display:none;">
+                        <div class="form-group">
+                            <label for="pad-edit-icon-mi">Symbol Name</label>
+                            <input type="text" id="pad-edit-icon-mi" maxlength="31" placeholder="e.g. power_settings_new">
+                            <small>Name from <a href="https://fonts.google.com/icons" target="_blank" style="color:#007aff;">Material Symbols</a>.</small>
+                        </div>
+                    </div>
+
+                    <div id="pad-edit-icon-preview-box" class="pad-icon-preview" style="display:none;">
+                        <canvas id="pad-edit-icon-canvas" width="64" height="64"></canvas>
+                    </div>
+                </details>
 
                 <!-- MQTT Label Bindings (collapsible) -->
                 <details id="pad-edit-bindings-section">
@@ -424,10 +482,12 @@
                     <div class="form-group" style="flex:1;">
                         <label for="pad-edit-bg-color">Background</label>
                         <input type="color" id="pad-edit-bg-color" value="#333333" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
+                        <div class="pad-swatch-strip" data-picker="pad-edit-bg-color"></div>
                     </div>
                     <div class="form-group" style="flex:1;">
                         <label for="pad-edit-fg-color">Text Color</label>
                         <input type="color" id="pad-edit-fg-color" value="#ffffff" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
+                        <div class="pad-swatch-strip" data-picker="pad-edit-fg-color"></div>
                     </div>
                 </div>
 
@@ -435,10 +495,11 @@
                     <div class="form-group" style="flex:1;">
                         <label for="pad-edit-border-color">Border</label>
                         <input type="color" id="pad-edit-border-color" value="#000000" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
+                        <div class="pad-swatch-strip" data-picker="pad-edit-border-color"></div>
                     </div>
                     <div class="form-group" style="flex:1;">
                         <label for="pad-edit-border-width">Border Width</label>
-                        <input type="number" id="pad-edit-border-width" min="0" max="10" value="1" style="width:100%;">
+                        <input type="number" id="pad-edit-border-width" min="0" max="10" value="0" style="width:100%;">
                     </div>
                     <div class="form-group" style="flex:1;">
                         <label for="pad-edit-corner-radius">Radius</label>
@@ -524,6 +585,8 @@
 
             <div class="pad-edit-footer">
                 <button type="button" id="pad-edit-ok" class="btn btn-primary" style="flex:1;">OK</button>
+                <button type="button" id="pad-edit-copy" class="btn btn-secondary" style="flex:1;">Copy</button>
+                <button type="button" id="pad-edit-paste" class="btn btn-secondary" style="flex:1;" disabled>Paste</button>
                 <button type="button" id="pad-edit-clear" class="btn btn-secondary" style="flex:1; color:#ff3b30; border-color:#ff3b30;">Clear</button>
                 <button type="button" id="pad-edit-cancel" class="btn btn-secondary" style="flex:1;">Cancel</button>
             </div>

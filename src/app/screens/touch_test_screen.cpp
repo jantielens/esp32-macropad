@@ -4,13 +4,14 @@
 
 #include "../board_config.h"
 #include "../log_manager.h"
+#include "../display_manager.h"
 #include "../touch_manager.h"
 
 #include <stdlib.h>  // abs()
 
-TouchTestScreen::TouchTestScreen()
+TouchTestScreen::TouchTestScreen(DisplayManager* manager)
 		: screen(nullptr), canvas(nullptr), canvasBuf(nullptr),
-			headerLabel(nullptr),
+			headerLabel(nullptr), backBtn(nullptr), displayMgr(manager),
 				prevTouchValid(false), prevX(0), prevY(0), brushRadius(3),
 			canvasWidth(0), canvasHeight(0) {}
 
@@ -47,6 +48,24 @@ void TouchTestScreen::create() {
 		lv_obj_align(headerLabel, LV_ALIGN_TOP_MID, 0, 4);
 		lv_obj_clear_flag(headerLabel, LV_OBJ_FLAG_CLICKABLE);
 
+		// Back button (centered) — allows navigating away from the drawing canvas
+		backBtn = lv_obj_create(screen);
+		lv_obj_set_size(backBtn, 80, 36);
+		lv_obj_align(backBtn, LV_ALIGN_CENTER, 0, 0);
+		lv_obj_set_style_bg_color(backBtn, lv_color_hex(0x333333), 0);
+		lv_obj_set_style_bg_opa(backBtn, LV_OPA_COVER, 0);
+		lv_obj_set_style_radius(backBtn, 8, 0);
+		lv_obj_set_style_border_color(backBtn, lv_color_hex(0x666666), 0);
+		lv_obj_set_style_border_width(backBtn, 1, 0);
+		lv_obj_set_style_pad_all(backBtn, 0, 0);
+		lv_obj_add_flag(backBtn, LV_OBJ_FLAG_CLICKABLE);
+		lv_obj_add_event_cb(backBtn, backBtnCallback, LV_EVENT_CLICKED, this);
+
+		lv_obj_t* backLabel = lv_label_create(backBtn);
+		lv_label_set_text(backLabel, LV_SYMBOL_LEFT " Back");
+		lv_obj_set_style_text_color(backLabel, lv_color_white(), 0);
+		lv_obj_center(backLabel);
+
 		// Canvas is NOT allocated here — deferred to show() to save PSRAM.
 
 		LOGI("TouchTest", "Create complete (brush r=%d)", brushRadius);
@@ -65,6 +84,7 @@ void TouchTestScreen::destroy() {
 				lv_obj_delete(screen);
 				screen = nullptr;
 				headerLabel = nullptr;
+				backBtn = nullptr;
 		}
 }
 
@@ -118,8 +138,9 @@ void TouchTestScreen::show() {
 		lv_obj_add_event_cb(canvas, touchEventCallback, LV_EVENT_PRESSING, this);
 		lv_obj_add_event_cb(canvas, touchEventCallback, LV_EVENT_RELEASED, this);
 
-		// Move header label to front (above canvas)
+		// Move header label and back button to front (above canvas)
 		lv_obj_move_to_index(headerLabel, -1);
+		lv_obj_move_to_index(backBtn, -1);
 
 		// Reset touch tracking
 		prevTouchValid = false;
@@ -276,6 +297,13 @@ void TouchTestScreen::touchEventCallback(lv_event_t* e) {
 		self->prevX = x;
 		self->prevY = y;
 		self->prevTouchValid = true;
+}
+
+void TouchTestScreen::backBtnCallback(lv_event_t* e) {
+		TouchTestScreen* self = (TouchTestScreen*)lv_event_get_user_data(e);
+		if (self && self->displayMgr) {
+				self->displayMgr->goBack();
+		}
 }
 
 #endif // HAS_TOUCH

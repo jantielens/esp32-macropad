@@ -78,7 +78,7 @@ struct ScreenButtonConfig {
     uint32_t bg_color_rgb;          // default 0x333333
     uint32_t fg_color_rgb;          // default 0xFFFFFF
     uint32_t border_color_rgb;      // default 0x000000
-    uint16_t border_width_px;       // default 1
+    uint16_t border_width_px;       // default 0
     uint32_t disabled_fg_color_rgb; // default 0x444444
     uint16_t corner_radius_px;      // default 8
 

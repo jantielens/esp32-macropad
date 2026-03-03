@@ -198,10 +198,10 @@ void InfoScreen::update() {
 		}
 }
 
-// Touch event callback - navigate to TestScreen
+// Touch event callback - navigate to previous screen
 void InfoScreen::touchEventCallback(lv_event_t* e) {
 		InfoScreen* instance = (InfoScreen*)lv_event_get_user_data(e);
 		if (instance && instance->displayMgr) {
-				instance->displayMgr->showTest();
+				instance->displayMgr->goBack();
 		}
 }

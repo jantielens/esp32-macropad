@@ -254,6 +254,13 @@
 #define HAS_DISPLAY false
 #endif
 
+// Blank backlight during pad save to hide PSRAM bus contention flicker on MIPI-DSI panels.
+// Continuous DMA scan can produce cyan/blue flashes during heavy PSRAM I/O
+// (LittleFS + lodepng). The browser blanks/restores via /api/display/brightness.
+#ifndef DISPLAY_BLANK_ON_SAVE
+#define DISPLAY_BLANK_ON_SAVE false
+#endif
+
 // Enable background image fetch for pad button tiles.
 // Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 #ifndef HAS_IMAGE_FETCH

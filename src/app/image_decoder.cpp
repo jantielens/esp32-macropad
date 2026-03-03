@@ -200,6 +200,9 @@ static bool letterbox_scale_rgb888_to_565(
 
     int scaled_w = (int)(src_w * scale + 0.5f);
     int scaled_h = (int)(src_h * scale + 0.5f);
+    // Clamp: rounding can push scaled dims 1 px past target
+    if (scaled_w > dst_w) scaled_w = dst_w;
+    if (scaled_h > dst_h) scaled_h = dst_h;
     int offset_x = (dst_w - scaled_w) / 2;
     int offset_y = (dst_h - scaled_h) / 2;
 
@@ -259,6 +262,9 @@ static bool letterbox_scale_rgba8888_to_565(
 
     int scaled_w = (int)(src_w * scale + 0.5f);
     int scaled_h = (int)(src_h * scale + 0.5f);
+    // Clamp: rounding can push scaled dims 1 px past target
+    if (scaled_w > dst_w) scaled_w = dst_w;
+    if (scaled_h > dst_h) scaled_h = dst_h;
     int offset_x = (dst_w - scaled_w) / 2;
     int offset_y = (dst_h - scaled_h) / 2;
 
@@ -342,24 +348,35 @@ static int jpeg_output_func(JDEC* jd, void* bitmap, JRECT* rect) {
     JpegOutputCtx* out = &s->output;
     if (!out->dst) return 0;
 
-    int rw = rect->right - rect->left + 1;
-    int rh = rect->bottom - rect->top + 1;
-    if (rw <= 0 || rh <= 0) return 0;
-    if (rect->right >= (unsigned)out->dst_w || rect->bottom >= (unsigned)out->dst_h) return 0;
+    // Clip the MCU block to the image boundary instead of dropping it.
+    // tjpgd may deliver blocks that extend 1-7 pixels beyond the image
+    // dimensions (JPEG MCUs are 8- or 16-pixel aligned).
+    int left  = (int)rect->left;
+    int top   = (int)rect->top;
+    int right = (int)rect->right;
+    int bottom = (int)rect->bottom;
+    if (left >= out->dst_w || top >= out->dst_h) return 0;
+    if (right  >= out->dst_w)  right  = out->dst_w - 1;
+    if (bottom >= out->dst_h)  bottom = out->dst_h - 1;
 
+    int rw = right - left + 1;
+    int rh = bottom - top + 1;
+    if (rw <= 0 || rh <= 0) return 0;
+
+    int block_w = (int)(rect->right - rect->left + 1);  // original MCU width for stride
     uint8_t* src = (uint8_t*)bitmap;
     for (int row = 0; row < rh; row++) {
-        int y = rect->top + row;
-        uint8_t* dst_row = out->dst + ((size_t)y * out->dst_w + rect->left) * 3;
+        int y = top + row;
+        uint8_t* dst_row = out->dst + ((size_t)y * out->dst_w + left) * 3;
         memcpy(dst_row, src, rw * 3);
-        src += rw * 3;
+        src += block_w * 3;
     }
     return 1;  // continue
 }
 
 static bool decode_jpeg(const uint8_t* data, size_t len,
                         uint8_t** out_rgb888, int* out_w, int* out_h) {
-    static const size_t kWorkSize = 4096;
+    static const size_t kWorkSize = 8192;
     void* work = psram_alloc(kWorkSize);
     if (!work) {
         LOGE(TAG, "JPEG: OOM work buffer");
@@ -441,7 +458,7 @@ static bool decode_png(const uint8_t* data, size_t len,
 
     if (pw == 0 || ph == 0 || pw > 4096 || ph > 4096) {
         LOGE(TAG, "PNG invalid dims %ux%u", pw, ph);
-        free(pixels);
+        lv_free(pixels);  // lodepng uses lv_malloc
         return false;
     }
 
@@ -505,7 +522,7 @@ bool image_decode_to_rgb565(
             } else {
                 ok = cover_scale_rgba8888_to_565(rgba, src_w, src_h, out, target_w, target_h);
             }
-            free(rgba);  // lodepng uses malloc
+            lv_free(rgba);  // lodepng uses lv_malloc
         }
     }
 

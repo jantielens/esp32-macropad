@@ -201,10 +201,15 @@ Real-time device health monitoring integrated as a header badge with expandable 
 **Available In:** Full Mode only (redirects to Network page in AP mode)
 
 **Sections:**
-- **👋 Hello World**: Welcome message with customization tip
-- **⚙️ Sample Settings**: Example configuration field (dummy_setting)
 - **⚡ Operating Mode & Cadence**: Mode selection, transport, cycle interval, portal idle timeout, WiFi backoff cap, and MQTT payload scope
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
+- **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
+  - **Pad selection & naming**: Dropdown for Pad 1–8 with optional custom names (max 31 chars)
+  - **Grid preview**: Click any cell to open the button editor dialog
+  - **Button editor dialog**: Label, icon (emoji / Material Symbol), colors, actions (screen navigate, MQTT), bindings, image backgrounds
+  - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
+  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 8 pad configs), Clear Pad
+  - **Device config export/import**: Exports NVS settings (excluding network) plus all 8 pad pages to a single JSON file; import overwrites settings and reboots
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
 
@@ -395,7 +400,16 @@ Returns comprehensive device information.
   "mac_address": "AA:BB:CC:DD:EE:FF",
   "wifi_hostname": "esp32-1234",
   "mdns_name": "esp32-1234.local",
-  "hostname": "esp32-1234"
+  "hostname": "esp32-1234",
+  "has_display": true,
+  "display_coord_width": 480,
+  "display_coord_height": 480,
+  "available_screens": [
+    {"id": "info", "name": "Info Screen"},
+    {"id": "pad_0", "name": "Pad 1: Living Room"},
+    {"id": "pad_1", "name": "Pad 2"}
+  ],
+  "current_screen": "pad_0"
 }
 ```
 
@@ -404,6 +418,11 @@ Returns comprehensive device information.
 - `wifi_hostname`: WiFi/DHCP hostname
 - `mdns_name`: Full mDNS name (hostname + `.local`)
 - `hostname`: Short hostname
+
+**Display Fields** (only when `has_display` is `true`):
+- `display_coord_width` / `display_coord_height`: Display resolution
+- `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
+- `current_screen`: ID of the currently displayed screen
 
 **Health Widget Fields:**
 - `health_poll_interval_ms`: Poll interval used by the portal health overlay
@@ -815,12 +834,93 @@ Switch the active runtime screen (no persistence).
 - When the screen saver is dimming/asleep/fading in, touch input is intentionally suppressed to avoid “wake gestures” clicking through into the UI. A second tap may be required after wake.
 
 
+---
+
+### Icon Store API
+
+All icon endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled.
+
+#### `POST /api/icons/install?id=<id>&kind=<0|1>`
+
+Upload a PNG icon and install it into the icon store.
+
+- **Query Parameters:** `id` (required, `[a-z0-9_]`), `kind` (optional, `0`=color default, `1`=mono)
+- **Body:** Raw PNG bytes (`Content-Type: application/octet-stream`)
+- **Max size:** `ICON_MAX_PNG_SIZE` (128 KB)
+- **Response:** `{"success": true}` on success; JSON error on failure
+- The PNG is saved to LittleFS at `/icons/<id>.png` and decoded into a PSRAM-cached ARGB8888 draw buffer for immediate use.
+
+#### `DELETE /api/icons/page?page=<N>`
+
+Delete all icon files for a given pad page.
+
+- **Query Parameters:** `page` (required, `0`–`7`)
+- **Response:** `{"success": true}`
+
+#### `GET /api/icons/installed`
+
+List all installed icon IDs (from LittleFS `/icons/` directory).
+
+**Response:**
+```json
+{ "icons": ["pad_0_0_0", "pad_0_1_2"], "cache_count": 2 }
+```
+
+#### `GET /api/icons/files`
+
+List all files in `/icons/` with names and sizes (debug endpoint).
+
+**Response:**
+```json
+{ "files": [{"name": "pad_0_0_0.png", "size": 4096}] }
+```
+
+#### `GET /api/icons/cache`
+
+Dump in-memory cache entries with dimensions and data sizes (debug endpoint).
+
+**Response:**
+```json
+{ "entries": [{"id": "pad_0_0_0", "kind": 0, "w": 128, "h": 128, "data_size": 65536}], "count": 1 }
+```
+
+#### `GET /api/icons/file?name=<filename>`
+
+Download a raw icon file from `/icons/`. Returns `image/png` for `.png` files.
+
+- **Query Parameters:** `name` (required, no path separators or `..`)
+
+#### `DELETE /api/icons/file?name=<filename>`
+
+Delete a specific icon file from `/icons/`.
+
+- **Query Parameters:** `name` (required, no path separators or `..`)
+- **Response:** `{"success": true}`
+
+#### `GET /api/pad/tile_sizes?cols=<N>&rows=<N>`
+
+Compute tile dimensions for a given grid layout. Used by the icon picker to render correctly sized icons.
+
+- **Query Parameters:** `cols` (required, `1`–`8`), `rows` (required, `1`–`8`)
+- **Response:**
+```json
+{
+  "display_w": 720, "display_h": 720,
+  "tile_w": 234, "tile_h": 234,
+  "gap": 4, "padding": 4,
+  "pixel_shift_margin": 4,
+  "font_small_h": 16
+}
+```
+
+
 ## Implementation Details
 
 ### Architecture
 
 **Backend (C++):**
 - `web_portal.cpp/h` - ESPAsyncWebServer with REST endpoints
+- `web_portal_icons.cpp/h` - Icon store REST API (upload, delete, list, debug endpoints)
 - `config_manager.cpp/h` - NVS (Non-Volatile Storage) for configuration
 - `web_assets.h` - PROGMEM embedded HTML/CSS/JS (gzip compressed) (auto-generated)
 - `project_branding.h` - `PROJECT_NAME` / `PROJECT_DISPLAY_NAME` defines (auto-generated)

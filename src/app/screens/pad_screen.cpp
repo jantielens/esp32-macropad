@@ -1,11 +1,13 @@
 #include "pad_screen.h"
 #include "../display_manager.h"
+#include "../icon_store.h"
 #include "../log_manager.h"
 #include "../pad_config.h"
 #include "../pad_layout.h"
 #if HAS_MQTT
 #include "../mqtt_manager.h"
 #include "../mqtt_sub_store.h"
+#include <ArduinoJson.h>
 #endif
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
@@ -242,6 +244,7 @@ void PadScreen::buildTiles() {
         lv_obj_set_style_border_color(obj, rgb_to_lv(bcfg.border_color_rgb), 0);
         lv_obj_set_style_border_width(obj, bcfg.border_width_px, 0);
         lv_obj_set_style_radius(obj, bcfg.corner_radius_px, 0);
+        lv_obj_set_style_clip_corner(obj, true, 0);
         lv_obj_set_style_pad_all(obj, 4, 0);
 
         lv_color_t fg = rgb_to_lv(bcfg.fg_color_rgb);
@@ -274,6 +277,35 @@ void PadScreen::buildTiles() {
             lv_obj_clear_flag(lbl_center, LV_OBJ_FLAG_CLICKABLE);
         }
 
+        // Icon image (shown when icon_id is set and icon is cached)
+        lv_obj_t* icon_img = nullptr;
+        if (bcfg.icon_id[0]) {
+            char icon_key[CONFIG_ICON_ID_MAX_LEN];
+            icon_store_build_key(pageIndex, bcfg.col, bcfg.row,
+                                 icon_key, sizeof(icon_key));
+            IconRef ref;
+            if (icon_store_lookup(icon_key, &ref)) {
+                icon_img = lv_image_create(obj);
+                lv_image_set_src(icon_img, ref.dsc);
+
+                // Center icon in the space between labels.
+                // LV_ALIGN_CENTER is the center of the full content area;
+                // offset by half the difference of top/bottom label heights.
+                const int16_t top_h = bcfg.label_top[0] ?
+                    lv_font_get_line_height(scale.font_small) : 0;
+                const int16_t bot_h = bcfg.label_bottom[0] ?
+                    lv_font_get_line_height(scale.font_small) : 0;
+                const int16_t y_ofs = (top_h - bot_h) / 2;
+                lv_obj_align(icon_img, LV_ALIGN_CENTER, 0, y_ofs);
+
+                lv_obj_clear_flag(icon_img, LV_OBJ_FLAG_CLICKABLE);
+                if (ref.kind == ICON_KIND_MONO) {
+                    lv_obj_set_style_image_recolor(icon_img, fg, 0);
+                    lv_obj_set_style_image_recolor_opa(icon_img, LV_OPA_COVER, 0);
+                }
+            }
+        }
+
         // Bottom label
         lv_obj_t* lbl_bottom = nullptr;
         if (bcfg.label_bottom[0]) {
@@ -293,7 +325,11 @@ void PadScreen::buildTiles() {
         tile.label_top = lbl_top;
         tile.label_center = lbl_center;
         tile.label_bottom = lbl_bottom;
+        tile.icon_img = icon_img;
         tile.bg_color_rgb = bcfg.bg_color_rgb;
+        tile.page = pageIndex;
+        tile.col = bcfg.col;
+        tile.row = bcfg.row;
         memcpy(&tile.action, &bcfg.action, sizeof(ButtonAction));
         memcpy(&tile.lp_action, &bcfg.lp_action, sizeof(ButtonAction));
 
@@ -473,6 +509,31 @@ static void execute_action(const ButtonAction& act, const char* label) {
     }
 }
 
+// Publish HA event entity payload for a button press/hold
+#if HAS_MQTT
+static void publish_button_event(const ButtonTile* tile, const char* event_type) {
+    if (!mqtt_manager.connected()) return;
+
+    char topic[128];
+    snprintf(topic, sizeof(topic), "%s/event", mqtt_manager.baseTopic());
+
+    StaticJsonDocument<256> doc;
+    doc["event_type"] = event_type;
+    doc["page"] = tile->page;
+    doc["col"] = tile->col;
+    doc["row"] = tile->row;
+
+    // Pick the most prominent label text
+    const char* label = "";
+    if (tile->label_center) label = lv_label_get_text(tile->label_center);
+    if ((!label || !label[0]) && tile->label_top) label = lv_label_get_text(tile->label_top);
+    if ((!label || !label[0]) && tile->label_bottom) label = lv_label_get_text(tile->label_bottom);
+    if (label && label[0]) doc["label"] = label;
+
+    mqtt_manager.publishJson(topic, doc, false);
+}
+#endif
+
 void PadScreen::onTap(lv_event_t* e) {
     ButtonTile* tile = (ButtonTile*)lv_event_get_user_data(e);
     if (!tile || !tile->obj) return;
@@ -481,6 +542,10 @@ void PadScreen::onTap(lv_event_t* e) {
     do_tap_flash(tile->obj, tile->bg_color_rgb);
 
     execute_action(tile->action, "Tap");
+
+#if HAS_MQTT
+    publish_button_event(tile, "press");
+#endif
 }
 
 void PadScreen::onLongPress(lv_event_t* e) {
@@ -491,6 +556,10 @@ void PadScreen::onLongPress(lv_event_t* e) {
     do_tap_flash(tile->obj, tile->bg_color_rgb);
 
     execute_action(tile->lp_action, "LP");
+
+#if HAS_MQTT
+    publish_button_event(tile, "hold");
+#endif
 }
 
 // ============================================================================

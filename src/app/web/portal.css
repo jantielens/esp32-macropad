@@ -1087,6 +1087,11 @@ footer {
     line-height: 1.3;
 }
 
+.pad-cell-icon {
+    font-size: 24px;
+    line-height: 1;
+}
+
 .pad-cell-label-bottom {
     font-size: 10px;
     opacity: 0.7;
@@ -1107,6 +1112,47 @@ footer {
 }
 
 .pad-empty-state p {
+    margin: 4px 0;
+}
+
+.pad-more-menu {
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    margin-bottom: 6px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+    min-width: 200px;
+    padding: 6px 0;
+    z-index: 100;
+}
+
+.pad-more-menu button {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    color: #1c1c1e;
+}
+
+.pad-more-menu button:hover:not(:disabled) {
+    background: #f2f2f7;
+}
+
+.pad-more-menu button:disabled {
+    color: #c7c7cc;
+    cursor: default;
+}
+
+.pad-more-menu hr {
+    border: none;
+    border-top: 1px solid #e5e5ea;
     margin: 4px 0;
 }
 
@@ -1137,6 +1183,38 @@ footer {
     margin-bottom: 12px;
 }
 
+.pad-swatch-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    min-height: 0;
+}
+
+.pad-swatch-strip:empty {
+    display: none;
+}
+
+.pad-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #d2d2d7;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+    transition: transform 0.1s;
+}
+
+.pad-swatch:hover {
+    transform: scale(1.2);
+    border-color: #0071e3;
+}
+
+.pad-swatch.active {
+    border-color: #0071e3;
+    box-shadow: 0 0 0 2px rgba(0,113,227,0.3);
+}
+
 .pad-edit-footer {
     display: flex;
     gap: 12px;
@@ -1147,6 +1225,22 @@ footer {
 
 .pad-edit-modal .btn {
     min-width: 0;
+    text-align: center;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.pad-icon-preview {
+    text-align: center;
+    margin: 8px 0;
+    background: #1c1c1e;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.pad-icon-preview canvas {
+    border: 1px dashed #48484a;
+    border-radius: 4px;
 }
 
 /* Responsive Design */

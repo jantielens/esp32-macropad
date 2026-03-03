@@ -20,6 +20,7 @@
 
 #if HAS_DISPLAY
 #include "display_manager.h"
+#include "pad_config.h"
 #endif
 
 // GET /api/mode - Return portal mode (core vs full)
@@ -122,6 +123,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_BLE ? "true" : "false");
 		response->print(",\"has_backlight\":");
 		response->print(HAS_BACKLIGHT ? "true" : "false");
+		response->print(",\"display_blank_on_save\":");
+		response->print(DISPLAY_BLANK_ON_SAVE ? "true" : "false");
 
 		#if HAS_DISPLAY
 				// Display screen information
@@ -149,7 +152,32 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 						response->print("{\"id\":\"");
 						response->print(screens[i].id);
 						response->print("\",\"name\":\"");
-						response->print(screens[i].display_name);
+
+						// For pad screens, read custom name from LittleFS config
+						const char* sid = screens[i].id;
+						bool emitted = false;
+						if (strncmp(sid, "pad_", 4) == 0) {
+								uint8_t pg = (uint8_t)atoi(sid + 4);
+								if (pg < MAX_PAD_PAGES && pad_config_exists(pg)) {
+										size_t len = 0;
+										char* raw = pad_config_read_raw(pg, &len);
+										if (raw) {
+												JsonDocument filter;
+												filter["name"] = true;
+												JsonDocument doc;
+												if (deserializeJson(doc, raw, len, DeserializationOption::Filter(filter)) == DeserializationError::Ok
+														&& doc["name"].is<const char*>() && strlen(doc["name"].as<const char*>()) > 0) {
+														response->print(screens[i].display_name);
+														response->print(": ");
+														response->print(doc["name"].as<const char*>());
+														emitted = true;
+												}
+												free(raw);
+										}
+								}
+						}
+						if (!emitted) response->print(screens[i].display_name);
+
 						response->print("\"}");
 				}
 				response->print("]");

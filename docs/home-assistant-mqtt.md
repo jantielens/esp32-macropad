@@ -46,10 +46,12 @@ The device derives a **sanitized name** from the configured device name and uses
 - Base topic: `devices/<sanitized>`
 - Availability (LWT): `devices/<sanitized>/availability` (retained `online` / `offline`)
 - State (JSON): `devices/<sanitized>/health/state` (retained JSON)
+- Button events: `devices/<sanitized>/event` (non-retained JSON per press)
 
 Home Assistant discovery topics:
 - `homeassistant/sensor/<sanitized>/<object_id>/config` (retained)
 - `homeassistant/binary_sensor/<sanitized>/<object_id>/config` (retained)
+- `homeassistant/event/<sanitized>/button_press/config` (retained)
 
 ## State Payload (JSON)
 
@@ -213,7 +215,91 @@ Example config payload shape (pseudo-code):
 Operational notes:
 - Use retained publishes for presence so HA can recover the last known state after restart.
 - Add basic debouncing in your sensor logic so you don’t spam MQTT during noisy transitions.
+## Button Press Events
 
+When `HAS_DISPLAY` and `HAS_MQTT` are both enabled, pad button taps and long-presses are automatically published as **Home Assistant Event entities**. A single discovery message covers all buttons — no per-button config bloat.
+
+### Discovery (retained, once per boot)
+
+Topic: `homeassistant/event/<sanitized_name>/button_press/config`
+
+```json
+{
+  "~": "devices/<sanitized_name>",
+  "name": "Button Press",
+  "object_id": "<sanitized_name>_button_press",
+  "uniq_id": "<sanitized_name>_button_press",
+  "stat_t": "~/event",
+  "event_types": ["press", "hold"],
+  "avty_t": "~/availability",
+  "pl_avail": "online",
+  "pl_not_avail": "offline",
+  "dev": { "ids": ["<sanitized_name>"], "name": "...", "mdl": "...", "sw": "..." }
+}
+```
+
+### Event payload (non-retained, per button press)
+
+Topic: `devices/<sanitized_name>/event`
+
+```json
+{
+  "event_type": "press",
+  "page": 0,
+  "col": 1,
+  "row": 0,
+  "label": "Lights"
+}
+```
+
+| Field        | Description                                      |
+|------------- |--------------------------------------------------|
+| `event_type` | `press` (tap) or `hold` (long-press)             |
+| `page`       | Zero-based page index                            |
+| `col`        | Zero-based column                                |
+| `row`        | Zero-based row                                   |
+| `label`      | Most prominent label text (omitted if no label)  |
+
+### HA entity
+
+The entity appears as `event.<sanitized_name>_button_press` under your device's **Events** section.
+
+### Example automation — react to a specific button
+
+```yaml
+alias: "Toggle Lights on Pad Button"
+triggers:
+  - trigger: state
+    entity_id: event.<sanitized_name>_button_press
+conditions:
+  - condition: template
+    value_template: >
+      {{ trigger.to_state.attributes.label == 'Lights'
+         and trigger.to_state.attributes.event_type == 'press' }}
+actions:
+  - action: light.toggle
+    target:
+      entity_id: light.living_room
+```
+
+### Example automation — log all button presses
+
+```yaml
+alias: "Log All Pad Button Presses"
+triggers:
+  - trigger: state
+    entity_id: event.<sanitized_name>_button_press
+actions:
+  - action: system_log.write
+    data:
+      message: >
+        Button {{ trigger.to_state.attributes.event_type }} on
+        page={{ trigger.to_state.attributes.page }}
+        col={{ trigger.to_state.attributes.col }}
+        row={{ trigger.to_state.attributes.row }}
+        label={{ trigger.to_state.attributes.label | default('?') }}
+      level: warning
+```
 ## Troubleshooting
 
 - Nothing appears in HA:

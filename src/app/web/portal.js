@@ -1192,7 +1192,214 @@ const padState = {
     buttons: [],     // Working copy: array of button objects (by grid position key "col,row")
     editCol: 0,
     editRow: 0,
+    btnClipboard: null,  // Copied button settings (position-independent)
+    padClipboard: null,  // Copied pad settings { cols, rows, buttons, name }
+    colorCache: {},      // page → hex[] — colors from visited pads
 };
+
+const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
+const DEVICE_CONFIG_VERSION = 1;
+
+// --- Icon Support ---
+
+let padTileSizesCache = null;
+
+// Lazy-load Material Symbols font
+let _materialSymbolsLoaded = false;
+function padEnsureMaterialSymbols() {
+    if (_materialSymbolsLoaded) return Promise.resolve();
+    return new Promise((resolve) => {
+        _materialSymbolsLoaded = true;
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,1,0';
+        link.onload = () => document.fonts.ready.then(resolve);
+        link.onerror = resolve;
+        document.head.appendChild(link);
+    });
+}
+
+function padIconIdToType(iconId) {
+    if (!iconId) return { type: '', value: '' };
+    if (iconId.startsWith('emoji_')) return { type: 'emoji', value: iconId.substring(6) };
+    if (iconId.startsWith('mi_')) return { type: 'mi', value: iconId.substring(3) };
+    return { type: '', value: '' };
+}
+
+function padBuildIconId() {
+    const type = document.getElementById('pad-edit-icon-type').value;
+    if (type === 'emoji') {
+        const val = document.getElementById('pad-edit-icon-emoji').value.trim();
+        return val ? 'emoji_' + val : '';
+    }
+    if (type === 'mi') {
+        const val = document.getElementById('pad-edit-icon-mi').value.trim();
+        return val ? 'mi_' + val : '';
+    }
+    return '';
+}
+
+function padIconTypeChanged() {
+    const type = document.getElementById('pad-edit-icon-type').value;
+    document.getElementById('pad-edit-icon-emoji-group').style.display = (type === 'emoji') ? '' : 'none';
+    document.getElementById('pad-edit-icon-mi-group').style.display = (type === 'mi') ? '' : 'none';
+    if (type === 'mi') padEnsureMaterialSymbols();
+    padUpdateIconPreview();
+}
+
+function padUpdateIconPreview() {
+    const box = document.getElementById('pad-edit-icon-preview-box');
+    const canvas = document.getElementById('pad-edit-icon-canvas');
+    if (!box || !canvas) return;
+    const type = document.getElementById('pad-edit-icon-type').value;
+
+    if (!type) { box.style.display = 'none'; return; }
+
+    const size = 64;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+
+    if (type === 'emoji') {
+        const emoji = document.getElementById('pad-edit-icon-emoji').value.trim();
+        if (!emoji) { box.style.display = 'none'; return; }
+        ctx.font = (size * 0.75) + 'px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, size / 2, size / 2);
+        padCenterCanvasContent(ctx, size, size);
+    } else if (type === 'mi') {
+        const name = document.getElementById('pad-edit-icon-mi').value.trim();
+        if (!name) { box.style.display = 'none'; return; }
+        ctx.font = size + 'px "Material Symbols Outlined"';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(name, size / 2, size / 2);
+        padCenterCanvasContent(ctx, size, size);
+    }
+
+    box.style.display = '';
+}
+
+function padCenterCanvasContent(ctx, w, h) {
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const px = imgData.data;
+    let minY = h, maxY = 0;
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            if (px[(y * w + x) * 4 + 3] > 0) {
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+                break;
+            }
+        }
+    }
+    if (minY >= maxY) return;
+    const contentMid = (minY + maxY) / 2;
+    const canvasMid = h / 2;
+    const shift = Math.round(canvasMid - contentMid);
+    if (shift === 0) return;
+    ctx.clearRect(0, 0, w, h);
+    ctx.putImageData(imgData, 0, shift);
+}
+
+function padRenderIconOnCanvas(canvas, iconId, width, height) {
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
+
+    const parsed = padIconIdToType(iconId);
+    if (parsed.type === 'emoji') {
+        const fontSize = Math.floor(Math.min(width, height) * 0.75);
+        ctx.font = fontSize + 'px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(parsed.value, width / 2, height / 2);
+        padCenterCanvasContent(ctx, width, height);
+    } else if (parsed.type === 'mi') {
+        const fontSize = Math.min(width, height);
+        ctx.font = fontSize + 'px "Material Symbols Outlined"';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(parsed.value, width / 2, height / 2);
+        padCenterCanvasContent(ctx, width, height);
+    }
+}
+
+function padCanvasToPNG(canvas) {
+    return new Promise(function(resolve, reject) {
+        canvas.toBlob(function(blob) {
+            if (blob) resolve(blob);
+            else reject(new Error('Canvas toBlob failed'));
+        }, 'image/png');
+    });
+}
+
+async function padGetTileSizes() {
+    if (padTileSizesCache &&
+        padTileSizesCache.cols === padState.cols &&
+        padTileSizesCache.rows === padState.rows) {
+        return padTileSizesCache;
+    }
+    const resp = await fetch('/api/pad/tile_sizes?cols=' + padState.cols + '&rows=' + padState.rows);
+    if (!resp.ok) throw new Error('Failed to get tile sizes');
+    const data = await resp.json();
+    data.cols = padState.cols;
+    data.rows = padState.rows;
+    padTileSizesCache = data;
+    return data;
+}
+
+async function padUploadPageIcons() {
+    // Always delete old page icons (cleans up removed icons)
+    await fetch('/api/icons/page?page=' + padState.page, { method: 'DELETE' });
+
+    const iconButtons = padState.buttons.filter(b => b.icon_id);
+    if (iconButtons.length === 0) return;
+
+    const tileSizes = await padGetTileSizes();
+    const baseW = tileSizes.tile_w - tileSizes.padding * 2;
+    const baseH = tileSizes.tile_h - tileSizes.padding * 2;
+
+    const needsMi = iconButtons.some(b => b.icon_id.startsWith('mi_'));
+    if (needsMi) await padEnsureMaterialSymbols();
+
+    const canvas = document.createElement('canvas');
+
+    for (const btn of iconButtons) {
+        const cs = btn.col_span || 1;
+        const rs = btn.row_span || 1;
+        // LVGL content area = tile - 2*padding - 2*border_width
+        const bw = (btn.border_width !== undefined) ? btn.border_width : 1;
+        const fullW = baseW * cs + tileSizes.gap * (cs - 1) - bw * 2;
+        const fullH = baseH * rs + tileSizes.gap * (rs - 1) - bw * 2;
+        const kind = btn.icon_id.startsWith('mi_') ? 1 : 0;
+
+        // Reserve space for top/bottom labels (font_small_h each)
+        const labelH = tileSizes.font_small_h || 0;
+        const topReserve = btn.label_top ? labelH : 0;
+        const bottomReserve = btn.label_bottom ? labelH : 0;
+        const iconW = fullW;
+        const iconH = fullH - topReserve - bottomReserve;
+
+        padRenderIconOnCanvas(canvas, btn.icon_id, iconW, iconH);
+        const pngBlob = await padCanvasToPNG(canvas);
+        const key = 'pad_' + padState.page + '_' + btn.col + '_' + btn.row;
+
+        const resp = await fetch('/api/icons/install?id=' + encodeURIComponent(key) + '&kind=' + kind, {
+            method: 'POST',
+            headers: { 'Content-Type': 'image/png' },
+            body: pngBlob,
+        });
+        if (!resp.ok) {
+            console.error('Icon upload failed for ' + key);
+        }
+    }
+}
 
 function padInit() {
     const section = document.getElementById('pad-config-section');
@@ -1215,10 +1422,45 @@ function padInit() {
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
     document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
 
+    // More menu toggle
+    const moreBtn = document.getElementById('pad-more-btn');
+    const moreMenu = document.getElementById('pad-more-menu');
+    moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        moreMenu.style.display = moreMenu.style.display === 'none' ? 'block' : 'none';
+    });
+    // Close menu on outside click
+    document.addEventListener('click', () => { moreMenu.style.display = 'none'; });
+    // Close menu when any menu item is clicked
+    moreMenu.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON' && !e.target.disabled) moreMenu.style.display = 'none';
+    });
+
     // Dialog buttons
     document.getElementById('pad-edit-ok').addEventListener('click', padDialogOk);
+    document.getElementById('pad-edit-copy').addEventListener('click', padDialogCopyBtn);
+    document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
     document.getElementById('pad-edit-cancel').addEventListener('click', padDialogClose);
+
+    // Pad-level actions
+    document.getElementById('pad-fill-btn').addEventListener('click', padFillWithClipboard);
+    document.getElementById('pad-copy-btn').addEventListener('click', padCopyPad);
+    document.getElementById('pad-paste-btn').addEventListener('click', padPastePad);
+    document.getElementById('pad-export-btn').addEventListener('click', padExportPad);
+    document.getElementById('pad-import-btn').addEventListener('click', () => document.getElementById('pad-import-file').click());
+    document.getElementById('pad-import-file').addEventListener('change', padImportPad);
+
+    // Device export/import
+    document.getElementById('device-export-btn').addEventListener('click', deviceExportConfig);
+    document.getElementById('device-import-btn').addEventListener('click', () => document.getElementById('device-import-file').click());
+    document.getElementById('device-import-file').addEventListener('change', deviceImportConfig);
+
+    // Icon input live preview
+    const iconEmoji = document.getElementById('pad-edit-icon-emoji');
+    if (iconEmoji) iconEmoji.addEventListener('input', padUpdateIconPreview);
+    const iconMi = document.getElementById('pad-edit-icon-mi');
+    if (iconMi) iconMi.addEventListener('input', padUpdateIconPreview);
 
     // Close dialog on overlay click
     document.getElementById('pad-edit-overlay').addEventListener('click', (e) => {
@@ -1232,6 +1474,7 @@ function padInit() {
                 section.style.display = 'block';
                 padPopulateScreenDropdown();
                 padLoadPage(0);
+                padRefreshDropdownLabels();
             }
         } else {
             setTimeout(waitForInfo, 200);
@@ -1275,6 +1518,8 @@ async function padLoadPage(page) {
             padState.rows = 2;
             document.getElementById('pad-cols').value = padState.cols;
             document.getElementById('pad-rows').value = padState.rows;
+            document.getElementById('pad-name').value = '';
+            padCacheColors(page, []);
             padRenderGrid();
             return;
         }
@@ -1287,6 +1532,10 @@ async function padLoadPage(page) {
 
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
+        document.getElementById('pad-name').value = json.name || '';
+
+        // Update dropdown label
+        padUpdateDropdownLabel(page, json.name || '');
 
         // Index buttons by "col,row" for easy lookup
         padState.buttons = [];
@@ -1295,6 +1544,9 @@ async function padLoadPage(page) {
                 padState.buttons.push(Object.assign({}, b));
             });
         }
+
+        // Cache colors for cross-pad swatches
+        padCacheColors(page, padState.buttons);
 
         padRenderGrid();
     } catch (err) {
@@ -1385,11 +1637,28 @@ function padRenderGrid() {
                     el.textContent = btn.label_top;
                     cell.appendChild(el);
                 }
-                const centerText = btn.label_center || '•';
-                const elc = document.createElement('div');
-                elc.className = 'pad-cell-label-center';
-                elc.textContent = centerText;
-                cell.appendChild(elc);
+                if (btn.icon_id) {
+                    const iconParsed = padIconIdToType(btn.icon_id);
+                    if (iconParsed.type === 'emoji') {
+                        const el = document.createElement('div');
+                        el.className = 'pad-cell-icon';
+                        el.textContent = iconParsed.value;
+                        cell.appendChild(el);
+                    } else if (iconParsed.type === 'mi') {
+                        padEnsureMaterialSymbols();
+                        const el = document.createElement('span');
+                        el.className = 'material-symbols-outlined pad-cell-icon';
+                        el.textContent = iconParsed.value;
+                        el.style.color = fg;
+                        cell.appendChild(el);
+                    }
+                } else {
+                    const centerText = btn.label_center || '•';
+                    const elc = document.createElement('div');
+                    elc.className = 'pad-cell-label-center';
+                    elc.textContent = centerText;
+                    cell.appendChild(elc);
+                }
                 if (btn.label_bottom) {
                     const el = document.createElement('div');
                     el.className = 'pad-cell-label-bottom';
@@ -1429,9 +1698,79 @@ function padHexToInt(hex) {
     return parseInt(hex.replace('#', ''), 16);
 }
 
+function padColorsToHex(btn) {
+    if (typeof btn.bg_color === 'number') btn.bg_color = btn.bg_color.toString(16).padStart(6, '0');
+    if (typeof btn.fg_color === 'number') btn.fg_color = btn.fg_color.toString(16).padStart(6, '0');
+    if (typeof btn.border_color === 'number') btn.border_color = btn.border_color.toString(16).padStart(6, '0');
+}
+
+function padCacheColors(page, buttons) {
+    const seen = new Set();
+    const colors = [];
+    for (const b of buttons) {
+        [b.bg_color, b.fg_color, b.border_color].forEach(val => {
+            const hex = padColorToHex(val, null);
+            if (hex && !seen.has(hex)) { seen.add(hex); colors.push(hex); }
+        });
+    }
+    padState.colorCache[page] = colors;
+}
+
+function padCollectUsedColors(editCol, editRow) {
+    const seen = new Set();
+    const colors = [];
+    function add(val) {
+        const hex = padColorToHex(val, null);
+        if (!hex || seen.has(hex)) return;
+        seen.add(hex);
+        colors.push(hex);
+    }
+    // 1) Current button first (highest priority)
+    const cur = padFindButton(editCol, editRow);
+    if (cur) { add(cur.bg_color); add(cur.fg_color); add(cur.border_color); }
+    // 2) Other buttons on same pad
+    for (const b of padState.buttons) {
+        if (b.col === editCol && b.row === editRow) continue;
+        add(b.bg_color); add(b.fg_color); add(b.border_color);
+    }
+    // 3) Colors from other visited pads
+    for (const [pg, hexArr] of Object.entries(padState.colorCache)) {
+        if (parseInt(pg) === padState.page) continue;
+        hexArr.forEach(hex => add(hex));
+    }
+    return colors.slice(0, 9);
+}
+
+function padRenderSwatches(editCol, editRow) {
+    const colors = padCollectUsedColors(editCol, editRow);
+    document.querySelectorAll('.pad-swatch-strip').forEach(strip => {
+        strip.innerHTML = '';
+        if (colors.length === 0) return;
+        const pickerId = strip.dataset.picker;
+        const picker = document.getElementById(pickerId);
+        if (!picker) return;
+        colors.forEach(hex => {
+            const sw = document.createElement('div');
+            sw.className = 'pad-swatch';
+            sw.style.background = hex;
+            sw.title = hex;
+            sw.addEventListener('click', () => {
+                picker.value = hex;
+                picker.dispatchEvent(new Event('input', { bubbles: true }));
+                sw.classList.add('active');
+                setTimeout(() => sw.classList.remove('active'), 300);
+            });
+            strip.appendChild(sw);
+        });
+    });
+}
+
 function padDialogOpen(col, row) {
     padState.editCol = col;
     padState.editRow = row;
+
+    // Refresh target screen dropdowns so pad names are current
+    padPopulateScreenDropdown();
 
     const btn = padFindButton(col, row) || {};
 
@@ -1445,8 +1784,10 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-bg-color').value = padColorToHex(btn.bg_color, '#333333');
     document.getElementById('pad-edit-fg-color').value = padColorToHex(btn.fg_color, '#ffffff');
     document.getElementById('pad-edit-border-color').value = padColorToHex(btn.border_color, '#000000');
-    document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 1;
+    document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 0;
     document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
+
+    padRenderSwatches(col, row);
 
     // Populate col_span / row_span dropdowns based on available space
     const maxCs = padState.cols - col;
@@ -1502,7 +1843,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-bind-bottom-path').value = bottomBind.path || '';
     document.getElementById('pad-edit-bind-bottom-format').value = bottomBind.format || '';
 
-    // Auto-open bindings section if any binding is set
+    // Auto-open bindings section only if any binding is set (default collapsed)
     const hasBindings = topBind.topic || centerBind.topic || bottomBind.topic;
     document.getElementById('pad-edit-bindings-section').open = !!hasBindings;
 
@@ -1523,13 +1864,30 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-bg-image-letterbox').checked = !!btn.bg_image_letterbox;
     document.getElementById('pad-edit-image-section').open = !!btn.bg_image_url;
 
+    // Icon
+    const iconParsed = padIconIdToType(btn.icon_id || '');
+    document.getElementById('pad-edit-icon-type').value = iconParsed.type;
+    document.getElementById('pad-edit-icon-emoji').value = (iconParsed.type === 'emoji') ? iconParsed.value : '';
+    document.getElementById('pad-edit-icon-mi').value = (iconParsed.type === 'mi') ? iconParsed.value : '';
+    document.getElementById('pad-edit-icon-section').open = !!btn.icon_id;
+    padIconTypeChanged();
+
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    // Enable paste button if clipboard has content
+    document.getElementById('pad-edit-paste').disabled = !padState.btnClipboard;
+
+    // Scroll dialog body to top
+    const body = document.querySelector('.pad-edit-modal .pad-edit-body');
+    if (body) body.scrollTop = 0;
 }
 
 function padDialogClose() {
     document.getElementById('pad-edit-overlay').style.display = 'none';
     document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
 }
 
 function padDialogOk() {
@@ -1560,7 +1918,7 @@ function padDialogOk() {
     btn.fg_color = padHexToInt(fgHex);
     btn.border_color = padHexToInt(document.getElementById('pad-edit-border-color').value);
     const bw = parseInt(document.getElementById('pad-edit-border-width').value);
-    btn.border_width = isNaN(bw) ? 1 : bw;
+    btn.border_width = isNaN(bw) ? 0 : bw;
     const cr = parseInt(document.getElementById('pad-edit-corner-radius').value);
     btn.corner_radius = isNaN(cr) ? 8 : cr;
 
@@ -1630,6 +1988,10 @@ function padDialogOk() {
         if (document.getElementById('pad-edit-bg-image-letterbox').checked) btn.bg_image_letterbox = true;
     }
 
+    // Icon
+    const iconId = padBuildIconId();
+    if (iconId) btn.icon_id = iconId;
+
     padState.buttons.push(btn);
     padDialogClose();
     padRenderGrid();
@@ -1649,16 +2011,36 @@ async function padSavePage() {
     payload.layout = payload.layout || 'grid';
     payload.cols = padState.cols;
     payload.rows = padState.rows;
+    const padName = document.getElementById('pad-name').value.trim();
+    if (padName) payload.name = padName;
+    else delete payload.name;
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));
 
     // Convert color ints to hex strings for JSON
-    payload.buttons.forEach(b => {
-        if (typeof b.bg_color === 'number') b.bg_color = b.bg_color.toString(16).padStart(6, '0');
-        if (typeof b.fg_color === 'number') b.fg_color = b.fg_color.toString(16).padStart(6, '0');
-        if (typeof b.border_color === 'number') b.border_color = b.border_color.toString(16).padStart(6, '0');
-    });
+    payload.buttons.forEach(b => padColorsToHex(b));
+
+    // On boards with DISPLAY_BLANK_ON_SAVE, heavy PSRAM I/O during icon
+    // upload causes DMA bus contention → cyan flashes on MIPI-DSI panels.
+    // Blank the backlight for the entire save sequence and restore after.
+    const blankOnSave = deviceInfoCache && deviceInfoCache.display_blank_on_save;
+    let savedBrightness = 0;
 
     try {
+        if (blankOnSave) {
+            const cfgResp = await fetch('/api/config');
+            if (cfgResp.ok) {
+                const cfg = await cfgResp.json();
+                savedBrightness = cfg.backlight_brightness ?? 80;
+            }
+            await fetch('/api/display/brightness', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brightness: 0 }),
+            });
+        }
+
+        await padUploadPageIcons();
+
         const resp = await fetch('/api/pad?page=' + padState.page, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1668,19 +2050,341 @@ async function padSavePage() {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
+
+        if (blankOnSave) {
+            // Wait for LVGL to rebuild tiles and render into the framebuffer
+            await new Promise(r => setTimeout(r, 500));
+        }
+
         showMessage('Pad ' + (padState.page + 1) + ' saved', 'success');
+        padUpdateDropdownLabel(padState.page, document.getElementById('pad-name').value.trim());
+
+        // Refresh deviceInfoCache so target screen dropdowns pick up new pad names
+        try {
+            const infoResp = await fetch(API_INFO);
+            if (infoResp.ok) deviceInfoCache = await infoResp.json();
+        } catch (_) {}
+
         // Reload to get canonical version from device
         padLoadPage(padState.page);
     } catch (err) {
         console.error('padSavePage error:', err);
         showMessage('Save failed: ' + err.message, 'error');
+    } finally {
+        if (blankOnSave && savedBrightness > 0) {
+            fetch('/api/display/brightness', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brightness: savedBrightness }),
+            }).catch(() => {});
+        }
+    }
+}
+
+// --- Pad name helpers ---
+
+function padUpdateDropdownLabel(page, name) {
+    const sel = document.getElementById('pad-page-select');
+    if (!sel) return;
+    const opt = sel.options[page];
+    if (opt) opt.textContent = name ? 'Pad ' + (page + 1) + ': ' + name : 'Pad ' + (page + 1);
+}
+
+// Populate pad-page-select labels from deviceInfoCache.available_screens
+function padRefreshDropdownLabels() {
+    if (!deviceInfoCache || !deviceInfoCache.available_screens) return;
+    deviceInfoCache.available_screens.forEach(s => {
+        const m = s.id.match(/^pad_(\d+)$/);
+        if (m) {
+            const idx = parseInt(m[1]);
+            // Extract custom name portion after "Pad N: " if present
+            const prefixRe = /^Pad \d+: (.+)$/;
+            const match = s.name.match(prefixRe);
+            padUpdateDropdownLabel(idx, match ? match[1] : '');
+        }
+    });
+}
+
+// --- Button clipboard (copy/paste) ---
+
+function padStripPosition(btn) {
+    const copy = Object.assign({}, btn);
+    delete copy.col;
+    delete copy.row;
+    delete copy.col_span;
+    delete copy.row_span;
+    return copy;
+}
+
+function padDialogCopyBtn() {
+    const col = padState.editCol;
+    const row = padState.editRow;
+
+    // Save dialog state as a button via padDialogOk (closes dialog + updates grid)
+    padDialogOk();
+    const btn = padFindButton(col, row);
+    padState.btnClipboard = btn ? padStripPosition(btn) : null;
+
+    // padDialogOk closes the dialog and updates grid — that's fine, user sees feedback
+    if (padState.btnClipboard) {
+        document.getElementById('pad-edit-paste').disabled = false;
+        document.getElementById('pad-fill-btn').disabled = false;
+        showMessage('Button copied', 'success');
+    }
+}
+
+function padDialogPasteBtn() {
+    if (!padState.btnClipboard) return;
+    const col = padState.editCol;
+    const row = padState.editRow;
+
+    // Remove existing button at this position
+    padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
+
+    // Paste clipboard with new position
+    const btn = Object.assign({}, padState.btnClipboard, { col: col, row: row });
+    padState.buttons.push(btn);
+
+    padDialogClose();
+    padRenderGrid();
+    showMessage('Button pasted', 'success');
+}
+
+// --- Fill pad with clipboard ---
+
+function padFillWithClipboard() {
+    if (!padState.btnClipboard) return;
+    if (!confirm('Fill all cells with the copied button settings?')) return;
+
+    for (let r = 0; r < padState.rows; r++) {
+        for (let c = 0; c < padState.cols; c++) {
+            // Remove existing button
+            padState.buttons = padState.buttons.filter(b => !(b.col === c && b.row === r));
+            // Add copy
+            const btn = Object.assign({}, padState.btnClipboard, { col: c, row: r });
+            padState.buttons.push(btn);
+        }
+    }
+    padRenderGrid();
+    showMessage('Pad filled with copied button', 'success');
+}
+
+// --- Pad clipboard (copy/paste entire pad) ---
+
+function padCopyPad() {
+    padState.padClipboard = {
+        cols: padState.cols,
+        rows: padState.rows,
+        name: document.getElementById('pad-name').value.trim(),
+        buttons: padState.buttons.map(b => Object.assign({}, b)),
+    };
+    document.getElementById('pad-paste-btn').disabled = false;
+    showMessage('Pad ' + (padState.page + 1) + ' copied', 'success');
+}
+
+function padPastePad() {
+    if (!padState.padClipboard) return;
+
+    padState.cols = padState.padClipboard.cols;
+    padState.rows = padState.padClipboard.rows;
+    padState.buttons = padState.padClipboard.buttons.map(b => Object.assign({}, b));
+
+    document.getElementById('pad-cols').value = padState.cols;
+    document.getElementById('pad-rows').value = padState.rows;
+    document.getElementById('pad-name').value = padState.padClipboard.name || '';
+
+    padRenderGrid();
+    showMessage('Pad pasted (unsaved)', 'success');
+}
+
+// --- Export/import single pad ---
+
+function padExportPad() {
+    const payload = {
+        layout: 'grid',
+        cols: padState.cols,
+        rows: padState.rows,
+        buttons: padState.buttons.map(b => {
+            const copy = Object.assign({}, b);
+            padColorsToHex(copy);
+            return copy;
+        }),
+    };
+    const padName = document.getElementById('pad-name').value.trim();
+    if (padName) payload.name = padName;
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pad_' + (padState.page + 1) + (padName ? '_' + padName.replace(/[^a-zA-Z0-9_-]/g, '_') : '') + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+async function padImportPad(evt) {
+    const file = evt.target.files[0];
+    evt.target.value = '';
+    if (!file) return;
+
+    try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+
+        if (!json.cols || !json.rows || !Array.isArray(json.buttons)) {
+            throw new Error('Invalid pad JSON: missing cols, rows, or buttons');
+        }
+        if (json.cols < 1 || json.cols > 8 || json.rows < 1 || json.rows > 8) {
+            throw new Error('Invalid grid size (1-8 cols/rows)');
+        }
+
+        // Load into editor
+        padState.cols = json.cols;
+        padState.rows = json.rows;
+        padState.buttons = json.buttons.map(b => Object.assign({}, b));
+
+        document.getElementById('pad-cols').value = padState.cols;
+        document.getElementById('pad-rows').value = padState.rows;
+        document.getElementById('pad-name').value = json.name || '';
+
+        padRenderGrid();
+        showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
+    } catch (err) {
+        showMessage('Import failed: ' + err.message, 'error');
+    }
+}
+
+// --- Export/import full device config ---
+
+async function deviceExportConfig() {
+    try {
+        showMessage('Exporting device config...', 'success');
+
+        // Fetch device config
+        const cfgResp = await fetch('/api/config');
+        if (!cfgResp.ok) throw new Error('Failed to fetch device config');
+        const config = await cfgResp.json();
+
+        // Remove fields we don't want to export (network-specific)
+        delete config.device_name;
+        delete config.device_name_sanitized;
+        delete config.fixed_ip;
+        delete config.subnet_mask;
+        delete config.gateway;
+        delete config.dns1;
+        delete config.dns2;
+        delete config.wifi_ssid;
+        delete config.wifi_password;
+
+        // Fetch all 8 pad configs
+        const pads = [];
+        for (let i = 0; i < 8; i++) {
+            try {
+                const resp = await fetch('/api/pad?page=' + i);
+                if (resp.ok) {
+                    pads.push(await resp.json());
+                } else {
+                    pads.push(null);
+                }
+            } catch (e) {
+                pads.push(null);
+            }
+        }
+
+        const exportData = {
+            _format: DEVICE_CONFIG_FORMAT,
+            _version: DEVICE_CONFIG_VERSION,
+            config: config,
+            pads: pads,
+        };
+
+        const deviceName = (window.deviceConfig && window.deviceConfig.device_name) || 'device';
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = deviceName.replace(/[^a-zA-Z0-9_-]/g, '_') + '_config.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        showMessage('Device config exported', 'success');
+    } catch (err) {
+        showMessage('Export failed: ' + err.message, 'error');
+    }
+}
+
+async function deviceImportConfig(evt) {
+    const file = evt.target.files[0];
+    evt.target.value = '';
+    if (!file) return;
+
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (data._format !== DEVICE_CONFIG_FORMAT || data._version !== DEVICE_CONFIG_VERSION) {
+            throw new Error('Unrecognized file format');
+        }
+
+        if (!confirm('Import device configuration? This will overwrite current settings and all pad configs. The device will reboot.')) return;
+
+        showMessage('Importing device config...', 'success');
+
+        // Step 1: Import device settings (excl. network fields which were stripped on export)
+        if (data.config && typeof data.config === 'object') {
+            const resp = await fetch('/api/config?no_reboot=1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data.config),
+            });
+            if (!resp.ok) throw new Error('Config import failed: HTTP ' + resp.status);
+        }
+
+        // Step 2: Import all pad configs (save each to trigger icon rendering)
+        if (Array.isArray(data.pads)) {
+            for (let i = 0; i < data.pads.length && i < 8; i++) {
+                const padJson = data.pads[i];
+                if (!padJson) {
+                    // Delete pad if it was null in export
+                    await fetch('/api/icons/page?page=' + i, { method: 'DELETE' }).catch(() => {});
+                    await fetch('/api/pad?page=' + i, { method: 'DELETE' }).catch(() => {});
+                    continue;
+                }
+
+                // Load pad into editor state, save it (which triggers icon upload)
+                padState.page = i;
+                padState.rawJson = null;
+                padState.cols = padJson.cols || 3;
+                padState.rows = padJson.rows || 2;
+                padState.buttons = (padJson.buttons || []).map(b => Object.assign({}, b));
+                document.getElementById('pad-page-select').value = i;
+                document.getElementById('pad-cols').value = padState.cols;
+                document.getElementById('pad-rows').value = padState.rows;
+                document.getElementById('pad-name').value = padJson.name || '';
+
+                // Delete old icons first
+                await fetch('/api/icons/page?page=' + i, { method: 'DELETE' }).catch(() => {});
+
+                // Save pad (includes icon upload)
+                await padSavePage();
+            }
+        }
+
+        showMessage('Import complete — rebooting device...', 'success');
+
+        // Reboot to apply NVS config
+        setTimeout(() => {
+            fetch('/api/reboot', { method: 'POST' }).catch(() => {});
+        }, 500);
+    } catch (err) {
+        showMessage('Import failed: ' + err.message, 'error');
     }
 }
 
 async function padDeletePage() {
-    if (!confirm('Delete Pad ' + (padState.page + 1) + '? This cannot be undone.')) return;
+    if (!confirm('Clear Pad ' + (padState.page + 1) + '? This will remove all buttons. This cannot be undone.')) return;
 
     try {
+        // Delete page icons
+        await fetch('/api/icons/page?page=' + padState.page, { method: 'DELETE' });
+
         const resp = await fetch('/api/pad?page=' + padState.page, { method: 'DELETE' });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
@@ -1693,6 +2397,8 @@ async function padDeletePage() {
         padState.rows = 2;
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
+        document.getElementById('pad-name').value = '';
+        padUpdateDropdownLabel(padState.page, '');
         padRenderGrid();
     } catch (err) {
         console.error('padDeletePage error:', err);
