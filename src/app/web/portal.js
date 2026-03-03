@@ -2058,6 +2058,13 @@ async function padSavePage() {
 
         showMessage('Pad ' + (padState.page + 1) + ' saved', 'success');
         padUpdateDropdownLabel(padState.page, document.getElementById('pad-name').value.trim());
+
+        // Refresh deviceInfoCache so target screen dropdowns pick up new pad names
+        try {
+            const infoResp = await fetch(API_INFO);
+            if (infoResp.ok) deviceInfoCache = await infoResp.json();
+        } catch (_) {}
+
         // Reload to get canonical version from device
         padLoadPage(padState.page);
     } catch (err) {
