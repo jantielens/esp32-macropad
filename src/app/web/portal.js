@@ -1669,7 +1669,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-bg-color').value = padColorToHex(btn.bg_color, '#333333');
     document.getElementById('pad-edit-fg-color').value = padColorToHex(btn.fg_color, '#ffffff');
     document.getElementById('pad-edit-border-color').value = padColorToHex(btn.border_color, '#000000');
-    document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 1;
+    document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 0;
     document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
 
     // Populate col_span / row_span dropdowns based on available space
@@ -1792,7 +1792,7 @@ function padDialogOk() {
     btn.fg_color = padHexToInt(fgHex);
     btn.border_color = padHexToInt(document.getElementById('pad-edit-border-color').value);
     const bw = parseInt(document.getElementById('pad-edit-border-width').value);
-    btn.border_width = isNaN(bw) ? 1 : bw;
+    btn.border_width = isNaN(bw) ? 0 : bw;
     const cr = parseInt(document.getElementById('pad-edit-corner-radius').value);
     btn.corner_radius = isNaN(cr) ? 8 : cr;
 

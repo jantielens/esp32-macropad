@@ -59,7 +59,7 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     btn->bg_color_rgb = 0x333333;
     btn->fg_color_rgb = 0xFFFFFF;
     btn->border_color_rgb = 0x000000;
-    btn->border_width_px = 1;
+    btn->border_width_px = 0;
     btn->disabled_fg_color_rgb = 0x444444;
     btn->corner_radius_px = 8;
 }
@@ -125,7 +125,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     btn->bg_color_rgb = parse_color(obj["bg_color"], 0x333333);
     btn->fg_color_rgb = parse_color(obj["fg_color"], 0xFFFFFF);
     btn->border_color_rgb = parse_color(obj["border_color"], 0x000000);
-    btn->border_width_px = obj["border_width"] | (uint16_t)1;
+    btn->border_width_px = obj["border_width"] | (uint16_t)0;
     btn->disabled_fg_color_rgb = parse_color(obj["disabled_fg_color"], 0x444444);
     btn->corner_radius_px = obj["corner_radius"] | (uint16_t)8;
 
