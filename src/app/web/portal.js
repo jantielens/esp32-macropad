@@ -1194,6 +1194,7 @@ const padState = {
     editRow: 0,
     btnClipboard: null,  // Copied button settings (position-independent)
     padClipboard: null,  // Copied pad settings { cols, rows, buttons, name }
+    colorCache: {},      // page → hex[] — colors from visited pads
 };
 
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
@@ -1518,6 +1519,7 @@ async function padLoadPage(page) {
             document.getElementById('pad-cols').value = padState.cols;
             document.getElementById('pad-rows').value = padState.rows;
             document.getElementById('pad-name').value = '';
+            padCacheColors(page, []);
             padRenderGrid();
             return;
         }
@@ -1542,6 +1544,9 @@ async function padLoadPage(page) {
                 padState.buttons.push(Object.assign({}, b));
             });
         }
+
+        // Cache colors for cross-pad swatches
+        padCacheColors(page, padState.buttons);
 
         padRenderGrid();
     } catch (err) {
@@ -1693,6 +1698,73 @@ function padHexToInt(hex) {
     return parseInt(hex.replace('#', ''), 16);
 }
 
+function padColorsToHex(btn) {
+    if (typeof btn.bg_color === 'number') btn.bg_color = btn.bg_color.toString(16).padStart(6, '0');
+    if (typeof btn.fg_color === 'number') btn.fg_color = btn.fg_color.toString(16).padStart(6, '0');
+    if (typeof btn.border_color === 'number') btn.border_color = btn.border_color.toString(16).padStart(6, '0');
+}
+
+function padCacheColors(page, buttons) {
+    const seen = new Set();
+    const colors = [];
+    for (const b of buttons) {
+        [b.bg_color, b.fg_color, b.border_color].forEach(val => {
+            const hex = padColorToHex(val, null);
+            if (hex && !seen.has(hex)) { seen.add(hex); colors.push(hex); }
+        });
+    }
+    padState.colorCache[page] = colors;
+}
+
+function padCollectUsedColors(editCol, editRow) {
+    const seen = new Set();
+    const colors = [];
+    function add(val) {
+        const hex = padColorToHex(val, null);
+        if (!hex || seen.has(hex)) return;
+        seen.add(hex);
+        colors.push(hex);
+    }
+    // 1) Current button first (highest priority)
+    const cur = padFindButton(editCol, editRow);
+    if (cur) { add(cur.bg_color); add(cur.fg_color); add(cur.border_color); }
+    // 2) Other buttons on same pad
+    for (const b of padState.buttons) {
+        if (b.col === editCol && b.row === editRow) continue;
+        add(b.bg_color); add(b.fg_color); add(b.border_color);
+    }
+    // 3) Colors from other visited pads
+    for (const [pg, hexArr] of Object.entries(padState.colorCache)) {
+        if (parseInt(pg) === padState.page) continue;
+        hexArr.forEach(hex => add(hex));
+    }
+    return colors.slice(0, 9);
+}
+
+function padRenderSwatches(editCol, editRow) {
+    const colors = padCollectUsedColors(editCol, editRow);
+    document.querySelectorAll('.pad-swatch-strip').forEach(strip => {
+        strip.innerHTML = '';
+        if (colors.length === 0) return;
+        const pickerId = strip.dataset.picker;
+        const picker = document.getElementById(pickerId);
+        if (!picker) return;
+        colors.forEach(hex => {
+            const sw = document.createElement('div');
+            sw.className = 'pad-swatch';
+            sw.style.background = hex;
+            sw.title = hex;
+            sw.addEventListener('click', () => {
+                picker.value = hex;
+                picker.dispatchEvent(new Event('input', { bubbles: true }));
+                sw.classList.add('active');
+                setTimeout(() => sw.classList.remove('active'), 300);
+            });
+            strip.appendChild(sw);
+        });
+    });
+}
+
 function padDialogOpen(col, row) {
     padState.editCol = col;
     padState.editRow = row;
@@ -1714,6 +1786,8 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-border-color').value = padColorToHex(btn.border_color, '#000000');
     document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 0;
     document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
+
+    padRenderSwatches(col, row);
 
     // Populate col_span / row_span dropdowns based on available space
     const maxCs = padState.cols - col;
@@ -1943,11 +2017,7 @@ async function padSavePage() {
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));
 
     // Convert color ints to hex strings for JSON
-    payload.buttons.forEach(b => {
-        if (typeof b.bg_color === 'number') b.bg_color = b.bg_color.toString(16).padStart(6, '0');
-        if (typeof b.fg_color === 'number') b.fg_color = b.fg_color.toString(16).padStart(6, '0');
-        if (typeof b.border_color === 'number') b.border_color = b.border_color.toString(16).padStart(6, '0');
-    });
+    payload.buttons.forEach(b => padColorsToHex(b));
 
     // On boards with DISPLAY_BLANK_ON_SAVE, heavy PSRAM I/O during icon
     // upload causes DMA bus contention → cyan flashes on MIPI-DSI panels.
@@ -2129,9 +2199,7 @@ function padExportPad() {
         rows: padState.rows,
         buttons: padState.buttons.map(b => {
             const copy = Object.assign({}, b);
-            if (typeof copy.bg_color === 'number') copy.bg_color = copy.bg_color.toString(16).padStart(6, '0');
-            if (typeof copy.fg_color === 'number') copy.fg_color = copy.fg_color.toString(16).padStart(6, '0');
-            if (typeof copy.border_color === 'number') copy.border_color = copy.border_color.toString(16).padStart(6, '0');
+            padColorsToHex(copy);
             return copy;
         }),
     };

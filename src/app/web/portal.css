@@ -1183,6 +1183,38 @@ footer {
     margin-bottom: 12px;
 }
 
+.pad-swatch-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    min-height: 0;
+}
+
+.pad-swatch-strip:empty {
+    display: none;
+}
+
+.pad-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #d2d2d7;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+    transition: transform 0.1s;
+}
+
+.pad-swatch:hover {
+    transform: scale(1.2);
+    border-color: #0071e3;
+}
+
+.pad-swatch.active {
+    border-color: #0071e3;
+    box-shadow: 0 0 0 2px rgba(0,113,227,0.3);
+}
+
 .pad-edit-footer {
     display: flex;
     gap: 12px;
