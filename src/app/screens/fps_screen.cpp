@@ -74,6 +74,10 @@ void FpsScreen::create() {
 		lv_obj_align(frameLabel, LV_ALIGN_CENTER, 0, 91);
 		lv_obj_clear_flag(frameLabel, LV_OBJ_FLAG_CLICKABLE);
 
+		// Add touch event handler - tap anywhere to go back
+		lv_obj_add_event_cb(screen, touchEventCallback, LV_EVENT_CLICKED, this);
+		lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+
 		LOGI("FpsScreen", "Create complete");
 }
 
@@ -99,6 +103,14 @@ void FpsScreen::show() {
 
 void FpsScreen::hide() {
 		// Nothing to do - LVGL handles screen switching
+}
+
+// Touch event callback - navigate to previous screen
+void FpsScreen::touchEventCallback(lv_event_t* e) {
+		FpsScreen* instance = (FpsScreen*)lv_event_get_user_data(e);
+		if (instance && instance->displayMgr) {
+				instance->displayMgr->goBack();
+		}
 }
 
 void FpsScreen::update() {

@@ -42,6 +42,9 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		: driver(nullptr), display(nullptr), config(cfg), currentScreen(nullptr), pendingScreen(nullptr),
 		screenHistoryCount(0), skipHistoryPush(false), 
 			infoScreen(cfg, this), testScreen(this), fpsScreen(this),
+			#if HAS_TOUCH && LV_USE_CANVAS
+			touchTestScreen(this),
+			#endif
 			padScreens{
 				PadScreen(0, this), PadScreen(1, this), PadScreen(2, this), PadScreen(3, this),
 				PadScreen(4, this), PadScreen(5, this), PadScreen(6, this), PadScreen(7, this)

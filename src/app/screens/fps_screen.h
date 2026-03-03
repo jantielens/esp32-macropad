@@ -30,6 +30,9 @@ private:
 		
 		// Arc animation state
 		uint16_t arcAngle;
+
+		// Touch event handler (static callback)
+		static void touchEventCallback(lv_event_t* e);
 		
 public:
 		FpsScreen(DisplayManager* manager);

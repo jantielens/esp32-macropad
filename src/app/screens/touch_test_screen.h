@@ -8,6 +8,9 @@
 #include "screen.h"
 #include <lvgl.h>
 
+// Forward declaration
+class DisplayManager;
+
 // ============================================================================
 // Touch Test Screen
 // ============================================================================
@@ -32,6 +35,13 @@ private:
 		// Header label (screen name + resolution)
 		lv_obj_t* headerLabel;
 
+		// Back button (center of screen)
+		lv_obj_t* backBtn;
+		DisplayManager* displayMgr;
+
+		// Back button event handler (static callback)
+		static void backBtnCallback(lv_event_t* e);
+
 		// Previous touch point for line interpolation
 		bool prevTouchValid;
 		int16_t prevX;
@@ -54,7 +64,7 @@ private:
 		static void touchEventCallback(lv_event_t* e);
 
 public:
-		TouchTestScreen();
+		TouchTestScreen(DisplayManager* manager);
 		~TouchTestScreen();
 
 		void create() override;
