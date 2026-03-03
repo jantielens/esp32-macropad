@@ -201,10 +201,15 @@ Real-time device health monitoring integrated as a header badge with expandable 
 **Available In:** Full Mode only (redirects to Network page in AP mode)
 
 **Sections:**
-- **👋 Hello World**: Welcome message with customization tip
-- **⚙️ Sample Settings**: Example configuration field (dummy_setting)
 - **⚡ Operating Mode & Cadence**: Mode selection, transport, cycle interval, portal idle timeout, WiFi backoff cap, and MQTT payload scope
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
+- **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
+  - **Pad selection & naming**: Dropdown for Pad 1–8 with optional custom names (max 31 chars)
+  - **Grid preview**: Click any cell to open the button editor dialog
+  - **Button editor dialog**: Label, icon (emoji / Material Symbol), colors, actions (screen navigate, MQTT), bindings, image backgrounds
+  - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
+  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 8 pad configs), Clear Pad
+  - **Device config export/import**: Exports NVS settings (excluding network) plus all 8 pad pages to a single JSON file; import overwrites settings and reboots
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
 
@@ -395,7 +400,16 @@ Returns comprehensive device information.
   "mac_address": "AA:BB:CC:DD:EE:FF",
   "wifi_hostname": "esp32-1234",
   "mdns_name": "esp32-1234.local",
-  "hostname": "esp32-1234"
+  "hostname": "esp32-1234",
+  "has_display": true,
+  "display_coord_width": 480,
+  "display_coord_height": 480,
+  "available_screens": [
+    {"id": "info", "name": "Info Screen"},
+    {"id": "pad_0", "name": "Pad 1: Living Room"},
+    {"id": "pad_1", "name": "Pad 2"}
+  ],
+  "current_screen": "pad_0"
 }
 ```
 
@@ -404,6 +418,11 @@ Returns comprehensive device information.
 - `wifi_hostname`: WiFi/DHCP hostname
 - `mdns_name`: Full mDNS name (hostname + `.local`)
 - `hostname`: Short hostname
+
+**Display Fields** (only when `has_display` is `true`):
+- `display_coord_width` / `display_coord_height`: Display resolution
+- `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
+- `current_screen`: ID of the currently displayed screen
 
 **Health Widget Fields:**
 - `health_poll_interval_ms`: Poll interval used by the portal health overlay

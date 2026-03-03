@@ -1115,6 +1115,47 @@ footer {
     margin: 4px 0;
 }
 
+.pad-more-menu {
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    margin-bottom: 6px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+    min-width: 200px;
+    padding: 6px 0;
+    z-index: 100;
+}
+
+.pad-more-menu button {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    color: #1c1c1e;
+}
+
+.pad-more-menu button:hover:not(:disabled) {
+    background: #f2f2f7;
+}
+
+.pad-more-menu button:disabled {
+    color: #c7c7cc;
+    cursor: default;
+}
+
+.pad-more-menu hr {
+    border: none;
+    border-top: 1px solid #e5e5ea;
+    margin: 4px 0;
+}
+
 .pad-edit-modal {
     max-width: 520px;
     text-align: left;
@@ -1152,6 +1193,9 @@ footer {
 
 .pad-edit-modal .btn {
     min-width: 0;
+    text-align: center;
+    padding-left: 8px;
+    padding-right: 8px;
 }
 
 .pad-icon-preview {

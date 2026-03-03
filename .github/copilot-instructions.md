@@ -124,7 +124,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution - they work from any 
 - 2-column grid on desktop (≥768px) using `.grid-2col` class
 - Sections stack vertically on mobile (<768px)
 - Network page: WiFi + Device Settings side-by-side, Network Config full-width
-- Home page: Hello World + Sample Settings side-by-side
+- Home page: Operating Mode settings + Pad Editor (when display enabled)
 
 **REST API Design**:
 - All endpoints under `/api/*` namespace
@@ -220,7 +220,7 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template
-- `src/app/web/home.html` - Home page (Hello World + Sample Settings)
+- `src/app/web/home.html` - Home page (Operating Mode, BLE Advertising, Pad Editor)
 - `src/app/web/network.html` - Network configuration page
 - `src/app/web/firmware.html` - Firmware page (online update, manual upload, factory reset)
 - `src/app/web/portal.css` - Styles (gradients, animations, responsive grid)

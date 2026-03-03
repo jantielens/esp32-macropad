@@ -258,6 +258,12 @@
                             </select>
                         </div>
                     </div>
+                    <div class="pad-controls-row" style="margin-top:6px;">
+                        <div class="form-group" style="margin-bottom:0; flex:1;">
+                            <label for="pad-name">Pad Name</label>
+                            <input type="text" id="pad-name" maxlength="31" placeholder="(optional)" style="padding:6px 10px;">
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Visual grid preview -->
@@ -271,9 +277,26 @@
 
                 <!-- Action buttons -->
                 <div class="pad-actions">
-                    <button type="button" id="pad-save-btn" class="btn btn-primary" style="flex:1 1 120px;">Save Page</button>
+                    <button type="button" id="pad-save-btn" class="btn btn-primary" style="flex:1 1 120px;">Save Pad</button>
                     <button type="button" id="pad-show-btn" class="btn btn-secondary" style="flex:1 1 120px;">Show on Device</button>
-                    <button type="button" id="pad-delete-btn" class="btn btn-secondary" style="flex:1 1 80px; color:#ff3b30; border-color:#ff3b30;">Delete</button>
+                    <div class="pad-more-wrap" style="position:relative; flex:0 0 auto;">
+                        <button type="button" id="pad-more-btn" class="btn btn-secondary" style="min-width:80px;">More ▾</button>
+                        <div id="pad-more-menu" class="pad-more-menu" style="display:none;">
+                            <button type="button" id="pad-fill-btn" disabled>Fill Pad</button>
+                            <button type="button" id="pad-copy-btn">Copy Pad</button>
+                            <button type="button" id="pad-paste-btn" disabled>Paste Pad</button>
+                            <hr>
+                            <button type="button" id="pad-export-btn">Export Pad</button>
+                            <button type="button" id="pad-import-btn">Import Pad</button>
+                            <input type="file" id="pad-import-file" accept=".json" style="display:none;">
+                            <hr>
+                            <button type="button" id="device-export-btn">Export Device Config</button>
+                            <button type="button" id="device-import-btn">Import Device Config</button>
+                            <input type="file" id="device-import-file" accept=".json" style="display:none;">
+                            <hr>
+                            <button type="button" id="pad-delete-btn" style="color:#ff3b30;">Clear Pad</button>
+                        </div>
+                    </div>
                 </div>
 
                 <small style="margin-top:8px; display:block;">Click a cell to edit its button. Pad uses its own Save — not the main form.</small>
@@ -559,6 +582,8 @@
 
             <div class="pad-edit-footer">
                 <button type="button" id="pad-edit-ok" class="btn btn-primary" style="flex:1;">OK</button>
+                <button type="button" id="pad-edit-copy" class="btn btn-secondary" style="flex:1;">Copy</button>
+                <button type="button" id="pad-edit-paste" class="btn btn-secondary" style="flex:1;" disabled>Paste</button>
                 <button type="button" id="pad-edit-clear" class="btn btn-secondary" style="flex:1; color:#ff3b30; border-color:#ff3b30;">Clear</button>
                 <button type="button" id="pad-edit-cancel" class="btn btn-secondary" style="flex:1;">Cancel</button>
             </div>
