@@ -66,8 +66,14 @@ void handlePostIconInstall(AsyncWebServerRequest *request, uint8_t *data,
                            size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
 
-    // If a previous chunk already sent an error, ignore remaining chunks
-    if (g_icon_post.errored) return;
+    // If a previous chunk of THIS request already sent an error, ignore remaining chunks.
+    // At index == 0 (new request), always clear the flag so stale errors from a
+    // prior request don't block this one.
+    if (index == 0) {
+        g_icon_post.errored = false;
+    } else if (g_icon_post.errored) {
+        return;
+    }
 
     if (index == 0) {
         // First chunk — parse id param, allocate buffer
@@ -83,10 +89,10 @@ void handlePostIconInstall(AsyncWebServerRequest *request, uint8_t *data,
             return;
         }
 
-        // Cleanup stuck upload
+        // Cleanup stuck upload (e.g., client disconnected mid-transfer)
         const uint32_t now = millis();
         if (g_icon_post.in_progress && g_icon_post.started_ms &&
-            (now - g_icon_post.started_ms > 10000)) {
+            (now - g_icon_post.started_ms > 5000)) {
             LOGW(TAG, "Stuck icon upload — resetting");
             icon_post_reset();
         }
