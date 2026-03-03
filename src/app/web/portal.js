@@ -1894,8 +1894,26 @@ async function padSavePage() {
         if (typeof b.border_color === 'number') b.border_color = b.border_color.toString(16).padStart(6, '0');
     });
 
+    // On boards with DISPLAY_BLANK_ON_SAVE, heavy PSRAM I/O during icon
+    // upload causes DMA bus contention → cyan flashes on MIPI-DSI panels.
+    // Blank the backlight for the entire save sequence and restore after.
+    const blankOnSave = deviceInfoCache && deviceInfoCache.display_blank_on_save;
+    let savedBrightness = 0;
+
     try {
-        // Upload icons before saving config (firmware preloads icons on save)
+        if (blankOnSave) {
+            const cfgResp = await fetch('/api/config');
+            if (cfgResp.ok) {
+                const cfg = await cfgResp.json();
+                savedBrightness = cfg.backlight_brightness ?? 80;
+            }
+            await fetch('/api/display/brightness', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brightness: 0 }),
+            });
+        }
+
         await padUploadPageIcons();
 
         const resp = await fetch('/api/pad?page=' + padState.page, {
@@ -1907,12 +1925,26 @@ async function padSavePage() {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
+
+        if (blankOnSave) {
+            // Wait for LVGL to rebuild tiles and render into the framebuffer
+            await new Promise(r => setTimeout(r, 500));
+        }
+
         showMessage('Pad ' + (padState.page + 1) + ' saved', 'success');
         // Reload to get canonical version from device
         padLoadPage(padState.page);
     } catch (err) {
         console.error('padSavePage error:', err);
         showMessage('Save failed: ' + err.message, 'error');
+    } finally {
+        if (blankOnSave && savedBrightness > 0) {
+            fetch('/api/display/brightness', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brightness: savedBrightness }),
+            }).catch(() => {});
+        }
     }
 }
 

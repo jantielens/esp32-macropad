@@ -201,8 +201,8 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
     pad_post_reset();
 
     LOGI(TAG, "Page %u config saved", saved_page);
-    // Preload icons for the saved page so LVGL task can render them
-    icon_store_preload_page(saved_page);
+    // Icons are already cached by icon_store_install() from the individual
+    // icon uploads that the browser performs before POSTing the config.
 #if HAS_MQTT
     mqtt_sub_store_subscribe_all();
 #endif

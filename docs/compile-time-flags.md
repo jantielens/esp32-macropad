@@ -22,7 +22,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 126
+Total flags: 127
 
 ### Features (HAS_*)
 
@@ -117,6 +117,7 @@ Total flags: 126
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
+- **DISPLAY_BLANK_ON_SAVE** default: `false` — (LittleFS + lodepng). The browser blanks/restores via /api/display/brightness.
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
 - **HEALTH_HISTORY_ENABLED** default: `1` — Enable device-side health history ring buffer for charting in the web portal
@@ -320,6 +321,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS**
   - src/app/app.ino
+  - src/app/board_config.h
+- **DISPLAY_BLANK_ON_SAVE**
   - src/app/board_config.h
 - **DISPLAY_ROTATION**
   - src/app/touch_manager.cpp

@@ -28,7 +28,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `image_decoder.cpp/h` - Stateless JPEG (tjpgd) / PNG (lodepng) decode + bilinear scale to RGB565 (cover or letterbox mode)
   - `image_fetch.cpp/h` - Slot-based FreeRTOS background fetcher with per-slot pause/resume, double-buffered PSRAM frames, and per-slot scale mode (cover/letterbox)
 - **Icon Store Subsystem**: PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
-  - `icon_store.cpp/h` - LittleFS I/O, lodepng decode with R↔B swap, growable PSRAM cache, preload from pad config
+  - `icon_store.cpp/h` - LittleFS I/O, lodepng decode with R↔B swap, growable PSRAM cache
   - `web_portal_icons.cpp/h` - REST API for icon upload, delete, list, and debug endpoints
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode and transport parsing helpers

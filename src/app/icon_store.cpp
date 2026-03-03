@@ -316,39 +316,6 @@ void icon_store_preload_pad_pages() {
          loaded, g_count);
 }
 
-void icon_store_preload_page(uint8_t page) {
-    if (page >= MAX_PAD_PAGES) return;
-
-    PadPageConfig* cfg = (PadPageConfig*)heap_caps_malloc(
-        sizeof(PadPageConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadPageConfig*)malloc(sizeof(PadPageConfig));
-    if (!cfg) return;
-
-    memset(cfg, 0, sizeof(PadPageConfig));
-    if (!pad_config_load(page, cfg)) {
-        free(cfg);
-        return;
-    }
-
-    uint16_t loaded = 0;
-    for (uint8_t i = 0; i < cfg->button_count; i++) {
-        if (!cfg->buttons[i].icon_id[0]) continue;
-
-        char key[CONFIG_ICON_ID_MAX_LEN];
-        icon_store_build_key(page, cfg->buttons[i].col,
-                             cfg->buttons[i].row, key, sizeof(key));
-
-        // Always reload — icon may have been re-installed
-        IconKind kind = kind_from_icon_id(cfg->buttons[i].icon_id);
-        if (load_from_fs(key, kind)) loaded++;
-    }
-
-    free(cfg);
-    if (loaded > 0) {
-        LOGI(TAG, "Page %u preload: %u icons", page, loaded);
-    }
-}
-
 void icon_store_delete_page_icons(uint8_t page) {
     if (page >= MAX_PAD_PAGES) return;
 

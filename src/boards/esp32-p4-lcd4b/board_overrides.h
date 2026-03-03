@@ -111,6 +111,11 @@
 #define TOUCH_INT -1
 
 // ============================================================================
+// Display: blank backlight during pad save to hide PSRAM bus contention
+// ============================================================================
+#define DISPLAY_BLANK_ON_SAVE true
+
+// ============================================================================
 // Telemetry tuning (temporary — flicker investigation)
 // ============================================================================
 // Disable ALL background telemetry tasks (CPU monitor, health-window timer,
