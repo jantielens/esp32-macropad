@@ -71,35 +71,46 @@ static bool validate_png(const uint8_t* data, size_t len) {
             data[2] == 0x4E && data[3] == 0x47);
 }
 
-// Convert RGBA8888 to planar RGB565A8. Returns PSRAM-allocated buffer
-// (ownership transfers to caller). Returns nullptr on OOM.
-static uint8_t* rgba_to_rgb565a8(const uint8_t* rgba, uint32_t w, uint32_t h) {
-    uint32_t pixel_count = w * h;
-    size_t out_size = (size_t)pixel_count * 3;
-
-    uint8_t* out = nullptr;
-    if (psramFound()) {
-        out = (uint8_t*)heap_caps_malloc(out_size,
-                  MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+// lodepng outputs RGBA byte order; LVGL ARGB8888 expects BGRA. Swap R↔B.
+static void swap_rb(lv_draw_buf_t* buf) {
+    uint8_t* data = buf->data;
+    uint32_t stride = buf->header.stride;
+    uint32_t h = buf->header.h;
+    uint32_t w = buf->header.w;
+    for (uint32_t y = 0; y < h; y++) {
+        uint8_t* row = data + y * stride;
+        for (uint32_t x = 0; x < w; x++) {
+            uint8_t tmp = row[x * 4 + 0];      // R
+            row[x * 4 + 0] = row[x * 4 + 2];   // R ← B
+            row[x * 4 + 2] = tmp;               // B ← R
+        }
     }
-    if (!out) out = (uint8_t*)malloc(out_size);
-    if (!out) return nullptr;
+}
 
-    uint8_t* rgb565 = out;
-    uint8_t* alpha = out + pixel_count * 2;
+// Decode PNG data into an LVGL draw buffer with R↔B swap applied.
+// Returns nullptr on failure. Caller takes ownership of the returned buffer.
+static lv_draw_buf_t* decode_png(const uint8_t* data, size_t len, const char* label) {
+    unsigned char* out = nullptr;
+    unsigned w = 0, h = 0;
+    unsigned err = lodepng_decode32(&out, &w, &h, data, len);
 
-    for (uint32_t i = 0; i < pixel_count; i++) {
-        const uint8_t r = rgba[i * 4 + 0];
-        const uint8_t g = rgba[i * 4 + 1];
-        const uint8_t b = rgba[i * 4 + 2];
-        alpha[i] = rgba[i * 4 + 3];
-
-        const uint16_t rgb = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
-        rgb565[i * 2 + 0] = rgb & 0xFF;
-        rgb565[i * 2 + 1] = (rgb >> 8) & 0xFF;
+    if (err || !out) {
+        LOGW(TAG, "PNG decode failed for '%s': %s", label,
+             err ? lodepng_error_text(err) : "null output");
+        if (out) lv_draw_buf_destroy((lv_draw_buf_t*)out);
+        return nullptr;
     }
 
-    return out;
+    lv_draw_buf_t* draw_buf = (lv_draw_buf_t*)out;
+
+    if (w == 0 || h == 0 || w > ICON_MAX_DIMENSION || h > ICON_MAX_DIMENSION) {
+        LOGW(TAG, "PNG dims invalid for '%s': %ux%u", label, w, h);
+        lv_draw_buf_destroy(draw_buf);
+        return nullptr;
+    }
+
+    swap_rb(draw_buf);
+    return draw_buf;
 }
 
 // Determine icon kind from the semantic icon_id string.
@@ -108,41 +119,18 @@ static IconKind kind_from_icon_id(const char* icon_id) {
     return ICON_KIND_COLOR;
 }
 
-// Create an LVGL draw buffer from raw RGB565A8 data.
-// Copies pixel data into a properly aligned LVGL-managed buffer.
-// Frees the input `pixels` buffer after copying.
-static lv_draw_buf_t* create_draw_buf(uint8_t* pixels, uint32_t w, uint32_t h) {
-    lv_draw_buf_t* buf = lv_draw_buf_create(w, h, LV_COLOR_FORMAT_RGB565A8, 0);
-    if (!buf) {
-        free(pixels);
-        return nullptr;
-    }
-
-    // Copy RGB565A8 planar data into LVGL's aligned buffer
-    uint32_t data_len = w * h * 3;
-    lv_memcpy(buf->data, pixels, data_len);
-    free(pixels);
-
-    return buf;
-}
-
-// Add or update a cache entry. Takes ownership of pre-allocated RGB565A8 data.
-// On failure, frees the pixels buffer.
-static bool cache_entry(const char* id, IconKind kind,
-                        uint8_t* pixels, uint32_t w, uint32_t h) {
-    lv_draw_buf_t* buf = create_draw_buf(pixels, w, h);
-    if (!buf) return false;
-
+// Add or update a cache entry. Takes ownership of the lv_draw_buf_t.
+static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
     // Check if entry already exists (update in place)
     int idx = find_entry(id);
     if (idx >= 0) {
-        // Old draw_buf is orphaned — can't free because LVGL may reference it.
-        // This is expected on re-install during pad save.
+        // Old draw_buf is orphaned — LVGL image widgets hold raw pointers to it.
+        // Leak is bounded by max button count (MAX_PAD_PAGES × MAX_PAD_BUTTONS).
         IconEntry& e = g_entries[idx];
         e.draw_buf = buf;
         e.kind = kind;
-        LOGD(TAG, "Updated cache: '%s' %ux%u stride=%u", id, w, h,
-             (unsigned)buf->header.stride);
+        LOGD(TAG, "Updated cache: '%s' %ux%u stride=%u", id,
+             buf->header.w, buf->header.h, (unsigned)buf->header.stride);
         return true;
     }
 
@@ -159,7 +147,8 @@ static bool cache_entry(const char* id, IconKind kind,
 
     g_count++;
     LOGD(TAG, "Cached: '%s' %ux%u stride=%u kind=%u (%u total)",
-         id, w, h, (unsigned)buf->header.stride, kind, g_count);
+         id, buf->header.w, buf->header.h,
+         (unsigned)buf->header.stride, kind, g_count);
     return true;
 }
 
@@ -207,35 +196,17 @@ static bool load_from_fs(const char* id, IconKind kind) {
         return false;
     }
 
-    // Decode PNG -> RGBA8888
-    unsigned char* rgba = nullptr;
-    unsigned w = 0, h = 0;
-    unsigned err = lodepng_decode32(&rgba, &w, &h, buf, file_size);
+    // Decode PNG → LVGL draw buffer
+    lv_draw_buf_t* draw_buf = decode_png(buf, file_size, id);
     free(buf);
 
-    if (err || !rgba) {
-        LOGW(TAG, "PNG decode failed for '%s': %s", id,
-             err ? lodepng_error_text(err) : "null output");
-        if (rgba) lv_free(rgba);
-        return false;
-    }
+    if (!draw_buf) return false;
 
-    if (w == 0 || h == 0 || w > ICON_MAX_DIMENSION || h > ICON_MAX_DIMENSION) {
-        LOGW(TAG, "PNG dims invalid for '%s': %ux%u", id, w, h);
-        lv_free(rgba);
-        return false;
-    }
+    LOGI(TAG, "Decoded '%s': %ux%u stride=%u cf=%u",
+         id, draw_buf->header.w, draw_buf->header.h,
+         draw_buf->header.stride, draw_buf->header.cf);
 
-    // Convert RGBA -> planar RGB565A8
-    uint8_t* pixels = rgba_to_rgb565a8(rgba, w, h);
-    lv_free(rgba);
-
-    if (!pixels) {
-        LOGE(TAG, "OOM converting '%s' %ux%u", id, w, h);
-        return false;
-    }
-
-    return cache_entry(id, kind, pixels, w, h);
+    return cache_entry_buf(id, kind, draw_buf);
 }
 
 // ============================================================================
@@ -282,40 +253,20 @@ bool icon_store_install(const char* id, IconKind kind,
         return false;
     }
 
-    // Decode PNG -> RGBA8888
-    unsigned char* rgba = nullptr;
-    unsigned w = 0, h = 0;
-    unsigned err = lodepng_decode32(&rgba, &w, &h, png_data, png_len);
-    if (err || !rgba) {
-        LOGW(TAG, "PNG decode failed for '%s': %s (saved to disk)",
-             id, err ? lodepng_error_text(err) : "null output");
-        if (rgba) lv_free(rgba);
+    // Decode PNG → LVGL draw buffer
+    lv_draw_buf_t* draw_buf = decode_png(png_data, png_len, id);
+    if (!draw_buf) {
+        LOGW(TAG, "Decode failed for '%s' — saved to disk", id);
         return true;  // File saved; will decode on next preload
     }
 
-    if (w == 0 || h == 0 || w > ICON_MAX_DIMENSION || h > ICON_MAX_DIMENSION) {
-        LOGW(TAG, "PNG dims invalid: %ux%u (saved to disk)", w, h);
-        lv_free(rgba);
-        return true;
-    }
-
-    // Convert RGBA -> planar RGB565A8
-    uint8_t* pixels = rgba_to_rgb565a8(rgba, w, h);
-    lv_free(rgba);
-
-    if (!pixels) {
-        LOGW(TAG, "OOM converting '%s' — saved to disk", id);
-        return true;
-    }
-
-    if (!cache_entry(id, kind, pixels, w, h)) {
-        // cache_entry frees pixels on failure
+    if (!cache_entry_buf(id, kind, draw_buf)) {
         LOGW(TAG, "Cache failed for '%s' — saved to disk", id);
         return true;
     }
 
-    LOGI(TAG, "Installed: '%s' %ux%u (PNG %u bytes -> %u bytes cached)",
-         id, w, h, (unsigned)png_len, w * h * 3);
+    LOGI(TAG, "Installed: '%s' %ux%u (PNG %u bytes)",
+         id, draw_buf->header.w, draw_buf->header.h, (unsigned)png_len);
     return true;
 }
 
@@ -325,7 +276,8 @@ bool icon_store_lookup(const char* id, IconRef* out) {
     int idx = find_entry(id);
     if (idx < 0) return false;
 
-    out->dsc = (const lv_image_dsc_t*)g_entries[idx].draw_buf;
+    const lv_draw_buf_t* buf = g_entries[idx].draw_buf;
+    out->dsc = (const lv_image_dsc_t*)buf;
     out->kind = g_entries[idx].kind;
     return true;
 }

@@ -209,10 +209,10 @@ void handleGetInstalledIcons(AsyncWebServerRequest *request) {
         while (entry) {
             const char* name = entry.name();
             size_t nlen = name ? strlen(name) : 0;
-            // Strip .png or .bin suffix for the ID
+            // Strip .png suffix for the ID
             size_t strip = 0;
             if (nlen > 4 && strcmp(name + nlen - 4, ".png") == 0) strip = 4;
-            else if (nlen > 4 && strcmp(name + nlen - 4, ".bin") == 0) strip = 4;
+
             if (strip) {
                 if (!first) response->print(",");
                 response->print("\"");

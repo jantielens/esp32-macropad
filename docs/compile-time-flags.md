@@ -229,6 +229,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
   - src/app/ha_discovery.cpp
+  - src/app/icon_store.cpp
+  - src/app/icon_store.h
   - src/app/lv_conf.h
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
@@ -239,6 +241,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_device_api.cpp
   - src/app/web_portal_display.cpp
   - src/app/web_portal_display.h
+  - src/app/web_portal_icons.cpp
+  - src/app/web_portal_icons.h
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp

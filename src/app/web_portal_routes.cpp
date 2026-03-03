@@ -162,6 +162,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		registerOptions("/api/icons/file");
 		server->on("/api/icons/file", HTTP_GET, handleGetIconFile);
 		server->on("/api/icons/file", HTTP_DELETE, handleDeleteIconFile);
+
 #endif
 
 		// OTA upload endpoint

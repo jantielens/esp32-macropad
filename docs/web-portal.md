@@ -815,12 +815,93 @@ Switch the active runtime screen (no persistence).
 - When the screen saver is dimming/asleep/fading in, touch input is intentionally suppressed to avoid “wake gestures” clicking through into the UI. A second tap may be required after wake.
 
 
+---
+
+### Icon Store API
+
+All icon endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled.
+
+#### `POST /api/icons/install?id=<id>&kind=<0|1>`
+
+Upload a PNG icon and install it into the icon store.
+
+- **Query Parameters:** `id` (required, `[a-z0-9_]`), `kind` (optional, `0`=color default, `1`=mono)
+- **Body:** Raw PNG bytes (`Content-Type: application/octet-stream`)
+- **Max size:** `ICON_MAX_PNG_SIZE` (128 KB)
+- **Response:** `{"success": true}` on success; JSON error on failure
+- The PNG is saved to LittleFS at `/icons/<id>.png` and decoded into a PSRAM-cached ARGB8888 draw buffer for immediate use.
+
+#### `DELETE /api/icons/page?page=<N>`
+
+Delete all icon files for a given pad page.
+
+- **Query Parameters:** `page` (required, `0`–`7`)
+- **Response:** `{"success": true}`
+
+#### `GET /api/icons/installed`
+
+List all installed icon IDs (from LittleFS `/icons/` directory).
+
+**Response:**
+```json
+{ "icons": ["pad_0_0_0", "pad_0_1_2"], "cache_count": 2 }
+```
+
+#### `GET /api/icons/files`
+
+List all files in `/icons/` with names and sizes (debug endpoint).
+
+**Response:**
+```json
+{ "files": [{"name": "pad_0_0_0.png", "size": 4096}] }
+```
+
+#### `GET /api/icons/cache`
+
+Dump in-memory cache entries with dimensions and data sizes (debug endpoint).
+
+**Response:**
+```json
+{ "entries": [{"id": "pad_0_0_0", "kind": 0, "w": 128, "h": 128, "data_size": 65536}], "count": 1 }
+```
+
+#### `GET /api/icons/file?name=<filename>`
+
+Download a raw icon file from `/icons/`. Returns `image/png` for `.png` files.
+
+- **Query Parameters:** `name` (required, no path separators or `..`)
+
+#### `DELETE /api/icons/file?name=<filename>`
+
+Delete a specific icon file from `/icons/`.
+
+- **Query Parameters:** `name` (required, no path separators or `..`)
+- **Response:** `{"success": true}`
+
+#### `GET /api/pad/tile_sizes?cols=<N>&rows=<N>`
+
+Compute tile dimensions for a given grid layout. Used by the icon picker to render correctly sized icons.
+
+- **Query Parameters:** `cols` (required, `1`–`8`), `rows` (required, `1`–`8`)
+- **Response:**
+```json
+{
+  "display_w": 720, "display_h": 720,
+  "tile_w": 234, "tile_h": 234,
+  "gap": 4, "padding": 4,
+  "pixel_shift_margin": 4,
+  "font_small_h": 16
+}
+```
+
+
 ## Implementation Details
 
 ### Architecture
 
 **Backend (C++):**
 - `web_portal.cpp/h` - ESPAsyncWebServer with REST endpoints
+- `web_portal_icons.cpp/h` - Icon store REST API (upload, delete, list, debug endpoints)
 - `config_manager.cpp/h` - NVS (Non-Volatile Storage) for configuration
 - `web_assets.h` - PROGMEM embedded HTML/CSS/JS (gzip compressed) (auto-generated)
 - `project_branding.h` - `PROJECT_NAME` / `PROJECT_DISPLAY_NAME` defines (auto-generated)

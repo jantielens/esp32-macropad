@@ -13,17 +13,17 @@
 // Icon Store — runtime icon management for pad buttons
 // ============================================================================
 //
-// Icons are installed via the REST API as ICN1 binary blobs, stored on
-// LittleFS at /icons/<id>.bin, and cached in PSRAM for LVGL rendering.
+// Icons are installed via the REST API as PNG files, stored on
+// LittleFS at /icons/<id>.png, and cached in PSRAM for LVGL rendering.
 //
 // Icon IDs are positional: "pad_<page>_<col>_<row>" — deterministic filenames
 // that are overwritten on each pad save. The ScreenButtonConfig.icon_id field
 // holds the semantic name (e.g. "emoji_sun", "mi_power") used by the browser
 // to decide what to render; the firmware only uses positional keys.
 //
-// Storage format: pure PNG files on LittleFS at /icons/<key>.png.
-// On load, PNG is decoded to RGBA8888 via lodepng, then converted to
-// planar RGB565A8 (LVGL-compatible) and cached in PSRAM.
+// Storage format: PNG files on LittleFS at /icons/<key>.png.
+// On load, PNG is decoded by LVGL's bundled lodepng into an ARGB8888
+// lv_draw_buf_t and cached in PSRAM.
 //
 // Cache is a non-evicting growable list in PSRAM. Entries are never freed
 // because LVGL image objects hold raw pointers to cached pixel data.
@@ -68,7 +68,7 @@ void icon_store_preload_pad_pages();
 // to ensure new icons are available to the LVGL task.
 void icon_store_preload_page(uint8_t page);
 
-// Delete all icon files for a page (pad_<page>_*.bin).
+// Delete all icon files for a page (pad_<page>_*.png).
 // Call before installing new icons when a pad page is saved.
 void icon_store_delete_page_icons(uint8_t page);
 

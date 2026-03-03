@@ -6,7 +6,7 @@
 
 #include <ESPAsyncWebServer.h>
 
-// POST /api/icons/install?id=<id> — install ICN1 blob (body handler)
+// POST /api/icons/install?id=<id> — install PNG icon (body handler)
 void handlePostIconInstall(AsyncWebServerRequest *request, uint8_t *data,
                            size_t len, size_t index, size_t total);
 
