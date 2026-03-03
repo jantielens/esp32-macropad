@@ -120,7 +120,27 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 		// Instead, just set STA mode and let the hosted link come up cleanly.
 		WiFi.mode(WIFI_STA);
 		LOGI("WiFi", "Waiting for ESP-Hosted link...");
-		delay(5000);
+		// Poll until the SDIO link is alive (MAC becomes readable) instead of
+		// a blind fixed delay. Typically takes 3-4 s, but allow up to 8 s.
+		{
+				const unsigned long hosted_start = millis();
+				const unsigned long HOSTED_TIMEOUT_MS = 8000;
+				bool link_ready = false;
+				while (millis() - hosted_start < HOSTED_TIMEOUT_MS) {
+						String mac = WiFi.macAddress();
+						if (mac.length() > 0 && mac != "00:00:00:00:00:00") {
+								link_ready = true;
+								LOGI("WiFi", "ESP-Hosted link ready (%lums)", millis() - hosted_start);
+								break;
+						}
+						delay(250);
+				}
+				if (!link_ready) {
+						LOGW("WiFi", "ESP-Hosted link not confirmed after %lums, proceeding anyway", HOSTED_TIMEOUT_MS);
+				}
+				// Brief settle time after SDIO link is confirmed.
+				delay(500);
+		}
 		#else
 		WiFi.disconnect(true);
 		delay(100);
@@ -217,13 +237,14 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 		#ifdef CONFIG_IDF_TARGET_ESP32P4
 		// ESP32-P4 ESP-Hosted: the C6 co-processor handles AP selection
 		// internally. Scanning + directed-connect (BSSID/channel) over SDIO
-		// causes ASSOC_LEAVE (reason 8). Use simple begin and let C6 decide.
-		// Also, auto-reconnect doesn't propagate reliably over SDIO, so we
+		// is unreliable and can cause ASSOC_LEAVE (reason 8), especially with
+		// older C6 firmware. Use simple begin and let the C6 decide.
+		// Auto-reconnect doesn't propagate reliably over SDIO, so we
 		// re-issue WiFi.begin() on each attempt with a clean disconnect cycle.
 		for (int attempt = 0; attempt < WIFI_MAX_ATTEMPTS; attempt++) {
 				if (attempt > 0) {
 						WiFi.disconnect(false);
-						delay(2000);
+						delay(500);
 				}
 				LOGI("WiFi", "Attempt %d/%d", attempt + 1, WIFI_MAX_ATTEMPTS);
 				WiFi.begin(config->wifi_ssid, config->wifi_password);
