@@ -85,9 +85,10 @@ static bool http_download(const char* url, const char* user, const char* pass,
     http.setReuse(false);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
-    // Only heap-allocate WiFiClientSecure when actually needed for HTTPS.
-    // Keeping it off the stack avoids ~2-4 KB of stack pressure for plain HTTP.
-    WiFiClient plain_client;
+    // Heap-allocate ALL WiFi clients in internal RAM.  The fetch task runs
+    // on a PSRAM-backed stack; keeping WiFiClient on that stack can cause
+    // cache-coherency issues with the WiFi MAC DMA engine on ESP32-S3.
+    WiFiClient* plain_client = nullptr;
     WiFiClientSecure* tls_client = nullptr;
 
     if (is_https) {
@@ -99,13 +100,19 @@ static bool http_download(const char* url, const char* user, const char* pass,
         tls_client->setInsecure();  // Accept any certificate for camera feeds
         tls_client->setTimeout(HTTP_TIMEOUT_MS);
     } else {
-        plain_client.setTimeout(HTTP_TIMEOUT_MS);
+        plain_client = new (std::nothrow) WiFiClient();
+        if (!plain_client) {
+            LOGE(TAG, "OOM for WiFiClient");
+            return false;
+        }
+        plain_client->setTimeout(HTTP_TIMEOUT_MS);
     }
 
-    bool began = is_https ? http.begin(*tls_client, url) : http.begin(plain_client, url);
+    bool began = is_https ? http.begin(*tls_client, url) : http.begin(*plain_client, url);
     if (!began) {
         LOGW(TAG, "HTTP begin failed: %.60s", url);
         delete tls_client;
+        delete plain_client;
         return false;
     }
 
@@ -118,7 +125,9 @@ static bool http_download(const char* url, const char* user, const char* pass,
     if (code != 200) {
         LOGW(TAG, "HTTP %d for %.60s", code, url);
         http.end();
+        vTaskDelay(pdMS_TO_TICKS(100));
         delete tls_client;
+        delete plain_client;
         return false;
     }
 
@@ -126,13 +135,17 @@ static bool http_download(const char* url, const char* user, const char* pass,
     if (content_len == 0) {
         LOGW(TAG, "Empty response for %.60s", url);
         http.end();
+        vTaskDelay(pdMS_TO_TICKS(100));
         delete tls_client;
+        delete plain_client;
         return false;
     }
     if (content_len > 0 && (size_t)content_len > MAX_DOWNLOAD_SIZE) {
         LOGW(TAG, "Response too large: %d bytes for %.60s", content_len, url);
         http.end();
+        vTaskDelay(pdMS_TO_TICKS(100));
         delete tls_client;
+        delete plain_client;
         return false;
     }
 
@@ -145,7 +158,9 @@ static bool http_download(const char* url, const char* user, const char* pass,
     if (!buf) {
         LOGE(TAG, "OOM for download buffer (%u bytes)", (unsigned)capacity);
         http.end();
+        vTaskDelay(pdMS_TO_TICKS(100));
         delete tls_client;
+        delete plain_client;
         return false;
     }
 
@@ -161,7 +176,9 @@ static bool http_download(const char* url, const char* user, const char* pass,
                  (unsigned)(MAX_DOWNLOAD_WALL_MS / 1000), url);
             heap_caps_free(buf);
             http.end();
+            vTaskDelay(pdMS_TO_TICKS(100));
             delete tls_client;
+            delete plain_client;
             return false;
         }
 
@@ -179,7 +196,9 @@ static bool http_download(const char* url, const char* user, const char* pass,
                 LOGW(TAG, "Download exceeds max size");
                 heap_caps_free(buf);
                 http.end();
+                vTaskDelay(pdMS_TO_TICKS(100));
                 delete tls_client;
+                delete plain_client;
                 return false;
             }
             uint8_t* new_buf = (uint8_t*)heap_caps_realloc(buf, new_cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -187,7 +206,9 @@ static bool http_download(const char* url, const char* user, const char* pass,
                 LOGE(TAG, "OOM growing download buffer to %u", (unsigned)new_cap);
                 heap_caps_free(buf);
                 http.end();
+                vTaskDelay(pdMS_TO_TICKS(100));
                 delete tls_client;
+                delete plain_client;
                 return false;
             }
             buf = new_buf;
@@ -201,7 +222,12 @@ static bool http_download(const char* url, const char* user, const char* pass,
     }
 
     http.end();
+    // Let WiFi MAC finish processing TCP close frames before destroying
+    // the client.  Without this delay the MAC DMA can access freed memory
+    // from the client's internal lwIP structures.
+    vTaskDelay(pdMS_TO_TICKS(100));
     delete tls_client;
+    delete plain_client;
 
     if (received == 0) {
         heap_caps_free(buf);
@@ -345,7 +371,6 @@ static void fetch_task(void* param) {
         }
         xSemaphoreGive(g_mutex);
 
-        // Small delay between fetches to avoid WiFi contention
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
