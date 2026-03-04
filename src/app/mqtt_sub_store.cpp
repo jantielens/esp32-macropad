@@ -111,6 +111,7 @@ void mqtt_sub_store_subscribe_all() {
             add_unique(btn.label_center_bind.mqtt_topic);
             add_unique(btn.label_bottom_bind.mqtt_topic);
             add_unique(btn.state_bind.mqtt_topic);
+            add_unique(btn.widget.data_topic);
         }
     }
 

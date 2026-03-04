@@ -233,6 +233,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/icon_store.cpp
   - src/app/icon_store.h
   - src/app/lv_conf.h
+  - src/app/pad_config.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp

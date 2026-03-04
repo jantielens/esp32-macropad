@@ -29,6 +29,8 @@
 #define CONFIG_BG_IMAGE_URL_MAX_LEN   256
 #define CONFIG_BG_IMAGE_USER_MAX_LEN   32
 #define CONFIG_BG_IMAGE_PASS_MAX_LEN   64
+#define CONFIG_WIDGET_TYPE_MAX_LEN     16
+#define WIDGET_CONFIG_MAX_BYTES        64
 
 // Action types (string constants for type field)
 #define ACTION_TYPE_NONE    ""
@@ -58,6 +60,14 @@ struct StateBinding {
     char on_value[CONFIG_STATE_ON_VALUE_MAX_LEN];     // value that means "ON"
 };
 
+// Widget type-specific config blob (parsed by widget implementations)
+struct WidgetConfig {
+    char type[CONFIG_WIDGET_TYPE_MAX_LEN];     // "" = normal button (default)
+    char data_topic[CONFIG_MQTT_TOPIC_MAX_LEN]; // MQTT topic that provides the numeric value for the widget
+    char data_path[CONFIG_JSON_PATH_MAX_LEN];   // JSON path to extract value ("." = raw)
+    uint8_t data[WIDGET_CONFIG_MAX_BYTES];     // type-specific config, opaque to pad_config
+};
+
 // Per-button config (grid placement, labels, colors, typed actions)
 struct ScreenButtonConfig {
     // Grid placement
@@ -71,8 +81,9 @@ struct ScreenButtonConfig {
     char label_center[CONFIG_LABEL_MAX_LEN];
     char label_bottom[CONFIG_LABEL_MAX_LEN];
 
-    // Icon reference (stored but not rendered in v0)
+    // Icon reference
     char icon_id[CONFIG_ICON_ID_MAX_LEN];
+    uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
 
     // Visual styling
     uint32_t bg_color_rgb;          // default 0x333333
@@ -100,6 +111,9 @@ struct ScreenButtonConfig {
     char bg_image_password[CONFIG_BG_IMAGE_PASS_MAX_LEN]; // HTTP Basic Auth password
     uint32_t bg_image_interval_ms;                        // 0 = fetch once, >0 = periodic
     bool bg_image_letterbox;                              // true = letterbox (fit + black bars), false = cover (fill + crop)
+
+    // Widget type (bar_chart, gauge, etc.) — empty = normal button
+    WidgetConfig widget;
 };
 
 // Page-level config

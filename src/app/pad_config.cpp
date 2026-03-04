@@ -3,6 +3,9 @@
 #include "board_config.h"
 #include "fs_health.h"
 #include "log_manager.h"
+#if HAS_DISPLAY
+#include "widgets/widget.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <LittleFS.h>
@@ -121,6 +124,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     strlcpy(btn->label_center, obj["label_center"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->label_bottom, obj["label_bottom"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
+    btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
 
     btn->bg_color_rgb = parse_color(obj["bg_color"], 0x333333);
     btn->fg_color_rgb = parse_color(obj["fg_color"], 0xFFFFFF);
@@ -147,6 +151,21 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     strlcpy(btn->bg_image_password, obj["bg_image_password"] | "", CONFIG_BG_IMAGE_PASS_MAX_LEN);
     btn->bg_image_interval_ms = obj["bg_image_interval_ms"] | (uint32_t)0;
     btn->bg_image_letterbox = obj["bg_image_letterbox"] | false;
+
+    // Widget type (bar_chart, gauge, etc.)
+    const char* wtype = obj["widget_type"] | "";
+    strlcpy(btn->widget.type, wtype, CONFIG_WIDGET_TYPE_MAX_LEN);
+    strlcpy(btn->widget.data_topic, obj["widget_data_topic"] | "", CONFIG_MQTT_TOPIC_MAX_LEN);
+    strlcpy(btn->widget.data_path, obj["widget_data_path"] | "", CONFIG_JSON_PATH_MAX_LEN);
+    memset(btn->widget.data, 0, WIDGET_CONFIG_MAX_BYTES);
+#if HAS_DISPLAY
+    if (wtype[0]) {
+        const WidgetType* wt = widget_find(wtype);
+        if (wt && wt->parseConfig) {
+            wt->parseConfig(obj, btn->widget.data);
+        }
+    }
+#endif
 }
 
 // ============================================================================

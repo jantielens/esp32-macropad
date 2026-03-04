@@ -30,6 +30,11 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Icon Store Subsystem**: PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
   - `icon_store.cpp/h` - LittleFS I/O, lodepng decode with R↔B swap, growable PSRAM cache
   - `web_portal_icons.cpp/h` - REST API for icon upload, delete, list, and debug endpoints
+- **Widget Subsystem**: Extensible widget type system for specialized button visualizations (compile-time gated by `HAS_DISPLAY`)
+  - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI function pointers)
+  - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
+  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical bar with color thresholds, MQTT-driven)
+  - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode and transport parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
@@ -217,6 +222,10 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/screens/test_screen.cpp/h` - Display calibration and color testing
 - `src/app/screens/touch_test_screen.cpp/h` - Touch accuracy test (red dots + connecting lines, PSRAM canvas, HAS_TOUCH only)
 - `src/app/screens.cpp` - Screen compilation unit (includes all screen .cpp files)
+- `src/app/widgets.cpp` - Widget compilation unit (includes all widget .cpp files)
+- `src/app/widgets/widget.h` - Widget type interface (WidgetType struct with function pointers)
+- `src/app/widgets/widget.cpp` - Widget type registry and lookup
+- `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (color thresholds, MQTT data binding)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template

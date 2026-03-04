@@ -4,6 +4,7 @@
 #include "screen.h"
 #include "../pad_config.h"
 #include "../pad_layout.h"
+#include "../widgets/widget.h"
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
 #endif
@@ -53,6 +54,13 @@ struct ButtonTile {
     uint8_t row;              // Grid row (for HA event)
     ButtonAction action;      // Tap action
     ButtonAction lp_action;   // Long-press action
+    // Widget runtime state (non-null widget_type = this tile is a widget)
+    const WidgetType* widget_type;
+    WidgetConfig widget_cfg;   // Copy of config (needed for update calls)
+    WidgetState widget_state;
+    // Widget data binding (topic + path from widget.data_topic, cached for polling)
+    char widget_topic[CONFIG_MQTT_TOPIC_MAX_LEN];
+    char widget_path[CONFIG_JSON_PATH_MAX_LEN];
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)

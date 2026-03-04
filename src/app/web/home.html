@@ -313,6 +313,16 @@
 
             <div class="pad-edit-body">
                 <div class="form-group">
+                    <label for="pad-edit-widget-type">Button Type</label>
+                    <select id="pad-edit-widget-type" onchange="padWidgetTypeChanged()">
+                        <option value="">Normal Button</option>
+                        <option value="bar_chart">Bar Chart</option>
+                    </select>
+                </div>
+
+                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
+
+                <div class="form-group">
                     <label for="pad-edit-label-top">Top Label</label>
                     <input type="text" id="pad-edit-label-top" maxlength="31" placeholder="e.g. Living Room">
                 </div>
@@ -355,6 +365,12 @@
                             <input type="text" id="pad-edit-icon-mi" maxlength="31" placeholder="e.g. power_settings_new">
                             <small>Name from <a href="https://fonts.google.com/icons" target="_blank" style="color:#007aff;">Material Symbols</a>.</small>
                         </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pad-edit-icon-scale">Icon Size %</label>
+                        <input type="number" id="pad-edit-icon-scale" min="0" max="250" step="1" value="0" placeholder="0 = auto">
+                        <small>0 = auto (fits available space), 1‑250 = explicit scale %.</small>
                     </div>
 
                     <div id="pad-edit-icon-preview-box" class="pad-icon-preview" style="display:none;">
@@ -420,6 +436,81 @@
                             </div>
                         </div>
                     </fieldset>
+                </details>
+
+                <!-- Bar Chart Settings (collapsible, shown only for bar_chart widget type) -->
+                <details id="pad-edit-bar-chart-section" style="display:none;">
+                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Bar Chart Settings</summary>
+                    <small style="display:block; margin-bottom:12px; color:#86868b;">Configure bar range, thresholds, and colors.</small>
+
+                    <div class="form-group">
+                        <label for="pad-edit-widget-data-topic">Data MQTT Topic</label>
+                        <input type="text" id="pad-edit-widget-data-topic" maxlength="127" placeholder="e.g. home/energy/solar_power">
+                        <small>MQTT topic that provides the numeric value for the bar chart.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="pad-edit-widget-data-path">Data JSON Path</label>
+                        <input type="text" id="pad-edit-widget-data-path" maxlength="47" placeholder=". = raw value, or e.g. power">
+                    </div>
+
+                    <div style="display:flex; gap:8px;">
+                        <div class="form-group" style="flex:1;">
+                            <label for="pad-edit-widget-bar-min">Min Value</label>
+                            <input type="number" id="pad-edit-widget-bar-min" step="any" value="0" placeholder="0">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label for="pad-edit-widget-bar-max">Max Value</label>
+                            <input type="number" id="pad-edit-widget-bar-max" step="any" value="3" placeholder="3">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="pad-edit-widget-use-absolute" checked> Use absolute value</label>
+                    </div>
+
+                    <div style="display:flex; gap:8px;">
+                        <div class="form-group" style="flex:1;">
+                            <label for="pad-edit-widget-threshold-1">Threshold 1</label>
+                            <input type="number" id="pad-edit-widget-threshold-1" step="any" placeholder="auto">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label for="pad-edit-widget-threshold-2">Threshold 2</label>
+                            <input type="number" id="pad-edit-widget-threshold-2" step="any" placeholder="auto">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label for="pad-edit-widget-threshold-3">Threshold 3</label>
+                            <input type="number" id="pad-edit-widget-threshold-3" step="any" placeholder="auto">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <div class="form-group" style="flex:1; min-width:100px;">
+                            <label for="pad-edit-widget-color-good">Good</label>
+                            <input type="color" id="pad-edit-widget-color-good" value="#4CAF50">
+                        </div>
+                        <div class="form-group" style="flex:1; min-width:100px;">
+                            <label for="pad-edit-widget-color-ok">OK</label>
+                            <input type="color" id="pad-edit-widget-color-ok" value="#8BC34A">
+                        </div>
+                        <div class="form-group" style="flex:1; min-width:100px;">
+                            <label for="pad-edit-widget-color-attention">Attention</label>
+                            <input type="color" id="pad-edit-widget-color-attention" value="#FF9800">
+                        </div>
+                        <div class="form-group" style="flex:1; min-width:100px;">
+                            <label for="pad-edit-widget-color-warning">Warning</label>
+                            <input type="color" id="pad-edit-widget-color-warning" value="#F44336">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:8px;">
+                        <div class="form-group" style="flex:1;">
+                            <label for="pad-edit-widget-bar-bg-color">Bar Background</label>
+                            <input type="color" id="pad-edit-widget-bar-bg-color" value="#1A1A1A">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label for="pad-edit-widget-bar-width-pct">Bar Width %</label>
+                            <input type="number" id="pad-edit-widget-bar-width-pct" min="1" max="100" value="100" placeholder="100">
+                        </div>
+                    </div>
                 </details>
 
                 <!-- Toggle State (collapsible) -->
