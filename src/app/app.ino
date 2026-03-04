@@ -29,6 +29,9 @@
 #include "image_fetch.h"
 #endif
 
+#include <esp_ota_ops.h>
+#include <esp_heap_caps.h>
+
 #if HAS_TOUCH
 #include "touch_manager.h"
 #endif
@@ -265,6 +268,7 @@ void setup()
 			if (wifi_manager_connect(&device_config, false)) {
 				power_manager_note_wifi_success();
 				wifi_manager_start_mdns(&device_config);
+				device_telemetry_cache_rssi();
 			} else {
 				LOGW("Main", "WiFi failed - fallback to AP");
 				power_manager_set_current_mode(PowerMode::Ap);
@@ -295,6 +299,10 @@ void setup()
 	last_heartbeat_ms = millis();
 	LOGI("Main", "Setup complete");
 
+	// Mark OTA partition as valid so the bootloader won't roll back on next reboot.
+	// Safe no-op when not running from an OTA partition.
+	esp_ota_mark_app_valid_cancel_rollback();
+
 	// Snapshot after all subsystems are initialized.
 	device_telemetry_log_memory_snapshot("setup");
 
@@ -313,12 +321,22 @@ void setup()
 	} else {
 		delay(1000);
 	}
+	#endif
+
+	#if HAS_MQTT
+	// Attempt blocking MQTT connect + HA discovery during boot.
+	// Non-fatal: if broker is unreachable we simply move on.
+	if (mqtt_manager.enabled() && WiFi.status() == WL_CONNECTED) {
+		#if HAS_DISPLAY
+		display_manager_set_splash_status("MQTT discovery...");
+		#endif
+		mqtt_manager.connectAndPublishDiscoveryBlocking(8000);
+	}
+	#endif
+
+	#if HAS_DISPLAY
 	display_manager_set_splash_status("Ready!");
 	delay(1000);
-
-	#if HAS_IMAGE_FETCH
-	image_fetch_init();
-	#endif
 
 	// Navigate to pad_0 if configured, otherwise info screen
 	if (pad_config_exists(0)) {
@@ -326,6 +344,13 @@ void setup()
 	} else {
 		display_manager_show_info();
 	}
+
+	// Start image fetching AFTER the splash is dismissed and the runtime screen is
+	// visible.  This avoids concurrent WiFi pressure (HTTP downloads + MQTT +
+	// ESP-Hosted RPC) during the critical early-boot window.
+	#if HAS_IMAGE_FETCH
+	image_fetch_init();
+	#endif
 
 	// Start the screen saver inactivity timer after the first runtime screen is visible.
 	// This avoids counting boot + splash time as "inactivity".
@@ -395,6 +420,11 @@ void loop()
 				(unsigned)mem.heap_internal_free_bytes,
 				(unsigned)mem.heap_internal_min_free_bytes,
 				(unsigned)mem.psram_free_bytes);
+		}
+
+		// Periodic heap integrity check — detects corruption early.
+		if (!heap_caps_check_integrity_all(true)) {
+			LOGE("Heap", "HEAP CORRUPTION DETECTED at uptime %ds", current_ms / 1000);
 		}
 
 		last_heartbeat_ms = current_ms;

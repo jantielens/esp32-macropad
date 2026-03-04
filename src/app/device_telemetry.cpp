@@ -28,6 +28,24 @@
 #include "driver/temperature_sensor.h"
 #endif
 
+// Cached WiFi RSSI — sampled once at boot (and optionally on reconnect) to
+// avoid repeated ESP-Hosted RPC calls from the hot health-publish path.
+static int16_t s_cached_rssi = 0;
+static bool    s_rssi_valid  = false;
+
+void device_telemetry_cache_rssi() {
+	if (WiFi.status() == WL_CONNECTED) {
+		s_cached_rssi = WiFi.RSSI();
+		s_rssi_valid  = true;
+		LOGI("Telemetry", "Cached WiFi RSSI: %d dBm", (int)s_cached_rssi);
+	}
+}
+
+int16_t device_telemetry_get_cached_rssi(bool *valid) {
+	if (valid) *valid = s_rssi_valid;
+	return s_cached_rssi;
+}
+
 // CPU usage tracking (task-based)
 static SemaphoreHandle_t cpu_mutex = nullptr;
 static int cpu_usage_current = -1;
@@ -1015,9 +1033,11 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 		doc["display_present_us"] = nullptr;
 		#endif
 
-		// WiFi stats (only if connected)
-		if (WiFi.status() == WL_CONNECTED) {
-				doc["wifi_rssi"] = WiFi.RSSI();
+// WiFi stats — use cached RSSI to avoid ESP-Hosted RPC on every publish.
+	if (WiFi.status() == WL_CONNECTED) {
+			bool rssi_ok = false;
+			int16_t rssi = device_telemetry_get_cached_rssi(&rssi_ok);
+			doc["wifi_rssi"] = rssi_ok ? (int)rssi : (int)0;
 
 				if (include_ip_and_channel) {
 						doc["wifi_channel"] = WiFi.channel();

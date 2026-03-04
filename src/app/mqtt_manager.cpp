@@ -40,6 +40,43 @@ void MqttManager::begin(const DeviceConfig *config, const char *friendly_name, c
 		_last_health_publish_ms = 0;
 }
 
+bool MqttManager::connectAndPublishDiscoveryBlocking(uint32_t timeout_ms) {
+		if (!connectEnabled()) return false;
+		if (_discovery_published_this_boot) return true;
+
+		LOGI("MQTT", "Boot discovery: connecting to %s:%d (timeout %ums)",
+				_config->mqtt_host, resolvedPort(), (unsigned)timeout_ms);
+
+		unsigned long start = millis();
+		bool conn = false;
+
+		// PubSubClient::connect() blocks internally with its own socket timeout.
+		// We retry in a loop until our overall deadline.
+		while (!conn && (millis() - start) < timeout_ms) {
+				conn = attemptConnectWithLWT(true);
+				if (!conn) {
+						LOGW("MQTT", "Boot connect attempt failed (state %d), retrying...", _client.state());
+						delay(500);
+				}
+		}
+
+		if (!conn) {
+				LOGW("MQTT", "Boot discovery: broker unreachable after %ums - skipping", (unsigned)timeout_ms);
+				return false;
+		}
+
+		LOGI("MQTT", "Boot discovery: connected");
+		onConnected(true);
+
+		// Let the broker process all retained messages before returning.
+		_client.loop();
+		delay(50);
+		_client.loop();
+
+		LOGI("MQTT", "Boot discovery: done (%ums)", (unsigned)(millis() - start));
+		return true;
+}
+
 bool MqttManager::connectEnabled() const {
 		if (!_config) return false;
 		if (strlen(_config->mqtt_host) == 0) return false;
@@ -180,6 +217,53 @@ void MqttManager::publishHealthIfDue() {
 		}
 }
 
+bool MqttManager::attemptConnectWithLWT(bool use_lwt) {
+		_client.setServer(_config->mqtt_host, resolvedPort());
+
+		char client_id[96];
+		snprintf(client_id, sizeof(client_id), "%s", _sanitized_name);
+
+		bool has_user = strlen(_config->mqtt_username) > 0;
+		bool has_pass = strlen(_config->mqtt_password) > 0;
+
+		if (has_user) {
+				const char *pass = has_pass ? _config->mqtt_password : "";
+				if (use_lwt) {
+						return _client.connect(client_id, _config->mqtt_username, pass,
+								_availability_topic, 0, true, "offline");
+				} else {
+						return _client.connect(client_id, _config->mqtt_username, pass);
+				}
+		} else {
+				if (use_lwt) {
+						return _client.connect(client_id,
+								_availability_topic, 0, true, "offline");
+				} else {
+						return _client.connect(client_id);
+				}
+		}
+}
+
+void MqttManager::onConnected(bool publish_availability) {
+		if (publish_availability) {
+				publishAvailability(true);
+		}
+
+		if (power_manager_should_publish_mqtt_discovery()) {
+				publishDiscoveryOncePerBoot();
+		}
+
+		// Re-subscribe to all tracked subscription topics.
+		mqtt_sub_store_subscribe_all();
+
+		// Publish a single retained state after connect so HA entities have values,
+		// even when periodic publishing is disabled (interval = 0).
+		publishHealthNow();
+
+		// Start/reset interval timing for periodic health publishes.
+		_last_health_publish_ms = millis();
+}
+
 void MqttManager::ensureConnected() {
 		if (!enabled()) return;
 		if (WiFi.status() != WL_CONNECTED) return;
@@ -192,68 +276,13 @@ void MqttManager::ensureConnected() {
 		}
 		_last_reconnect_attempt_ms = now;
 
-		_client.setServer(_config->mqtt_host, resolvedPort());
-
-		// Client ID: sanitized name
-		char client_id[96];
-		snprintf(client_id, sizeof(client_id), "%s", _sanitized_name);
-
-		bool has_user = strlen(_config->mqtt_username) > 0;
-		bool has_pass = strlen(_config->mqtt_password) > 0;
+		const bool duty_cycle = (power_manager_get_current_mode() == PowerMode::DutyCycle);
 
 		LOGI("MQTT", "Connecting to %s:%d", _config->mqtt_host, resolvedPort());
 
-		const bool duty_cycle = (power_manager_get_current_mode() == PowerMode::DutyCycle);
-		bool connected = false;
-		if (has_user) {
-				const char *pass = has_pass ? _config->mqtt_password : "";
-				if (duty_cycle) {
-						connected = _client.connect(client_id, _config->mqtt_username, pass);
-				} else {
-						connected = _client.connect(
-								client_id,
-								_config->mqtt_username,
-								pass,
-								_availability_topic,
-								0,
-								true,
-								"offline"
-						);
-				}
-		} else {
-				if (duty_cycle) {
-						connected = _client.connect(client_id);
-				} else {
-						connected = _client.connect(
-								client_id,
-								_availability_topic,
-								0,
-								true,
-								"offline"
-						);
-				}
-		}
-
-		if (connected) {
+		if (attemptConnectWithLWT(!duty_cycle)) {
 				LOGI("MQTT", "Connected");
-				if (!duty_cycle) {
-						publishAvailability(true);
-				}
-
-				if (power_manager_should_publish_mqtt_discovery()) {
-						publishDiscoveryOncePerBoot();
-				}
-
-				// Re-subscribe to all tracked subscription topics.
-				// On first connect, this also scans pad configs to discover topics.
-				mqtt_sub_store_subscribe_all();
-
-				// Publish a single retained state after connect so HA entities have values,
-				// even when periodic publishing is disabled (interval = 0).
-				publishHealthNow();
-
-				// If periodic publishing is enabled, start interval timing from now.
-				_last_health_publish_ms = millis();
+				onConnected(!duty_cycle);
 		} else {
 				LOGW("MQTT", "Connect failed (state %d)", _client.state());
 		}

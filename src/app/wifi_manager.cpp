@@ -2,6 +2,7 @@
 
 #include "board_config.h"
 #include "config_manager.h"
+#include "device_telemetry.h"
 #include "log_manager.h"
 #include "power_manager.h"
 #include "../version.h"
@@ -379,6 +380,7 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 				if (wifi_manager_connect(config, false)) {
 						power_manager_note_wifi_success();
 						wifi_manager_start_mdns(config);
+						device_telemetry_cache_rssi();
 				}
 		}
 
