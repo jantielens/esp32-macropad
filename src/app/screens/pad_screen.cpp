@@ -117,6 +117,7 @@ void PadScreen::update() {
         // Config unchanged — just poll MQTT bindings and toggle state
         pollMqttBindings();
         pollToggleState();
+        mqtt_sub_store_clear_dirty();
 #if HAS_IMAGE_FETCH
         pollImageFrames();
 #endif
@@ -570,7 +571,7 @@ void PadScreen::pollMqttBindings() {
 #if HAS_MQTT
     if (bindingCount == 0) return;
 
-    char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
+    static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
     char extracted[128];
     char formatted[128];
 
@@ -579,14 +580,15 @@ void PadScreen::pollMqttBindings() {
         if (!rb.active || !rb.label) continue;
 
         bool changed = false;
-        if (!mqtt_sub_store_get(rb.mqtt_topic, payload, sizeof(payload), &changed)) continue;
+        bool truncated = false;
+        if (!mqtt_sub_store_get(rb.mqtt_topic, payload, sizeof(payload), &changed, &truncated)) continue;
         if (!changed) continue;
 
         // Extract value from JSON payload (or raw if path is ".")
         const char* path = rb.json_path[0] ? rb.json_path : ".";
         if (!mqtt_sub_store_extract_json(payload, path, extracted, sizeof(extracted))) {
-            // Extraction failed — use raw payload
-            strlcpy(extracted, payload, sizeof(extracted));
+            // Extraction failed — show overflow hint if truncated, otherwise raw payload
+            strlcpy(extracted, truncated ? "[TOO BIG]" : payload, sizeof(extracted));
         }
 
         // Apply format string (best-effort)
@@ -610,7 +612,7 @@ void PadScreen::pollToggleState() {
 #if HAS_MQTT
     if (stateBindingCount == 0) return;
 
-    char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
+    static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
     char extracted[128];
 
     for (uint16_t i = 0; i < stateBindingCount; i++) {
@@ -618,13 +620,14 @@ void PadScreen::pollToggleState() {
         if (!sb.active) continue;
 
         bool changed = false;
-        if (!mqtt_sub_store_get(sb.mqtt_topic, payload, sizeof(payload), &changed)) continue;
+        bool truncated = false;
+        if (!mqtt_sub_store_get(sb.mqtt_topic, payload, sizeof(payload), &changed, &truncated)) continue;
         if (!changed && sb.initialized) continue;
 
         // Extract value via JSON path
         const char* path = sb.json_path[0] ? sb.json_path : ".";
         if (!mqtt_sub_store_extract_json(payload, path, extracted, sizeof(extracted))) {
-            strlcpy(extracted, payload, sizeof(extracted));
+            strlcpy(extracted, truncated ? "[TOO BIG]" : payload, sizeof(extracted));
         }
 
         // Compare to on_value (case-sensitive)

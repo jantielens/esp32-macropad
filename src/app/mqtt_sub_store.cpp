@@ -7,6 +7,7 @@
 #include "pad_config.h"
 
 #include <ArduinoJson.h>
+#include "psram_json_allocator.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <esp_heap_caps.h>
@@ -24,8 +25,9 @@
 struct SubStoreEntry {
     char topic[CONFIG_MQTT_TOPIC_MAX_LEN];
     char value[MQTT_SUB_STORE_MAX_VALUE_LEN];
-    bool dirty;   // set by store_set, cleared by store_get
+    bool dirty;      // set by store_set, cleared by store_get
     bool in_use;
+    bool truncated;  // payload exceeded MAX_VALUE_LEN on ingestion
 };
 
 static SubStoreEntry* g_entries = nullptr;
@@ -189,6 +191,7 @@ void mqtt_sub_store_set(const char* topic, const uint8_t* payload, unsigned int 
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
             if (g_entries[i].in_use && strcmp(g_entries[i].topic, topic) == 0) {
+                bool was_truncated = (len >= MQTT_SUB_STORE_MAX_VALUE_LEN);
                 size_t copy_len = len;
                 if (copy_len >= MQTT_SUB_STORE_MAX_VALUE_LEN) {
                     copy_len = MQTT_SUB_STORE_MAX_VALUE_LEN - 1;
@@ -196,6 +199,11 @@ void mqtt_sub_store_set(const char* topic, const uint8_t* payload, unsigned int 
                 memcpy(g_entries[i].value, payload, copy_len);
                 g_entries[i].value[copy_len] = '\0';
                 g_entries[i].dirty = true;
+                g_entries[i].truncated = was_truncated;
+                if (was_truncated) {
+                    LOGW(TAG, "Payload truncated for %s (%u > %d)",
+                         topic, (unsigned)len, MQTT_SUB_STORE_MAX_VALUE_LEN - 1);
+                }
                 break;
             }
         }
@@ -207,10 +215,11 @@ void mqtt_sub_store_set(const char* topic, const uint8_t* payload, unsigned int 
 // Get — called from LVGL task
 // ============================================================================
 
-bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* changed) {
+bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* changed, bool* truncated) {
     if (!g_entries || !g_mutex || !topic || !buf || buf_len == 0) {
         if (buf && buf_len > 0) buf[0] = '\0';
         if (changed) *changed = false;
+        if (truncated) *truncated = false;
         return false;
     }
 
@@ -220,7 +229,9 @@ bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* chan
             if (g_entries[i].in_use && strcmp(g_entries[i].topic, topic) == 0) {
                 strlcpy(buf, g_entries[i].value, buf_len);
                 if (changed) *changed = g_entries[i].dirty;
-                g_entries[i].dirty = false;
+                if (truncated) *truncated = g_entries[i].truncated;
+                // Dirty flag is NOT cleared here — caller must invoke
+                // mqtt_sub_store_clear_dirty() after all consumers have polled.
                 found = true;
                 break;
             }
@@ -231,8 +242,23 @@ bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* chan
     if (!found) {
         buf[0] = '\0';
         if (changed) *changed = false;
+        if (truncated) *truncated = false;
     }
     return found;
+}
+
+// ============================================================================
+// Clear all dirty flags — call once per poll cycle
+// ============================================================================
+
+void mqtt_sub_store_clear_dirty() {
+    if (!g_entries || !g_mutex) return;
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+            if (g_entries[i].in_use) g_entries[i].dirty = false;
+        }
+        xSemaphoreGive(g_mutex);
+    }
 }
 
 // ============================================================================
@@ -248,8 +274,8 @@ bool mqtt_sub_store_extract_json(const char* payload, const char* path, char* ou
         return true;
     }
 
-    // Parse JSON
-    DynamicJsonDocument doc(512);
+    // Parse JSON (PSRAM-backed document for large payloads)
+    BasicJsonDocument<PsramJsonAllocator> doc(2048);
     DeserializationError err = deserializeJson(doc, payload);
     if (err) {
         // Not valid JSON — return raw payload

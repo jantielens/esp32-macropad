@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-03-04
+
+### Fixed
+- **MQTT multi-label same-topic bug** — multiple label bindings subscribed to the same MQTT topic now all update correctly; previously the per-topic dirty flag was cleared by the first binding, causing subsequent bindings to miss the update
+
+### Improved
+- **MQTT payload buffer** — increased `MQTT_SUB_STORE_MAX_VALUE_LEN` from 256 to 2048 bytes to support larger JSON payloads (e.g. Home Assistant media player attributes); store is PSRAM-backed so no internal SRAM impact
+- **MQTT JSON parser** — `DynamicJsonDocument` replaced with PSRAM-backed `BasicJsonDocument<PsramJsonAllocator>` (2048 bytes) for reliable parsing of larger payloads
+- **MQTT payload overflow detection** — payloads exceeding the 2048-byte buffer are now detected and flagged; labels show `[TOO BIG]` instead of broken JSON, and a `LOGW` is emitted on serial for diagnostics
+
 ## [1.4.0] - 2026-03-03
 
 ### Added
