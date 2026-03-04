@@ -116,7 +116,6 @@ static bool conn_ensure(int slot, const char* url, const char* user, const char*
             c.plain->setTimeout(HTTP_TIMEOUT_MS);
         }
         c.http.setReuse(true);  // HTTP keep-alive — reuse TCP connection
-        c.http.setTimeout(HTTP_TIMEOUT_MS);
         c.http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
         c.is_https = need_https;
         c.active = true;
@@ -128,6 +127,12 @@ static bool conn_ensure(int slot, const char* url, const char* user, const char*
         conn_close(slot);
         return false;
     }
+
+    // setTimeout must be called AFTER begin() — begin() sets _client, and
+    // setTimeout() internally calls connected() which dereferences _client.
+    // Calling it before begin() would use a dangling pointer from a
+    // previous conn_close() cycle.
+    c.http.setTimeout(HTTP_TIMEOUT_MS);
 
     if (user && user[0] && pass && pass[0]) {
         c.http.setAuthorization(user, pass);
