@@ -65,120 +65,125 @@ static const uint32_t MAX_DOWNLOAD_WALL_MS = 30000;  // 30s total wall-clock lim
 static const size_t   MAX_DOWNLOAD_SIZE = 2 * 1024 * 1024;  // 2 MB
 
 // ============================================================================
-// HTTP fetch helper — downloads URL to PSRAM buffer
+// Per-slot persistent HTTP connections (fetch task only — no mutex needed)
 // ============================================================================
 
-static bool http_download(const char* url, const char* user, const char* pass,
-                          uint8_t** out_data, size_t* out_len) {
-    if (out_data) *out_data = nullptr;
-    if (out_len) *out_len = 0;
+struct SlotConn {
+    WiFiClient*       plain;
+    WiFiClientSecure* tls;
+    HTTPClient        http;
+    bool              active;     // connection has been set up
+    bool              is_https;
+};
 
-    if (WiFi.status() != WL_CONNECTED) {
-        LOGD(TAG, "WiFi not connected, skip fetch");
-        return false;
+static SlotConn g_conn[IMAGE_SLOT_MAX];
+
+static void conn_close(int slot) {
+    SlotConn& c = g_conn[slot];
+    if (!c.active) return;
+    c.http.end();
+    // Let WiFi MAC finish processing TCP close frames before destroying
+    // the client.  Without this delay the MAC DMA can access freed memory
+    // from the client's internal lwIP structures.
+    vTaskDelay(pdMS_TO_TICKS(100));
+    delete c.tls;   c.tls = nullptr;
+    delete c.plain;  c.plain = nullptr;
+    c.active = false;
+    c.is_https = false;
+}
+
+// Ensure a persistent connection exists for a slot.  Creates the client
+// on first call; subsequent calls reuse it (HTTP keep-alive).
+static bool conn_ensure(int slot, const char* url, const char* user, const char* pass) {
+    SlotConn& c = g_conn[slot];
+    bool need_https = (strncmp(url, "https://", 8) == 0);
+
+    // Protocol changed — tear down and recreate
+    if (c.active && c.is_https != need_https) {
+        conn_close(slot);
     }
 
-    bool is_https = (strncmp(url, "https://", 8) == 0);
-
-    HTTPClient http;
-    http.setTimeout(HTTP_TIMEOUT_MS);
-    http.setReuse(false);
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-
-    // Heap-allocate ALL WiFi clients in internal RAM.  The fetch task runs
-    // on a PSRAM-backed stack; keeping WiFiClient on that stack can cause
-    // cache-coherency issues with the WiFi MAC DMA engine on ESP32-S3.
-    WiFiClient* plain_client = nullptr;
-    WiFiClientSecure* tls_client = nullptr;
-
-    if (is_https) {
-        tls_client = new (std::nothrow) WiFiClientSecure();
-        if (!tls_client) {
-            LOGE(TAG, "OOM for WiFiClientSecure");
-            return false;
+    // Create client on first use
+    if (!c.active) {
+        if (need_https) {
+            c.tls = new (std::nothrow) WiFiClientSecure();
+            if (!c.tls) { LOGE(TAG, "OOM for WiFiClientSecure"); return false; }
+            c.tls->setInsecure();
+            c.tls->setTimeout(HTTP_TIMEOUT_MS);
+        } else {
+            c.plain = new (std::nothrow) WiFiClient();
+            if (!c.plain) { LOGE(TAG, "OOM for WiFiClient"); return false; }
+            c.plain->setTimeout(HTTP_TIMEOUT_MS);
         }
-        tls_client->setInsecure();  // Accept any certificate for camera feeds
-        tls_client->setTimeout(HTTP_TIMEOUT_MS);
-    } else {
-        plain_client = new (std::nothrow) WiFiClient();
-        if (!plain_client) {
-            LOGE(TAG, "OOM for WiFiClient");
-            return false;
-        }
-        plain_client->setTimeout(HTTP_TIMEOUT_MS);
+        c.http.setReuse(true);  // HTTP keep-alive — reuse TCP connection
+        c.http.setTimeout(HTTP_TIMEOUT_MS);
+        c.http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+        c.is_https = need_https;
+        c.active = true;
     }
 
-    bool began = is_https ? http.begin(*tls_client, url) : http.begin(*plain_client, url);
-    if (!began) {
+    bool ok = need_https ? c.http.begin(*c.tls, url) : c.http.begin(*c.plain, url);
+    if (!ok) {
         LOGW(TAG, "HTTP begin failed: %.60s", url);
-        delete tls_client;
-        delete plain_client;
+        conn_close(slot);
         return false;
     }
 
-    // Basic auth
     if (user && user[0] && pass && pass[0]) {
-        http.setAuthorization(user, pass);
+        c.http.setAuthorization(user, pass);
     }
+    return true;
+}
 
-    int code = http.GET();
+// Download from an already-prepared connection.  Returns PSRAM buffer.
+static bool conn_download(int slot, uint8_t** out_data, size_t* out_len) {
+    *out_data = nullptr;
+    *out_len = 0;
+
+    SlotConn& c = g_conn[slot];
+    int code = c.http.GET();
     if (code != 200) {
-        LOGW(TAG, "HTTP %d for %.60s", code, url);
-        http.end();
-        vTaskDelay(pdMS_TO_TICKS(100));
-        delete tls_client;
-        delete plain_client;
+        LOGW(TAG, "HTTP %d for slot %d", code, slot);
+        c.http.end();        // clears response; keep-alive preserves socket
+        if (code < 0) conn_close(slot);  // transport error — full teardown
         return false;
     }
 
-    int content_len = http.getSize();
+    int content_len = c.http.getSize();
     if (content_len == 0) {
-        LOGW(TAG, "Empty response for %.60s", url);
-        http.end();
-        vTaskDelay(pdMS_TO_TICKS(100));
-        delete tls_client;
-        delete plain_client;
+        LOGW(TAG, "Empty response for slot %d", slot);
+        c.http.end();
         return false;
     }
     if (content_len > 0 && (size_t)content_len > MAX_DOWNLOAD_SIZE) {
-        LOGW(TAG, "Response too large: %d bytes for %.60s", content_len, url);
-        http.end();
-        vTaskDelay(pdMS_TO_TICKS(100));
-        delete tls_client;
-        delete plain_client;
+        LOGW(TAG, "Response too large: %d bytes for slot %d", content_len, slot);
+        c.http.end();
         return false;
     }
 
     // Read response body into PSRAM buffer
     size_t total = (content_len > 0) ? (size_t)content_len : 0;
-    size_t capacity = total ? total : 32768;  // Initial capacity if unknown
+    size_t capacity = total ? total : 32768;
 
     uint8_t* buf = (uint8_t*)heap_caps_malloc(capacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!buf) buf = (uint8_t*)malloc(capacity);
     if (!buf) {
         LOGE(TAG, "OOM for download buffer (%u bytes)", (unsigned)capacity);
-        http.end();
-        vTaskDelay(pdMS_TO_TICKS(100));
-        delete tls_client;
-        delete plain_client;
+        c.http.end();
         return false;
     }
 
-    WiFiClient* stream = http.getStreamPtr();
+    WiFiClient* stream = c.http.getStreamPtr();
     size_t received = 0;
     uint32_t dl_start = (uint32_t)millis();
 
-    while (http.connected() && (content_len < 0 || received < (size_t)content_len)) {
-        // Guard against slow-drip servers that send just enough data to
-        // avoid socket timeouts but tie up the fetch task indefinitely.
+    while (c.http.connected() && (content_len < 0 || received < (size_t)content_len)) {
         if ((uint32_t)millis() - dl_start > MAX_DOWNLOAD_WALL_MS) {
-            LOGW(TAG, "Download wall-clock timeout (%us) for %.60s",
-                 (unsigned)(MAX_DOWNLOAD_WALL_MS / 1000), url);
+            LOGW(TAG, "Download wall-clock timeout (%us) slot %d",
+                 (unsigned)(MAX_DOWNLOAD_WALL_MS / 1000), slot);
             heap_caps_free(buf);
-            http.end();
-            vTaskDelay(pdMS_TO_TICKS(100));
-            delete tls_client;
-            delete plain_client;
+            c.http.end();
+            conn_close(slot);
             return false;
         }
 
@@ -195,20 +200,14 @@ static bool http_download(const char* url, const char* user, const char* pass,
             if (received + avail > new_cap) {
                 LOGW(TAG, "Download exceeds max size");
                 heap_caps_free(buf);
-                http.end();
-                vTaskDelay(pdMS_TO_TICKS(100));
-                delete tls_client;
-                delete plain_client;
+                c.http.end();
                 return false;
             }
             uint8_t* new_buf = (uint8_t*)heap_caps_realloc(buf, new_cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             if (!new_buf) {
                 LOGE(TAG, "OOM growing download buffer to %u", (unsigned)new_cap);
                 heap_caps_free(buf);
-                http.end();
-                vTaskDelay(pdMS_TO_TICKS(100));
-                delete tls_client;
-                delete plain_client;
+                c.http.end();
                 return false;
             }
             buf = new_buf;
@@ -221,13 +220,7 @@ static bool http_download(const char* url, const char* user, const char* pass,
         received += n;
     }
 
-    http.end();
-    // Let WiFi MAC finish processing TCP close frames before destroying
-    // the client.  Without this delay the MAC DMA can access freed memory
-    // from the client's internal lwIP structures.
-    vTaskDelay(pdMS_TO_TICKS(100));
-    delete tls_client;
-    delete plain_client;
+    c.http.end();  // clears response; keep-alive preserves socket
 
     if (received == 0) {
         heap_caps_free(buf);
@@ -285,7 +278,11 @@ static void fetch_task(void* param) {
         xSemaphoreGive(g_mutex);
 
         if (next < 0) {
-            // No slot ready — sleep until the soonest slot is due
+            // No slot ready — close connections for inactive/cancelled slots
+            for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
+                if (g_conn[i].active && !g_slots[i].active) conn_close(i);
+            }
+            // Sleep until the soonest slot is due
             if (min_wait_ms < 10) min_wait_ms = 10;  // Floor to avoid busy-spin
             vTaskDelay(pdMS_TO_TICKS(min_wait_ms));
             continue;
@@ -313,10 +310,25 @@ static void fetch_task(void* param) {
 
         LOGD(TAG, "Fetch slot %d: %.60s (%ux%u)", next, url, tw, th);
 
-        // Download
+        // --- Heap integrity checkpoint: BEFORE download ---
+        if (!heap_caps_check_integrity_all(true)) {
+            LOGE(TAG, "HEAP CORRUPT before download (slot %d)", next);
+        }
+
+        // Persistent connection: ensure client exists, then download
         uint8_t* raw_data = nullptr;
         size_t raw_len = 0;
-        if (!http_download(url, user, pass, &raw_data, &raw_len)) {
+
+        if (WiFi.status() != WL_CONNECTED) {
+            LOGW(TAG, "WiFi not connected, skipping slot %d", next);
+            // Close all persistent connections — they're dead sockets now
+            for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) conn_close(i);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
+        if (!conn_ensure(next, url, user, pass) ||
+            !conn_download(next, &raw_data, &raw_len)) {
             LOGW(TAG, "Slot %d download failed", next);
             // Mark last_fetch to avoid immediate retry
             xSemaphoreTake(g_mutex, portMAX_DELAY);
@@ -332,6 +344,12 @@ static void fetch_task(void* param) {
         // Decode + scale to RGB565
         uint16_t* pixels = nullptr;
         size_t pixel_size = 0;
+
+        // --- Heap integrity checkpoint: AFTER download, BEFORE decode ---
+        if (!heap_caps_check_integrity_all(true)) {
+            LOGE(TAG, "HEAP CORRUPT after download (slot %d, %u bytes)", next, (unsigned)raw_len);
+        }
+
         bool decoded = image_decode_to_rgb565(raw_data, raw_len, tw, th, sm, &pixels, &pixel_size);
         heap_caps_free(raw_data);
 
@@ -370,6 +388,11 @@ static void fetch_task(void* param) {
             heap_caps_free(pixels);
         }
         xSemaphoreGive(g_mutex);
+
+        // --- Heap integrity checkpoint: AFTER decode + swap ---
+        if (!heap_caps_check_integrity_all(true)) {
+            LOGE(TAG, "HEAP CORRUPT after decode/swap (slot %d)", next);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(50));
     }
