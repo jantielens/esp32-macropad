@@ -22,6 +22,7 @@
 #include "display_manager.h"
 #include "health_binding.h"
 #include "icon_store.h"
+#include "time_binding.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #endif
@@ -270,6 +271,7 @@ void setup()
 				power_manager_note_wifi_success();
 				wifi_manager_start_mdns(&device_config);
 				device_telemetry_cache_rssi();
+				time_binding_start_ntp();
 			} else {
 				LOGW("Main", "WiFi failed - fallback to AP");
 				power_manager_set_current_mode(PowerMode::Ap);
@@ -299,6 +301,7 @@ void setup()
 
 	#if HAS_DISPLAY
 	health_binding_init();
+	time_binding_init();
 	#endif
 
 	last_heartbeat_ms = millis();

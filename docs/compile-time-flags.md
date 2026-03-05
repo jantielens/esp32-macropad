@@ -230,6 +230,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
   - src/app/ha_discovery.cpp
+  - src/app/health_binding.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
   - src/app/lv_conf.h
