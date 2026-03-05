@@ -88,12 +88,4 @@
 #define TOUCH_RST -1           // No hardware reset (NC per BSP)
 #define TOUCH_INT -1           // No interrupt pin (NC per BSP)
 
-// ============================================================================
-// Telemetry tuning
-// ============================================================================
-// Disable background telemetry tasks to reduce scheduler contention with
-// display rendering on Core 0.
-#define DEVICE_TELEMETRY_BACKGROUND_TASKS 0
-#define HEALTH_HISTORY_ENABLED 0
-
 #endif // BOARD_OVERRIDES_JC4880P433_H

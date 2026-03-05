@@ -238,6 +238,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
+  - src/app/time_binding.cpp
   - src/app/touch_manager.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
