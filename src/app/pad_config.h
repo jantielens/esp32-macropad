@@ -16,7 +16,7 @@
 #define MAX_GRID_COLS          8
 #define MAX_GRID_ROWS          8
 
-#define CONFIG_LABEL_MAX_LEN           32
+#define CONFIG_LABEL_MAX_LEN          192
 #define CONFIG_ICON_ID_MAX_LEN         32
 #define CONFIG_SCREEN_ID_MAX_LEN       16
 #define CONFIG_MQTT_TOPIC_MAX_LEN     128
@@ -46,12 +46,8 @@ struct ButtonAction {
     char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // type="mqtt": publish payload
 };
 
-// Per-label MQTT binding (subscribe to topic, extract value, format for display)
-struct LabelBinding {
-    char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];  // empty = no binding
-    char json_path[CONFIG_JSON_PATH_MAX_LEN];    // "." = raw value, "temp" = doc["temp"]
-    char format[CONFIG_FORMAT_MAX_LEN];          // "" = raw, "%.1f°C" = printf format
-};
+// LabelBinding removed — MQTT bindings are now inline in label text.
+// Use [mqtt:topic;path;format] syntax in label_top/center/bottom fields.
 
 // Per-button toggle state binding (subscribe to topic, compare to on_value)
 struct StateBinding {
@@ -96,11 +92,6 @@ struct ScreenButtonConfig {
     // Typed actions
     ButtonAction action;     // tap action
     ButtonAction lp_action;  // long-press action
-
-    // MQTT label bindings (subscribe & display live values)
-    LabelBinding label_top_bind;
-    LabelBinding label_center_bind;
-    LabelBinding label_bottom_bind;
 
     // Toggle state binding (dim button when OFF)
     StateBinding state_bind;

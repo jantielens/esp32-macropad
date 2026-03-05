@@ -2,6 +2,7 @@
 
 #if HAS_DISPLAY
 
+#include "../binding_template.h"
 #include "../log_manager.h"
 #include <math.h>
 #include <stdlib.h>
@@ -121,8 +122,8 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->last_value = NAN;
 
     // Only reserve space for labels that are actually used (static text or MQTT binding)
-    bool has_top = btn->label_top[0] || btn->label_top_bind.mqtt_topic[0];
-    bool has_bot = btn->label_bottom[0] || btn->label_bottom_bind.mqtt_topic[0];
+    bool has_top = btn->label_top[0];
+    bool has_bot = btn->label_bottom[0];
     int16_t label_h = lv_font_get_line_height(scale->font_small) + 2;
     int16_t top_h = has_top ? label_h : 0;
     int16_t bot_h = has_bot ? label_h : 0;

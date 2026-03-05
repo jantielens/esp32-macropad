@@ -30,6 +30,7 @@ extern "C" {
 #endif
 
 // Initialize the store (allocates memory). Call once during boot.
+// Also registers the "mqtt" binding scheme with the binding_template engine.
 void mqtt_sub_store_init();
 
 // Scan all pad page configs and subscribe to every unique MQTT topic found

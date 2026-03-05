@@ -67,15 +67,6 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     btn->corner_radius_px = 8;
 }
 
-static void parse_label_binding(JsonVariant v, LabelBinding* bind) {
-    memset(bind, 0, sizeof(LabelBinding));
-    if (!v.is<JsonObject>()) return;
-    JsonObject obj = v.as<JsonObject>();
-    strlcpy(bind->mqtt_topic, obj["topic"] | "", CONFIG_MQTT_TOPIC_MAX_LEN);
-    strlcpy(bind->json_path, obj["path"] | ".", CONFIG_JSON_PATH_MAX_LEN);
-    strlcpy(bind->format, obj["format"] | "", CONFIG_FORMAT_MAX_LEN);
-}
-
 static void parse_state_binding(JsonVariant v, StateBinding* bind) {
     memset(bind, 0, sizeof(StateBinding));
     if (!v.is<JsonObject>()) return;
@@ -136,11 +127,6 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     // Typed actions (with legacy flat key fallback)
     parse_action(obj["action"], &btn->action, "action_screen", obj);
     parse_action(obj["lp_action"], &btn->lp_action, "lp_action_screen", obj);
-
-    // MQTT label bindings
-    parse_label_binding(obj["label_top_bind"], &btn->label_top_bind);
-    parse_label_binding(obj["label_center_bind"], &btn->label_center_bind);
-    parse_label_binding(obj["label_bottom_bind"], &btn->label_bottom_bind);
 
     // Toggle state binding
     parse_state_binding(obj["state_bind"], &btn->state_bind);

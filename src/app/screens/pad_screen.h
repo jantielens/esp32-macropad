@@ -4,6 +4,7 @@
 #include "screen.h"
 #include "../pad_config.h"
 #include "../pad_layout.h"
+#include "../binding_template.h"
 #include "../widgets/widget.h"
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
@@ -19,14 +20,13 @@ class DisplayManager;
 // Config is loaded lazily from LittleFS on first update() and when the
 // generation counter changes.
 
-// Runtime MQTT label binding (links an LVGL label to a subscription topic)
+// Runtime MQTT label binding — template-based
+// Labels containing [scheme:params] tokens are resolved each poll cycle.
 struct RuntimeLabelBinding {
     lv_obj_t* label;                                  // LVGL label to update
-    char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];       // topic to poll from store
-    char json_path[CONFIG_JSON_PATH_MAX_LEN];         // extraction path
-    char format[CONFIG_FORMAT_MAX_LEN];               // printf format string
-    bool active;                                      // binding is in use
-    bool initialized;                                 // received at least one value
+    char templ[CONFIG_LABEL_MAX_LEN];                 // Original label text (template)
+    char last[BINDING_TEMPLATE_MAX_LEN];              // Last rendered result (skip if unchanged)
+    bool active;
 };
 
 // Runtime toggle state binding (links a tile's fg color to an MQTT state)

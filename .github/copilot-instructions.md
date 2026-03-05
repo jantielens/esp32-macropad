@@ -35,6 +35,10 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
   - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical bar with color thresholds, MQTT-driven)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
+- **Binding Template Engine**: Scheme-extensible `[scheme:params]` token resolver for label text (compile-time gated by `HAS_MQTT`)
+  - `binding_template.cpp/h` - Token parser, scheme registry (max 4), `resolve()` and `collect_topics()` API; called only from LVGL task
+  - MQTT scheme registered by `mqtt_sub_store_init()` — resolves `[mqtt:topic;path;format]` tokens against the subscription store
+  - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode and transport parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers

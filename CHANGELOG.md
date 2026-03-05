@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Web portal: full "Bar Chart Settings" section with all config fields; grid preview shows gradient indicator
 - **Icon scale percentage** — new `icon_scale_pct` field (0 = auto, 1–250 = explicit %) lets users control icon size per button; widget-aware auto-sizing renders icons at half height for bar chart buttons
 - **Monitor logging** — `./monitor.sh --log` writes timestamped serial output to auto-named log files (`monitor_YYYYMMDD_HHMMSS.log`); `--log=file.log` for a custom filename
+- **Inline label binding syntax** — labels now support `[mqtt:topic;path;format]` tokens directly in the label text, replacing the separate MQTT Label Binding fields (topic, path, format per label)
+  - Extensible `[scheme:params]` registry pattern for future binding types (REST, sensor, time, etc.)
+  - Supports static prefix/suffix text around tokens (e.g. `Power: [mqtt:grid;power;%d] W`)
+  - Multiple binding tokens per label (e.g. `[mqtt:a;temp;%.0f]° / [mqtt:b;hum;%.0f]%`)
+  - Graceful error handling: malformed tokens show `ERR:xxx`, missing data shows `---`
+  - `CONFIG_LABEL_MAX_LEN` increased from 32 to 192 bytes; net RAM neutral (replaces 3 × 600-byte `LabelBinding` structs)
+- **Binding syntax help dialog** — `?` button next to label fields opens a styled help popup with syntax reference, parameter descriptions, and progressive examples
 
 ### Fixed
 - **Square icon PNGs** — emoji/Material Symbol icons are now rendered on a square canvas (using the minimum of width and height) instead of the original rectangular glyph bounding box, eliminating transparent padding above and below icons
@@ -42,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cached WiFi RSSI** — RSSI is sampled once at boot (and on reconnect) and cached; health publishes no longer issue live `WiFi.RSSI()` RPC calls, eliminating repeated ESP-Hosted SDIO round-trips from the hot path
 - **MQTT connect DRY refactor** — extracted shared `attemptConnectWithLWT()` and `onConnected()` helpers, removing ~40 lines of duplicated connect/post-connect logic between boot-time and runtime MQTT paths
 - **HTTP keep-alive for image fetch** — camera image downloads now reuse persistent per-slot TCP connections (`setReuse(true)`) instead of creating and tearing down a new connection on every request; eliminates ~3 TCP SYN/ACK+FIN cycles per second that were stressing the WiFi MAC TX queue, addressing the `ppTask` crash in `lmacProcessTxComplete`; connections are automatically torn down on WiFi disconnect, protocol change, or slot cancellation
+- **Simplified pad button editor** — removed the separate "MQTT Label Bindings" section (9 input fields) from the web portal; binding configuration is now done inline in the label text fields, reducing UI complexity
 
 ## [1.4.0] - 2026-03-03
 

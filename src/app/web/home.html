@@ -324,16 +324,17 @@
 
                 <div class="form-group">
                     <label for="pad-edit-label-top">Top Label</label>
-                    <input type="text" id="pad-edit-label-top" maxlength="31" placeholder="e.g. Living Room">
+                    <input type="text" id="pad-edit-label-top" maxlength="191" placeholder="e.g. Living Room or Power: [mqtt:topic;path;fmt] W">
                 </div>
                 <div class="form-group">
                     <label for="pad-edit-label-center">Center Label</label>
-                    <input type="text" id="pad-edit-label-center" maxlength="31" placeholder="e.g. 21.5°C">
+                    <input type="text" id="pad-edit-label-center" maxlength="191" placeholder="e.g. 21.5°C or [mqtt:sensors/temp;temp;%.1f°C]">
                 </div>
                 <div class="form-group">
                     <label for="pad-edit-label-bottom">Bottom Label</label>
-                    <input type="text" id="pad-edit-label-bottom" maxlength="31" placeholder="e.g. Lights">
+                    <input type="text" id="pad-edit-label-bottom" maxlength="191" placeholder="e.g. Lights or [mqtt:topic;path;format]">
                 </div>
+                <small style="display:block; margin-bottom:12px; color:#86868b;">Use <code>[mqtt:topic;path;format]</code> in labels to bind live values. <button type="button" onclick="document.getElementById('binding-help-overlay').style.display='flex'" style="background:none;border:1px solid #d2d2d7;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:18px;cursor:pointer;color:#86868b;padding:0;vertical-align:middle;">?</button></small>
 
                 <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
 
@@ -376,66 +377,6 @@
                     <div id="pad-edit-icon-preview-box" class="pad-icon-preview" style="display:none;">
                         <canvas id="pad-edit-icon-canvas" width="64" height="64"></canvas>
                     </div>
-                </details>
-
-                <!-- MQTT Label Bindings (collapsible) -->
-                <details id="pad-edit-bindings-section">
-                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">MQTT Label Bindings</summary>
-                    <small style="display:block; margin-bottom:12px; color:#86868b;">Subscribe to MQTT topics to show live values on labels.</small>
-
-                    <fieldset style="border:1px solid #e5e5ea; border-radius:8px; padding:12px; margin-bottom:8px;">
-                        <legend style="font-size:0.85em; color:#86868b;">Top Label Binding</legend>
-                        <div class="form-group">
-                            <label for="pad-edit-bind-top-topic">MQTT Topic</label>
-                            <input type="text" id="pad-edit-bind-top-topic" maxlength="127" placeholder="e.g. sensors/living-room/state">
-                        </div>
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:2;">
-                                <label for="pad-edit-bind-top-path">JSON Path</label>
-                                <input type="text" id="pad-edit-bind-top-path" maxlength="47" placeholder="e.g. temperature (. = raw)">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-bind-top-format">Format</label>
-                                <input type="text" id="pad-edit-bind-top-format" maxlength="23" placeholder="e.g. %.1f°C">
-                            </div>
-                        </div>
-                    </fieldset>
-
-                    <fieldset style="border:1px solid #e5e5ea; border-radius:8px; padding:12px; margin-bottom:8px;">
-                        <legend style="font-size:0.85em; color:#86868b;">Center Label Binding</legend>
-                        <div class="form-group">
-                            <label for="pad-edit-bind-center-topic">MQTT Topic</label>
-                            <input type="text" id="pad-edit-bind-center-topic" maxlength="127" placeholder="e.g. sensors/living-room/state">
-                        </div>
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:2;">
-                                <label for="pad-edit-bind-center-path">JSON Path</label>
-                                <input type="text" id="pad-edit-bind-center-path" maxlength="47" placeholder="e.g. temperature (. = raw)">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-bind-center-format">Format</label>
-                                <input type="text" id="pad-edit-bind-center-format" maxlength="23" placeholder="e.g. %.1f°C">
-                            </div>
-                        </div>
-                    </fieldset>
-
-                    <fieldset style="border:1px solid #e5e5ea; border-radius:8px; padding:12px;">
-                        <legend style="font-size:0.85em; color:#86868b;">Bottom Label Binding</legend>
-                        <div class="form-group">
-                            <label for="pad-edit-bind-bottom-topic">MQTT Topic</label>
-                            <input type="text" id="pad-edit-bind-bottom-topic" maxlength="127" placeholder="e.g. sensors/living-room/state">
-                        </div>
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:2;">
-                                <label for="pad-edit-bind-bottom-path">JSON Path</label>
-                                <input type="text" id="pad-edit-bind-bottom-path" maxlength="47" placeholder="e.g. humidity (. = raw)">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-bind-bottom-format">Format</label>
-                                <input type="text" id="pad-edit-bind-bottom-format" maxlength="23" placeholder="e.g. %s%%">
-                            </div>
-                        </div>
-                    </fieldset>
                 </details>
 
                 <!-- Bar Chart Settings (collapsible, shown only for bar_chart widget type) -->
@@ -680,6 +621,51 @@
                 <button type="button" id="pad-edit-paste" class="btn btn-secondary" style="flex:1;" disabled>Paste</button>
                 <button type="button" id="pad-edit-clear" class="btn btn-secondary" style="flex:1; color:#ff3b30; border-color:#ff3b30;">Clear</button>
                 <button type="button" id="pad-edit-cancel" class="btn btn-secondary" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Binding Syntax Help -->
+    <div id="binding-help-overlay" class="reboot-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="reboot-modal" style="background:#fffde7;max-width:520px;text-align:left;padding:0;">
+            <div style="padding:24px 28px 8px;display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;font-size:18px;">Label Bindings</h3>
+                <button type="button" onclick="document.getElementById('binding-help-overlay').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#86868b;padding:0 4px;">&times;</button>
+            </div>
+            <div style="padding:0 28px 24px;font-size:13px;color:#1d1d1f;line-height:1.5;overflow-y:auto;max-height:70vh;">
+                <p style="color:#86868b;margin:0 0 16px;">Labels can contain <strong>binding tokens</strong> that display live data from MQTT (or other sources in the future). Static text around tokens is preserved.</p>
+
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Syntax</h4>
+                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:16px;word-break:break-all;">[mqtt:topic;path;format]</code>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px;">
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>topic</strong></td><td style="padding:4px 0;">MQTT topic to subscribe to <em>(required)</em></td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>path</strong></td><td style="padding:4px 0;">JSON key to extract, dot-separated for nested keys. Omit or use <code>.</code> for raw value.</td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">Printf-style format string. Omit for raw value. Supports <code>%d</code>, <code>%.1f</code>, <code>%s</code>, etc.</td></tr>
+                </table>
+
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Examples</h4>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:6px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:sensors/temp]</code></td>
+                        <td style="padding:6px 0;color:#86868b;">Raw value from topic</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:6px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:sensors/state;temperature;%.1f°C]</code></td>
+                        <td style="padding:6px 0;color:#86868b;">Extract JSON key, format as float</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:6px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:home/energy;;%d W]</code></td>
+                        <td style="padding:6px 0;color:#86868b;">Raw value with format (empty path = raw)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:6px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">Power: [mqtt:grid;power;%d] W</code></td>
+                        <td style="padding:6px 0;color:#86868b;">Static prefix &amp; suffix around binding</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:6px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:a;temp;%.0f]° / [mqtt:b;hum;%.0f]%</code></td>
+                        <td style="padding:6px 0;color:#86868b;">Multiple bindings in one label</td>
+                    </tr>
+                </table>
             </div>
         </div>
     </div>

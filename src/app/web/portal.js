@@ -1862,24 +1862,6 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-lp-action-payload').value = lpAct.payload || '';
     padActionTypeChanged('lp');
 
-    // MQTT label bindings
-    const topBind = btn.label_top_bind || {};
-    const centerBind = btn.label_center_bind || {};
-    const bottomBind = btn.label_bottom_bind || {};
-    document.getElementById('pad-edit-bind-top-topic').value = topBind.topic || '';
-    document.getElementById('pad-edit-bind-top-path').value = topBind.path || '';
-    document.getElementById('pad-edit-bind-top-format').value = topBind.format || '';
-    document.getElementById('pad-edit-bind-center-topic').value = centerBind.topic || '';
-    document.getElementById('pad-edit-bind-center-path').value = centerBind.path || '';
-    document.getElementById('pad-edit-bind-center-format').value = centerBind.format || '';
-    document.getElementById('pad-edit-bind-bottom-topic').value = bottomBind.topic || '';
-    document.getElementById('pad-edit-bind-bottom-path').value = bottomBind.path || '';
-    document.getElementById('pad-edit-bind-bottom-format').value = bottomBind.format || '';
-
-    // Auto-open bindings section only if any binding is set (default collapsed)
-    const hasBindings = topBind.topic || centerBind.topic || bottomBind.topic;
-    document.getElementById('pad-edit-bindings-section').open = !!hasBindings;
-
     // Toggle state binding
     const stateBind = btn.state_bind || {};
     document.getElementById('pad-edit-state-topic').value = stateBind.topic || '';
@@ -1999,24 +1981,6 @@ function padDialogOk() {
         }
         btn.lp_action = act;
     }
-
-    // MQTT label bindings
-    function readBinding(prefix) {
-        const topic = document.getElementById('pad-edit-bind-' + prefix + '-topic').value.trim();
-        if (!topic) return undefined;
-        const bind = { topic: topic };
-        const path = document.getElementById('pad-edit-bind-' + prefix + '-path').value.trim();
-        const fmt = document.getElementById('pad-edit-bind-' + prefix + '-format').value.trim();
-        if (path) bind.path = path;
-        if (fmt) bind.format = fmt;
-        return bind;
-    }
-    const topBind = readBinding('top');
-    const centerBind = readBinding('center');
-    const bottomBind = readBinding('bottom');
-    if (topBind) btn.label_top_bind = topBind;
-    if (centerBind) btn.label_center_bind = centerBind;
-    if (bottomBind) btn.label_bottom_bind = bottomBind;
 
     // Toggle state binding
     const stateTopic = document.getElementById('pad-edit-state-topic').value.trim();
