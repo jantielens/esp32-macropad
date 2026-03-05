@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **ESP32-P4 health telemetry re-enabled** — background telemetry tasks (CPU monitor, health-window timer, sparklines) re-enabled on both P4 boards (`esp32-p4-lcd4b`, `jc4880p433`); originally disabled during flicker investigation, no longer needed
 
+### Improved
+- **Pad Editor aspect ratio** — grid preview now mirrors the device screen's aspect ratio using display dimensions from `/api/info`; portrait devices render as tall rectangles, square devices as squares; capped at 70vh with auto-centering to keep the editor compact
+
 ## [1.5.0] - 2026-03-04
 
 ### Added

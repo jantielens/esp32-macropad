@@ -1626,6 +1626,11 @@ function padRenderGrid() {
     const rows = padState.rows;
 
     grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+    grid.style.gridTemplateRows = 'repeat(' + rows + ', 1fr)';
+    // Apply device aspect ratio so the editor mimics the real screen
+    if (deviceInfoCache && deviceInfoCache.display_coord_width && deviceInfoCache.display_coord_height) {
+        grid.style.aspectRatio = deviceInfoCache.display_coord_width + ' / ' + deviceInfoCache.display_coord_height;
+    }
     grid.style.background = document.getElementById('pad-bg-color').value || '#000000';
     grid.innerHTML = '';
 

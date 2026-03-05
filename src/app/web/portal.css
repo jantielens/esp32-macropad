@@ -1031,6 +1031,10 @@ footer {
     background: #1c1c1e;
     border-radius: 12px;
     min-height: 80px;
+    max-height: 70vh;
+    max-width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
 }
 
 .pad-cell {
@@ -1040,7 +1044,7 @@ footer {
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-    min-height: 64px;
+    min-height: 0;
     cursor: pointer;
     transition: transform 0.1s, box-shadow 0.15s;
     text-align: center;
