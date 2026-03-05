@@ -55,6 +55,11 @@ static void enter_asleep() {
 		g_state = ScreenSaverState::Asleep;
 		g_pixel_shift_counter = (g_pixel_shift_counter + 34) % 81;
 		create_sleep_overlay();
+
+		// Navigate to wake screen while display is dark (invisible to user).
+		if (displayManager) {
+				displayManager->handleSleepScreenRedirect();
+		}
 }
 
 static void enter_awake() {
@@ -245,7 +250,7 @@ static void handle_pending_requests() {
 				#endif
 
 				start_fade(ScreenSaverState::FadingIn, from, target, fade_in_ms());
-				LOGI("SAVER", "Wake requested");
+				LOGI("SAVER", "Wake requested (pixel shift dx=%d dy=%d)", dx, dy);
 		}
 }
 

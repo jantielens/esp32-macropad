@@ -28,6 +28,11 @@ public:
 		bool publishEnabled() const;
 		bool connected();
 
+		// Blocking connect + HA discovery for use during boot splash.
+		// Attempts to connect within timeout_ms and publishes discovery if successful.
+		// Returns true if discovery was published, false otherwise (non-fatal).
+		bool connectAndPublishDiscoveryBlocking(uint32_t timeout_ms);
+
 		void disconnect();
 
 		unsigned long lastHealthPublishMs() const { return _last_health_publish_ms; }
@@ -57,6 +62,13 @@ private:
 		void publishDiscoveryOncePerBoot();
 		void publishHealthNow();
 		void publishHealthIfDue();
+
+		// Shared connect helper: sets server, builds client ID, calls PubSubClient::connect
+		// with LWT (unless duty_cycle is true). Returns true on success.
+		bool attemptConnectWithLWT(bool use_lwt);
+
+		// Post-connect sequence: availability, discovery, subscriptions, initial health.
+		void onConnected(bool publish_availability);
 
 		bool connectEnabled() const;
 		uint16_t resolvedPort() const;

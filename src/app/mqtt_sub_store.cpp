@@ -2,11 +2,13 @@
 
 #if HAS_MQTT
 
+#include "binding_template.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
 #include "pad_config.h"
 
 #include <ArduinoJson.h>
+#include "psram_json_allocator.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <esp_heap_caps.h>
@@ -24,12 +26,124 @@
 struct SubStoreEntry {
     char topic[CONFIG_MQTT_TOPIC_MAX_LEN];
     char value[MQTT_SUB_STORE_MAX_VALUE_LEN];
-    bool dirty;   // set by store_set, cleared by store_get
+    bool dirty;      // set by store_set, cleared by store_get
     bool in_use;
+    bool truncated;  // payload exceeded MAX_VALUE_LEN on ingestion
 };
 
 static SubStoreEntry* g_entries = nullptr;
 static SemaphoreHandle_t g_mutex = nullptr;
+
+// ============================================================================
+// Parse MQTT binding params: "topic;path;format"
+// Splits on first two ';' — everything after the second is format (may contain ';').
+// ============================================================================
+
+static void parse_mqtt_params(const char* params,
+                              char* topic, size_t topic_len,
+                              char* path, size_t path_len,
+                              char* fmt, size_t fmt_len) {
+    topic[0] = '\0';
+    path[0] = '\0';
+    fmt[0] = '\0';
+    if (!params || !params[0]) return;
+
+    // Find first ';'
+    const char* s1 = strchr(params, ';');
+    if (!s1) {
+        // Only topic
+        strlcpy(topic, params, topic_len);
+        return;
+    }
+    size_t tlen = (size_t)(s1 - params);
+    if (tlen >= topic_len) tlen = topic_len - 1;
+    memcpy(topic, params, tlen);
+    topic[tlen] = '\0';
+
+    // Find second ';'
+    const char* s2 = strchr(s1 + 1, ';');
+    if (!s2) {
+        // topic;path
+        strlcpy(path, s1 + 1, path_len);
+        return;
+    }
+    size_t plen = (size_t)(s2 - (s1 + 1));
+    if (plen >= path_len) plen = path_len - 1;
+    memcpy(path, s1 + 1, plen);
+    path[plen] = '\0';
+
+    // Everything after second ';' is format (may contain ';')
+    strlcpy(fmt, s2 + 1, fmt_len);
+}
+
+// ============================================================================
+// MQTT binding scheme resolver — called by binding_template_resolve()
+// ============================================================================
+
+static bool mqtt_binding_resolve(const char* params, char* out, size_t out_len) {
+    char topic[CONFIG_MQTT_TOPIC_MAX_LEN];
+    char path[CONFIG_JSON_PATH_MAX_LEN];
+    char fmt[CONFIG_FORMAT_MAX_LEN];
+
+    parse_mqtt_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt));
+
+    if (!topic[0]) {
+        strlcpy(out, "ERR:no topic", out_len);
+        return false;
+    }
+
+    static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
+    bool truncated = false;
+    if (!mqtt_sub_store_get(topic, payload, sizeof(payload), nullptr, &truncated)) {
+        return false; // Not yet received — caller shows placeholder
+    }
+
+    // Extract value from JSON payload
+    const char* jp = (path[0]) ? path : ".";
+    char extracted[128];
+    if (!mqtt_sub_store_extract_json(payload, jp, extracted, sizeof(extracted))) {
+        strlcpy(extracted, truncated ? "ERR:too big" : payload, sizeof(extracted));
+    }
+
+    // Apply format string (best-effort)
+    if (fmt[0]) {
+        mqtt_sub_store_format_value(extracted, fmt, out, out_len);
+    } else {
+        strlcpy(out, extracted, out_len);
+    }
+    return true;
+}
+
+// ============================================================================
+// MQTT binding scheme topic collector — called by binding_template_collect_topics()
+// ============================================================================
+
+// user_data points to a TopicCollectorCtx (defined in subscribe_all)
+struct TopicCollectorCtx {
+    struct Entry { char topic[CONFIG_MQTT_TOPIC_MAX_LEN]; };
+    Entry* list;
+    int* count;
+    int max;
+};
+
+static void mqtt_binding_collect(const char* params, void* user_data) {
+    char topic[CONFIG_MQTT_TOPIC_MAX_LEN];
+    char path[CONFIG_JSON_PATH_MAX_LEN];
+    char fmt[CONFIG_FORMAT_MAX_LEN];
+
+    parse_mqtt_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt));
+
+    if (!topic[0] || !user_data) return;
+
+    TopicCollectorCtx* ctx = (TopicCollectorCtx*)user_data;
+    // Deduplicate
+    for (int i = 0; i < *ctx->count; i++) {
+        if (strcmp(ctx->list[i].topic, topic) == 0) return;
+    }
+    if (*ctx->count >= ctx->max) return;
+    strlcpy(ctx->list[*ctx->count].topic, topic, CONFIG_MQTT_TOPIC_MAX_LEN);
+    (*ctx->count)++;
+}
 
 // ============================================================================
 // Init
@@ -52,6 +166,9 @@ void mqtt_sub_store_init() {
     g_mutex = xSemaphoreCreateMutex();
     LOGI(TAG, "Initialized (%d entries, %u bytes)", MQTT_SUB_STORE_MAX_ENTRIES,
          (unsigned)(MQTT_SUB_STORE_MAX_ENTRIES * sizeof(SubStoreEntry)));
+
+    // Register "mqtt" scheme with the binding template engine
+    binding_template_register("mqtt", mqtt_binding_resolve, mqtt_binding_collect);
 }
 
 // ============================================================================
@@ -61,16 +178,12 @@ void mqtt_sub_store_init() {
 void mqtt_sub_store_subscribe_all() {
     if (!g_entries || !g_mutex) return;
 
-    // Collect unique topics from all pad page label bindings
-    // Temporary topic list (stack allocated, small)
-    struct TopicEntry { char topic[CONFIG_MQTT_TOPIC_MAX_LEN]; };
-
-    // Use a reasonable max — 64 buttons * 3 labels * 8 pages = 1536, but most are empty.
-    // We deduplicate on the fly, so 64 unique topics is generous.
+    // Collect unique topics from all pad page label bindings and state/widget bindings.
     static const int MAX_UNIQUE = MQTT_SUB_STORE_MAX_ENTRIES;
     int unique_count = 0;
 
     // Allocate temp list in PSRAM
+    typedef TopicCollectorCtx::Entry TopicEntry;
     TopicEntry* unique = (TopicEntry*)heap_caps_malloc(
         MAX_UNIQUE * sizeof(TopicEntry), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!unique) {
@@ -81,7 +194,13 @@ void mqtt_sub_store_subscribe_all() {
         return;
     }
 
-    // Helper lambda to add topic if not already in list
+    // Context for binding_template_collect_topics
+    TopicCollectorCtx ctx;
+    ctx.list = unique;
+    ctx.count = &unique_count;
+    ctx.max = MAX_UNIQUE;
+
+    // Helper lambda to add a plain topic string (for state_bind, widget data)
     auto add_unique = [&](const char* topic) {
         if (!topic[0]) return;
         for (int i = 0; i < unique_count; i++) {
@@ -105,10 +224,12 @@ void mqtt_sub_store_subscribe_all() {
         if (!pad_config_load(page, cfg)) continue;
         for (uint8_t b = 0; b < cfg->button_count; b++) {
             const ScreenButtonConfig& btn = cfg->buttons[b];
-            add_unique(btn.label_top_bind.mqtt_topic);
-            add_unique(btn.label_center_bind.mqtt_topic);
-            add_unique(btn.label_bottom_bind.mqtt_topic);
+            // Scan label text for [mqtt:...] binding tokens
+            binding_template_collect_topics(btn.label_top, &ctx);
+            binding_template_collect_topics(btn.label_center, &ctx);
+            binding_template_collect_topics(btn.label_bottom, &ctx);
             add_unique(btn.state_bind.mqtt_topic);
+            binding_template_collect_topics(btn.widget.data_binding, &ctx);
         }
     }
 
@@ -189,6 +310,7 @@ void mqtt_sub_store_set(const char* topic, const uint8_t* payload, unsigned int 
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
             if (g_entries[i].in_use && strcmp(g_entries[i].topic, topic) == 0) {
+                bool was_truncated = (len >= MQTT_SUB_STORE_MAX_VALUE_LEN);
                 size_t copy_len = len;
                 if (copy_len >= MQTT_SUB_STORE_MAX_VALUE_LEN) {
                     copy_len = MQTT_SUB_STORE_MAX_VALUE_LEN - 1;
@@ -196,6 +318,11 @@ void mqtt_sub_store_set(const char* topic, const uint8_t* payload, unsigned int 
                 memcpy(g_entries[i].value, payload, copy_len);
                 g_entries[i].value[copy_len] = '\0';
                 g_entries[i].dirty = true;
+                g_entries[i].truncated = was_truncated;
+                if (was_truncated) {
+                    LOGW(TAG, "Payload truncated for %s (%u > %d)",
+                         topic, (unsigned)len, MQTT_SUB_STORE_MAX_VALUE_LEN - 1);
+                }
                 break;
             }
         }
@@ -207,10 +334,11 @@ void mqtt_sub_store_set(const char* topic, const uint8_t* payload, unsigned int 
 // Get — called from LVGL task
 // ============================================================================
 
-bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* changed) {
+bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* changed, bool* truncated) {
     if (!g_entries || !g_mutex || !topic || !buf || buf_len == 0) {
         if (buf && buf_len > 0) buf[0] = '\0';
         if (changed) *changed = false;
+        if (truncated) *truncated = false;
         return false;
     }
 
@@ -220,7 +348,9 @@ bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* chan
             if (g_entries[i].in_use && strcmp(g_entries[i].topic, topic) == 0) {
                 strlcpy(buf, g_entries[i].value, buf_len);
                 if (changed) *changed = g_entries[i].dirty;
-                g_entries[i].dirty = false;
+                if (truncated) *truncated = g_entries[i].truncated;
+                // Dirty flag is NOT cleared here — caller must invoke
+                // mqtt_sub_store_clear_dirty() after all consumers have polled.
                 found = true;
                 break;
             }
@@ -231,8 +361,23 @@ bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* chan
     if (!found) {
         buf[0] = '\0';
         if (changed) *changed = false;
+        if (truncated) *truncated = false;
     }
     return found;
+}
+
+// ============================================================================
+// Clear all dirty flags — call once per poll cycle
+// ============================================================================
+
+void mqtt_sub_store_clear_dirty() {
+    if (!g_entries || !g_mutex) return;
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+            if (g_entries[i].in_use) g_entries[i].dirty = false;
+        }
+        xSemaphoreGive(g_mutex);
+    }
 }
 
 // ============================================================================
@@ -248,8 +393,8 @@ bool mqtt_sub_store_extract_json(const char* payload, const char* path, char* ou
         return true;
     }
 
-    // Parse JSON
-    DynamicJsonDocument doc(512);
+    // Parse JSON (PSRAM-backed document for large payloads)
+    BasicJsonDocument<PsramJsonAllocator> doc(2048);
     DeserializationError err = deserializeJson(doc, payload);
     if (err) {
         // Not valid JSON — return raw payload

@@ -1031,15 +1031,21 @@ footer {
     background: #1c1c1e;
     border-radius: 12px;
     min-height: 80px;
+    max-height: 70vh;
+    max-width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
 }
 
 .pad-cell {
+    position: relative;
+    container-type: size;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-    min-height: 64px;
+    min-height: 0;
     cursor: pointer;
     transition: transform 0.1s, box-shadow 0.15s;
     text-align: center;
@@ -1075,6 +1081,19 @@ footer {
     box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
+.pad-cell-image-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: min(75cqw, 75cqh, 4em);
+    line-height: 1;
+    opacity: 0.35;
+    filter: grayscale(0.5);
+    pointer-events: none;
+}
+
 .pad-cell-label-top {
     font-size: 10px;
     opacity: 0.7;
@@ -1096,6 +1115,17 @@ footer {
     font-size: 10px;
     opacity: 0.7;
     line-height: 1.2;
+}
+
+.pad-cell-widget-bar {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 6px;
+    height: 60%;
+    background: linear-gradient(to top, #4CAF50 33%, #FF9800 66%, #F44336 100%);
+    border-radius: 2px;
+    opacity: 0.6;
 }
 
 .pad-actions {

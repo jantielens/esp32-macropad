@@ -678,6 +678,17 @@ bool DisplayManager::goBack() {
 		return true;
 }
 
+void DisplayManager::handleSleepScreenRedirect() {
+		if (!currentScreen) return;
+		const char* target = currentScreen->wakeScreenId();
+		if (!target) return;
+		const char* current = getCurrentScreenId();
+		if (current && strcmp(current, target) == 0) return;
+		skipHistoryPush = true;
+		showScreen(target);
+		LOGI("Display", "Sleep redirect: %s -> %s", current ? current : "?", target);
+}
+
 const char* DisplayManager::getCurrentScreenId() {
 		// Return ID of current screen (nullptr if splash or unknown)
 		for (size_t i = 0; i < screenCount; i++) {

@@ -16,7 +16,7 @@
 #define MAX_GRID_COLS          8
 #define MAX_GRID_ROWS          8
 
-#define CONFIG_LABEL_MAX_LEN           32
+#define CONFIG_LABEL_MAX_LEN          192
 #define CONFIG_ICON_ID_MAX_LEN         32
 #define CONFIG_SCREEN_ID_MAX_LEN       16
 #define CONFIG_MQTT_TOPIC_MAX_LEN     128
@@ -29,6 +29,8 @@
 #define CONFIG_BG_IMAGE_URL_MAX_LEN   256
 #define CONFIG_BG_IMAGE_USER_MAX_LEN   32
 #define CONFIG_BG_IMAGE_PASS_MAX_LEN   64
+#define CONFIG_WIDGET_TYPE_MAX_LEN     16
+#define WIDGET_CONFIG_MAX_BYTES        64
 
 // Action types (string constants for type field)
 #define ACTION_TYPE_NONE    ""
@@ -44,18 +46,21 @@ struct ButtonAction {
     char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // type="mqtt": publish payload
 };
 
-// Per-label MQTT binding (subscribe to topic, extract value, format for display)
-struct LabelBinding {
-    char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];  // empty = no binding
-    char json_path[CONFIG_JSON_PATH_MAX_LEN];    // "." = raw value, "temp" = doc["temp"]
-    char format[CONFIG_FORMAT_MAX_LEN];          // "" = raw, "%.1f°C" = printf format
-};
+// LabelBinding removed — MQTT bindings are now inline in label text.
+// Use [mqtt:topic;path;format] syntax in label_top/center/bottom fields.
 
 // Per-button toggle state binding (subscribe to topic, compare to on_value)
 struct StateBinding {
     char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];       // empty = no toggle
     char json_path[CONFIG_JSON_PATH_MAX_LEN];         // "." = raw value
     char on_value[CONFIG_STATE_ON_VALUE_MAX_LEN];     // value that means "ON"
+};
+
+// Widget type-specific config blob (parsed by widget implementations)
+struct WidgetConfig {
+    char type[CONFIG_WIDGET_TYPE_MAX_LEN];     // "" = normal button (default)
+    char data_binding[CONFIG_LABEL_MAX_LEN];   // Binding template for widget data, e.g. [mqtt:topic;path]
+    uint8_t data[WIDGET_CONFIG_MAX_BYTES];     // type-specific config, opaque to pad_config
 };
 
 // Per-button config (grid placement, labels, colors, typed actions)
@@ -71,8 +76,9 @@ struct ScreenButtonConfig {
     char label_center[CONFIG_LABEL_MAX_LEN];
     char label_bottom[CONFIG_LABEL_MAX_LEN];
 
-    // Icon reference (stored but not rendered in v0)
+    // Icon reference
     char icon_id[CONFIG_ICON_ID_MAX_LEN];
+    uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
 
     // Visual styling
     uint32_t bg_color_rgb;          // default 0x333333
@@ -86,11 +92,6 @@ struct ScreenButtonConfig {
     ButtonAction action;     // tap action
     ButtonAction lp_action;  // long-press action
 
-    // MQTT label bindings (subscribe & display live values)
-    LabelBinding label_top_bind;
-    LabelBinding label_center_bind;
-    LabelBinding label_bottom_bind;
-
     // Toggle state binding (dim button when OFF)
     StateBinding state_bind;
 
@@ -100,6 +101,9 @@ struct ScreenButtonConfig {
     char bg_image_password[CONFIG_BG_IMAGE_PASS_MAX_LEN]; // HTTP Basic Auth password
     uint32_t bg_image_interval_ms;                        // 0 = fetch once, >0 = periodic
     bool bg_image_letterbox;                              // true = letterbox (fit + black bars), false = cover (fill + crop)
+
+    // Widget type (bar_chart, gauge, etc.) — empty = normal button
+    WidgetConfig widget;
 };
 
 // Page-level config
@@ -107,6 +111,8 @@ struct PadPageConfig {
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
+    char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
+    uint32_t bg_color_rgb;                       // page background color (default 0x000000 = black)
     uint8_t button_count;
     ScreenButtonConfig buttons[MAX_PAD_BUTTONS];
 };

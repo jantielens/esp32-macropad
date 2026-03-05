@@ -32,6 +32,14 @@ struct DeviceHealthWindowBands {
 // This exists to avoid re-entrant calls into ESP-IDF image helpers from different tasks.
 void device_telemetry_init();
 
+// Cache the current WiFi RSSI value.  Call once after WiFi connects (and
+// optionally after a reconnect).  All subsequent health publishes use the
+// cached value instead of issuing a live WiFi.RSSI() RPC.
+void device_telemetry_cache_rssi();
+
+// Return the most recently cached RSSI.  Sets *valid = false if cache is empty.
+int16_t device_telemetry_get_cached_rssi(bool *valid = nullptr);
+
 // Cached flash/sketch metadata helpers.
 size_t device_telemetry_sketch_size();
 size_t device_telemetry_free_sketch_space();

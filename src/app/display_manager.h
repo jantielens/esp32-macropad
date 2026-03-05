@@ -178,6 +178,10 @@ public:
 		
 		// Access to display driver (for touch integration)
 		DisplayDriver* getDriver() { return driver; }
+
+		// Check if the current screen wants to redirect on screensaver sleep.
+		// If so, navigate to the target screen (invisible under sleep overlay).
+		void handleSleepScreenRedirect();
 };
 
 // Lightweight rendering/perf snapshot (best-effort).

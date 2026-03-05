@@ -1219,6 +1219,12 @@ function padEnsureMaterialSymbols() {
     });
 }
 
+// Simplify binding tokens for grid preview: [mqtt:topic;path;fmt] → [mqtt:topic]
+function padSimplifyBindings(text) {
+    if (!text) return text;
+    return text.replace(/\[(\w+):([^\];]*)[^\]]*\]/g, '[$1:$2]');
+}
+
 function padIconIdToType(iconId) {
     if (!iconId) return { type: '', value: '' };
     if (iconId.startsWith('emoji_')) return { type: 'emoji', value: iconId.substring(6) };
@@ -1383,8 +1389,25 @@ async function padUploadPageIcons() {
         const labelH = tileSizes.font_small_h || 0;
         const topReserve = btn.label_top ? labelH : 0;
         const bottomReserve = btn.label_bottom ? labelH : 0;
-        const iconW = fullW;
-        const iconH = fullH - topReserve - bottomReserve;
+        var iconW = fullW;
+        var iconH = fullH - topReserve - bottomReserve;
+
+        // For bar chart widgets, icon only occupies the top half
+        if (btn.widget_type === 'bar_chart') {
+            iconH = Math.floor((fullH - topReserve - bottomReserve) / 2);
+        }
+
+        // Apply explicit icon_scale_pct if set (1-250%)
+        if (btn.icon_scale_pct && btn.icon_scale_pct > 0) {
+            iconW = Math.max(1, Math.round(iconW * btn.icon_scale_pct / 100));
+            iconH = Math.max(1, Math.round(iconH * btn.icon_scale_pct / 100));
+        }
+
+        // Make icon square — glyph is sized to min dimension anyway,
+        // avoids transparent padding in the taller axis
+        var iconSize = Math.min(iconW, iconH);
+        iconW = iconSize;
+        iconH = iconSize;
 
         padRenderIconOnCanvas(canvas, btn.icon_id, iconW, iconH);
         const pngBlob = await padCanvasToPNG(canvas);
@@ -1415,6 +1438,9 @@ function padInit() {
     });
     document.getElementById('pad-rows').addEventListener('change', (e) => {
         padState.rows = parseInt(e.target.value);
+        padRenderGrid();
+    });
+    document.getElementById('pad-bg-color').addEventListener('input', () => {
         padRenderGrid();
     });
 
@@ -1496,6 +1522,17 @@ function padPopulateScreenDropdown() {
             sel.appendChild(opt);
         });
     });
+    // Populate wake-screen dropdown (keep first "(stay on this screen)" option)
+    const wakeSel = document.getElementById('pad-wake-screen');
+    if (wakeSel && deviceInfoCache && deviceInfoCache.available_screens) {
+        while (wakeSel.options.length > 1) wakeSel.remove(1);
+        deviceInfoCache.available_screens.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.name;
+            wakeSel.appendChild(opt);
+        });
+    }
 }
 
 function padActionTypeChanged(prefix) {
@@ -1503,6 +1540,14 @@ function padActionTypeChanged(prefix) {
     const type = document.getElementById('pad-edit-' + pfx + '-type').value;
     document.getElementById('pad-edit-' + pfx + '-screen-group').style.display = (type === 'screen') ? '' : 'none';
     document.getElementById('pad-edit-' + pfx + '-mqtt-group').style.display = (type === 'mqtt') ? '' : 'none';
+}
+
+function padWidgetTypeChanged() {
+    const wtype = document.getElementById('pad-edit-widget-type').value;
+    document.getElementById('pad-edit-bar-chart-section').style.display = (wtype === 'bar_chart') ? '' : 'none';
+    if (wtype === 'bar_chart') {
+        document.getElementById('pad-edit-bar-chart-section').open = true;
+    }
 }
 
 async function padLoadPage(page) {
@@ -1519,7 +1564,10 @@ async function padLoadPage(page) {
             document.getElementById('pad-cols').value = padState.cols;
             document.getElementById('pad-rows').value = padState.rows;
             document.getElementById('pad-name').value = '';
-            padCacheColors(page, []);
+            document.getElementById('pad-wake-screen').value = '';
+            document.getElementById('pad-bg-color').value = '#000000';
+            padCacheColors(page, [], '#000000');
+            padRenderPageSwatches();
             padRenderGrid();
             return;
         }
@@ -1533,6 +1581,8 @@ async function padLoadPage(page) {
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
+        document.getElementById('pad-wake-screen').value = json.wake_screen || '';
+        document.getElementById('pad-bg-color').value = padColorToHex(json.bg_color, '#000000');
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -1546,7 +1596,8 @@ async function padLoadPage(page) {
         }
 
         // Cache colors for cross-pad swatches
-        padCacheColors(page, padState.buttons);
+        padCacheColors(page, padState.buttons, padColorToHex(json.bg_color, '#000000'));
+        padRenderPageSwatches();
 
         padRenderGrid();
     } catch (err) {
@@ -1581,6 +1632,12 @@ function padRenderGrid() {
     const rows = padState.rows;
 
     grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+    grid.style.gridTemplateRows = 'repeat(' + rows + ', 1fr)';
+    // Apply device aspect ratio so the editor mimics the real screen
+    if (deviceInfoCache && deviceInfoCache.display_coord_width && deviceInfoCache.display_coord_height) {
+        grid.style.aspectRatio = deviceInfoCache.display_coord_width + ' / ' + deviceInfoCache.display_coord_height;
+    }
+    grid.style.background = document.getElementById('pad-bg-color').value || '#000000';
     grid.innerHTML = '';
 
     if (emptyState) emptyState.style.display = 'none';
@@ -1625,17 +1682,36 @@ function padRenderGrid() {
                 cell.style.background = bg;
                 cell.style.color = fg;
 
+
+
                 const borderColor = padColorToHex(btn.border_color, '#000000');
                 const borderWidth = (btn.border_width !== undefined) ? btn.border_width : 1;
                 const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
                 cell.style.border = borderWidth + 'px solid ' + borderColor;
                 cell.style.borderRadius = cornerRadius + 'px';
 
-                if (btn.label_top) {
+                // Spread labels to edges when top or bottom labels are present
+                const hasTop = !!btn.label_top;
+                const hasBottom = !!btn.label_bottom;
+                if (hasTop || hasBottom) {
+                    cell.style.justifyContent = 'space-between';
+                }
+
+                if (hasTop) {
                     const el = document.createElement('div');
                     el.className = 'pad-cell-label-top';
-                    el.textContent = btn.label_top;
+                    el.textContent = padSimplifyBindings(btn.label_top);
                     cell.appendChild(el);
+                } else if (hasBottom) {
+                    // Spacer so center content stays centered with space-between
+                    cell.appendChild(document.createElement('div'));
+                }
+                // Background image placeholder (absolute-positioned behind content)
+                if (btn.bg_image_url) {
+                    const img = document.createElement('div');
+                    img.className = 'pad-cell-image-placeholder';
+                    img.textContent = '\u{1F5BC}';
+                    cell.appendChild(img);
                 }
                 if (btn.icon_id) {
                     const iconParsed = padIconIdToType(btn.icon_id);
@@ -1652,18 +1728,34 @@ function padRenderGrid() {
                         el.style.color = fg;
                         cell.appendChild(el);
                     }
-                } else {
+                } else if (!btn.bg_image_url) {
                     const centerText = btn.label_center || '•';
                     const elc = document.createElement('div');
                     elc.className = 'pad-cell-label-center';
-                    elc.textContent = centerText;
+                    elc.textContent = padSimplifyBindings(centerText);
+                    cell.appendChild(elc);
+                } else if (btn.label_center) {
+                    const elc = document.createElement('div');
+                    elc.className = 'pad-cell-label-center';
+                    elc.textContent = padSimplifyBindings(btn.label_center);
                     cell.appendChild(elc);
                 }
-                if (btn.label_bottom) {
+                if (hasBottom) {
                     const el = document.createElement('div');
                     el.className = 'pad-cell-label-bottom';
-                    el.textContent = btn.label_bottom;
+                    el.textContent = padSimplifyBindings(btn.label_bottom);
                     cell.appendChild(el);
+                } else if (hasTop) {
+                    // Spacer so center content stays centered with space-between
+                    cell.appendChild(document.createElement('div'));
+                }
+
+                // Widget indicator
+                if (btn.widget_type === 'bar_chart') {
+                    const bar = document.createElement('div');
+                    bar.className = 'pad-cell-widget-bar';
+                    bar.title = 'Bar Chart Widget';
+                    cell.appendChild(bar);
                 }
 
                 cell.addEventListener('click', () => padDialogOpen(c, r));
@@ -1704,9 +1796,13 @@ function padColorsToHex(btn) {
     if (typeof btn.border_color === 'number') btn.border_color = btn.border_color.toString(16).padStart(6, '0');
 }
 
-function padCacheColors(page, buttons) {
+function padCacheColors(page, buttons, pageBgColor) {
     const seen = new Set();
     const colors = [];
+    // Include page background color in cache
+    if (pageBgColor && pageBgColor !== '#000000') {
+        seen.add(pageBgColor); colors.push(pageBgColor);
+    }
     for (const b of buttons) {
         [b.bg_color, b.fg_color, b.border_color].forEach(val => {
             const hex = padColorToHex(val, null);
@@ -1714,6 +1810,28 @@ function padCacheColors(page, buttons) {
         });
     }
     padState.colorCache[page] = colors;
+}
+
+function padRenderPageSwatches() {
+    const strip = document.querySelector('.pad-swatch-strip[data-picker="pad-bg-color"]');
+    if (!strip) return;
+    strip.innerHTML = '';
+    const colors = padCollectUsedColors(-1, -1);
+    if (colors.length === 0) return;
+    const picker = document.getElementById('pad-bg-color');
+    colors.forEach(hex => {
+        const sw = document.createElement('div');
+        sw.className = 'pad-swatch';
+        sw.style.background = hex;
+        sw.title = hex;
+        sw.addEventListener('click', () => {
+            picker.value = hex;
+            picker.dispatchEvent(new Event('input', { bubbles: true }));
+            sw.classList.add('active');
+            setTimeout(() => sw.classList.remove('active'), 300);
+        });
+        strip.appendChild(sw);
+    });
 }
 
 function padCollectUsedColors(editCol, editRow) {
@@ -1829,24 +1947,6 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-lp-action-payload').value = lpAct.payload || '';
     padActionTypeChanged('lp');
 
-    // MQTT label bindings
-    const topBind = btn.label_top_bind || {};
-    const centerBind = btn.label_center_bind || {};
-    const bottomBind = btn.label_bottom_bind || {};
-    document.getElementById('pad-edit-bind-top-topic').value = topBind.topic || '';
-    document.getElementById('pad-edit-bind-top-path').value = topBind.path || '';
-    document.getElementById('pad-edit-bind-top-format').value = topBind.format || '';
-    document.getElementById('pad-edit-bind-center-topic').value = centerBind.topic || '';
-    document.getElementById('pad-edit-bind-center-path').value = centerBind.path || '';
-    document.getElementById('pad-edit-bind-center-format').value = centerBind.format || '';
-    document.getElementById('pad-edit-bind-bottom-topic').value = bottomBind.topic || '';
-    document.getElementById('pad-edit-bind-bottom-path').value = bottomBind.path || '';
-    document.getElementById('pad-edit-bind-bottom-format').value = bottomBind.format || '';
-
-    // Auto-open bindings section only if any binding is set (default collapsed)
-    const hasBindings = topBind.topic || centerBind.topic || bottomBind.topic;
-    document.getElementById('pad-edit-bindings-section').open = !!hasBindings;
-
     // Toggle state binding
     const stateBind = btn.state_bind || {};
     document.getElementById('pad-edit-state-topic').value = stateBind.topic || '';
@@ -1870,7 +1970,27 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-icon-emoji').value = (iconParsed.type === 'emoji') ? iconParsed.value : '';
     document.getElementById('pad-edit-icon-mi').value = (iconParsed.type === 'mi') ? iconParsed.value : '';
     document.getElementById('pad-edit-icon-section').open = !!btn.icon_id;
+    document.getElementById('pad-edit-icon-scale').value = (btn.icon_scale_pct !== undefined) ? btn.icon_scale_pct : 0;
     padIconTypeChanged();
+
+    // Widget type
+    document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
+    padWidgetTypeChanged();
+
+    // Bar chart widget fields
+    document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : 0;
+    document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : 3;
+    document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-widget-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : true;
+    document.getElementById('pad-edit-widget-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
+    document.getElementById('pad-edit-widget-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
+    document.getElementById('pad-edit-widget-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
+    document.getElementById('pad-edit-widget-color-good').value = padColorToHex(btn.widget_color_good, '#4CAF50');
+    document.getElementById('pad-edit-widget-color-ok').value = padColorToHex(btn.widget_color_ok, '#8BC34A');
+    document.getElementById('pad-edit-widget-color-attention').value = padColorToHex(btn.widget_color_attention, '#FF9800');
+    document.getElementById('pad-edit-widget-color-warning').value = padColorToHex(btn.widget_color_warning, '#F44336');
+    document.getElementById('pad-edit-widget-bar-bg-color').value = padColorToHex(btn.widget_bar_bg_color, '#1A1A1A');
+    document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -1888,6 +2008,7 @@ function padDialogClose() {
     document.getElementById('pad-edit-overlay').style.display = 'none';
     document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
+    padRenderPageSwatches();
 }
 
 function padDialogOk() {
@@ -1946,24 +2067,6 @@ function padDialogOk() {
         btn.lp_action = act;
     }
 
-    // MQTT label bindings
-    function readBinding(prefix) {
-        const topic = document.getElementById('pad-edit-bind-' + prefix + '-topic').value.trim();
-        if (!topic) return undefined;
-        const bind = { topic: topic };
-        const path = document.getElementById('pad-edit-bind-' + prefix + '-path').value.trim();
-        const fmt = document.getElementById('pad-edit-bind-' + prefix + '-format').value.trim();
-        if (path) bind.path = path;
-        if (fmt) bind.format = fmt;
-        return bind;
-    }
-    const topBind = readBinding('top');
-    const centerBind = readBinding('center');
-    const bottomBind = readBinding('bottom');
-    if (topBind) btn.label_top_bind = topBind;
-    if (centerBind) btn.label_center_bind = centerBind;
-    if (bottomBind) btn.label_bottom_bind = bottomBind;
-
     // Toggle state binding
     const stateTopic = document.getElementById('pad-edit-state-topic').value.trim();
     if (stateTopic) {
@@ -1992,8 +2095,42 @@ function padDialogOk() {
     const iconId = padBuildIconId();
     if (iconId) btn.icon_id = iconId;
 
+    // Icon scale
+    const iconScale = parseInt(document.getElementById('pad-edit-icon-scale').value);
+    if (!isNaN(iconScale) && iconScale > 0 && iconScale <= 250) btn.icon_scale_pct = iconScale;
+
+    // Widget type
+    const wtype = document.getElementById('pad-edit-widget-type').value;
+    if (wtype) {
+        btn.widget_type = wtype;
+        // Data binding template for widget value
+        const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
+        if (wDataBinding) btn.widget_data_binding = wDataBinding;
+        if (wtype === 'bar_chart') {
+            const barMin = parseFloat(document.getElementById('pad-edit-widget-bar-min').value);
+            const barMax = parseFloat(document.getElementById('pad-edit-widget-bar-max').value);
+            btn.widget_bar_min = isNaN(barMin) ? 0 : barMin;
+            btn.widget_bar_max = isNaN(barMax) ? 3 : barMax;
+            btn.widget_use_absolute = document.getElementById('pad-edit-widget-use-absolute').checked;
+            const t1 = parseFloat(document.getElementById('pad-edit-widget-threshold-1').value);
+            const t2 = parseFloat(document.getElementById('pad-edit-widget-threshold-2').value);
+            const t3 = parseFloat(document.getElementById('pad-edit-widget-threshold-3').value);
+            if (!isNaN(t1)) btn.widget_threshold_1 = t1;
+            if (!isNaN(t2)) btn.widget_threshold_2 = t2;
+            if (!isNaN(t3)) btn.widget_threshold_3 = t3;
+            btn.widget_color_good = padHexToInt(document.getElementById('pad-edit-widget-color-good').value);
+            btn.widget_color_ok = padHexToInt(document.getElementById('pad-edit-widget-color-ok').value);
+            btn.widget_color_attention = padHexToInt(document.getElementById('pad-edit-widget-color-attention').value);
+            btn.widget_color_warning = padHexToInt(document.getElementById('pad-edit-widget-color-warning').value);
+            btn.widget_bar_bg_color = padHexToInt(document.getElementById('pad-edit-widget-bar-bg-color').value);
+            const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
+            btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
+        }
+    }
+
     padState.buttons.push(btn);
     padDialogClose();
+    padRenderPageSwatches();
     padRenderGrid();
 }
 
@@ -2002,6 +2139,7 @@ function padDialogClear() {
     const row = padState.editRow;
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
     padDialogClose();
+    padRenderPageSwatches();
     padRenderGrid();
 }
 
@@ -2014,6 +2152,12 @@ async function padSavePage() {
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
     else delete payload.name;
+    const wakeScreen = document.getElementById('pad-wake-screen').value;
+    if (wakeScreen) payload.wake_screen = wakeScreen;
+    else delete payload.wake_screen;
+    const bgColor = document.getElementById('pad-bg-color').value;
+    if (bgColor && bgColor !== '#000000') payload.bg_color = bgColor.replace('#', '');
+    else delete payload.bg_color;
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));
 
     // Convert color ints to hex strings for JSON
@@ -2176,6 +2320,8 @@ function padCopyPad() {
         cols: padState.cols,
         rows: padState.rows,
         name: document.getElementById('pad-name').value.trim(),
+        wake_screen: document.getElementById('pad-wake-screen').value,
+        bg_color: document.getElementById('pad-bg-color').value,
         buttons: padState.buttons.map(b => Object.assign({}, b)),
     };
     document.getElementById('pad-paste-btn').disabled = false;
@@ -2192,6 +2338,8 @@ function padPastePad() {
     document.getElementById('pad-cols').value = padState.cols;
     document.getElementById('pad-rows').value = padState.rows;
     document.getElementById('pad-name').value = padState.padClipboard.name || '';
+    document.getElementById('pad-wake-screen').value = padState.padClipboard.wake_screen || '';
+    document.getElementById('pad-bg-color').value = padState.padClipboard.bg_color || '#000000';
 
     padRenderGrid();
     showMessage('Pad pasted (unsaved)', 'success');
@@ -2212,6 +2360,10 @@ function padExportPad() {
     };
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
+    const wakeScreen = document.getElementById('pad-wake-screen').value;
+    if (wakeScreen) payload.wake_screen = wakeScreen;
+    const bgColor = document.getElementById('pad-bg-color').value;
+    if (bgColor && bgColor !== '#000000') payload.bg_color = bgColor.replace('#', '');
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -2245,6 +2397,8 @@ async function padImportPad(evt) {
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
+        document.getElementById('pad-wake-screen').value = json.wake_screen || '';
+        document.getElementById('pad-bg-color').value = padColorToHex(json.bg_color, '#000000');
 
         padRenderGrid();
         showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
@@ -2358,6 +2512,8 @@ async function deviceImportConfig(evt) {
                 document.getElementById('pad-cols').value = padState.cols;
                 document.getElementById('pad-rows').value = padState.rows;
                 document.getElementById('pad-name').value = padJson.name || '';
+                document.getElementById('pad-wake-screen').value = padJson.wake_screen || '';
+                document.getElementById('pad-bg-color').value = padColorToHex(padJson.bg_color, '#000000');
 
                 // Delete old icons first
                 await fetch('/api/icons/page?page=' + i, { method: 'DELETE' }).catch(() => {});
@@ -2398,6 +2554,8 @@ async function padDeletePage() {
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = '';
+        document.getElementById('pad-wake-screen').value = '';
+        document.getElementById('pad-bg-color').value = '#000000';
         padUpdateDropdownLabel(padState.page, '');
         padRenderGrid();
     } catch (err) {

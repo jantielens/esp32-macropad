@@ -230,12 +230,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
   - src/app/ha_discovery.cpp
+  - src/app/health_binding.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
   - src/app/lv_conf.h
+  - src/app/mqtt_screen.cpp
+  - src/app/mqtt_screen.h
+  - src/app/pad_config.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
+  - src/app/time_binding.cpp
   - src/app/touch_manager.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
@@ -247,6 +252,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp
+  - src/app/widgets.cpp
+  - src/app/widgets/bar_chart_widget.cpp
+  - src/app/widgets/widget.cpp
+  - src/app/widgets/widget.h
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino
   - src/app/board_config.h
@@ -267,6 +276,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
+  - src/app/mqtt_screen.cpp
+  - src/app/mqtt_screen.h
   - src/app/mqtt_sub_store.cpp
   - src/app/mqtt_sub_store.h
   - src/app/screens/pad_screen.cpp

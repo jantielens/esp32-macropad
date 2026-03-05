@@ -23,13 +23,14 @@
 //   5. mqtt_sub_store_resubscribe()   — called on MQTT reconnect
 
 #define MQTT_SUB_STORE_MAX_ENTRIES   64
-#define MQTT_SUB_STORE_MAX_VALUE_LEN 256
+#define MQTT_SUB_STORE_MAX_VALUE_LEN 2048
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Initialize the store (allocates memory). Call once during boot.
+// Also registers the "mqtt" binding scheme with the binding_template engine.
 void mqtt_sub_store_init();
 
 // Scan all pad page configs and subscribe to every unique MQTT topic found
@@ -46,8 +47,16 @@ void mqtt_sub_store_set(const char* topic, const uint8_t* payload, unsigned int 
 // Retrieve the latest payload for a topic. Thread-safe.
 // Returns true if the topic exists in the store. Sets *changed to true if the
 // value was updated since the last get() call for this topic.
+// Does NOT clear the dirty flag — call mqtt_sub_store_clear_dirty() after
+// all consumers have polled to reset flags for the next cycle.
 // buf is filled with the null-terminated payload (truncated to buf_len-1).
-bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* changed);
+// If truncated is non-null, it is set to true when the stored value was
+// truncated on ingestion (payload exceeded MQTT_SUB_STORE_MAX_VALUE_LEN).
+bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* changed, bool* truncated = nullptr);
+
+// Clear all dirty flags. Call once per poll cycle after all consumers have
+// read their topics. Thread-safe.
+void mqtt_sub_store_clear_dirty();
 
 // Extract a value from a JSON payload using a dot-separated path.
 // path="." returns the raw value. path="temp" returns doc["temp"].

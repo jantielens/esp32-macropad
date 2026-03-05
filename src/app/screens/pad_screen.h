@@ -4,6 +4,8 @@
 #include "screen.h"
 #include "../pad_config.h"
 #include "../pad_layout.h"
+#include "../binding_template.h"
+#include "../widgets/widget.h"
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
 #endif
@@ -18,13 +20,13 @@ class DisplayManager;
 // Config is loaded lazily from LittleFS on first update() and when the
 // generation counter changes.
 
-// Runtime MQTT label binding (links an LVGL label to a subscription topic)
+// Runtime MQTT label binding — template-based
+// Labels containing [scheme:params] tokens are resolved each poll cycle.
 struct RuntimeLabelBinding {
     lv_obj_t* label;                                  // LVGL label to update
-    char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];       // topic to poll from store
-    char json_path[CONFIG_JSON_PATH_MAX_LEN];         // extraction path
-    char format[CONFIG_FORMAT_MAX_LEN];               // printf format string
-    bool active;                                      // binding is in use
+    char templ[CONFIG_LABEL_MAX_LEN];                 // Original label text (template)
+    char last[BINDING_TEMPLATE_MAX_LEN];              // Last rendered result (skip if unchanged)
+    bool active;
 };
 
 // Runtime toggle state binding (links a tile's fg color to an MQTT state)
@@ -53,6 +55,13 @@ struct ButtonTile {
     uint8_t row;              // Grid row (for HA event)
     ButtonAction action;      // Tap action
     ButtonAction lp_action;   // Long-press action
+    // Widget runtime state (non-null widget_type = this tile is a widget)
+    const WidgetType* widget_type;
+    WidgetConfig widget_cfg;   // Copy of config (needed for update calls)
+    WidgetState widget_state;
+    // Widget data binding template (e.g. "[mqtt:topic;path]")
+    char widget_binding[CONFIG_LABEL_MAX_LEN];
+    char widget_last[BINDING_TEMPLATE_MAX_LEN]; // Last resolved value (dedup)
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
@@ -84,6 +93,8 @@ private:
 
     uint32_t cachedGeneration; // Last seen pad_config generation
     bool tilesBuilt;
+    char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
+    uint32_t bgColor;                              // Cached page background color
 
     // Build/destroy tile LVGL objects from config
     void buildTiles();
@@ -110,6 +121,7 @@ public:
     void show() override;
     void hide() override;
     void update() override;
+    const char* wakeScreenId() const override;
 
     uint8_t getPageIndex() const { return pageIndex; }
 };

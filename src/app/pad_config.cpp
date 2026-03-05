@@ -3,6 +3,9 @@
 #include "board_config.h"
 #include "fs_health.h"
 #include "log_manager.h"
+#if HAS_DISPLAY
+#include "widgets/widget.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <LittleFS.h>
@@ -64,15 +67,6 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     btn->corner_radius_px = 8;
 }
 
-static void parse_label_binding(JsonVariant v, LabelBinding* bind) {
-    memset(bind, 0, sizeof(LabelBinding));
-    if (!v.is<JsonObject>()) return;
-    JsonObject obj = v.as<JsonObject>();
-    strlcpy(bind->mqtt_topic, obj["topic"] | "", CONFIG_MQTT_TOPIC_MAX_LEN);
-    strlcpy(bind->json_path, obj["path"] | ".", CONFIG_JSON_PATH_MAX_LEN);
-    strlcpy(bind->format, obj["format"] | "", CONFIG_FORMAT_MAX_LEN);
-}
-
 static void parse_state_binding(JsonVariant v, StateBinding* bind) {
     memset(bind, 0, sizeof(StateBinding));
     if (!v.is<JsonObject>()) return;
@@ -121,6 +115,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     strlcpy(btn->label_center, obj["label_center"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->label_bottom, obj["label_bottom"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
+    btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
 
     btn->bg_color_rgb = parse_color(obj["bg_color"], 0x333333);
     btn->fg_color_rgb = parse_color(obj["fg_color"], 0xFFFFFF);
@@ -133,11 +128,6 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     parse_action(obj["action"], &btn->action, "action_screen", obj);
     parse_action(obj["lp_action"], &btn->lp_action, "lp_action_screen", obj);
 
-    // MQTT label bindings
-    parse_label_binding(obj["label_top_bind"], &btn->label_top_bind);
-    parse_label_binding(obj["label_center_bind"], &btn->label_center_bind);
-    parse_label_binding(obj["label_bottom_bind"], &btn->label_bottom_bind);
-
     // Toggle state binding
     parse_state_binding(obj["state_bind"], &btn->state_bind);
 
@@ -147,6 +137,20 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     strlcpy(btn->bg_image_password, obj["bg_image_password"] | "", CONFIG_BG_IMAGE_PASS_MAX_LEN);
     btn->bg_image_interval_ms = obj["bg_image_interval_ms"] | (uint32_t)0;
     btn->bg_image_letterbox = obj["bg_image_letterbox"] | false;
+
+    // Widget type (bar_chart, gauge, etc.)
+    const char* wtype = obj["widget_type"] | "";
+    strlcpy(btn->widget.type, wtype, CONFIG_WIDGET_TYPE_MAX_LEN);
+    strlcpy(btn->widget.data_binding, obj["widget_data_binding"] | "", CONFIG_LABEL_MAX_LEN);
+    memset(btn->widget.data, 0, WIDGET_CONFIG_MAX_BYTES);
+#if HAS_DISPLAY
+    if (wtype[0]) {
+        const WidgetType* wt = widget_find(wtype);
+        if (wt && wt->parseConfig) {
+            wt->parseConfig(obj, btn->widget.data);
+        }
+    }
+#endif
 }
 
 // ============================================================================
@@ -269,6 +273,8 @@ static bool pad_config_load_from_flash(uint8_t page, PadPageConfig* out) {
     strlcpy(out->layout, doc["layout"] | "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = doc["cols"] | (uint8_t)3;
     out->rows = doc["rows"] | (uint8_t)3;
+    strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
+    out->bg_color_rgb = parse_color(doc["bg_color"], 0x000000);
 
     if (out->cols < 1) out->cols = 1;
     if (out->cols > MAX_GRID_COLS) out->cols = MAX_GRID_COLS;

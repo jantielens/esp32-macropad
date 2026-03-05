@@ -30,6 +30,25 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Icon Store Subsystem**: PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
   - `icon_store.cpp/h` - LittleFS I/O, lodepng decode with R↔B swap, growable PSRAM cache
   - `web_portal_icons.cpp/h` - REST API for icon upload, delete, list, and debug endpoints
+- **Widget Subsystem**: Extensible widget type system for specialized button visualizations (compile-time gated by `HAS_DISPLAY`)
+  - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI function pointers)
+  - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
+  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical bar with color thresholds, binding-driven)
+  - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
+- **Binding Template Engine**: Scheme-extensible `[scheme:params]` token resolver for label text (compile-time gated by `HAS_MQTT`)
+  - `binding_template.cpp/h` - Token parser, scheme registry (max 4), `resolve()` and `collect_topics()` API; called only from LVGL task
+  - MQTT scheme registered by `mqtt_sub_store_init()` — resolves `[mqtt:topic;path;format]` tokens against the subscription store
+  - Health scheme registered by `health_binding_init()` — resolves `[health:key;format]` tokens from local device telemetry (CPU, heap, PSRAM, RSSI, uptime, IP, hostname); expensive reads cached 2 s, lightweight keys live
+  - `health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
+  - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries)
+  - `time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
+  - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
+- **Screen Saver Subsystem**: Inactivity-based display sleep with backlight fading and per-screen wake redirect (compile-time gated by `HAS_DISPLAY`)
+  - `screen_saver_manager.cpp/h` - State machine (Awake/FadingOut/Asleep/FadingIn), fade animation, touch wake polling, pixel shift burn-in prevention
+  - On entering sleep, calls `displayManager->handleSleepScreenRedirect()` to navigate to a per-screen wake target (invisible under sleep overlay)
+- **MQTT Screen Control**: Exposes active screen as an HA `select` entity for remote navigation (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
+  - `mqtt_screen.cpp/h` - Subscribe `~/screen/set`, publish `~/screen/state` (retained), wake screensaver on HA navigation
+  - HA discovery published via `ha_discovery_publish_screen_select_config()` with dynamic options list from screen registry
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode and transport parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
@@ -190,10 +209,15 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/ble_advertiser.cpp/h` - BLE BTHome advertiser (compile-time gated by `HAS_BLE`)
 - `src/app/wifi_manager.cpp/h` - WiFi connect + mDNS (replaces inline connect logic)
 - `src/app/portal_idle.cpp/h` - Portal idle timeout in Config/AP modes
+- `src/app/binding_template.cpp/h` - Scheme-extensible token resolver for label text (compile-time gated by `HAS_MQTT`)
+- `src/app/health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
+- `src/app/time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
 - `src/app/image_fetch.cpp/h` - Slot-based background image fetcher with per-slot pause/resume (compile-time gated by `HAS_IMAGE_FETCH`)
 - `src/app/icon_store.cpp/h` - PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
 - `src/app/web_portal_icons.cpp/h` - Icon store REST API (upload, delete, list, debug endpoints)
+- `src/app/screen_saver_manager.cpp/h` - Screensaver state machine with fade, pixel shift, and wake-screen redirect
+- `src/app/mqtt_screen.cpp/h` - MQTT active-screen control (HA select entity, remote navigation + wake)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface
@@ -217,6 +241,10 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/screens/test_screen.cpp/h` - Display calibration and color testing
 - `src/app/screens/touch_test_screen.cpp/h` - Touch accuracy test (red dots + connecting lines, PSRAM canvas, HAS_TOUCH only)
 - `src/app/screens.cpp` - Screen compilation unit (includes all screen .cpp files)
+- `src/app/widgets.cpp` - Widget compilation unit (includes all widget .cpp files)
+- `src/app/widgets/widget.h` - Widget type interface (WidgetType struct with function pointers)
+- `src/app/widgets/widget.cpp` - Widget type registry and lookup
+- `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (color thresholds, MQTT data binding)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template

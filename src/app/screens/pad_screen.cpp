@@ -51,17 +51,23 @@ PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
     memset(tiles, 0, sizeof(tiles));
     memset(bindings, 0, sizeof(bindings));
     memset(stateBindings, 0, sizeof(stateBindings));
+    wakeScreen[0] = '\0';
+    bgColor = 0x000000;
 }
 
 PadScreen::~PadScreen() {
     destroy();
 }
 
+const char* PadScreen::wakeScreenId() const {
+    return wakeScreen[0] ? wakeScreen : nullptr;
+}
+
 void PadScreen::create() {
     if (screen) return;
 
     screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(screen, rgb_to_lv(bgColor), 0);
     lv_obj_set_style_pad_all(screen, 0, 0);
     lv_obj_set_style_border_width(screen, 0, 0);
 
@@ -91,6 +97,16 @@ void PadScreen::show() {
     if (screen) {
         lv_screen_load(screen);
     }
+
+    // Clear last-rendered text so the first poll after navigating back
+    // re-renders current store values.
+    for (uint16_t i = 0; i < bindingCount; i++) {
+        bindings[i].last[0] = '\0';
+    }
+    for (uint16_t i = 0; i < stateBindingCount; i++) {
+        stateBindings[i].initialized = false;
+    }
+
 #if HAS_IMAGE_FETCH
     for (uint8_t i = 0; i < tileCount; i++) {
         if (tiles[i].image_slot != IMAGE_SLOT_INVALID)
@@ -117,6 +133,7 @@ void PadScreen::update() {
         // Config unchanged — just poll MQTT bindings and toggle state
         pollMqttBindings();
         pollToggleState();
+        mqtt_sub_store_clear_dirty();
 #if HAS_IMAGE_FETCH
         pollImageFrames();
 #endif
@@ -133,6 +150,11 @@ void PadScreen::update() {
 
 void PadScreen::clearTiles() {
     for (uint8_t i = 0; i < tileCount; i++) {
+        // Destroy widget state before LVGL objects are deleted
+        if (tiles[i].widget_type && tiles[i].widget_type->destroyUI) {
+            tiles[i].widget_type->destroyUI(&tiles[i].widget_state);
+            tiles[i].widget_type = nullptr;
+        }
 #if HAS_IMAGE_FETCH
         // Cancel fetch slot first (stops background task from touching buffers)
         if (tiles[i].image_slot != IMAGE_SLOT_INVALID) {
@@ -181,10 +203,17 @@ void PadScreen::buildTiles() {
 
     bool loaded = pad_config_load(pageIndex, cfg);
     if (!loaded) {
+        wakeScreen[0] = '\0';
+        bgColor = 0x000000;
         free(cfg);
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
+
+    // Cache page-level settings
+    strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
+    bgColor = cfg->bg_color_rgb;
+    if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(bgColor), 0);
 
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {
@@ -333,20 +362,9 @@ void PadScreen::buildTiles() {
         memcpy(&tile.action, &bcfg.action, sizeof(ButtonAction));
         memcpy(&tile.lp_action, &bcfg.lp_action, sizeof(ButtonAction));
 
+        // Create MQTT-bound center label early so widgets can position it
 #if HAS_MQTT
-        // Create labels for MQTT bindings where no static label text was set
-        if (bcfg.label_top_bind.mqtt_topic[0] && !tile.label_top) {
-            tile.label_top = lv_label_create(obj);
-            lv_label_set_text(tile.label_top, "");
-            lv_obj_set_style_text_color(tile.label_top, fg, 0);
-            lv_obj_set_style_text_font(tile.label_top, scale.font_small, 0);
-            lv_obj_align(tile.label_top, LV_ALIGN_TOP_MID, 0, 0);
-            lv_label_set_long_mode(tile.label_top, LV_LABEL_LONG_CLIP);
-            lv_obj_set_width(tile.label_top, r.w - 8);
-            lv_obj_set_style_text_align(tile.label_top, LV_TEXT_ALIGN_CENTER, 0);
-            lv_obj_clear_flag(tile.label_top, LV_OBJ_FLAG_CLICKABLE);
-        }
-        if (bcfg.label_center_bind.mqtt_topic[0] && !tile.label_center && !bcfg.icon_id[0]) {
+        if (binding_template_has_bindings(bcfg.label_center) && !tile.label_center && !bcfg.icon_id[0]) {
             tile.label_center = lv_label_create(obj);
             lv_label_set_text(tile.label_center, "");
             lv_obj_set_style_text_color(tile.label_center, fg, 0);
@@ -357,33 +375,46 @@ void PadScreen::buildTiles() {
             lv_obj_set_style_text_align(tile.label_center, LV_TEXT_ALIGN_CENTER, 0);
             lv_obj_clear_flag(tile.label_center, LV_OBJ_FLAG_CLICKABLE);
         }
-        if (bcfg.label_bottom_bind.mqtt_topic[0] && !tile.label_bottom) {
-            tile.label_bottom = lv_label_create(obj);
-            lv_label_set_text(tile.label_bottom, "");
-            lv_obj_set_style_text_color(tile.label_bottom, fg, 0);
-            lv_obj_set_style_text_font(tile.label_bottom, scale.font_small, 0);
-            lv_obj_align(tile.label_bottom, LV_ALIGN_BOTTOM_MID, 0, 0);
-            lv_label_set_long_mode(tile.label_bottom, LV_LABEL_LONG_CLIP);
-            lv_obj_set_width(tile.label_bottom, r.w - 8);
-            lv_obj_set_style_text_align(tile.label_bottom, LV_TEXT_ALIGN_CENTER, 0);
-            lv_obj_clear_flag(tile.label_bottom, LV_OBJ_FLAG_CLICKABLE);
+#endif
+
+        // Widget initialization
+        tile.widget_type = nullptr;
+        memset(&tile.widget_state, 0, sizeof(WidgetState));
+        tile.widget_binding[0] = '\0';
+        tile.widget_last[0] = '\0';
+        if (bcfg.widget.type[0]) {
+            const WidgetType* wt = widget_find(bcfg.widget.type);
+            if (wt) {
+                tile.widget_type = wt;
+                memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
+                // Widget data binding template (e.g. "[mqtt:topic;path]")
+                strlcpy(tile.widget_binding, bcfg.widget.data_binding, CONFIG_LABEL_MAX_LEN);
+                if (wt->createUI) {
+                    // Pass icon or center label — widget positions it above the bar
+                    lv_obj_t* header_obj = tile.icon_img ? tile.icon_img : tile.label_center;
+                    wt->createUI(obj, &tile.widget_cfg, &bcfg, &r, &scale, header_obj, &tile.widget_state);
+                }
+            }
         }
 
-        // Register MQTT label bindings
-        auto addBinding = [this](lv_obj_t* lbl, const LabelBinding& bind) {
-            if (!lbl || !bind.mqtt_topic[0]) return;
+#if HAS_MQTT
+        // Register template-based label bindings for labels containing [scheme:...]
+        auto addTemplateBinding = [this](lv_obj_t* lbl, const char* label_text) {
+            if (!lbl || !label_text || !label_text[0]) return;
+            if (!binding_template_has_bindings(label_text)) return;
             if (bindingCount >= MAX_BINDINGS) return;
             RuntimeLabelBinding& rb = bindings[bindingCount];
             rb.label = lbl;
-            strlcpy(rb.mqtt_topic, bind.mqtt_topic, sizeof(rb.mqtt_topic));
-            strlcpy(rb.json_path, bind.json_path, sizeof(rb.json_path));
-            strlcpy(rb.format, bind.format, sizeof(rb.format));
+            strlcpy(rb.templ, label_text, sizeof(rb.templ));
+            rb.last[0] = '\0';
             rb.active = true;
             bindingCount++;
+            // Show placeholder until first resolve
+            lv_label_set_text(lbl, "---");
         };
-        addBinding(tile.label_top, bcfg.label_top_bind);
-        addBinding(tile.label_center, bcfg.label_center_bind);
-        addBinding(tile.label_bottom, bcfg.label_bottom_bind);
+        addTemplateBinding(tile.label_top, bcfg.label_top);
+        addTemplateBinding(tile.label_center, bcfg.label_center);
+        addTemplateBinding(tile.label_bottom, bcfg.label_bottom);
 
         // Register toggle state binding
         if (bcfg.state_bind.mqtt_topic[0] && stateBindingCount < MAX_PAD_BUTTONS) {
@@ -568,36 +599,37 @@ void PadScreen::onLongPress(lv_event_t* e) {
 
 void PadScreen::pollMqttBindings() {
 #if HAS_MQTT
-    if (bindingCount == 0) return;
-
-    char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
-    char extracted[128];
-    char formatted[128];
+    char resolved[BINDING_TEMPLATE_MAX_LEN];
 
     for (uint16_t i = 0; i < bindingCount; i++) {
         RuntimeLabelBinding& rb = bindings[i];
         if (!rb.active || !rb.label) continue;
 
-        bool changed = false;
-        if (!mqtt_sub_store_get(rb.mqtt_topic, payload, sizeof(payload), &changed)) continue;
-        if (!changed) continue;
+        // Resolve template — replaces [scheme:...] tokens with live values
+        binding_template_resolve(rb.templ, resolved, sizeof(resolved));
 
-        // Extract value from JSON payload (or raw if path is ".")
-        const char* path = rb.json_path[0] ? rb.json_path : ".";
-        if (!mqtt_sub_store_extract_json(payload, path, extracted, sizeof(extracted))) {
-            // Extraction failed — use raw payload
-            strlcpy(extracted, payload, sizeof(extracted));
-        }
+        // Only update LVGL label if text changed
+        if (strcmp(resolved, rb.last) == 0) continue;
+        strlcpy(rb.last, resolved, sizeof(rb.last));
+        lv_label_set_text(rb.label, resolved);
+    }
 
-        // Apply format string (best-effort)
-        if (rb.format[0]) {
-            mqtt_sub_store_format_value(extracted, rb.format, formatted, sizeof(formatted));
-        } else {
-            strlcpy(formatted, extracted, sizeof(formatted));
-        }
+    // Update widget tiles from their data binding template
+    char widget_resolved[BINDING_TEMPLATE_MAX_LEN];
 
-        // Update LVGL label (we're already inside the LVGL task / mutex)
-        lv_label_set_text(rb.label, formatted);
+    for (uint8_t i = 0; i < tileCount; i++) {
+        ButtonTile& tile = tiles[i];
+        if (!tile.widget_type || !tile.widget_type->update) continue;
+        if (!tile.widget_binding[0]) continue;
+
+        // Resolve binding template — replaces [scheme:...] tokens with live values
+        binding_template_resolve(tile.widget_binding, widget_resolved, sizeof(widget_resolved));
+
+        // Only update widget if resolved value changed
+        if (strcmp(widget_resolved, tile.widget_last) == 0) continue;
+        strlcpy(tile.widget_last, widget_resolved, sizeof(tile.widget_last));
+
+        tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, widget_resolved);
     }
 #endif
 }
@@ -610,7 +642,7 @@ void PadScreen::pollToggleState() {
 #if HAS_MQTT
     if (stateBindingCount == 0) return;
 
-    char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
+    static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
     char extracted[128];
 
     for (uint16_t i = 0; i < stateBindingCount; i++) {
@@ -618,13 +650,14 @@ void PadScreen::pollToggleState() {
         if (!sb.active) continue;
 
         bool changed = false;
-        if (!mqtt_sub_store_get(sb.mqtt_topic, payload, sizeof(payload), &changed)) continue;
+        bool truncated = false;
+        if (!mqtt_sub_store_get(sb.mqtt_topic, payload, sizeof(payload), &changed, &truncated)) continue;
         if (!changed && sb.initialized) continue;
 
         // Extract value via JSON path
         const char* path = sb.json_path[0] ? sb.json_path : ".";
         if (!mqtt_sub_store_extract_json(payload, path, extracted, sizeof(extracted))) {
-            strlcpy(extracted, payload, sizeof(extracted));
+            strlcpy(extracted, truncated ? "[TOO BIG]" : payload, sizeof(extracted));
         }
 
         // Compare to on_value (case-sensitive)
