@@ -8,14 +8,13 @@
 // Binding Template Engine
 // ============================================================================
 // Labels can contain binding tokens: [scheme:params]
-// Currently supported scheme: "mqtt"
-//   [mqtt:topic;json_path;format]   — full binding
-//   [mqtt:topic;json_path]          — no format (raw value)
-//   [mqtt:topic]                    — raw value at root (".")
+// Built-in schemes: "mqtt" and "health"
+//   [mqtt:topic;json_path;format]   — live MQTT data
+//   [health:key;format]              — local device telemetry
 //   "prefix [mqtt:topic;path;fmt] suffix" — mixed static + binding
 //
-// Extensible: new schemes (rest, sensor, time, ...) can be added by
-// registering a resolver via binding_template_register().
+// Additional schemes can be added by registering a resolver
+// via binding_template_register().
 //
 // Thread safety: resolve is NOT thread-safe (uses internal buffers).
 // Call only from the LVGL task.

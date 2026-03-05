@@ -20,6 +20,7 @@
 
 #if HAS_DISPLAY
 #include "display_manager.h"
+#include "health_binding.h"
 #include "icon_store.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
@@ -294,6 +295,10 @@ void setup()
 	config_manager_sanitize_device_name(device_config.device_name, sanitized, sizeof(sanitized));
 	mqtt_manager.begin(&device_config, device_config.device_name, sanitized);
 	mqtt_sub_store_init();
+	#endif
+
+	#if HAS_DISPLAY
+	health_binding_init();
 	#endif
 
 	last_heartbeat_ms = millis();

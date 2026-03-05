@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Graceful error handling: malformed tokens show `ERR:xxx`, missing data shows `---`
   - `CONFIG_LABEL_MAX_LEN` increased from 32 to 192 bytes; net RAM neutral (replaces 3 × 600-byte `LabelBinding` structs)
 - **Binding syntax help dialog** — `?` button next to label fields opens a styled help popup with syntax reference, parameter descriptions, and progressive examples
+- **Device health binding scheme** — `[health:key;format]` tokens resolve local device telemetry (CPU usage, heap, PSRAM, RSSI, uptime, IP address, hostname) with a 2 s refresh cache; no MQTT or network dependency
 
 ### Fixed
 - **Square icon PNGs** — emoji/Material Symbol icons are now rendered on a square canvas (using the minimum of width and height) instead of the original rectangular glyph bounding box, eliminating transparent padding above and below icons

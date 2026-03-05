@@ -633,14 +633,21 @@
                 <button type="button" onclick="document.getElementById('binding-help-overlay').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#86868b;padding:0 4px;">&times;</button>
             </div>
             <div style="padding:0 28px 24px;font-size:13px;color:#1d1d1f;line-height:1.5;overflow-y:auto;max-height:70vh;">
-                <p style="color:#86868b;margin:0 0 16px;">Labels can contain <strong>binding tokens</strong> that display live data from MQTT (or other sources in the future). Static text around tokens is preserved.</p>
+                <p style="color:#86868b;margin:0 0 16px;">Labels can contain <strong>binding tokens</strong> that display live data. Static text around tokens is preserved. Updates every 2 s.</p>
 
-                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Syntax</h4>
-                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:16px;word-break:break-all;">[mqtt:topic;path;format]</code>
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">MQTT Binding</h4>
+                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:8px;word-break:break-all;">[mqtt:topic;path;format]</code>
                 <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px;">
                     <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>topic</strong></td><td style="padding:4px 0;">MQTT topic to subscribe to <em>(required)</em></td></tr>
-                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>path</strong></td><td style="padding:4px 0;">JSON key to extract, dot-separated for nested keys. Omit or use <code>.</code> for raw value.</td></tr>
-                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">Printf-style format string. Omit for raw value. Supports <code>%d</code>, <code>%.1f</code>, <code>%s</code>, etc.</td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>path</strong></td><td style="padding:4px 0;">JSON key to extract, dot-separated for nested. Omit or use <code>.</code> for raw value.</td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">Printf format string (<code>%d</code>, <code>%.1f</code>, <code>%s</code>). Omit for raw value.</td></tr>
+                </table>
+
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Device Health Binding</h4>
+                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:8px;word-break:break-all;">[health:key;format]</code>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px;">
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>key</strong></td><td style="padding:4px 0;"><code>cpu</code>, <code>rssi</code>, <code>uptime</code>, <code>heap_free</code>, <code>heap_min</code>, <code>heap_largest</code>, <code>heap_internal</code>, <code>psram_free</code>, <code>psram_min</code>, <code>psram_largest</code>, <code>ip</code>, <code>hostname</code></td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">Optional printf format string. Omit for raw value.</td></tr>
                 </table>
 
                 <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Examples</h4>
@@ -664,6 +671,18 @@
                     <tr>
                         <td style="padding:6px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:a;temp;%.0f]° / [mqtt:b;hum;%.0f]%</code></td>
                         <td style="padding:6px 0;color:#86868b;">Multiple bindings in one label</td>
+                    </tr>
+                    <tr style="border-top:2px solid #e5e5ea;">
+                        <td style="padding:6px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">CPU: [health:cpu]%</code></td>
+                        <td style="padding:6px 0;color:#86868b;">Device CPU usage with static suffix</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:6px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[health:heap_free;%d B]</code></td>
+                        <td style="padding:6px 0;color:#86868b;">Free heap with format string</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:6px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[health:rssi] dBm</code></td>
+                        <td style="padding:6px 0;color:#86868b;">WiFi signal strength</td>
                     </tr>
                 </table>
             </div>
