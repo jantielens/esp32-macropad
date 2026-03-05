@@ -229,7 +229,7 @@ void mqtt_sub_store_subscribe_all() {
             binding_template_collect_topics(btn.label_center, &ctx);
             binding_template_collect_topics(btn.label_bottom, &ctx);
             add_unique(btn.state_bind.mqtt_topic);
-            add_unique(btn.widget.data_topic);
+            binding_template_collect_topics(btn.widget.data_binding, &ctx);
         }
     }
 

@@ -19,11 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `WidgetType` interface with pluggable `parseConfig`, `createUI`, `update`, and `destroyUI` hooks
   - Registry-based widget lookup by name, stored as a 64-byte config blob per button
   - Web portal: "Button Type" dropdown in the pad button editor to select Normal or widget types
-- **Bar Chart widget** — first widget type; renders a vertical bar that fills based on live MQTT data
+- **Bar Chart widget** — first widget type; renders a vertical bar that fills based on live data
   - Configurable min/max range, bar width %, background color, and up to 4 color thresholds
   - Supports both raw values and absolute-value mode for bidirectional metrics (e.g. grid import/export)
   - Adaptive layout: bar height adjusts dynamically based on presence of icon, top label, and bottom label
-  - Dedicated `widget_data_topic` and `widget_data_path` fields for MQTT data binding, decoupled from label bindings
+  - Uses binding template syntax for data source (e.g. `[mqtt:topic;path]`, `[health:cpu]`), supporting all registered schemes
   - Web portal: full "Bar Chart Settings" section with all config fields; grid preview shows gradient indicator
 - **Icon scale percentage** — new `icon_scale_pct` field (0 = auto, 1–250 = explicit %) lets users control icon size per button; widget-aware auto-sizing renders icons at half height for bar chart buttons
 - **Monitor logging** — `./monitor.sh --log` writes timestamped serial output to auto-named log files (`monitor_YYYYMMDD_HHMMSS.log`); `--log=file.log` for a custom filename

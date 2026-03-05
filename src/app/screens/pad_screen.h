@@ -59,9 +59,9 @@ struct ButtonTile {
     const WidgetType* widget_type;
     WidgetConfig widget_cfg;   // Copy of config (needed for update calls)
     WidgetState widget_state;
-    // Widget data binding (topic + path from widget.data_topic, cached for polling)
-    char widget_topic[CONFIG_MQTT_TOPIC_MAX_LEN];
-    char widget_path[CONFIG_JSON_PATH_MAX_LEN];
+    // Widget data binding template (e.g. "[mqtt:topic;path]")
+    char widget_binding[CONFIG_LABEL_MAX_LEN];
+    char widget_last[BINDING_TEMPLATE_MAX_LEN]; // Last resolved value (dedup)
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)

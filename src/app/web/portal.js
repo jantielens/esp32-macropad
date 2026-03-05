@@ -1895,8 +1895,7 @@ function padDialogOpen(col, row) {
     // Bar chart widget fields
     document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : 0;
     document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : 3;
-    document.getElementById('pad-edit-widget-data-topic').value = btn.widget_data_topic || '';
-    document.getElementById('pad-edit-widget-data-path').value = btn.widget_data_path || '';
+    document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
     document.getElementById('pad-edit-widget-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : true;
     document.getElementById('pad-edit-widget-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
     document.getElementById('pad-edit-widget-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
@@ -2018,11 +2017,9 @@ function padDialogOk() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
     if (wtype) {
         btn.widget_type = wtype;
-        // Dedicated data topic for widget
-        const wDataTopic = document.getElementById('pad-edit-widget-data-topic').value.trim();
-        const wDataPath = document.getElementById('pad-edit-widget-data-path').value.trim();
-        if (wDataTopic) btn.widget_data_topic = wDataTopic;
-        if (wDataPath) btn.widget_data_path = wDataPath;
+        // Data binding template for widget value
+        const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
+        if (wDataBinding) btn.widget_data_binding = wDataBinding;
         if (wtype === 'bar_chart') {
             const barMin = parseFloat(document.getElementById('pad-edit-widget-bar-min').value);
             const barMax = parseFloat(document.getElementById('pad-edit-widget-bar-max').value);

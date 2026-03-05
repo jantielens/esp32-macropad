@@ -141,8 +141,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     // Widget type (bar_chart, gauge, etc.)
     const char* wtype = obj["widget_type"] | "";
     strlcpy(btn->widget.type, wtype, CONFIG_WIDGET_TYPE_MAX_LEN);
-    strlcpy(btn->widget.data_topic, obj["widget_data_topic"] | "", CONFIG_MQTT_TOPIC_MAX_LEN);
-    strlcpy(btn->widget.data_path, obj["widget_data_path"] | "", CONFIG_JSON_PATH_MAX_LEN);
+    strlcpy(btn->widget.data_binding, obj["widget_data_binding"] | "", CONFIG_LABEL_MAX_LEN);
     memset(btn->widget.data, 0, WIDGET_CONFIG_MAX_BYTES);
 #if HAS_DISPLAY
     if (wtype[0]) {

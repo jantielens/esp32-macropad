@@ -367,16 +367,15 @@ void PadScreen::buildTiles() {
         // Widget initialization
         tile.widget_type = nullptr;
         memset(&tile.widget_state, 0, sizeof(WidgetState));
-        tile.widget_topic[0] = '\0';
-        tile.widget_path[0] = '\0';
+        tile.widget_binding[0] = '\0';
+        tile.widget_last[0] = '\0';
         if (bcfg.widget.type[0]) {
             const WidgetType* wt = widget_find(bcfg.widget.type);
             if (wt) {
                 tile.widget_type = wt;
                 memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
-                // Widget data from dedicated data_topic/data_path
-                strlcpy(tile.widget_topic, bcfg.widget.data_topic, CONFIG_MQTT_TOPIC_MAX_LEN);
-                strlcpy(tile.widget_path, bcfg.widget.data_path, CONFIG_JSON_PATH_MAX_LEN);
+                // Widget data binding template (e.g. "[mqtt:topic;path]")
+                strlcpy(tile.widget_binding, bcfg.widget.data_binding, CONFIG_LABEL_MAX_LEN);
                 if (wt->createUI) {
                     // Pass icon or center label — widget positions it above the bar
                     lv_obj_t* header_obj = tile.icon_img ? tile.icon_img : tile.label_center;
@@ -602,26 +601,22 @@ void PadScreen::pollMqttBindings() {
         lv_label_set_text(rb.label, resolved);
     }
 
-    // Update widget tiles from their dedicated data binding
-    static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
-    char extracted[128];
+    // Update widget tiles from their data binding template
+    char widget_resolved[BINDING_TEMPLATE_MAX_LEN];
 
     for (uint8_t i = 0; i < tileCount; i++) {
         ButtonTile& tile = tiles[i];
         if (!tile.widget_type || !tile.widget_type->update) continue;
-        if (!tile.widget_topic[0]) continue;
+        if (!tile.widget_binding[0]) continue;
 
-        bool changed = false;
-        bool truncated = false;
-        if (!mqtt_sub_store_get(tile.widget_topic, payload, sizeof(payload), &changed, &truncated)) continue;
+        // Resolve binding template — replaces [scheme:...] tokens with live values
+        binding_template_resolve(tile.widget_binding, widget_resolved, sizeof(widget_resolved));
 
-        // Extract raw value (pre-format) for widget
-        const char* path = tile.widget_path[0] ? tile.widget_path : ".";
-        if (!mqtt_sub_store_extract_json(payload, path, extracted, sizeof(extracted))) {
-            strlcpy(extracted, truncated ? "" : payload, sizeof(extracted));
-        }
+        // Only update widget if resolved value changed
+        if (strcmp(widget_resolved, tile.widget_last) == 0) continue;
+        strlcpy(tile.widget_last, widget_resolved, sizeof(tile.widget_last));
 
-        tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, extracted);
+        tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, widget_resolved);
     }
 #endif
 }
