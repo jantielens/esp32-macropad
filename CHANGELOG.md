@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Improved
 - **Pad Editor aspect ratio** — grid preview now mirrors the device screen's aspect ratio using display dimensions from `/api/info`; portrait devices render as tall rectangles, square devices as squares; capped at 70vh with auto-centering to keep the editor compact
+- **Pad Editor button rendering** — improved grid preview fidelity: background image buttons show a 🖼️ placeholder emoji (visible alongside labels/icons); top/bottom labels are pushed to cell edges matching device layout; binding tokens simplified to `[scheme:key]` in preview; spacer divs keep center content vertically centered when only one edge label is present
 
 ## [1.5.0] - 2026-03-04
 

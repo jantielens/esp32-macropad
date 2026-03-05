@@ -1039,6 +1039,7 @@ footer {
 
 .pad-cell {
     position: relative;
+    container-type: size;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1078,6 +1079,19 @@ footer {
 
 .pad-cell-btn:hover {
     box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+.pad-cell-image-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: min(75cqw, 75cqh, 4em);
+    line-height: 1;
+    opacity: 0.35;
+    filter: grayscale(0.5);
+    pointer-events: none;
 }
 
 .pad-cell-label-top {

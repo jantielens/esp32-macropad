@@ -1219,6 +1219,12 @@ function padEnsureMaterialSymbols() {
     });
 }
 
+// Simplify binding tokens for grid preview: [mqtt:topic;path;fmt] → [mqtt:topic]
+function padSimplifyBindings(text) {
+    if (!text) return text;
+    return text.replace(/\[(\w+):([^\];]*)[^\]]*\]/g, '[$1:$2]');
+}
+
 function padIconIdToType(iconId) {
     if (!iconId) return { type: '', value: '' };
     if (iconId.startsWith('emoji_')) return { type: 'emoji', value: iconId.substring(6) };
@@ -1676,17 +1682,36 @@ function padRenderGrid() {
                 cell.style.background = bg;
                 cell.style.color = fg;
 
+
+
                 const borderColor = padColorToHex(btn.border_color, '#000000');
                 const borderWidth = (btn.border_width !== undefined) ? btn.border_width : 1;
                 const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
                 cell.style.border = borderWidth + 'px solid ' + borderColor;
                 cell.style.borderRadius = cornerRadius + 'px';
 
-                if (btn.label_top) {
+                // Spread labels to edges when top or bottom labels are present
+                const hasTop = !!btn.label_top;
+                const hasBottom = !!btn.label_bottom;
+                if (hasTop || hasBottom) {
+                    cell.style.justifyContent = 'space-between';
+                }
+
+                if (hasTop) {
                     const el = document.createElement('div');
                     el.className = 'pad-cell-label-top';
-                    el.textContent = btn.label_top;
+                    el.textContent = padSimplifyBindings(btn.label_top);
                     cell.appendChild(el);
+                } else if (hasBottom) {
+                    // Spacer so center content stays centered with space-between
+                    cell.appendChild(document.createElement('div'));
+                }
+                // Background image placeholder (absolute-positioned behind content)
+                if (btn.bg_image_url) {
+                    const img = document.createElement('div');
+                    img.className = 'pad-cell-image-placeholder';
+                    img.textContent = '\u{1F5BC}';
+                    cell.appendChild(img);
                 }
                 if (btn.icon_id) {
                     const iconParsed = padIconIdToType(btn.icon_id);
@@ -1703,18 +1728,26 @@ function padRenderGrid() {
                         el.style.color = fg;
                         cell.appendChild(el);
                     }
-                } else {
+                } else if (!btn.bg_image_url) {
                     const centerText = btn.label_center || '•';
                     const elc = document.createElement('div');
                     elc.className = 'pad-cell-label-center';
-                    elc.textContent = centerText;
+                    elc.textContent = padSimplifyBindings(centerText);
+                    cell.appendChild(elc);
+                } else if (btn.label_center) {
+                    const elc = document.createElement('div');
+                    elc.className = 'pad-cell-label-center';
+                    elc.textContent = padSimplifyBindings(btn.label_center);
                     cell.appendChild(elc);
                 }
-                if (btn.label_bottom) {
+                if (hasBottom) {
                     const el = document.createElement('div');
                     el.className = 'pad-cell-label-bottom';
-                    el.textContent = btn.label_bottom;
+                    el.textContent = padSimplifyBindings(btn.label_bottom);
                     cell.appendChild(el);
+                } else if (hasTop) {
+                    // Spacer so center content stays centered with space-between
+                    cell.appendChild(document.createElement('div'));
                 }
 
                 // Widget indicator
