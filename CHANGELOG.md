@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Square icon PNGs** — emoji/Material Symbol icons are now rendered on a square canvas (using the minimum of width and height) instead of the original rectangular glyph bounding box, eliminating transparent padding above and below icons
 - **MQTT multi-label same-topic bug** — multiple label bindings subscribed to the same MQTT topic now all update correctly; previously the per-topic dirty flag was cleared by the first binding, causing subsequent bindings to miss the update
+- **MQTT bindings empty on non-initial pad screens** — label and state bindings on pad pages other than the boot page (pad 0) now show retained MQTT data immediately; previously, pad 0 cleared the global dirty flags before other pages could read them, and navigating back to a page would not re-render updated values
 - **OTA rollback protection** — `esp_ota_mark_app_valid_cancel_rollback()` is now called at end of `setup()`, preventing the bootloader from rolling back healthy firmware on the next reboot
 - **Heap corruption detection** — periodic `heap_caps_check_integrity_all()` check added to the 60 s heartbeat loop for early detection of heap corruption
 

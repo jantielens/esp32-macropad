@@ -91,6 +91,17 @@ void PadScreen::show() {
     if (screen) {
         lv_screen_load(screen);
     }
+
+    // Reset initialized flags so the first poll after navigating back
+    // renders current store values (dirty flags may have been cleared
+    // by whichever screen was active while this one was hidden).
+    for (uint16_t i = 0; i < bindingCount; i++) {
+        bindings[i].initialized = false;
+    }
+    for (uint16_t i = 0; i < stateBindingCount; i++) {
+        stateBindings[i].initialized = false;
+    }
+
 #if HAS_IMAGE_FETCH
     for (uint8_t i = 0; i < tileCount; i++) {
         if (tiles[i].image_slot != IMAGE_SLOT_INVALID)
@@ -411,6 +422,7 @@ void PadScreen::buildTiles() {
             strlcpy(rb.json_path, bind.json_path, sizeof(rb.json_path));
             strlcpy(rb.format, bind.format, sizeof(rb.format));
             rb.active = true;
+            rb.initialized = false;
             bindingCount++;
         };
         addBinding(tile.label_top, bcfg.label_top_bind);
@@ -611,7 +623,8 @@ void PadScreen::pollMqttBindings() {
         bool changed = false;
         bool truncated = false;
         if (!mqtt_sub_store_get(rb.mqtt_topic, payload, sizeof(payload), &changed, &truncated)) continue;
-        if (!changed) continue;
+        if (!changed && rb.initialized) continue;
+        rb.initialized = true;
 
         // Extract value from JSON payload (or raw if path is ".")
         const char* path = rb.json_path[0] ? rb.json_path : ".";

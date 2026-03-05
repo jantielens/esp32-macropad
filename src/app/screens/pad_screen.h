@@ -26,6 +26,7 @@ struct RuntimeLabelBinding {
     char json_path[CONFIG_JSON_PATH_MAX_LEN];         // extraction path
     char format[CONFIG_FORMAT_MAX_LEN];               // printf format string
     bool active;                                      // binding is in use
+    bool initialized;                                 // received at least one value
 };
 
 // Runtime toggle state binding (links a tile's fg color to an MQTT state)
