@@ -52,6 +52,7 @@ PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
     memset(bindings, 0, sizeof(bindings));
     memset(stateBindings, 0, sizeof(stateBindings));
     wakeScreen[0] = '\0';
+    bgColor = 0x000000;
 }
 
 PadScreen::~PadScreen() {
@@ -66,7 +67,7 @@ void PadScreen::create() {
     if (screen) return;
 
     screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(screen, rgb_to_lv(bgColor), 0);
     lv_obj_set_style_pad_all(screen, 0, 0);
     lv_obj_set_style_border_width(screen, 0, 0);
 
@@ -203,6 +204,7 @@ void PadScreen::buildTiles() {
     bool loaded = pad_config_load(pageIndex, cfg);
     if (!loaded) {
         wakeScreen[0] = '\0';
+        bgColor = 0x000000;
         free(cfg);
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
@@ -210,6 +212,8 @@ void PadScreen::buildTiles() {
 
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
+    bgColor = cfg->bg_color_rgb;
+    if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(bgColor), 0);
 
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {

@@ -274,6 +274,7 @@ static bool pad_config_load_from_flash(uint8_t page, PadPageConfig* out) {
     out->cols = doc["cols"] | (uint8_t)3;
     out->rows = doc["rows"] | (uint8_t)3;
     strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
+    out->bg_color_rgb = parse_color(doc["bg_color"], 0x000000);
 
     if (out->cols < 1) out->cols = 1;
     if (out->cols > MAX_GRID_COLS) out->cols = MAX_GRID_COLS;

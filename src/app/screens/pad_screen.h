@@ -94,6 +94,7 @@ private:
     uint32_t cachedGeneration; // Last seen pad_config generation
     bool tilesBuilt;
     char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
+    uint32_t bgColor;                              // Cached page background color
 
     // Build/destroy tile LVGL objects from config
     void buildTiles();

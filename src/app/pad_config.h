@@ -112,6 +112,7 @@ struct PadPageConfig {
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
+    uint32_t bg_color_rgb;                       // page background color (default 0x000000 = black)
     uint8_t button_count;
     ScreenButtonConfig buttons[MAX_PAD_BUTTONS];
 };

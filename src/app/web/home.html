@@ -283,6 +283,13 @@
                     <p><small>Adjust columns and rows above, then click empty cells to add buttons.</small></p>
                 </div>
 
+                <!-- Background color -->
+                <div style="display:flex; align-items:center; gap:10px; margin-top:8px; margin-bottom:4px;">
+                    <label for="pad-bg-color" style="margin:0; white-space:nowrap;">Background</label>
+                    <input type="color" id="pad-bg-color" value="#000000" style="width:40px; height:34px; border:2px solid #d2d2d7; border-radius:8px; padding:2px; cursor:pointer; flex-shrink:0;">
+                    <div class="pad-swatch-strip" data-picker="pad-bg-color" style="margin-top:0;"></div>
+                </div>
+
                 <!-- Action buttons -->
                 <div class="pad-actions">
                     <button type="button" id="pad-save-btn" class="btn btn-primary" style="flex:1 1 120px;">Save Pad</button>
