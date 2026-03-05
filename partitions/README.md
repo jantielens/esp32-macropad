@@ -2,7 +2,7 @@
 
 This folder contains **optional** custom partition table CSVs that can be enabled via the Arduino ESP32 core’s `PartitionScheme=...` FQBN option.
 
-For the broader build/release context, also see: [docs/build-and-release-process.md](../docs/build-and-release-process.md#custom-partition-schemes)
+For the broader build/release context, also see: [docs/dev/build-and-release-process.md](../docs/dev/build-and-release-process.md#custom-partition-schemes)
 
 ## How Arduino “PartitionScheme” works (important)
 

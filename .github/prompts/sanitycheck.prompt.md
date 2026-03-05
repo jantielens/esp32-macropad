@@ -40,7 +40,8 @@ Do NOT fix anything — only report.
 
 - Check if changes affect behavior documented in any of these files:
   - README.md
-  - docs/*.md (especially web-portal.md, display-touch-architecture.md, scripts.md)
+  - docs/dev/*.md (especially web-portal.md, display-touch-architecture.md, scripts.md)
+  - docs/first-time-setup.md, docs/web-portal-guide.md
   - .github/copilot-instructions.md
   - CHANGELOG.md (is the new entry accurate and complete?)
   - src/app/drivers/README.md (if driver changes)

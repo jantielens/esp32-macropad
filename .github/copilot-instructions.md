@@ -14,7 +14,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `src/boards/[board-name]/board_overrides.h` - Optional board-specific compile-time defines
   - Build system automatically detects and applies overrides when present
   - Application uses `#if HAS_xxx` conditional compilation for board-specific logic
-- **Display & Touch Subsystem**: HAL-based architecture with LVGL integration (see `docs/display-touch-architecture.md`)
+- **Display & Touch Subsystem**: HAL-based architecture with LVGL integration (see `docs/dev/display-touch-architecture.md`)
   - `display_driver.h` - DisplayDriver HAL interface (`RenderMode`, `present()`, `configureLVGL()`)
   - `display_manager.cpp/h` - Hardware lifecycle, LVGL init, FreeRTOS rendering task
   - `touch_driver.h` - TouchDriver HAL interface
@@ -178,7 +178,7 @@ Serial port access requires:
 2. User must be in `dialout` group: `sudo usermod -a -G dialout $USER`
 3. Full WSL restart after group change: `wsl --terminate Ubuntu` (PowerShell)
 
-See `docs/wsl-development.md` for complete USB/IP setup guide.
+See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 
 ## Key Files
 
@@ -256,7 +256,7 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 - `src/version.h` - Firmware version tracking
 
 ### Documentation
-- docs/logging-guidelines.md - Logging rules and format (LOGx macros, severity, modules)
+- docs/dev/logging-guidelines.md - Logging rules and format (LOGx macros, severity, modules)
 
 ### Tools
 - `tools/minify-web-assets.sh` - Minifies and embeds web assets into `web_assets.h`
@@ -297,7 +297,7 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 
 ## Adding New Configuration Settings
 
-When adding new configuration settings (e.g., MQTT, custom features), follow this complete checklist. For more details on the web portal architecture and REST API, see `docs/web-portal.md`.
+When adding new configuration settings (e.g., MQTT, custom features), follow this complete checklist. For more details on the web portal architecture and REST API, see `docs/dev/web-portal.md`.
 
 ### 1. Backend: Configuration Storage
 
@@ -423,12 +423,14 @@ After every significant change, the agent must:
 
 2. **Check if documentation needs updates** by reviewing:
    - `README.md` - Main project documentation
-   - `docs/web-portal.md` - Web portal and REST API guide
-   - `docs/display-touch-architecture.md` - Display/touch HAL and screen architecture
-   - `docs/scripts.md` - Script usage guide
-   - `docs/library-management.md` - Library management guide
-   - `docs/build-and-release-process.md` - Project branding, build system, and release workflow guide
-   - `docs/wsl-development.md` - WSL setup guide
+   - `docs/dev/web-portal.md` - Web portal and REST API guide
+   - `docs/dev/display-touch-architecture.md` - Display/touch HAL and screen architecture
+   - `docs/dev/scripts.md` - Script usage guide
+   - `docs/dev/library-management.md` - Library management guide
+   - `docs/dev/build-and-release-process.md` - Project branding, build system, and release workflow guide
+   - `docs/dev/wsl-development.md` - WSL setup guide
+   - `docs/first-time-setup.md` - User first-time setup guide
+   - `docs/web-portal-guide.md` - User web portal guide
    - `.github/copilot-instructions.md` - This file
    - `.github/workflows/build.yml` - CI/CD build pipeline
    - `.github/workflows/release.yml` - CI/CD release pipeline
@@ -450,18 +452,18 @@ After every significant change, the agent must:
 
 ### Examples of Documentation Updates Needed
 
-- New script added → Update `README.md` script table and `docs/scripts.md`
-- Library management changed → Update `docs/library-management.md`
-- Build workflow modified → Update `README.md` CI/CD section and `docs/build-and-release-process.md`
-- Board configuration system changed → Update `README.md` board configuration section and `docs/build-and-release-process.md`
-- Release workflow modified → Update `docs/build-and-release-process.md` and `README.md` release section
+- New script added → Update `README.md` script table and `docs/dev/scripts.md`
+- Library management changed → Update `docs/dev/library-management.md`
+- Build workflow modified → Update `README.md` CI/CD section and `docs/dev/build-and-release-process.md`
+- Board configuration system changed → Update `README.md` board configuration section and `docs/dev/build-and-release-process.md`
+- Release workflow modified → Update `docs/dev/build-and-release-process.md` and `README.md` release section
 - New requirement added → Update `README.md` prerequisites
-- REST API endpoint added/changed → Update `docs/web-portal.md` and `README.md` API table
-- Web UI feature changed → Update `docs/web-portal.md` features section
-- Display/touch driver added/changed → Update `docs/display-touch-architecture.md` driver sections
-- Screen management changed → Update `docs/display-touch-architecture.md` screen lifecycle
+- REST API endpoint added/changed → Update `docs/dev/web-portal.md` and `README.md` API table
+- Web UI feature changed → Update `docs/dev/web-portal.md` features section and `docs/web-portal-guide.md`
+- Display/touch driver added/changed → Update `docs/dev/display-touch-architecture.md` driver sections
+- Screen management changed → Update `docs/dev/display-touch-architecture.md` screen lifecycle
 - New version released → Update `CHANGELOG.md` with changes, update `src/version.h` with new version number
-- Release process changed → Update `docs/build-and-release-process.md` with new workflow
+- Release process changed → Update `docs/dev/build-and-release-process.md` with new workflow
 
 ### Build Verification
 
