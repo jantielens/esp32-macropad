@@ -273,6 +273,7 @@ static bool pad_config_load_from_flash(uint8_t page, PadPageConfig* out) {
     strlcpy(out->layout, doc["layout"] | "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = doc["cols"] | (uint8_t)3;
     out->rows = doc["rows"] | (uint8_t)3;
+    strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
 
     if (out->cols < 1) out->cols = 1;
     if (out->cols > MAX_GRID_COLS) out->cols = MAX_GRID_COLS;

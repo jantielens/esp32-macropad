@@ -33,6 +33,10 @@ public:
 		// Update screen data (called every loop while active)
 		// Read from stored pointers (thread-safe: main loop only)
 		virtual void update() = 0;
+
+		// Screen to navigate to when the screensaver enters sleep.
+		// Return nullptr (default) to stay on this screen.
+		virtual const char* wakeScreenId() const { return nullptr; }
 };
 
 #endif // SCREEN_H

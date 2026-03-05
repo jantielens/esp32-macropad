@@ -5,6 +5,7 @@
 #if HAS_MQTT
 
 #include "mqtt_manager.h"
+#include "display_manager.h"
 #include "sensors/sensor_manager.h"
 #include "web_assets.h" // PROJECT_DISPLAY_NAME
 #include "../version.h" // FIRMWARE_VERSION
@@ -68,6 +69,7 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 		// Pad button press event entity
 		#if HAS_DISPLAY
 		ha_discovery_publish_button_event_config(mqtt);
+		ha_discovery_publish_screen_select_config(mqtt);
 		#endif
 }
 
@@ -283,6 +285,55 @@ bool ha_discovery_publish_button_event_config(MqttManager &mqtt) {
 		}
 
 		return mqtt.publishJson(topic, doc, true);
+}
+
+bool ha_discovery_publish_screen_select_config(MqttManager &mqtt) {
+#if HAS_DISPLAY
+		size_t count = 0;
+		const ScreenInfo* screens = display_manager_get_available_screens(&count);
+		if (!screens || count == 0) return false;
+
+		char topic[160];
+		snprintf(topic, sizeof(topic), "homeassistant/select/%s/active_screen/config", mqtt.sanitizedName());
+
+		StaticJsonDocument<1024> doc;
+
+		doc["~"] = mqtt.baseTopic();
+		doc["name"] = "Active Screen";
+
+		char ha_object_id[96];
+		snprintf(ha_object_id, sizeof(ha_object_id), "%s_active_screen", mqtt.sanitizedName());
+		doc["object_id"] = ha_object_id;
+
+		char uniq_id[96];
+		snprintf(uniq_id, sizeof(uniq_id), "%s_active_screen", mqtt.sanitizedName());
+		doc["uniq_id"] = uniq_id;
+
+		doc["cmd_t"] = "~/screen/set";
+		doc["stat_t"] = "~/screen/state";
+
+		JsonArray options = doc["options"].to<JsonArray>();
+		for (size_t i = 0; i < count; i++) {
+				options.add(screens[i].id);
+		}
+
+		doc["avty_t"] = "~/availability";
+		doc["pl_avail"] = "online";
+		doc["pl_not_avail"] = "offline";
+
+		JsonObject dev = doc["dev"].to<JsonObject>();
+		JsonArray ids = dev["ids"].to<JsonArray>();
+		ids.add(mqtt.sanitizedName());
+		dev["name"] = mqtt.friendlyName();
+		dev["mdl"] = PROJECT_DISPLAY_NAME;
+		dev["sw"] = FIRMWARE_VERSION;
+
+		if (doc.overflowed()) return false;
+
+		return mqtt.publishJson(topic, doc, true);
+#else
+		return false;
+#endif
 }
 
 #endif // HAS_MQTT

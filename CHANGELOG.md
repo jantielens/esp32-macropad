@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Wake Screen redirect** — per-pad `wake_screen` setting navigates to a target screen when the screensaver enters sleep (invisible under the sleep overlay); configurable in the web portal Pad Editor "Wake Screen" dropdown; default is to stay on the current screen
+- **MQTT Active Screen control** — exposes active screen as an HA `select` entity (`~/screen/state` + `~/screen/set`); HA can navigate the device to any screen and wake the screensaver; navigating to the current screen while asleep wakes the device; inactivity timer resets on HA navigation (mimics a tap)
+
 ### Fixed
 - **ESP32-P4 health telemetry re-enabled** — background telemetry tasks (CPU monitor, health-window timer, sparklines) re-enabled on both P4 boards (`esp32-p4-lcd4b`, `jc4880p433`); originally disabled during flicker investigation, no longer needed
 

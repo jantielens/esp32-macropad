@@ -51,10 +51,15 @@ PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
     memset(tiles, 0, sizeof(tiles));
     memset(bindings, 0, sizeof(bindings));
     memset(stateBindings, 0, sizeof(stateBindings));
+    wakeScreen[0] = '\0';
 }
 
 PadScreen::~PadScreen() {
     destroy();
+}
+
+const char* PadScreen::wakeScreenId() const {
+    return wakeScreen[0] ? wakeScreen : nullptr;
 }
 
 void PadScreen::create() {
@@ -197,10 +202,14 @@ void PadScreen::buildTiles() {
 
     bool loaded = pad_config_load(pageIndex, cfg);
     if (!loaded) {
+        wakeScreen[0] = '\0';
         free(cfg);
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
+
+    // Cache page-level settings
+    strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
 
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {

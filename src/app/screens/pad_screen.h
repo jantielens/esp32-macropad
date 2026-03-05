@@ -93,6 +93,7 @@ private:
 
     uint32_t cachedGeneration; // Last seen pad_config generation
     bool tilesBuilt;
+    char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
 
     // Build/destroy tile LVGL objects from config
     void buildTiles();
@@ -119,6 +120,7 @@ public:
     void show() override;
     void hide() override;
     void update() override;
+    const char* wakeScreenId() const override;
 
     uint8_t getPageIndex() const { return pageIndex; }
 };

@@ -1513,6 +1513,17 @@ function padPopulateScreenDropdown() {
             sel.appendChild(opt);
         });
     });
+    // Populate wake-screen dropdown (keep first "(stay on this screen)" option)
+    const wakeSel = document.getElementById('pad-wake-screen');
+    if (wakeSel && deviceInfoCache && deviceInfoCache.available_screens) {
+        while (wakeSel.options.length > 1) wakeSel.remove(1);
+        deviceInfoCache.available_screens.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.name;
+            wakeSel.appendChild(opt);
+        });
+    }
 }
 
 function padActionTypeChanged(prefix) {
@@ -1544,6 +1555,7 @@ async function padLoadPage(page) {
             document.getElementById('pad-cols').value = padState.cols;
             document.getElementById('pad-rows').value = padState.rows;
             document.getElementById('pad-name').value = '';
+            document.getElementById('pad-wake-screen').value = '';
             padCacheColors(page, []);
             padRenderGrid();
             return;
@@ -1558,6 +1570,7 @@ async function padLoadPage(page) {
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
+        document.getElementById('pad-wake-screen').value = json.wake_screen || '';
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -2064,6 +2077,9 @@ async function padSavePage() {
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
     else delete payload.name;
+    const wakeScreen = document.getElementById('pad-wake-screen').value;
+    if (wakeScreen) payload.wake_screen = wakeScreen;
+    else delete payload.wake_screen;
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));
 
     // Convert color ints to hex strings for JSON
@@ -2226,6 +2242,7 @@ function padCopyPad() {
         cols: padState.cols,
         rows: padState.rows,
         name: document.getElementById('pad-name').value.trim(),
+        wake_screen: document.getElementById('pad-wake-screen').value,
         buttons: padState.buttons.map(b => Object.assign({}, b)),
     };
     document.getElementById('pad-paste-btn').disabled = false;
@@ -2242,6 +2259,7 @@ function padPastePad() {
     document.getElementById('pad-cols').value = padState.cols;
     document.getElementById('pad-rows').value = padState.rows;
     document.getElementById('pad-name').value = padState.padClipboard.name || '';
+    document.getElementById('pad-wake-screen').value = padState.padClipboard.wake_screen || '';
 
     padRenderGrid();
     showMessage('Pad pasted (unsaved)', 'success');
@@ -2262,6 +2280,8 @@ function padExportPad() {
     };
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
+    const wakeScreen = document.getElementById('pad-wake-screen').value;
+    if (wakeScreen) payload.wake_screen = wakeScreen;
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -2295,6 +2315,7 @@ async function padImportPad(evt) {
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
+        document.getElementById('pad-wake-screen').value = json.wake_screen || '';
 
         padRenderGrid();
         showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
@@ -2408,6 +2429,7 @@ async function deviceImportConfig(evt) {
                 document.getElementById('pad-cols').value = padState.cols;
                 document.getElementById('pad-rows').value = padState.rows;
                 document.getElementById('pad-name').value = padJson.name || '';
+                document.getElementById('pad-wake-screen').value = padJson.wake_screen || '';
 
                 // Delete old icons first
                 await fetch('/api/icons/page?page=' + i, { method: 'DELETE' }).catch(() => {});
@@ -2448,6 +2470,7 @@ async function padDeletePage() {
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = '';
+        document.getElementById('pad-wake-screen').value = '';
         padUpdateDropdownLabel(padState.page, '');
         padRenderGrid();
     } catch (err) {

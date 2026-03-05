@@ -111,6 +111,7 @@ struct PadPageConfig {
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
+    char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     uint8_t button_count;
     ScreenButtonConfig buttons[MAX_PAD_BUTTONS];
 };

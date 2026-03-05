@@ -43,6 +43,12 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries)
   - `time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
+- **Screen Saver Subsystem**: Inactivity-based display sleep with backlight fading and per-screen wake redirect (compile-time gated by `HAS_DISPLAY`)
+  - `screen_saver_manager.cpp/h` - State machine (Awake/FadingOut/Asleep/FadingIn), fade animation, touch wake polling, pixel shift burn-in prevention
+  - On entering sleep, calls `displayManager->handleSleepScreenRedirect()` to navigate to a per-screen wake target (invisible under sleep overlay)
+- **MQTT Screen Control**: Exposes active screen as an HA `select` entity for remote navigation (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
+  - `mqtt_screen.cpp/h` - Subscribe `~/screen/set`, publish `~/screen/state` (retained), wake screensaver on HA navigation
+  - HA discovery published via `ha_discovery_publish_screen_select_config()` with dynamic options list from screen registry
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode and transport parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
@@ -210,6 +216,8 @@ See `docs/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/image_fetch.cpp/h` - Slot-based background image fetcher with per-slot pause/resume (compile-time gated by `HAS_IMAGE_FETCH`)
 - `src/app/icon_store.cpp/h` - PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
 - `src/app/web_portal_icons.cpp/h` - Icon store REST API (upload, delete, list, debug endpoints)
+- `src/app/screen_saver_manager.cpp/h` - Screensaver state machine with fade, pixel shift, and wake-screen redirect
+- `src/app/mqtt_screen.cpp/h` - MQTT active-screen control (HA select entity, remote navigation + wake)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface

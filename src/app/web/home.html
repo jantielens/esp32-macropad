@@ -215,10 +215,10 @@
             <section class="section" id="pad-config-section" style="display:none;">
                 <h2>🎛️ Pad Configuration</h2>
 
-                <!-- Controls row -->
+                <!-- Controls rows -->
                 <div class="pad-controls">
                     <div class="pad-controls-row">
-                        <div class="form-group" style="margin-bottom:0; flex:1; min-width:100px;">
+                        <div class="form-group" style="margin-bottom:0; flex:1;">
                             <label for="pad-page-select">Pad</label>
                             <select id="pad-page-select">
                                 <option value="0">Pad 1</option>
@@ -231,8 +231,16 @@
                                 <option value="7">Pad 8</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="pad-controls-row" style="margin-top:6px;">
+                        <div class="form-group" style="margin-bottom:0; flex:1;">
+                            <label for="pad-name">Pad Name</label>
+                            <input type="text" id="pad-name" maxlength="31" placeholder="(optional)" style="padding:6px 10px;">
+                        </div>
+                    </div>
+                    <div class="pad-controls-row" style="margin-top:6px;">
                         <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
-                            <label for="pad-cols">Cols</label>
+                            <label for="pad-cols">Columns</label>
                             <select id="pad-cols">
                                 <option value="1">1</option>
                                 <option value="2">2</option>
@@ -257,11 +265,11 @@
                                 <option value="8">8</option>
                             </select>
                         </div>
-                    </div>
-                    <div class="pad-controls-row" style="margin-top:6px;">
                         <div class="form-group" style="margin-bottom:0; flex:1;">
-                            <label for="pad-name">Pad Name</label>
-                            <input type="text" id="pad-name" maxlength="31" placeholder="(optional)" style="padding:6px 10px;">
+                            <label for="pad-wake-screen">Screensaver wakes up screen</label>
+                            <select id="pad-wake-screen">
+                                <option value="">(stay on this screen)</option>
+                            </select>
                         </div>
                     </div>
                 </div>
