@@ -283,9 +283,9 @@ static void fetch_task(void* param) {
         xSemaphoreGive(g_mutex);
 
         if (next < 0) {
-            // No slot ready — close connections for inactive/cancelled slots
+            // No slot ready — close connections for inactive/cancelled/paused slots
             for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
-                if (g_conn[i].active && !g_slots[i].active) conn_close(i);
+                if (g_conn[i].active && (!g_slots[i].active || g_slots[i].paused)) conn_close(i);
             }
             // Sleep until the soonest slot is due
             if (min_wait_ms < 10) min_wait_ms = 10;  // Floor to avoid busy-spin
@@ -373,7 +373,7 @@ static void fetch_task(void* param) {
         // Swap into slot's back buffer, then promote to front
         xSemaphoreTake(g_mutex, portMAX_DELAY);
         ImageSlot& s = g_slots[next];
-        if (s.active) {
+        if (s.active && !s.paused) {
             // Free old back buffer and assign new decoded pixels
             if (s.back_buf) heap_caps_free(s.back_buf);
             s.back_buf = pixels;
@@ -389,7 +389,7 @@ static void fetch_task(void* param) {
 
             LOGD(TAG, "Slot %d frame ready (%ux%u, %u bytes)", next, tw, th, (unsigned)pixel_size);
         } else {
-            // Slot was cancelled while we were decoding
+            // Slot was cancelled or paused while we were decoding
             heap_caps_free(pixels);
         }
         xSemaphoreGive(g_mutex);
@@ -502,7 +502,21 @@ void image_fetch_cancel_all() {
 
 void image_fetch_pause_slot(image_slot_t slot) {
     if (slot < 0 || slot >= IMAGE_SLOT_MAX) return;
-    g_slots[slot].paused = true;
+    if (!g_mutex) return;
+
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    ImageSlot& s = g_slots[slot];
+    s.paused = true;
+    // Free double-buffers to reclaim PSRAM while the page is hidden.
+    // owned_pixels in PadScreen is unaffected, so LVGL keeps showing
+    // the last frame.  Buffers are re-allocated on next fetch after resume.
+    size_t freed = 0;
+    if (s.front_buf) { freed += s.buf_size; heap_caps_free(s.front_buf); s.front_buf = nullptr; }
+    if (s.back_buf)  { freed += s.buf_size; heap_caps_free(s.back_buf);  s.back_buf  = nullptr; }
+    s.buf_size = 0;
+    xSemaphoreGive(g_mutex);
+
+    if (freed) LOGD(TAG, "Slot %d paused, freed %u bytes", slot, (unsigned)freed);
 }
 
 void image_fetch_resume_slot(image_slot_t slot) {
