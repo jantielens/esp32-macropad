@@ -1047,13 +1047,19 @@ footer {
     border-radius: 8px;
     min-height: 0;
     cursor: pointer;
-    transition: transform 0.1s, box-shadow 0.15s;
+    transition: transform 0.1s, box-shadow 0.15s, outline-color 0.15s;
     text-align: center;
     padding: 6px 4px;
     overflow: hidden;
     word-break: break-word;
     user-select: none;
     -webkit-user-select: none;
+    outline: 2px dashed #48484a;
+    outline-offset: -2px;
+}
+
+.pad-cell:hover {
+    outline-color: #8e8e93;
 }
 
 .pad-cell:active {
@@ -1061,14 +1067,12 @@ footer {
 }
 
 .pad-cell-empty {
-    border: 2px dashed #48484a;
     background: transparent;
     color: #636366;
     font-size: 20px;
 }
 
 .pad-cell-empty:hover {
-    border-color: #8e8e93;
     background: rgba(255,255,255,0.04);
 }
 
