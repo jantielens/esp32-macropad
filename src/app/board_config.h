@@ -205,11 +205,29 @@
 // portal can render history even when no client was connected.
 // Default: enabled.
 // Master switch for background telemetry tasks (CPU monitor, health-window
-// timer, tripwires).  Set to 0 on boards where these tasks interfere with
-// real-time display rendering.  /api/health still works — it just returns
+// timer).  Set to 0 on boards where these tasks interfere with real-time
+// display rendering.  /api/health still works — it just returns
 // point-in-time values without min/max window bands or CPU %.
 #ifndef DEVICE_TELEMETRY_BACKGROUND_TASKS
 #define DEVICE_TELEMETRY_BACKGROUND_TASKS 1
+#endif
+
+// Granular sub-flags — default to the master switch value so that
+// DEVICE_TELEMETRY_BACKGROUND_TASKS=0 disables everything, but boards
+// can selectively re-enable individual components.
+// Enable CPU monitoring (idle-hook based, 1 Hz esp_timer).
+#ifndef DEVICE_TELEMETRY_CPU_MONITOR
+#define DEVICE_TELEMETRY_CPU_MONITOR DEVICE_TELEMETRY_BACKGROUND_TASKS
+#endif
+// Enable health-window min/max sampling timer.
+#ifndef DEVICE_TELEMETRY_HEALTH_WINDOW
+#define DEVICE_TELEMETRY_HEALTH_WINDOW DEVICE_TELEMETRY_BACKGROUND_TASKS
+#endif
+// Health window sampling period (ms).  Lower = finer min/max tracking but
+// more frequent sampling.  Boards with PSRAM-backed framebuffers may need a
+// higher value to avoid DMA bus contention.
+#ifndef HEALTH_WINDOW_SAMPLE_PERIOD_MS
+#define HEALTH_WINDOW_SAMPLE_PERIOD_MS 200
 #endif
 
 // Enable device-side health history ring buffer for charting in the web portal
@@ -478,21 +496,6 @@
 // Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 #ifndef LVGL_BUFFER_PREFER_INTERNAL
 #define LVGL_BUFFER_PREFER_INTERNAL false
-#endif
-
-// ============================================================================
-// Diagnostics / Telemetry
-// ============================================================================
-// Low-memory tripwire: when the internal heap minimum free (bytes) drops below this
-// threshold, dump per-task stack watermarks once.
-// Default: disabled (0). Enable per-board if you want early warning logs.
-#ifndef MEMORY_TRIPWIRE_INTERNAL_MIN_BYTES
-#define MEMORY_TRIPWIRE_INTERNAL_MIN_BYTES 0
-#endif
-
-// How often to check tripwires from the main loop.
-#ifndef MEMORY_TRIPWIRE_CHECK_INTERVAL_MS
-#define MEMORY_TRIPWIRE_CHECK_INTERVAL_MS 5000
 #endif
 
 // ============================================================================

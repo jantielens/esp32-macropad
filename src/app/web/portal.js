@@ -2691,8 +2691,6 @@ const healthHistory = {
     psramFreeMax: [],
     heapInternalLargest: [],
     heapInternalLargestTs: [],
-    heapInternalLargestMin: [],
-    heapInternalLargestMax: [],
 };
 
 const healthSeriesStats = {
@@ -2755,8 +2753,6 @@ function healthUpdateSeriesStats({ hasPsram = null } = {}) {
     {
         const mm = healthComputeMinMaxMulti([
             healthHistory.heapInternalLargest,
-            healthHistory.heapInternalLargestMin,
-            healthHistory.heapInternalLargestMax,
         ]);
         healthSeriesStats.heapInternalLargest.min = mm.min;
         healthSeriesStats.heapInternalLargest.max = mm.max;
@@ -2837,8 +2833,6 @@ async function updateHealthHistory({ hasPsram = null } = {}) {
 
         healthReplaceArray(healthHistory.heapInternalLargest, hist.heap_internal_largest);
         healthReplaceArray(healthHistory.heapInternalLargestTs, ts);
-        healthReplaceArray(healthHistory.heapInternalLargestMin, hist.heap_internal_largest_min_window);
-        healthReplaceArray(healthHistory.heapInternalLargestMax, hist.heap_internal_largest_max_window);
 
         healthUpdateSeriesStats({ hasPsram });
         healthDrawSparklinesOnly({ hasPsram });
@@ -3194,9 +3188,6 @@ function healthDrawSparklinesOnly({ hasPsram = null } = {}) {
 
     sparklineDraw(document.getElementById('health-sparkline-largest'), healthHistory.heapInternalLargest, {
         color: '#ff2d55',
-        bandMin: healthHistory.heapInternalLargestMin,
-        bandMax: healthHistory.heapInternalLargestMax,
-        bandColor: 'rgba(255, 45, 85, 0.16)',
         highlightIndex: healthGetSparklineHoverIndex('health-sparkline-largest'),
     });
 }
@@ -3399,20 +3390,15 @@ function healthInitSparklineTooltips() {
     healthAttachSparklineTooltip(largestCanvas, (t) => {
         const v = healthHistory.heapInternalLargest;
         const ts = healthHistory.heapInternalLargestTs;
-        const bmin = healthHistory.heapInternalLargestMin;
-        const bmax = healthHistory.heapInternalLargestMax;
         const n = v.length;
         if (n < 1) return null;
         const i = Math.max(0, Math.min(n - 1, Math.round(t * (n - 1))));
         const val = v[i];
         const tsv = ts[i];
-        const wmin = (i < bmin.length) ? bmin[i] : val;
-        const wmax = (i < bmax.length) ? bmax[i] : val;
         const age = healthFormatAgeMs(Date.now() - tsv);
         const smin = healthSeriesStats.heapInternalLargest.min;
         const smax = healthSeriesStats.heapInternalLargest.max;
 
-        const windowLine = formatMinMaxDeltaLine(wmin, wmax, healthFormatBytes);
         const sparklineLine = formatMinMaxDeltaLine(smin, smax, healthFormatBytes);
 
         return {
@@ -3421,7 +3407,6 @@ function healthInitSparklineTooltips() {
                 title: 'Internal Largest Block',
                 age,
                 hero: healthFormatBytes(val),
-                windowLineHtml: windowLine,
                 sparklineLineHtml: sparklineLine,
             }),
         };
@@ -3462,10 +3447,6 @@ function renderHealth(health) {
     if (tempEl) tempEl.textContent = (health.cpu_temperature !== null) ? `${health.cpu_temperature}°C` : 'N/A';
 
     // Memory
-    const heapEl = document.getElementById('health-heap');
-    if (heapEl) heapEl.textContent = formatBytes(health.heap_free);
-    const heapMinEl = document.getElementById('health-heap-min');
-    if (heapMinEl) heapMinEl.textContent = formatBytes(health.heap_min);
     const heapFragEl = document.getElementById('health-heap-frag');
     if (heapFragEl) {
         if (typeof health.heap_fragmentation_max_window === 'number') {
@@ -3480,11 +3461,7 @@ function renderHealth(health) {
 
     const internalLargestEl = document.getElementById('health-internal-largest');
     if (internalLargestEl) {
-        if (typeof health.heap_internal_largest_min_window === 'number') {
-            internalLargestEl.textContent = `${healthFormatBytes(health.heap_internal_largest)} (min ${healthFormatBytes(health.heap_internal_largest_min_window)})`;
-        } else {
-            internalLargestEl.textContent = healthFormatBytes(health.heap_internal_largest);
-        }
+        internalLargestEl.textContent = healthFormatBytes(health.heap_internal_largest);
     }
 
     const hasPsram = (
@@ -3496,17 +3473,6 @@ function renderHealth(health) {
     if (psramMinWrap) psramMinWrap.style.display = hasPsram ? '' : 'none';
     const psramMinEl = document.getElementById('health-psram-min');
     if (psramMinEl) psramMinEl.textContent = hasPsram ? healthFormatBytes(health.psram_min) : '—';
-
-    const psramFragWrap = document.getElementById('health-psram-frag-wrap');
-    if (psramFragWrap) psramFragWrap.style.display = hasPsram ? '' : 'none';
-    const psramFragEl = document.getElementById('health-psram-frag');
-    if (psramFragEl) {
-        if (hasPsram && typeof health.psram_fragmentation_max_window === 'number') {
-            psramFragEl.textContent = `${health.psram_fragmentation}% (max ${health.psram_fragmentation_max_window}%)`;
-        } else {
-            psramFragEl.textContent = hasPsram ? `${health.psram_fragmentation}%` : '—';
-        }
-    }
 
     // Flash
     const flashEl = document.getElementById('health-flash');
@@ -3563,8 +3529,6 @@ function renderHealth(health) {
         if (hasDisplay) {
             if (health.display_fps === null || health.display_fps === undefined) {
                 displayEl.textContent = 'N/A';
-            } else if (typeof health.display_lv_timer_us === 'number' && typeof health.display_present_us === 'number') {
-                displayEl.textContent = `${health.display_fps} fps, ${(health.display_lv_timer_us / 1000).toFixed(1)}ms / ${(health.display_present_us / 1000).toFixed(1)}ms`;
             } else {
                 displayEl.textContent = `${health.display_fps} fps`;
             }

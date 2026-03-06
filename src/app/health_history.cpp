@@ -72,12 +72,10 @@ static void hist_timer_cb(TimerHandle_t) {
 		const int cpu_usage = device_telemetry_get_cpu_usage();
 		s.cpu_usage = (cpu_usage < 0) ? (int16_t)-1 : (int16_t)cpu_usage;
 
-		const DeviceMemorySnapshot mem = device_telemetry_get_memory_snapshot();
-		s.heap_internal_free = (uint32_t)mem.heap_internal_free_bytes;
-		s.psram_free = (uint32_t)mem.psram_free_bytes;
-
-		// For consistency with /api/health, treat this as internal largest block.
-		s.heap_internal_largest = (uint32_t)mem.heap_largest_free_block_bytes;
+		// Lightweight heap counter reads only — no PSRAM free-list walks.
+		s.heap_internal_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		s.heap_internal_largest = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		s.psram_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
 		DeviceHealthWindowBands bands = {};
 		if (device_telemetry_get_health_window_bands(&bands)) {
@@ -86,19 +84,12 @@ static void hist_timer_cb(TimerHandle_t) {
 
 				s.psram_free_min_window = bands.psram_free_min_window;
 				s.psram_free_max_window = bands.psram_free_max_window;
-
-				s.heap_internal_largest_min_window = bands.heap_internal_largest_min_window;
-				s.heap_internal_largest_max_window = bands.heap_internal_largest_max_window;
 		} else {
-				// Early boot fallback: use instantaneous values as a degenerate band.
 				s.heap_internal_free_min_window = s.heap_internal_free;
 				s.heap_internal_free_max_window = s.heap_internal_free;
 
 				s.psram_free_min_window = s.psram_free;
 				s.psram_free_max_window = s.psram_free;
-
-				s.heap_internal_largest_min_window = s.heap_internal_largest;
-				s.heap_internal_largest_max_window = s.heap_internal_largest;
 		}
 
 		hist_write_sample(s);

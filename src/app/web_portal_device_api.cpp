@@ -55,6 +55,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(ESP.getChipCores());
 		response->print(",\"cpu_freq\":");
 		response->print(ESP.getCpuFreqMHz());
+		response->print(",\"heap_size\":");
+		response->print(ESP.getHeapSize());
 		response->print(",\"flash_chip_size\":");
 		response->print(ESP.getFlashChipSize());
 		response->print(",\"psram_size\":");
@@ -293,8 +295,6 @@ void handleGetHealthHistory(AsyncWebServerRequest *request) {
 		PRINT_U32_ARRAY_FIELD("psram_free_max_window", s.psram_free_max_window);
 
 		PRINT_U32_ARRAY_FIELD("heap_internal_largest", s.heap_internal_largest);
-		PRINT_U32_ARRAY_FIELD("heap_internal_largest_min_window", s.heap_internal_largest_min_window);
-		PRINT_U32_ARRAY_FIELD("heap_internal_largest_max_window", s.heap_internal_largest_max_window);
 
 #undef PRINT_U32_ARRAY_FIELD
 

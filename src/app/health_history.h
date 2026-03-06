@@ -20,14 +20,11 @@ struct HealthHistorySample {
 		uint32_t heap_internal_free;
 		uint32_t heap_internal_free_min_window;
 		uint32_t heap_internal_free_max_window;
-
 		uint32_t psram_free;
 		uint32_t psram_free_min_window;
 		uint32_t psram_free_max_window;
 
 		uint32_t heap_internal_largest;
-		uint32_t heap_internal_largest_min_window;
-		uint32_t heap_internal_largest_max_window;
 };
 
 // Starts background sampling if enabled. Safe to call multiple times.

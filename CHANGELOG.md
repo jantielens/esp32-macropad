@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Improved
 - **Image fetch PSRAM optimization** — `image_fetch_pause_slot()` now frees the double-buffer PSRAM allocations (front_buf + back_buf) when a page is hidden, reclaiming 2 × W×H×2 bytes per slot; LVGL-side `owned_pixels` are preserved so the last frame remains visible on navigate-back; buffers are re-allocated automatically on resume; persistent HTTP connections for paused slots are also closed, freeing socket and TLS memory
+- **Telemetry cleanup — reduced PSRAM bus contention** — comprehensive audit and simplification of the device telemetry subsystem targeting ESP32-P4 MIPI-DSI boards where PSRAM free-list walks stall the DPI DMA scan
+  - **CPU monitor rewrite** — replaced `uxTaskGetSystemState()` (which suspended the scheduler and caused blue-flash buffer underruns, issue #7) with per-core `ulTaskGetIdleRunTimeCounterForCore()` via `esp_timer` high-resolution counters; zero scheduler suspension
+  - **Health window simplified** — 200 ms timer now uses only counter reads (`heap_caps_get_free_size` for internal + PSRAM); `heap_caps_get_largest_free_block` removed from the timer and computed on-demand at `/api/health` request time; internal largest sparkline retains its line but loses min/max band
+  - **Health window enabled on ESP32-P4** — re-enabled `DEVICE_TELEMETRY_HEALTH_WINDOW` on `esp32-p4-lcd4b` now that all free-list walks are eliminated from the timer
+  - **PSRAM sparkline bands** — added `psram_free` min/max window tracking; PSRAM Free sparkline now shows a min/max band like Internal Free
+  - **Temperature sensor** — switched from transient install/read/uninstall per sample to a persistent handle installed once at boot
+  - **Removed fields** — dropped `heap_free`, `heap_min`, `heap_largest`, `heap_size`, `cpu_freq`, `psram_fragmentation`, `psram_largest` (redundant with capability-specific fields); removed `display_lv_timer_us` and `display_present_us` debug fields; removed `heap_caps_check_integrity_all()` from heartbeat
+  - **Removed tripwire system** — eliminated `TRIPWIRE_ARMED` / `rtos_task_utils.h` / background task dumper entirely
+  - **HA discovery** — removed `heap_fragmentation` sensor (was an undocumented internal metric); HA users with dashboards referencing this entity will need to remove it
+
+### Breaking
+- **HA MQTT entities removed** — `sensor.macropad_heap_fragmentation` no longer published; dashboards referencing it will show "unavailable"
+- **`/api/health` fields removed** — `heap_free`, `heap_min`, `heap_largest`, `heap_size`, `cpu_freq`, `psram_fragmentation`, `psram_largest`, `display_lv_timer_us`, `display_present_us`, `heap_internal_largest_min_window`, `heap_internal_largest_max_window` dropped from the JSON response
 
 ## [1.5.0] - 2026-03-05
 

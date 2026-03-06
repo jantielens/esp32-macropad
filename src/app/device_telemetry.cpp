@@ -3,7 +3,6 @@
 #include "log_manager.h"
 #include "board_config.h"
 #include "fs_health.h"
-#include "rtos_task_utils.h"
 #include "sensors/sensor_manager.h"
 
 #include <Arduino.h>
@@ -14,6 +13,8 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <freertos/timers.h>
+#include <freertos/idf_additions.h>
+#include <esp_timer.h>
 
 #if HAS_MQTT
 #include "mqtt_manager.h"
@@ -46,25 +47,15 @@ int16_t device_telemetry_get_cached_rssi(bool *valid) {
 	return s_cached_rssi;
 }
 
-// CPU usage tracking (task-based)
-static SemaphoreHandle_t cpu_mutex = nullptr;
-static int cpu_usage_current = -1;
-static TaskHandle_t cpu_task_handle = nullptr;
-static RtosTaskPsramAlloc cpu_task_alloc = {};
-
-// Delta tracking for calculation
-static uint32_t last_idle_runtime = 0;
-static uint32_t last_total_runtime = 0;
-static bool first_calculation = true;
-
-static bool log_every_ms(unsigned long now_ms, unsigned long *last_ms, unsigned long interval_ms) {
-		if (!last_ms) return false;
-		if (*last_ms == 0 || (now_ms - *last_ms) >= interval_ms) {
-				*last_ms = now_ms;
-				return true;
-		}
-		return false;
-}
+// CPU usage tracking — uses FreeRTOS per-core idle-task run-time counters.
+// `ulTaskGetIdleRunTimeCounterForCore()` (ESP-IDF addition) reads a single
+// uint32 from the idle-task TCB — no scheduler suspension, no task-list walk.
+// A 1 Hz esp_timer computes the delta and derives CPU%.
+static configRUN_TIME_COUNTER_TYPE s_idle_rt_last[portNUM_PROCESSORS] = {};
+static int64_t           s_wall_us_last = 0;
+static volatile int      s_cpu_usage = -1;           // Written by timer, read by getter
+static esp_timer_handle_t s_cpu_timer = nullptr;
+static bool              s_cpu_first_sample = true;
 
 // /api/health min/max window sampling (time-based rollover).
 // Goal: capture short-lived dips/spikes without storing time series on-device.
@@ -76,21 +67,16 @@ static bool log_every_ms(unsigned long now_ms, unsigned long *last_ms, unsigned 
 static portMUX_TYPE g_health_window_mux = portMUX_INITIALIZER_UNLOCKED;
 static TimerHandle_t g_health_window_timer = nullptr;
 
-static constexpr uint32_t kHealthWindowSamplePeriodMs = 200;
+static constexpr uint32_t kHealthWindowSamplePeriodMs = HEALTH_WINDOW_SAMPLE_PERIOD_MS;
 
 struct HealthWindowStats {
 		bool initialized;
 
 		size_t internal_free_min;
 		size_t internal_free_max;
-		size_t internal_largest_min;
-		size_t internal_largest_max;
-		int internal_frag_max;
 
 		size_t psram_free_min;
 		size_t psram_free_max;
-		size_t psram_largest_min;
-		int psram_frag_max;
 };
 
 static HealthWindowStats g_health_window_current = {};
@@ -121,10 +107,7 @@ static int compute_fragmentation_percent(size_t free_bytes, size_t largest_bytes
 		return (int)frag;
 }
 
-static void health_window_update_sample(size_t internal_free, size_t internal_largest, size_t psram_free, size_t psram_largest) {
-		const int internal_frag = compute_fragmentation_percent(internal_free, internal_largest);
-		const int psram_frag = compute_fragmentation_percent(psram_free, psram_largest);
-
+static void health_window_update_sample(size_t internal_free, size_t psram_free) {
 		const unsigned long now_ms = millis();
 
 		portENTER_CRITICAL(&g_health_window_mux);
@@ -152,14 +135,8 @@ static void health_window_update_sample(size_t internal_free, size_t internal_la
 
 				g_health_window_current.internal_free_min = internal_free;
 				g_health_window_current.internal_free_max = internal_free;
-				g_health_window_current.internal_largest_min = internal_largest;
-				g_health_window_current.internal_largest_max = internal_largest;
-				g_health_window_current.internal_frag_max = internal_frag;
-
 				g_health_window_current.psram_free_min = psram_free;
 				g_health_window_current.psram_free_max = psram_free;
-				g_health_window_current.psram_largest_min = psram_largest;
-				g_health_window_current.psram_frag_max = psram_frag;
 
 				portEXIT_CRITICAL(&g_health_window_mux);
 				return;
@@ -167,14 +144,8 @@ static void health_window_update_sample(size_t internal_free, size_t internal_la
 
 		if (internal_free < g_health_window_current.internal_free_min) g_health_window_current.internal_free_min = internal_free;
 		if (internal_free > g_health_window_current.internal_free_max) g_health_window_current.internal_free_max = internal_free;
-		if (internal_largest < g_health_window_current.internal_largest_min) g_health_window_current.internal_largest_min = internal_largest;
-		if (internal_largest > g_health_window_current.internal_largest_max) g_health_window_current.internal_largest_max = internal_largest;
-		if (internal_frag > g_health_window_current.internal_frag_max) g_health_window_current.internal_frag_max = internal_frag;
-
 		if (psram_free < g_health_window_current.psram_free_min) g_health_window_current.psram_free_min = psram_free;
 		if (psram_free > g_health_window_current.psram_free_max) g_health_window_current.psram_free_max = psram_free;
-		if (psram_largest < g_health_window_current.psram_largest_min) g_health_window_current.psram_largest_min = psram_largest;
-		if (psram_frag > g_health_window_current.psram_frag_max) g_health_window_current.psram_frag_max = psram_frag;
 
 		portEXIT_CRITICAL(&g_health_window_mux);
 }
@@ -184,7 +155,12 @@ static bool flash_cache_initialized = false;
 static size_t cached_sketch_size = 0;
 static size_t cached_free_sketch_space = 0;
 
-static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool include_debug_fields, bool include_mqtt_self_report);
+// Persistent temperature sensor handle (installed once, kept enabled).
+#if SOC_TEMP_SENSOR_SUPPORTED
+static temperature_sensor_handle_t s_temp_sensor = nullptr;
+#endif
+
+static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool include_api_only_fields, bool include_mqtt_self_report);
 
 static void fill_health_window_fields(JsonDocument &doc);
 
@@ -192,14 +168,10 @@ struct HealthWindowComputed {
 		uint32_t heap_internal_free_min_window;
 		uint32_t heap_internal_free_max_window;
 
-		uint32_t heap_internal_largest_min_window;
-		uint32_t heap_internal_largest_max_window;
 		int heap_fragmentation_max_window;
 
 		uint32_t psram_free_min_window;
 		uint32_t psram_free_max_window;
-		uint32_t psram_largest_min_window;
-		int psram_fragmentation_max_window;
 };
 
 static bool compute_health_window_computed(HealthWindowComputed* out);
@@ -224,112 +196,48 @@ static void get_memory_snapshot(
 		size_t *out_psram_largest
 );
 
-static int calculate_cpu_usage() {
-		// IMPORTANT:
-		// - uxTaskGetSystemState returns 0 when the provided array is too small.
-		// - TaskStatus_t is fairly large; keep this out of stack (CPU monitor task stack is small).
-		// - If runtime stats aren't enabled, total_runtime and ulRunTimeCounter stay 0 -> treat as unknown.
-		constexpr UBaseType_t kMaxTasks = 24;
-		static TaskStatus_t task_stats[kMaxTasks];
+// 1 Hz timer callback — reads per-core idle-task run-time counters (microseconds)
+// and derives CPU% from the delta.  Runs in esp_timer task context.
+static void cpu_timer_cb(void*) {
+	const int64_t wall_now = esp_timer_get_time();  // microseconds since boot
 
-		// Guard: if there are more tasks than we can sample, bail out and log.
-		// This keeps the static array size fixed (no extra RAM), while making truncation visible.
-		static unsigned long last_truncation_log_ms = 0;
-		const unsigned long now_ms = millis();
-		const UBaseType_t expected_tasks = uxTaskGetNumberOfTasks();
-		if (expected_tasks > kMaxTasks) {
-				if (log_every_ms(now_ms, &last_truncation_log_ms, 5000)) {
-						LOGI(
-								"CPU",
-								"Runtime stats truncated: tasks=%u > max=%u (cpu_usage unavailable)",
-								(unsigned)expected_tasks,
-								(unsigned)kMaxTasks
-						);
-				}
-				return -1;
+	if (s_cpu_first_sample) {
+		for (int c = 0; c < portNUM_PROCESSORS; c++) {
+			s_idle_rt_last[c] = ulTaskGetIdleRunTimeCounterForCore(c);
 		}
+		s_wall_us_last = wall_now;
+		s_cpu_first_sample = false;
+		return;
+	}
 
-		uint32_t total_runtime = 0;
-		const int task_count = uxTaskGetSystemState(task_stats, kMaxTasks, &total_runtime);
+	const int64_t wall_delta = wall_now - s_wall_us_last;
+	if (wall_delta <= 0) return;
 
-		static unsigned long last_runtime_stats_log_ms = 0;
-		if (task_count <= 0 || total_runtime == 0) {
-				if (log_every_ms(now_ms, &last_runtime_stats_log_ms, 5000)) {
-						LOGI(
-								"CPU",
-								"Runtime stats unavailable: uxTaskGetSystemState=%d total_runtime=%lu",
-								task_count,
-								(unsigned long)total_runtime
-						);
-				}
-				return -1;
-		}
+	// Sum idle microseconds across all cores.
+	int64_t idle_us_total = 0;
+	for (int c = 0; c < portNUM_PROCESSORS; c++) {
+		const configRUN_TIME_COUNTER_TYPE cur = ulTaskGetIdleRunTimeCounterForCore(c);
+		idle_us_total += (int64_t)(cur - s_idle_rt_last[c]);
+		s_idle_rt_last[c] = cur;
+	}
+	s_wall_us_last = wall_now;
 
-		// Count IDLE tasks and sum their runtimes.
-		uint32_t idle_runtime = 0;
-		int idle_task_count = 0;
-		for (UBaseType_t i = 0; i < task_count; i++) {
-				const char* name = task_stats[i].pcTaskName;
-				if (name && strstr(name, "IDLE") != nullptr) {
-						idle_runtime += task_stats[i].ulRunTimeCounter;
-						idle_task_count++;
-				}
-		}
+	// Total available CPU time = wall_delta * number_of_cores.
+	const int64_t total_cpu_us = wall_delta * portNUM_PROCESSORS;
 
-		if (idle_task_count <= 0) return -1;
+	int usage = (int)(100 - (idle_us_total * 100 / total_cpu_us));
+	if (usage < 0)   usage = 0;
+	if (usage > 100)  usage = 100;
 
-		// Skip first calculation (need delta)
-		if (first_calculation) {
-				last_idle_runtime = idle_runtime;
-				last_total_runtime = total_runtime;
-				first_calculation = false;
-				return -1;
-		}
-
-		// Calculate delta.
-		const uint32_t idle_delta = idle_runtime - last_idle_runtime;
-		const uint32_t total_delta = total_runtime - last_total_runtime;
-
-		last_idle_runtime = idle_runtime;
-		last_total_runtime = total_runtime;
-
-		if (total_delta == 0) return -1;
-
-		const uint32_t max_idle_time = total_delta * (uint32_t)idle_task_count;
-		if (max_idle_time == 0) return -1;
-
-		const float idle_percent = ((float)idle_delta / (float)max_idle_time) * 100.0f;
-		int cpu_usage = (int)(100.0f - idle_percent);
-
-		if (cpu_usage < 0) cpu_usage = 0;
-		if (cpu_usage > 100) cpu_usage = 100;
-
-		return cpu_usage;
+	s_cpu_usage = usage;
 }
 
 static void health_window_timer_cb(TimerHandle_t) {
-		size_t heap_free = 0;
-		size_t heap_min = 0;
-		size_t heap_largest = 0;
-		size_t internal_free = 0;
-		size_t internal_min = 0;
-		size_t psram_free = 0;
-		size_t psram_min = 0;
-		size_t psram_largest = 0;
+		// Pure counter reads only — no free-list walks.
+		const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
-		get_memory_snapshot(
-				&heap_free,
-				&heap_min,
-				&heap_largest,
-				&internal_free,
-				&internal_min,
-				&psram_free,
-				&psram_min,
-				&psram_largest
-		);
-
-		// heap_largest is computed as INTERNAL largest free block (see get_memory_snapshot).
-		health_window_update_sample(internal_free, heap_largest, psram_free, psram_largest);
+		health_window_update_sample(internal_free, psram_free);
 }
 
 static void health_window_get_snapshot(
@@ -352,56 +260,6 @@ static void health_window_get_snapshot(
 		*out_last_start_ms = g_health_window_last_start_ms;
 		*out_last_end_ms = g_health_window_last_end_ms;
 		portEXIT_CRITICAL(&g_health_window_mux);
-}
-
-static void log_task_stack_watermarks_one_shot() {
-		const UBaseType_t task_count = uxTaskGetNumberOfTasks();
-		if (task_count == 0) return;
-
-		TaskStatus_t* tasks = nullptr;
-		if (psramFound()) {
-				tasks = (TaskStatus_t*)heap_caps_malloc(sizeof(TaskStatus_t) * task_count, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-		}
-		if (!tasks) {
-				tasks = (TaskStatus_t*)heap_caps_malloc(sizeof(TaskStatus_t) * task_count, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-		}
-		if (!tasks) {
-				LOGE("Mem", "TRIPWIRE: OOM while allocating task list");
-				return;
-		}
-
-		uint32_t total_runtime = 0;
-		const UBaseType_t got = uxTaskGetSystemState(tasks, task_count, &total_runtime);
-		if (got == 0) {
-				heap_caps_free(tasks);
-				LOGE("Mem", "TRIPWIRE: uxTaskGetSystemState returned 0");
-				return;
-		}
-
-		// Sort by lowest high-water mark first (most at risk).
-		for (UBaseType_t i = 0; i < got; i++) {
-				UBaseType_t best = i;
-				for (UBaseType_t j = i + 1; j < got; j++) {
-						if (tasks[j].usStackHighWaterMark < tasks[best].usStackHighWaterMark) {
-								best = j;
-						}
-				}
-				if (best != i) {
-						TaskStatus_t tmp = tasks[i];
-						tasks[i] = tasks[best];
-						tasks[best] = tmp;
-				}
-		}
-
-		// Keep logs bounded.
-		const UBaseType_t max_to_log = (got > 16) ? 16 : got;
-		LOGI("Mem", "TRIPWIRE: task stack watermarks (worst %u/%u)", (unsigned)max_to_log, (unsigned)got);
-		for (UBaseType_t i = 0; i < max_to_log; i++) {
-				const unsigned bytes = (unsigned)tasks[i].usStackHighWaterMark * (unsigned)sizeof(StackType_t);
-				LOGI("Stack", "%s hw=%u", tasks[i].pcTaskName ? tasks[i].pcTaskName : "(null)", bytes);
-		}
-
-		heap_caps_free(tasks);
 }
 
 DeviceMemorySnapshot device_telemetry_get_memory_snapshot() {
@@ -470,37 +328,6 @@ void device_telemetry_log_memory_snapshot(const char *tag) {
 				(unsigned)psram_min,
 				(unsigned)psram_largest
 		);
-}
-
-void device_telemetry_check_tripwires() {
-		#if MEMORY_TRIPWIRE_INTERNAL_MIN_BYTES == 0
-		return;
-		#else
-		static bool fired = false;
-		static unsigned long last_check = 0;
-
-		if (fired) return;
-
-		const unsigned long now = millis();
-		if (last_check != 0 && (now - last_check) < (unsigned long)MEMORY_TRIPWIRE_CHECK_INTERVAL_MS) {
-				return;
-		}
-		last_check = now;
-
-		DeviceMemorySnapshot snapshot = device_telemetry_get_memory_snapshot();
-		if (snapshot.heap_internal_min_free_bytes > (size_t)MEMORY_TRIPWIRE_INTERNAL_MIN_BYTES) {
-				return;
-		}
-
-		fired = true;
-		LOGI(
-				"Mem",
-				"TRIPWIRE fired: internal_min=%u <= %u",
-				(unsigned)snapshot.heap_internal_min_free_bytes,
-				(unsigned)MEMORY_TRIPWIRE_INTERNAL_MIN_BYTES
-		);
-		log_task_stack_watermarks_one_shot();
-		#endif
 }
 
 void device_telemetry_fill_api(JsonDocument &doc) {
@@ -580,6 +407,20 @@ void device_telemetry_init() {
 		cached_sketch_size = ESP.getSketchSize();
 		cached_free_sketch_space = ESP.getFreeSketchSpace();
 		flash_cache_initialized = true;
+
+#if SOC_TEMP_SENSOR_SUPPORTED
+		if (!s_temp_sensor) {
+				temperature_sensor_config_t cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
+				if (temperature_sensor_install(&cfg, &s_temp_sensor) == ESP_OK) {
+						if (temperature_sensor_enable(s_temp_sensor) != ESP_OK) {
+								temperature_sensor_uninstall(s_temp_sensor);
+								s_temp_sensor = nullptr;
+						}
+				} else {
+						s_temp_sensor = nullptr;
+				}
+		}
+#endif
 }
 
 size_t device_telemetry_sketch_size() {
@@ -596,74 +437,39 @@ size_t device_telemetry_free_sketch_space() {
 		return cached_free_sketch_space;
 }
 
-// Background task: Calculate CPU usage every 1s.
-static void cpu_monitoring_task(void* param) {
-		while (true) {
-				const int new_value = calculate_cpu_usage();
-
-				xSemaphoreTake(cpu_mutex, portMAX_DELAY);
-				cpu_usage_current = new_value;
-				xSemaphoreGive(cpu_mutex);
-
-				vTaskDelay(pdMS_TO_TICKS(1000));
-		}
-}
-
+// Start a 1 Hz timer that reads per-core idle-task run-time counters.
 void device_telemetry_start_cpu_monitoring() {
-		if (cpu_task_handle != nullptr) return;  // Already started
-		
-		cpu_mutex = xSemaphoreCreateMutex();
-		if (cpu_mutex == nullptr) {
-				LOGE("CPU", "Failed to create mutex");
+		if (s_cpu_timer != nullptr) return;  // Already started
+
+		// Create a periodic 1 Hz esp_timer to compute the delta.
+		const esp_timer_create_args_t args = {
+				.callback = cpu_timer_cb,
+				.arg = nullptr,
+				.dispatch_method = ESP_TIMER_TASK,
+				.name = "cpu_usage",
+				.skip_unhandled_events = true,
+		};
+
+		esp_err_t err = esp_timer_create(&args, &s_cpu_timer);
+		if (err != ESP_OK) {
+				LOGE("CPU", "Failed to create timer: %s", esp_err_to_name(err));
 				return;
 		}
-		
-#if SOC_SPIRAM_SUPPORTED
-		if (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) > 0) {
-				const bool ok = rtos_create_task_psram_stack(
-						cpu_monitoring_task,
-						"cpu_monitor",
-						2048,  // Stack depth (words)
-						nullptr,
-						1,  // Low priority
-						&cpu_task_handle,
-						&cpu_task_alloc
-				);
 
-				if (!ok) {
-						LOGE("CPU", "Failed to create PSRAM-backed cpu_monitor task");
-						abort();
-				}
-
-				LOGI("CPU", "Created task with PSRAM-backed stack");
+		err = esp_timer_start_periodic(s_cpu_timer, 1000000);  // 1 s
+		if (err != ESP_OK) {
+				LOGE("CPU", "Failed to start timer: %s", esp_err_to_name(err));
+				esp_timer_delete(s_cpu_timer);
+				s_cpu_timer = nullptr;
 				return;
 		}
-#endif
 
-		BaseType_t result = xTaskCreate(
-				cpu_monitoring_task,
-				"cpu_monitor",
-				2048,  // Stack depth (words)
-				nullptr,
-				1,  // Low priority
-				&cpu_task_handle
-		);
-
-		if (result != pdPASS) {
-				LOGE("CPU", "Failed to create task");
-				vSemaphoreDelete(cpu_mutex);
-				cpu_mutex = nullptr;
-		}
+		LOGI("CPU", "Run-time-stats CPU monitor started (%d core%s)",
+				portNUM_PROCESSORS, portNUM_PROCESSORS > 1 ? "s" : "");
 }
 
 int device_telemetry_get_cpu_usage() {
-		if (cpu_mutex == nullptr) return -1;  // Not initialized
-
-		int value = -1;
-		xSemaphoreTake(cpu_mutex, portMAX_DELAY);
-		value = cpu_usage_current;
-		xSemaphoreGive(cpu_mutex);
-		return value;
+		return s_cpu_usage;  // Atomic read of a volatile int
 }
 
 void device_telemetry_start_health_window_sampling() {
@@ -699,14 +505,10 @@ static void fill_health_window_fields(JsonDocument &doc) {
 
 		doc["heap_internal_free_min_window"] = c.heap_internal_free_min_window;
 		doc["heap_internal_free_max_window"] = c.heap_internal_free_max_window;
-		doc["heap_internal_largest_min_window"] = c.heap_internal_largest_min_window;
-		doc["heap_internal_largest_max_window"] = c.heap_internal_largest_max_window;
 		doc["heap_fragmentation_max_window"] = c.heap_fragmentation_max_window;
 
 		doc["psram_free_min_window"] = c.psram_free_min_window;
 		doc["psram_free_max_window"] = c.psram_free_max_window;
-		doc["psram_largest_min_window"] = c.psram_largest_min_window;
-		doc["psram_fragmentation_max_window"] = c.psram_fragmentation_max_window;
 }
 
 static bool compute_health_window_computed(HealthWindowComputed* out) {
@@ -721,32 +523,16 @@ static bool compute_health_window_computed(HealthWindowComputed* out) {
 
 		health_window_get_snapshot(&last, &has_last, &current, &current_start_ms, &last_start_ms, &last_end_ms);
 
-		// Also fold in instantaneous request-time values to guarantee the returned
-		// band contains the point-in-time fields, even between 200ms samples.
-		size_t heap_free_now = 0;
-		size_t heap_min_now = 0;
-		size_t heap_largest_now = 0;
-		size_t internal_free_now = 0;
-		size_t internal_min_now = 0;
-		size_t psram_free_now = 0;
-		size_t psram_min_now = 0;
-		size_t psram_largest_now = 0;
-		get_memory_snapshot(
-				&heap_free_now,
-				&heap_min_now,
-				&heap_largest_now,
-				&internal_free_now,
-				&internal_min_now,
-				&psram_free_now,
-				&psram_min_now,
-				&psram_largest_now
-		);
-		const int internal_frag_now = compute_fragmentation_percent(internal_free_now, heap_largest_now);
-		const int psram_frag_now = compute_fragmentation_percent(psram_free_now, psram_largest_now);
+		// Fold in instantaneous request-time values to guarantee the
+		// returned band contains the point-in-time fields, even between samples.
+		const size_t internal_free_now = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const size_t psram_free_now = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
+		// Fragmentation computed on-demand (single free-list walk at request time, not in the 200ms timer).
+		const size_t internal_largest_now = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const int internal_frag_now = compute_fragmentation_percent(internal_free_now, internal_largest_now);
 
 		// Merge last-complete and current-in-progress windows.
-		// This is conservative (can be slightly wider than a strict "last N seconds" window),
-		// but avoids missing spikes without extra RAM.
 		HealthWindowStats merged = {};
 
 		const bool has_current = current.initialized;
@@ -754,71 +540,39 @@ static bool compute_health_window_computed(HealthWindowComputed* out) {
 		if (has_any) {
 				merged.initialized = true;
 
-				// Start from whichever window is present.
 				const HealthWindowStats* base = has_current ? &current : &last;
 				merged.internal_free_min = base->internal_free_min;
 				merged.internal_free_max = base->internal_free_max;
-				merged.internal_largest_min = base->internal_largest_min;
-				merged.internal_largest_max = base->internal_largest_max;
-				merged.internal_frag_max = base->internal_frag_max;
-
 				merged.psram_free_min = base->psram_free_min;
 				merged.psram_free_max = base->psram_free_max;
-				merged.psram_largest_min = base->psram_largest_min;
-				merged.psram_frag_max = base->psram_frag_max;
 
 				if (has_current && has_last && last.initialized) {
 						if (last.internal_free_min < merged.internal_free_min) merged.internal_free_min = last.internal_free_min;
 						if (last.internal_free_max > merged.internal_free_max) merged.internal_free_max = last.internal_free_max;
-						if (last.internal_largest_min < merged.internal_largest_min) merged.internal_largest_min = last.internal_largest_min;
-						if (last.internal_largest_max > merged.internal_largest_max) merged.internal_largest_max = last.internal_largest_max;
-						if (last.internal_frag_max > merged.internal_frag_max) merged.internal_frag_max = last.internal_frag_max;
-
 						if (last.psram_free_min < merged.psram_free_min) merged.psram_free_min = last.psram_free_min;
 						if (last.psram_free_max > merged.psram_free_max) merged.psram_free_max = last.psram_free_max;
-						if (last.psram_largest_min < merged.psram_largest_min) merged.psram_largest_min = last.psram_largest_min;
-						if (last.psram_frag_max > merged.psram_frag_max) merged.psram_frag_max = last.psram_frag_max;
 				}
 		}
 
 		if (!merged.initialized) {
-				// Early boot: initialize from instantaneous values.
 				merged.initialized = true;
 				merged.internal_free_min = internal_free_now;
 				merged.internal_free_max = internal_free_now;
-				merged.internal_largest_min = heap_largest_now;
-				merged.internal_largest_max = heap_largest_now;
-				merged.internal_frag_max = internal_frag_now;
-
 				merged.psram_free_min = psram_free_now;
 				merged.psram_free_max = psram_free_now;
-				merged.psram_largest_min = psram_largest_now;
-				merged.psram_frag_max = psram_frag_now;
 		}
 
-		// Guarantee the instantaneous request-time values are within the returned band.
+		// Guarantee instantaneous values are within the returned band.
 		if (internal_free_now < merged.internal_free_min) merged.internal_free_min = internal_free_now;
 		if (internal_free_now > merged.internal_free_max) merged.internal_free_max = internal_free_now;
-		if (heap_largest_now < merged.internal_largest_min) merged.internal_largest_min = heap_largest_now;
-		if (heap_largest_now > merged.internal_largest_max) merged.internal_largest_max = heap_largest_now;
-		if (internal_frag_now > merged.internal_frag_max) merged.internal_frag_max = internal_frag_now;
-
 		if (psram_free_now < merged.psram_free_min) merged.psram_free_min = psram_free_now;
 		if (psram_free_now > merged.psram_free_max) merged.psram_free_max = psram_free_now;
-		if (psram_largest_now < merged.psram_largest_min) merged.psram_largest_min = psram_largest_now;
-		if (psram_frag_now > merged.psram_frag_max) merged.psram_frag_max = psram_frag_now;
 
 		out->heap_internal_free_min_window = (uint32_t)merged.internal_free_min;
 		out->heap_internal_free_max_window = (uint32_t)merged.internal_free_max;
-
-		out->heap_internal_largest_min_window = (uint32_t)merged.internal_largest_min;
-		out->heap_internal_largest_max_window = (uint32_t)merged.internal_largest_max;
-		out->heap_fragmentation_max_window = merged.internal_frag_max;
-
+		out->heap_fragmentation_max_window = internal_frag_now;
 		out->psram_free_min_window = (uint32_t)merged.psram_free_min;
 		out->psram_free_max_window = (uint32_t)merged.psram_free_max;
-		out->psram_largest_min_window = (uint32_t)merged.psram_largest_min;
-		out->psram_fragmentation_max_window = merged.psram_frag_max;
 
 		return true;
 }
@@ -832,12 +586,10 @@ bool device_telemetry_get_health_window_bands(DeviceHealthWindowBands* out_bands
 		out_bands->heap_internal_free_max_window = c.heap_internal_free_max_window;
 		out_bands->psram_free_min_window = c.psram_free_min_window;
 		out_bands->psram_free_max_window = c.psram_free_max_window;
-		out_bands->heap_internal_largest_min_window = c.heap_internal_largest_min_window;
-		out_bands->heap_internal_largest_max_window = c.heap_internal_largest_max_window;
 		return true;
 }
 
-static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool include_debug_fields, bool include_mqtt_self_report) {
+static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool include_api_only_fields, bool include_mqtt_self_report) {
 		// System
 		uint64_t uptime_us = esp_timer_get_time();
 		doc["uptime_seconds"] = uptime_us / 1000000;
@@ -859,11 +611,6 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 		}
 		doc["reset_reason"] = reset_str;
 
-		// CPU (API includes cpu_freq; MQTT keeps payload smaller)
-		if (include_debug_fields) {
-				doc["cpu_freq"] = ESP.getCpuFreqMHz();
-		}
-
 		// CPU usage (nullable when runtime stats are unavailable)
 		const int cpu_usage = device_telemetry_get_cpu_usage();
 		if (cpu_usage < 0) {
@@ -872,72 +619,32 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 				doc["cpu_usage"] = cpu_usage;
 		}
 
-		// CPU / SoC temperature
+		// CPU / SoC temperature (persistent handle, installed once in device_telemetry_init)
 #if SOC_TEMP_SENSOR_SUPPORTED
-		float temp_celsius = 0;
-		temperature_sensor_handle_t temp_sensor = NULL;
-		temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
-
-		if (temperature_sensor_install(&temp_sensor_config, &temp_sensor) == ESP_OK) {
-				if (temperature_sensor_enable(temp_sensor) == ESP_OK) {
-						if (temperature_sensor_get_celsius(temp_sensor, &temp_celsius) == ESP_OK) {
-								doc["cpu_temperature"] = (int)temp_celsius;
-						} else {
-								doc["cpu_temperature"] = nullptr;
-						}
-						temperature_sensor_disable(temp_sensor);
+		{
+				float temp_celsius = 0;
+				if (s_temp_sensor && temperature_sensor_get_celsius(s_temp_sensor, &temp_celsius) == ESP_OK) {
+						doc["cpu_temperature"] = (int)temp_celsius;
 				} else {
 						doc["cpu_temperature"] = nullptr;
 				}
-				temperature_sensor_uninstall(temp_sensor);
-		} else {
-				doc["cpu_temperature"] = nullptr;
 		}
 #else
 		doc["cpu_temperature"] = nullptr;
 #endif
 
-		// Memory
-		size_t heap_free = 0;
-		size_t heap_min = 0;
-		size_t heap_largest = 0;
-		size_t internal_free = 0;
-		size_t internal_min = 0;
-		size_t psram_free = 0;
-		size_t psram_min = 0;
-		size_t psram_largest = 0;
+		// Memory — only internal heap + PSRAM free/min (no PSRAM free-list walks).
+		// Mixed heap_free/heap_min removed (confusing on PSRAM boards).
+		// psram_largest/psram_fragmentation removed (expensive PSRAM free-list walk).
+		const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const size_t internal_min = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 
-		get_memory_snapshot(
-				&heap_free,
-				&heap_min,
-				&heap_largest,
-				&internal_free,
-				&internal_min,
-				&psram_free,
-				&psram_min,
-				&psram_largest
-		);
-
-		doc["heap_free"] = heap_free;
-		doc["heap_min"] = heap_min;
-		if (include_debug_fields) {
-				doc["heap_size"] = ESP.getHeapSize();
-		}
-
-		// Additional heap/PSRAM details (useful for memory/fragmentation investigations)
-		doc["heap_largest"] = heap_largest;
 		doc["heap_internal_free"] = internal_free;
 		doc["heap_internal_min"] = internal_min;
-		const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 		doc["heap_internal_largest"] = internal_largest;
-		doc["psram_free"] = psram_free;
-		doc["psram_min"] = psram_min;
-		doc["psram_largest"] = psram_largest;
 
-		// Heap fragmentation
-		// IMPORTANT: On PSRAM boards, `heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)` can return a PSRAM block,
-		// while `ESP.getFreeHeap()` reports internal heap only. Mixing those yields negative fragmentation.
-		// We define heap fragmentation as INTERNAL heap fragmentation.
+		// Heap fragmentation (internal only)
 		float heap_frag = 0;
 		if (internal_free > 0 && internal_largest <= internal_free) {
 				heap_frag = (1.0f - ((float)internal_largest / (float)internal_free)) * 100.0f;
@@ -946,13 +653,15 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 		if (heap_frag > 100) heap_frag = 100;
 		doc["heap_fragmentation"] = (int)heap_frag;
 
-		float psram_frag = 0;
-		if (psram_free > 0 && psram_largest <= psram_free) {
-				psram_frag = (1.0f - ((float)psram_largest / (float)psram_free)) * 100.0f;
-		}
-		if (psram_frag < 0) psram_frag = 0;
-		if (psram_frag > 100) psram_frag = 100;
-		doc["psram_fragmentation"] = (int)psram_frag;
+#if SOC_SPIRAM_SUPPORTED
+		const size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+		const size_t psram_min = heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM);
+		doc["psram_free"] = psram_free;
+		doc["psram_min"] = psram_min;
+#else
+		doc["psram_free"] = 0;
+		doc["psram_min"] = 0;
+#endif
 
 		// Flash usage
 		const size_t sketch_size = device_telemetry_sketch_size();
@@ -1009,29 +718,23 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 				#endif
 		}
 
-		// Display perf (best-effort)
-		#if HAS_DISPLAY
-		if (displayManager) {
-				DisplayPerfStats stats;
-				if (display_manager_get_perf_stats(&stats)) {
-						doc["display_fps"] = stats.fps;
-						doc["display_lv_timer_us"] = stats.lv_timer_us;
-						doc["display_present_us"] = stats.present_us;
+		// Display FPS (API-only; excluded from MQTT payload).
+	if (include_api_only_fields) {
+				#if HAS_DISPLAY
+				if (displayManager) {
+						DisplayPerfStats stats;
+						if (display_manager_get_perf_stats(&stats)) {
+								doc["display_fps"] = stats.fps;
+						} else {
+								doc["display_fps"] = nullptr;
+						}
 				} else {
 						doc["display_fps"] = nullptr;
-						doc["display_lv_timer_us"] = nullptr;
-						doc["display_present_us"] = nullptr;
 				}
-		} else {
+				#else
 				doc["display_fps"] = nullptr;
-				doc["display_lv_timer_us"] = nullptr;
-				doc["display_present_us"] = nullptr;
+				#endif
 		}
-		#else
-		doc["display_fps"] = nullptr;
-		doc["display_lv_timer_us"] = nullptr;
-		doc["display_present_us"] = nullptr;
-		#endif
 
 // WiFi stats — use cached RSSI to avoid ESP-Hosted RPC on every publish.
 	if (WiFi.status() == WL_CONNECTED) {
