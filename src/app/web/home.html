@@ -789,6 +789,66 @@
                     <code style="display:block;font-size:11px;margin:0 0 2px;color:#86868b;">IST-5:30</code>
                 </details>
 
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Expression Binding</h4>
+                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:8px;word-break:break-all;">[expr:expression;format]</code>
+                <p style="color:#86868b;margin:0 0 8px;font-size:12px;">Evaluate math, comparisons, and conditionals on live binding values. Inner bindings (<code>[mqtt:...]</code>, <code>[health:...]</code>, etc.) are resolved first, then the expression is evaluated.</p>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12px;">
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>expression</strong></td><td style="padding:4px 0;">Math expression with inner bindings. Supports <code>+ - * / %</code>, comparisons <code>&gt; &lt; &gt;= &lt;= == !=</code>, ternary <code>? :</code>, parentheses, and <code>"quoted strings"</code>.</td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">Optional printf format string after <code>;</code> separator. Omit for automatic formatting.</td></tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Basic — unit conversion</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[health:heap_free] / 1024;%.0f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Bytes → KB (e.g. <em>183</em>)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[health:psram_free] / (1024 * 1024);%.2f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Bytes → MB (e.g. <em>4.00</em>)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:sensors/temp;value] * 9/5 + 32;%.1f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">°C → °F (e.g. <em>72.5</em>)</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Conditional text</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:sensor/temp;value] &gt; 30 ? "Hot" : "OK"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Threshold check → text</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[health:cpu] &gt; 80 ? "High" : "Normal"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">CPU load warning</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Advanced — combine multiple bindings</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar/power;w] - [mqtt:grid/power;w];%.0f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Net power (solar − grid)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar/power;w] &gt; 0 ? "Producing" : "Idle"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Status based on solar output</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Mixed — static text + expression</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">Heap: [expr:[health:heap_free]/1024;%.0f] KB</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Static text wrapping expr</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar;w]/1000;%.1f]kW / [expr:[mqtt:grid;w]/1000;%.1f]kW</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Two expressions in one label</td>
+                    </tr>
+                </table>
+
                 <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Widget Data Binding</h4>
                 <p style="color:#86868b;margin:0 0 8px;font-size:12px;">The <strong>Data Binding</strong> field in widget settings uses the same binding syntax. The resolved value is parsed as a number by the widget. <strong>Omit the format parameter</strong> — formatting would break numeric parsing.</p>
                 <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
@@ -800,9 +860,13 @@
                         <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:sensors/temp]</code></td>
                         <td style="padding:4px 0;color:#86868b;">Raw MQTT value → bar chart</td>
                     </tr>
-                    <tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
                         <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[health:cpu]</code></td>
                         <td style="padding:4px 0;color:#86868b;">Device CPU usage → bar chart</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar;w] - [mqtt:grid;w]]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Computed value → bar chart</td>
                     </tr>
                 </table>
             </div>

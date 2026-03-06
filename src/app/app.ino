@@ -21,6 +21,7 @@
 
 #if HAS_DISPLAY
 #include "display_manager.h"
+#include "expr_binding.h"
 #include "health_binding.h"
 #include "icon_store.h"
 #include "time_binding.h"
@@ -304,6 +305,7 @@ void setup()
 	#if HAS_DISPLAY
 	health_binding_init();
 	time_binding_init();
+	expr_binding_init();
 	#endif
 
 	last_heartbeat_ms = millis();

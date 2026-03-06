@@ -36,12 +36,15 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical bar with color thresholds, binding-driven)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Binding Template Engine**: Scheme-extensible `[scheme:params]` token resolver for label text (compile-time gated by `HAS_MQTT`)
-  - `binding_template.cpp/h` - Token parser, scheme registry (max 4), `resolve()` and `collect_topics()` API; called only from LVGL task
+  - `binding_template.cpp/h` - Token parser, scheme registry (max 8), `resolve()` and `collect_topics()` API; called only from LVGL task
   - MQTT scheme registered by `mqtt_sub_store_init()` — resolves `[mqtt:topic;path;format]` tokens against the subscription store
   - Health scheme registered by `health_binding_init()` — resolves `[health:key;format]` tokens from local device telemetry (CPU, heap, PSRAM, RSSI, uptime, IP, hostname); expensive reads cached 2 s, lightweight keys live
   - `health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
   - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries)
   - `time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
+  - Expr scheme registered by `expr_binding_init()` — resolves `[expr:expression;format]` tokens by first resolving inner bindings, then evaluating with a recursive-descent expression evaluator
+  - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings); no ESP32 dependencies, host-testable
+  - `expr_binding.cpp/h` - Glue between expr_eval and binding_template engine; bracket-depth `;` splitting (compile-time gated by `HAS_DISPLAY`)
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
 - **Screen Saver Subsystem**: Inactivity-based display sleep with backlight fading and per-screen wake redirect (compile-time gated by `HAS_DISPLAY`)
   - `screen_saver_manager.cpp/h` - State machine (Awake/FadingOut/Asleep/FadingIn), fade animation, touch wake polling, pixel shift burn-in prevention
@@ -210,6 +213,8 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/wifi_manager.cpp/h` - WiFi connect + mDNS (replaces inline connect logic)
 - `src/app/portal_idle.cpp/h` - Portal idle timeout in Config/AP modes
 - `src/app/binding_template.cpp/h` - Scheme-extensible token resolver for label text (compile-time gated by `HAS_MQTT`)
+- `src/app/expr_eval.cpp/h` - Pure C expression evaluator (arithmetic, comparisons, ternary); host-testable, no ESP32 deps
+- `src/app/expr_binding.cpp/h` - Expression binding glue — registers `[expr:]` scheme (compile-time gated by `HAS_DISPLAY`)
 - `src/app/health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
 - `src/app/time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
@@ -271,6 +276,14 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `tools/generate-board-driver-table.py` - Generates the board→drivers table from `src/boards/*/board_overrides.h`
   - Auto-discovers available display/touch backends from `src/app/display_drivers.cpp` and `src/app/touch_drivers.cpp`
   - `python3 tools/generate-board-driver-table.py --update-drivers-readme`
+
+### Tests
+- `tests/run_tests.sh` - Builds and runs all host-native tests (no ESP32 needed)
+- `tests/test_expr_eval.cpp` - Unit tests for pure expression evaluator (66 tests)
+- `tests/test_expr_binding.cpp` - Integration tests with mock MQTT/health resolvers (22 tests)
+- `tests/stubs.cpp` - `strlcpy()` stub for glibc (not available on Linux)
+- `tests/log_manager.h` - No-op log macros for host compilation
+- `tests/board_config.h` - Minimal board config stub for host compilation
 
 ### Configuration
 - `config.sh` - Project paths, FQBN_TARGETS array, and helper functions

@@ -110,6 +110,14 @@ The pad editor lets you design button layouts visually: pick icons, set colors, 
 
 Building from source, contributing, or adding new board support? See the [developer docs](docs/dev/).
 
+### Running Tests
+
+Host-native unit and integration tests run on the development machine (no ESP32 needed):
+
+```bash
+./tests/run_tests.sh
+```
+
 ## 📄 License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
