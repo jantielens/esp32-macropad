@@ -133,7 +133,8 @@ void PadScreen::update() {
     // Check if config has changed
     uint32_t gen = pad_config_get_generation();
     if (tilesBuilt && gen == cachedGeneration) {
-        // Config unchanged — just poll MQTT bindings and color bindings
+        // Config unchanged — poll bindings in priority order
+        pollBtnStateBindings();   // Visibility/interactivity first
         pollMqttBindings();
         pollColorBindings();
         mqtt_sub_store_clear_dirty();
@@ -183,6 +184,7 @@ void PadScreen::clearTiles() {
     tileCount = 0;
     bindingCount = 0;
     colorBindingCount = 0;
+    btnStateBindingCount = 0;
     tilesBuilt = false;
 }
 
@@ -450,6 +452,17 @@ void PadScreen::buildTiles() {
         lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(obj, onTap, LV_EVENT_SHORT_CLICKED, &tiles[i]);
         lv_obj_add_event_cb(obj, onLongPress, LV_EVENT_LONG_PRESSED, &tiles[i]);
+
+        // Register btn_state binding if configured
+        if (bcfg.btn_state[0] && btnStateBindingCount < MAX_PAD_BUTTONS) {
+            RuntimeBtnStateBinding& sb = btnStateBindings[btnStateBindingCount];
+            sb.tileIndex = i;
+            strlcpy(sb.templ, bcfg.btn_state, sizeof(sb.templ));
+            sb.lastState = 0xFF; // uninitialized — force first apply
+            sb.active = true;
+            sb.hasBindings = binding_template_has_bindings(bcfg.btn_state);
+            btnStateBindingCount++;
+        }
 
 #if HAS_IMAGE_FETCH
         // Request background image fetch if URL is configured
@@ -725,6 +738,77 @@ void PadScreen::pollColorBindings() {
         }
     }
 #endif
+}
+
+// ============================================================================
+// Button State Binding Polling
+// ============================================================================
+
+static BtnState parse_btn_state(const char* resolved) {
+    if (!resolved || !resolved[0]) return BTN_STATE_ENABLED;
+    if (strcmp(resolved, "disabled") == 0) return BTN_STATE_DISABLED;
+    if (strcmp(resolved, "hidden") == 0)   return BTN_STATE_HIDDEN;
+    // "enabled", "---" (unresolved), "ERR:..." → default to enabled
+    return BTN_STATE_ENABLED;
+}
+
+static void apply_btn_state(ButtonTile& tile, BtnState state) {
+    if (!tile.obj) return;
+    switch (state) {
+    case BTN_STATE_ENABLED:
+        lv_obj_clear_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_state(tile.obj, LV_STATE_DISABLED);
+        break;
+    case BTN_STATE_DISABLED:
+        lv_obj_clear_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_state(tile.obj, LV_STATE_DISABLED);
+        break;
+    case BTN_STATE_HIDDEN:
+        lv_obj_add_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);
+        break;
+    }
+}
+
+void PadScreen::pollBtnStateBindings() {
+    if (btnStateBindingCount == 0) return;
+
+    char resolved[BINDING_TEMPLATE_MAX_LEN];
+
+    for (uint16_t i = 0; i < btnStateBindingCount; i++) {
+        RuntimeBtnStateBinding& sb = btnStateBindings[i];
+        if (!sb.active) continue;
+
+        BtnState state;
+
+        if (sb.hasBindings) {
+            binding_template_resolve(sb.templ, resolved, sizeof(resolved));
+            state = parse_btn_state(resolved);
+        } else {
+            // Static value — parse once then deactivate
+            state = parse_btn_state(sb.templ);
+            sb.active = false;
+        }
+
+        if ((uint8_t)state == sb.lastState) continue;
+        sb.lastState = (uint8_t)state;
+
+        uint8_t ti = sb.tileIndex;
+        if (ti >= tileCount) continue;
+        ButtonTile& tile = tiles[ti];
+
+        apply_btn_state(tile, state);
+
+#if HAS_IMAGE_FETCH
+        // Pause/resume image fetch for hidden tiles
+        if (tile.image_slot != IMAGE_SLOT_INVALID) {
+            if (state == BTN_STATE_HIDDEN) {
+                image_fetch_pause_slot(tile.image_slot);
+            } else {
+                image_fetch_resume_slot(tile.image_slot);
+            }
+        }
+#endif
+    }
 }
 
 // ============================================================================

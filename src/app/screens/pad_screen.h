@@ -41,6 +41,22 @@ struct RuntimeColorBinding {
     bool hasBindings;                                 // true if template contains [xxx:...] tokens
 };
 
+// Tri-state button state: enabled (interactive), disabled (visible, no input), hidden
+enum BtnState : uint8_t {
+    BTN_STATE_ENABLED  = 0,
+    BTN_STATE_DISABLED = 1,
+    BTN_STATE_HIDDEN   = 2,
+};
+
+// Runtime button state binding — resolved each poll cycle to determine visibility/interactivity.
+struct RuntimeBtnStateBinding {
+    uint8_t tileIndex;                                // index into tiles[]
+    char templ[CONFIG_BTN_STATE_MAX_LEN];             // Original btn_state string (template or static)
+    uint8_t lastState;                                // Last applied BtnState (0xFF = uninitialized)
+    bool active;
+    bool hasBindings;                                 // true if template contains [xxx:...] tokens
+};
+
 // Runtime state per button tile (kept in memory while screen is active)
 struct ButtonTile {
     lv_obj_t* obj;            // Button container object
@@ -92,6 +108,10 @@ private:
     RuntimeColorBinding colorBindings[MAX_PAD_BUTTONS * 3 + 1];
     uint16_t colorBindingCount;
 
+    // Button state bindings (1 per button max)
+    RuntimeBtnStateBinding btnStateBindings[MAX_PAD_BUTTONS];
+    uint16_t btnStateBindingCount;
+
     uint32_t cachedGeneration; // Last seen pad_config generation
     bool tilesBuilt;
     char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
@@ -103,6 +123,7 @@ private:
     void clearTiles();
     void pollMqttBindings();
     void pollColorBindings();
+    void pollBtnStateBindings();
 #if HAS_IMAGE_FETCH
     void pollImageFrames();
 #endif

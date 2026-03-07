@@ -27,6 +27,7 @@
 #define CONFIG_JSON_PATH_MAX_LEN       48
 #define CONFIG_FORMAT_MAX_LEN          24
 #define CONFIG_STATE_ON_VALUE_MAX_LEN  32
+#define CONFIG_BTN_STATE_MAX_LEN      192
 #define CONFIG_BG_IMAGE_URL_MAX_LEN   256
 #define CONFIG_BG_IMAGE_USER_MAX_LEN   32
 #define CONFIG_BG_IMAGE_PASS_MAX_LEN   64
@@ -116,6 +117,10 @@ struct ScreenButtonConfig {
 
     // Widget type (bar_chart, gauge, etc.) — empty = normal button
     WidgetConfig widget;
+
+    // Button state — tri-state: "enabled" (default), "disabled", "hidden"
+    // Empty = enabled. Supports binding templates for dynamic state.
+    char btn_state[CONFIG_BTN_STATE_MAX_LEN];
 };
 
 // Page-level config

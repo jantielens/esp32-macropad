@@ -542,6 +542,20 @@
                     </div>
                 </div>
 
+                <!-- Button State (collapsible) -->
+                <details id="pad-edit-btn-state-section">
+                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Button State</summary>
+                    <small style="display:block; margin-bottom:12px; color:#86868b;">Control button visibility and interactivity. Use a static value or a binding expression that resolves to <code>enabled</code>, <code>disabled</code>, or <code>hidden</code>.</small>
+                    <div class="form-group">
+                        <label for="pad-edit-btn-state">State</label>
+                        <div class="binding-input-wrap">
+                            <input type="text" id="pad-edit-btn-state" class="binding-mono" maxlength="191" placeholder="e.g. enabled, disabled, hidden, or [expr:…]">
+                            <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                        </div>
+                        <small><b>enabled</b> = normal (default when empty), <b>disabled</b> = visible but no tap/hold, <b>hidden</b> = invisible.</small>
+                    </div>
+                </details>
+
                 <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
 
                 <!-- Tap Action -->

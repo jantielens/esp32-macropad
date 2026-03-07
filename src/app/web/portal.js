@@ -2037,6 +2037,11 @@ function padDialogOpen(col, row) {
         padUpdateMixedBindingFont(el);
     });
 
+    // Button state
+    var btnStateEl = document.getElementById('pad-edit-btn-state');
+    btnStateEl.value = btn.btn_state || '';
+    document.getElementById('pad-edit-btn-state-section').open = !!btn.btn_state;
+
     // Build bindable color components (rebuilds DOM each open)
     padBuildColorBind('pad-edit-bg-color-wrap', 'Background', 'bg_color', '#333333');
     padBuildColorBind('pad-edit-fg-color-wrap', 'Text Color', 'fg_color', '#ffffff');
@@ -2260,6 +2265,10 @@ function padDialogOk() {
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
         }
     }
+
+    // Button state
+    const btnState = document.getElementById('pad-edit-btn-state').value.trim();
+    if (btnState) btn.btn_state = btnState;
 
     padState.buttons.push(btn);
     padDialogClose();

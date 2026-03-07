@@ -174,6 +174,9 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
         }
     }
 #endif
+
+    // Button state (tri-state: "enabled", "disabled", "hidden"; empty = enabled)
+    strlcpy(btn->btn_state, obj["btn_state"] | "", CONFIG_BTN_STATE_MAX_LEN);
 }
 
 // ============================================================================
