@@ -230,6 +230,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_telemetry.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
+  - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/icon_store.cpp
@@ -273,6 +274,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/device_telemetry.cpp
   - src/app/duty_cycle.cpp
+  - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/ha_discovery.h
   - src/app/mqtt_manager.cpp

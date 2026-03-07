@@ -29,17 +29,16 @@ struct RuntimeLabelBinding {
     bool active;
 };
 
-// Runtime toggle state binding (links a tile's fg color to an MQTT state)
-struct RuntimeStateBinding {
+// Runtime color binding — a color field that may contain binding templates.
+// Resolved each poll cycle; only applies LVGL style on change.
+struct RuntimeColorBinding {
     uint8_t tileIndex;                                // index into tiles[]
-    char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];       // topic to poll
-    char json_path[CONFIG_JSON_PATH_MAX_LEN];         // extraction path
-    char on_value[CONFIG_STATE_ON_VALUE_MAX_LEN];     // value == ON
-    uint32_t fg_color_rgb;                            // normal fg
-    uint32_t disabled_fg_color_rgb;                   // dimmed fg (OFF)
-    bool currentlyOn;                                 // current visual state
-    bool initialized;                                 // received at least one value
+    char templ[CONFIG_COLOR_MAX_LEN];                 // Original color string (template or static)
+    uint32_t defaultColor;                            // Fallback color when unresolved
+    uint32_t lastApplied;                             // Last applied color (skip if unchanged)
+    uint8_t target;                                   // 0=bg, 1=fg (labels+icon recolor), 2=border
     bool active;
+    bool hasBindings;                                 // true if template contains [xxx:...] tokens
 };
 
 // Runtime state per button tile (kept in memory while screen is active)
@@ -49,7 +48,8 @@ struct ButtonTile {
     lv_obj_t* label_center;   // Center label (Font L) or nullptr
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr
     lv_obj_t* icon_img;       // Icon image widget (or nullptr)
-    uint32_t bg_color_rgb;    // Original bg color (for tap flash restore)
+    bool icon_is_mono;        // True if icon uses fg recolor
+    uint32_t bg_color_rgb;    // Current bg color (for tap flash restore)
     uint8_t page;             // Page index (for HA event)
     uint8_t col;              // Grid column (for HA event)
     uint8_t row;              // Grid row (for HA event)
@@ -87,20 +87,22 @@ private:
     RuntimeLabelBinding bindings[MAX_PAD_BUTTONS * 3];
     uint16_t bindingCount;
 
-    // Toggle state bindings (max 1 per button)
-    RuntimeStateBinding stateBindings[MAX_PAD_BUTTONS];
-    uint16_t stateBindingCount;
+    // Color bindings (max 3 per button: bg, fg, border + 1 page bg)
+    static const int MAX_COLOR_BINDINGS = MAX_PAD_BUTTONS * 3 + 1;
+    RuntimeColorBinding colorBindings[MAX_PAD_BUTTONS * 3 + 1];
+    uint16_t colorBindingCount;
 
     uint32_t cachedGeneration; // Last seen pad_config generation
     bool tilesBuilt;
     char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
-    uint32_t bgColor;                              // Cached page background color
+    char pageBgTemplate[CONFIG_COLOR_MAX_LEN];     // Page background color/binding
+    uint32_t pageBgDefault;                        // Fallback page bg color
 
     // Build/destroy tile LVGL objects from config
     void buildTiles();
     void clearTiles();
     void pollMqttBindings();
-    void pollToggleState();
+    void pollColorBindings();
 #if HAS_IMAGE_FETCH
     void pollImageFrames();
 #endif

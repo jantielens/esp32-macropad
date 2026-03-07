@@ -284,11 +284,7 @@
                 </div>
 
                 <!-- Background color -->
-                <div style="display:flex; align-items:center; gap:10px; margin-top:8px; margin-bottom:4px;">
-                    <label for="pad-bg-color" style="margin:0; white-space:nowrap;">Background</label>
-                    <input type="color" id="pad-bg-color" value="#000000" style="width:40px; height:34px; border:2px solid #d2d2d7; border-radius:8px; padding:2px; cursor:pointer; flex-shrink:0;">
-                    <div class="pad-swatch-strip" data-picker="pad-bg-color" style="margin-top:0;"></div>
-                </div>
+                <div id="pad-page-bg-color-wrap" class="pad-color-bind-group" style="margin-top:8px; margin-bottom:4px;"></div>
 
                 <!-- Action buttons -->
                 <div class="pad-actions">
@@ -339,17 +335,25 @@
 
                 <div class="form-group">
                     <label for="pad-edit-label-top">Top Label</label>
-                    <input type="text" id="pad-edit-label-top" maxlength="191" placeholder="e.g. Living Room or Power: [mqtt:topic;path;fmt] W">
+                    <div class="binding-input-wrap">
+                        <input type="text" id="pad-edit-label-top" maxlength="191" placeholder="e.g. Living Room or Power: [mqtt:topic;path;fmt] W">
+                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="pad-edit-label-center">Center Label</label>
-                    <input type="text" id="pad-edit-label-center" maxlength="191" placeholder="e.g. 21.5°C or [mqtt:sensors/temp;temp;%.1f°C]">
+                    <div class="binding-input-wrap">
+                        <input type="text" id="pad-edit-label-center" maxlength="191" placeholder="e.g. 21.5°C or [mqtt:sensors/temp;temp;%.1f°C]">
+                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="pad-edit-label-bottom">Bottom Label</label>
-                    <input type="text" id="pad-edit-label-bottom" maxlength="191" placeholder="e.g. Lights or [mqtt:topic;path;format]">
+                    <div class="binding-input-wrap">
+                        <input type="text" id="pad-edit-label-bottom" maxlength="191" placeholder="e.g. Lights or [mqtt:topic;path;format]">
+                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                    </div>
                 </div>
-                <small style="display:block; margin-bottom:12px; color:#86868b;">Use <code>[mqtt:topic;path;format]</code> in labels to bind live values. <button type="button" onclick="document.getElementById('binding-help-overlay').style.display='flex'" style="background:none;border:1px solid #d2d2d7;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:18px;cursor:pointer;color:#86868b;padding:0;vertical-align:middle;">?</button></small>
 
                 <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
 
@@ -401,8 +405,10 @@
 
                     <div class="form-group">
                         <label for="pad-edit-widget-data-binding">Data Binding</label>
-                        <input type="text" id="pad-edit-widget-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/energy/solar_power;power]">
-                        <small>Binding template for widget value. Omit format — widget parses the raw number. <button type="button" onclick="document.getElementById('binding-help-overlay').style.display='flex'" style="background:none;border:1px solid #d2d2d7;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:18px;cursor:pointer;color:#86868b;padding:0;vertical-align:middle;">?</button></small>
+                        <div class="binding-input-wrap">
+                            <input type="text" class="binding-mono" id="pad-edit-widget-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/energy/solar_power;power]">
+                            <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                        </div>
                     </div>
 
                     <div style="display:flex; gap:8px;">
@@ -465,26 +471,7 @@
                     </div>
                 </details>
 
-                <!-- Toggle State (collapsible) -->
-                <details id="pad-edit-state-section">
-                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Toggle State</summary>
-                    <small style="display:block; margin-bottom:12px; color:#86868b;">Dim button text when MQTT state doesn't match the "ON" value.</small>
 
-                    <div class="form-group">
-                        <label for="pad-edit-state-topic">State Topic</label>
-                        <input type="text" id="pad-edit-state-topic" maxlength="127" placeholder="e.g. home/lights/living-room/state">
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                        <div class="form-group" style="flex:2;">
-                            <label for="pad-edit-state-path">JSON Path</label>
-                            <input type="text" id="pad-edit-state-path" maxlength="47" placeholder="e.g. state (. = raw)">
-                        </div>
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-state-on-value">ON Value</label>
-                            <input type="text" id="pad-edit-state-on-value" maxlength="31" placeholder="e.g. ON" value="ON">
-                        </div>
-                    </div>
-                </details>
 
                 <!-- Image Background (collapsible) -->
                 <details id="pad-edit-image-section">
@@ -521,25 +508,17 @@
 
                 <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
 
-                <div style="display:flex; gap:12px;">
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-bg-color">Background</label>
-                        <input type="color" id="pad-edit-bg-color" value="#333333" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
-                        <div class="pad-swatch-strip" data-picker="pad-edit-bg-color"></div>
-                    </div>
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-fg-color">Text Color</label>
-                        <input type="color" id="pad-edit-fg-color" value="#ffffff" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
-                        <div class="pad-swatch-strip" data-picker="pad-edit-fg-color"></div>
-                    </div>
-                </div>
+                <!-- Bindable color fields -->
+                <details id="pad-edit-colors-section">
+                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Colors</summary>
+                    <small style="display:block; margin-bottom:12px; color:#86868b;">Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. When using a binding, set a default color as fallback. <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button></small>
+
+                    <div id="pad-edit-bg-color-wrap" class="pad-color-bind-group"></div>
+                    <div id="pad-edit-fg-color-wrap" class="pad-color-bind-group"></div>
+                    <div id="pad-edit-border-color-wrap" class="pad-color-bind-group"></div>
+                </details>
 
                 <div style="display:flex; gap:12px; margin-top:4px;">
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-border-color">Border</label>
-                        <input type="color" id="pad-edit-border-color" value="#000000" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
-                        <div class="pad-swatch-strip" data-picker="pad-edit-border-color"></div>
-                    </div>
                     <div class="form-group" style="flex:1;">
                         <label for="pad-edit-border-width">Border Width</label>
                         <input type="number" id="pad-edit-border-width" min="0" max="10" value="0" style="width:100%;">

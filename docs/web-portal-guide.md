@@ -138,10 +138,9 @@ Click any cell in the grid preview to open the button editor dialog:
 - **Long-Press Action** — same options, triggered on a long press
 - For MQTT actions, configure the topic and payload
 
-**Toggle State** (optional)
-- **State Topic** — MQTT topic to monitor for on/off state
-- **JSON Path** — extract a value from a JSON payload (`.` for raw)
-- **ON Value** — the value that means "on" (default: `ON`)
+**Colors** (collapsible)
+- **Background / Text / Border** — pick a static `#hex` color, or enter a binding expression like `[expr:[mqtt:topic;path]>50?"#ff0000":"#00ff00"]` for dynamic coloring
+- **Default color** — fallback color used when a binding hasn't resolved yet or returns an error
 
 **Background Image** (optional)
 - **Image URL** — HTTP URL to a JPEG or PNG image

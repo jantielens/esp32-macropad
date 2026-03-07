@@ -1440,9 +1440,6 @@ function padInit() {
         padState.rows = parseInt(e.target.value);
         padRenderGrid();
     });
-    document.getElementById('pad-bg-color').addEventListener('input', () => {
-        padRenderGrid();
-    });
 
     document.getElementById('pad-save-btn').addEventListener('click', padSavePage);
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
@@ -1565,7 +1562,8 @@ async function padLoadPage(page) {
             document.getElementById('pad-rows').value = padState.rows;
             document.getElementById('pad-name').value = '';
             document.getElementById('pad-wake-screen').value = '';
-            document.getElementById('pad-bg-color').value = '#000000';
+            padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
+            padSetColorBind('page_bg_color', '#000000', undefined, '#000000');
             padCacheColors(page, [], '#000000');
             padRenderPageSwatches();
             padRenderGrid();
@@ -1582,7 +1580,8 @@ async function padLoadPage(page) {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
-        document.getElementById('pad-bg-color').value = padColorToHex(json.bg_color, '#000000');
+        padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
+        padSetColorBind('page_bg_color', json.bg_color, json.bg_color_default, '#000000');
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -1637,7 +1636,8 @@ function padRenderGrid() {
     if (deviceInfoCache && deviceInfoCache.display_coord_width && deviceInfoCache.display_coord_height) {
         grid.style.aspectRatio = deviceInfoCache.display_coord_width + ' / ' + deviceInfoCache.display_coord_height;
     }
-    grid.style.background = document.getElementById('pad-bg-color').value || '#000000';
+    const pageBgPick = document.getElementById('pad-edit-page_bg_color-pick');
+    grid.style.background = pageBgPick ? pageBgPick.value : '#000000';
     grid.innerHTML = '';
 
     if (emptyState) emptyState.style.display = 'none';
@@ -1774,15 +1774,32 @@ function padColorToHex(val, fallback) {
     if (val === undefined || val === null) return fallback;
     if (typeof val === 'string') {
         if (val.startsWith('#')) return val;
+        if (val.startsWith('[')) return fallback; // binding template — use fallback
         // Try parsing as hex number string
         const n = parseInt(val, 16);
         if (!isNaN(n)) return '#' + n.toString(16).padStart(6, '0');
-        return val || fallback;
+        return fallback;
     }
     if (typeof val === 'number') {
         return '#' + (val & 0xFFFFFF).toString(16).padStart(6, '0');
     }
     return fallback;
+}
+
+// Returns the raw color string (hex or binding) for storing in config
+function padColorValue(val) {
+    if (val === undefined || val === null) return '';
+    if (typeof val === 'number') return '#' + (val & 0xFFFFFF).toString(16).padStart(6, '0');
+    if (typeof val === 'string') {
+        if (val.startsWith('#') || val.startsWith('[')) return val;
+        const n = parseInt(val, 16);
+        if (!isNaN(n)) return '#' + n.toString(16).padStart(6, '0');
+    }
+    return String(val);
+}
+
+function padIsBinding(val) {
+    return typeof val === 'string' && val.startsWith('[');
 }
 
 function padHexToInt(hex) {
@@ -1791,9 +1808,107 @@ function padHexToInt(hex) {
 }
 
 function padColorsToHex(btn) {
-    if (typeof btn.bg_color === 'number') btn.bg_color = btn.bg_color.toString(16).padStart(6, '0');
-    if (typeof btn.fg_color === 'number') btn.fg_color = btn.fg_color.toString(16).padStart(6, '0');
-    if (typeof btn.border_color === 'number') btn.border_color = btn.border_color.toString(16).padStart(6, '0');
+    // Normalize colors for JSON save: legacy ints → hex strings, strip # from static hex
+    ['bg_color', 'fg_color', 'border_color'].forEach(k => {
+        const v = btn[k];
+        if (typeof v === 'number') {
+            btn[k] = (v & 0xFFFFFF).toString(16).padStart(6, '0');
+        } else if (typeof v === 'string' && v.startsWith('#')) {
+            btn[k] = v.slice(1);
+        }
+        // Binding strings (starting with '[') pass through unchanged
+    });
+}
+
+/**
+ * Toggle monospace font on mixed-binding inputs based on whether they contain a binding token.
+ */
+function padUpdateMixedBindingFont(input) {
+    if (input.value.indexOf('[') !== -1) {
+        input.classList.add('has-binding');
+    } else {
+        input.classList.remove('has-binding');
+    }
+}
+
+/** Show the binding help overlay. */
+function showBindingHelp() {
+    document.getElementById('binding-help-overlay').style.display = 'flex';
+}
+
+/**
+ * Build a bindable color component inside a container element.
+ * Layout: [color picker] ○○○○○ (swatches)  /  [expression textbox]
+ * @param {string} containerId - ID of the wrapper div
+ * @param {string} label - Display label (e.g. "Background")
+ * @param {string} fieldName - Field key (e.g. "bg_color") used for element IDs
+ * @param {string} defaultHex - Default hex color when field is empty
+ */
+function padBuildColorBind(containerId, label, fieldName, defaultHex) {
+    const wrap = document.getElementById(containerId);
+    if (!wrap) return;
+    const pickId = 'pad-edit-' + fieldName + '-pick';
+    const exprId = 'pad-edit-' + fieldName + '-expr';
+
+    wrap.innerHTML =
+        '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">' + label + '</label>' +
+        '<div class="pad-color-bind-row">' +
+            '<input type="color" id="' + pickId + '" value="' + defaultHex + '">' +
+            '<div class="pad-swatch-strip" data-picker="' + pickId + '" style="margin-top:0;"></div>' +
+        '</div>' +
+        '<div style="margin-top:6px;">' +
+            '<label for="' + exprId + '" style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Data Binding</label>' +
+            '<div class="binding-input-wrap">' +
+                '<input type="text" class="binding-mono" id="' + exprId + '" maxlength="191" placeholder="e.g. [expr:[mqtt:topic;path]>50?&quot;#ff0000&quot;:&quot;#00ff00&quot;]">' +
+                '<button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>' +
+            '</div>' +
+        '</div>';
+
+    // Re-render grid preview when page-level color picker changes
+    if (fieldName === 'page_bg_color') {
+        document.getElementById(pickId).addEventListener('input', () => { padRenderGrid(); });
+    }
+}
+
+/**
+ * Set value of a bindable color component.
+ * If colorVal is a binding → picker shows defaultColor, expression shows binding.
+ * If colorVal is a static hex → picker shows that hex, expression is empty.
+ */
+function padSetColorBind(fieldName, colorVal, defaultColor, fallbackHex) {
+    const pick = document.getElementById('pad-edit-' + fieldName + '-pick');
+    const expr = document.getElementById('pad-edit-' + fieldName + '-expr');
+    if (!pick) return;
+
+    const raw = padColorValue(colorVal) || fallbackHex;
+
+    if (padIsBinding(raw)) {
+        // Binding: picker = default/fallback color, expression = binding string
+        pick.value = defaultColor !== undefined ? padColorToHex(defaultColor, fallbackHex) : fallbackHex;
+        if (expr) expr.value = raw;
+    } else {
+        // Static color: picker = that color, expression empty
+        pick.value = padColorToHex(raw, fallbackHex);
+        if (expr) expr.value = '';
+    }
+}
+
+/**
+ * Read value from a bindable color component.
+ * If expression is empty → value = picker hex, no defaultInt.
+ * If expression is present → value = expression, defaultInt = picker color.
+ * @returns {{ value: string, defaultInt: number|undefined }}
+ */
+function padGetColorBind(fieldName) {
+    const pick = document.getElementById('pad-edit-' + fieldName + '-pick');
+    const expr = document.getElementById('pad-edit-' + fieldName + '-expr');
+    if (!pick) return { value: '', defaultInt: undefined };
+
+    const binding = expr ? expr.value.trim() : '';
+    if (binding) {
+        return { value: binding, defaultInt: padHexToInt(pick.value) };
+    }
+    return { value: pick.value, defaultInt: undefined };
 }
 
 function padCacheColors(page, buttons, pageBgColor) {
@@ -1813,24 +1928,34 @@ function padCacheColors(page, buttons, pageBgColor) {
 }
 
 function padRenderPageSwatches() {
-    const strip = document.querySelector('.pad-swatch-strip[data-picker="pad-bg-color"]');
-    if (!strip) return;
-    strip.innerHTML = '';
-    const colors = padCollectUsedColors(-1, -1);
-    if (colors.length === 0) return;
-    const picker = document.getElementById('pad-bg-color');
-    colors.forEach(hex => {
-        const sw = document.createElement('div');
-        sw.className = 'pad-swatch';
-        sw.style.background = hex;
-        sw.title = hex;
-        sw.addEventListener('click', () => {
-            picker.value = hex;
-            picker.dispatchEvent(new Event('input', { bubbles: true }));
-            sw.classList.add('active');
-            setTimeout(() => sw.classList.remove('active'), 300);
+    padRenderSwatchesInto('pad-page-bg-color-wrap');
+}
+
+function padRenderSwatchesInto(containerId) {
+    const container = containerId ? document.getElementById(containerId) : null;
+    const strips = container
+        ? container.querySelectorAll('.pad-swatch-strip')
+        : document.querySelectorAll('.pad-swatch-strip');
+    const colors = padCollectUsedColors(padState.editCol || -1, padState.editRow || -1);
+    strips.forEach(strip => {
+        strip.innerHTML = '';
+        if (colors.length === 0) return;
+        const targetId = strip.dataset.picker;
+        const target = document.getElementById(targetId);
+        if (!target) return;
+        colors.forEach(hex => {
+            const sw = document.createElement('div');
+            sw.className = 'pad-swatch';
+            sw.style.background = hex;
+            sw.title = hex;
+            sw.addEventListener('click', () => {
+                target.value = hex;
+                target.dispatchEvent(new Event('input', { bubbles: true }));
+                sw.classList.add('active');
+                setTimeout(() => sw.classList.remove('active'), 300);
+            });
+            strip.appendChild(sw);
         });
-        strip.appendChild(sw);
     });
 }
 
@@ -1860,21 +1985,27 @@ function padCollectUsedColors(editCol, editRow) {
 }
 
 function padRenderSwatches(editCol, editRow) {
+    padState.editCol = editCol;
+    padState.editRow = editRow;
+    // Render swatches in all .pad-swatch-strip elements in the dialog
+    const dialog = document.querySelector('.pad-edit-modal');
+    if (!dialog) return;
+    const strips = dialog.querySelectorAll('.pad-swatch-strip');
     const colors = padCollectUsedColors(editCol, editRow);
-    document.querySelectorAll('.pad-swatch-strip').forEach(strip => {
+    strips.forEach(strip => {
         strip.innerHTML = '';
         if (colors.length === 0) return;
-        const pickerId = strip.dataset.picker;
-        const picker = document.getElementById(pickerId);
-        if (!picker) return;
+        const targetId = strip.dataset.picker;
+        const target = document.getElementById(targetId);
+        if (!target) return;
         colors.forEach(hex => {
             const sw = document.createElement('div');
             sw.className = 'pad-swatch';
             sw.style.background = hex;
             sw.title = hex;
             sw.addEventListener('click', () => {
-                picker.value = hex;
-                picker.dispatchEvent(new Event('input', { bubbles: true }));
+                target.value = hex;
+                target.dispatchEvent(new Event('input', { bubbles: true }));
                 sw.classList.add('active');
                 setTimeout(() => sw.classList.remove('active'), 300);
             });
@@ -1899,9 +2030,26 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-label-center').value = btn.label_center || '';
     document.getElementById('pad-edit-label-bottom').value = btn.label_bottom || '';
 
-    document.getElementById('pad-edit-bg-color').value = padColorToHex(btn.bg_color, '#333333');
-    document.getElementById('pad-edit-fg-color').value = padColorToHex(btn.fg_color, '#ffffff');
-    document.getElementById('pad-edit-border-color').value = padColorToHex(btn.border_color, '#000000');
+    // Wire and init monospace toggle for mixed-binding label inputs
+    ['pad-edit-label-top', 'pad-edit-label-center', 'pad-edit-label-bottom'].forEach(function(id) {
+        var el = document.getElementById(id);
+        el.oninput = function() { padUpdateMixedBindingFont(el); };
+        padUpdateMixedBindingFont(el);
+    });
+
+    // Build bindable color components (rebuilds DOM each open)
+    padBuildColorBind('pad-edit-bg-color-wrap', 'Background', 'bg_color', '#333333');
+    padBuildColorBind('pad-edit-fg-color-wrap', 'Text Color', 'fg_color', '#ffffff');
+    padBuildColorBind('pad-edit-border-color-wrap', 'Border', 'border_color', '#000000');
+
+    padSetColorBind('bg_color', btn.bg_color, btn.bg_color_default, '#333333');
+    padSetColorBind('fg_color', btn.fg_color, btn.fg_color_default, '#ffffff');
+    padSetColorBind('border_color', btn.border_color, btn.border_color_default, '#000000');
+
+    // Auto-open colors section if any color has a binding
+    document.getElementById('pad-edit-colors-section').open =
+        padIsBinding(btn.bg_color) || padIsBinding(btn.fg_color) || padIsBinding(btn.border_color);
+
     document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 0;
     document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
 
@@ -1946,15 +2094,6 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-lp-action-topic').value = lpAct.topic || '';
     document.getElementById('pad-edit-lp-action-payload').value = lpAct.payload || '';
     padActionTypeChanged('lp');
-
-    // Toggle state binding
-    const stateBind = btn.state_bind || {};
-    document.getElementById('pad-edit-state-topic').value = stateBind.topic || '';
-    document.getElementById('pad-edit-state-path').value = stateBind.path || '';
-    document.getElementById('pad-edit-state-on-value').value = stateBind.on_value || 'ON';
-
-    // Auto-open state section if configured
-    document.getElementById('pad-edit-state-section').open = !!stateBind.topic;
 
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
@@ -2033,11 +2172,16 @@ function padDialogOk() {
     if (lc) btn.label_center = lc;
     if (lb) btn.label_bottom = lb;
 
-    const bgHex = document.getElementById('pad-edit-bg-color').value;
-    const fgHex = document.getElementById('pad-edit-fg-color').value;
-    btn.bg_color = padHexToInt(bgHex);
-    btn.fg_color = padHexToInt(fgHex);
-    btn.border_color = padHexToInt(document.getElementById('pad-edit-border-color').value);
+    const bgC = padGetColorBind('bg_color');
+    const fgC = padGetColorBind('fg_color');
+    const bdC = padGetColorBind('border_color');
+    btn.bg_color = bgC.value || '#333333';
+    btn.fg_color = fgC.value || '#ffffff';
+    btn.border_color = bdC.value || '#000000';
+    if (bgC.defaultInt !== undefined) btn.bg_color_default = bgC.defaultInt;
+    if (fgC.defaultInt !== undefined) btn.fg_color_default = fgC.defaultInt;
+    if (bdC.defaultInt !== undefined) btn.border_color_default = bdC.defaultInt;
+
     const bw = parseInt(document.getElementById('pad-edit-border-width').value);
     btn.border_width = isNaN(bw) ? 0 : bw;
     const cr = parseInt(document.getElementById('pad-edit-corner-radius').value);
@@ -2065,17 +2209,6 @@ function padDialogOk() {
             act.payload = document.getElementById('pad-edit-lp-action-payload').value.trim();
         }
         btn.lp_action = act;
-    }
-
-    // Toggle state binding
-    const stateTopic = document.getElementById('pad-edit-state-topic').value.trim();
-    if (stateTopic) {
-        const sb = { topic: stateTopic };
-        const statePath = document.getElementById('pad-edit-state-path').value.trim();
-        const stateOnVal = document.getElementById('pad-edit-state-on-value').value.trim();
-        if (statePath) sb.path = statePath;
-        sb.on_value = stateOnVal || 'ON';
-        btn.state_bind = sb;
     }
 
     // Image background
@@ -2155,9 +2288,15 @@ async function padSavePage() {
     const wakeScreen = document.getElementById('pad-wake-screen').value;
     if (wakeScreen) payload.wake_screen = wakeScreen;
     else delete payload.wake_screen;
-    const bgColor = document.getElementById('pad-bg-color').value;
-    if (bgColor && bgColor !== '#000000') payload.bg_color = bgColor.replace('#', '');
-    else delete payload.bg_color;
+    const pageBgC = padGetColorBind('page_bg_color');
+    if (pageBgC.value && pageBgC.value !== '#000000') {
+        payload.bg_color = pageBgC.value.replace(/^#/, '');
+        if (pageBgC.defaultInt !== undefined) payload.bg_color_default = pageBgC.defaultInt;
+        else delete payload.bg_color_default;
+    } else {
+        delete payload.bg_color;
+        delete payload.bg_color_default;
+    }
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));
 
     // Convert color ints to hex strings for JSON
@@ -2316,12 +2455,14 @@ function padFillWithClipboard() {
 // --- Pad clipboard (copy/paste entire pad) ---
 
 function padCopyPad() {
+    const cbBgC = padGetColorBind('page_bg_color');
     padState.padClipboard = {
         cols: padState.cols,
         rows: padState.rows,
         name: document.getElementById('pad-name').value.trim(),
         wake_screen: document.getElementById('pad-wake-screen').value,
-        bg_color: document.getElementById('pad-bg-color').value,
+        bg_color: cbBgC.value || '#000000',
+        bg_color_default: cbBgC.defaultInt,
         buttons: padState.buttons.map(b => Object.assign({}, b)),
     };
     document.getElementById('pad-paste-btn').disabled = false;
@@ -2339,7 +2480,8 @@ function padPastePad() {
     document.getElementById('pad-rows').value = padState.rows;
     document.getElementById('pad-name').value = padState.padClipboard.name || '';
     document.getElementById('pad-wake-screen').value = padState.padClipboard.wake_screen || '';
-    document.getElementById('pad-bg-color').value = padState.padClipboard.bg_color || '#000000';
+    padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
+    padSetColorBind('page_bg_color', padState.padClipboard.bg_color, padState.padClipboard.bg_color_default, '#000000');
 
     padRenderGrid();
     showMessage('Pad pasted (unsaved)', 'success');
@@ -2362,8 +2504,11 @@ function padExportPad() {
     if (padName) payload.name = padName;
     const wakeScreen = document.getElementById('pad-wake-screen').value;
     if (wakeScreen) payload.wake_screen = wakeScreen;
-    const bgColor = document.getElementById('pad-bg-color').value;
-    if (bgColor && bgColor !== '#000000') payload.bg_color = bgColor.replace('#', '');
+    const expBgC = padGetColorBind('page_bg_color');
+    if (expBgC.value && expBgC.value !== '#000000') {
+        payload.bg_color = expBgC.value.replace(/^#/, '');
+        if (expBgC.defaultInt !== undefined) payload.bg_color_default = expBgC.defaultInt;
+    }
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -2398,7 +2543,8 @@ async function padImportPad(evt) {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
-        document.getElementById('pad-bg-color').value = padColorToHex(json.bg_color, '#000000');
+        padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
+        padSetColorBind('page_bg_color', json.bg_color, json.bg_color_default, '#000000');
 
         padRenderGrid();
         showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
@@ -2513,7 +2659,8 @@ async function deviceImportConfig(evt) {
                 document.getElementById('pad-rows').value = padState.rows;
                 document.getElementById('pad-name').value = padJson.name || '';
                 document.getElementById('pad-wake-screen').value = padJson.wake_screen || '';
-                document.getElementById('pad-bg-color').value = padColorToHex(padJson.bg_color, '#000000');
+                padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
+                padSetColorBind('page_bg_color', padJson.bg_color, padJson.bg_color_default, '#000000');
 
                 // Delete old icons first
                 await fetch('/api/icons/page?page=' + i, { method: 'DELETE' }).catch(() => {});
@@ -2555,7 +2702,8 @@ async function padDeletePage() {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = '';
         document.getElementById('pad-wake-screen').value = '';
-        document.getElementById('pad-bg-color').value = '#000000';
+        padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
+        padSetColorBind('page_bg_color', '#000000', undefined, '#000000');
         padUpdateDropdownLabel(padState.page, '');
         padRenderGrid();
     } catch (err) {

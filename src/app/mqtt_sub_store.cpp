@@ -200,7 +200,7 @@ void mqtt_sub_store_subscribe_all() {
     ctx.count = &unique_count;
     ctx.max = MAX_UNIQUE;
 
-    // Helper lambda to add a plain topic string (for state_bind, widget data)
+    // Helper lambda to add a plain topic string (for widget data)
     auto add_unique = [&](const char* topic) {
         if (!topic[0]) return;
         for (int i = 0; i < unique_count; i++) {
@@ -222,13 +222,18 @@ void mqtt_sub_store_subscribe_all() {
 
     for (uint8_t page = 0; page < MAX_PAD_PAGES; page++) {
         if (!pad_config_load(page, cfg)) continue;
+        // Scan page-level background color for binding tokens
+        binding_template_collect_topics(cfg->bg_color, &ctx);
         for (uint8_t b = 0; b < cfg->button_count; b++) {
             const ScreenButtonConfig& btn = cfg->buttons[b];
             // Scan label text for [mqtt:...] binding tokens
             binding_template_collect_topics(btn.label_top, &ctx);
             binding_template_collect_topics(btn.label_center, &ctx);
             binding_template_collect_topics(btn.label_bottom, &ctx);
-            add_unique(btn.state_bind.mqtt_topic);
+            // Scan color fields for binding tokens
+            binding_template_collect_topics(btn.bg_color, &ctx);
+            binding_template_collect_topics(btn.fg_color, &ctx);
+            binding_template_collect_topics(btn.border_color, &ctx);
             binding_template_collect_topics(btn.widget.data_binding, &ctx);
         }
     }

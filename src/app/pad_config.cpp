@@ -59,21 +59,45 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     memset(btn, 0, sizeof(ScreenButtonConfig));
     btn->col_span = 1;
     btn->row_span = 1;
-    btn->bg_color_rgb = 0x333333;
-    btn->fg_color_rgb = 0xFFFFFF;
-    btn->border_color_rgb = 0x000000;
+    strlcpy(btn->bg_color, "#333333", CONFIG_COLOR_MAX_LEN);
+    strlcpy(btn->fg_color, "#FFFFFF", CONFIG_COLOR_MAX_LEN);
+    strlcpy(btn->border_color, "#000000", CONFIG_COLOR_MAX_LEN);
+    btn->bg_color_default = 0x333333;
+    btn->fg_color_default = 0xFFFFFF;
+    btn->border_color_default = 0x000000;
     btn->border_width_px = 0;
-    btn->disabled_fg_color_rgb = 0x444444;
     btn->corner_radius_px = 8;
 }
 
-static void parse_state_binding(JsonVariant v, StateBinding* bind) {
-    memset(bind, 0, sizeof(StateBinding));
-    if (!v.is<JsonObject>()) return;
-    JsonObject obj = v.as<JsonObject>();
-    strlcpy(bind->mqtt_topic, obj["topic"] | "", CONFIG_MQTT_TOPIC_MAX_LEN);
-    strlcpy(bind->json_path, obj["path"] | ".", CONFIG_JSON_PATH_MAX_LEN);
-    strlcpy(bind->on_value, obj["on_value"] | "ON", CONFIG_STATE_ON_VALUE_MAX_LEN);
+// Parse a color field from JSON into a string (binding or hex color).
+// If the JSON value is an integer, convert it to "#RRGGBB" string.
+static void parse_color_field(JsonVariant v, char* out, size_t out_len, const char* default_hex) {
+    if (v.isNull()) {
+        strlcpy(out, default_hex, out_len);
+        return;
+    }
+    if (v.is<unsigned long>() || v.is<long>()) {
+        // Integer → convert to hex string
+        uint32_t val = (uint32_t)v.as<unsigned long>();
+        snprintf(out, out_len, "#%06X", val & 0xFFFFFF);
+        return;
+    }
+    if (v.is<const char*>()) {
+        const char* s = v.as<const char*>();
+        if (s && s[0]) {
+            strlcpy(out, s, out_len);
+            return;
+        }
+    }
+    strlcpy(out, default_hex, out_len);
+}
+
+// Parse a static color string (hex only) to uint32_t.
+// Returns default_val if the string is empty, null, or a binding template.
+static uint32_t parse_static_color(const char* s, uint32_t default_val) {
+    if (!s || !s[0] || s[0] == '[') return default_val;
+    uint32_t val;
+    return parse_hex_color(s, &val) ? val : default_val;
 }
 
 // Parse a typed action object: { "type": "screen", "target": "pad_1" }
@@ -117,19 +141,18 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
 
-    btn->bg_color_rgb = parse_color(obj["bg_color"], 0x333333);
-    btn->fg_color_rgb = parse_color(obj["fg_color"], 0xFFFFFF);
-    btn->border_color_rgb = parse_color(obj["border_color"], 0x000000);
+    parse_color_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN, "#333333");
+    parse_color_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN, "#FFFFFF");
+    parse_color_field(obj["border_color"], btn->border_color, CONFIG_COLOR_MAX_LEN, "#000000");
+    btn->bg_color_default = parse_color(obj["bg_color_default"], parse_static_color(btn->bg_color, 0x333333));
+    btn->fg_color_default = parse_color(obj["fg_color_default"], parse_static_color(btn->fg_color, 0xFFFFFF));
+    btn->border_color_default = parse_color(obj["border_color_default"], parse_static_color(btn->border_color, 0x000000));
     btn->border_width_px = obj["border_width"] | (uint16_t)0;
-    btn->disabled_fg_color_rgb = parse_color(obj["disabled_fg_color"], 0x444444);
     btn->corner_radius_px = obj["corner_radius"] | (uint16_t)8;
 
     // Typed actions (with legacy flat key fallback)
     parse_action(obj["action"], &btn->action, "action_screen", obj);
     parse_action(obj["lp_action"], &btn->lp_action, "lp_action_screen", obj);
-
-    // Toggle state binding
-    parse_state_binding(obj["state_bind"], &btn->state_bind);
 
     // Background image fields
     strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);
@@ -274,7 +297,8 @@ static bool pad_config_load_from_flash(uint8_t page, PadPageConfig* out) {
     out->cols = doc["cols"] | (uint8_t)3;
     out->rows = doc["rows"] | (uint8_t)3;
     strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
-    out->bg_color_rgb = parse_color(doc["bg_color"], 0x000000);
+    parse_color_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN, "#000000");
+    out->bg_color_default = parse_color(doc["bg_color_default"], parse_static_color(out->bg_color, 0x000000));
 
     if (out->cols < 1) out->cols = 1;
     if (out->cols > MAX_GRID_COLS) out->cols = MAX_GRID_COLS;

@@ -1249,6 +1249,37 @@ footer {
     box-shadow: 0 0 0 2px rgba(0,113,227,0.3);
 }
 
+/* Bindable color field component */
+.pad-color-bind-group { margin-bottom: 10px; }
+.pad-color-bind-row {
+    display: flex; align-items: center; gap: 6px;
+}
+.pad-color-bind-row input[type="color"] {
+    width: 34px; height: 34px; border: 2px solid #d2d2d7; border-radius: 8px;
+    padding: 2px; cursor: pointer; flex-shrink: 0;
+}
+
+/* Binding input: flex row with ? help button */
+.binding-input-wrap {
+    display: flex; align-items: center; gap: 6px;
+}
+.binding-input-wrap input[type="text"] {
+    flex: 1; min-width: 0; height: 48px; box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.binding-input-wrap input.binding-mono {
+    font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px;
+}
+.binding-help-btn {
+    background: none; border: 1px solid #d2d2d7; border-radius: 50%;
+    width: 24px; height: 24px; min-width: 24px;
+    font-size: 13px; line-height: 22px; text-align: center;
+    cursor: pointer; color: #86868b; padding: 0; flex-shrink: 0;
+}
+.binding-help-btn:hover { border-color: #007aff; color: #007aff; }
+/* Mixed labels: monospace when binding detected — match binding-mono size */
+input.has-binding { font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px; }
+
 .pad-edit-footer {
     display: flex;
     gap: 12px;

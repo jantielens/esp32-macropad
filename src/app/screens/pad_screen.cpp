@@ -41,18 +41,21 @@ static lv_color_t rgb_to_lv(uint32_t rgb) {
     return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 }
 
+// parse_hex_color() from pad_config.h is used for resolved color strings
+
 // ============================================================================
 // PadScreen
 // ============================================================================
 
 PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
     : pageIndex(page), displayMgr(manager), screen(nullptr), container(nullptr),
-      tileCount(0), bindingCount(0), stateBindingCount(0), cachedGeneration(UINT32_MAX), tilesBuilt(false) {
+      tileCount(0), bindingCount(0), colorBindingCount(0), cachedGeneration(UINT32_MAX), tilesBuilt(false) {
     memset(tiles, 0, sizeof(tiles));
     memset(bindings, 0, sizeof(bindings));
-    memset(stateBindings, 0, sizeof(stateBindings));
+    memset(colorBindings, 0, sizeof(colorBindings));
     wakeScreen[0] = '\0';
-    bgColor = 0x000000;
+    pageBgTemplate[0] = '\0';
+    pageBgDefault = 0x000000;
 }
 
 PadScreen::~PadScreen() {
@@ -67,7 +70,7 @@ void PadScreen::create() {
     if (screen) return;
 
     screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(screen, rgb_to_lv(bgColor), 0);
+    lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);
     lv_obj_set_style_pad_all(screen, 0, 0);
     lv_obj_set_style_border_width(screen, 0, 0);
 
@@ -103,8 +106,8 @@ void PadScreen::show() {
     for (uint16_t i = 0; i < bindingCount; i++) {
         bindings[i].last[0] = '\0';
     }
-    for (uint16_t i = 0; i < stateBindingCount; i++) {
-        stateBindings[i].initialized = false;
+    for (uint16_t i = 0; i < colorBindingCount; i++) {
+        colorBindings[i].lastApplied = UINT32_MAX; // Force re-apply
     }
 
 #if HAS_IMAGE_FETCH
@@ -130,9 +133,9 @@ void PadScreen::update() {
     // Check if config has changed
     uint32_t gen = pad_config_get_generation();
     if (tilesBuilt && gen == cachedGeneration) {
-        // Config unchanged — just poll MQTT bindings and toggle state
+        // Config unchanged — just poll MQTT bindings and color bindings
         pollMqttBindings();
-        pollToggleState();
+        pollColorBindings();
         mqtt_sub_store_clear_dirty();
 #if HAS_IMAGE_FETCH
         pollImageFrames();
@@ -179,7 +182,7 @@ void PadScreen::clearTiles() {
     }
     tileCount = 0;
     bindingCount = 0;
-    stateBindingCount = 0;
+    colorBindingCount = 0;
     tilesBuilt = false;
 }
 
@@ -204,7 +207,8 @@ void PadScreen::buildTiles() {
     bool loaded = pad_config_load(pageIndex, cfg);
     if (!loaded) {
         wakeScreen[0] = '\0';
-        bgColor = 0x000000;
+        pageBgTemplate[0] = '\0';
+        pageBgDefault = 0x000000;
         free(cfg);
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
@@ -212,8 +216,9 @@ void PadScreen::buildTiles() {
 
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
-    bgColor = cfg->bg_color_rgb;
-    if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(bgColor), 0);
+    strlcpy(pageBgTemplate, cfg->bg_color, sizeof(pageBgTemplate));
+    pageBgDefault = cfg->bg_color_default;
+    if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);
 
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {
@@ -267,16 +272,16 @@ void PadScreen::buildTiles() {
         lv_obj_set_size(obj, r.w, r.h);
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 
-        // Styling
-        lv_obj_set_style_bg_color(obj, rgb_to_lv(bcfg.bg_color_rgb), 0);
+        // Styling — use default colors for initial render
+        lv_obj_set_style_bg_color(obj, rgb_to_lv(bcfg.bg_color_default), 0);
         lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_color(obj, rgb_to_lv(bcfg.border_color_rgb), 0);
+        lv_obj_set_style_border_color(obj, rgb_to_lv(bcfg.border_color_default), 0);
         lv_obj_set_style_border_width(obj, bcfg.border_width_px, 0);
         lv_obj_set_style_radius(obj, bcfg.corner_radius_px, 0);
         lv_obj_set_style_clip_corner(obj, true, 0);
         lv_obj_set_style_pad_all(obj, 4, 0);
 
-        lv_color_t fg = rgb_to_lv(bcfg.fg_color_rgb);
+        lv_color_t fg = rgb_to_lv(bcfg.fg_color_default);
 
         // Top label
         lv_obj_t* lbl_top = nullptr;
@@ -331,6 +336,7 @@ void PadScreen::buildTiles() {
                 if (ref.kind == ICON_KIND_MONO) {
                     lv_obj_set_style_image_recolor(icon_img, fg, 0);
                     lv_obj_set_style_image_recolor_opa(icon_img, LV_OPA_COVER, 0);
+                    tile.icon_is_mono = true;
                 }
             }
         }
@@ -355,7 +361,8 @@ void PadScreen::buildTiles() {
         tile.label_center = lbl_center;
         tile.label_bottom = lbl_bottom;
         tile.icon_img = icon_img;
-        tile.bg_color_rgb = bcfg.bg_color_rgb;
+        // icon_is_mono is set inside the icon block above; default false via clearTiles() memset
+        tile.bg_color_rgb = bcfg.bg_color_default;
         tile.page = pageIndex;
         tile.col = bcfg.col;
         tile.row = bcfg.row;
@@ -416,20 +423,23 @@ void PadScreen::buildTiles() {
         addTemplateBinding(tile.label_center, bcfg.label_center);
         addTemplateBinding(tile.label_bottom, bcfg.label_bottom);
 
-        // Register toggle state binding
-        if (bcfg.state_bind.mqtt_topic[0] && stateBindingCount < MAX_PAD_BUTTONS) {
-            RuntimeStateBinding& sb = stateBindings[stateBindingCount];
-            sb.tileIndex = i;
-            strlcpy(sb.mqtt_topic, bcfg.state_bind.mqtt_topic, sizeof(sb.mqtt_topic));
-            strlcpy(sb.json_path, bcfg.state_bind.json_path, sizeof(sb.json_path));
-            strlcpy(sb.on_value, bcfg.state_bind.on_value, sizeof(sb.on_value));
-            sb.fg_color_rgb = bcfg.fg_color_rgb;
-            sb.disabled_fg_color_rgb = bcfg.disabled_fg_color_rgb;
-            sb.currentlyOn = true;  // assume ON until first message
-            sb.initialized = false;
-            sb.active = true;
-            stateBindingCount++;
-        }
+        // Register color bindings for binding-based colors
+        auto addColorBinding = [this](uint8_t ti, const char* templ, uint32_t def, uint8_t target) {
+            if (!templ || !templ[0]) return;
+            if (colorBindingCount >= MAX_COLOR_BINDINGS) return;
+            RuntimeColorBinding& cb = colorBindings[colorBindingCount];
+            cb.tileIndex = ti;
+            strlcpy(cb.templ, templ, sizeof(cb.templ));
+            cb.defaultColor = def;
+            cb.lastApplied = def; // Already rendered with default
+            cb.target = target;
+            cb.active = true;
+            cb.hasBindings = binding_template_has_bindings(templ);
+            colorBindingCount++;
+        };
+        addColorBinding(i, bcfg.bg_color, bcfg.bg_color_default, 0);
+        addColorBinding(i, bcfg.fg_color, bcfg.fg_color_default, 1);
+        addColorBinding(i, bcfg.border_color, bcfg.border_color_default, 2);
 #endif
 
         // Event handlers — store tile index in user_data
@@ -471,6 +481,21 @@ void PadScreen::buildTiles() {
 
         tileCount++;
     }
+
+#if HAS_MQTT
+    // Register page-level background color binding (target=0xFF = page bg, tileIndex unused)
+    if (pageBgTemplate[0] && binding_template_has_bindings(pageBgTemplate) && colorBindingCount < MAX_COLOR_BINDINGS) {
+        RuntimeColorBinding& cb = colorBindings[colorBindingCount];
+        cb.tileIndex = 0xFF; // sentinel: page background
+        strlcpy(cb.templ, pageBgTemplate, sizeof(cb.templ));
+        cb.defaultColor = pageBgDefault;
+        cb.lastApplied = pageBgDefault;
+        cb.target = 0; // bg
+        cb.active = true;
+        cb.hasBindings = true;
+        colorBindingCount++;
+    }
+#endif
 
     free(cfg);
     tilesBuilt = true;
@@ -635,48 +660,69 @@ void PadScreen::pollMqttBindings() {
 }
 
 // ============================================================================
-// Toggle State Polling
+// Color Binding Polling
 // ============================================================================
 
-void PadScreen::pollToggleState() {
+void PadScreen::pollColorBindings() {
 #if HAS_MQTT
-    if (stateBindingCount == 0) return;
+    if (colorBindingCount == 0) return;
 
-    static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
-    char extracted[128];
+    char resolved[BINDING_TEMPLATE_MAX_LEN];
 
-    for (uint16_t i = 0; i < stateBindingCount; i++) {
-        RuntimeStateBinding& sb = stateBindings[i];
-        if (!sb.active) continue;
+    for (uint16_t i = 0; i < colorBindingCount; i++) {
+        RuntimeColorBinding& cb = colorBindings[i];
+        if (!cb.active) continue;
 
-        bool changed = false;
-        bool truncated = false;
-        if (!mqtt_sub_store_get(sb.mqtt_topic, payload, sizeof(payload), &changed, &truncated)) continue;
-        if (!changed && sb.initialized) continue;
+        uint32_t color = cb.defaultColor;
 
-        // Extract value via JSON path
-        const char* path = sb.json_path[0] ? sb.json_path : ".";
-        if (!mqtt_sub_store_extract_json(payload, path, extracted, sizeof(extracted))) {
-            strlcpy(extracted, truncated ? "[TOO BIG]" : payload, sizeof(extracted));
+        if (cb.hasBindings) {
+            // Resolve binding template to get a color string
+            binding_template_resolve(cb.templ, resolved, sizeof(resolved));
+            uint32_t parsed;
+            if (parse_hex_color(resolved, &parsed)) {
+                color = parsed;
+            }
+            // else: unresolved / error — keep default
+        } else {
+            // Static color string — parse once then deactivate
+            uint32_t parsed;
+            if (parse_hex_color(cb.templ, &parsed)) {
+                color = parsed;
+            }
+            cb.active = false; // static value won't change; stop polling
         }
 
-        // Compare to on_value (case-sensitive)
-        bool isOn = (strcmp(extracted, sb.on_value) == 0);
+        // Only update LVGL if color changed
+        if (color == cb.lastApplied) continue;
+        cb.lastApplied = color;
 
-        // Only update LVGL if state actually changed (or first time)
-        if (isOn == sb.currentlyOn && sb.initialized) continue;
-        sb.currentlyOn = isOn;
-        sb.initialized = true;
+        // Page background (sentinel tileIndex=0xFF)
+        if (cb.tileIndex == 0xFF) {
+            if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(color), 0);
+            continue;
+        }
 
-        // Apply fg color to all labels on this tile
-        uint8_t ti = sb.tileIndex;
+        uint8_t ti = cb.tileIndex;
         if (ti >= tileCount) continue;
         ButtonTile& tile = tiles[ti];
-        lv_color_t fg = rgb_to_lv(isOn ? sb.fg_color_rgb : sb.disabled_fg_color_rgb);
 
-        if (tile.label_top) lv_obj_set_style_text_color(tile.label_top, fg, 0);
-        if (tile.label_center) lv_obj_set_style_text_color(tile.label_center, fg, 0);
-        if (tile.label_bottom) lv_obj_set_style_text_color(tile.label_bottom, fg, 0);
+        switch (cb.target) {
+        case 0: // bg
+            lv_obj_set_style_bg_color(tile.obj, rgb_to_lv(color), 0);
+            tile.bg_color_rgb = color; // Update for tap flash
+            break;
+        case 1: // fg (labels + mono icon recolor)
+            if (tile.label_top) lv_obj_set_style_text_color(tile.label_top, rgb_to_lv(color), 0);
+            if (tile.label_center) lv_obj_set_style_text_color(tile.label_center, rgb_to_lv(color), 0);
+            if (tile.label_bottom) lv_obj_set_style_text_color(tile.label_bottom, rgb_to_lv(color), 0);
+            if (tile.icon_img && tile.icon_is_mono) {
+                lv_obj_set_style_image_recolor(tile.icon_img, rgb_to_lv(color), 0);
+            }
+            break;
+        case 2: // border
+            lv_obj_set_style_border_color(tile.obj, rgb_to_lv(color), 0);
+            break;
+        }
     }
 #endif
 }
