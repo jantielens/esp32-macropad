@@ -18,23 +18,23 @@
 
 #define TAG "PadScr"
 
-// Tap flash: brighten 30% for 100ms
-#define TAP_FLASH_BRIGHTEN_PCT 30
+// Tap flash overlay: semi-transparent darken/lighten for 100ms
 #define TAP_FLASH_DURATION_MS  100
+#define TAP_OVERLAY_DARK_OPA   80   // ~31% black overlay on light backgrounds
+#define TAP_OVERLAY_LIGHT_OPA  50   // ~20% white overlay on dark backgrounds
+#define TAP_LUMINANCE_THRESH   180  // Perceived-brightness cutoff (0-255)
+#define TILE_PAD_PX            4    // Content padding inside each tile
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-// Brighten a color by a percentage (clamp to 255)
-static lv_color_t brighten_color(uint32_t rgb, uint8_t pct) {
+// Perceived luminance (ITU-R BT.601) of an RGB888 color (0-255 range)
+static uint8_t perceived_luminance(uint32_t rgb) {
     uint8_t r = (rgb >> 16) & 0xFF;
     uint8_t g = (rgb >> 8) & 0xFF;
     uint8_t b = rgb & 0xFF;
-    r = (uint8_t)(r + (uint16_t)(255 - r) * pct / 100);
-    g = (uint8_t)(g + (uint16_t)(255 - g) * pct / 100);
-    b = (uint8_t)(b + (uint16_t)(255 - b) * pct / 100);
-    return lv_color_make(r, g, b);
+    return (uint8_t)((r * 77 + g * 150 + b * 29) >> 8);
 }
 
 static lv_color_t rgb_to_lv(uint32_t rgb) {
@@ -281,7 +281,7 @@ void PadScreen::buildTiles() {
         lv_obj_set_style_border_width(obj, bcfg.border_width_px, 0);
         lv_obj_set_style_radius(obj, bcfg.corner_radius_px, 0);
         lv_obj_set_style_clip_corner(obj, true, 0);
-        lv_obj_set_style_pad_all(obj, 4, 0);
+        lv_obj_set_style_pad_all(obj, TILE_PAD_PX, 0);
 
         lv_color_t fg = rgb_to_lv(bcfg.fg_color_default);
 
@@ -364,7 +364,6 @@ void PadScreen::buildTiles() {
         tile.label_bottom = lbl_bottom;
         tile.icon_img = icon_img;
         // icon_is_mono is set inside the icon block above; default false via clearTiles() memset
-        tile.bg_color_rgb = bcfg.bg_color_default;
         tile.page = pageIndex;
         tile.col = bcfg.col;
         tile.row = bcfg.row;
@@ -492,6 +491,25 @@ void PadScreen::buildTiles() {
         }
 #endif
 
+        // Tap overlay — semi-transparent sheet shown briefly on press.
+        // Created last so it renders on top of all children (image bg, widgets, labels).
+        // Color adapts to background luminance: dark overlay on light bg, light on dark.
+        {
+            bool is_light = perceived_luminance(bcfg.bg_color_default) > TAP_LUMINANCE_THRESH;
+            int16_t inset = TILE_PAD_PX + bcfg.border_width_px; // pad + border
+            lv_obj_t* ov = lv_obj_create(obj);
+            lv_obj_set_pos(ov, -inset, -inset);
+            lv_obj_set_size(ov, r.w, r.h);
+            lv_obj_set_style_bg_color(ov, is_light ? lv_color_black() : lv_color_white(), 0);
+            lv_obj_set_style_bg_opa(ov, is_light ? TAP_OVERLAY_DARK_OPA : TAP_OVERLAY_LIGHT_OPA, 0);
+            lv_obj_set_style_border_width(ov, 0, 0);
+            lv_obj_set_style_radius(ov, 0, 0);
+            lv_obj_set_style_pad_all(ov, 0, 0);
+            lv_obj_clear_flag(ov, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+            lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
+            tile.tap_overlay = ov;
+        }
+
         tileCount++;
     }
 
@@ -520,30 +538,19 @@ void PadScreen::buildTiles() {
 // Event Handlers
 // ============================================================================
 
-// Tap flash: temporarily brighten, then restore after timeout
-struct TapFlashCtx {
-    lv_obj_t* obj;
-    uint32_t original_rgb;
-};
-
+// Tap flash: show overlay briefly, then hide after timeout
 void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
-    TapFlashCtx* ctx = (TapFlashCtx*)lv_timer_get_user_data(timer);
-    if (ctx && ctx->obj) {
-        lv_obj_set_style_bg_color(ctx->obj, rgb_to_lv(ctx->original_rgb), 0);
+    lv_obj_t* overlay = (lv_obj_t*)lv_timer_get_user_data(timer);
+    if (overlay) {
+        lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
     }
-    free(ctx);
     lv_timer_delete(timer);
 }
 
-static void do_tap_flash(lv_obj_t* obj, uint32_t bg_rgb) {
-    lv_obj_set_style_bg_color(obj, brighten_color(bg_rgb, TAP_FLASH_BRIGHTEN_PCT), 0);
-
-    TapFlashCtx* ctx = (TapFlashCtx*)malloc(sizeof(TapFlashCtx));
-    if (ctx) {
-        ctx->obj = obj;
-        ctx->original_rgb = bg_rgb;
-        lv_timer_create(PadScreen::tapFlashTimerCb, TAP_FLASH_DURATION_MS, ctx);
-    }
+static void do_tap_flash(ButtonTile* tile) {
+    if (!tile->tap_overlay) return;
+    lv_obj_remove_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+    lv_timer_create(PadScreen::tapFlashTimerCb, TAP_FLASH_DURATION_MS, tile->tap_overlay);
 }
 
 // Execute a typed action (dispatch on action.type)
@@ -608,7 +615,7 @@ void PadScreen::onTap(lv_event_t* e) {
     if (!tile || !tile->obj) return;
 
     // Tap flash
-    do_tap_flash(tile->obj, tile->bg_color_rgb);
+    do_tap_flash(tile);
 
     execute_action(tile->action, "Tap");
 
@@ -622,7 +629,7 @@ void PadScreen::onLongPress(lv_event_t* e) {
     if (!tile || !tile->obj) return;
 
     // Tap flash
-    do_tap_flash(tile->obj, tile->bg_color_rgb);
+    do_tap_flash(tile);
 
     execute_action(tile->lp_action, "LP");
 
@@ -722,7 +729,12 @@ void PadScreen::pollColorBindings() {
         switch (cb.target) {
         case 0: // bg
             lv_obj_set_style_bg_color(tile.obj, rgb_to_lv(color), 0);
-            tile.bg_color_rgb = color; // Update for tap flash
+            // Update overlay color to match new background luminance
+            if (tile.tap_overlay) {
+                bool is_light = perceived_luminance(color) > TAP_LUMINANCE_THRESH;
+                lv_obj_set_style_bg_color(tile.tap_overlay, is_light ? lv_color_black() : lv_color_white(), 0);
+                lv_obj_set_style_bg_opa(tile.tap_overlay, is_light ? TAP_OVERLAY_DARK_OPA : TAP_OVERLAY_LIGHT_OPA, 0);
+            }
             break;
         case 1: // fg (labels + mono icon recolor)
             if (tile.label_top) lv_obj_set_style_text_color(tile.label_top, rgb_to_lv(color), 0);

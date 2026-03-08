@@ -65,7 +65,6 @@ struct ButtonTile {
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr
     lv_obj_t* icon_img;       // Icon image widget (or nullptr)
     bool icon_is_mono;        // True if icon uses fg recolor
-    uint32_t bg_color_rgb;    // Current bg color (for tap flash restore)
     uint8_t page;             // Page index (for HA event)
     uint8_t col;              // Grid column (for HA event)
     uint8_t row;              // Grid row (for HA event)
@@ -78,6 +77,7 @@ struct ButtonTile {
     // Widget data binding template (e.g. "[mqtt:topic;path]")
     char widget_binding[CONFIG_LABEL_MAX_LEN];
     char widget_last[BINDING_TEMPLATE_MAX_LEN]; // Last resolved value (dedup)
+    lv_obj_t* tap_overlay;    // Semi-transparent overlay shown briefly on tap
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
