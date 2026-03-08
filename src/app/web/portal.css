@@ -1270,6 +1270,9 @@ footer {
 .binding-input-wrap input.binding-mono {
     font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px;
 }
+input.binding-mono {
+    font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px;
+}
 .binding-help-btn {
     background: none; border: 1px solid #d2d2d7; border-radius: 50%;
     width: 24px; height: 24px; min-width: 24px;
@@ -1277,8 +1280,32 @@ footer {
     cursor: pointer; color: #86868b; padding: 0; flex-shrink: 0;
 }
 .binding-help-btn:hover { border-color: #007aff; color: #007aff; }
+.style-toggle-btn {
+    background: none; border: 1px solid #d2d2d7; border-radius: 50%;
+    width: 24px; height: 24px; min-width: 24px;
+    font-size: 11px; font-weight: 700; line-height: 22px; text-align: center;
+    cursor: pointer; color: #86868b; padding: 0; flex-shrink: 0;
+    font-family: inherit;
+}
+.style-toggle-btn:hover { border-color: #007aff; color: #007aff; }
+.style-toggle-btn.active { border-color: #007aff; color: #007aff; background: rgba(0,122,255,.08); }
 /* Mixed labels: monospace when binding detected — match binding-mono size */
 input.has-binding { font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px; }
+/* Label style wrap: flex row with input + help button */
+.label-style-wrap {
+    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+}
+.label-style-wrap .label-style-input { flex: 1; min-width: 0; margin-top: 0; }
+/* Label style DSL input — compact, monospace */
+.label-style-input {
+    width: 100%; box-sizing: border-box; height: 32px;
+    font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace;
+    font-size: 12px; color: #86868b; border: 1px dashed #d2d2d7; border-radius: 6px;
+    padding: 4px 8px; background: #fafafa;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.label-style-input:focus { border-color: #007aff; color: #1d1d1f; outline: none; box-shadow: 0 0 0 3px rgba(0,122,255,.15); }
+.label-style-input::placeholder { color: #c7c7cc; }
 
 .pad-edit-footer {
     display: flex;

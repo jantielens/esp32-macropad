@@ -289,13 +289,13 @@ void PadScreen::buildTiles() {
         lv_obj_t* lbl_top = nullptr;
         if (bcfg.label_top[0]) {
             lbl_top = lv_label_create(obj);
-            lv_label_set_text(lbl_top, bcfg.label_top);
-            lv_obj_set_style_text_color(lbl_top, fg, 0);
-            lv_obj_set_style_text_font(lbl_top, scale.font_small, 0);
-            lv_obj_align(lbl_top, LV_ALIGN_TOP_MID, 0, 0);
-            lv_label_set_long_mode(lbl_top, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(lbl_top, pad_resolve_label_color(bcfg.style_top, fg), 0);
+            lv_obj_set_style_text_font(lbl_top, pad_resolve_font(bcfg.style_top, scale.font_small), 0);
             lv_obj_set_width(lbl_top, r.w - 8);
-            lv_obj_set_style_text_align(lbl_top, LV_TEXT_ALIGN_CENTER, 0);
+            pad_apply_long_mode(lbl_top, bcfg.style_top);
+            lv_label_set_text(lbl_top, bcfg.label_top);
+            lv_obj_align(lbl_top, LV_ALIGN_TOP_MID, 0, bcfg.style_top.y_offset);
+            lv_obj_set_style_text_align(lbl_top, pad_resolve_align(bcfg.style_top), 0);
             lv_obj_clear_flag(lbl_top, LV_OBJ_FLAG_CLICKABLE);
         }
 
@@ -303,13 +303,13 @@ void PadScreen::buildTiles() {
         lv_obj_t* lbl_center = nullptr;
         if (bcfg.label_center[0] && !bcfg.icon_id[0]) {
             lbl_center = lv_label_create(obj);
-            lv_label_set_text(lbl_center, bcfg.label_center);
-            lv_obj_set_style_text_color(lbl_center, fg, 0);
-            lv_obj_set_style_text_font(lbl_center, scale.font_large, 0);
-            lv_obj_align(lbl_center, LV_ALIGN_CENTER, 0, 0);
-            lv_label_set_long_mode(lbl_center, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(lbl_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
+            lv_obj_set_style_text_font(lbl_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
             lv_obj_set_width(lbl_center, r.w - 8);
-            lv_obj_set_style_text_align(lbl_center, LV_TEXT_ALIGN_CENTER, 0);
+            pad_apply_long_mode(lbl_center, bcfg.style_center);
+            lv_label_set_text(lbl_center, bcfg.label_center);
+            lv_obj_align(lbl_center, LV_ALIGN_CENTER, 0, bcfg.style_center.y_offset);
+            lv_obj_set_style_text_align(lbl_center, pad_resolve_align(bcfg.style_center), 0);
             lv_obj_clear_flag(lbl_center, LV_OBJ_FLAG_CLICKABLE);
         }
 
@@ -327,10 +327,12 @@ void PadScreen::buildTiles() {
                 // Center icon in the space between labels.
                 // LV_ALIGN_CENTER is the center of the full content area;
                 // offset by half the difference of top/bottom label heights.
+                const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small);
+                const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small);
                 const int16_t top_h = bcfg.label_top[0] ?
-                    lv_font_get_line_height(scale.font_small) : 0;
+                    lv_font_get_line_height(top_font) : 0;
                 const int16_t bot_h = bcfg.label_bottom[0] ?
-                    lv_font_get_line_height(scale.font_small) : 0;
+                    lv_font_get_line_height(bot_font) : 0;
                 const int16_t y_ofs = (top_h - bot_h) / 2;
                 lv_obj_align(icon_img, LV_ALIGN_CENTER, 0, y_ofs);
 
@@ -347,13 +349,13 @@ void PadScreen::buildTiles() {
         lv_obj_t* lbl_bottom = nullptr;
         if (bcfg.label_bottom[0]) {
             lbl_bottom = lv_label_create(obj);
-            lv_label_set_text(lbl_bottom, bcfg.label_bottom);
-            lv_obj_set_style_text_color(lbl_bottom, fg, 0);
-            lv_obj_set_style_text_font(lbl_bottom, scale.font_small, 0);
-            lv_obj_align(lbl_bottom, LV_ALIGN_BOTTOM_MID, 0, 0);
-            lv_label_set_long_mode(lbl_bottom, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(lbl_bottom, pad_resolve_label_color(bcfg.style_bottom, fg), 0);
+            lv_obj_set_style_text_font(lbl_bottom, pad_resolve_font(bcfg.style_bottom, scale.font_small), 0);
             lv_obj_set_width(lbl_bottom, r.w - 8);
-            lv_obj_set_style_text_align(lbl_bottom, LV_TEXT_ALIGN_CENTER, 0);
+            pad_apply_long_mode(lbl_bottom, bcfg.style_bottom);
+            lv_label_set_text(lbl_bottom, bcfg.label_bottom);
+            lv_obj_align(lbl_bottom, LV_ALIGN_BOTTOM_MID, 0, bcfg.style_bottom.y_offset);
+            lv_obj_set_style_text_align(lbl_bottom, pad_resolve_align(bcfg.style_bottom), 0);
             lv_obj_clear_flag(lbl_bottom, LV_OBJ_FLAG_CLICKABLE);
         }
 
@@ -374,13 +376,13 @@ void PadScreen::buildTiles() {
 #if HAS_MQTT
         if (binding_template_has_bindings(bcfg.label_center) && !tile.label_center && !bcfg.icon_id[0]) {
             tile.label_center = lv_label_create(obj);
-            lv_label_set_text(tile.label_center, "");
-            lv_obj_set_style_text_color(tile.label_center, fg, 0);
-            lv_obj_set_style_text_font(tile.label_center, scale.font_large, 0);
-            lv_obj_align(tile.label_center, LV_ALIGN_CENTER, 0, 0);
-            lv_label_set_long_mode(tile.label_center, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(tile.label_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
+            lv_obj_set_style_text_font(tile.label_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
             lv_obj_set_width(tile.label_center, r.w - 8);
-            lv_obj_set_style_text_align(tile.label_center, LV_TEXT_ALIGN_CENTER, 0);
+            pad_apply_long_mode(tile.label_center, bcfg.style_center);
+            lv_label_set_text(tile.label_center, "");
+            lv_obj_align(tile.label_center, LV_ALIGN_CENTER, 0, bcfg.style_center.y_offset);
+            lv_obj_set_style_text_align(tile.label_center, pad_resolve_align(bcfg.style_center), 0);
             lv_obj_clear_flag(tile.label_center, LV_OBJ_FLAG_CLICKABLE);
         }
 #endif

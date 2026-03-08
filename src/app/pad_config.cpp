@@ -55,6 +55,61 @@ static uint32_t parse_color(JsonVariant v, uint32_t default_val) {
     return val;
 }
 
+// ============================================================================
+// Label Style DSL parser
+// ============================================================================
+// Format: "key:value;key:value;..."
+// Keys: font (12/14/18/24/32/36), align (left/center/right),
+//        y (int offset), mode (clip/scroll/dot/wrap), color (#RRGGBB)
+void label_style_parse(const char* dsl, LabelStyle* out) {
+    memset(out, 0, sizeof(LabelStyle));
+    if (!dsl || !dsl[0]) return;
+
+    // Work on a local copy to tokenize
+    char buf[CONFIG_LABEL_STYLE_MAX_LEN];
+    strlcpy(buf, dsl, sizeof(buf));
+
+    char* saveptr = nullptr;
+    char* token = strtok_r(buf, ";", &saveptr);
+    while (token) {
+        // Skip leading whitespace
+        while (*token == ' ') token++;
+        char* colon = strchr(token, ':');
+        if (colon) {
+            *colon = '\0';
+            const char* key = token;
+            const char* val = colon + 1;
+
+            if (strcmp(key, "font") == 0) {
+                int sz = atoi(val);
+                if (sz == 12 || sz == 14 || sz == 18 || sz == 24 || sz == 32 || sz == 36) {
+                    out->font_size = (uint8_t)sz;
+                }
+            } else if (strcmp(key, "align") == 0) {
+                if (strcmp(val, "left") == 0)        out->align = LABEL_ALIGN_LEFT;
+                else if (strcmp(val, "right") == 0)  out->align = LABEL_ALIGN_RIGHT;
+                else if (strcmp(val, "center") == 0) out->align = LABEL_ALIGN_CENTER;
+            } else if (strcmp(key, "y") == 0) {
+                int y = atoi(val);
+                if (y < -128) y = -128;
+                if (y > 127)  y = 127;
+                out->y_offset = (int8_t)y;
+            } else if (strcmp(key, "mode") == 0) {
+                if (strcmp(val, "clip") == 0)        out->long_mode = LABEL_MODE_CLIP;
+                else if (strcmp(val, "scroll") == 0) out->long_mode = LABEL_MODE_SCROLL;
+                else if (strcmp(val, "dot") == 0)    out->long_mode = LABEL_MODE_DOT;
+                else if (strcmp(val, "wrap") == 0)   out->long_mode = LABEL_MODE_WRAP;
+            } else if (strcmp(key, "color") == 0) {
+                uint32_t c;
+                if (parse_hex_color(val, &c)) {
+                    out->color = c | 0x01000000; // Set marker bit
+                }
+            }
+        }
+        token = strtok_r(nullptr, ";", &saveptr);
+    }
+}
+
 static void init_button_defaults(ScreenButtonConfig* btn) {
     memset(btn, 0, sizeof(ScreenButtonConfig));
     btn->col_span = 1;
@@ -138,6 +193,12 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     strlcpy(btn->label_top, obj["label_top"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->label_center, obj["label_center"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->label_bottom, obj["label_bottom"] | "", CONFIG_LABEL_MAX_LEN);
+
+    // Per-label style overrides (DSL strings, e.g. "font:24;align:right")
+    label_style_parse(obj["label_top_style"] | "", &btn->style_top);
+    label_style_parse(obj["label_center_style"] | "", &btn->style_center);
+    label_style_parse(obj["label_bottom_style"] | "", &btn->style_bottom);
+
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
 

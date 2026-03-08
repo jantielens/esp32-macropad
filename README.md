@@ -9,7 +9,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 ### Display & Touch
 - **LVGL-powered UI** — smooth, modern interface on all supported displays
 - **Customizable pad layouts** — up to 8 pages with configurable grids (up to 8×8)
-- **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols), and background images
+- **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols), background images, and per-label style overrides (font size, alignment, text overflow mode)
 - **Multi-span buttons** — buttons can span multiple columns and rows
 - **Bar chart widgets** — visualize data with color-coded threshold bars
 - **Screen saver** — automatic backlight fade with pixel-shift burn-in prevention

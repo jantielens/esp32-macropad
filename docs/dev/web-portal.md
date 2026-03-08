@@ -206,7 +206,7 @@ Real-time device health monitoring integrated as a header badge with expandable 
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
   - **Pad selection & naming**: Dropdown for Pad 1–8 with optional custom names (max 31 chars)
   - **Grid preview**: Click any cell to open the button editor dialog
-  - **Button editor dialog**: Label, icon (emoji / Material Symbol), colors, actions (screen navigate, MQTT), bindings, image backgrounds, button state (enabled/disabled/hidden with binding support)
+  - **Button editor dialog**: Label, icon (emoji / Material Symbol), per-label style overrides (font, alignment, y-offset, text overflow mode, color via DSL), colors, actions (screen navigate, MQTT), bindings, image backgrounds, button state (enabled/disabled/hidden with binding support)
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
   - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 8 pad configs), Clear Pad
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 8 pad pages to a single JSON file; import overwrites settings and reboots

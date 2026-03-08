@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Per-label style DSL** — each button label (top/center/bottom) now supports a compact style string for advanced typography control without cluttering the main UI. Toggle the **Aa** button next to any label field to reveal the style input. Properties are semicolon-separated key:value pairs:
+  - `font:24` — override font size (available sizes: 12, 14, 18, 24, 32, 36 px)
+  - `align:left` / `align:right` / `align:center` — horizontal text alignment
+  - `y:-2` — vertical pixel offset (nudge label up or down)
+  - `mode:clip` / `mode:scroll` / `mode:dot` / `mode:wrap` — LVGL long-text mode (clip truncates, dot adds "...", scroll auto-scrolls, wrap wraps to next line)
+  - `color:#FF0` — override text color for this label (3, 4, 6, or 8 hex digits)
+  - Example: `font:36;align:left;mode:dot` — large left-aligned text with ellipsis overflow
+  - A built-in **?** help button documents all properties with examples
 - **Sub-second time binding codes** — the `[time:]` scheme now supports custom format codes beyond strftime: `%ms` (000-999 milliseconds within second), `%cs` (00-99 centiseconds), `%ds` (0-9 deciseconds), and `%ums` (raw device uptime in ms, standalone, no NTP needed). Enables sub-second color cycling in expressions (e.g. `[expr:[time:%ums]%1000<500?"#ff0000":"#00ff00"]` toggles every 500ms)
 
 - **Expression binding `[expr:]`** — new binding scheme for inline math, comparisons, and conditional text on button labels. Supports arithmetic (`+ - * / %`), comparisons (`> < >= <= == !=`), ternary (`cond ? "yes" : "no"`), parentheses, and cross-binding math (e.g. `[expr:[mqtt:solar;w] - [mqtt:grid;w];%.0f]`). Inner bindings are resolved first, then the expression is evaluated. Optional printf format suffix via `;` separator (e.g. `[expr:[health:heap_free]/1024;%.1f]`)

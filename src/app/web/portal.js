@@ -1836,6 +1836,31 @@ function showBindingHelp() {
     document.getElementById('binding-help-overlay').style.display = 'flex';
 }
 
+/** Show the label style help overlay. */
+function showStyleHelp() {
+    document.getElementById('style-help-overlay').style.display = 'flex';
+}
+
+/** Toggle label style input visibility for a label slot (top/center/bottom). */
+function toggleLabelStyle(slot) {
+    var wrap = document.getElementById('pad-edit-label-' + slot + '-style-wrap');
+    var btn = wrap.previousElementSibling.querySelector('.style-toggle-btn');
+    var visible = wrap.style.display !== 'none';
+    wrap.style.display = visible ? 'none' : 'flex';
+    btn.classList.toggle('active', !visible);
+    if (!visible) wrap.querySelector('input').focus();
+}
+
+/** Show or hide a label style wrap based on whether it has a value. */
+function syncLabelStyleVisibility(slot) {
+    var input = document.getElementById('pad-edit-label-' + slot + '-style');
+    var wrap = document.getElementById('pad-edit-label-' + slot + '-style-wrap');
+    var btn = wrap.previousElementSibling.querySelector('.style-toggle-btn');
+    var hasValue = input.value.trim().length > 0;
+    wrap.style.display = hasValue ? 'flex' : 'none';
+    btn.classList.toggle('active', hasValue);
+}
+
 /**
  * Build a bindable color component inside a container element.
  * Layout: [color picker] ○○○○○ (swatches)  /  [expression textbox]
@@ -2029,6 +2054,10 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-label-top').value = btn.label_top || '';
     document.getElementById('pad-edit-label-center').value = btn.label_center || '';
     document.getElementById('pad-edit-label-bottom').value = btn.label_bottom || '';
+    document.getElementById('pad-edit-label-top-style').value = btn.label_top_style || '';
+    document.getElementById('pad-edit-label-center-style').value = btn.label_center_style || '';
+    document.getElementById('pad-edit-label-bottom-style').value = btn.label_bottom_style || '';
+    ['top', 'center', 'bottom'].forEach(syncLabelStyleVisibility);
 
     // Wire and init monospace toggle for mixed-binding label inputs
     ['pad-edit-label-top', 'pad-edit-label-center', 'pad-edit-label-bottom'].forEach(function(id) {
@@ -2176,6 +2205,13 @@ function padDialogOk() {
     if (lt) btn.label_top = lt;
     if (lc) btn.label_center = lc;
     if (lb) btn.label_bottom = lb;
+
+    const lts = document.getElementById('pad-edit-label-top-style').value.trim();
+    const lcs = document.getElementById('pad-edit-label-center-style').value.trim();
+    const lbs = document.getElementById('pad-edit-label-bottom-style').value.trim();
+    if (lts) btn.label_top_style = lts;
+    if (lcs) btn.label_center_style = lcs;
+    if (lbs) btn.label_bottom_style = lbs;
 
     const bgC = padGetColorBind('bg_color');
     const fgC = padGetColorBind('fg_color');

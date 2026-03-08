@@ -118,6 +118,14 @@ Click any cell in the grid preview to open the button editor dialog:
 - **Top / Center / Bottom label** — static text or live data via binding templates
 - Binding syntax: `[mqtt:topic;json_path;format]`, `[health:key;format]`, `[time:format;timezone]`
 - A built-in help dialog explains all available bindings
+- **Label style override** — click the **Aa** button next to any label to reveal an advanced style input. Use a compact `key:value;...` syntax to fine-tune individual labels:
+  - `font:24` — override font size (12, 14, 18, 24, 32, or 36 px)
+  - `align:left` / `right` / `center` — horizontal text alignment
+  - `y:-2` — vertical pixel offset
+  - `mode:clip` / `scroll` / `dot` / `wrap` — text overflow behavior (`dot` adds "..." for long text)
+  - `color:#FF0` — override the label's text color
+  - Example: `font:36;align:left;mode:dot` — large left-aligned text with ellipsis
+  - A **?** button next to the style input opens a reference with all properties and examples
 
 **Icons**
 - **Icon Type** — None, Emoji, or Material Symbol
