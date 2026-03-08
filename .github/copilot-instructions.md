@@ -40,7 +40,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - MQTT scheme registered by `mqtt_sub_store_init()` — resolves `[mqtt:topic;path;format]` tokens against the subscription store
   - Health scheme registered by `health_binding_init()` — resolves `[health:key;format]` tokens from local device telemetry (CPU, heap, PSRAM, RSSI, uptime, IP, hostname); expensive reads cached 2 s, lightweight keys live
   - `health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
-  - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries)
+  - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries); extends strftime with sub-second codes (`%ms` millis, `%cs` centisec, `%ds` decisec) and standalone `%ums` (device uptime ms)
   - `time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
   - Expr scheme registered by `expr_binding_init()` — resolves `[expr:expression;format]` tokens by first resolving inner bindings, then evaluating with a recursive-descent expression evaluator
   - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings); no ESP32 dependencies, host-testable

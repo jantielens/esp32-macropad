@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Sub-second time binding codes** — the `[time:]` scheme now supports custom format codes beyond strftime: `%ms` (000-999 milliseconds within second), `%cs` (00-99 centiseconds), `%ds` (0-9 deciseconds), and `%ums` (raw device uptime in ms, standalone, no NTP needed). Enables sub-second color cycling in expressions (e.g. `[expr:[time:%ums]%1000<500?"#ff0000":"#00ff00"]` toggles every 500ms)
+
 - **Expression binding `[expr:]`** — new binding scheme for inline math, comparisons, and conditional text on button labels. Supports arithmetic (`+ - * / %`), comparisons (`> < >= <= == !=`), ternary (`cond ? "yes" : "no"`), parentheses, and cross-binding math (e.g. `[expr:[mqtt:solar;w] - [mqtt:grid;w];%.0f]`). Inner bindings are resolved first, then the expression is evaluated. Optional printf format suffix via `;` separator (e.g. `[expr:[health:heap_free]/1024;%.1f]`)
 - **Host-native unit test infrastructure** — new `tests/` directory with `g++`-compiled tests that run on the development machine (no ESP32 needed). Includes `test_expr_eval.cpp` (66 pure evaluator tests) and `test_expr_binding.cpp` (22 integration tests with mock MQTT/health resolvers exercising the full template→resolve→evaluate pipeline). Run via `tests/run_tests.sh`
 - **Binding-based coloring** — button background, text, and border colors now accept binding expressions (e.g. `[expr:[mqtt:topic;path]>50?"#ff0000":"#00ff00"]`) for dynamic color changes driven by MQTT data. Each color field has a default fallback color used until the binding resolves. Replaces the previous toggle-state feature with a more flexible approach

@@ -8,6 +8,7 @@
 
 #include <Arduino.h>
 #include <time.h>
+#include <sys/time.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -132,12 +133,23 @@ static bool time_binding_resolve(const char* params, char* out, size_t out_len) 
         strlcpy(tz, sep + 1, sizeof(tz));
     }
 
+    // Handle %ums (uptime milliseconds) — standalone, no NTP needed
+    if (strcmp(fmt, "%ums") == 0) {
+        snprintf(out, out_len, "%lu", (unsigned long)millis());
+        return true;
+    }
+
     // Check if NTP has synced (time > 2024-01-01)
     time_t now = time(nullptr);
     if (now < 1704067200L) {
         strlcpy(out, "--:--", out_len);
         return true;
     }
+
+    // Get sub-second precision via gettimeofday
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    int millis_in_sec = (int)(tv.tv_usec / 1000);  // 0-999
 
     // Apply timezone
     const char* posix_tz = resolve_tz(tz);
@@ -147,7 +159,46 @@ static bool time_binding_resolve(const char* params, char* out, size_t out_len) 
     struct tm ti;
     localtime_r(&now, &ti);
 
-    if (strftime(out, out_len, fmt, &ti) == 0) {
+    // Expand custom sub-second format codes before strftime:
+    //   %ms  → milliseconds within second (000-999)
+    //   %ds  → deciseconds (0-9, 100ms granularity)
+    //   %cs  → centiseconds (00-99, 10ms granularity)
+    //   %ums → skipped here (handled as standalone above); if embedded
+    //          in a compound format, consume it to avoid strftime seeing %u
+    char expanded[128];
+    char* dst = expanded;
+    char* dst_end = expanded + sizeof(expanded) - 1;
+    const char* src = fmt;
+    while (*src && dst < dst_end) {
+        if (src[0] == '%') {
+            if (src[1] == 'u' && src[2] == 'm' && src[3] == 's') {
+                // %ums in a compound format: expand to millis() as best effort
+                int n = snprintf(dst, (size_t)(dst_end - dst), "%lu", (unsigned long)millis());
+                dst += n;
+                src += 4;
+                continue;
+            } else if (src[1] == 'm' && src[2] == 's') {
+                int n = snprintf(dst, (size_t)(dst_end - dst), "%03d", millis_in_sec);
+                dst += n;
+                src += 3;
+                continue;
+            } else if (src[1] == 'd' && src[2] == 's') {
+                int n = snprintf(dst, (size_t)(dst_end - dst), "%d", millis_in_sec / 100);
+                dst += n;
+                src += 3;
+                continue;
+            } else if (src[1] == 'c' && src[2] == 's') {
+                int n = snprintf(dst, (size_t)(dst_end - dst), "%02d", millis_in_sec / 10);
+                dst += n;
+                src += 3;
+                continue;
+            }
+        }
+        *dst++ = *src++;
+    }
+    *dst = '\0';
+
+    if (strftime(out, out_len, expanded, &ti) == 0) {
         strlcpy(out, "ERR:fmt", out_len);
         return false;
     }
