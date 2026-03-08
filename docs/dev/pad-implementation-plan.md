@@ -288,25 +288,25 @@ Curated layouts have no `cols`/`rows` fields. The layout name determines button 
 
 ---
 
-## Phase 6: MQTT Live Labels & Toggle State
+## Phase 6: MQTT Live Labels & Binding-Based Colors
 
-**Goal:** Subscribe to per-button MQTT topics for live label updates and toggle state.
+**Goal:** Subscribe to per-button MQTT topics for live label updates and binding-driven dynamic colors.
 
 ### Files to modify
 
 | File | Change |
 |---|---|
-| `src/app/screens/pad_screen.cpp` | Add MQTT subscription management: on tile rebuild, subscribe to all configured `label_*_sub_topic` and `state_topic` values. On message callback: extract value via `json_path`, format via `format` string, update label text. Toggle state: compare to `state_on_value`, set fg color accordingly. Coalescing: track `last_label_update_ms`, defer LVGL updates by `PAD_LABEL_COALESCE_MS` (200ms) |
-| `src/app/mqtt_manager.cpp` (or equivalent) | Add routing: pad label/state topics → `pad_screen_on_mqtt_message(page, button_index, topic, payload)` |
+| `src/app/screens/pad_screen.cpp` | Add MQTT subscription management: on tile rebuild, subscribe to all configured `label_*_sub_topic` values and color binding topics. On message callback: extract value via `json_path`, format via `format` string, update label text. Color bindings: resolve binding template (e.g. `[expr:[mqtt:topic;path]>50?"#ff0000":"#00ff00"]`), parse hex result, apply to LVGL style. Coalescing: track `last_label_update_ms`, defer LVGL updates by `PAD_LABEL_COALESCE_MS` (200ms) |
+| `src/app/mqtt_sub_store.cpp` | Scan color fields for binding topics during subscription collection |
+| `src/app/pad_config.cpp/h` | Color fields stored as `char[192]` strings (hex or binding) with `uint32_t _default` fallback; shared `parse_hex_color()` utility |
 | `src/app/web_portal_pad.cpp` | On POST: trigger MQTT resubscribe for the saved page |
 
 ### Data flow
 
 ```
-MQTT broker → mqtt_manager → pad_screen_on_mqtt_message()
-  → extract value (json_path)
-  → format (printf)
-  → set pending_label_update flag + timestamp
+MQTT broker → mqtt_manager → binding_template resolve()
+  → color binding: resolve template → parse hex → apply lv_obj_set_style_bg/text/border_color
+  → label binding: extract value (json_path) → format (printf) → set pending_label_update flag
   → update() loop: if pending && elapsed > 200ms → lv_label_set_text()
 ```
 
@@ -315,7 +315,7 @@ MQTT broker → mqtt_manager → pad_screen_on_mqtt_message()
 - Configure a button with `label_center_sub: "home/temp"`, `label_center_fmt: "%.1f°C"`
 - Publish `{"value": 21.5}` to `home/temp`
 - Verify button center label updates to `"21.5°C"`
-- Test toggle: configure `state_topic`, verify button dims when value != `state_on_value`
+- Test color binding: configure `bg_color` as `[expr:[mqtt:topic;val]>50?"#ff0000":"#00ff00"]`, verify color changes with MQTT data
 
 ---
 

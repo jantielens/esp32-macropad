@@ -55,6 +55,8 @@ public:
 		const char *friendlyName() const { return _friendly_name; }
 		const char *sanitizedName() const { return _sanitized_name; }
 
+		const DeviceConfig *config() const { return _config; }
+
 private:
 		void ensureConnected();
 		void installCallback();

@@ -6,6 +6,7 @@
 #include "mqtt_manager.h"
 #include "mqtt_sub_store.h"
 #include "mqtt_screen.h"
+#include "mqtt_wake.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
 #include "ble_advertiser.h"
@@ -21,6 +22,7 @@
 
 #if HAS_DISPLAY
 #include "display_manager.h"
+#include "expr_binding.h"
 #include "health_binding.h"
 #include "icon_store.h"
 #include "time_binding.h"
@@ -179,11 +181,11 @@ void setup()
 	// (e.g., MQTT publish + web API calls).
 	device_telemetry_init();
 
-	#if DEVICE_TELEMETRY_BACKGROUND_TASKS
-	// Start CPU monitoring background task
+	#if DEVICE_TELEMETRY_CPU_MONITOR
 	device_telemetry_start_cpu_monitoring();
+	#endif
 
-	// Start 200ms health-window sampling (min/max fields between /api/health polls)
+	#if DEVICE_TELEMETRY_HEALTH_WINDOW
 	device_telemetry_start_health_window_sampling();
 	#endif
 
@@ -299,11 +301,13 @@ void setup()
 	mqtt_manager.begin(&device_config, device_config.device_name, sanitized);
 	mqtt_sub_store_init();
 	mqtt_screen_init();
+	mqtt_wake_init(&device_config);
 	#endif
 
 	#if HAS_DISPLAY
 	health_binding_init();
 	time_binding_init();
+	expr_binding_init();
 	#endif
 
 	last_heartbeat_ms = millis();
@@ -387,6 +391,7 @@ void loop()
 	#if HAS_MQTT
 	mqtt_manager.loop();
 	mqtt_screen_loop();
+	mqtt_wake_loop();
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).
@@ -398,11 +403,6 @@ void loop()
 	#endif
 
 
-	#if DEVICE_TELEMETRY_BACKGROUND_TASKS
-	// Lightweight telemetry tripwires (runs from main loop only).
-	device_telemetry_check_tripwires();
-	#endif
-
 	unsigned long current_ms = millis();
 
 	// WiFi watchdog - monitor connection and reconnect if needed
@@ -410,32 +410,22 @@ void loop()
 	wifi_manager_watchdog(&device_config, config_loaded, web_portal_is_ap_mode());
 
 	// Check if it's time for heartbeat
-	// TODO: consider moving heartbeat logging into device_telemetry.
 	if (current_ms - last_heartbeat_ms >= HEARTBEAT_INTERVAL_MS) {
-		const DeviceMemorySnapshot mem = device_telemetry_get_memory_snapshot();
+		// Lightweight heartbeat — direct heap_caps calls, no full memory snapshot.
+		const size_t int_free  = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 		if (WiFi.status() == WL_CONNECTED) {
-			LOGI("Heartbeat", "Up:%ds heap=%u min=%u int=%u min=%u psram=%u | WiFi:%s (%s)",
+			LOGI("Heartbeat", "Up:%ds int=%u psram=%u | WiFi:%s (%s)",
 				current_ms / 1000,
-				(unsigned)mem.heap_free_bytes,
-				(unsigned)mem.heap_min_free_bytes,
-				(unsigned)mem.heap_internal_free_bytes,
-				(unsigned)mem.heap_internal_min_free_bytes,
-				(unsigned)mem.psram_free_bytes,
+				(unsigned)int_free,
+				(unsigned)psram_free,
 				WiFi.localIP().toString().c_str(),
 				WiFi.getHostname());
 		} else {
-			LOGI("Heartbeat", "Up:%ds heap=%u min=%u int=%u min=%u psram=%u | WiFi: Disconnected",
+			LOGI("Heartbeat", "Up:%ds int=%u psram=%u | WiFi: Disconnected",
 				current_ms / 1000,
-				(unsigned)mem.heap_free_bytes,
-				(unsigned)mem.heap_min_free_bytes,
-				(unsigned)mem.heap_internal_free_bytes,
-				(unsigned)mem.heap_internal_min_free_bytes,
-				(unsigned)mem.psram_free_bytes);
-		}
-
-		// Periodic heap integrity check — detects corruption early.
-		if (!heap_caps_check_integrity_all(true)) {
-			LOGE("Heap", "HEAP CORRUPTION DETECTED at uptime %ds", current_ms / 1000);
+				(unsigned)int_free,
+				(unsigned)psram_free);
 		}
 
 		last_heartbeat_ms = current_ms;

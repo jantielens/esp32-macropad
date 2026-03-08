@@ -38,6 +38,9 @@
 #define CONFIG_PUBLISH_TRANSPORT_MAX_LEN 16
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
 
+// Screen saver MQTT wake binding
+#define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
+
 // Web portal Basic Auth (STA/full mode only)
 #define CONFIG_BASIC_AUTH_USERNAME_MAX_LEN 32
 #define CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN 64
@@ -98,6 +101,7 @@ struct DeviceConfig {
 		uint16_t screen_saver_fade_out_ms;       // default 800
 		uint16_t screen_saver_fade_in_ms;        // default 400
 		bool screen_saver_wake_on_touch;         // default true (when HAS_TOUCH)
+		char screen_saver_wake_binding[CONFIG_SS_WAKE_BINDING_MAX_LEN]; // binding expression; wake on "ON"
 #endif
 		
 		// Validation flag (magic number to detect valid config)

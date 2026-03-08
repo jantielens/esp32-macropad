@@ -59,28 +59,37 @@ Do NOT fix anything — only report.
 
 ```
 ### Dead Code
-1. [file.cpp#L42] `unusedFunction()` — never called after refactor
-2. [file.h#L10] `#include "old_header.h"` — not needed after changes to module X
+DEAD01. [file.cpp#L42] `unusedFunction()` — never called after refactor
+DEAD02. [file.h#L10] `#include "old_header.h"` — not needed after changes to module X
 ...
 
 ### Comments & Naming
-3. [file.cpp#L88] Comment "handles edge case Y" is no longer accurate after logic change
+COMMENT01. [file.cpp#L88] Comment "handles edge case Y" is no longer accurate after logic change
 ...
 
 ### KISS
+KISS01. [file.cpp#L120] `ComplexWrapper` class adds unnecessary indirection for a one-off use case
 ...
 
 ### DRY
+DRY01. [file1.cpp#L50] and [file2.cpp#L75] Both contain similar logic for parsing config values — should be extracted to a shared helper function
 ...
 
 ### Documentation
+DOC01. [README.md#L200] The "Supported Devices" section needs updating to reflect the new board added in this PR
 ...
 
 ### Architecture & Clean Design
+ARCH01. [module1.cpp#L30] Direct calls to `Serial.print()` in the data processing module violate separation of concerns — should use a logging interface instead
 ...
 
 ### Recommendations
-Recommended to fix 2, 3 and 5 because ...
-We can skip 1 and 4 for now since ...
+
+Recommended to fix:
+- DEAD01: (Super short description & why it should be fixed.)
+- KISS01: (Super short description & why it should be fixed.)
+...
+Recommended to skip:
+- KISS03: (Super short description & why it should be skipped.)
 
 ```

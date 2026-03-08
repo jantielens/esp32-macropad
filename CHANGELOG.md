@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-03-08
+
+### Added
+- **Per-label style DSL** — each button label (top/center/bottom) now supports a compact style string for advanced typography control without cluttering the main UI. Toggle the **Aa** button next to any label field to reveal the style input. Properties are semicolon-separated key:value pairs:
+  - `font:24` — override font size (available sizes: 12, 14, 18, 24, 32, 36 px)
+  - `align:left` / `align:right` / `align:center` — horizontal text alignment
+  - `y:-2` — vertical pixel offset (nudge label up or down)
+  - `mode:clip` / `mode:scroll` / `mode:dot` / `mode:wrap` — LVGL long-text mode (clip truncates, dot adds "...", scroll auto-scrolls, wrap wraps to next line)
+  - `color:#FF0` — override text color for this label (3, 4, 6, or 8 hex digits)
+  - Example: `font:36;align:left;mode:dot` — large left-aligned text with ellipsis overflow
+  - A built-in **?** help button documents all properties with examples
+- **Sub-second time binding codes** — the `[time:]` scheme now supports custom format codes beyond strftime: `%ms` (000-999 milliseconds within second), `%cs` (00-99 centiseconds), `%ds` (0-9 deciseconds), and `%ums` (raw device uptime in ms, standalone, no NTP needed). Enables sub-second color cycling in expressions (e.g. `[expr:[time:%ums]%1000<500?"#ff0000":"#00ff00"]` toggles every 500ms)
+
+- **Expression binding `[expr:]`** — new binding scheme for inline math, comparisons, and conditional text on button labels. Supports arithmetic (`+ - * / %`), comparisons (`> < >= <= == !=`), ternary (`cond ? "yes" : "no"`), parentheses, and cross-binding math (e.g. `[expr:[mqtt:solar;w] - [mqtt:grid;w];%.0f]`). Inner bindings are resolved first, then the expression is evaluated. Optional printf format suffix via `;` separator (e.g. `[expr:[health:heap_free]/1024;%.1f]`)
+- **Host-native unit test infrastructure** — new `tests/` directory with `g++`-compiled tests that run on the development machine (no ESP32 needed). Includes `test_expr_eval.cpp` (66 pure evaluator tests) and `test_expr_binding.cpp` (22 integration tests with mock MQTT/health resolvers exercising the full template→resolve→evaluate pipeline). Run via `tests/run_tests.sh`
+- **Binding-based coloring** — button background, text, and border colors now accept binding expressions (e.g. `[expr:[mqtt:topic;path]>50?"#ff0000":"#00ff00"]`) for dynamic color changes driven by MQTT data. Each color field has a default fallback color used until the binding resolves. Replaces the previous toggle-state feature with a more flexible approach
+- **MQTT Wake binding** — new `screen_saver_wake_binding` config field that wakes the screensaver and keeps the screen on while a binding expression resolves to `ON`. Supports any binding scheme (`[mqtt:...]`, `[expr:...]`, etc.). When the value leaves ON, the normal idle timeout resumes. Configurable in the web portal under Screen Saver settings. Implemented in `mqtt_wake.cpp/h` (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
+- **Dynamic button state** — new `btn_state` config field provides tri-state control per button: `enabled` (normal, default), `disabled` (visible but ignores tap/hold), `hidden` (invisible, gap preserved). Supports binding expressions for dynamic state (e.g. `[expr:[mqtt:alarm/state;.;%s]=="armed"?"disabled":"enabled"]`). LVGL `LV_STATE_DISABLED` provides native dimmed styling; `LV_OBJ_FLAG_HIDDEN` hides without reflow. Image fetch slots auto-pause when hidden
+- **Pad Editor Guide** — new comprehensive documentation (`docs/pad-editor-guide.md`) covering all pad editor features: pad and button settings, label style DSL, icons, widgets, binding template syntax (MQTT, Health, Time, Expression), dynamic colors, bulk pad actions, and six complete real-world examples (energy dashboard, light controls, security cameras, world clock, server monitor, climate control). Web portal guide now links to this dedicated guide instead of inlining the full reference
+
+### Improved
+- **Tap indicator overlay** — replaced the old brighten-background tap flash with a semi-transparent overlay that covers the entire button including images, widgets, and bar charts. Uses adaptive color: black overlay (~31% opacity) on light backgrounds, white overlay (~20% opacity) on dark backgrounds, based on perceived luminance (BT.601). Overlay tracks dynamic background color changes from bindings. Eliminates per-tap heap allocation (no more `malloc`/`free` per press)
+- **Pad Editor — dotted outline on configured buttons** — configured buttons in the web portal Pad Editor now keep the dashed outline indicator and hover effect; the outline follows the button's configured corner radius via CSS `outline` so the editor grid consistently shows cell boundaries for all buttons
+- **Image fetch PSRAM optimization** — `image_fetch_pause_slot()` now frees the double-buffer PSRAM allocations (front_buf + back_buf) when a page is hidden, reclaiming 2 × W×H×2 bytes per slot; LVGL-side `owned_pixels` are preserved so the last frame remains visible on navigate-back; buffers are re-allocated automatically on resume; persistent HTTP connections for paused slots are also closed, freeing socket and TLS memory
+- **Telemetry cleanup — reduced PSRAM bus contention** — comprehensive audit and simplification of the device telemetry subsystem targeting ESP32-P4 MIPI-DSI boards where PSRAM free-list walks stall the DPI DMA scan
+  - **CPU monitor rewrite** — replaced `uxTaskGetSystemState()` (which suspended the scheduler and caused blue-flash buffer underruns, issue #7) with per-core `ulTaskGetIdleRunTimeCounterForCore()` via `esp_timer` high-resolution counters; zero scheduler suspension
+  - **Health window simplified** — 200 ms timer now uses only counter reads (`heap_caps_get_free_size` for internal + PSRAM); `heap_caps_get_largest_free_block` removed from the timer and computed on-demand at `/api/health` request time; internal largest sparkline retains its line but loses min/max band
+  - **Health window enabled on ESP32-P4** — re-enabled `DEVICE_TELEMETRY_HEALTH_WINDOW` on `esp32-p4-lcd4b` now that all free-list walks are eliminated from the timer
+  - **PSRAM sparkline bands** — added `psram_free` min/max window tracking; PSRAM Free sparkline now shows a min/max band like Internal Free
+  - **Temperature sensor** — switched from transient install/read/uninstall per sample to a persistent handle installed once at boot
+  - **Removed fields** — dropped `heap_free`, `heap_min`, `heap_largest`, `heap_size`, `cpu_freq`, `psram_fragmentation`, `psram_largest` (redundant with capability-specific fields); removed `display_lv_timer_us` and `display_present_us` debug fields; removed `heap_caps_check_integrity_all()` from heartbeat
+  - **Removed tripwire system** — eliminated `TRIPWIRE_ARMED` / `rtos_task_utils.h` / background task dumper entirely
+  - **HA discovery** — removed `heap_fragmentation` sensor (was an undocumented internal metric); HA users with dashboards referencing this entity will need to remove it
+
+### Breaking
+- **HA MQTT entities removed** — `sensor.macropad_heap_fragmentation` no longer published; dashboards referencing it will show "unavailable"
+- **`/api/health` fields removed** — `heap_free`, `heap_min`, `heap_largest`, `heap_size`, `cpu_freq`, `psram_fragmentation`, `psram_largest`, `display_lv_timer_us`, `display_present_us`, `heap_internal_largest_min_window`, `heap_internal_largest_max_window` dropped from the JSON response
+
 ## [1.5.0] - 2026-03-05
 
 ### Added

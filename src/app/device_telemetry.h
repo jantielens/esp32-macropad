@@ -23,9 +23,6 @@ struct DeviceHealthWindowBands {
 
 	uint32_t psram_free_min_window;
 	uint32_t psram_free_max_window;
-
-	uint32_t heap_internal_largest_min_window;
-	uint32_t heap_internal_largest_max_window;
 };
 
 // Initializes cached values used by device telemetry (safe to call multiple times).
@@ -76,9 +73,5 @@ bool device_telemetry_get_health_window_bands(DeviceHealthWindowBands* out_bands
 
 // Convenience logging helper (single line) using logger.
 void device_telemetry_log_memory_snapshot(const char *tag);
-
-// Call from the main loop to run lightweight one-shot tripwires.
-// (Avoid calling from AsyncTCP/other background tasks.)
-void device_telemetry_check_tripwires();
 
 #endif // DEVICE_TELEMETRY_H

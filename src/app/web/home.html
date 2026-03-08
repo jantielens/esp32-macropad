@@ -200,6 +200,17 @@
                     <small>Only applies to touch-enabled boards.</small>
                 </div>
 
+                <div class="form-group">
+                    <label for="screen_saver_wake_binding">Wake on MQTT Binding</label>
+                    <div class="binding-input-wrap">
+                        <input type="text" class="binding-mono" id="screen_saver_wake_binding" name="screen_saver_wake_binding" maxlength="191" placeholder="[mqtt:devices/node/presence/state]">
+                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                    </div>
+                    <small>Binding expression that keeps the screen awake while it resolves to <strong>ON</strong>. Wakes the screensaver on transition to ON and resets the idle timer as long as ON persists. When the value leaves ON, the normal idle timeout resumes. Uses the same binding syntax as labels. Examples:<br>
+                    <code>[mqtt:devices/node/presence/state]</code> — HA binary sensor<br>
+                    <code>[expr:[mqtt:topic/value]=="xyz"?"ON":"OFF"]</code> — custom condition</small>
+                </div>
+
                 <div class="form-group" id="screen-selection-group" style="display:none;">
                     <label for="screen_selection">
                         Current Screen
@@ -284,11 +295,7 @@
                 </div>
 
                 <!-- Background color -->
-                <div style="display:flex; align-items:center; gap:10px; margin-top:8px; margin-bottom:4px;">
-                    <label for="pad-bg-color" style="margin:0; white-space:nowrap;">Background</label>
-                    <input type="color" id="pad-bg-color" value="#000000" style="width:40px; height:34px; border:2px solid #d2d2d7; border-radius:8px; padding:2px; cursor:pointer; flex-shrink:0;">
-                    <div class="pad-swatch-strip" data-picker="pad-bg-color" style="margin-top:0;"></div>
-                </div>
+                <div id="pad-page-bg-color-wrap" class="pad-color-bind-group" style="margin-top:8px; margin-bottom:4px;"></div>
 
                 <!-- Action buttons -->
                 <div class="pad-actions">
@@ -339,17 +346,40 @@
 
                 <div class="form-group">
                     <label for="pad-edit-label-top">Top Label</label>
-                    <input type="text" id="pad-edit-label-top" maxlength="191" placeholder="e.g. Living Room or Power: [mqtt:topic;path;fmt] W">
+                    <div class="binding-input-wrap">
+                        <input type="text" id="pad-edit-label-top" maxlength="191" placeholder="e.g. Living Room or Power: [mqtt:topic;path;fmt] W">
+                        <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('top')" title="Label style override">Aa</button>
+                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                    </div>
+                    <div id="pad-edit-label-top-style-wrap" class="label-style-wrap" style="display:none;">
+                        <input type="text" id="pad-edit-label-top-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
+                        <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="pad-edit-label-center">Center Label</label>
-                    <input type="text" id="pad-edit-label-center" maxlength="191" placeholder="e.g. 21.5°C or [mqtt:sensors/temp;temp;%.1f°C]">
+                    <div class="binding-input-wrap">
+                        <input type="text" id="pad-edit-label-center" maxlength="191" placeholder="e.g. 21.5°C or [mqtt:sensors/temp;temp;%.1f°C]">
+                        <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('center')" title="Label style override">Aa</button>
+                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                    </div>
+                    <div id="pad-edit-label-center-style-wrap" class="label-style-wrap" style="display:none;">
+                        <input type="text" id="pad-edit-label-center-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
+                        <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="pad-edit-label-bottom">Bottom Label</label>
-                    <input type="text" id="pad-edit-label-bottom" maxlength="191" placeholder="e.g. Lights or [mqtt:topic;path;format]">
+                    <div class="binding-input-wrap">
+                        <input type="text" id="pad-edit-label-bottom" maxlength="191" placeholder="e.g. Lights or [mqtt:topic;path;format]">
+                        <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('bottom')" title="Label style override">Aa</button>
+                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                    </div>
+                    <div id="pad-edit-label-bottom-style-wrap" class="label-style-wrap" style="display:none;">
+                        <input type="text" id="pad-edit-label-bottom-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
+                        <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                    </div>
                 </div>
-                <small style="display:block; margin-bottom:12px; color:#86868b;">Use <code>[mqtt:topic;path;format]</code> in labels to bind live values. <button type="button" onclick="document.getElementById('binding-help-overlay').style.display='flex'" style="background:none;border:1px solid #d2d2d7;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:18px;cursor:pointer;color:#86868b;padding:0;vertical-align:middle;">?</button></small>
 
                 <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
 
@@ -401,8 +431,10 @@
 
                     <div class="form-group">
                         <label for="pad-edit-widget-data-binding">Data Binding</label>
-                        <input type="text" id="pad-edit-widget-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/energy/solar_power;power]">
-                        <small>Binding template for widget value. Omit format — widget parses the raw number. <button type="button" onclick="document.getElementById('binding-help-overlay').style.display='flex'" style="background:none;border:1px solid #d2d2d7;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:18px;cursor:pointer;color:#86868b;padding:0;vertical-align:middle;">?</button></small>
+                        <div class="binding-input-wrap">
+                            <input type="text" class="binding-mono" id="pad-edit-widget-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/energy/solar_power;power]">
+                            <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                        </div>
                     </div>
 
                     <div style="display:flex; gap:8px;">
@@ -465,26 +497,7 @@
                     </div>
                 </details>
 
-                <!-- Toggle State (collapsible) -->
-                <details id="pad-edit-state-section">
-                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Toggle State</summary>
-                    <small style="display:block; margin-bottom:12px; color:#86868b;">Dim button text when MQTT state doesn't match the "ON" value.</small>
 
-                    <div class="form-group">
-                        <label for="pad-edit-state-topic">State Topic</label>
-                        <input type="text" id="pad-edit-state-topic" maxlength="127" placeholder="e.g. home/lights/living-room/state">
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                        <div class="form-group" style="flex:2;">
-                            <label for="pad-edit-state-path">JSON Path</label>
-                            <input type="text" id="pad-edit-state-path" maxlength="47" placeholder="e.g. state (. = raw)">
-                        </div>
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-state-on-value">ON Value</label>
-                            <input type="text" id="pad-edit-state-on-value" maxlength="31" placeholder="e.g. ON" value="ON">
-                        </div>
-                    </div>
-                </details>
 
                 <!-- Image Background (collapsible) -->
                 <details id="pad-edit-image-section">
@@ -521,25 +534,17 @@
 
                 <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
 
-                <div style="display:flex; gap:12px;">
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-bg-color">Background</label>
-                        <input type="color" id="pad-edit-bg-color" value="#333333" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
-                        <div class="pad-swatch-strip" data-picker="pad-edit-bg-color"></div>
-                    </div>
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-fg-color">Text Color</label>
-                        <input type="color" id="pad-edit-fg-color" value="#ffffff" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
-                        <div class="pad-swatch-strip" data-picker="pad-edit-fg-color"></div>
-                    </div>
-                </div>
+                <!-- Bindable color fields -->
+                <details id="pad-edit-colors-section">
+                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Colors</summary>
+                    <small style="display:block; margin-bottom:12px; color:#86868b;">Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. When using a binding, set a default color as fallback. <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button></small>
+
+                    <div id="pad-edit-bg-color-wrap" class="pad-color-bind-group"></div>
+                    <div id="pad-edit-fg-color-wrap" class="pad-color-bind-group"></div>
+                    <div id="pad-edit-border-color-wrap" class="pad-color-bind-group"></div>
+                </details>
 
                 <div style="display:flex; gap:12px; margin-top:4px;">
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-border-color">Border</label>
-                        <input type="color" id="pad-edit-border-color" value="#000000" style="width:100%; height:40px; border:2px solid #d2d2d7; border-radius:10px; padding:2px; cursor:pointer;">
-                        <div class="pad-swatch-strip" data-picker="pad-edit-border-color"></div>
-                    </div>
                     <div class="form-group" style="flex:1;">
                         <label for="pad-edit-border-width">Border Width</label>
                         <input type="number" id="pad-edit-border-width" min="0" max="10" value="0" style="width:100%;">
@@ -562,6 +567,20 @@
                         <select id="pad-edit-row-span"></select>
                     </div>
                 </div>
+
+                <!-- Button State (collapsible) -->
+                <details id="pad-edit-btn-state-section">
+                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Button State</summary>
+                    <small style="display:block; margin-bottom:12px; color:#86868b;">Control button visibility and interactivity. Use a static value or a binding expression that resolves to <code>enabled</code>, <code>disabled</code>, or <code>hidden</code>.</small>
+                    <div class="form-group">
+                        <label for="pad-edit-btn-state">State</label>
+                        <div class="binding-input-wrap">
+                            <input type="text" id="pad-edit-btn-state" class="binding-mono" maxlength="191" placeholder="e.g. enabled, disabled, hidden, or [expr:…]">
+                            <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                        </div>
+                        <small><b>enabled</b> = normal (default when empty), <b>disabled</b> = visible but no tap/hold, <b>hidden</b> = invisible.</small>
+                    </div>
+                </details>
 
                 <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
 
@@ -700,7 +719,7 @@
                 <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Date &amp; Time Binding</h4>
                 <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:8px;word-break:break-all;">[time:format;timezone]</code>
                 <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12px;">
-                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">strftime format <em>(required)</em>: <code>%H:%M</code> (time), <code>%d/%m</code> (date), <code>%a</code> (weekday), <code>%Y-%m-%d</code>, etc.</td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">strftime format <em>(required)</em>: <code>%H:%M</code> (time), <code>%d/%m</code> (date), <code>%a</code> (weekday), <code>%Y-%m-%d</code>, etc.<br>Sub-second: <code>%ms</code> (000-999 millis), <code>%cs</code> (00-99 centisec), <code>%ds</code> (0-9 decisec), <code>%ums</code> (uptime ms, standalone only)</td></tr>
                     <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>timezone</strong></td><td style="padding:4px 0;">Olson name or POSIX TZ. Omit for UTC. Examples: <code>Europe/Amsterdam</code>, <code>America/New_York</code>, <code>Asia/Tokyo</code></td></tr>
                 </table>
                 <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
@@ -723,6 +742,14 @@
                     <tr>
                         <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%H:%M]</code></td>
                         <td style="padding:4px 0;color:#86868b;">Current time in UTC</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%H:%M:%S.%ms]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Time with milliseconds</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%ums]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Device uptime in ms (no NTP needed)</td>
                     </tr>
                 </table>
                 <details style="margin-bottom:16px;font-size:12px;">
@@ -789,6 +816,92 @@
                     <code style="display:block;font-size:11px;margin:0 0 2px;color:#86868b;">IST-5:30</code>
                 </details>
 
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Expression Binding</h4>
+                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:8px;word-break:break-all;">[expr:expression;format]</code>
+                <p style="color:#86868b;margin:0 0 8px;font-size:12px;">Evaluate math, comparisons, and conditionals on live binding values. Inner bindings (<code>[mqtt:...]</code>, <code>[health:...]</code>, etc.) are resolved first, then the expression is evaluated.</p>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12px;">
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>expression</strong></td><td style="padding:4px 0;">Math expression with inner bindings. Supports <code>+ - * / %</code>, comparisons <code>&gt; &lt; &gt;= &lt;= == !=</code>, ternary <code>? :</code>, parentheses, and <code>"quoted strings"</code>.</td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">Optional printf format string after <code>;</code> separator. Omit for automatic formatting.</td></tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Basic — unit conversion</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[health:heap_free] / 1024;%.0f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Bytes → KB (e.g. <em>183</em>)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[health:psram_free] / (1024 * 1024);%.2f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Bytes → MB (e.g. <em>4.00</em>)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:sensors/temp;value] * 9/5 + 32;%.1f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">°C → °F (e.g. <em>72.5</em>)</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Conditional text</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:sensor/temp;value] &gt; 30 ? "Hot" : "OK"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Threshold check → text</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[health:cpu] &gt; 80 ? "High" : "Normal"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">CPU load warning</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Advanced — combine multiple bindings</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar/power;w] - [mqtt:grid/power;w];%.0f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Net power (solar − grid)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar/power;w] &gt; 0 ? "Producing" : "Idle"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Status based on solar output</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Mixed — static text + expression</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">Heap: [expr:[health:heap_free]/1024;%.0f] KB</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Static text wrapping expr</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar;w]/1000;%.1f]kW / [expr:[mqtt:grid;w]/1000;%.1f]kW</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Two expressions in one label</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Sub-second timing — fast color cycling</p>
+                <p style="color:#86868b;margin:0 0 6px;font-size:11px;">Use modulo (<code>%</code>) with <code>&lt;</code> to split a time range into two halves. <code>%ms</code> (0-999) works for periods that divide evenly into 1000. <code>%ums</code> (uptime ms) works for any period.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ds]%2&lt;1?"#ff0000":"#00ff00"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Toggle every 100ms (deciseconds)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ms]%500&lt;250?"#ff0000":"#00ff00"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Toggle every 250ms</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ums]%1000&lt;500?"#ff0000":"#00ff00"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Toggle every 500ms (any period)</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Conditional color cycling — MQTT threshold warning</p>
+                <p style="color:#86868b;margin:0 0 6px;font-size:11px;">Combine an MQTT threshold check with fast color cycling: flash when a value exceeds a limit, otherwise use a static color.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:energy/power]&gt;2.5?([time:%ms]%500&lt;250?"#ff0000":"#ffffff"):"#000000"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Flash red/white when power &gt; 2.5, else black</td>
+                    </tr>
+                </table>
+
                 <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Widget Data Binding</h4>
                 <p style="color:#86868b;margin:0 0 8px;font-size:12px;">The <strong>Data Binding</strong> field in widget settings uses the same binding syntax. The resolved value is parsed as a number by the widget. <strong>Omit the format parameter</strong> — formatting would break numeric parsing.</p>
                 <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
@@ -800,9 +913,62 @@
                         <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:sensors/temp]</code></td>
                         <td style="padding:4px 0;color:#86868b;">Raw MQTT value → bar chart</td>
                     </tr>
-                    <tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
                         <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[health:cpu]</code></td>
                         <td style="padding:4px 0;color:#86868b;">Device CPU usage → bar chart</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar;w] - [mqtt:grid;w]]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Computed value → bar chart</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="style-help-overlay" class="reboot-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="reboot-modal" style="background:#fffde7;max-width:420px;text-align:left;padding:0;">
+            <div style="padding:24px 28px 8px;display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;font-size:18px;">Label Style Reference</h3>
+                <button type="button" onclick="document.getElementById('style-help-overlay').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#86868b;padding:0 4px;">&times;</button>
+            </div>
+            <div style="padding:0 28px 24px;font-size:13px;color:#1d1d1f;line-height:1.5;overflow-y:auto;max-height:70vh;">
+                <p style="color:#86868b;margin:0 0 12px;">Override individual label styling with a compact <code>key:value;...</code> syntax.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><strong>font</strong></td>
+                        <td style="padding:4px 0;color:#86868b;">Font size: <code>12</code>, <code>14</code>, <code>18</code>, <code>24</code>, <code>32</code>, or <code>36</code></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><strong>align</strong></td>
+                        <td style="padding:4px 0;color:#86868b;"><code>left</code>, <code>center</code>, or <code>right</code></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><strong>y</strong></td>
+                        <td style="padding:4px 0;color:#86868b;">Vertical pixel offset (e.g. <code>-2</code>, <code>5</code>)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><strong>mode</strong></td>
+                        <td style="padding:4px 0;color:#86868b;"><code>clip</code>, <code>scroll</code>, <code>dot</code> (...), or <code>wrap</code></td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><strong>color</strong></td>
+                        <td style="padding:4px 0;color:#86868b;">Hex color (e.g. <code>#FF0</code>, <code>#FF6600</code>)</td>
+                    </tr>
+                </table>
+                <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#1d1d1f;">Examples</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:36;align:left;mode:dot</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Large, left-aligned, ellipsis</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:14;color:#FF0</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Small yellow text</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">y:-4;align:right</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Shifted up, right-aligned</td>
                     </tr>
                 </table>
             </div>

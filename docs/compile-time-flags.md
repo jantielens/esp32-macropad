@@ -22,7 +22,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 127
+Total flags: 128
 
 ### Features (HAS_*)
 
@@ -97,11 +97,11 @@ Total flags: 127
 ### Limits & Tuning
 
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
+- **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
-- **MEMORY_TRIPWIRE_INTERNAL_MIN_BYTES** default: `0` — Default: disabled (0). Enable per-board if you want early warning logs.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
@@ -117,6 +117,8 @@ Total flags: 127
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
+- **DEVICE_TELEMETRY_CPU_MONITOR** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable CPU monitoring (idle-hook based, 1 Hz esp_timer).
+- **DEVICE_TELEMETRY_HEALTH_WINDOW** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable health-window min/max sampling timer.
 - **DISPLAY_BLANK_ON_SAVE** default: `false` — (LittleFS + lodepng). The browser blanks/restores via /api/display/brightness.
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
@@ -138,7 +140,6 @@ Total flags: 127
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
 - **LVGL_TASK_PRIORITY** default: `4` — Default 4 matches ESP-IDF BSP convention; keeps rendering above WiFi (pri 2-3).
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
-- **MEMORY_TRIPWIRE_CHECK_INTERVAL_MS** default: `5000` — How often to check tripwires from the main loop.
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
 - **ST7701_DSI_HSYNC_BACK_PORCH** default: `42` — HSYNC back porch in pixel clocks.
@@ -229,6 +230,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_telemetry.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
+  - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/icon_store.cpp
@@ -236,6 +238,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/lv_conf.h
   - src/app/mqtt_screen.cpp
   - src/app/mqtt_screen.h
+  - src/app/mqtt_wake.cpp
+  - src/app/mqtt_wake.h
   - src/app/pad_config.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
@@ -272,6 +276,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/device_telemetry.cpp
   - src/app/duty_cycle.cpp
+  - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/ha_discovery.h
   - src/app/mqtt_manager.cpp
@@ -280,6 +285,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_screen.h
   - src/app/mqtt_sub_store.cpp
   - src/app/mqtt_sub_store.h
+  - src/app/mqtt_wake.cpp
+  - src/app/mqtt_wake.h
   - src/app/screens/pad_screen.cpp
   - src/app/sensors/bme280_sensor.cpp
   - src/app/sensors/bme280_sensor.h
@@ -331,6 +338,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **BUTTON_PIN**
   - src/app/board_config.h
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS**
+  - src/app/board_config.h
+- **DEVICE_TELEMETRY_CPU_MONITOR**
+  - src/app/app.ino
+  - src/app/board_config.h
+- **DEVICE_TELEMETRY_HEALTH_WINDOW**
   - src/app/app.ino
   - src/app/board_config.h
 - **DISPLAY_BLANK_ON_SAVE**
@@ -352,6 +364,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HEALTH_HISTORY_SECONDS**
   - src/app/board_config.h
 - **HEALTH_POLL_INTERVAL_MS**
+  - src/app/board_config.h
+- **HEALTH_WINDOW_SAMPLE_PERIOD_MS**
   - src/app/board_config.h
 - **LCD_BL_PIN**
   - src/app/drivers/arduino_gfx_driver.cpp
@@ -391,11 +405,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LVGL_TICK_PERIOD_MS**
   - src/app/board_config.h
-- **MEMORY_TRIPWIRE_CHECK_INTERVAL_MS**
-  - src/app/board_config.h
-- **MEMORY_TRIPWIRE_INTERNAL_MIN_BYTES**
-  - src/app/board_config.h
-  - src/app/device_telemetry.cpp
 - **POWERON_CONFIG_BURST_ENABLED**
   - src/app/board_config.h
   - src/app/power_manager.cpp

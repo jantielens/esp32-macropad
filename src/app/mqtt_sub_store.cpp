@@ -3,6 +3,7 @@
 #if HAS_MQTT
 
 #include "binding_template.h"
+#include "config_manager.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
 #include "pad_config.h"
@@ -200,7 +201,7 @@ void mqtt_sub_store_subscribe_all() {
     ctx.count = &unique_count;
     ctx.max = MAX_UNIQUE;
 
-    // Helper lambda to add a plain topic string (for state_bind, widget data)
+    // Helper lambda to add a plain topic string (for widget data)
     auto add_unique = [&](const char* topic) {
         if (!topic[0]) return;
         for (int i = 0; i < unique_count; i++) {
@@ -222,18 +223,31 @@ void mqtt_sub_store_subscribe_all() {
 
     for (uint8_t page = 0; page < MAX_PAD_PAGES; page++) {
         if (!pad_config_load(page, cfg)) continue;
+        // Scan page-level background color for binding tokens
+        binding_template_collect_topics(cfg->bg_color, &ctx);
         for (uint8_t b = 0; b < cfg->button_count; b++) {
             const ScreenButtonConfig& btn = cfg->buttons[b];
             // Scan label text for [mqtt:...] binding tokens
             binding_template_collect_topics(btn.label_top, &ctx);
             binding_template_collect_topics(btn.label_center, &ctx);
             binding_template_collect_topics(btn.label_bottom, &ctx);
-            add_unique(btn.state_bind.mqtt_topic);
+            // Scan color fields for binding tokens
+            binding_template_collect_topics(btn.bg_color, &ctx);
+            binding_template_collect_topics(btn.fg_color, &ctx);
+            binding_template_collect_topics(btn.border_color, &ctx);
             binding_template_collect_topics(btn.widget.data_binding, &ctx);
         }
     }
 
     free(cfg);
+
+    // Scan screen saver wake binding for MQTT topics
+    {
+        const DeviceConfig* dcfg = mqtt_manager.config();
+        if (dcfg && strlen(dcfg->screen_saver_wake_binding) > 0) {
+            binding_template_collect_topics(dcfg->screen_saver_wake_binding, &ctx);
+        }
+    }
 
     // Update store entries and subscribe
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {

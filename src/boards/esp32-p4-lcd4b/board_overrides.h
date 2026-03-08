@@ -115,4 +115,19 @@
 // ============================================================================
 #define DISPLAY_BLANK_ON_SAVE true
 
+// ============================================================================
+// Telemetry tuning — reduce PSRAM bus contention with DPI DMA scan
+// ============================================================================
+// The MIPI-DSI DPI controller continuously DMA-scans the PSRAM framebuffer.
+// Avoid PSRAM free-list walks (heap_caps_get_largest_free_block for SPIRAM)
+// in high-frequency timers — they stall the bus and cause blue-flash
+// buffer underruns (issue #7).
+//
+// Health window only tracks counter reads (internal_free, psram_free);
+// internal_largest is read on-demand at /api/health request time.
+#define DEVICE_TELEMETRY_BACKGROUND_TASKS 0
+#define HEALTH_HISTORY_ENABLED            1
+#define DEVICE_TELEMETRY_CPU_MONITOR      1
+#define DEVICE_TELEMETRY_HEALTH_WINDOW    1
+
 #endif // BOARD_OVERRIDES_ESP32_P4_LCD4B_H

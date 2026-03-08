@@ -130,6 +130,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["screen_saver_fade_out_ms"] = current_config->screen_saver_fade_out_ms;
 				(*doc)["screen_saver_fade_in_ms"] = current_config->screen_saver_fade_in_ms;
 				(*doc)["screen_saver_wake_on_touch"] = current_config->screen_saver_wake_on_touch;
+				(*doc)["screen_saver_wake_binding"] = current_config->screen_saver_wake_binding;
 				#endif
 
 				if (doc->overflowed()) {
@@ -527,6 +528,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				} else {
 						current_config->screen_saver_wake_on_touch = (bool)(doc["screen_saver_wake_on_touch"] | false);
 				}
+		}
+
+		if (doc.containsKey("screen_saver_wake_binding")) {
+				strlcpy(current_config->screen_saver_wake_binding, doc["screen_saver_wake_binding"] | "", CONFIG_SS_WAKE_BINDING_MAX_LEN);
 		}
 		#endif
 

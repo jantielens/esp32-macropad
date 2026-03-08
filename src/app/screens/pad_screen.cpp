@@ -18,28 +18,30 @@
 
 #define TAG "PadScr"
 
-// Tap flash: brighten 30% for 100ms
-#define TAP_FLASH_BRIGHTEN_PCT 30
+// Tap flash overlay: semi-transparent darken/lighten for 100ms
 #define TAP_FLASH_DURATION_MS  100
+#define TAP_OVERLAY_DARK_OPA   80   // ~31% black overlay on light backgrounds
+#define TAP_OVERLAY_LIGHT_OPA  50   // ~20% white overlay on dark backgrounds
+#define TAP_LUMINANCE_THRESH   180  // Perceived-brightness cutoff (0-255)
+#define TILE_PAD_PX            4    // Content padding inside each tile
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-// Brighten a color by a percentage (clamp to 255)
-static lv_color_t brighten_color(uint32_t rgb, uint8_t pct) {
+// Perceived luminance (ITU-R BT.601) of an RGB888 color (0-255 range)
+static uint8_t perceived_luminance(uint32_t rgb) {
     uint8_t r = (rgb >> 16) & 0xFF;
     uint8_t g = (rgb >> 8) & 0xFF;
     uint8_t b = rgb & 0xFF;
-    r = (uint8_t)(r + (uint16_t)(255 - r) * pct / 100);
-    g = (uint8_t)(g + (uint16_t)(255 - g) * pct / 100);
-    b = (uint8_t)(b + (uint16_t)(255 - b) * pct / 100);
-    return lv_color_make(r, g, b);
+    return (uint8_t)((r * 77 + g * 150 + b * 29) >> 8);
 }
 
 static lv_color_t rgb_to_lv(uint32_t rgb) {
     return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 }
+
+// parse_hex_color() from pad_config.h is used for resolved color strings
 
 // ============================================================================
 // PadScreen
@@ -47,12 +49,13 @@ static lv_color_t rgb_to_lv(uint32_t rgb) {
 
 PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
     : pageIndex(page), displayMgr(manager), screen(nullptr), container(nullptr),
-      tileCount(0), bindingCount(0), stateBindingCount(0), cachedGeneration(UINT32_MAX), tilesBuilt(false) {
+      tileCount(0), bindingCount(0), colorBindingCount(0), cachedGeneration(UINT32_MAX), tilesBuilt(false) {
     memset(tiles, 0, sizeof(tiles));
     memset(bindings, 0, sizeof(bindings));
-    memset(stateBindings, 0, sizeof(stateBindings));
+    memset(colorBindings, 0, sizeof(colorBindings));
     wakeScreen[0] = '\0';
-    bgColor = 0x000000;
+    pageBgTemplate[0] = '\0';
+    pageBgDefault = 0x000000;
 }
 
 PadScreen::~PadScreen() {
@@ -67,7 +70,7 @@ void PadScreen::create() {
     if (screen) return;
 
     screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(screen, rgb_to_lv(bgColor), 0);
+    lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);
     lv_obj_set_style_pad_all(screen, 0, 0);
     lv_obj_set_style_border_width(screen, 0, 0);
 
@@ -103,8 +106,8 @@ void PadScreen::show() {
     for (uint16_t i = 0; i < bindingCount; i++) {
         bindings[i].last[0] = '\0';
     }
-    for (uint16_t i = 0; i < stateBindingCount; i++) {
-        stateBindings[i].initialized = false;
+    for (uint16_t i = 0; i < colorBindingCount; i++) {
+        colorBindings[i].lastApplied = UINT32_MAX; // Force re-apply
     }
 
 #if HAS_IMAGE_FETCH
@@ -130,9 +133,10 @@ void PadScreen::update() {
     // Check if config has changed
     uint32_t gen = pad_config_get_generation();
     if (tilesBuilt && gen == cachedGeneration) {
-        // Config unchanged — just poll MQTT bindings and toggle state
+        // Config unchanged — poll bindings in priority order
+        pollBtnStateBindings();   // Visibility/interactivity first
         pollMqttBindings();
-        pollToggleState();
+        pollColorBindings();
         mqtt_sub_store_clear_dirty();
 #if HAS_IMAGE_FETCH
         pollImageFrames();
@@ -179,7 +183,8 @@ void PadScreen::clearTiles() {
     }
     tileCount = 0;
     bindingCount = 0;
-    stateBindingCount = 0;
+    colorBindingCount = 0;
+    btnStateBindingCount = 0;
     tilesBuilt = false;
 }
 
@@ -204,7 +209,8 @@ void PadScreen::buildTiles() {
     bool loaded = pad_config_load(pageIndex, cfg);
     if (!loaded) {
         wakeScreen[0] = '\0';
-        bgColor = 0x000000;
+        pageBgTemplate[0] = '\0';
+        pageBgDefault = 0x000000;
         free(cfg);
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
@@ -212,8 +218,9 @@ void PadScreen::buildTiles() {
 
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
-    bgColor = cfg->bg_color_rgb;
-    if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(bgColor), 0);
+    strlcpy(pageBgTemplate, cfg->bg_color, sizeof(pageBgTemplate));
+    pageBgDefault = cfg->bg_color_default;
+    if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);
 
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {
@@ -267,28 +274,28 @@ void PadScreen::buildTiles() {
         lv_obj_set_size(obj, r.w, r.h);
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 
-        // Styling
-        lv_obj_set_style_bg_color(obj, rgb_to_lv(bcfg.bg_color_rgb), 0);
+        // Styling — use default colors for initial render
+        lv_obj_set_style_bg_color(obj, rgb_to_lv(bcfg.bg_color_default), 0);
         lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_color(obj, rgb_to_lv(bcfg.border_color_rgb), 0);
+        lv_obj_set_style_border_color(obj, rgb_to_lv(bcfg.border_color_default), 0);
         lv_obj_set_style_border_width(obj, bcfg.border_width_px, 0);
         lv_obj_set_style_radius(obj, bcfg.corner_radius_px, 0);
         lv_obj_set_style_clip_corner(obj, true, 0);
-        lv_obj_set_style_pad_all(obj, 4, 0);
+        lv_obj_set_style_pad_all(obj, TILE_PAD_PX, 0);
 
-        lv_color_t fg = rgb_to_lv(bcfg.fg_color_rgb);
+        lv_color_t fg = rgb_to_lv(bcfg.fg_color_default);
 
         // Top label
         lv_obj_t* lbl_top = nullptr;
         if (bcfg.label_top[0]) {
             lbl_top = lv_label_create(obj);
-            lv_label_set_text(lbl_top, bcfg.label_top);
-            lv_obj_set_style_text_color(lbl_top, fg, 0);
-            lv_obj_set_style_text_font(lbl_top, scale.font_small, 0);
-            lv_obj_align(lbl_top, LV_ALIGN_TOP_MID, 0, 0);
-            lv_label_set_long_mode(lbl_top, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(lbl_top, pad_resolve_label_color(bcfg.style_top, fg), 0);
+            lv_obj_set_style_text_font(lbl_top, pad_resolve_font(bcfg.style_top, scale.font_small), 0);
             lv_obj_set_width(lbl_top, r.w - 8);
-            lv_obj_set_style_text_align(lbl_top, LV_TEXT_ALIGN_CENTER, 0);
+            pad_apply_long_mode(lbl_top, bcfg.style_top);
+            lv_label_set_text(lbl_top, bcfg.label_top);
+            lv_obj_align(lbl_top, LV_ALIGN_TOP_MID, 0, bcfg.style_top.y_offset);
+            lv_obj_set_style_text_align(lbl_top, pad_resolve_align(bcfg.style_top), 0);
             lv_obj_clear_flag(lbl_top, LV_OBJ_FLAG_CLICKABLE);
         }
 
@@ -296,13 +303,13 @@ void PadScreen::buildTiles() {
         lv_obj_t* lbl_center = nullptr;
         if (bcfg.label_center[0] && !bcfg.icon_id[0]) {
             lbl_center = lv_label_create(obj);
-            lv_label_set_text(lbl_center, bcfg.label_center);
-            lv_obj_set_style_text_color(lbl_center, fg, 0);
-            lv_obj_set_style_text_font(lbl_center, scale.font_large, 0);
-            lv_obj_align(lbl_center, LV_ALIGN_CENTER, 0, 0);
-            lv_label_set_long_mode(lbl_center, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(lbl_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
+            lv_obj_set_style_text_font(lbl_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
             lv_obj_set_width(lbl_center, r.w - 8);
-            lv_obj_set_style_text_align(lbl_center, LV_TEXT_ALIGN_CENTER, 0);
+            pad_apply_long_mode(lbl_center, bcfg.style_center);
+            lv_label_set_text(lbl_center, bcfg.label_center);
+            lv_obj_align(lbl_center, LV_ALIGN_CENTER, 0, bcfg.style_center.y_offset);
+            lv_obj_set_style_text_align(lbl_center, pad_resolve_align(bcfg.style_center), 0);
             lv_obj_clear_flag(lbl_center, LV_OBJ_FLAG_CLICKABLE);
         }
 
@@ -320,10 +327,12 @@ void PadScreen::buildTiles() {
                 // Center icon in the space between labels.
                 // LV_ALIGN_CENTER is the center of the full content area;
                 // offset by half the difference of top/bottom label heights.
+                const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small);
+                const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small);
                 const int16_t top_h = bcfg.label_top[0] ?
-                    lv_font_get_line_height(scale.font_small) : 0;
+                    lv_font_get_line_height(top_font) : 0;
                 const int16_t bot_h = bcfg.label_bottom[0] ?
-                    lv_font_get_line_height(scale.font_small) : 0;
+                    lv_font_get_line_height(bot_font) : 0;
                 const int16_t y_ofs = (top_h - bot_h) / 2;
                 lv_obj_align(icon_img, LV_ALIGN_CENTER, 0, y_ofs);
 
@@ -331,6 +340,7 @@ void PadScreen::buildTiles() {
                 if (ref.kind == ICON_KIND_MONO) {
                     lv_obj_set_style_image_recolor(icon_img, fg, 0);
                     lv_obj_set_style_image_recolor_opa(icon_img, LV_OPA_COVER, 0);
+                    tile.icon_is_mono = true;
                 }
             }
         }
@@ -339,13 +349,13 @@ void PadScreen::buildTiles() {
         lv_obj_t* lbl_bottom = nullptr;
         if (bcfg.label_bottom[0]) {
             lbl_bottom = lv_label_create(obj);
-            lv_label_set_text(lbl_bottom, bcfg.label_bottom);
-            lv_obj_set_style_text_color(lbl_bottom, fg, 0);
-            lv_obj_set_style_text_font(lbl_bottom, scale.font_small, 0);
-            lv_obj_align(lbl_bottom, LV_ALIGN_BOTTOM_MID, 0, 0);
-            lv_label_set_long_mode(lbl_bottom, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(lbl_bottom, pad_resolve_label_color(bcfg.style_bottom, fg), 0);
+            lv_obj_set_style_text_font(lbl_bottom, pad_resolve_font(bcfg.style_bottom, scale.font_small), 0);
             lv_obj_set_width(lbl_bottom, r.w - 8);
-            lv_obj_set_style_text_align(lbl_bottom, LV_TEXT_ALIGN_CENTER, 0);
+            pad_apply_long_mode(lbl_bottom, bcfg.style_bottom);
+            lv_label_set_text(lbl_bottom, bcfg.label_bottom);
+            lv_obj_align(lbl_bottom, LV_ALIGN_BOTTOM_MID, 0, bcfg.style_bottom.y_offset);
+            lv_obj_set_style_text_align(lbl_bottom, pad_resolve_align(bcfg.style_bottom), 0);
             lv_obj_clear_flag(lbl_bottom, LV_OBJ_FLAG_CLICKABLE);
         }
 
@@ -355,7 +365,7 @@ void PadScreen::buildTiles() {
         tile.label_center = lbl_center;
         tile.label_bottom = lbl_bottom;
         tile.icon_img = icon_img;
-        tile.bg_color_rgb = bcfg.bg_color_rgb;
+        // icon_is_mono is set inside the icon block above; default false via clearTiles() memset
         tile.page = pageIndex;
         tile.col = bcfg.col;
         tile.row = bcfg.row;
@@ -366,13 +376,13 @@ void PadScreen::buildTiles() {
 #if HAS_MQTT
         if (binding_template_has_bindings(bcfg.label_center) && !tile.label_center && !bcfg.icon_id[0]) {
             tile.label_center = lv_label_create(obj);
-            lv_label_set_text(tile.label_center, "");
-            lv_obj_set_style_text_color(tile.label_center, fg, 0);
-            lv_obj_set_style_text_font(tile.label_center, scale.font_large, 0);
-            lv_obj_align(tile.label_center, LV_ALIGN_CENTER, 0, 0);
-            lv_label_set_long_mode(tile.label_center, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_color(tile.label_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
+            lv_obj_set_style_text_font(tile.label_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
             lv_obj_set_width(tile.label_center, r.w - 8);
-            lv_obj_set_style_text_align(tile.label_center, LV_TEXT_ALIGN_CENTER, 0);
+            pad_apply_long_mode(tile.label_center, bcfg.style_center);
+            lv_label_set_text(tile.label_center, "");
+            lv_obj_align(tile.label_center, LV_ALIGN_CENTER, 0, bcfg.style_center.y_offset);
+            lv_obj_set_style_text_align(tile.label_center, pad_resolve_align(bcfg.style_center), 0);
             lv_obj_clear_flag(tile.label_center, LV_OBJ_FLAG_CLICKABLE);
         }
 #endif
@@ -416,20 +426,23 @@ void PadScreen::buildTiles() {
         addTemplateBinding(tile.label_center, bcfg.label_center);
         addTemplateBinding(tile.label_bottom, bcfg.label_bottom);
 
-        // Register toggle state binding
-        if (bcfg.state_bind.mqtt_topic[0] && stateBindingCount < MAX_PAD_BUTTONS) {
-            RuntimeStateBinding& sb = stateBindings[stateBindingCount];
-            sb.tileIndex = i;
-            strlcpy(sb.mqtt_topic, bcfg.state_bind.mqtt_topic, sizeof(sb.mqtt_topic));
-            strlcpy(sb.json_path, bcfg.state_bind.json_path, sizeof(sb.json_path));
-            strlcpy(sb.on_value, bcfg.state_bind.on_value, sizeof(sb.on_value));
-            sb.fg_color_rgb = bcfg.fg_color_rgb;
-            sb.disabled_fg_color_rgb = bcfg.disabled_fg_color_rgb;
-            sb.currentlyOn = true;  // assume ON until first message
-            sb.initialized = false;
-            sb.active = true;
-            stateBindingCount++;
-        }
+        // Register color bindings for binding-based colors
+        auto addColorBinding = [this](uint8_t ti, const char* templ, uint32_t def, uint8_t target) {
+            if (!templ || !templ[0]) return;
+            if (colorBindingCount >= MAX_COLOR_BINDINGS) return;
+            RuntimeColorBinding& cb = colorBindings[colorBindingCount];
+            cb.tileIndex = ti;
+            strlcpy(cb.templ, templ, sizeof(cb.templ));
+            cb.defaultColor = def;
+            cb.lastApplied = def; // Already rendered with default
+            cb.target = target;
+            cb.active = true;
+            cb.hasBindings = binding_template_has_bindings(templ);
+            colorBindingCount++;
+        };
+        addColorBinding(i, bcfg.bg_color, bcfg.bg_color_default, 0);
+        addColorBinding(i, bcfg.fg_color, bcfg.fg_color_default, 1);
+        addColorBinding(i, bcfg.border_color, bcfg.border_color_default, 2);
 #endif
 
         // Event handlers — store tile index in user_data
@@ -440,6 +453,17 @@ void PadScreen::buildTiles() {
         lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(obj, onTap, LV_EVENT_SHORT_CLICKED, &tiles[i]);
         lv_obj_add_event_cb(obj, onLongPress, LV_EVENT_LONG_PRESSED, &tiles[i]);
+
+        // Register btn_state binding if configured
+        if (bcfg.btn_state[0] && btnStateBindingCount < MAX_PAD_BUTTONS) {
+            RuntimeBtnStateBinding& sb = btnStateBindings[btnStateBindingCount];
+            sb.tileIndex = i;
+            strlcpy(sb.templ, bcfg.btn_state, sizeof(sb.templ));
+            sb.lastState = 0xFF; // uninitialized — force first apply
+            sb.active = true;
+            sb.hasBindings = binding_template_has_bindings(bcfg.btn_state);
+            btnStateBindingCount++;
+        }
 
 #if HAS_IMAGE_FETCH
         // Request background image fetch if URL is configured
@@ -469,8 +493,42 @@ void PadScreen::buildTiles() {
         }
 #endif
 
+        // Tap overlay — semi-transparent sheet shown briefly on press.
+        // Created last so it renders on top of all children (image bg, widgets, labels).
+        // Color adapts to background luminance: dark overlay on light bg, light on dark.
+        {
+            bool is_light = perceived_luminance(bcfg.bg_color_default) > TAP_LUMINANCE_THRESH;
+            int16_t inset = TILE_PAD_PX + bcfg.border_width_px; // pad + border
+            lv_obj_t* ov = lv_obj_create(obj);
+            lv_obj_set_pos(ov, -inset, -inset);
+            lv_obj_set_size(ov, r.w, r.h);
+            lv_obj_set_style_bg_color(ov, is_light ? lv_color_black() : lv_color_white(), 0);
+            lv_obj_set_style_bg_opa(ov, is_light ? TAP_OVERLAY_DARK_OPA : TAP_OVERLAY_LIGHT_OPA, 0);
+            lv_obj_set_style_border_width(ov, 0, 0);
+            lv_obj_set_style_radius(ov, 0, 0);
+            lv_obj_set_style_pad_all(ov, 0, 0);
+            lv_obj_clear_flag(ov, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+            lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
+            tile.tap_overlay = ov;
+        }
+
         tileCount++;
     }
+
+#if HAS_MQTT
+    // Register page-level background color binding (target=0xFF = page bg, tileIndex unused)
+    if (pageBgTemplate[0] && binding_template_has_bindings(pageBgTemplate) && colorBindingCount < MAX_COLOR_BINDINGS) {
+        RuntimeColorBinding& cb = colorBindings[colorBindingCount];
+        cb.tileIndex = 0xFF; // sentinel: page background
+        strlcpy(cb.templ, pageBgTemplate, sizeof(cb.templ));
+        cb.defaultColor = pageBgDefault;
+        cb.lastApplied = pageBgDefault;
+        cb.target = 0; // bg
+        cb.active = true;
+        cb.hasBindings = true;
+        colorBindingCount++;
+    }
+#endif
 
     free(cfg);
     tilesBuilt = true;
@@ -482,30 +540,19 @@ void PadScreen::buildTiles() {
 // Event Handlers
 // ============================================================================
 
-// Tap flash: temporarily brighten, then restore after timeout
-struct TapFlashCtx {
-    lv_obj_t* obj;
-    uint32_t original_rgb;
-};
-
+// Tap flash: show overlay briefly, then hide after timeout
 void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
-    TapFlashCtx* ctx = (TapFlashCtx*)lv_timer_get_user_data(timer);
-    if (ctx && ctx->obj) {
-        lv_obj_set_style_bg_color(ctx->obj, rgb_to_lv(ctx->original_rgb), 0);
+    lv_obj_t* overlay = (lv_obj_t*)lv_timer_get_user_data(timer);
+    if (overlay) {
+        lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
     }
-    free(ctx);
     lv_timer_delete(timer);
 }
 
-static void do_tap_flash(lv_obj_t* obj, uint32_t bg_rgb) {
-    lv_obj_set_style_bg_color(obj, brighten_color(bg_rgb, TAP_FLASH_BRIGHTEN_PCT), 0);
-
-    TapFlashCtx* ctx = (TapFlashCtx*)malloc(sizeof(TapFlashCtx));
-    if (ctx) {
-        ctx->obj = obj;
-        ctx->original_rgb = bg_rgb;
-        lv_timer_create(PadScreen::tapFlashTimerCb, TAP_FLASH_DURATION_MS, ctx);
-    }
+static void do_tap_flash(ButtonTile* tile) {
+    if (!tile->tap_overlay) return;
+    lv_obj_remove_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+    lv_timer_create(PadScreen::tapFlashTimerCb, TAP_FLASH_DURATION_MS, tile->tap_overlay);
 }
 
 // Execute a typed action (dispatch on action.type)
@@ -570,7 +617,7 @@ void PadScreen::onTap(lv_event_t* e) {
     if (!tile || !tile->obj) return;
 
     // Tap flash
-    do_tap_flash(tile->obj, tile->bg_color_rgb);
+    do_tap_flash(tile);
 
     execute_action(tile->action, "Tap");
 
@@ -584,7 +631,7 @@ void PadScreen::onLongPress(lv_event_t* e) {
     if (!tile || !tile->obj) return;
 
     // Tap flash
-    do_tap_flash(tile->obj, tile->bg_color_rgb);
+    do_tap_flash(tile);
 
     execute_action(tile->lp_action, "LP");
 
@@ -635,50 +682,147 @@ void PadScreen::pollMqttBindings() {
 }
 
 // ============================================================================
-// Toggle State Polling
+// Color Binding Polling
 // ============================================================================
 
-void PadScreen::pollToggleState() {
+void PadScreen::pollColorBindings() {
 #if HAS_MQTT
-    if (stateBindingCount == 0) return;
+    if (colorBindingCount == 0) return;
 
-    static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
-    char extracted[128];
+    char resolved[BINDING_TEMPLATE_MAX_LEN];
 
-    for (uint16_t i = 0; i < stateBindingCount; i++) {
-        RuntimeStateBinding& sb = stateBindings[i];
-        if (!sb.active) continue;
+    for (uint16_t i = 0; i < colorBindingCount; i++) {
+        RuntimeColorBinding& cb = colorBindings[i];
+        if (!cb.active) continue;
 
-        bool changed = false;
-        bool truncated = false;
-        if (!mqtt_sub_store_get(sb.mqtt_topic, payload, sizeof(payload), &changed, &truncated)) continue;
-        if (!changed && sb.initialized) continue;
+        uint32_t color = cb.defaultColor;
 
-        // Extract value via JSON path
-        const char* path = sb.json_path[0] ? sb.json_path : ".";
-        if (!mqtt_sub_store_extract_json(payload, path, extracted, sizeof(extracted))) {
-            strlcpy(extracted, truncated ? "[TOO BIG]" : payload, sizeof(extracted));
+        if (cb.hasBindings) {
+            // Resolve binding template to get a color string
+            binding_template_resolve(cb.templ, resolved, sizeof(resolved));
+            uint32_t parsed;
+            if (parse_hex_color(resolved, &parsed)) {
+                color = parsed;
+            }
+            // else: unresolved / error — keep default
+        } else {
+            // Static color string — parse once then deactivate
+            uint32_t parsed;
+            if (parse_hex_color(cb.templ, &parsed)) {
+                color = parsed;
+            }
+            cb.active = false; // static value won't change; stop polling
         }
 
-        // Compare to on_value (case-sensitive)
-        bool isOn = (strcmp(extracted, sb.on_value) == 0);
+        // Only update LVGL if color changed
+        if (color == cb.lastApplied) continue;
+        cb.lastApplied = color;
 
-        // Only update LVGL if state actually changed (or first time)
-        if (isOn == sb.currentlyOn && sb.initialized) continue;
-        sb.currentlyOn = isOn;
-        sb.initialized = true;
+        // Page background (sentinel tileIndex=0xFF)
+        if (cb.tileIndex == 0xFF) {
+            if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(color), 0);
+            continue;
+        }
 
-        // Apply fg color to all labels on this tile
+        uint8_t ti = cb.tileIndex;
+        if (ti >= tileCount) continue;
+        ButtonTile& tile = tiles[ti];
+
+        switch (cb.target) {
+        case 0: // bg
+            lv_obj_set_style_bg_color(tile.obj, rgb_to_lv(color), 0);
+            // Update overlay color to match new background luminance
+            if (tile.tap_overlay) {
+                bool is_light = perceived_luminance(color) > TAP_LUMINANCE_THRESH;
+                lv_obj_set_style_bg_color(tile.tap_overlay, is_light ? lv_color_black() : lv_color_white(), 0);
+                lv_obj_set_style_bg_opa(tile.tap_overlay, is_light ? TAP_OVERLAY_DARK_OPA : TAP_OVERLAY_LIGHT_OPA, 0);
+            }
+            break;
+        case 1: // fg (labels + mono icon recolor)
+            if (tile.label_top) lv_obj_set_style_text_color(tile.label_top, rgb_to_lv(color), 0);
+            if (tile.label_center) lv_obj_set_style_text_color(tile.label_center, rgb_to_lv(color), 0);
+            if (tile.label_bottom) lv_obj_set_style_text_color(tile.label_bottom, rgb_to_lv(color), 0);
+            if (tile.icon_img && tile.icon_is_mono) {
+                lv_obj_set_style_image_recolor(tile.icon_img, rgb_to_lv(color), 0);
+            }
+            break;
+        case 2: // border
+            lv_obj_set_style_border_color(tile.obj, rgb_to_lv(color), 0);
+            break;
+        }
+    }
+#endif
+}
+
+// ============================================================================
+// Button State Binding Polling
+// ============================================================================
+
+static BtnState parse_btn_state(const char* resolved) {
+    if (!resolved || !resolved[0]) return BTN_STATE_ENABLED;
+    if (strcmp(resolved, "disabled") == 0) return BTN_STATE_DISABLED;
+    if (strcmp(resolved, "hidden") == 0)   return BTN_STATE_HIDDEN;
+    // "enabled", "---" (unresolved), "ERR:..." → default to enabled
+    return BTN_STATE_ENABLED;
+}
+
+static void apply_btn_state(ButtonTile& tile, BtnState state) {
+    if (!tile.obj) return;
+    switch (state) {
+    case BTN_STATE_ENABLED:
+        lv_obj_clear_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_state(tile.obj, LV_STATE_DISABLED);
+        break;
+    case BTN_STATE_DISABLED:
+        lv_obj_clear_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_state(tile.obj, LV_STATE_DISABLED);
+        break;
+    case BTN_STATE_HIDDEN:
+        lv_obj_add_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);
+        break;
+    }
+}
+
+void PadScreen::pollBtnStateBindings() {
+    if (btnStateBindingCount == 0) return;
+
+    char resolved[BINDING_TEMPLATE_MAX_LEN];
+
+    for (uint16_t i = 0; i < btnStateBindingCount; i++) {
+        RuntimeBtnStateBinding& sb = btnStateBindings[i];
+        if (!sb.active) continue;
+
+        BtnState state;
+
+        if (sb.hasBindings) {
+            binding_template_resolve(sb.templ, resolved, sizeof(resolved));
+            state = parse_btn_state(resolved);
+        } else {
+            // Static value — parse once then deactivate
+            state = parse_btn_state(sb.templ);
+            sb.active = false;
+        }
+
+        if ((uint8_t)state == sb.lastState) continue;
+        sb.lastState = (uint8_t)state;
+
         uint8_t ti = sb.tileIndex;
         if (ti >= tileCount) continue;
         ButtonTile& tile = tiles[ti];
-        lv_color_t fg = rgb_to_lv(isOn ? sb.fg_color_rgb : sb.disabled_fg_color_rgb);
 
-        if (tile.label_top) lv_obj_set_style_text_color(tile.label_top, fg, 0);
-        if (tile.label_center) lv_obj_set_style_text_color(tile.label_center, fg, 0);
-        if (tile.label_bottom) lv_obj_set_style_text_color(tile.label_bottom, fg, 0);
-    }
+        apply_btn_state(tile, state);
+
+#if HAS_IMAGE_FETCH
+        // Pause/resume image fetch for hidden tiles
+        if (tile.image_slot != IMAGE_SLOT_INVALID) {
+            if (state == BTN_STATE_HIDDEN) {
+                image_fetch_pause_slot(tile.image_slot);
+            } else {
+                image_fetch_resume_slot(tile.image_slot);
+            }
+        }
 #endif
+    }
 }
 
 // ============================================================================

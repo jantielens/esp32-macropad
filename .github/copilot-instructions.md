@@ -36,12 +36,15 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical bar with color thresholds, binding-driven)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Binding Template Engine**: Scheme-extensible `[scheme:params]` token resolver for label text (compile-time gated by `HAS_MQTT`)
-  - `binding_template.cpp/h` - Token parser, scheme registry (max 4), `resolve()` and `collect_topics()` API; called only from LVGL task
+  - `binding_template.cpp/h` - Token parser, scheme registry (max 8), `resolve()` and `collect_topics()` API; called only from LVGL task
   - MQTT scheme registered by `mqtt_sub_store_init()` — resolves `[mqtt:topic;path;format]` tokens against the subscription store
   - Health scheme registered by `health_binding_init()` — resolves `[health:key;format]` tokens from local device telemetry (CPU, heap, PSRAM, RSSI, uptime, IP, hostname); expensive reads cached 2 s, lightweight keys live
   - `health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
-  - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries)
+  - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries); extends strftime with sub-second codes (`%ms` millis, `%cs` centisec, `%ds` decisec) and standalone `%ums` (device uptime ms)
   - `time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
+  - Expr scheme registered by `expr_binding_init()` — resolves `[expr:expression;format]` tokens by first resolving inner bindings, then evaluating with a recursive-descent expression evaluator
+  - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings); no ESP32 dependencies, host-testable
+  - `expr_binding.cpp/h` - Glue between expr_eval and binding_template engine; bracket-depth `;` splitting (compile-time gated by `HAS_DISPLAY`)
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
 - **Screen Saver Subsystem**: Inactivity-based display sleep with backlight fading and per-screen wake redirect (compile-time gated by `HAS_DISPLAY`)
   - `screen_saver_manager.cpp/h` - State machine (Awake/FadingOut/Asleep/FadingIn), fade animation, touch wake polling, pixel shift burn-in prevention
@@ -49,6 +52,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **MQTT Screen Control**: Exposes active screen as an HA `select` entity for remote navigation (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
   - `mqtt_screen.cpp/h` - Subscribe `~/screen/set`, publish `~/screen/state` (retained), wake screensaver on HA navigation
   - HA discovery published via `ha_discovery_publish_screen_select_config()` with dynamic options list from screen registry
+- **MQTT Wake Subsystem**: Binding-driven screensaver wakeup (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
+  - `mqtt_wake.cpp/h` - Resolves a user-configured binding expression each loop tick; wakes screensaver on OFF→ON edge; keeps screen awake while ON persists via throttled idle-timer reset (~1 s)
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode and transport parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
@@ -210,6 +215,8 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/wifi_manager.cpp/h` - WiFi connect + mDNS (replaces inline connect logic)
 - `src/app/portal_idle.cpp/h` - Portal idle timeout in Config/AP modes
 - `src/app/binding_template.cpp/h` - Scheme-extensible token resolver for label text (compile-time gated by `HAS_MQTT`)
+- `src/app/expr_eval.cpp/h` - Pure C expression evaluator (arithmetic, comparisons, ternary); host-testable, no ESP32 deps
+- `src/app/expr_binding.cpp/h` - Expression binding glue — registers `[expr:]` scheme (compile-time gated by `HAS_DISPLAY`)
 - `src/app/health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
 - `src/app/time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
@@ -218,6 +225,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web_portal_icons.cpp/h` - Icon store REST API (upload, delete, list, debug endpoints)
 - `src/app/screen_saver_manager.cpp/h` - Screensaver state machine with fade, pixel shift, and wake-screen redirect
 - `src/app/mqtt_screen.cpp/h` - MQTT active-screen control (HA select entity, remote navigation + wake)
+- `src/app/mqtt_wake.cpp/h` - Binding-driven screensaver wakeup with idle-timer keep-alive (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface
@@ -236,6 +244,9 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides
+- `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`)
+- `src/app/screens/pad_screen.cpp/h` - Pad screen with LVGL button tiles, label rendering (uses label style resolvers), icon/widget layout, binding updates, and image fetch integration
 - `src/app/screens/splash_screen.cpp/h` - Boot splash with animated spinner
 - `src/app/screens/info_screen.cpp/h` - Device info and real-time stats
 - `src/app/screens/test_screen.cpp/h` - Display calibration and color testing
@@ -271,6 +282,14 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `tools/generate-board-driver-table.py` - Generates the board→drivers table from `src/boards/*/board_overrides.h`
   - Auto-discovers available display/touch backends from `src/app/display_drivers.cpp` and `src/app/touch_drivers.cpp`
   - `python3 tools/generate-board-driver-table.py --update-drivers-readme`
+
+### Tests
+- `tests/run_tests.sh` - Builds and runs all host-native tests (no ESP32 needed)
+- `tests/test_expr_eval.cpp` - Unit tests for pure expression evaluator (66 tests)
+- `tests/test_expr_binding.cpp` - Integration tests with mock MQTT/health resolvers (22 tests)
+- `tests/stubs.cpp` - `strlcpy()` stub for glibc (not available on Linux)
+- `tests/log_manager.h` - No-op log macros for host compilation
+- `tests/board_config.h` - Minimal board config stub for host compilation
 
 ### Configuration
 - `config.sh` - Project paths, FQBN_TARGETS array, and helper functions
@@ -431,6 +450,7 @@ After every significant change, the agent must:
    - `docs/dev/wsl-development.md` - WSL setup guide
    - `docs/first-time-setup.md` - User first-time setup guide
    - `docs/web-portal-guide.md` - User web portal guide
+   - `docs/pad-editor-guide.md` - Pad editor, binding templates, widgets, and real-world examples
    - `.github/copilot-instructions.md` - This file
    - `.github/workflows/build.yml` - CI/CD build pipeline
    - `.github/workflows/release.yml` - CI/CD release pipeline

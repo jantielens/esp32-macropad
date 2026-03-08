@@ -22,9 +22,6 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 		ha_discovery_publish_sensor_config(mqtt, "cpu_usage", "CPU Usage", "{{ value_json.cpu_usage }}", "%", "", "measurement", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "cpu_temperature", "Core Temp", "{{ value_json.cpu_temperature }}", "°C", "temperature", "measurement", "diagnostic");
 
-		ha_discovery_publish_sensor_config(mqtt, "heap_free", "Free Heap", "{{ value_json.heap_free }}", "B", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "heap_min", "Min Free Heap", "{{ value_json.heap_min }}", "B", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "heap_largest", "Largest Heap Block", "{{ value_json.heap_largest }}", "B", "", "measurement", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "heap_fragmentation", "Heap Fragmentation", "{{ value_json.heap_fragmentation }}", "%", "", "measurement", "diagnostic");
 
 		ha_discovery_publish_sensor_config(mqtt, "heap_internal_free", "Internal Heap Free", "{{ value_json.heap_internal_free }}", "B", "", "measurement", "diagnostic");
@@ -33,8 +30,6 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 
 		ha_discovery_publish_sensor_config(mqtt, "psram_free", "PSRAM Free", "{{ value_json.psram_free }}", "B", "", "measurement", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "psram_min", "PSRAM Min Free", "{{ value_json.psram_min }}", "B", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "psram_largest", "PSRAM Largest Block", "{{ value_json.psram_largest }}", "B", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "psram_fragmentation", "PSRAM Fragmentation", "{{ value_json.psram_fragmentation }}", "%", "", "measurement", "diagnostic");
 
 		ha_discovery_publish_sensor_config(mqtt, "flash_used", "Flash Used", "{{ value_json.flash_used }}", "B", "", "measurement", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "flash_total", "Flash Total", "{{ value_json.flash_total }}", "B", "", "measurement", "diagnostic");
@@ -44,9 +39,7 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 		ha_discovery_publish_sensor_config(mqtt, "fs_total_bytes", "FS Total", "{{ value_json.fs_total_bytes }}", "B", "", "measurement", "diagnostic");
 
 		#if HAS_DISPLAY
-		ha_discovery_publish_sensor_config(mqtt, "display_fps", "Display FPS", "{{ value_json.display_fps }}", "fps", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "display_lv_timer_us", "Display LV Timer", "{{ value_json.display_lv_timer_us }}", "us", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "display_present_us", "Display Present", "{{ value_json.display_present_us }}", "us", "", "measurement", "diagnostic");
+		// display_fps is API-only (not in MQTT payload), no HA entity needed.
 		#endif
 
 		ha_discovery_publish_sensor_config(mqtt, "wifi_rssi", "WiFi RSSI", "{{ value_json.wifi_rssi }}", "dBm", "signal_strength", "measurement", "diagnostic");

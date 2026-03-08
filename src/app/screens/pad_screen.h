@@ -29,17 +29,32 @@ struct RuntimeLabelBinding {
     bool active;
 };
 
-// Runtime toggle state binding (links a tile's fg color to an MQTT state)
-struct RuntimeStateBinding {
+// Runtime color binding — a color field that may contain binding templates.
+// Resolved each poll cycle; only applies LVGL style on change.
+struct RuntimeColorBinding {
     uint8_t tileIndex;                                // index into tiles[]
-    char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];       // topic to poll
-    char json_path[CONFIG_JSON_PATH_MAX_LEN];         // extraction path
-    char on_value[CONFIG_STATE_ON_VALUE_MAX_LEN];     // value == ON
-    uint32_t fg_color_rgb;                            // normal fg
-    uint32_t disabled_fg_color_rgb;                   // dimmed fg (OFF)
-    bool currentlyOn;                                 // current visual state
-    bool initialized;                                 // received at least one value
+    char templ[CONFIG_COLOR_MAX_LEN];                 // Original color string (template or static)
+    uint32_t defaultColor;                            // Fallback color when unresolved
+    uint32_t lastApplied;                             // Last applied color (skip if unchanged)
+    uint8_t target;                                   // 0=bg, 1=fg (labels+icon recolor), 2=border
     bool active;
+    bool hasBindings;                                 // true if template contains [xxx:...] tokens
+};
+
+// Tri-state button state: enabled (interactive), disabled (visible, no input), hidden
+enum BtnState : uint8_t {
+    BTN_STATE_ENABLED  = 0,
+    BTN_STATE_DISABLED = 1,
+    BTN_STATE_HIDDEN   = 2,
+};
+
+// Runtime button state binding — resolved each poll cycle to determine visibility/interactivity.
+struct RuntimeBtnStateBinding {
+    uint8_t tileIndex;                                // index into tiles[]
+    char templ[CONFIG_BTN_STATE_MAX_LEN];             // Original btn_state string (template or static)
+    uint8_t lastState;                                // Last applied BtnState (0xFF = uninitialized)
+    bool active;
+    bool hasBindings;                                 // true if template contains [xxx:...] tokens
 };
 
 // Runtime state per button tile (kept in memory while screen is active)
@@ -49,7 +64,7 @@ struct ButtonTile {
     lv_obj_t* label_center;   // Center label (Font L) or nullptr
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr
     lv_obj_t* icon_img;       // Icon image widget (or nullptr)
-    uint32_t bg_color_rgb;    // Original bg color (for tap flash restore)
+    bool icon_is_mono;        // True if icon uses fg recolor
     uint8_t page;             // Page index (for HA event)
     uint8_t col;              // Grid column (for HA event)
     uint8_t row;              // Grid row (for HA event)
@@ -62,6 +77,7 @@ struct ButtonTile {
     // Widget data binding template (e.g. "[mqtt:topic;path]")
     char widget_binding[CONFIG_LABEL_MAX_LEN];
     char widget_last[BINDING_TEMPLATE_MAX_LEN]; // Last resolved value (dedup)
+    lv_obj_t* tap_overlay;    // Semi-transparent overlay shown briefly on tap
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
@@ -87,20 +103,27 @@ private:
     RuntimeLabelBinding bindings[MAX_PAD_BUTTONS * 3];
     uint16_t bindingCount;
 
-    // Toggle state bindings (max 1 per button)
-    RuntimeStateBinding stateBindings[MAX_PAD_BUTTONS];
-    uint16_t stateBindingCount;
+    // Color bindings (max 3 per button: bg, fg, border + 1 page bg)
+    static const int MAX_COLOR_BINDINGS = MAX_PAD_BUTTONS * 3 + 1;
+    RuntimeColorBinding colorBindings[MAX_PAD_BUTTONS * 3 + 1];
+    uint16_t colorBindingCount;
+
+    // Button state bindings (1 per button max)
+    RuntimeBtnStateBinding btnStateBindings[MAX_PAD_BUTTONS];
+    uint16_t btnStateBindingCount;
 
     uint32_t cachedGeneration; // Last seen pad_config generation
     bool tilesBuilt;
     char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
-    uint32_t bgColor;                              // Cached page background color
+    char pageBgTemplate[CONFIG_COLOR_MAX_LEN];     // Page background color/binding
+    uint32_t pageBgDefault;                        // Fallback page bg color
 
     // Build/destroy tile LVGL objects from config
     void buildTiles();
     void clearTiles();
     void pollMqttBindings();
-    void pollToggleState();
+    void pollColorBindings();
+    void pollBtnStateBindings();
 #if HAS_IMAGE_FETCH
     void pollImageFrames();
 #endif
