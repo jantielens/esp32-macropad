@@ -450,6 +450,7 @@ After every significant change, the agent must:
    - `docs/dev/wsl-development.md` - WSL setup guide
    - `docs/first-time-setup.md` - User first-time setup guide
    - `docs/web-portal-guide.md` - User web portal guide
+   - `docs/pad-editor-guide.md` - Pad editor, binding templates, widgets, and real-world examples
    - `.github/copilot-instructions.md` - This file
    - `.github/workflows/build.yml` - CI/CD build pipeline
    - `.github/workflows/release.yml` - CI/CD release pipeline

@@ -99,80 +99,9 @@ Protects your LCD from burn-in by turning off the backlight after a period of in
 
 ### Pad Editor
 
-The pad editor is the heart of ESP32 Macropad — this is where you design your touch screen layouts.
+The pad editor is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 8 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
 
-#### Pad-Level Settings
-
-| Setting | Description |
-|---------|-------------|
-| **Pad selection** | Switch between Pad 1–8 |
-| **Pad Name** | Optional name for this pad page (shown in Home Assistant and on-device) |
-| **Columns / Rows** | Grid size, up to 8×8 |
-| **Wake Screen** | Which screen to show when the screensaver wakes up |
-| **Background** | Pad background color |
-
-#### Button Editor
-
-Click any cell in the grid preview to open the button editor dialog:
-
-**Labels**
-- **Top / Center / Bottom label** — static text or live data via binding templates
-- Binding syntax: `[mqtt:topic;json_path;format]`, `[health:key;format]`, `[time:format;timezone]`
-- A built-in help dialog explains all available bindings
-- **Label style override** — click the **Aa** button next to any label to reveal an advanced style input. Use a compact `key:value;...` syntax to fine-tune individual labels:
-  - `font:24` — override font size (12, 14, 18, 24, 32, or 36 px)
-  - `align:left` / `right` / `center` — horizontal text alignment
-  - `y:-2` — vertical pixel offset
-  - `mode:clip` / `scroll` / `dot` / `wrap` — text overflow behavior (`dot` adds "..." for long text)
-  - `color:#FF0` — override the label's text color
-  - Example: `font:36;align:left;mode:dot` — large left-aligned text with ellipsis
-  - A **?** button next to the style input opens a reference with all properties and examples
-
-**Icons**
-- **Icon Type** — None, Emoji, or Material Symbol
-- **Icon Size %** — scale the icon (0 = auto)
-- Emoji icons render in full color; Material Symbols can be tinted with the text color
-
-**Widget Type**
-- **Normal Button** — standard button with labels, icon, and colors
-- **Bar Chart** — vertical bar visualization driven by MQTT data; includes configurable thresholds and color zones
-
-**Styling**
-- **Background / Text / Border colors** — full color picker with quick swatches
-- **Border width and corner radius** — fine-tune the look
-- **Column span / Row span** — make buttons span multiple grid cells
-
-**Actions**
-- **Tap Action** — what happens when the button is pressed: navigate to a screen, go back, or publish an MQTT message
-- **Long-Press Action** — same options, triggered on a long press
-- For MQTT actions, configure the topic and payload
-
-**Colors** (collapsible)
-- **Background / Text / Border** — pick a static `#hex` color, or enter a binding expression like `[expr:[mqtt:topic;path]>50?"#ff0000":"#00ff00"]` for dynamic coloring
-- **Default color** — fallback color used when a binding hasn't resolved yet or returns an error
-
-**Background Image** (optional)
-- **Image URL** — HTTP URL to a JPEG or PNG image
-- **Auth User / Password** — credentials for protected images (e.g., security cameras)
-- **Refresh Interval** — how often to re-fetch (ms, 0 = fetch once)
-- **Letterbox** — fit the image with black bars instead of cropping to fill
-
-#### Pad Actions (More Menu)
-
-The **More ▾** dropdown provides bulk operations:
-
-| Action | Description |
-|--------|-------------|
-| **Fill Pad** | Fill all empty cells with the copied button |
-| **Copy Pad** | Copy the entire pad layout to clipboard |
-| **Paste Pad** | Overwrite the current pad with the clipboard |
-| **Export Pad** | Download the current pad as a JSON file |
-| **Import Pad** | Load a pad from a JSON file |
-| **Export Device Config** | Download all settings + all 8 pads as a single JSON file |
-| **Import Device Config** | Restore settings + pads from an exported JSON (triggers reboot) |
-| **Clear Pad** | Remove all buttons from the current pad |
-
-> **Tip**: Use Export/Import Device Config to back up your entire setup, or to clone settings from one device to another.
+For the complete guide — including binding template syntax, widget configuration, label styling, dynamic colors, and real-world examples — see the **[Pad Editor Guide](pad-editor-guide.md)**.
 
 ---
 
