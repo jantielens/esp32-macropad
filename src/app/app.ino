@@ -6,6 +6,7 @@
 #include "mqtt_manager.h"
 #include "mqtt_sub_store.h"
 #include "mqtt_screen.h"
+#include "mqtt_wake.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
 #include "ble_advertiser.h"
@@ -300,6 +301,7 @@ void setup()
 	mqtt_manager.begin(&device_config, device_config.device_name, sanitized);
 	mqtt_sub_store_init();
 	mqtt_screen_init();
+	mqtt_wake_init(&device_config);
 	#endif
 
 	#if HAS_DISPLAY
@@ -389,6 +391,7 @@ void loop()
 	#if HAS_MQTT
 	mqtt_manager.loop();
 	mqtt_screen_loop();
+	mqtt_wake_loop();
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).

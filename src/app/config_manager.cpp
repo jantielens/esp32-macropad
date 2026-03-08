@@ -53,6 +53,7 @@
 #define KEY_SCREEN_SAVER_FADE_OUT "ss_fo"
 #define KEY_SCREEN_SAVER_FADE_IN "ss_fi"
 #define KEY_SCREEN_SAVER_WAKE_TOUCH "ss_wt"
+#define KEY_SCREEN_SAVER_WAKE_BINDING "ss_wb"
 #endif
 #define KEY_MAGIC          "magic"
 
@@ -172,6 +173,7 @@ bool config_manager_load(DeviceConfig *config) {
 				#else
 				config->screen_saver_wake_on_touch = false;
 				#endif
+				config->screen_saver_wake_binding[0] = '\0';
 				#endif
 				
 				return false;
@@ -253,6 +255,7 @@ bool config_manager_load(DeviceConfig *config) {
 		#else
 		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, false);
 		#endif
+		preferences.getString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding, CONFIG_SS_WAKE_BINDING_MAX_LEN);
 		#endif
 		
 		config->magic = magic;
@@ -339,6 +342,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUShort(KEY_SCREEN_SAVER_FADE_OUT, config->screen_saver_fade_out_ms);
 		preferences.putUShort(KEY_SCREEN_SAVER_FADE_IN, config->screen_saver_fade_in_ms);
 		preferences.putBool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch);
+		preferences.putString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding);
 		#endif
 		
 		// Save magic number last (indicates valid config)
@@ -444,5 +448,11 @@ void config_manager_print(const DeviceConfig *config) {
 #else
 		// MQTT config can still exist in NVS, but the firmware has MQTT support compiled out.
 		LOGI("Config", "MQTT: disabled (feature not compiled into firmware)");
+#endif
+
+#if HAS_DISPLAY
+		if (strlen(config->screen_saver_wake_binding) > 0) {
+				LOGI("Config", "SS wake binding: %s", config->screen_saver_wake_binding);
+		}
 #endif
 }

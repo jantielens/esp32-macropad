@@ -3,6 +3,7 @@
 #if HAS_MQTT
 
 #include "binding_template.h"
+#include "config_manager.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
 #include "pad_config.h"
@@ -239,6 +240,14 @@ void mqtt_sub_store_subscribe_all() {
     }
 
     free(cfg);
+
+    // Scan screen saver wake binding for MQTT topics
+    {
+        const DeviceConfig* dcfg = mqtt_manager.config();
+        if (dcfg && strlen(dcfg->screen_saver_wake_binding) > 0) {
+            binding_template_collect_topics(dcfg->screen_saver_wake_binding, &ctx);
+        }
+    }
 
     // Update store entries and subscribe
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {

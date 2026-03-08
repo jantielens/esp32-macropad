@@ -200,6 +200,17 @@
                     <small>Only applies to touch-enabled boards.</small>
                 </div>
 
+                <div class="form-group">
+                    <label for="screen_saver_wake_binding">Wake on MQTT Binding</label>
+                    <div class="binding-input-wrap">
+                        <input type="text" class="binding-mono" id="screen_saver_wake_binding" name="screen_saver_wake_binding" maxlength="191" placeholder="[mqtt:devices/node/presence/state]">
+                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                    </div>
+                    <small>Binding expression that keeps the screen awake while it resolves to <strong>ON</strong>. Wakes the screensaver on transition to ON and resets the idle timer as long as ON persists. When the value leaves ON, the normal idle timeout resumes. Uses the same binding syntax as labels. Examples:<br>
+                    <code>[mqtt:devices/node/presence/state]</code> — HA binary sensor<br>
+                    <code>[expr:[mqtt:topic/value]=="xyz"?"ON":"OFF"]</code> — custom condition</small>
+                </div>
+
                 <div class="form-group" id="screen-selection-group" style="display:none;">
                     <label for="screen_selection">
                         Current Screen

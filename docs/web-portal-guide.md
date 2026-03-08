@@ -95,6 +95,7 @@ Protects your LCD from burn-in by turning off the backlight after a period of in
 | **Fade Out** | How long the backlight fade-out takes (ms, 0 = instant) |
 | **Fade In** | How long the backlight fade-in takes on wake (ms, 0 = instant) |
 | **Wake on touch** | Wake the display by touching the screen |
+| **Wake on MQTT Binding** | Binding expression that keeps the screen awake while it resolves to ON (e.g. `[mqtt:devices/node/presence/state]`) |
 
 ### Pad Editor
 

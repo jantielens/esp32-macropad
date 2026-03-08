@@ -52,6 +52,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **MQTT Screen Control**: Exposes active screen as an HA `select` entity for remote navigation (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
   - `mqtt_screen.cpp/h` - Subscribe `~/screen/set`, publish `~/screen/state` (retained), wake screensaver on HA navigation
   - HA discovery published via `ha_discovery_publish_screen_select_config()` with dynamic options list from screen registry
+- **MQTT Wake Subsystem**: Binding-driven screensaver wakeup (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
+  - `mqtt_wake.cpp/h` - Resolves a user-configured binding expression each loop tick; wakes screensaver on OFF→ON edge; keeps screen awake while ON persists via throttled idle-timer reset (~1 s)
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode and transport parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
@@ -223,6 +225,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web_portal_icons.cpp/h` - Icon store REST API (upload, delete, list, debug endpoints)
 - `src/app/screen_saver_manager.cpp/h` - Screensaver state machine with fade, pixel shift, and wake-screen redirect
 - `src/app/mqtt_screen.cpp/h` - MQTT active-screen control (HA select entity, remote navigation + wake)
+- `src/app/mqtt_wake.cpp/h` - Binding-driven screensaver wakeup with idle-timer keep-alive (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface

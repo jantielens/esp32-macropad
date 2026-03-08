@@ -573,7 +573,8 @@ Returns current device configuration (passwords excluded).
   "screen_saver_timeout_seconds": 300,
   "screen_saver_fade_out_ms": 800,
   "screen_saver_fade_in_ms": 400,
-  "screen_saver_wake_on_touch": true
+  "screen_saver_wake_on_touch": true,
+  "screen_saver_wake_binding": ""
 }
 ```
 
@@ -621,7 +622,8 @@ Save new configuration. Device reboots after successful save.
   "screen_saver_timeout_seconds": 300,
   "screen_saver_fade_out_ms": 800,
   "screen_saver_fade_in_ms": 400,
-  "screen_saver_wake_on_touch": true
+  "screen_saver_wake_on_touch": true,
+  "screen_saver_wake_binding": "[mqtt:devices/node/presence/state]"
 }
 ```
 

@@ -657,6 +657,7 @@ async function loadConfig() {
         setValueIfExists('screen_saver_fade_out_ms', config.screen_saver_fade_out_ms);
         setValueIfExists('screen_saver_fade_in_ms', config.screen_saver_fade_in_ms);
         setCheckedIfExists('screen_saver_wake_on_touch', config.screen_saver_wake_on_touch);
+        setValueIfExists('screen_saver_wake_binding', config.screen_saver_wake_binding);
         
         // Hide loading overlay (silent load)
         const overlay = document.getElementById('form-loading-overlay');
@@ -701,7 +702,8 @@ function extractFormFields(formData) {
                     'mqtt_publish_scope',
                     'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
                     'backlight_brightness',
-                    'screen_saver_enabled', 'screen_saver_timeout_seconds', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms', 'screen_saver_wake_on_touch'];
+                    'screen_saver_enabled', 'screen_saver_timeout_seconds', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms', 'screen_saver_wake_on_touch',
+                    'screen_saver_wake_binding'];
     
     fields.forEach(field => {
         const element = document.querySelector(`[name="${field}"]`);
