@@ -866,19 +866,28 @@
                 </table>
 
                 <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Sub-second timing — fast color cycling</p>
-                <p style="color:#86868b;margin:0 0 6px;font-size:11px;">Use <code>%ums</code> (uptime ms) with modulo for any cycle period. <code>%ms</code> and <code>%ds</code> work for periods that divide evenly into 1000.</p>
-                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+                <p style="color:#86868b;margin:0 0 6px;font-size:11px;">Use modulo (<code>%</code>) with <code>&lt;</code> to split a time range into two halves. <code>%ms</code> (0-999) works for periods that divide evenly into 1000. <code>%ums</code> (uptime ms) works for any period.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
                     <tr style="border-bottom:1px solid #e5e5ea;">
-                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ds]%2==0?"#ff0000":"#00ff00"]</code></td>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ds]%2&lt;1?"#ff0000":"#00ff00"]</code></td>
                         <td style="padding:4px 0;color:#86868b;">Toggle every 100ms (deciseconds)</td>
                     </tr>
                     <tr style="border-bottom:1px solid #e5e5ea;">
-                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ms]/250%2==0?"#ff0000":"#00ff00"]</code></td>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ms]%500&lt;250?"#ff0000":"#00ff00"]</code></td>
                         <td style="padding:4px 0;color:#86868b;">Toggle every 250ms</td>
                     </tr>
                     <tr>
                         <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ums]%1000&lt;500?"#ff0000":"#00ff00"]</code></td>
                         <td style="padding:4px 0;color:#86868b;">Toggle every 500ms (any period)</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Conditional color cycling — MQTT threshold warning</p>
+                <p style="color:#86868b;margin:0 0 6px;font-size:11px;">Combine an MQTT threshold check with fast color cycling: flash when a value exceeds a limit, otherwise use a static color.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:energy/power]&gt;2.5?([time:%ms]%500&lt;250?"#ff0000":"#ffffff"):"#000000"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Flash red/white when power &gt; 2.5, else black</td>
                     </tr>
                 </table>
 
