@@ -578,7 +578,6 @@ def main(argv: list[str]) -> int:
         "gateway": cfg.get("gateway", ""),
         "dns1": cfg.get("dns1", ""),
         "dns2": cfg.get("dns2", ""),
-        "dummy_setting": cfg.get("dummy_setting", ""),
         "mqtt_host": cfg.get("mqtt_host", ""),
         "mqtt_port": cfg.get("mqtt_port", 0),
         "mqtt_username": cfg.get("mqtt_username", ""),

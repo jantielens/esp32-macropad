@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Web portal — separate Pads page** — the pad editor has moved from the Home page to its own dedicated **Pads** page, accessible via a new tab in the navigation bar (Home | **Pads** | Network | Firmware). The Home page now shows a welcome card with quick links, plus device settings (Operating Mode, Display, Sensors). The Pads page has its own floating footer with Save Pad / Show on Device / More actions, completely separate from the device config Save & Reboot flow
+- **Button editor — collapsible card groups** — the button editor dialog is reorganized into card-like collapsible `<details>` sections: Layout, Labels, Bar Chart (conditional), Actions, Icon, Image Background, Appearance, and State. Layout, Labels, and Actions are open by default; the rest are collapsed to reduce visual clutter
+- **Unsaved pad changes protection** — switching between pads or navigating away from the Pads page with unsaved changes now shows a confirmation dialog. The browser's `beforeunload` event also warns before closing the tab
+- **Home page section order** — reordered sections to Welcome → Display Settings → Operating Mode & Cadence. The welcome card now includes a link to the GitHub repo for docs, source code, and issue tracking
+- **Removed `dummy_setting`** — cleaned up the unused example config field from the backend, REST API, JavaScript, and documentation
+
 ## [1.6.0] - 2026-03-08
 
 ### Added

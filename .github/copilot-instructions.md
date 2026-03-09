@@ -130,7 +130,8 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution - they work from any 
 ### Web Portal Conventions
 
 **Multi-Page Architecture**:
-- **Home** (`/` or `/home.html`): Custom settings and welcome message (Full Mode only)
+- **Home** (`/` or `/home.html`): Operating mode, sensor, and display settings (Full Mode only)
+- **Pads** (`/pads.html`): Visual pad editor with button editor dialog (Full Mode only)
 - **Network** (`/network.html`): WiFi, device, and network configuration (both modes)
 - **Firmware** (`/firmware.html`): Online update (GitHub Releases), manual upload, and factory reset (Full Mode only)
 - Template fragments: `_header.html`, `_nav.html`, `_footer.html` used via `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}` placeholders
@@ -141,14 +142,15 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution - they work from any 
   - Only Network page accessible (Home/Firmware redirect to Network)
   - Navigation tabs for Home/Firmware hidden via JavaScript
 - **Full Mode**: Connected to WiFi - portal at device IP/hostname
-  - All three pages accessible
+  - All four pages accessible
 
 **Responsive Design**:
 - Container max-width: 900px
 - 2-column grid on desktop (≥768px) using `.grid-2col` class
 - Sections stack vertically on mobile (<768px)
 - Network page: WiFi + Device Settings side-by-side, Network Config full-width
-- Home page: Operating Mode settings + Pad Editor (when display enabled)
+- Home page: Operating Mode settings, sensor and display configuration
+- Pads page: Visual pad editor (when display enabled)
 
 **REST API Design**:
 - All endpoints under `/api/*` namespace
@@ -259,7 +261,8 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template
-- `src/app/web/home.html` - Home page (Operating Mode, BLE Advertising, Pad Editor)
+- `src/app/web/home.html` - Home page (Operating Mode, BLE Advertising, Display Settings)
+- `src/app/web/pads.html` - Pads page (visual pad editor, button editor dialog)
 - `src/app/web/network.html` - Network configuration page
 - `src/app/web/firmware.html` - Firmware page (online update, manual upload, factory reset)
 - `src/app/web/portal.css` - Styles (gradients, animations, responsive grid)

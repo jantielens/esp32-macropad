@@ -89,9 +89,6 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["dns1"] = current_config->dns1;
 				(*doc)["dns2"] = current_config->dns2;
 
-				// Dummy setting
-				(*doc)["dummy_setting"] = current_config->dummy_setting;
-
 				// MQTT settings (password not returned)
 				(*doc)["mqtt_host"] = current_config->mqtt_host;
 				(*doc)["mqtt_port"] = current_config->mqtt_port;
@@ -312,11 +309,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 		if (doc.containsKey("dns2")) {
 				strlcpy(current_config->dns2, doc["dns2"] | "", CONFIG_IP_STR_MAX_LEN);
-		}
-
-		// Dummy setting - only update if field exists
-		if (doc.containsKey("dummy_setting")) {
-				strlcpy(current_config->dummy_setting, doc["dummy_setting"] | "", CONFIG_DUMMY_MAX_LEN);
 		}
 
 		// MQTT host

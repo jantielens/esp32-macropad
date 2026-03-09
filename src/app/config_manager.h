@@ -26,7 +26,6 @@
 #define CONFIG_PASSWORD_MAX_LEN 64
 #define CONFIG_DEVICE_NAME_MAX_LEN 32
 #define CONFIG_IP_STR_MAX_LEN 16
-#define CONFIG_DUMMY_MAX_LEN 64
 
 // MQTT settings
 #define CONFIG_MQTT_HOST_MAX_LEN 64
@@ -60,9 +59,6 @@ struct DeviceConfig {
 		char gateway[CONFIG_IP_STR_MAX_LEN];
 		char dns1[CONFIG_IP_STR_MAX_LEN];
 		char dns2[CONFIG_IP_STR_MAX_LEN];
-		
-		// Dummy setting (example for extensibility)
-		char dummy_setting[CONFIG_DUMMY_MAX_LEN];
 
 		// MQTT / Home Assistant integration settings (all optional)
 		char mqtt_host[CONFIG_MQTT_HOST_MAX_LEN];

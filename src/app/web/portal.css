@@ -1217,6 +1217,40 @@ footer {
     margin-bottom: 12px;
 }
 
+/* Editor group: card-like <details> in button editor */
+.editor-group {
+    border: 1px solid #e5e5ea;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    background: #fafafa;
+}
+.editor-group > summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    color: #1d1d1f;
+    padding: 10px 14px;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    user-select: none;
+}
+.editor-group > summary::-webkit-details-marker { display: none; }
+.editor-group > summary::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 8px;
+    transition: transform 0.15s;
+    font-size: 12px;
+    color: #86868b;
+}
+.editor-group[open] > summary::before {
+    transform: rotate(90deg);
+}
+.editor-group-body {
+    padding: 0 14px 14px;
+}
+
 .pad-swatch-strip {
     display: flex;
     flex-wrap: wrap;

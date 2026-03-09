@@ -6,29 +6,94 @@
         {{NAV}}
 
         <form id="config-form">
-            <!-- Hello World and Sample Settings (2-column on desktop) -->
-            <div class="grid-2col">
-            <!-- Hello World Section -->
-            <section class="section">
-                <h2>👋 Hello World</h2>
-                <p style="font-size: 16px; line-height: 1.6; color: #1d1d1f; margin-bottom: 16px;">
-                    Welcome to your ESP32 device! This is a simple demonstration section.
+            <!-- Welcome Card -->
+            <section class="section" id="welcome-card">
+                <h2>👋 Welcome</h2>
+                <p style="font-size: 15px; line-height: 1.6; color: #1d1d1f; margin-bottom: 12px;">
+                    Configure your ESP32 macropad using the pages above. Set up buttons and layouts on the <a href="/pads.html" style="color:#007aff; text-decoration:none; font-weight:600;">Pads</a> page, configure networking on <a href="/network.html" style="color:#007aff; text-decoration:none; font-weight:600;">Network</a>, or update firmware on the <a href="/firmware.html" style="color:#007aff; text-decoration:none; font-weight:600;">Firmware</a> page.
                 </p>
-                <p style="font-size: 14px; color: #86868b; margin: 0;">
-                    💡 <strong>Tip:</strong> You can modify this welcome message in <code style="background: #f5f5f7; padding: 2px 6px; border-radius: 4px; font-size: 13px;">src/app/web/home.html</code>
+                <p style="font-size: 13px; line-height: 1.5; color: #86868b; margin: 0;">
+                    📖 Full documentation, source code & issue tracker on <a href="https://github.com/jantielens/esp32-macropad" target="_blank" rel="noopener" style="color:#007aff; text-decoration:none; font-weight:600;">GitHub</a>.
                 </p>
             </section>
 
-            <!-- Sample Settings Section -->
-            <section class="section">
-                <h2>⚙️ Sample Settings</h2>
+            <!-- Display Settings Section (hidden if no backlight support) -->
+            <section class="section" id="display-settings-section" style="display:none;">
+                <h2>🖥️ Display Settings</h2>
                 <div class="form-group">
-                    <label for="dummy_setting">Dummy Setting</label>
-                    <input type="text" id="dummy_setting" name="dummy_setting" maxlength="63">
-                    <small>Example setting for demonstration</small>
+                    <label for="backlight_brightness">
+                        Backlight Brightness: <span id="brightness-value">100</span>%
+                    </label>
+                    <input type="range" id="backlight_brightness" name="backlight_brightness" 
+                           min="0" max="100" value="100" 
+                           style="width: 100%; height: 8px; border-radius: 4px; background: linear-gradient(to right, #007aff 0%, #007aff 100%, #e5e5e5 100%, #e5e5e5 100%);">
+                    <small>Brightness adjusts immediately. Click Save to persist across reboots.</small>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid #e5e5ea; margin: 18px 0;">
+
+                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #1d1d1f;">Screen Saver (Burn-in Prevention)</h3>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="screen_saver_enabled" name="screen_saver_enabled">
+                        Enable screen saver (turn off backlight when idle)
+                    </label>
+                    <small>When enabled, the backlight will fade out after inactivity.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="screen_saver_timeout_seconds">Idle Timeout (seconds)</label>
+                    <input type="number" id="screen_saver_timeout_seconds" name="screen_saver_timeout_seconds" min="0" max="65535" placeholder="300">
+                    <small>0 disables automatic sleep. Example: 300 = 5 minutes.</small>
+                </div>
+
+                <div class="grid-2col">
+                    <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
+                        <div class="form-group">
+                            <label for="screen_saver_fade_out_ms">Fade Out (ms)</label>
+                            <input type="number" id="screen_saver_fade_out_ms" name="screen_saver_fade_out_ms" min="0" max="60000" placeholder="800">
+                            <small>0 = instant off</small>
+                        </div>
+                    </section>
+                    <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
+                        <div class="form-group">
+                            <label for="screen_saver_fade_in_ms">Fade In (ms)</label>
+                            <input type="number" id="screen_saver_fade_in_ms" name="screen_saver_fade_in_ms" min="0" max="60000" placeholder="400">
+                            <small>0 = instant on</small>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="screen_saver_wake_on_touch" name="screen_saver_wake_on_touch">
+                        Wake on touch press
+                    </label>
+                    <small>Only applies to touch-enabled boards.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="screen_saver_wake_binding">Wake on MQTT Binding</label>
+                    <div class="binding-input-wrap">
+                        <input type="text" class="binding-mono" id="screen_saver_wake_binding" name="screen_saver_wake_binding" maxlength="191" placeholder="[mqtt:devices/node/presence/state]">
+                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                    </div>
+                    <small>Binding expression that keeps the screen awake while it resolves to <strong>ON</strong>. Wakes the screensaver on transition to ON and resets the idle timer as long as ON persists. When the value leaves ON, the normal idle timeout resumes. Uses the same binding syntax as labels. Examples:<br>
+                    <code>[mqtt:devices/node/presence/state]</code> — HA binary sensor<br>
+                    <code>[expr:[mqtt:topic/value]=="xyz"?"ON":"OFF"]</code> — custom condition</small>
+                </div>
+
+                <div class="form-group" id="screen-selection-group" style="display:none;">
+                    <label for="screen_selection">
+                        Current Screen
+                    </label>
+                    <select id="screen_selection" name="screen_selection">
+                        <!-- Options populated by JavaScript from /api/info -->
+                    </select>
+                    <small>Switch between screens instantly. Selection is not saved (resets on reboot).</small>
                 </div>
             </section>
-            </div>
 
             <!-- Operating Mode & Cadence -->
             <section class="section" id="power-settings-section">
@@ -144,515 +209,8 @@
                 <small style="display:block; margin-top: 8px; color:#86868b;">Live values from /api/health</small>
             </section>
 
-            <!-- Display Settings Section (hidden if no backlight support) -->
-            <section class="section" id="display-settings-section" style="display:none;">
-                <h2>🖥️ Display Settings</h2>
-                <div class="form-group">
-                    <label for="backlight_brightness">
-                        Backlight Brightness: <span id="brightness-value">100</span>%
-                    </label>
-                    <input type="range" id="backlight_brightness" name="backlight_brightness" 
-                           min="0" max="100" value="100" 
-                           style="width: 100%; height: 8px; border-radius: 4px; background: linear-gradient(to right, #007aff 0%, #007aff 100%, #e5e5e5 100%, #e5e5e5 100%);">
-                    <small>Brightness adjusts immediately. Click Save to persist across reboots.</small>
-                </div>
-
-                <hr style="border: none; border-top: 1px solid #e5e5ea; margin: 18px 0;">
-
-                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #1d1d1f;">Screen Saver (Burn-in Prevention)</h3>
-
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; gap: 10px;">
-                        <input type="checkbox" id="screen_saver_enabled" name="screen_saver_enabled">
-                        Enable screen saver (turn off backlight when idle)
-                    </label>
-                    <small>When enabled, the backlight will fade out after inactivity.</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="screen_saver_timeout_seconds">Idle Timeout (seconds)</label>
-                    <input type="number" id="screen_saver_timeout_seconds" name="screen_saver_timeout_seconds" min="0" max="65535" placeholder="300">
-                    <small>0 disables automatic sleep. Example: 300 = 5 minutes.</small>
-                </div>
-
-                <div class="grid-2col">
-                    <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                        <div class="form-group">
-                            <label for="screen_saver_fade_out_ms">Fade Out (ms)</label>
-                            <input type="number" id="screen_saver_fade_out_ms" name="screen_saver_fade_out_ms" min="0" max="60000" placeholder="800">
-                            <small>0 = instant off</small>
-                        </div>
-                    </section>
-                    <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                        <div class="form-group">
-                            <label for="screen_saver_fade_in_ms">Fade In (ms)</label>
-                            <input type="number" id="screen_saver_fade_in_ms" name="screen_saver_fade_in_ms" min="0" max="60000" placeholder="400">
-                            <small>0 = instant on</small>
-                        </div>
-                    </section>
-                </div>
-
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; gap: 10px;">
-                        <input type="checkbox" id="screen_saver_wake_on_touch" name="screen_saver_wake_on_touch">
-                        Wake on touch press
-                    </label>
-                    <small>Only applies to touch-enabled boards.</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="screen_saver_wake_binding">Wake on MQTT Binding</label>
-                    <div class="binding-input-wrap">
-                        <input type="text" class="binding-mono" id="screen_saver_wake_binding" name="screen_saver_wake_binding" maxlength="191" placeholder="[mqtt:devices/node/presence/state]">
-                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
-                    </div>
-                    <small>Binding expression that keeps the screen awake while it resolves to <strong>ON</strong>. Wakes the screensaver on transition to ON and resets the idle timer as long as ON persists. When the value leaves ON, the normal idle timeout resumes. Uses the same binding syntax as labels. Examples:<br>
-                    <code>[mqtt:devices/node/presence/state]</code> — HA binary sensor<br>
-                    <code>[expr:[mqtt:topic/value]=="xyz"?"ON":"OFF"]</code> — custom condition</small>
-                </div>
-
-                <div class="form-group" id="screen-selection-group" style="display:none;">
-                    <label for="screen_selection">
-                        Current Screen
-                    </label>
-                    <select id="screen_selection" name="screen_selection">
-                        <!-- Options populated by JavaScript from /api/info -->
-                    </select>
-                    <small>Switch between screens instantly. Selection is not saved (resets on reboot).</small>
-                </div>
-            </section>
-
-            <!-- Pad Configuration Section (hidden if no display) -->
-            <section class="section" id="pad-config-section" style="display:none;">
-                <h2>🎛️ Pad Configuration</h2>
-
-                <!-- Controls rows -->
-                <div class="pad-controls">
-                    <div class="pad-controls-row">
-                        <div class="form-group" style="margin-bottom:0; flex:1;">
-                            <label for="pad-page-select">Pad</label>
-                            <select id="pad-page-select">
-                                <option value="0">Pad 1</option>
-                                <option value="1">Pad 2</option>
-                                <option value="2">Pad 3</option>
-                                <option value="3">Pad 4</option>
-                                <option value="4">Pad 5</option>
-                                <option value="5">Pad 6</option>
-                                <option value="6">Pad 7</option>
-                                <option value="7">Pad 8</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="pad-controls-row" style="margin-top:6px;">
-                        <div class="form-group" style="margin-bottom:0; flex:1;">
-                            <label for="pad-name">Pad Name</label>
-                            <input type="text" id="pad-name" maxlength="31" placeholder="(optional)" style="padding:6px 10px;">
-                        </div>
-                    </div>
-                    <div class="pad-controls-row" style="margin-top:6px;">
-                        <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
-                            <label for="pad-cols">Columns</label>
-                            <select id="pad-cols">
-                                <option value="1">1</option>
-                                <option value="2">2</option>
-                                <option value="3" selected>3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8">8</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
-                            <label for="pad-rows">Rows</label>
-                            <select id="pad-rows">
-                                <option value="1">1</option>
-                                <option value="2" selected>2</option>
-                                <option value="3">3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8">8</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="margin-bottom:0; flex:1;">
-                            <label for="pad-wake-screen">Screensaver wakes up screen</label>
-                            <select id="pad-wake-screen">
-                                <option value="">(stay on this screen)</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Visual grid preview -->
-                <div id="pad-grid" class="pad-grid"></div>
-
-                <!-- Empty state -->
-                <div id="pad-empty-state" class="pad-empty-state" style="display:none;">
-                    <p>No configuration for this page yet.</p>
-                    <p><small>Adjust columns and rows above, then click empty cells to add buttons.</small></p>
-                </div>
-
-                <!-- Background color -->
-                <div id="pad-page-bg-color-wrap" class="pad-color-bind-group" style="margin-top:8px; margin-bottom:4px;"></div>
-
-                <!-- Action buttons -->
-                <div class="pad-actions">
-                    <button type="button" id="pad-save-btn" class="btn btn-primary" style="flex:1 1 120px;">Save Pad</button>
-                    <button type="button" id="pad-show-btn" class="btn btn-secondary" style="flex:1 1 120px;">Show on Device</button>
-                    <div class="pad-more-wrap" style="position:relative; flex:0 0 auto;">
-                        <button type="button" id="pad-more-btn" class="btn btn-secondary" style="min-width:80px;">More ▾</button>
-                        <div id="pad-more-menu" class="pad-more-menu" style="display:none;">
-                            <button type="button" id="pad-fill-btn" disabled>Fill Pad</button>
-                            <button type="button" id="pad-copy-btn">Copy Pad</button>
-                            <button type="button" id="pad-paste-btn" disabled>Paste Pad</button>
-                            <hr>
-                            <button type="button" id="pad-export-btn">Export Pad</button>
-                            <button type="button" id="pad-import-btn">Import Pad</button>
-                            <input type="file" id="pad-import-file" accept=".json" style="display:none;">
-                            <hr>
-                            <button type="button" id="device-export-btn">Export Device Config</button>
-                            <button type="button" id="device-import-btn">Import Device Config</button>
-                            <input type="file" id="device-import-file" accept=".json" style="display:none;">
-                            <hr>
-                            <button type="button" id="pad-delete-btn" style="color:#ff3b30;">Clear Pad</button>
-                        </div>
-                    </div>
-                </div>
-
-                <small style="margin-top:8px; display:block;">Click a cell to edit its button. Pad uses its own Save — not the main form.</small>
-            </section>
-
             {{FOOTER}}
         </form>
-    </div>
-
-    <!-- Pad Button Edit Dialog -->
-    <div id="pad-edit-overlay" class="reboot-overlay" style="display:none;">
-        <div class="reboot-modal pad-edit-modal">
-            <h2 id="pad-edit-title">Edit Button</h2>
-
-            <div class="pad-edit-body">
-                <div class="form-group">
-                    <label for="pad-edit-widget-type">Button Type</label>
-                    <select id="pad-edit-widget-type" onchange="padWidgetTypeChanged()">
-                        <option value="">Normal Button</option>
-                        <option value="bar_chart">Bar Chart</option>
-                    </select>
-                </div>
-
-                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
-
-                <div class="form-group">
-                    <label for="pad-edit-label-top">Top Label</label>
-                    <div class="binding-input-wrap">
-                        <input type="text" id="pad-edit-label-top" maxlength="191" placeholder="e.g. Living Room or Power: [mqtt:topic;path;fmt] W">
-                        <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('top')" title="Label style override">Aa</button>
-                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
-                    </div>
-                    <div id="pad-edit-label-top-style-wrap" class="label-style-wrap" style="display:none;">
-                        <input type="text" id="pad-edit-label-top-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
-                        <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="pad-edit-label-center">Center Label</label>
-                    <div class="binding-input-wrap">
-                        <input type="text" id="pad-edit-label-center" maxlength="191" placeholder="e.g. 21.5°C or [mqtt:sensors/temp;temp;%.1f°C]">
-                        <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('center')" title="Label style override">Aa</button>
-                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
-                    </div>
-                    <div id="pad-edit-label-center-style-wrap" class="label-style-wrap" style="display:none;">
-                        <input type="text" id="pad-edit-label-center-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
-                        <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="pad-edit-label-bottom">Bottom Label</label>
-                    <div class="binding-input-wrap">
-                        <input type="text" id="pad-edit-label-bottom" maxlength="191" placeholder="e.g. Lights or [mqtt:topic;path;format]">
-                        <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('bottom')" title="Label style override">Aa</button>
-                        <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
-                    </div>
-                    <div id="pad-edit-label-bottom-style-wrap" class="label-style-wrap" style="display:none;">
-                        <input type="text" id="pad-edit-label-bottom-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
-                        <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
-                    </div>
-                </div>
-
-                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
-
-                <!-- Icon (collapsible) -->
-                <details id="pad-edit-icon-section">
-                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Icon</summary>
-                    <small style="display:block; margin-bottom:12px; color:#86868b;">Display an icon centered on the button.</small>
-
-                    <div class="form-group">
-                        <label for="pad-edit-icon-type">Icon Type</label>
-                        <select id="pad-edit-icon-type" onchange="padIconTypeChanged()">
-                            <option value="">(none)</option>
-                            <option value="emoji">Emoji</option>
-                            <option value="mi">Material Symbol</option>
-                        </select>
-                    </div>
-
-                    <div id="pad-edit-icon-emoji-group" style="display:none;">
-                        <div class="form-group">
-                            <label for="pad-edit-icon-emoji">Emoji</label>
-                            <input type="text" id="pad-edit-icon-emoji" maxlength="15" placeholder="e.g. ☀️ 🔌 💡">
-                            <small>Paste or type an emoji character.</small>
-                        </div>
-                    </div>
-
-                    <div id="pad-edit-icon-mi-group" style="display:none;">
-                        <div class="form-group">
-                            <label for="pad-edit-icon-mi">Symbol Name</label>
-                            <input type="text" id="pad-edit-icon-mi" maxlength="31" placeholder="e.g. power_settings_new">
-                            <small>Name from <a href="https://fonts.google.com/icons" target="_blank" style="color:#007aff;">Material Symbols</a>.</small>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="pad-edit-icon-scale">Icon Size %</label>
-                        <input type="number" id="pad-edit-icon-scale" min="0" max="250" step="1" value="0" placeholder="0 = auto">
-                        <small>0 = auto (fits available space), 1‑250 = explicit scale %.</small>
-                    </div>
-
-                    <div id="pad-edit-icon-preview-box" class="pad-icon-preview" style="display:none;">
-                        <canvas id="pad-edit-icon-canvas" width="64" height="64"></canvas>
-                    </div>
-                </details>
-
-                <!-- Bar Chart Settings (collapsible, shown only for bar_chart widget type) -->
-                <details id="pad-edit-bar-chart-section" style="display:none;">
-                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Bar Chart Settings</summary>
-                    <small style="display:block; margin-bottom:12px; color:#86868b;">Configure bar range, thresholds, and colors.</small>
-
-                    <div class="form-group">
-                        <label for="pad-edit-widget-data-binding">Data Binding</label>
-                        <div class="binding-input-wrap">
-                            <input type="text" class="binding-mono" id="pad-edit-widget-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/energy/solar_power;power]">
-                            <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
-                        </div>
-                    </div>
-
-                    <div style="display:flex; gap:8px;">
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-widget-bar-min">Min Value</label>
-                            <input type="number" id="pad-edit-widget-bar-min" step="any" value="0" placeholder="0">
-                        </div>
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-widget-bar-max">Max Value</label>
-                            <input type="number" id="pad-edit-widget-bar-max" step="any" value="3" placeholder="3">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label><input type="checkbox" id="pad-edit-widget-use-absolute" checked> Use absolute value</label>
-                    </div>
-
-                    <div style="display:flex; gap:8px;">
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-widget-threshold-1">Threshold 1</label>
-                            <input type="number" id="pad-edit-widget-threshold-1" step="any" placeholder="auto">
-                        </div>
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-widget-threshold-2">Threshold 2</label>
-                            <input type="number" id="pad-edit-widget-threshold-2" step="any" placeholder="auto">
-                        </div>
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-widget-threshold-3">Threshold 3</label>
-                            <input type="number" id="pad-edit-widget-threshold-3" step="any" placeholder="auto">
-                        </div>
-                    </div>
-
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <div class="form-group" style="flex:1; min-width:100px;">
-                            <label for="pad-edit-widget-color-good">Good</label>
-                            <input type="color" id="pad-edit-widget-color-good" value="#4CAF50">
-                        </div>
-                        <div class="form-group" style="flex:1; min-width:100px;">
-                            <label for="pad-edit-widget-color-ok">OK</label>
-                            <input type="color" id="pad-edit-widget-color-ok" value="#8BC34A">
-                        </div>
-                        <div class="form-group" style="flex:1; min-width:100px;">
-                            <label for="pad-edit-widget-color-attention">Attention</label>
-                            <input type="color" id="pad-edit-widget-color-attention" value="#FF9800">
-                        </div>
-                        <div class="form-group" style="flex:1; min-width:100px;">
-                            <label for="pad-edit-widget-color-warning">Warning</label>
-                            <input type="color" id="pad-edit-widget-color-warning" value="#F44336">
-                        </div>
-                    </div>
-
-                    <div style="display:flex; gap:8px;">
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-widget-bar-bg-color">Bar Background</label>
-                            <input type="color" id="pad-edit-widget-bar-bg-color" value="#1A1A1A">
-                        </div>
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-widget-bar-width-pct">Bar Width %</label>
-                            <input type="number" id="pad-edit-widget-bar-width-pct" min="1" max="100" value="100" placeholder="100">
-                        </div>
-                    </div>
-                </details>
-
-
-
-                <!-- Image Background (collapsible) -->
-                <details id="pad-edit-image-section">
-                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Image Background</summary>
-                    <small style="display:block; margin-bottom:12px; color:#86868b;">Fetch a JPEG/PNG image from a URL and display it as the button background.</small>
-
-                    <div class="form-group">
-                        <label for="pad-edit-bg-image-url">Image URL</label>
-                        <input type="text" id="pad-edit-bg-image-url" maxlength="255" placeholder="e.g. http://192.168.1.10/cam/snapshot.jpg">
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-bg-image-user">Auth User</label>
-                            <input type="text" id="pad-edit-bg-image-user" maxlength="31" placeholder="(optional)">
-                        </div>
-                        <div class="form-group" style="flex:1;">
-                            <label for="pad-edit-bg-image-password">Auth Password</label>
-                            <input type="password" id="pad-edit-bg-image-password" maxlength="63" placeholder="(optional)">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="pad-edit-bg-image-interval">Refresh Interval (ms)</label>
-                        <input type="number" id="pad-edit-bg-image-interval" min="0" max="86400000" value="0" placeholder="0 = fetch once">
-                        <small>0 = fetch once at startup. E.g. 5000 = refresh every 5 seconds.</small>
-                    </div>
-                    <div class="form-group" style="margin-top:8px;">
-                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                            <input type="checkbox" id="pad-edit-bg-image-letterbox" style="width:18px; height:18px;">
-                            Letterbox (fit image, black bars)
-                        </label>
-                        <small>When checked, the image fits inside the button area with black bars. Otherwise it fills and crops.</small>
-                    </div>
-                </details>
-
-                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
-
-                <!-- Bindable color fields -->
-                <details id="pad-edit-colors-section">
-                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Colors</summary>
-                    <small style="display:block; margin-bottom:12px; color:#86868b;">Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. When using a binding, set a default color as fallback. <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button></small>
-
-                    <div id="pad-edit-bg-color-wrap" class="pad-color-bind-group"></div>
-                    <div id="pad-edit-fg-color-wrap" class="pad-color-bind-group"></div>
-                    <div id="pad-edit-border-color-wrap" class="pad-color-bind-group"></div>
-                </details>
-
-                <div style="display:flex; gap:12px; margin-top:4px;">
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-border-width">Border Width</label>
-                        <input type="number" id="pad-edit-border-width" min="0" max="10" value="0" style="width:100%;">
-                    </div>
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-corner-radius">Radius</label>
-                        <input type="number" id="pad-edit-corner-radius" min="0" max="50" value="8" style="width:100%;">
-                    </div>
-                </div>
-
-                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
-
-                <div style="display:flex; gap:12px;">
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-col-span">Col Span</label>
-                        <select id="pad-edit-col-span"></select>
-                    </div>
-                    <div class="form-group" style="flex:1;">
-                        <label for="pad-edit-row-span">Row Span</label>
-                        <select id="pad-edit-row-span"></select>
-                    </div>
-                </div>
-
-                <!-- Button State (collapsible) -->
-                <details id="pad-edit-btn-state-section">
-                    <summary style="cursor:pointer; font-weight:600; color:#1d1d1f; margin-bottom:8px;">Button State</summary>
-                    <small style="display:block; margin-bottom:12px; color:#86868b;">Control button visibility and interactivity. Use a static value or a binding expression that resolves to <code>enabled</code>, <code>disabled</code>, or <code>hidden</code>.</small>
-                    <div class="form-group">
-                        <label for="pad-edit-btn-state">State</label>
-                        <div class="binding-input-wrap">
-                            <input type="text" id="pad-edit-btn-state" class="binding-mono" maxlength="191" placeholder="e.g. enabled, disabled, hidden, or [expr:…]">
-                            <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
-                        </div>
-                        <small><b>enabled</b> = normal (default when empty), <b>disabled</b> = visible but no tap/hold, <b>hidden</b> = invisible.</small>
-                    </div>
-                </details>
-
-                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
-
-                <!-- Tap Action -->
-                <div class="form-group">
-                    <label for="pad-edit-action-type">Tap Action</label>
-                    <select id="pad-edit-action-type" onchange="padActionTypeChanged('tap')">
-                        <option value="">(none)</option>
-                        <option value="screen">Navigate to Screen</option>
-                        <option value="back">Navigate Back</option>
-                        <option value="mqtt">MQTT Publish</option>
-                    </select>
-                </div>
-                <div id="pad-edit-action-screen-group" style="display:none;">
-                    <div class="form-group">
-                        <label for="pad-edit-action-target">Target Screen</label>
-                        <select id="pad-edit-action-target">
-                            <option value="">(none)</option>
-                        </select>
-                    </div>
-                </div>
-                <div id="pad-edit-action-mqtt-group" style="display:none;">
-                    <div class="form-group">
-                        <label for="pad-edit-action-topic">MQTT Topic</label>
-                        <input type="text" id="pad-edit-action-topic" maxlength="127" placeholder="e.g. home/light/toggle">
-                    </div>
-                    <div class="form-group">
-                        <label for="pad-edit-action-payload">MQTT Payload</label>
-                        <input type="text" id="pad-edit-action-payload" maxlength="127" placeholder="e.g. ON">
-                    </div>
-                </div>
-
-                <hr style="border:none; border-top:1px solid #e5e5ea; margin:16px 0;">
-
-                <!-- Long-Press Action -->
-                <div class="form-group">
-                    <label for="pad-edit-lp-action-type">Long-Press Action</label>
-                    <select id="pad-edit-lp-action-type" onchange="padActionTypeChanged('lp')">
-                        <option value="">(none)</option>
-                        <option value="screen">Navigate to Screen</option>
-                        <option value="back">Navigate Back</option>
-                        <option value="mqtt">MQTT Publish</option>
-                    </select>
-                </div>
-                <div id="pad-edit-lp-action-screen-group" style="display:none;">
-                    <div class="form-group">
-                        <label for="pad-edit-lp-action-target">Target Screen</label>
-                        <select id="pad-edit-lp-action-target">
-                            <option value="">(none)</option>
-                        </select>
-                    </div>
-                </div>
-                <div id="pad-edit-lp-action-mqtt-group" style="display:none;">
-                    <div class="form-group">
-                        <label for="pad-edit-lp-action-topic">MQTT Topic</label>
-                        <input type="text" id="pad-edit-lp-action-topic" maxlength="127" placeholder="e.g. home/light/toggle">
-                    </div>
-                    <div class="form-group">
-                        <label for="pad-edit-lp-action-payload">MQTT Payload</label>
-                        <input type="text" id="pad-edit-lp-action-payload" maxlength="127" placeholder="e.g. OFF">
-                    </div>
-                </div>
-            </div>
-
-            <div class="pad-edit-footer">
-                <button type="button" id="pad-edit-ok" class="btn btn-primary" style="flex:1;">OK</button>
-                <button type="button" id="pad-edit-copy" class="btn btn-secondary" style="flex:1;">Copy</button>
-                <button type="button" id="pad-edit-paste" class="btn btn-secondary" style="flex:1;" disabled>Paste</button>
-                <button type="button" id="pad-edit-clear" class="btn btn-secondary" style="flex:1; color:#ff3b30; border-color:#ff3b30;">Clear</button>
-                <button type="button" id="pad-edit-cancel" class="btn btn-secondary" style="flex:1;">Cancel</button>
-            </div>
-        </div>
     </div>
 
     <!-- Binding Syntax Help -->
@@ -920,55 +478,6 @@
                     <tr>
                         <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar;w] - [mqtt:grid;w]]</code></td>
                         <td style="padding:4px 0;color:#86868b;">Computed value → bar chart</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div id="style-help-overlay" class="reboot-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
-        <div class="reboot-modal" style="background:#fffde7;max-width:420px;text-align:left;padding:0;">
-            <div style="padding:24px 28px 8px;display:flex;justify-content:space-between;align-items:center;">
-                <h3 style="margin:0;font-size:18px;">Label Style Reference</h3>
-                <button type="button" onclick="document.getElementById('style-help-overlay').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#86868b;padding:0 4px;">&times;</button>
-            </div>
-            <div style="padding:0 28px 24px;font-size:13px;color:#1d1d1f;line-height:1.5;overflow-y:auto;max-height:70vh;">
-                <p style="color:#86868b;margin:0 0 12px;">Override individual label styling with a compact <code>key:value;...</code> syntax.</p>
-                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
-                    <tr style="border-bottom:1px solid #e5e5ea;">
-                        <td style="padding:4px 0;"><strong>font</strong></td>
-                        <td style="padding:4px 0;color:#86868b;">Font size: <code>12</code>, <code>14</code>, <code>18</code>, <code>24</code>, <code>32</code>, or <code>36</code></td>
-                    </tr>
-                    <tr style="border-bottom:1px solid #e5e5ea;">
-                        <td style="padding:4px 0;"><strong>align</strong></td>
-                        <td style="padding:4px 0;color:#86868b;"><code>left</code>, <code>center</code>, or <code>right</code></td>
-                    </tr>
-                    <tr style="border-bottom:1px solid #e5e5ea;">
-                        <td style="padding:4px 0;"><strong>y</strong></td>
-                        <td style="padding:4px 0;color:#86868b;">Vertical pixel offset (e.g. <code>-2</code>, <code>5</code>)</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid #e5e5ea;">
-                        <td style="padding:4px 0;"><strong>mode</strong></td>
-                        <td style="padding:4px 0;color:#86868b;"><code>clip</code>, <code>scroll</code>, <code>dot</code> (...), or <code>wrap</code></td>
-                    </tr>
-                    <tr>
-                        <td style="padding:4px 0;"><strong>color</strong></td>
-                        <td style="padding:4px 0;color:#86868b;">Hex color (e.g. <code>#FF0</code>, <code>#FF6600</code>)</td>
-                    </tr>
-                </table>
-                <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#1d1d1f;">Examples</p>
-                <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                    <tr style="border-bottom:1px solid #e5e5ea;">
-                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:36;align:left;mode:dot</code></td>
-                        <td style="padding:4px 0;color:#86868b;">Large, left-aligned, ellipsis</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid #e5e5ea;">
-                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:14;color:#FF0</code></td>
-                        <td style="padding:4px 0;color:#86868b;">Small yellow text</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">y:-4;align:right</code></td>
-                        <td style="padding:4px 0;color:#86868b;">Shifted up, right-aligned</td>
                     </tr>
                 </table>
             </div>

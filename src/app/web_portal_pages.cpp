@@ -68,6 +68,24 @@ void handleHome(AsyncWebServerRequest *request) {
 		request->send(response);
 }
 
+void handlePad(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+
+		if (web_portal_is_ap_mode_active()) {
+				request->redirect("/network.html");
+				return;
+		}
+
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"text/html",
+				pads_html_gz,
+				pads_html_gz_len,
+				"no-store"
+		);
+		request->send(response);
+}
+
 void handleNetwork(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 

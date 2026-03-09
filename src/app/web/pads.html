@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+{{HEADER}}
+<body data-page="pad">
+    <div class="container">
+        {{NAV}}
+
+            <!-- Pad Configuration Section -->
+            <section class="section" id="pad-config-section" style="display:none;">
+                <h2>🎛️ Pad Configuration</h2>
+
+                <!-- Controls rows -->
+                <div class="pad-controls">
+                    <div class="pad-controls-row">
+                        <div class="form-group" style="margin-bottom:0; flex:1;">
+                            <label for="pad-page-select">Pad</label>
+                            <select id="pad-page-select">
+                                <option value="0">Pad 1</option>
+                                <option value="1">Pad 2</option>
+                                <option value="2">Pad 3</option>
+                                <option value="3">Pad 4</option>
+                                <option value="4">Pad 5</option>
+                                <option value="5">Pad 6</option>
+                                <option value="6">Pad 7</option>
+                                <option value="7">Pad 8</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="pad-controls-row" style="margin-top:6px;">
+                        <div class="form-group" style="margin-bottom:0; flex:1;">
+                            <label for="pad-name">Pad Name</label>
+                            <input type="text" id="pad-name" maxlength="31" placeholder="(optional)" style="padding:6px 10px;">
+                        </div>
+                    </div>
+                    <div class="pad-controls-row" style="margin-top:6px;">
+                        <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
+                            <label for="pad-cols">Columns</label>
+                            <select id="pad-cols">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3" selected>3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
+                            <label for="pad-rows">Rows</label>
+                            <select id="pad-rows">
+                                <option value="1">1</option>
+                                <option value="2" selected>2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0; flex:1;">
+                            <label for="pad-wake-screen">Screensaver wakes up screen</label>
+                            <select id="pad-wake-screen">
+                                <option value="">(stay on this screen)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visual grid preview -->
+                <div id="pad-grid" class="pad-grid"></div>
+
+                <!-- Empty state -->
+                <div id="pad-empty-state" class="pad-empty-state" style="display:none;">
+                    <p>No configuration for this page yet.</p>
+                    <p><small>Adjust columns and rows above, then click empty cells to add buttons.</small></p>
+                </div>
+
+                <!-- Background color -->
+                <div id="pad-page-bg-color-wrap" class="pad-color-bind-group" style="margin-top:8px; margin-bottom:4px;"></div>
+
+                <small style="margin-top:8px; display:block;">Click a cell to edit its button.</small>
+            </section>
+
+            <!-- No-display fallback -->
+            <section class="section" id="pad-no-display-section" style="display:none;">
+                <h2>🎛️ Pad Configuration</h2>
+                <p style="color:#86868b;">Pad configuration requires a board with a display. This device does not have a display connected.</p>
+            </section>
+
+        </div>
+
+        <!-- Floating Pad Footer -->
+        <div class="floating-action-footer" id="pad-floating-footer" style="display:none;">
+            <div class="button-group">
+                <button type="button" id="pad-save-btn" class="btn btn-primary">Save Pad</button>
+                <button type="button" id="pad-show-btn" class="btn btn-secondary">Show on Device</button>
+                <div class="pad-more-wrap" style="position:relative; flex:0 0 auto;">
+                    <button type="button" id="pad-more-btn" class="btn btn-secondary" style="min-width:80px;">More ▾</button>
+                    <div id="pad-more-menu" class="pad-more-menu" style="display:none;">
+                        <button type="button" id="pad-fill-btn" disabled>Fill Pad</button>
+                        <button type="button" id="pad-copy-btn">Copy Pad</button>
+                        <button type="button" id="pad-paste-btn" disabled>Paste Pad</button>
+                        <hr>
+                        <button type="button" id="pad-export-btn">Export Pad</button>
+                        <button type="button" id="pad-import-btn">Import Pad</button>
+                        <input type="file" id="pad-import-file" accept=".json" style="display:none;">
+                        <hr>
+                        <button type="button" id="device-export-btn">Export Device Config</button>
+                        <button type="button" id="device-import-btn">Import Device Config</button>
+                        <input type="file" id="device-import-file" accept=".json" style="display:none;">
+                        <hr>
+                        <button type="button" id="pad-delete-btn" style="color:#ff3b30;">Clear Pad</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pad Button Edit Dialog -->
+    <div id="pad-edit-overlay" class="reboot-overlay" style="display:none;">
+        <div class="reboot-modal pad-edit-modal">
+            <h2 id="pad-edit-title">Edit Button</h2>
+
+            <div class="pad-edit-body">
+
+                <!-- Layout group (open by default) -->
+                <details class="editor-group" open>
+                    <summary>Layout</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-widget-type">Button Type</label>
+                            <select id="pad-edit-widget-type" onchange="padWidgetTypeChanged()">
+                                <option value="">Normal Button</option>
+                                <option value="bar_chart">Bar Chart</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; gap:12px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-col-span">Col Span</label>
+                                <select id="pad-edit-col-span"></select>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-row-span">Row Span</label>
+                                <select id="pad-edit-row-span"></select>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Labels group (open by default) -->
+                <details class="editor-group" open>
+                    <summary>Labels</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-label-top">Top Label</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" id="pad-edit-label-top" maxlength="191" placeholder="e.g. Living Room or Power: [mqtt:topic;path;fmt] W">
+                                <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('top')" title="Label style override">Aa</button>
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                            <div id="pad-edit-label-top-style-wrap" class="label-style-wrap" style="display:none;">
+                                <input type="text" id="pad-edit-label-top-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
+                                <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-label-center">Center Label</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" id="pad-edit-label-center" maxlength="191" placeholder="e.g. 21.5°C or [mqtt:sensors/temp;temp;%.1f°C]">
+                                <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('center')" title="Label style override">Aa</button>
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                            <div id="pad-edit-label-center-style-wrap" class="label-style-wrap" style="display:none;">
+                                <input type="text" id="pad-edit-label-center-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
+                                <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-label-bottom">Bottom Label</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" id="pad-edit-label-bottom" maxlength="191" placeholder="e.g. Lights or [mqtt:topic;path;format]">
+                                <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('bottom')" title="Label style override">Aa</button>
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                            <div id="pad-edit-label-bottom-style-wrap" class="label-style-wrap" style="display:none;">
+                                <input type="text" id="pad-edit-label-bottom-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
+                                <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Bar Chart Settings (conditional, shown only for bar_chart widget type) -->
+                <details class="editor-group" id="pad-edit-bar-chart-section" style="display:none;">
+                    <summary>Bar Chart Settings</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-widget-data-binding">Data Binding</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-widget-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/energy/solar_power;power]">
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-bar-min">Min Value</label>
+                                <input type="number" id="pad-edit-widget-bar-min" step="any" value="0" placeholder="0">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-bar-max">Max Value</label>
+                                <input type="number" id="pad-edit-widget-bar-max" step="any" value="3" placeholder="3">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-widget-use-absolute" checked> Use absolute value</label>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-threshold-1">Threshold 1</label>
+                                <input type="number" id="pad-edit-widget-threshold-1" step="any" placeholder="auto">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-threshold-2">Threshold 2</label>
+                                <input type="number" id="pad-edit-widget-threshold-2" step="any" placeholder="auto">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-threshold-3">Threshold 3</label>
+                                <input type="number" id="pad-edit-widget-threshold-3" step="any" placeholder="auto">
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <div class="form-group" style="flex:1; min-width:100px;">
+                                <label for="pad-edit-widget-color-good">Good</label>
+                                <input type="color" id="pad-edit-widget-color-good" value="#4CAF50">
+                            </div>
+                            <div class="form-group" style="flex:1; min-width:100px;">
+                                <label for="pad-edit-widget-color-ok">OK</label>
+                                <input type="color" id="pad-edit-widget-color-ok" value="#8BC34A">
+                            </div>
+                            <div class="form-group" style="flex:1; min-width:100px;">
+                                <label for="pad-edit-widget-color-attention">Attention</label>
+                                <input type="color" id="pad-edit-widget-color-attention" value="#FF9800">
+                            </div>
+                            <div class="form-group" style="flex:1; min-width:100px;">
+                                <label for="pad-edit-widget-color-warning">Warning</label>
+                                <input type="color" id="pad-edit-widget-color-warning" value="#F44336">
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-bar-bg-color">Bar Background</label>
+                                <input type="color" id="pad-edit-widget-bar-bg-color" value="#1A1A1A">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-bar-width-pct">Bar Width %</label>
+                                <input type="number" id="pad-edit-widget-bar-width-pct" min="1" max="100" value="100" placeholder="100">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Actions group (open by default) -->
+                <details class="editor-group" open>
+                    <summary>Actions</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-action-type">Tap Action</label>
+                            <select id="pad-edit-action-type" onchange="padActionTypeChanged('tap')">
+                                <option value="">(none)</option>
+                                <option value="screen">Navigate to Screen</option>
+                                <option value="back">Navigate Back</option>
+                                <option value="mqtt">MQTT Publish</option>
+                            </select>
+                        </div>
+                        <div id="pad-edit-action-screen-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-action-target">Target Screen</label>
+                                <select id="pad-edit-action-target">
+                                    <option value="">(none)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="pad-edit-action-mqtt-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-action-topic">MQTT Topic</label>
+                                <input type="text" id="pad-edit-action-topic" maxlength="127" placeholder="e.g. home/light/toggle">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-action-payload">MQTT Payload</label>
+                                <input type="text" id="pad-edit-action-payload" maxlength="127" placeholder="e.g. ON">
+                            </div>
+                        </div>
+
+                        <hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">
+
+                        <div class="form-group">
+                            <label for="pad-edit-lp-action-type">Long-Press Action</label>
+                            <select id="pad-edit-lp-action-type" onchange="padActionTypeChanged('lp')">
+                                <option value="">(none)</option>
+                                <option value="screen">Navigate to Screen</option>
+                                <option value="back">Navigate Back</option>
+                                <option value="mqtt">MQTT Publish</option>
+                            </select>
+                        </div>
+                        <div id="pad-edit-lp-action-screen-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-lp-action-target">Target Screen</label>
+                                <select id="pad-edit-lp-action-target">
+                                    <option value="">(none)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="pad-edit-lp-action-mqtt-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-lp-action-topic">MQTT Topic</label>
+                                <input type="text" id="pad-edit-lp-action-topic" maxlength="127" placeholder="e.g. home/light/toggle">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-lp-action-payload">MQTT Payload</label>
+                                <input type="text" id="pad-edit-lp-action-payload" maxlength="127" placeholder="e.g. OFF">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Icon -->
+                <details class="editor-group" id="pad-edit-icon-section">
+                    <summary>Icon</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Display an icon centered on the button.</small>
+
+                        <div class="form-group">
+                            <label for="pad-edit-icon-type">Icon Type</label>
+                            <select id="pad-edit-icon-type" onchange="padIconTypeChanged()">
+                                <option value="">(none)</option>
+                                <option value="emoji">Emoji</option>
+                                <option value="mi">Material Symbol</option>
+                            </select>
+                        </div>
+
+                        <div id="pad-edit-icon-emoji-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-icon-emoji">Emoji</label>
+                                <input type="text" id="pad-edit-icon-emoji" maxlength="15" placeholder="e.g. ☀️ 🔌 💡">
+                                <small>Paste or type an emoji character.</small>
+                            </div>
+                        </div>
+
+                        <div id="pad-edit-icon-mi-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-icon-mi">Symbol Name</label>
+                                <input type="text" id="pad-edit-icon-mi" maxlength="31" placeholder="e.g. power_settings_new">
+                                <small>Name from <a href="https://fonts.google.com/icons" target="_blank" style="color:#007aff;">Material Symbols</a>.</small>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="pad-edit-icon-scale">Icon Size %</label>
+                            <input type="number" id="pad-edit-icon-scale" min="0" max="250" step="1" value="0" placeholder="0 = auto">
+                            <small>0 = auto (fits available space), 1‑250 = explicit scale %.</small>
+                        </div>
+
+                        <div id="pad-edit-icon-preview-box" class="pad-icon-preview" style="display:none;">
+                            <canvas id="pad-edit-icon-canvas" width="64" height="64"></canvas>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Image Background -->
+                <details class="editor-group" id="pad-edit-image-section">
+                    <summary>Image Background</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Fetch a JPEG/PNG image from a URL and display it as the button background.</small>
+
+                        <div class="form-group">
+                            <label for="pad-edit-bg-image-url">Image URL</label>
+                            <input type="text" id="pad-edit-bg-image-url" maxlength="255" placeholder="e.g. http://192.168.1.10/cam/snapshot.jpg">
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-bg-image-user">Auth User</label>
+                                <input type="text" id="pad-edit-bg-image-user" maxlength="31" placeholder="(optional)">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-bg-image-password">Auth Password</label>
+                                <input type="password" id="pad-edit-bg-image-password" maxlength="63" placeholder="(optional)">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-bg-image-interval">Refresh Interval (ms)</label>
+                            <input type="number" id="pad-edit-bg-image-interval" min="0" max="86400000" value="0" placeholder="0 = fetch once">
+                            <small>0 = fetch once at startup. E.g. 5000 = refresh every 5 seconds.</small>
+                        </div>
+                        <div class="form-group" style="margin-top:8px;">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                <input type="checkbox" id="pad-edit-bg-image-letterbox" style="width:18px; height:18px;">
+                                Letterbox (fit image, black bars)
+                            </label>
+                            <small>When checked, the image fits inside the button area with black bars. Otherwise it fills and crops.</small>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Appearance -->
+                <details class="editor-group" id="pad-edit-colors-section">
+                    <summary>Appearance</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. When using a binding, set a default color as fallback. <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button></small>
+
+                        <div id="pad-edit-bg-color-wrap" class="pad-color-bind-group"></div>
+                        <div id="pad-edit-fg-color-wrap" class="pad-color-bind-group"></div>
+                        <div id="pad-edit-border-color-wrap" class="pad-color-bind-group"></div>
+
+                        <div style="display:flex; gap:12px; margin-top:4px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-border-width">Border Width</label>
+                                <input type="number" id="pad-edit-border-width" min="0" max="10" value="0" style="width:100%;">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-corner-radius">Radius</label>
+                                <input type="number" id="pad-edit-corner-radius" min="0" max="50" value="8" style="width:100%;">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Button State -->
+                <details class="editor-group" id="pad-edit-btn-state-section">
+                    <summary>Button State</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Control button visibility and interactivity. Use a static value or a binding expression that resolves to <code>enabled</code>, <code>disabled</code>, or <code>hidden</code>.</small>
+                        <div class="form-group">
+                            <label for="pad-edit-btn-state">State</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" id="pad-edit-btn-state" class="binding-mono" maxlength="191" placeholder="e.g. enabled, disabled, hidden, or [expr:…]">
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                            <small><b>enabled</b> = normal (default when empty), <b>disabled</b> = visible but no tap/hold, <b>hidden</b> = invisible.</small>
+                        </div>
+                    </div>
+                </details>
+
+            </div>
+
+            <div class="pad-edit-footer">
+                <button type="button" id="pad-edit-ok" class="btn btn-primary" style="flex:1;">OK</button>
+                <button type="button" id="pad-edit-copy" class="btn btn-secondary" style="flex:1;">Copy</button>
+                <button type="button" id="pad-edit-paste" class="btn btn-secondary" style="flex:1;" disabled>Paste</button>
+                <button type="button" id="pad-edit-clear" class="btn btn-secondary" style="flex:1; color:#ff3b30; border-color:#ff3b30;">Clear</button>
+                <button type="button" id="pad-edit-cancel" class="btn btn-secondary" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Binding Syntax Help -->
+    <div id="binding-help-overlay" class="reboot-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="reboot-modal" style="background:#fffde7;max-width:520px;text-align:left;padding:0;">
+            <div style="padding:24px 28px 8px;display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;font-size:18px;">Binding Syntax</h3>
+                <button type="button" onclick="document.getElementById('binding-help-overlay').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#86868b;padding:0 4px;">&times;</button>
+            </div>
+            <div style="padding:0 28px 24px;font-size:13px;color:#1d1d1f;line-height:1.5;overflow-y:auto;max-height:70vh;">
+                <p style="color:#86868b;margin:0 0 16px;">Labels can contain <strong>binding tokens</strong> that display live data. Static text around tokens is preserved.</p>
+
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">MQTT Binding</h4>
+                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:8px;word-break:break-all;">[mqtt:topic;path;format]</code>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12px;">
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>topic</strong></td><td style="padding:4px 0;">MQTT topic to subscribe to <em>(required)</em></td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>path</strong></td><td style="padding:4px 0;">JSON key to extract, dot-separated for nested. Omit or use <code>.</code> for raw value.</td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">Printf format string (<code>%d</code>, <code>%.1f</code>, <code>%s</code>). Omit for raw value.</td></tr>
+                </table>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:sensors/temp]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Raw value from topic</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:sensors/state;temperature;%.1f°C]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Extract JSON key, format as float</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:home/energy;;%d W]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Raw value with format (empty path = raw)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">Power: [mqtt:grid;power;%d] W</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Static prefix &amp; suffix around binding</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:a;temp;%.0f]° / [mqtt:b;hum;%.0f]%</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Multiple bindings in one label</td>
+                    </tr>
+                </table>
+
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Device Health Binding</h4>
+                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:8px;word-break:break-all;">[health:key;format]</code>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12px;">
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>key</strong></td><td style="padding:4px 0;"><code>cpu</code>, <code>rssi</code>, <code>uptime</code>, <code>heap_free</code>, <code>heap_min</code>, <code>heap_largest</code>, <code>heap_internal</code>, <code>psram_free</code>, <code>psram_min</code>, <code>psram_largest</code>, <code>ip</code>, <code>hostname</code></td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">Optional printf format string. Omit for raw value.</td></tr>
+                </table>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">CPU: [health:cpu]%</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Device CPU usage with static suffix</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[health:heap_free;%d B]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Free heap with format string</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[health:rssi] dBm</code></td>
+                        <td style="padding:4px 0;color:#86868b;">WiFi signal strength</td>
+                    </tr>
+                </table>
+
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Date &amp; Time Binding</h4>
+                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:8px;word-break:break-all;">[time:format;timezone]</code>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12px;">
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">strftime format <em>(required)</em>: <code>%H:%M</code> (time), <code>%d/%m</code> (date), <code>%a</code> (weekday), <code>%Y-%m-%d</code>, etc.<br>Sub-second: <code>%ms</code> (000-999 millis), <code>%cs</code> (00-99 centisec), <code>%ds</code> (0-9 decisec), <code>%ums</code> (uptime ms, standalone only)</td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>timezone</strong></td><td style="padding:4px 0;">Olson name or POSIX TZ. Omit for UTC. Examples: <code>Europe/Amsterdam</code>, <code>America/New_York</code>, <code>Asia/Tokyo</code></td></tr>
+                </table>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%H:%M;Europe/Amsterdam]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Local time (CET/CEST)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%d/%m/%Y;Europe/Amsterdam]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Date as 05/03/2026</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%A, %B %d, %Y;Europe/Amsterdam]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Thursday, March 05, 2026</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%a %d %b;America/New_York]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Weekday and date in New York</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%H:%M]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Current time in UTC</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%H:%M:%S.%ms]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Time with milliseconds</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[time:%ums]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Device uptime in ms (no NTP needed)</td>
+                    </tr>
+                </table>
+                <details style="margin-bottom:16px;font-size:12px;">
+                    <summary style="cursor:pointer;color:#0071e3;font-weight:600;margin-bottom:6px;">Supported Timezones</summary>
+                    <div style="columns:2;column-gap:16px;margin-top:6px;">
+                        <p style="margin:0 0 4px;font-weight:600;color:#1d1d1f;">UTC</p>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">UTC</code>
+                        <p style="margin:8px 0 4px;font-weight:600;color:#1d1d1f;">Europe</p>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/London</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Amsterdam</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Berlin</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Brussels</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Paris</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Rome</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Madrid</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Zurich</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Vienna</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Stockholm</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Oslo</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Copenhagen</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Warsaw</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Helsinki</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Athens</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Bucharest</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Istanbul</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Europe/Moscow</code>
+                        <p style="margin:8px 0 4px;font-weight:600;color:#1d1d1f;">Americas</p>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/New_York</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Chicago</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Denver</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Los_Angeles</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Anchorage</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Phoenix</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Toronto</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Vancouver</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Sao_Paulo</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Argentina/Buenos_Aires</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">America/Mexico_City</code>
+                        <p style="margin:8px 0 4px;font-weight:600;color:#1d1d1f;">Asia / Pacific</p>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Tokyo</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Shanghai</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Hong_Kong</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Singapore</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Seoul</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Kolkata</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Dubai</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Riyadh</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Bangkok</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Asia/Jakarta</code>
+                        <p style="margin:8px 0 4px;font-weight:600;color:#1d1d1f;">Oceania</p>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Australia/Sydney</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Australia/Melbourne</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Australia/Perth</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Pacific/Auckland</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Pacific/Honolulu</code>
+                        <p style="margin:8px 0 4px;font-weight:600;color:#1d1d1f;">Africa</p>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Africa/Cairo</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Africa/Johannesburg</code>
+                        <code style="display:block;font-size:11px;margin:0 0 2px;">Africa/Lagos</code>
+                    </div>
+                    <p style="margin:10px 0 4px;font-size:11px;color:#86868b;line-height:1.4;">You can also use raw <strong>POSIX TZ strings</strong> for any timezone not listed above:</p>
+                    <code style="display:block;font-size:11px;margin:0 0 2px;color:#86868b;">CST-8</code>
+                    <code style="display:block;font-size:11px;margin:0 0 2px;color:#86868b;">EST5EDT,M3.2.0,M11.1.0</code>
+                    <code style="display:block;font-size:11px;margin:0 0 2px;color:#86868b;">IST-5:30</code>
+                </details>
+
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Expression Binding</h4>
+                <code style="display:block;background:rgba(255,255,255,0.7);padding:10px 12px;border-radius:8px;font-size:12px;margin-bottom:8px;word-break:break-all;">[expr:expression;format]</code>
+                <p style="color:#86868b;margin:0 0 8px;font-size:12px;">Evaluate math, comparisons, and conditionals on live binding values. Inner bindings (<code>[mqtt:...]</code>, <code>[health:...]</code>, etc.) are resolved first, then the expression is evaluated.</p>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:12px;">
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>expression</strong></td><td style="padding:4px 0;">Math expression with inner bindings. Supports <code>+ - * / %</code>, comparisons <code>&gt; &lt; &gt;= &lt;= == !=</code>, ternary <code>? :</code>, parentheses, and <code>"quoted strings"</code>.</td></tr>
+                    <tr><td style="padding:4px 8px 4px 0;color:#86868b;white-space:nowrap;vertical-align:top;"><strong>format</strong></td><td style="padding:4px 0;">Optional printf format string after <code>;</code> separator. Omit for automatic formatting.</td></tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Basic — unit conversion</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[health:heap_free] / 1024;%.0f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Bytes → KB (e.g. <em>183</em>)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[health:psram_free] / (1024 * 1024);%.2f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Bytes → MB (e.g. <em>4.00</em>)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:sensors/temp;value] * 9/5 + 32;%.1f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">°C → °F (e.g. <em>72.5</em>)</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Conditional text</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:sensor/temp;value] &gt; 30 ? "Hot" : "OK"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Threshold check → text</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[health:cpu] &gt; 80 ? "High" : "Normal"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">CPU load warning</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Advanced — combine multiple bindings</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar/power;w] - [mqtt:grid/power;w];%.0f]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Net power (solar − grid)</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar/power;w] &gt; 0 ? "Producing" : "Idle"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Status based on solar output</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Mixed — static text + expression</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">Heap: [expr:[health:heap_free]/1024;%.0f] KB</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Static text wrapping expr</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar;w]/1000;%.1f]kW / [expr:[mqtt:grid;w]/1000;%.1f]kW</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Two expressions in one label</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Sub-second timing — fast color cycling</p>
+                <p style="color:#86868b;margin:0 0 6px;font-size:11px;">Use modulo (<code>%</code>) with <code>&lt;</code> to split a time range into two halves. <code>%ms</code> (0-999) works for periods that divide evenly into 1000. <code>%ums</code> (uptime ms) works for any period.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ds]%2&lt;1?"#ff0000":"#00ff00"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Toggle every 100ms (deciseconds)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ms]%500&lt;250?"#ff0000":"#00ff00"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Toggle every 250ms</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[time:%ums]%1000&lt;500?"#ff0000":"#00ff00"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Toggle every 500ms (any period)</td>
+                    </tr>
+                </table>
+
+                <p style="margin:8px 0 4px;font-size:12px;font-weight:600;color:#1d1d1f;">Conditional color cycling — MQTT threshold warning</p>
+                <p style="color:#86868b;margin:0 0 6px;font-size:11px;">Combine an MQTT threshold check with fast color cycling: flash when a value exceeds a limit, otherwise use a static color.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:energy/power]&gt;2.5?([time:%ms]%500&lt;250?"#ff0000":"#ffffff"):"#000000"]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Flash red/white when power &gt; 2.5, else black</td>
+                    </tr>
+                </table>
+
+                <h4 style="margin:0 0 6px;font-size:13px;color:#1d1d1f;">Widget Data Binding</h4>
+                <p style="color:#86868b;margin:0 0 8px;font-size:12px;">The <strong>Data Binding</strong> field in widget settings uses the same binding syntax. The resolved value is parsed as a number by the widget. <strong>Omit the format parameter</strong> — formatting would break numeric parsing.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:home/energy/solar;power]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">MQTT JSON value → bar chart</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[mqtt:sensors/temp]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Raw MQTT value → bar chart</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[health:cpu]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Device CPU usage → bar chart</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">[expr:[mqtt:solar;w] - [mqtt:grid;w]]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Computed value → bar chart</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="style-help-overlay" class="reboot-overlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+        <div class="reboot-modal" style="background:#fffde7;max-width:420px;text-align:left;padding:0;">
+            <div style="padding:24px 28px 8px;display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;font-size:18px;">Label Style Reference</h3>
+                <button type="button" onclick="document.getElementById('style-help-overlay').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#86868b;padding:0 4px;">&times;</button>
+            </div>
+            <div style="padding:0 28px 24px;font-size:13px;color:#1d1d1f;line-height:1.5;overflow-y:auto;max-height:70vh;">
+                <p style="color:#86868b;margin:0 0 12px;">Override individual label styling with a compact <code>key:value;...</code> syntax.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><strong>font</strong></td>
+                        <td style="padding:4px 0;color:#86868b;">Font size: <code>12</code>, <code>14</code>, <code>18</code>, <code>24</code>, <code>32</code>, or <code>36</code></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><strong>align</strong></td>
+                        <td style="padding:4px 0;color:#86868b;"><code>left</code>, <code>center</code>, or <code>right</code></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><strong>y</strong></td>
+                        <td style="padding:4px 0;color:#86868b;">Vertical pixel offset (e.g. <code>-2</code>, <code>5</code>)</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><strong>mode</strong></td>
+                        <td style="padding:4px 0;color:#86868b;"><code>clip</code>, <code>scroll</code>, <code>dot</code> (...), or <code>wrap</code></td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><strong>color</strong></td>
+                        <td style="padding:4px 0;color:#86868b;">Hex color (e.g. <code>#FF0</code>, <code>#FF6600</code>)</td>
+                    </tr>
+                </table>
+                <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#1d1d1f;">Examples</p>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:36;align:left;mode:dot</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Large, left-aligned, ellipsis</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:14;color:#FF0</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Small yellow text</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">y:-4;align:right</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Shifted up, right-aligned</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="reboot-overlay" class="reboot-overlay" style="display:none;">
+        <div class="reboot-modal">
+            <div id="reboot-spinner" class="spinner"></div>
+            <h2 id="reboot-title">Device Rebooting</h2>
+            <p id="reboot-message">Please wait while the device restarts...</p>
+            <div id="reboot-progress-container" style="margin: 25px 0; display: none;">
+                <div class="progress-bar" style="height: 30px; background: #e0e0e0; border-radius: 15px; overflow: hidden;">
+                    <div id="reboot-progress-fill" style="height: 100%; width: 0%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s;"></div>
+                </div>
+                <div id="reboot-progress-text" style="margin-top: 10px; font-size: 18px; font-weight: 600; color: #667eea;">0%</div>
+            </div>
+            <p id="reboot-submessage" class="small">This page will automatically refresh when ready</p>
+            <div id="reconnect-status" class="reconnect-status"></div>
+        </div>
+    </div>
+
+    <script src="/portal.js"></script>
+</body>
+</html>

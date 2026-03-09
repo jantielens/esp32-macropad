@@ -9,7 +9,7 @@ The ESP32 Macropad includes a built-in web portal for configuring every aspect o
 | **AP Mode** (first boot / factory reset) | Wi-Fi not configured | Connect to the device's Wi-Fi, then go to `http://192.168.4.1` |
 | **Full Mode** (normal operation) | Connected to your Wi-Fi | `http://<device-name>.local` or the device's IP address |
 
-In AP mode, only the Network page is available. In Full mode, all three pages are accessible.
+In AP mode, only the Network page is available. In Full mode, all four pages are accessible.
 
 ## Header & Health Monitoring
 
@@ -46,7 +46,7 @@ The orange **CPU** badge in the header shows real-time CPU usage with a breathin
 
 *Available in Full mode only.*
 
-The Home page is where you configure the device's behavior and pad layouts.
+The Home page provides a welcome overview with quick links to the other pages, plus device behavior settings.
 
 ### Operating Mode & Cadence
 
@@ -97,9 +97,17 @@ Protects your LCD from burn-in by turning off the backlight after a period of in
 | **Wake on touch** | Wake the display by touching the screen |
 | **Wake on MQTT Binding** | Binding expression that keeps the screen awake while it resolves to ON (e.g. `[mqtt:devices/node/presence/state]`) |
 
-### Pad Editor
+---
 
-The pad editor is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 8 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
+## Pads Page
+
+*Available in Full mode only.*
+
+The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 8 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
+
+The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import). This is completely separate from the device config Save & Reboot footer on other pages.
+
+Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 
 For the complete guide — including binding template syntax, widget configuration, label styling, dynamic colors, and real-world examples — see the **[Pad Editor Guide](pad-editor-guide.md)**.
 
@@ -175,13 +183,15 @@ Erases all configuration and restarts the device in AP mode. You'll need to go t
 
 ## Saving & Rebooting
 
-The floating footer at the bottom of every page offers three actions:
+The Home and Network pages share a floating footer with three actions:
 
 | Button | What it does |
 |--------|--------------|
 | **Save and Reboot** | Saves all settings and restarts the device (required for WiFi/network changes) |
 | **Save** | Saves settings without rebooting (applied on next restart) |
 | **Reboot** | Restarts without saving |
+
+The **Pads** page has its own separate footer — see [Pads Page](#pads-page) above.
 
 Each page only saves the fields shown on that page — saving on the Home page won't clear your Network settings.
 

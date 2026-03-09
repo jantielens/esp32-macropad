@@ -5,6 +5,7 @@
 
 void handleRoot(AsyncWebServerRequest *request);
 void handleHome(AsyncWebServerRequest *request);
+void handlePad(AsyncWebServerRequest *request);
 void handleNetwork(AsyncWebServerRequest *request);
 void handleFirmware(AsyncWebServerRequest *request);
 void handleCSS(AsyncWebServerRequest *request);

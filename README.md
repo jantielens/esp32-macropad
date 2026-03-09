@@ -90,7 +90,8 @@ After flashing, the device creates its own Wi-Fi hotspot for initial configurati
 
 Everything is configured from your browser — no flashing or coding needed after the initial install.
 
-- **Home page** — operating mode, display settings, and the visual pad editor
+- **Home page** — operating mode, display settings, and sensor configuration
+- **Pads page** — visual pad editor for designing button layouts
 - **Network page** — Wi-Fi, MQTT, device name, static IP, and security
 - **Firmware page** — OTA updates, manual upload, and factory reset
 

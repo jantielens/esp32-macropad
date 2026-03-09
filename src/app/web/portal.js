@@ -59,6 +59,8 @@ function initNavigation() {
     
     if (path === '/' || path === '/home.html') {
         currentPage = 'home';
+    } else if (path === '/pads.html') {
+        currentPage = 'pad';
     } else if (path === '/network.html') {
         currentPage = 'network';
     } else if (path === '/firmware.html') {
@@ -379,7 +381,7 @@ async function loadMode() {
         
         // Hide Home and Firmware navigation buttons in AP mode (core mode)
         if (portalMode === 'core') {
-            document.querySelectorAll('.nav-tab[data-page="home"], .nav-tab[data-page="firmware"]').forEach(tab => {
+            document.querySelectorAll('.nav-tab[data-page="home"], .nav-tab[data-page="pad"], .nav-tab[data-page="firmware"]').forEach(tab => {
                 tab.style.display = 'none';
             });
             
@@ -604,9 +606,6 @@ async function loadConfig() {
         setValueIfExists('gateway', config.gateway);
         setValueIfExists('dns1', config.dns1);
         setValueIfExists('dns2', config.dns2);
-        
-        // Dummy setting
-        setValueIfExists('dummy_setting', config.dummy_setting);
 
         // MQTT settings
         setValueIfExists('mqtt_host', config.mqtt_host);
@@ -695,7 +694,7 @@ function extractFormFields(formData) {
     // Build config from only the fields that exist on this page
     const config = {};
     const fields = ['wifi_ssid', 'wifi_password', 'device_name', 'fixed_ip', 
-                    'subnet_mask', 'gateway', 'dns1', 'dns2', 'dummy_setting',
+                    'subnet_mask', 'gateway', 'dns1', 'dns2',
                     'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
                     'power_mode', 'publish_transport', 'cycle_interval_seconds', 'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
                     'ble_adv_burst_ms', 'ble_adv_gap_ms', 'ble_adv_bursts', 'ble_adv_interval_ms',
@@ -1199,6 +1198,16 @@ const padState = {
     colorCache: {},      // page → hex[] — colors from visited pads
 };
 
+let padDirty = false;
+
+function padMarkDirty() {
+    padDirty = true;
+}
+
+function padClearDirty() {
+    padDirty = false;
+}
+
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
 const DEVICE_CONFIG_VERSION = 1;
 
@@ -1431,15 +1440,25 @@ function padInit() {
     if (!section) return;
 
     document.getElementById('pad-page-select').addEventListener('change', (e) => {
-        padState.page = parseInt(e.target.value);
+        const newPage = parseInt(e.target.value);
+        if (padDirty) {
+            if (!confirm('You have unsaved changes. Discard and switch pad?')) {
+                e.target.value = padState.page;
+                return;
+            }
+        }
+        padClearDirty();
+        padState.page = newPage;
         padLoadPage(padState.page);
     });
     document.getElementById('pad-cols').addEventListener('change', (e) => {
         padState.cols = parseInt(e.target.value);
+        padMarkDirty();
         padRenderGrid();
     });
     document.getElementById('pad-rows').addEventListener('change', (e) => {
         padState.rows = parseInt(e.target.value);
+        padMarkDirty();
         padRenderGrid();
     });
 
@@ -1492,14 +1511,29 @@ function padInit() {
         if (e.target.id === 'pad-edit-overlay') padDialogClose();
     });
 
+    // Track unsaved changes on name and other inputs
+    document.getElementById('pad-name').addEventListener('input', padMarkDirty);
+
+    // Warn before leaving with unsaved changes
+    window.addEventListener('beforeunload', (e) => {
+        if (padDirty) {
+            e.preventDefault();
+        }
+    });
+
     // Wait for deviceInfoCache to be ready, then show section + load
     const waitForInfo = () => {
         if (deviceInfoCache) {
             if (deviceInfoCache.has_display === true) {
                 section.style.display = 'block';
+                const padFooter = document.getElementById('pad-floating-footer');
+                if (padFooter) padFooter.style.display = '';
                 padPopulateScreenDropdown();
                 padLoadPage(0);
                 padRefreshDropdownLabels();
+            } else {
+                const noDisp = document.getElementById('pad-no-display-section');
+                if (noDisp) noDisp.style.display = 'block';
             }
         } else {
             setTimeout(waitForInfo, 200);
@@ -1553,6 +1587,7 @@ async function padLoadPage(page) {
     padState.page = page;
     padState.rawJson = null;
     padState.buttons = [];
+    padClearDirty();
 
     try {
         const resp = await fetch('/api/pad?page=' + page);
@@ -2309,6 +2344,7 @@ function padDialogOk() {
     if (btnState) btn.btn_state = btnState;
 
     padState.buttons.push(btn);
+    padMarkDirty();
     padDialogClose();
     padRenderPageSwatches();
     padRenderGrid();
@@ -2318,6 +2354,7 @@ function padDialogClear() {
     const col = padState.editCol;
     const row = padState.editRow;
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
+    padMarkDirty();
     padDialogClose();
     padRenderPageSwatches();
     padRenderGrid();
@@ -2387,6 +2424,7 @@ async function padSavePage() {
         }
 
         showMessage('Pad ' + (padState.page + 1) + ' saved', 'success');
+        padClearDirty();
         padUpdateDropdownLabel(padState.page, document.getElementById('pad-name').value.trim());
 
         // Refresh deviceInfoCache so target screen dropdowns pick up new pad names
@@ -2476,6 +2514,7 @@ function padDialogPasteBtn() {
     padState.buttons.push(btn);
 
     padDialogClose();
+    padMarkDirty();
     padRenderGrid();
     showMessage('Button pasted', 'success');
 }
@@ -2496,6 +2535,7 @@ function padFillWithClipboard() {
         }
     }
     padRenderGrid();
+    padMarkDirty();
     showMessage('Pad filled with copied button', 'success');
 }
 
@@ -2531,6 +2571,7 @@ function padPastePad() {
     padSetColorBind('page_bg_color', padState.padClipboard.bg_color, padState.padClipboard.bg_color_default, '#000000');
 
     padRenderGrid();
+    padMarkDirty();
     showMessage('Pad pasted (unsaved)', 'success');
 }
 
@@ -2594,6 +2635,7 @@ async function padImportPad(evt) {
         padSetColorBind('page_bg_color', json.bg_color, json.bg_color_default, '#000000');
 
         padRenderGrid();
+        padMarkDirty();
         showMessage('Pad imported (unsaved) — click Save Pad to apply', 'success');
     } catch (err) {
         showMessage('Import failed: ' + err.message, 'error');

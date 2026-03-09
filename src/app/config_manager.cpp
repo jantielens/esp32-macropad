@@ -25,7 +25,6 @@
 #define KEY_GATEWAY        "gateway"
 #define KEY_DNS1           "dns1"
 #define KEY_DNS2           "dns2"
-#define KEY_DUMMY          "dummy"
 #define KEY_MQTT_HOST      "mqtt_host"
 #define KEY_MQTT_PORT      "mqtt_port"
 #define KEY_MQTT_USER      "mqtt_user"
@@ -196,9 +195,6 @@ bool config_manager_load(DeviceConfig *config) {
 		preferences.getString(KEY_GATEWAY, config->gateway, CONFIG_IP_STR_MAX_LEN);
 		preferences.getString(KEY_DNS1, config->dns1, CONFIG_IP_STR_MAX_LEN);
 		preferences.getString(KEY_DNS2, config->dns2, CONFIG_IP_STR_MAX_LEN);
-		
-		// Load dummy setting
-		preferences.getString(KEY_DUMMY, config->dummy_setting, CONFIG_DUMMY_MAX_LEN);
 
 		// Load MQTT settings (all optional)
 		preferences.getString(KEY_MQTT_HOST, config->mqtt_host, CONFIG_MQTT_HOST_MAX_LEN);
@@ -302,9 +298,6 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putString(KEY_GATEWAY, config->gateway);
 		preferences.putString(KEY_DNS1, config->dns1);
 		preferences.putString(KEY_DNS2, config->dns2);
-		
-		// Save dummy setting
-		preferences.putString(KEY_DUMMY, config->dummy_setting);
 
 		// Save MQTT settings
 		preferences.putString(KEY_MQTT_HOST, config->mqtt_host);
