@@ -210,17 +210,18 @@ The bar chart widget draws a vertical bar that fills up based on a numeric value
 | **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
 | **Min / Max** | The value range. The bar is empty at min and full at max |
 | **Use absolute value** | When on, negative values fill the bar upward too (useful for grid power that can be negative) |
+| **Reversed, high values are better** | When toggled, the four color picker values swap in place so low values use warning colors and high values use good colors (e.g. battery level, signal strength). The zone labels stay fixed — only the colors move |
 | **Bar width %** | How wide the bar is relative to the button (1–100%) |
 | **Bar background** | The color of the empty bar track |
 
-**Color thresholds** divide the bar into up to four colored zones:
+**Color thresholds** divide the bar into up to four colored zones. The zone labels are positional (Below T1, T1–T2, T2–T3, Above T3) and stay fixed. Toggling "Reversed" swaps the color picker values so the colors visually flip while labels remain in place:
 
-| Zone | Default color | Meaning |
-|------|--------------|---------|
-| Good | Green (`#4CAF50`) | Below threshold 1 |
-| OK | Light green (`#8BC34A`) | Between threshold 1 and 2 |
-| Attention | Orange (`#FF9800`) | Between threshold 2 and 3 |
-| Warning | Red (`#F44336`) | Above threshold 3 |
+| Zone label | Default color (normal) | Default color (reversed) |
+|-----------|----------------------|-------------------------|
+| Below T1 | Green (`#4CAF50`) | Red (`#F44336`) |
+| T1 – T2 | Light green (`#8BC34A`) | Orange (`#FF9800`) |
+| T2 – T3 | Orange (`#FF9800`) | Light green (`#8BC34A`) |
+| Above T3 | Red (`#F44336`) | Green (`#4CAF50`) |
 
 Thresholds default to 33%, 66%, and 90% of the range. Customize them to match your use case — for a solar panel with a 5 kW max, you might set thresholds at 1.0, 3.0, and 4.5 kW.
 

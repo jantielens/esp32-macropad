@@ -63,6 +63,8 @@ static_assert(sizeof(BarChartState) <= WIDGET_STATE_MAX_BYTES,
 static lv_color_t pick_tier_color(const BarChartConfig* cfg, float value) {
     float cmp = cfg->use_absolute ? fabsf(value) : value;
     uint32_t rgb;
+    // Color values are already arranged by the web UI (swapped when "reversed" is on),
+    // so the firmware always uses the same ascending threshold logic.
     if (cmp >= cfg->threshold_3) rgb = cfg->color_warning_rgb;
     else if (cmp >= cfg->threshold_2) rgb = cfg->color_attention_rgb;
     else if (cmp >= cfg->threshold_1) rgb = cfg->color_ok_rgb;

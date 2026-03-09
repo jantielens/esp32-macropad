@@ -1293,6 +1293,17 @@ footer {
     padding: 2px; cursor: pointer; flex-shrink: 0;
 }
 
+/* Bar chart threshold color picker row */
+.bar-chart-colors {
+    display: flex; gap: 8px; align-items: end;
+}
+.bar-chart-colors .form-group { flex: 1; min-width: 0; }
+.bar-chart-colors input[type="color"],
+#pad-edit-bar-chart-section input[type="color"] {
+    width: 100%; height: 34px; border: 2px solid #d2d2d7; border-radius: 8px;
+    padding: 2px; cursor: pointer;
+}
+
 /* Binding input: flex row with ? help button */
 .binding-input-wrap {
     display: flex; align-items: center; gap: 6px;

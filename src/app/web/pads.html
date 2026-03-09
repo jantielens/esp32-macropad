@@ -217,6 +217,10 @@
                         <div class="form-group">
                             <label><input type="checkbox" id="pad-edit-widget-use-absolute" checked> Use absolute value</label>
                         </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-widget-higher-is-better" onchange="padSwapBarColors()"> Reversed, high values are better</label>
+                            <small>When checked, low values use warning colors and high values use good colors (e.g. battery level, signal strength)</small>
+                        </div>
 
                         <div style="display:flex; gap:8px;">
                             <div class="form-group" style="flex:1;">
@@ -233,21 +237,21 @@
                             </div>
                         </div>
 
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <div class="form-group" style="flex:1; min-width:100px;">
-                                <label for="pad-edit-widget-color-good">Good</label>
+                        <div class="bar-chart-colors">
+                            <div class="form-group">
+                                <label for="pad-edit-widget-color-good">Below T1</label>
                                 <input type="color" id="pad-edit-widget-color-good" value="#4CAF50">
                             </div>
-                            <div class="form-group" style="flex:1; min-width:100px;">
-                                <label for="pad-edit-widget-color-ok">OK</label>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-color-ok">T1 – T2</label>
                                 <input type="color" id="pad-edit-widget-color-ok" value="#8BC34A">
                             </div>
-                            <div class="form-group" style="flex:1; min-width:100px;">
-                                <label for="pad-edit-widget-color-attention">Attention</label>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-color-attention">T2 – T3</label>
                                 <input type="color" id="pad-edit-widget-color-attention" value="#FF9800">
                             </div>
-                            <div class="form-group" style="flex:1; min-width:100px;">
-                                <label for="pad-edit-widget-color-warning">Warning</label>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-color-warning">Above T3</label>
                                 <input type="color" id="pad-edit-widget-color-warning" value="#F44336">
                             </div>
                         </div>

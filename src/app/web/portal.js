@@ -1583,6 +1583,14 @@ function padWidgetTypeChanged() {
     }
 }
 
+function padSwapBarColors() {
+    const ids = ['pad-edit-widget-color-good', 'pad-edit-widget-color-ok',
+                 'pad-edit-widget-color-attention', 'pad-edit-widget-color-warning'];
+    const vals = ids.map(id => document.getElementById(id).value);
+    vals.reverse();
+    ids.forEach((id, i) => { document.getElementById(id).value = vals[i]; });
+}
+
 async function padLoadPage(page) {
     padState.page = page;
     padState.rawJson = null;
@@ -2192,6 +2200,8 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : 3;
     document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
     document.getElementById('pad-edit-widget-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : true;
+    document.getElementById('pad-edit-widget-higher-is-better').checked = (btn.widget_higher_is_better !== undefined) ? btn.widget_higher_is_better : false;
+    /* labels are static; colors loaded from config */
     document.getElementById('pad-edit-widget-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
     document.getElementById('pad-edit-widget-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
     document.getElementById('pad-edit-widget-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
@@ -2323,6 +2333,7 @@ function padDialogOk() {
             btn.widget_bar_min = isNaN(barMin) ? 0 : barMin;
             btn.widget_bar_max = isNaN(barMax) ? 3 : barMax;
             btn.widget_use_absolute = document.getElementById('pad-edit-widget-use-absolute').checked;
+            btn.widget_higher_is_better = document.getElementById('pad-edit-widget-higher-is-better').checked;
             const t1 = parseFloat(document.getElementById('pad-edit-widget-threshold-1').value);
             const t2 = parseFloat(document.getElementById('pad-edit-widget-threshold-2').value);
             const t3 = parseFloat(document.getElementById('pad-edit-widget-threshold-3').value);

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Bar chart — reversed color mode** — new "Reversed, high values are better" checkbox in the bar chart widget settings. When toggled, the four color picker values swap in place (the positional labels Below T1 / T1–T2 / T2–T3 / Above T3 stay fixed). Ideal for battery level, signal strength, or any metric where higher is better
+
 ### Changed
 - **Web portal — separate Pads page** — the pad editor has moved from the Home page to its own dedicated **Pads** page, accessible via a new tab in the navigation bar (Home | **Pads** | Network | Firmware). The Home page now shows a welcome card with quick links, plus device settings (Operating Mode, Display, Sensors). The Pads page has its own floating footer with Save Pad / Show on Device / More actions, completely separate from the device config Save & Reboot flow
 - **Button editor — collapsible card groups** — the button editor dialog is reorganized into card-like collapsible `<details>` sections: Layout, Labels, Bar Chart (conditional), Actions, Icon, Image Background, Appearance, and State. Layout, Labels, and Actions are open by default; the rest are collapsed to reduce visual clutter
