@@ -911,7 +911,7 @@ footer {
     padding: 16px;
     max-height: 500px;
     overflow-y: auto;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 13px;
     line-height: 1.6;
     color: #d4d4d4;
@@ -1302,10 +1302,10 @@ footer {
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .binding-input-wrap input.binding-mono {
-    font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px;
 }
 input.binding-mono {
-    font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px;
 }
 .binding-help-btn {
     background: none; border: 1px solid #d2d2d7; border-radius: 50%;
@@ -1324,16 +1324,16 @@ input.binding-mono {
 .style-toggle-btn:hover { border-color: #007aff; color: #007aff; }
 .style-toggle-btn.active { border-color: #007aff; color: #007aff; background: rgba(0,122,255,.08); }
 /* Mixed labels: monospace when binding detected — match binding-mono size */
-input.has-binding { font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px; }
+input.has-binding { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; }
 /* Label style wrap: flex row with input + help button */
 .label-style-wrap {
     display: flex; align-items: center; gap: 6px; margin-top: 4px;
 }
 .label-style-wrap .label-style-input { flex: 1; min-width: 0; margin-top: 0; }
 /* Label style DSL input — compact, monospace */
-.label-style-input {
+input[type="text"].label-style-input {
     width: 100%; box-sizing: border-box; height: 32px;
-    font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 12px; color: #86868b; border: 1px dashed #d2d2d7; border-radius: 6px;
     padding: 4px 8px; background: #fafafa;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
