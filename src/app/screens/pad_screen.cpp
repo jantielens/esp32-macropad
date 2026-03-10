@@ -705,10 +705,15 @@ void PadScreen::pollMqttBindings() {
         }
 
         // Only update widget if any resolved value changed
-        if (strcmp(widget_combined, tile.widget_last) == 0) continue;
-        strlcpy(tile.widget_last, widget_combined, sizeof(tile.widget_last));
+        if (strcmp(widget_combined, tile.widget_last) != 0) {
+            strlcpy(tile.widget_last, widget_combined, sizeof(tile.widget_last));
+            tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, widget_combined);
+        }
 
-        tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, widget_combined);
+        // Always call tick (if implemented) for time-driven widgets
+        if (tile.widget_type->tick) {
+            tile.widget_type->tick(tile.obj, &tile.widget_cfg, &tile.widget_state);
+        }
     }
 #endif
 }

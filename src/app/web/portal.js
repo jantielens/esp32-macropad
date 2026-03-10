@@ -1585,11 +1585,15 @@ function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
     document.getElementById('pad-edit-bar-chart-section').style.display = (wtype === 'bar_chart') ? '' : 'none';
     document.getElementById('pad-edit-gauge-section').style.display = (wtype === 'gauge') ? '' : 'none';
+    document.getElementById('pad-edit-sparkline-section').style.display = (wtype === 'sparkline') ? '' : 'none';
     if (wtype === 'bar_chart') {
         document.getElementById('pad-edit-bar-chart-section').open = true;
     }
     if (wtype === 'gauge') {
         document.getElementById('pad-edit-gauge-section').open = true;
+    }
+    if (wtype === 'sparkline') {
+        document.getElementById('pad-edit-sparkline-section').open = true;
     }
 }
 
@@ -1599,6 +1603,11 @@ function padSwapColors(prefix) {
     const vals = ids.map(id => document.getElementById(id).value);
     vals.reverse();
     ids.forEach((id, i) => { document.getElementById(id).value = vals[i]; });
+}
+
+function padSparklineThresholdToggle() {
+    const show = document.getElementById('pad-edit-sparkline-use-thresholds').checked;
+    document.getElementById('pad-edit-sparkline-threshold-section').style.display = show ? '' : 'none';
 }
 
 async function padLoadPage(page) {
@@ -1817,6 +1826,12 @@ function padRenderGrid() {
                     arc.className = 'pad-cell-widget-gauge';
                     arc.title = 'Gauge Widget';
                     cell.appendChild(arc);
+                }
+                if (btn.widget_type === 'sparkline') {
+                    const spark = document.createElement('div');
+                    spark.className = 'pad-cell-widget-sparkline';
+                    spark.title = 'Sparkline Widget';
+                    cell.appendChild(spark);
                 }
 
                 cell.addEventListener('click', () => padDialogOpen(c, r));
@@ -2255,6 +2270,26 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-needle-width').value = (btn.widget_gauge_needle_width !== undefined) ? btn.widget_gauge_needle_width : 2;
     document.getElementById('pad-edit-gauge-tick-width').value = (btn.widget_gauge_tick_width !== undefined) ? btn.widget_gauge_tick_width : 1;
 
+    // Sparkline widget fields
+    document.getElementById('pad-edit-sparkline-data-binding').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-sparkline-min').value = (btn.widget_sparkline_min !== undefined && btn.widget_sparkline_min !== null) ? btn.widget_sparkline_min : '';
+    document.getElementById('pad-edit-sparkline-max').value = (btn.widget_sparkline_max !== undefined && btn.widget_sparkline_max !== null) ? btn.widget_sparkline_max : '';
+    document.getElementById('pad-edit-sparkline-window').value = (btn.widget_sparkline_window !== undefined) ? btn.widget_sparkline_window : 300;
+    document.getElementById('pad-edit-sparkline-slots').value = (btn.widget_sparkline_slots !== undefined) ? btn.widget_sparkline_slots : 60;
+    document.getElementById('pad-edit-sparkline-line-color').value = padColorToHex(btn.widget_sparkline_line_color, '#4CAF50');
+    document.getElementById('pad-edit-sparkline-line-width').value = (btn.widget_sparkline_line_width !== undefined) ? btn.widget_sparkline_line_width : 2;
+    document.getElementById('pad-edit-sparkline-use-thresholds').checked = btn.widget_sparkline_use_thresholds || false;
+    document.getElementById('pad-edit-sparkline-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : false;
+    document.getElementById('pad-edit-sparkline-higher-is-better').checked = btn.widget_sparkline_higher_is_better || false;
+    document.getElementById('pad-edit-sparkline-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
+    document.getElementById('pad-edit-sparkline-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
+    document.getElementById('pad-edit-sparkline-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
+    document.getElementById('pad-edit-sparkline-color-good').value = padColorToHex(btn.widget_color_good, '#4CAF50');
+    document.getElementById('pad-edit-sparkline-color-ok').value = padColorToHex(btn.widget_color_ok, '#8BC34A');
+    document.getElementById('pad-edit-sparkline-color-attention').value = padColorToHex(btn.widget_color_attention, '#FF9800');
+    document.getElementById('pad-edit-sparkline-color-warning').value = padColorToHex(btn.widget_color_warning, '#F44336');
+    padSparklineThresholdToggle();
+
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
@@ -2430,6 +2465,36 @@ function padDialogOk() {
             btn.widget_gauge_needle_width = (isNaN(gNeedleW) || gNeedleW < 0) ? 2 : (gNeedleW > 10) ? 10 : gNeedleW;
             const gTickW = parseInt(document.getElementById('pad-edit-gauge-tick-width').value);
             btn.widget_gauge_tick_width = (isNaN(gTickW) || gTickW < 1) ? 1 : (gTickW > 5) ? 5 : gTickW;
+        }
+        if (wtype === 'sparkline') {
+            const sDataBinding = document.getElementById('pad-edit-sparkline-data-binding').value.trim();
+            if (sDataBinding) btn.widget_data_binding = sDataBinding;
+            const sMin = parseFloat(document.getElementById('pad-edit-sparkline-min').value);
+            const sMax = parseFloat(document.getElementById('pad-edit-sparkline-max').value);
+            if (!isNaN(sMin)) btn.widget_sparkline_min = sMin;
+            if (!isNaN(sMax)) btn.widget_sparkline_max = sMax;
+            const sWindow = parseInt(document.getElementById('pad-edit-sparkline-window').value);
+            btn.widget_sparkline_window = (isNaN(sWindow) || sWindow < 10) ? 300 : sWindow;
+            const sSlots = parseInt(document.getElementById('pad-edit-sparkline-slots').value);
+            btn.widget_sparkline_slots = (isNaN(sSlots) || sSlots < 2) ? 60 : (sSlots > 255) ? 255 : sSlots;
+            btn.widget_sparkline_line_color = padHexToInt(document.getElementById('pad-edit-sparkline-line-color').value);
+            const sLw = parseInt(document.getElementById('pad-edit-sparkline-line-width').value);
+            btn.widget_sparkline_line_width = (isNaN(sLw) || sLw < 1) ? 2 : (sLw > 10) ? 10 : sLw;
+            btn.widget_sparkline_use_thresholds = document.getElementById('pad-edit-sparkline-use-thresholds').checked;
+            if (btn.widget_sparkline_use_thresholds) {
+                btn.widget_use_absolute = document.getElementById('pad-edit-sparkline-use-absolute').checked;
+                btn.widget_sparkline_higher_is_better = document.getElementById('pad-edit-sparkline-higher-is-better').checked;
+                const st1 = parseFloat(document.getElementById('pad-edit-sparkline-threshold-1').value);
+                const st2 = parseFloat(document.getElementById('pad-edit-sparkline-threshold-2').value);
+                const st3 = parseFloat(document.getElementById('pad-edit-sparkline-threshold-3').value);
+                if (!isNaN(st1)) btn.widget_threshold_1 = st1;
+                if (!isNaN(st2)) btn.widget_threshold_2 = st2;
+                if (!isNaN(st3)) btn.widget_threshold_3 = st3;
+                btn.widget_color_good = padHexToInt(document.getElementById('pad-edit-sparkline-color-good').value);
+                btn.widget_color_ok = padHexToInt(document.getElementById('pad-edit-sparkline-color-ok').value);
+                btn.widget_color_attention = padHexToInt(document.getElementById('pad-edit-sparkline-color-attention').value);
+                btn.widget_color_warning = padHexToInt(document.getElementById('pad-edit-sparkline-color-warning').value);
+            }
         }
     }
 

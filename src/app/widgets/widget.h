@@ -58,9 +58,29 @@ struct WidgetType {
     // Clean up any resources in WidgetState before tile deletion.
     // LVGL child objects are deleted automatically when the tile is deleted.
     void (*destroyUI)(WidgetState* state);
+
+    // Optional periodic tick called every poll cycle, even when the bound
+    // value hasn't changed.  Used by time-driven widgets (e.g. sparkline)
+    // to advance their internal timeline.  May be NULL.
+    void (*tick)(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* state);
 };
 
 // Look up a widget type by name. Returns NULL for "" or unknown types.
 const WidgetType* widget_find(const char* type_name);
+
+// ---- Shared color-parsing helper for widget config ----
+// Accepts numeric JSON values, "#RRGGBB", or "0xRRGGBB" strings.
+inline uint32_t widget_parse_color(JsonVariant v, uint32_t def) {
+    if (v.isNull()) return def;
+    if (v.is<unsigned long>() || v.is<long>()) return (uint32_t)v.as<unsigned long>();
+    if (!v.is<const char*>()) return def;
+    const char* s = v.as<const char*>();
+    if (!s || !*s) return def;
+    if (s[0] == '#') s++;
+    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
+    char* end = nullptr;
+    uint32_t val = strtoul(s, &end, 16);
+    return (end == s) ? def : val;
+}
 
 #endif // HAS_DISPLAY

@@ -73,21 +73,6 @@ static lv_color_t pick_tier_color(const BarChartConfig* cfg, float value) {
     return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 }
 
-// ---- Parse color helper (same logic as pad_config.cpp) ----
-
-static uint32_t parse_widget_color(JsonVariant v, uint32_t def) {
-    if (v.isNull()) return def;
-    if (v.is<unsigned long>() || v.is<long>()) return (uint32_t)v.as<unsigned long>();
-    if (!v.is<const char*>()) return def;
-    const char* s = v.as<const char*>();
-    if (!s || !*s) return def;
-    if (s[0] == '#') s++;
-    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
-    char* end = nullptr;
-    uint32_t val = strtoul(s, &end, 16);
-    return (end == s) ? def : val;
-}
-
 // ---- WidgetType callbacks ----
 
 static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
@@ -99,12 +84,12 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
     cfg->use_absolute = btn["widget_use_absolute"] | true;
 
     // Color tiers with energy-monitor-inspired defaults
-    cfg->color_good_rgb     = parse_widget_color(btn["widget_color_good"],      0x4CAF50); // green
-    cfg->color_ok_rgb       = parse_widget_color(btn["widget_color_ok"],        0x8BC34A); // light green
-    cfg->color_attention_rgb = parse_widget_color(btn["widget_color_attention"], 0xFF9800); // orange
-    cfg->color_warning_rgb  = parse_widget_color(btn["widget_color_warning"],   0xF44336); // red
+    cfg->color_good_rgb     = widget_parse_color(btn["widget_color_good"],      0x4CAF50); // green
+    cfg->color_ok_rgb       = widget_parse_color(btn["widget_color_ok"],        0x8BC34A); // light green
+    cfg->color_attention_rgb = widget_parse_color(btn["widget_color_attention"], 0xFF9800); // orange
+    cfg->color_warning_rgb  = widget_parse_color(btn["widget_color_warning"],   0xF44336); // red
 
-    cfg->bar_bg_color_rgb = parse_widget_color(btn["widget_bar_bg_color"], 0x1A1A1A);
+    cfg->bar_bg_color_rgb = widget_parse_color(btn["widget_bar_bg_color"], 0x1A1A1A);
     uint8_t wpct = btn["widget_bar_width_pct"] | (uint8_t)100;
     cfg->bar_width_pct = (wpct < 1) ? 1 : (wpct > 100) ? 100 : wpct;
 
@@ -267,7 +252,8 @@ const WidgetType bar_chart_widget_type = {
     bar_chart_parse,
     bar_chart_create,
     bar_chart_update,
-    bar_chart_destroy
+    bar_chart_destroy,
+    nullptr  // no tick
 };
 
 #endif // HAS_DISPLAY

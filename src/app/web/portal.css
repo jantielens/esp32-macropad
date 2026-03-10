@@ -1145,6 +1145,17 @@ footer {
     opacity: 0.6;
 }
 
+.pad-cell-widget-sparkline {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 20px;
+    height: 10px;
+    opacity: 0.6;
+    background: linear-gradient(135deg, transparent 20%, #4CAF50 20%, #4CAF50 30%, transparent 30%, transparent 50%, #4CAF50 50%, #4CAF50 60%, transparent 60%, transparent 80%, #4CAF50 80%);
+    border-bottom: 1px solid #4CAF50;
+}
+
 .pad-actions {
     display: flex;
     flex-wrap: wrap;

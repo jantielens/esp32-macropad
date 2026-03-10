@@ -135,6 +135,7 @@
                                 <option value="">Normal Button</option>
                                 <option value="bar_chart">Bar Chart</option>
                                 <option value="gauge">Gauge</option>
+                                <option value="sparkline">Sparkline</option>
                             </select>
                         </div>
                         <div style="display:flex; gap:12px;">
@@ -412,6 +413,105 @@
                                 <label for="pad-edit-gauge-tick-width">Tick Width</label>
                                 <input type="number" id="pad-edit-gauge-tick-width" min="1" max="5" value="1" placeholder="1">
                                 <small>Line width (px)</small>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Sparkline Settings (conditional, shown only for sparkline widget type) -->
+                <details class="editor-group" id="pad-edit-sparkline-section" style="display:none;">
+                    <summary>Sparkline Settings</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-sparkline-data-binding">Data Binding</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-sparkline-min">Min Value</label>
+                                <input type="number" id="pad-edit-sparkline-min" step="any" placeholder="auto">
+                                <small>Leave empty for auto-scale</small>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-sparkline-max">Max Value</label>
+                                <input type="number" id="pad-edit-sparkline-max" step="any" placeholder="auto">
+                                <small>Leave empty for auto-scale</small>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-sparkline-window">Time Window (seconds)</label>
+                                <input type="number" id="pad-edit-sparkline-window" min="10" max="86400" value="300" placeholder="300">
+                                <small>How much history to show (e.g. 300 = 5 min)</small>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-sparkline-slots">Sample Slots</label>
+                                <input type="number" id="pad-edit-sparkline-slots" min="2" max="255" value="60" placeholder="60">
+                                <small>Number of data points in the line</small>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-sparkline-line-color">Line Color</label>
+                                <input type="color" id="pad-edit-sparkline-line-color" value="#4CAF50">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-sparkline-line-width">Line Width (px)</label>
+                                <input type="number" id="pad-edit-sparkline-line-width" min="1" max="10" value="2" placeholder="2">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-sparkline-use-thresholds" onchange="padSparklineThresholdToggle()"> Color line by threshold</label>
+                            <small>Line color changes based on current value (uses thresholds below)</small>
+                        </div>
+
+                        <div id="pad-edit-sparkline-threshold-section" style="display:none;">
+                            <div class="form-group">
+                                <label><input type="checkbox" id="pad-edit-sparkline-use-absolute"> Use absolute value</label>
+                            </div>
+                            <div class="form-group">
+                                <label><input type="checkbox" id="pad-edit-sparkline-higher-is-better" onchange="padSwapColors('pad-edit-sparkline-color')"> Reversed, high values are better</label>
+                            </div>
+
+                            <div style="display:flex; gap:8px;">
+                                <div class="form-group" style="flex:1;">
+                                    <label for="pad-edit-sparkline-threshold-1">Threshold 1</label>
+                                    <input type="number" id="pad-edit-sparkline-threshold-1" step="any" placeholder="auto">
+                                </div>
+                                <div class="form-group" style="flex:1;">
+                                    <label for="pad-edit-sparkline-threshold-2">Threshold 2</label>
+                                    <input type="number" id="pad-edit-sparkline-threshold-2" step="any" placeholder="auto">
+                                </div>
+                                <div class="form-group" style="flex:1;">
+                                    <label for="pad-edit-sparkline-threshold-3">Threshold 3</label>
+                                    <input type="number" id="pad-edit-sparkline-threshold-3" step="any" placeholder="auto">
+                                </div>
+                            </div>
+
+                            <div class="bar-chart-colors">
+                                <div class="form-group">
+                                    <label for="pad-edit-sparkline-color-good">Below T1</label>
+                                    <input type="color" id="pad-edit-sparkline-color-good" value="#4CAF50">
+                                </div>
+                                <div class="form-group">
+                                    <label for="pad-edit-sparkline-color-ok">T1 – T2</label>
+                                    <input type="color" id="pad-edit-sparkline-color-ok" value="#8BC34A">
+                                </div>
+                                <div class="form-group">
+                                    <label for="pad-edit-sparkline-color-attention">T2 – T3</label>
+                                    <input type="color" id="pad-edit-sparkline-color-attention" value="#FF9800">
+                                </div>
+                                <div class="form-group">
+                                    <label for="pad-edit-sparkline-color-warning">Above T3</label>
+                                    <input type="color" id="pad-edit-sparkline-color-warning" value="#F44336">
+                                </div>
                             </div>
                         </div>
                     </div>

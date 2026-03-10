@@ -95,21 +95,6 @@ static lv_color_t gauge_pick_tier_color(const GaugeConfig* cfg, float value) {
     return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 }
 
-// ---- Parse color helper (same logic as bar chart) ----
-
-static uint32_t gauge_parse_color(JsonVariant v, uint32_t def) {
-    if (v.isNull()) return def;
-    if (v.is<unsigned long>() || v.is<long>()) return (uint32_t)v.as<unsigned long>();
-    if (!v.is<const char*>()) return def;
-    const char* s = v.as<const char*>();
-    if (!s || !*s) return def;
-    if (s[0] == '#') s++;
-    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
-    char* end = nullptr;
-    uint32_t val = strtoul(s, &end, 16);
-    return (end == s) ? def : val;
-}
-
 // ---- Helper: compute arc bounding box (unit circle) ----
 // Returns the min/max x and y extents of the arc on a unit circle.
 
@@ -227,14 +212,14 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     cfg->show_needle  = btn["widget_gauge_show_needle"] | true;
 
     // Color tiers (same keys as bar chart for consistency)
-    cfg->color_good_rgb      = gauge_parse_color(btn["widget_color_good"],      0x4CAF50);
-    cfg->color_ok_rgb        = gauge_parse_color(btn["widget_color_ok"],        0x8BC34A);
-    cfg->color_attention_rgb = gauge_parse_color(btn["widget_color_attention"], 0xFF9800);
-    cfg->color_warning_rgb   = gauge_parse_color(btn["widget_color_warning"],   0xF44336);
+    cfg->color_good_rgb      = widget_parse_color(btn["widget_color_good"],      0x4CAF50);
+    cfg->color_ok_rgb        = widget_parse_color(btn["widget_color_ok"],        0x8BC34A);
+    cfg->color_attention_rgb = widget_parse_color(btn["widget_color_attention"], 0xFF9800);
+    cfg->color_warning_rgb   = widget_parse_color(btn["widget_color_warning"],   0xF44336);
 
-    cfg->track_color_rgb  = gauge_parse_color(btn["widget_gauge_track_color"],  0x1A1A1A);
-    cfg->needle_color_rgb = gauge_parse_color(btn["widget_gauge_needle_color"], 0xFFFFFF);
-    cfg->tick_color_rgb   = gauge_parse_color(btn["widget_gauge_tick_color"],   0x808080);
+    cfg->track_color_rgb  = widget_parse_color(btn["widget_gauge_track_color"],  0x1A1A1A);
+    cfg->needle_color_rgb = widget_parse_color(btn["widget_gauge_needle_color"], 0xFFFFFF);
+    cfg->tick_color_rgb   = widget_parse_color(btn["widget_gauge_tick_color"],   0x808080);
 
     uint8_t awpct = btn["widget_gauge_arc_width_pct"] | (uint8_t)15;
     cfg->arc_width_pct = (awpct < 5) ? 5 : (awpct > 50) ? 50 : awpct;
@@ -554,7 +539,8 @@ const WidgetType gauge_widget_type = {
     gauge_parse,
     gauge_create,
     gauge_update,
-    gauge_destroy
+    gauge_destroy,
+    nullptr  // no tick
 };
 
 #endif // HAS_DISPLAY

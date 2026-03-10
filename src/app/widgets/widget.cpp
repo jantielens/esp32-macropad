@@ -7,12 +7,13 @@
 // Forward declarations for widget type instances
 extern const WidgetType bar_chart_widget_type;
 extern const WidgetType gauge_widget_type;
+extern const WidgetType sparkline_widget_type;
 
 // Static registry of all widget types (NULL-terminated)
 static const WidgetType* s_widget_types[] = {
     &bar_chart_widget_type,
     &gauge_widget_type,
-    // Future: &sparkline_widget_type,
+    &sparkline_widget_type,
     nullptr
 };
 
