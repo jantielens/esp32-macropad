@@ -272,17 +272,18 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 
 | Setting | Description |
 |---------|-------------|
-| **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`) |
-| **Min / Max** | The Y-axis range. Leave at 0/0 for auto-scaling based on observed data |
-| **Time window (s)** | How many seconds of history to display (default: 300 = 5 minutes) |
-| **Data slots** | Number of data points in the line (default: 60). More slots = higher resolution but slightly more memory |
-| **Line width** | Thickness of the trend line in pixels (1–5, default: 2) |
-| **Line color** | Color of the trend line (used when thresholds are disabled) |
-| **Use thresholds** | Enable 4-zone color thresholds (same system as bar chart and gauge). When enabled with auto min/max, thresholds are computed dynamically from observed data range |
+| **Data binding (main line)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`). Each line has a color swatch below the binding input |
+| **Data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream and color. Leave empty for single line |
+| **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data |
+| **Same scale for all lines** | When enabled (default), all lines in a multi-line sparkline share the same auto-scaled Y-axis range, so values are visually comparable. Disable to let each line auto-scale independently — useful when lines have very different magnitudes and you want to compare trends/shapes rather than absolute values. Has no effect when explicit min/max are configured or with single-line sparklines |
+| **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
+| **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
+| **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
+| **Color by value** | Enable 4-zone color thresholds on the main line (same system as bar chart and gauge). When enabled with auto min/max, thresholds are computed dynamically from observed data range |
 
 **Background data collection** — unlike bar chart and gauge which only show the current value, sparklines need historical data. The data stream registry collects data continuously in the background, even when the sparkline's screen is not visible. When you navigate to a sparkline's screen, the graph is immediately populated with all collected history.
 
-**Auto-scaling** — when min and max are both 0, the sparkline automatically scales the Y-axis to fit the observed data range. This is the recommended default for most use cases.
+**Auto-scaling** — when min and max are left empty, the sparkline automatically scales the Y-axis to fit the observed data range. This is the recommended default for most use cases. With multiple lines and **Same scale for all lines** enabled (default), all lines share the same Y-axis range computed from the global min/max across all streams — so a value of 50 on line 1 and 50 on line 2 appear at the same height. Disable it if your lines have very different magnitudes (e.g., watts 0–5000 vs efficiency 0–100) and you want each to fill the chart independently.
 
 **Data gaps** — if data stops arriving (e.g., MQTT sensor goes offline), the sparkline uses Last Observation Carried Forward (LOCF) to fill gaps, keeping the graph smooth instead of showing holes.
 
@@ -297,6 +298,12 @@ Labels, icons, and colors still work alongside the widget. A typical sparkline b
 - Data binding: `[health:cpu]`
 - Min: 0, Max: 100, Time window: 300 (5 minutes), Slots: 60
 - Use thresholds: on (green→red as CPU increases)
+
+**Multi-line solar comparison:**
+- Data binding: `[mqtt:home/solar/power;production]` (green line)
+- Data binding (line 2): `[mqtt:home/solar/power;grid_import]` (blue line)
+- Min: 0, Max: auto, Time window: 600 (10 minutes), Slots: 60
+- Top label: `Solar`, Bottom label: `[mqtt:home/solar/power;production;%.0fW]`
 
 ---
 

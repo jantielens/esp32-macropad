@@ -55,9 +55,8 @@ Do NOT fix anything — only report.
 - Inconsistent error handling patterns compared to surrounding code
 - Opportunities to simplify the dependency graph between modules
 
-## Output Format
+## Sample Output Format
 
-```
 ### Dead Code
 DEAD01. [file.cpp#L42] `unusedFunction()` — never called after refactor
 DEAD02. [file.h#L10] `#include "old_header.h"` — not needed after changes to module X
@@ -91,5 +90,3 @@ Recommended to fix:
 ...
 Recommended to skip:
 - KISS03: (Super short description & why it should be skipped.)
-
-```

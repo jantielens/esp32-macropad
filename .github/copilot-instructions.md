@@ -35,7 +35,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
   - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with color thresholds, binding-driven)
   - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, color thresholds, up to 3 concentric rings, binding-driven)
-  - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale, time-windowed display, threshold coloring, reads from data stream registry)
+  - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale, time-windowed display, threshold coloring, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Data Stream Registry**: Background data collection for history-based widgets (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
   - `data_stream.cpp/h` - Demand-driven registry of per-widget ring buffers; resolves bindings and feeds PSRAM-allocated ring buffers every LVGL cycle regardless of active screen; LOCF for data gaps; rebuild triggered by pad config generation changes
@@ -264,7 +264,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/widgets/widget.cpp` - Widget type registry and lookup
 - `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (color thresholds, MQTT data binding)
 - `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, color thresholds, up to 3 concentric rings, binding-driven)
-- `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, reads from data stream registry, auto-scale, threshold coloring)
+- `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, up to 3 overlaid lines, reads from data stream registry, auto-scale, threshold coloring)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template

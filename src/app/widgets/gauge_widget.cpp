@@ -541,7 +541,7 @@ const WidgetType gauge_widget_type = {
     gauge_update,
     gauge_destroy,
     nullptr,  // no tick
-    nullptr   // no data stream
+    nullptr   // no getStreamParams
 };
 
 #endif // HAS_DISPLAY

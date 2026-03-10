@@ -2272,13 +2272,18 @@ function padDialogOpen(col, row) {
 
     // Sparkline widget fields
     document.getElementById('pad-edit-sparkline-data-binding').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-sparkline-data-binding-2').value = btn.widget_data_binding_2 || '';
+    document.getElementById('pad-edit-sparkline-data-binding-3').value = btn.widget_data_binding_3 || '';
     document.getElementById('pad-edit-sparkline-min').value = (btn.widget_sparkline_min !== undefined && btn.widget_sparkline_min !== null) ? btn.widget_sparkline_min : '';
     document.getElementById('pad-edit-sparkline-max').value = (btn.widget_sparkline_max !== undefined && btn.widget_sparkline_max !== null) ? btn.widget_sparkline_max : '';
     document.getElementById('pad-edit-sparkline-window').value = (btn.widget_sparkline_window !== undefined) ? btn.widget_sparkline_window : 300;
     document.getElementById('pad-edit-sparkline-slots').value = (btn.widget_sparkline_slots !== undefined) ? btn.widget_sparkline_slots : 60;
     document.getElementById('pad-edit-sparkline-line-color').value = padColorToHex(btn.widget_sparkline_line_color, '#4CAF50');
+    document.getElementById('pad-edit-sparkline-line-color-2').value = padColorToHex(btn.widget_sparkline_line_color_2, '#2196F3');
+    document.getElementById('pad-edit-sparkline-line-color-3').value = padColorToHex(btn.widget_sparkline_line_color_3, '#9C27B0');
     document.getElementById('pad-edit-sparkline-line-width').value = (btn.widget_sparkline_line_width !== undefined) ? btn.widget_sparkline_line_width : 2;
     document.getElementById('pad-edit-sparkline-use-thresholds').checked = btn.widget_sparkline_use_thresholds || false;
+    document.getElementById('pad-edit-sparkline-unified-scale').checked = (btn.widget_sparkline_unified_scale !== undefined) ? btn.widget_sparkline_unified_scale : true;
     document.getElementById('pad-edit-sparkline-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : false;
     document.getElementById('pad-edit-sparkline-higher-is-better').checked = btn.widget_sparkline_higher_is_better || false;
     document.getElementById('pad-edit-sparkline-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
@@ -2469,6 +2474,8 @@ function padDialogOk() {
         if (wtype === 'sparkline') {
             const sDataBinding = document.getElementById('pad-edit-sparkline-data-binding').value.trim();
             if (sDataBinding) btn.widget_data_binding = sDataBinding;
+            btn.widget_data_binding_2 = document.getElementById('pad-edit-sparkline-data-binding-2').value.trim();
+            btn.widget_data_binding_3 = document.getElementById('pad-edit-sparkline-data-binding-3').value.trim();
             const sMin = parseFloat(document.getElementById('pad-edit-sparkline-min').value);
             const sMax = parseFloat(document.getElementById('pad-edit-sparkline-max').value);
             if (!isNaN(sMin)) btn.widget_sparkline_min = sMin;
@@ -2478,9 +2485,12 @@ function padDialogOk() {
             const sSlots = parseInt(document.getElementById('pad-edit-sparkline-slots').value);
             btn.widget_sparkline_slots = (isNaN(sSlots) || sSlots < 2) ? 60 : (sSlots > 255) ? 255 : sSlots;
             btn.widget_sparkline_line_color = padHexToInt(document.getElementById('pad-edit-sparkline-line-color').value);
+            btn.widget_sparkline_line_color_2 = padHexToInt(document.getElementById('pad-edit-sparkline-line-color-2').value);
+            btn.widget_sparkline_line_color_3 = padHexToInt(document.getElementById('pad-edit-sparkline-line-color-3').value);
             const sLw = parseInt(document.getElementById('pad-edit-sparkline-line-width').value);
             btn.widget_sparkline_line_width = (isNaN(sLw) || sLw < 1) ? 2 : (sLw > 10) ? 10 : sLw;
             btn.widget_sparkline_use_thresholds = document.getElementById('pad-edit-sparkline-use-thresholds').checked;
+            btn.widget_sparkline_unified_scale = document.getElementById('pad-edit-sparkline-unified-scale').checked;
             if (btn.widget_sparkline_use_thresholds) {
                 btn.widget_use_absolute = document.getElementById('pad-edit-sparkline-use-absolute').checked;
                 btn.widget_sparkline_higher_is_better = document.getElementById('pad-edit-sparkline-higher-is-better').checked;

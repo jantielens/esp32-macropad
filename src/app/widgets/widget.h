@@ -68,10 +68,13 @@ struct WidgetType {
     // Optional: return data stream requirements for background collection.
     // Widgets that need historical data (ring buffers) implement this so the
     // data_stream registry can collect data independently of the active screen.
-    // `config_data` is the parsed WidgetConfig.data[] blob.
-    // Returns true if this widget needs a data stream.  May be NULL.
-    bool (*getStreamParams)(const uint8_t* config_data,
-                            uint16_t* window_secs, uint8_t* slot_count);
+    // Called with stream_index 0, 1, 2, ... until it returns false.
+    // Index 0 uses cfg->data_binding; higher indices use data_binding_2/3.
+    // Returns true if stream_index is valid and needs a data stream.
+    // May be NULL (widget needs no data streams).
+    bool (*getStreamParams)(const WidgetConfig* cfg, uint8_t stream_index,
+                            uint16_t* window_secs, uint8_t* slot_count,
+                            const char** out_binding);
 };
 
 // Look up a widget type by name. Returns NULL for "" or unknown types.

@@ -40,12 +40,15 @@ struct SparklineConfig {
     uint32_t color_ok_rgb;         // Color tier 1: threshold 1 → 2
     uint32_t color_attention_rgb;  // Color tier 2: threshold 2 → 3
     uint32_t color_warning_rgb;    // Color tier 3: at/above threshold 3
-    uint32_t line_color_rgb;       // Fallback line color (when thresholds not used)
+    uint32_t line_color_rgb;       // Main line color (when thresholds not used)
+    uint32_t line_color_2_rgb;     // Extra line 2 color
+    uint32_t line_color_3_rgb;     // Extra line 3 color
     uint16_t window_secs;          // Time window in seconds (e.g. 300 = 5 min)
     uint8_t  slot_count;           // Number of sample slots (default 60)
     uint8_t  line_width;           // Line thickness in pixels (default 2)
     bool     use_absolute;         // Compare |value| for color tiers
     bool     use_thresholds;       // true = color by current value tier
+    bool     unified_autoscale;    // true = shared auto min/max across all lines
 };
 
 static_assert(sizeof(SparklineConfig) <= WIDGET_CONFIG_MAX_BYTES,
@@ -55,14 +58,17 @@ static_assert(sizeof(SparklineConfig) <= WIDGET_CONFIG_MAX_BYTES,
 // The sparkline no longer owns its ring buffer — data collection is
 // handled by the DataStream registry (data_stream.cpp) which runs
 // independently of the active screen.  SparklineState just holds the
-// LVGL rendering objects and a handle to its data stream.
+// LVGL rendering objects and handles to its data streams.
+
+#define MAX_SPARKLINE_LINES 3
 
 struct SparklineState {
-    lv_obj_t*            line;       // LVGL line object
-    lv_point_precise_t*  points;     // Heap-allocated LVGL point array [slot_count]
+    lv_obj_t*            lines[MAX_SPARKLINE_LINES];   // LVGL line objects
+    lv_point_precise_t*  points[MAX_SPARKLINE_LINES];  // Heap-allocated point arrays
     uint8_t  slot_count;             // Copy from config for points array size
+    uint8_t  line_count;             // 1–3 (auto-detected from bindings)
 #if HAS_MQTT
-    data_stream_handle_t ds_handle;  // Handle into data stream registry
+    data_stream_handle_t ds_handles[MAX_SPARKLINE_LINES]; // Data stream handles
 #endif
 };
 
@@ -121,8 +127,11 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     cfg->line_width = (lw < 1) ? 1 : lw;
 
     cfg->line_color_rgb = widget_parse_color(btn["widget_sparkline_line_color"], 0x4CAF50);
+    cfg->line_color_2_rgb = widget_parse_color(btn["widget_sparkline_line_color_2"], 0x2196F3);
+    cfg->line_color_3_rgb = widget_parse_color(btn["widget_sparkline_line_color_3"], 0x9C27B0);
     cfg->use_thresholds = btn["widget_sparkline_use_thresholds"] | false;
     cfg->use_absolute = btn["widget_use_absolute"] | false;
+    cfg->unified_autoscale = btn["widget_sparkline_unified_scale"] | true;  // default on
 
     // Color tiers (same defaults as bar chart)
     cfg->color_good_rgb     = widget_parse_color(btn["widget_color_good"],      0x4CAF50);
@@ -147,19 +156,37 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<SparklineState*>(state->data);
     memset(st, 0, sizeof(SparklineState));
     st->slot_count = cfg->slot_count;
+
+    // Determine line count from binding presence (same pattern as gauge rings)
+    st->line_count = 1;
+    if (wcfg->data_binding_2[0]) st->line_count = 2;
+    if (wcfg->data_binding_3[0]) st->line_count = 3;
+
 #if HAS_MQTT
-    st->ds_handle = data_stream_find(wcfg->data_binding,
-                                     cfg->window_secs, cfg->slot_count);
-    if (st->ds_handle == DATA_STREAM_INVALID) {
-        LOGW(TAG, "No data stream for binding: %s", wcfg->data_binding);
+    // Look up data stream handles for each line
+    const char* bindings[MAX_SPARKLINE_LINES] = {
+        wcfg->data_binding, wcfg->data_binding_2, wcfg->data_binding_3
+    };
+    for (uint8_t i = 0; i < st->line_count; i++) {
+        st->ds_handles[i] = DATA_STREAM_INVALID;
+        if (bindings[i][0]) {
+            st->ds_handles[i] = data_stream_find(bindings[i],
+                                                  cfg->window_secs, cfg->slot_count);
+            if (st->ds_handles[i] == DATA_STREAM_INVALID) {
+                LOGW(TAG, "No data stream for binding[%d]: %s", i, bindings[i]);
+            }
+        }
     }
 #endif
 
-    // Allocate point array via lv_malloc (PSRAM-first)
-    st->points = (lv_point_precise_t*)lv_malloc(sizeof(lv_point_precise_t) * cfg->slot_count);
-    if (!st->points) {
-        LOGE(TAG, "Failed to allocate points array (%d slots)", cfg->slot_count);
-        return;
+    // Allocate point arrays for each line
+    for (uint8_t i = 0; i < st->line_count; i++) {
+        st->points[i] = (lv_point_precise_t*)lv_malloc(
+            sizeof(lv_point_precise_t) * cfg->slot_count);
+        if (!st->points[i]) {
+            LOGE(TAG, "Failed to allocate points array[%d] (%d slots)", i, cfg->slot_count);
+            return;
+        }
     }
 
     // Compute layout — same pattern as bar chart
@@ -190,10 +217,11 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (chart_h < 8) chart_h = 8;
     int16_t chart_w = content_w;
 
-    LOGD(TAG, "Layout: rect=%dx%d content=%dx%d chart_top=%d chart=%dx%d slots=%d window=%ds",
-         rect->w, rect->h, content_w, content_h, chart_top, chart_w, chart_h, cfg->slot_count, cfg->window_secs);
+    LOGD(TAG, "Layout: rect=%dx%d content=%dx%d chart_top=%d chart=%dx%d slots=%d window=%ds lines=%d",
+         rect->w, rect->h, content_w, content_h, chart_top, chart_w, chart_h,
+         cfg->slot_count, cfg->window_secs, st->line_count);
 
-    // Create a container for the sparkline area (clips the line)
+    // Create a container for the sparkline area (clips the lines)
     lv_obj_t* chart_area = lv_obj_create(tile);
     lv_obj_set_size(chart_area, chart_w, chart_h);
     lv_obj_align(chart_area, LV_ALIGN_TOP_MID, 0, chart_top);
@@ -204,31 +232,37 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_obj_set_scrollbar_mode(chart_area, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(chart_area, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
 
-    // Create line object inside the chart area
-    lv_obj_t* line = lv_line_create(chart_area);
-    uint32_t lc = cfg->line_color_rgb;
-    lv_obj_set_style_line_color(line, lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF), 0);
-    lv_obj_set_style_line_width(line, cfg->line_width, 0);
-    lv_obj_set_style_line_rounded(line, true, 0);
-    lv_obj_clear_flag(line, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
-
-    // Initialize with zero points (nothing drawn until data arrives)
-    lv_line_set_points(line, st->points, 0);
-
-    st->line = line;
+    // Create line objects — extra lines first (drawn behind main line)
+    const uint32_t line_colors[MAX_SPARKLINE_LINES] = {
+        cfg->line_color_rgb, cfg->line_color_2_rgb, cfg->line_color_3_rgb
+    };
+    for (int8_t i = (int8_t)(st->line_count - 1); i >= 0; i--) {
+        lv_obj_t* line = lv_line_create(chart_area);
+        uint32_t lc = line_colors[i];
+        lv_obj_set_style_line_color(line, lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF), 0);
+        lv_obj_set_style_line_width(line, cfg->line_width, 0);
+        lv_obj_set_style_line_rounded(line, true, 0);
+        lv_obj_clear_flag(line, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+        lv_line_set_points(line, st->points[i], 0);
+        st->lines[i] = line;
+    }
 }
 
 // ---- Rebuild the LVGL point array from a data stream snapshot ----
 
 static void sparkline_rebuild_points(const SparklineConfig* cfg,
-                                     SparklineState* st,
+                                     lv_point_precise_t* points,
+                                     lv_obj_t* line_obj,
                                      const DataStreamSnapshot* snap,
-                                     int16_t chart_w, int16_t chart_h) {
+                                     int16_t chart_w, int16_t chart_h,
+                                     float shared_auto_min, float shared_auto_max) {
     // Determine Y-axis range
+    // When shared min/max are provided (unified auto-scale), use them
+    // instead of the per-line snapshot auto values.
     float y_min = cfg->min_val;
     float y_max = cfg->max_val;
-    if (isnan(y_min)) y_min = snap->auto_min;
-    if (isnan(y_max)) y_max = snap->auto_max;
+    if (isnan(y_min)) y_min = isnan(shared_auto_min) ? snap->auto_min : shared_auto_min;
+    if (isnan(y_max)) y_max = isnan(shared_auto_max) ? snap->auto_max : shared_auto_max;
     if (y_min >= y_max) { y_min -= 1.0f; y_max += 1.0f; }  // degenerate range guard
     if (!isfinite(y_min) || !isfinite(y_max)) { y_min = 0.0f; y_max = 1.0f; }
     float y_range = y_max - y_min;
@@ -237,6 +271,8 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
     uint8_t n = snap->slot_count;
     uint8_t valid = 0;
     float x_step = (n > 1) ? (float)chart_w / (float)(n - 1) : 0.0f;
+    // Right-align: when buffer not yet full, offset so newest point sits at right edge
+    uint8_t x_offset = (snap->count < n) ? (n - snap->count) : 0;
 
     // Walk the ring buffer from oldest to newest
     for (uint8_t i = 0; i < n; i++) {
@@ -251,40 +287,69 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
         if (ratio < 0.0f) ratio = 0.0f;
         if (ratio > 1.0f) ratio = 1.0f;
 
-        // X: left-to-right (oldest=left, newest=right)
-        st->points[valid].x = (lv_value_precise_t)(i * x_step);
+        // X: right-aligned (newest=right edge, grows leftward as buffer fills)
+        points[valid].x = (lv_value_precise_t)((i + x_offset) * x_step);
         // Y: top=max, bottom=min (LVGL Y grows downward)
-        st->points[valid].y = (lv_value_precise_t)((1.0f - ratio) * (chart_h - 1));
+        points[valid].y = (lv_value_precise_t)((1.0f - ratio) * (chart_h - 1));
         valid++;
     }
 
     // Update the line with the valid point count
-    if (st->line) {
-        lv_line_set_points(st->line, st->points, valid);
+    if (line_obj) {
+        lv_line_set_points(line_obj, points, valid);
     }
 }
 
-// ---- Helper: read data stream snapshot and redraw ----
+// ---- Helper: read data stream snapshots and redraw all lines ----
 
 static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
-    if (!st->line || !st->points) return;
+    if (!st->lines[0] || !st->points[0]) return;
 
 #if HAS_MQTT
-    DataStreamSnapshot snap;
-    if (!data_stream_get(st->ds_handle, &snap)) return;
-    if (snap.count == 0) return;
-
-    lv_obj_t* chart_area = lv_obj_get_parent(st->line);
+    // Get chart area dimensions from the main line's parent
+    lv_obj_t* chart_area = lv_obj_get_parent(st->lines[0]);
     lv_obj_update_layout(chart_area);
     int16_t chart_w = (int16_t)lv_obj_get_content_width(chart_area);
     int16_t chart_h = (int16_t)lv_obj_get_content_height(chart_area);
 
-    sparkline_rebuild_points(cfg, st, &snap, chart_w, chart_h);
+    // Pre-scan: compute shared auto min/max across all lines when unified
+    float shared_auto_min = NAN;
+    float shared_auto_max = NAN;
+    if (cfg->unified_autoscale && st->line_count > 1
+        && (isnan(cfg->min_val) || isnan(cfg->max_val))) {
+        for (uint8_t i = 0; i < st->line_count; i++) {
+            if (st->ds_handles[i] == DATA_STREAM_INVALID) continue;
+            DataStreamSnapshot s;
+            if (!data_stream_get(st->ds_handles[i], &s)) continue;
+            if (s.count == 0) continue;
+            if (isnan(cfg->min_val)) {
+                if (isnan(shared_auto_min) || s.auto_min < shared_auto_min)
+                    shared_auto_min = s.auto_min;
+            }
+            if (isnan(cfg->max_val)) {
+                if (isnan(shared_auto_max) || s.auto_max > shared_auto_max)
+                    shared_auto_max = s.auto_max;
+            }
+        }
+    }
 
-    // Update line color based on current value (threshold mode)
-    if (cfg->use_thresholds && isfinite(snap.last_value)) {
-        lv_color_t color = pick_tier_color(cfg, snap.auto_min, snap.auto_max, snap.last_value);
-        lv_obj_set_style_line_color(st->line, color, 0);
+    // Redraw each line from its data stream
+    for (uint8_t i = 0; i < st->line_count; i++) {
+        if (!st->lines[i] || !st->points[i]) continue;
+
+        DataStreamSnapshot snap;
+        if (!data_stream_get(st->ds_handles[i], &snap)) continue;
+        if (snap.count == 0) continue;
+
+        sparkline_rebuild_points(cfg, st->points[i], st->lines[i],
+                                 &snap, chart_w, chart_h,
+                                 shared_auto_min, shared_auto_max);
+
+        // Threshold coloring applies to main line only
+        if (i == 0 && cfg->use_thresholds && isfinite(snap.last_value)) {
+            lv_color_t color = pick_tier_color(cfg, snap.auto_min, snap.auto_max, snap.last_value);
+            lv_obj_set_style_line_color(st->lines[0], color, 0);
+        }
     }
 #endif
 }
@@ -293,7 +358,7 @@ static void sparkline_update(lv_obj_t* tile, const WidgetConfig* wcfg,
                               WidgetState* state, const char* raw_value) {
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     auto* st = reinterpret_cast<SparklineState*>(state->data);
-    if (!st->line || !st->points) return;
+    if (!st->lines[0] || !st->points[0]) return;
 
     // Data ingestion is handled by data_stream_poll() — we just redraw.
     sparkline_redraw(cfg, st);
@@ -305,7 +370,7 @@ static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
                            WidgetState* state) {
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     auto* st = reinterpret_cast<SparklineState*>(state->data);
-    if (!st->line || !st->points) return;
+    if (!st->lines[0] || !st->points[0]) return;
 
     // Redraw from the data stream (which advances time independently)
     sparkline_redraw(cfg, st);
@@ -313,19 +378,32 @@ static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
 
 static void sparkline_destroy(WidgetState* state) {
     auto* st = reinterpret_cast<SparklineState*>(state->data);
-    if (st->points) { lv_free(st->points); st->points = nullptr; }
+    for (uint8_t i = 0; i < MAX_SPARKLINE_LINES; i++) {
+        if (st->points[i]) { lv_free(st->points[i]); st->points[i] = nullptr; }
+    }
     // LVGL line + chart_area are tile children — deleted automatically
-    // Ring buffer is owned by data_stream registry — not freed here
+    // Ring buffers are owned by data_stream registry — not freed here
 }
 
 // ---- Registration ----
 
-static bool sparkline_get_stream_params(const uint8_t* config_data,
+static bool sparkline_get_stream_params(const WidgetConfig* wcfg,
+                                        uint8_t stream_index,
                                         uint16_t* window_secs,
-                                        uint8_t* slot_count) {
-    auto* cfg = reinterpret_cast<const SparklineConfig*>(config_data);
+                                        uint8_t* slot_count,
+                                        const char** out_binding) {
+    auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
+    const char* binding = nullptr;
+    switch (stream_index) {
+        case 0: binding = wcfg->data_binding;   break;
+        case 1: binding = wcfg->data_binding_2; break;
+        case 2: binding = wcfg->data_binding_3; break;
+        default: return false;
+    }
+    if (!binding || !binding[0]) return false;
     if (window_secs) *window_secs = cfg->window_secs;
     if (slot_count)  *slot_count  = cfg->slot_count;
+    if (out_binding) *out_binding = binding;
     return true;
 }
 

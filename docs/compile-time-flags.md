@@ -227,6 +227,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/data_stream.cpp
+  - src/app/data_stream.h
   - src/app/device_telemetry.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
@@ -276,6 +278,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
+  - src/app/data_stream.cpp
+  - src/app/data_stream.h
   - src/app/device_telemetry.cpp
   - src/app/display_manager.cpp
   - src/app/duty_cycle.cpp

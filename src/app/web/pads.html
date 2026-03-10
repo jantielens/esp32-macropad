@@ -422,59 +422,97 @@
                 <details class="editor-group" id="pad-edit-sparkline-section" style="display:none;">
                     <summary>Sparkline Settings</summary>
                     <div class="editor-group-body">
+                        <div class="widget-sub-heading">Data Sources</div>
+
                         <div class="form-group">
-                            <label for="pad-edit-sparkline-data-binding">Data Binding</label>
+                            <label for="pad-edit-sparkline-data-binding">Data Binding (main line)</label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
                                 <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
                             </div>
+                            <div class="sparkline-color-row">
+                                <input type="color" id="pad-edit-sparkline-line-color" value="#4CAF50">
+                                <small>Line color</small>
+                            </div>
                         </div>
+
+                        <div class="form-group">
+                            <label for="pad-edit-sparkline-data-binding-2">Data Binding (line 2)</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-2" maxlength="191" placeholder="Optional — leave empty for single line">
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                            <div class="sparkline-color-row">
+                                <input type="color" id="pad-edit-sparkline-line-color-2" value="#2196F3">
+                                <small>Line 2 color</small>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="pad-edit-sparkline-data-binding-3">Data Binding (line 3)</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-3" maxlength="191" placeholder="Optional — leave empty for single or double line">
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                            <div class="sparkline-color-row">
+                                <input type="color" id="pad-edit-sparkline-line-color-3" value="#9C27B0">
+                                <small>Line 3 color</small>
+                            </div>
+                        </div>
+
+                        <div class="widget-sub-heading">Scale</div>
 
                         <div style="display:flex; gap:8px;">
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-min">Min Value</label>
+                                <label for="pad-edit-sparkline-min">Y-Axis Min</label>
                                 <input type="number" id="pad-edit-sparkline-min" step="any" placeholder="auto">
                                 <small>Leave empty for auto-scale</small>
                             </div>
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-max">Max Value</label>
+                                <label for="pad-edit-sparkline-max">Y-Axis Max</label>
                                 <input type="number" id="pad-edit-sparkline-max" step="any" placeholder="auto">
                                 <small>Leave empty for auto-scale</small>
                             </div>
                         </div>
 
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-sparkline-unified-scale" checked> Same scale for all lines</label>
+                            <small>When using auto-scale with multiple lines, share the same Y-axis range. Disable for independent per-line scaling.</small>
+                        </div>
+
+                        <div class="widget-sub-heading">Sampling</div>
+
                         <div style="display:flex; gap:8px;">
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-window">Time Window (seconds)</label>
+                                <label for="pad-edit-sparkline-window">Time Window</label>
                                 <input type="number" id="pad-edit-sparkline-window" min="10" max="86400" value="300" placeholder="300">
                                 <small>How much history to show (e.g. 300 = 5 min)</small>
                             </div>
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-slots">Sample Slots</label>
+                                <label for="pad-edit-sparkline-slots">Data Points</label>
                                 <input type="number" id="pad-edit-sparkline-slots" min="2" max="255" value="60" placeholder="60">
-                                <small>Number of data points in the line</small>
+                                <small>Number of samples in the line</small>
                             </div>
                         </div>
 
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-line-color">Line Color</label>
-                                <input type="color" id="pad-edit-sparkline-line-color" value="#4CAF50">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-line-width">Line Width (px)</label>
-                                <input type="number" id="pad-edit-sparkline-line-width" min="1" max="10" value="2" placeholder="2">
-                            </div>
+                        <div class="widget-sub-heading">Line Width</div>
+
+                        <div class="form-group" style="max-width:120px;">
+                            <label for="pad-edit-sparkline-line-width">Line Width (px)</label>
+                            <input type="number" id="pad-edit-sparkline-line-width" min="1" max="10" value="2" placeholder="2">
                         </div>
+
+                        <div class="widget-sub-heading">Main Line Color by Value</div>
 
                         <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-sparkline-use-thresholds" onchange="padSparklineThresholdToggle()"> Color line by threshold</label>
-                            <small>Line color changes based on current value (uses thresholds below)</small>
+                            <label><input type="checkbox" id="pad-edit-sparkline-use-thresholds" onchange="padSparklineThresholdToggle()"> Color by value</label>
+                            <small>Main line color changes based on current value (uses thresholds below)</small>
                         </div>
 
                         <div id="pad-edit-sparkline-threshold-section" style="display:none;">
                             <div class="form-group">
                                 <label><input type="checkbox" id="pad-edit-sparkline-use-absolute"> Use absolute value</label>
+                                <small>Compare |value| for thresholds, ignoring sign</small>
                             </div>
                             <div class="form-group">
                                 <label><input type="checkbox" id="pad-edit-sparkline-higher-is-better" onchange="padSwapColors('pad-edit-sparkline-color')"> Reversed, high values are better</label>

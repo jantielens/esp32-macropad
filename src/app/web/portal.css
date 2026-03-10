@@ -1317,6 +1317,28 @@ footer {
     padding: 2px; cursor: pointer; flex-shrink: 0;
 }
 
+/* Sparkline: color swatch row below binding input */
+.sparkline-color-row {
+    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+}
+.sparkline-color-row input[type="color"] {
+    width: 34px; min-width: 34px; max-width: 34px; height: 34px;
+    border: 2px solid #d2d2d7; border-radius: 8px;
+    padding: 2px; cursor: pointer; flex-shrink: 0;
+}
+.sparkline-color-row small { color: #86868b; font-size: 12px; }
+
+/* Widget sub-group headings (reusable across widget sections) */
+.widget-sub-heading {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: #86868b;
+    margin: 14px 0 6px; padding-top: 10px;
+    border-top: 1px solid #e5e5ea;
+}
+.widget-sub-heading:first-child {
+    margin-top: 0; padding-top: 0; border-top: none;
+}
+
 /* Bar chart threshold color picker row */
 .bar-chart-colors {
     display: flex; gap: 8px; align-items: end;

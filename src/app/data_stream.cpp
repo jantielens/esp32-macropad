@@ -161,7 +161,7 @@ void data_stream_rebuild() {
         return;
     }
 
-    // Scan all pad pages for sparkline widgets
+    // Scan all pad pages for widgets that need data streams
     for (uint8_t page = 0; page < MAX_PAD_PAGES; page++) {
         if (!pad_config_load(page, cfg)) continue;
         for (uint8_t b = 0; b < cfg->button_count; b++) {
@@ -172,49 +172,52 @@ void data_stream_rebuild() {
             const WidgetType* wt = widget_find(btn.widget.type);
             if (!wt || !wt->getStreamParams) continue;
 
-            const char* binding = btn.widget.data_binding;
-            if (!binding[0]) continue;
+            // Iterate over stream indices (0 = primary, 1/2 = extra lines)
+            for (uint8_t si = 0; si < 3; si++) {
+                uint16_t window_secs = 300;
+                uint8_t slot_count = 60;
+                const char* binding = nullptr;
+                if (!wt->getStreamParams(&btn.widget, si,
+                                         &window_secs, &slot_count, &binding))
+                    break;  // No more streams for this widget
+                if (!binding || !binding[0]) continue;
 
-            // Ask the widget type for its stream requirements
-            uint16_t window_secs = 300;
-            uint8_t slot_count = 60;
-            if (!wt->getStreamParams(btn.widget.data, &window_secs, &slot_count)) continue;
+                // Check if an existing stream matches
+                data_stream_handle_t existing = data_stream_find(binding, window_secs, slot_count);
+                if (existing != DATA_STREAM_INVALID) {
+                    keep[existing] = true;
+                    continue;
+                }
 
-            // Check if an existing stream matches
-            data_stream_handle_t existing = data_stream_find(binding, window_secs, slot_count);
-            if (existing != DATA_STREAM_INVALID) {
-                keep[existing] = true;
-                continue;
+                // Allocate a new stream
+                int slot = -1;
+                for (int i = 0; i < DATA_STREAM_MAX_STREAMS; i++) {
+                    if (!g_streams[i].in_use) { slot = i; break; }
+                }
+                if (slot < 0) {
+                    LOGW(TAG, "Max streams reached, skipping: %s", binding);
+                    continue;
+                }
+
+                DataStream* s = &g_streams[slot];
+                s->in_use = true;
+                strlcpy(s->binding, binding, sizeof(s->binding));
+                s->window_secs = window_secs;
+                s->slot_count = slot_count;
+
+                // Allocate ring buffer
+                if (s->samples) free_ring(s->samples);
+                s->samples = alloc_ring(slot_count);
+                if (!s->samples) {
+                    LOGE(TAG, "OOM for ring buffer (%d slots)", slot_count);
+                    s->in_use = false;
+                    continue;
+                }
+                reset_ring(s);
+                keep[slot] = true;
+
+                LOGI(TAG, "Stream[%d]: %s (window=%ds slots=%d)", slot, binding, window_secs, slot_count);
             }
-
-            // Allocate a new stream
-            int slot = -1;
-            for (int i = 0; i < DATA_STREAM_MAX_STREAMS; i++) {
-                if (!g_streams[i].in_use) { slot = i; break; }
-            }
-            if (slot < 0) {
-                LOGW(TAG, "Max streams reached, skipping: %s", binding);
-                continue;
-            }
-
-            DataStream* s = &g_streams[slot];
-            s->in_use = true;
-            strlcpy(s->binding, binding, sizeof(s->binding));
-            s->window_secs = window_secs;
-            s->slot_count = slot_count;
-
-            // Allocate ring buffer
-            if (s->samples) free_ring(s->samples);
-            s->samples = alloc_ring(slot_count);
-            if (!s->samples) {
-                LOGE(TAG, "OOM for ring buffer (%d slots)", slot_count);
-                s->in_use = false;
-                continue;
-            }
-            reset_ring(s);
-            keep[slot] = true;
-
-            LOGI(TAG, "Stream[%d]: %s (window=%ds slots=%d)", slot, binding, window_secs, slot_count);
         }
     }
 
