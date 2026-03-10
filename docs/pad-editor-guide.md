@@ -264,6 +264,40 @@ The icon and center label are positioned inside the arc at the pivot point. A ty
 - Arc Degrees: 359, Start Angle: 270 (12 o'clock)
 - Tick Marks: 12, Center label: `[time:%H:%M]`
 
+### Sparkline
+
+The sparkline widget draws a mini trend line showing how a value changes over time — perfect for temperature history, power consumption trends, network latency, or any metric you want to watch evolve.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`) |
+| **Min / Max** | The Y-axis range. Leave at 0/0 for auto-scaling based on observed data |
+| **Time window (s)** | How many seconds of history to display (default: 300 = 5 minutes) |
+| **Data slots** | Number of data points in the line (default: 60). More slots = higher resolution but slightly more memory |
+| **Line width** | Thickness of the trend line in pixels (1–5, default: 2) |
+| **Line color** | Color of the trend line (used when thresholds are disabled) |
+| **Use thresholds** | Enable 4-zone color thresholds (same system as bar chart and gauge). When enabled with auto min/max, thresholds are computed dynamically from observed data range |
+
+**Background data collection** — unlike bar chart and gauge which only show the current value, sparklines need historical data. The data stream registry collects data continuously in the background, even when the sparkline's screen is not visible. When you navigate to a sparkline's screen, the graph is immediately populated with all collected history.
+
+**Auto-scaling** — when min and max are both 0, the sparkline automatically scales the Y-axis to fit the observed data range. This is the recommended default for most use cases.
+
+**Data gaps** — if data stops arriving (e.g., MQTT sensor goes offline), the sparkline uses Last Observation Carried Forward (LOCF) to fill gaps, keeping the graph smooth instead of showing holes.
+
+Labels, icons, and colors still work alongside the widget. A typical sparkline button uses the top label for a title ("Temperature") and the bottom label for the current value (`[mqtt:sensor/temp;temperature;%.1f°C]`).
+
+**Temperature trend example:**
+- Data binding: `[mqtt:home/sensor/living_room;temperature]`
+- Min: 15, Max: 35, Time window: 600 (10 minutes), Slots: 60
+- Top label: `Living Room`, Bottom label: `[mqtt:home/sensor/living_room;temperature;%.1f°C]`
+
+**CPU usage sparkline:**
+- Data binding: `[health:cpu]`
+- Min: 0, Max: 100, Time window: 300 (5 minutes), Slots: 60
+- Use thresholds: on (green→red as CPU increases)
+
 ---
 
 ## Binding Templates

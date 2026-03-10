@@ -280,6 +280,7 @@ bool pad_config_init() {
 
     // Pre-load all existing page configs into RAM cache.
     // This runs on the main task (internal stack) so flash access is safe.
+    bool any_loaded = false;
     for (uint8_t i = 0; i < MAX_PAD_PAGES; i++) {
         char path[32];
         pad_config_path(i, path, sizeof(path));
@@ -292,12 +293,22 @@ bool pad_config_init() {
                 memset(cfg, 0, sizeof(PadPageConfig));
                 if (pad_config_load_from_flash(i, cfg)) {
                     g_cache[i] = cfg;
+                    any_loaded = true;
                     LOGD(TAG, "Cached page %u", i);
                 } else {
                     free(cfg);
                 }
             }
         }
+    }
+
+    // Bump generation so subsystems that depend on pad configs (data stream
+    // registry, pad screens) detect that configs are now available.  The LVGL
+    // task may have already run data_stream_rebuild() before LittleFS was
+    // mounted and found zero configs — this ensures it re-scans.
+    if (any_loaded) {
+        g_generation++;
+        LOGI(TAG, "Configs cached, gen=%u", g_generation);
     }
 
     return true;

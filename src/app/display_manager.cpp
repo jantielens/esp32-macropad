@@ -2,8 +2,10 @@
 
 #if HAS_DISPLAY
 
+#include "data_stream.h"
 #include "display_manager.h"
 #include "log_manager.h"
+#include "pad_config.h"
 #include "rtos_task_utils.h"
 #include "screen_saver_manager.h"
 
@@ -301,6 +303,20 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				uint32_t delayMs = lv_timer_handler();
 				const uint32_t lv_timer_us = (uint32_t)(esp_timer_get_time() - lv_start_us);
 				
+#if HAS_MQTT
+				// Poll data stream registry (background ring buffers for
+				// history-based widgets, independent of active screen).
+				{
+						static uint32_t s_ds_generation = UINT32_MAX;
+						uint32_t gen = pad_config_get_generation();
+						if (gen != s_ds_generation) {
+								s_ds_generation = gen;
+								data_stream_rebuild();
+						}
+						data_stream_poll();
+				}
+#endif
+
 				// Update current screen (data refresh)
 				if (mgr->currentScreen) {
 						mgr->currentScreen->update();
@@ -542,6 +558,10 @@ void DisplayManager::init() {
 		initLVGL();
 		
 		LOGI("Display", "Manager init start");
+
+#if HAS_MQTT
+		data_stream_init();
+#endif
 		
 		// Create all screens
 		splashScreen.create();

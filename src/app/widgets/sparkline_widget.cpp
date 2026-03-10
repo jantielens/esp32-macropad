@@ -2,7 +2,7 @@
 
 #if HAS_DISPLAY
 
-#include "../binding_template.h"
+#include "../data_stream.h"
 #include "../log_manager.h"
 #include <math.h>
 #include <stdlib.h>
@@ -52,30 +52,27 @@ static_assert(sizeof(SparklineConfig) <= WIDGET_CONFIG_MAX_BYTES,
               "SparklineConfig exceeds WIDGET_CONFIG_MAX_BYTES");
 
 // ---- Runtime state (packed into WidgetState.data[]) ----
+// The sparkline no longer owns its ring buffer — data collection is
+// handled by the DataStream registry (data_stream.cpp) which runs
+// independently of the active screen.  SparklineState just holds the
+// LVGL rendering objects and a handle to its data stream.
 
 struct SparklineState {
     lv_obj_t*            line;       // LVGL line object
-    float*               samples;    // Heap-allocated ring buffer [slot_count]
     lv_point_precise_t*  points;     // Heap-allocated LVGL point array [slot_count]
-    float    auto_min;               // Tracked minimum for auto-scale
-    float    auto_max;               // Tracked maximum for auto-scale
-    float    last_value;             // Last numeric value (for redundant update skip)
-    uint32_t last_slot_ms;           // millis() when current slot started
-    uint8_t  head;                   // Next write position in ring buffer
-    uint8_t  count;                  // Number of valid samples in ring buffer
-    uint8_t  slot_count;             // Copy from config for runtime use
+    uint8_t  slot_count;             // Copy from config for points array size
+#if HAS_MQTT
+    data_stream_handle_t ds_handle;  // Handle into data stream registry
+#endif
 };
 
 static_assert(sizeof(SparklineState) <= WIDGET_STATE_MAX_BYTES,
               "SparklineState exceeds WIDGET_STATE_MAX_BYTES");
 
-// ---- Marker value for empty slots (only before any data arrives) ----
-static constexpr float SLOT_EMPTY = -1e30f;
-
 // ---- Color tier helper (with dynamic thresholds for auto-scale) ----
 
 static lv_color_t pick_tier_color(const SparklineConfig* cfg,
-                                  const SparklineState* st,
+                                  float auto_min, float auto_max,
                                   float value) {
     float cmp = cfg->use_absolute ? fabsf(value) : value;
 
@@ -85,8 +82,8 @@ static lv_color_t pick_tier_color(const SparklineConfig* cfg,
     float t2 = cfg->threshold_2;
     float t3 = cfg->threshold_3;
     if (isnan(t1) || isnan(t2) || isnan(t3)) {
-        float lo = isnan(cfg->min_val) ? st->auto_min : cfg->min_val;
-        float hi = isnan(cfg->max_val) ? st->auto_max : cfg->max_val;
+        float lo = isnan(cfg->min_val) ? auto_min : cfg->min_val;
+        float hi = isnan(cfg->max_val) ? auto_max : cfg->max_val;
         if (!isfinite(lo) || !isfinite(hi) || lo >= hi) { lo = 0.0f; hi = 1.0f; }
         float r = hi - lo;
         if (isnan(t1)) t1 = lo + r * 0.33f;
@@ -149,25 +146,20 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     auto* st = reinterpret_cast<SparklineState*>(state->data);
     memset(st, 0, sizeof(SparklineState));
-    st->last_value = NAN;
-    st->auto_min = INFINITY;
-    st->auto_max = -INFINITY;
     st->slot_count = cfg->slot_count;
-    st->last_slot_ms = millis();
-
-    // Allocate sample buffer and point array via lv_malloc (PSRAM-first)
-    st->samples = (float*)lv_malloc(sizeof(float) * cfg->slot_count);
-    st->points  = (lv_point_precise_t*)lv_malloc(sizeof(lv_point_precise_t) * cfg->slot_count);
-    if (!st->samples || !st->points) {
-        LOGE(TAG, "Failed to allocate sparkline buffers (%d slots)", cfg->slot_count);
-        if (st->samples) { lv_free(st->samples); st->samples = nullptr; }
-        if (st->points)  { lv_free(st->points);  st->points  = nullptr; }
-        return;
+#if HAS_MQTT
+    st->ds_handle = data_stream_find(wcfg->data_binding,
+                                     cfg->window_secs, cfg->slot_count);
+    if (st->ds_handle == DATA_STREAM_INVALID) {
+        LOGW(TAG, "No data stream for binding: %s", wcfg->data_binding);
     }
+#endif
 
-    // Initialize all slots as empty
-    for (uint8_t i = 0; i < cfg->slot_count; i++) {
-        st->samples[i] = SLOT_EMPTY;
+    // Allocate point array via lv_malloc (PSRAM-first)
+    st->points = (lv_point_precise_t*)lv_malloc(sizeof(lv_point_precise_t) * cfg->slot_count);
+    if (!st->points) {
+        LOGE(TAG, "Failed to allocate points array (%d slots)", cfg->slot_count);
+        return;
     }
 
     // Compute layout — same pattern as bar chart
@@ -226,33 +218,34 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->line = line;
 }
 
-// ---- Rebuild the LVGL point array from the sample ring buffer ----
+// ---- Rebuild the LVGL point array from a data stream snapshot ----
 
 static void sparkline_rebuild_points(const SparklineConfig* cfg,
                                      SparklineState* st,
+                                     const DataStreamSnapshot* snap,
                                      int16_t chart_w, int16_t chart_h) {
     // Determine Y-axis range
     float y_min = cfg->min_val;
     float y_max = cfg->max_val;
-    if (isnan(y_min)) y_min = st->auto_min;
-    if (isnan(y_max)) y_max = st->auto_max;
+    if (isnan(y_min)) y_min = snap->auto_min;
+    if (isnan(y_max)) y_max = snap->auto_max;
     if (y_min >= y_max) { y_min -= 1.0f; y_max += 1.0f; }  // degenerate range guard
     if (!isfinite(y_min) || !isfinite(y_max)) { y_min = 0.0f; y_max = 1.0f; }
     float y_range = y_max - y_min;
 
-    // Build points from oldest to newest, skipping empty slots
-    uint8_t n = st->slot_count;
+    // Build points from oldest to newest
+    uint8_t n = snap->slot_count;
     uint8_t valid = 0;
     float x_step = (n > 1) ? (float)chart_w / (float)(n - 1) : 0.0f;
 
     // Walk the ring buffer from oldest to newest
     for (uint8_t i = 0; i < n; i++) {
-        uint8_t idx = (st->count < n)
+        uint8_t idx = (snap->count < n)
             ? i                                    // buffer not yet full: 0..count-1
-            : (uint8_t)((st->head + i) % n);      // buffer full: head is oldest
-        if (i >= st->count) break;                 // no more valid samples
-        float val = st->samples[idx];
-        if (val <= SLOT_EMPTY + 1.0f) continue;    // skip empty slots
+            : (uint8_t)((snap->head + i) % n);    // buffer full: head is oldest
+        if (i >= snap->count) break;               // no more valid samples
+        float val = snap->samples[idx];
+        if (!isfinite(val)) continue;              // skip invalid entries
 
         float ratio = (val - y_min) / y_range;
         if (ratio < 0.0f) ratio = 0.0f;
@@ -271,136 +264,70 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
     }
 }
 
-// ---- Helper: advance empty time slots using last-observation-carried-forward ----
-
-static uint32_t sparkline_slot_duration(const SparklineConfig* cfg) {
-    uint32_t d = (uint32_t)cfg->window_secs * 1000UL / (uint32_t)cfg->slot_count;
-    return (d < 100) ? 100 : d;
-}
-
-static bool sparkline_advance_time(const SparklineConfig* cfg,
-                                   SparklineState* st,
-                                   float fill_value) {
-    uint32_t now = millis();
-    uint32_t slot_ms = sparkline_slot_duration(cfg);
-    uint32_t elapsed = now - st->last_slot_ms;
-    if (elapsed < slot_ms) return false;  // still within current slot
-
-    uint32_t slots_advanced = elapsed / slot_ms;
-    if (slots_advanced > cfg->slot_count) slots_advanced = cfg->slot_count;
-
-    // Fill skipped slots with last-observation-carried-forward
-    for (uint32_t s = 0; s < slots_advanced; s++) {
-        st->samples[st->head] = fill_value;
-        st->head = (uint8_t)((st->head + 1) % st->slot_count);
-        if (st->count < st->slot_count) st->count++;
-    }
-    st->last_slot_ms += slots_advanced * slot_ms;  // keep aligned to grid
-    return true;
-}
-
-// ---- Helper: recompute auto-scale and redraw points ----
+// ---- Helper: read data stream snapshot and redraw ----
 
 static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
-    if (!st->line) return;
+    if (!st->line || !st->points) return;
 
-    // Update auto-scale tracking from current buffer contents
-    if (isnan(cfg->min_val) || isnan(cfg->max_val)) {
-        float a_min = INFINITY, a_max = -INFINITY;
-        for (uint8_t i = 0; i < st->count && i < st->slot_count; i++) {
-            uint8_t idx = (st->count < st->slot_count)
-                ? i
-                : (uint8_t)((st->head + i) % st->slot_count);
-            float v = st->samples[idx];
-            if (v <= SLOT_EMPTY + 1.0f) continue;
-            if (v < a_min) a_min = v;
-            if (v > a_max) a_max = v;
-        }
-        st->auto_min = a_min;
-        st->auto_max = a_max;
-    }
+#if HAS_MQTT
+    DataStreamSnapshot snap;
+    if (!data_stream_get(st->ds_handle, &snap)) return;
+    if (snap.count == 0) return;
 
     lv_obj_t* chart_area = lv_obj_get_parent(st->line);
     lv_obj_update_layout(chart_area);
     int16_t chart_w = (int16_t)lv_obj_get_content_width(chart_area);
     int16_t chart_h = (int16_t)lv_obj_get_content_height(chart_area);
 
-    sparkline_rebuild_points(cfg, st, chart_w, chart_h);
+    sparkline_rebuild_points(cfg, st, &snap, chart_w, chart_h);
+
+    // Update line color based on current value (threshold mode)
+    if (cfg->use_thresholds && isfinite(snap.last_value)) {
+        lv_color_t color = pick_tier_color(cfg, snap.auto_min, snap.auto_max, snap.last_value);
+        lv_obj_set_style_line_color(st->line, color, 0);
+    }
+#endif
 }
 
 static void sparkline_update(lv_obj_t* tile, const WidgetConfig* wcfg,
                               WidgetState* state, const char* raw_value) {
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     auto* st = reinterpret_cast<SparklineState*>(state->data);
+    if (!st->line || !st->points) return;
 
-    if (!st->samples || !st->points || !st->line) return;
-
-    // Parse numeric value
-    char* end = nullptr;
-    float value = strtof(raw_value, &end);
-    if (end == raw_value) return;  // not a number
-
-    // Advance time slots (LOCF for any skipped slots, then write new value)
-    uint32_t slot_ms = sparkline_slot_duration(cfg);
-    uint32_t elapsed = millis() - st->last_slot_ms;
-
-    if (elapsed >= slot_ms) {
-        // Use last_value for LOCF fill, then overwrite newest slot with new data
-        float fill = isnan(st->last_value) ? value : st->last_value;
-        sparkline_advance_time(cfg, st, fill);
-        // Overwrite the most-recently-written slot with the actual new value
-        uint8_t newest = (st->head == 0) ? (uint8_t)(st->slot_count - 1) : (uint8_t)(st->head - 1);
-        st->samples[newest] = value;
-    } else {
-        // Still within the same time slot — overwrite with latest value
-        if (st->count > 0) {
-            uint8_t cur_slot = (st->head == 0) ? (uint8_t)(st->slot_count - 1) : (uint8_t)(st->head - 1);
-            st->samples[cur_slot] = value;
-        } else {
-            // First ever sample
-            st->samples[st->head] = value;
-            st->head = (uint8_t)((st->head + 1) % st->slot_count);
-            st->count = 1;
-            st->last_slot_ms = millis();
-        }
-    }
-
-    st->last_value = value;
-
+    // Data ingestion is handled by data_stream_poll() — we just redraw.
     sparkline_redraw(cfg, st);
-
-    // Update line color based on current value (threshold mode)
-    if (cfg->use_thresholds) {
-        lv_color_t color = pick_tier_color(cfg, st, value);
-        lv_obj_set_style_line_color(st->line, color, 0);
-    }
 }
 
-// ---- Tick: advance time slots even when no new data arrives ----
+// ---- Tick: redraw from registry even when no new data value ----
 
 static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
                            WidgetState* state) {
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     auto* st = reinterpret_cast<SparklineState*>(state->data);
+    if (!st->line || !st->points) return;
 
-    if (!st->samples || !st->points || !st->line) return;
-    if (st->count == 0) return;  // no data yet — nothing to carry forward
-
-    // Use LOCF to fill any elapsed time slots since last update
-    float fill = isnan(st->last_value) ? SLOT_EMPTY : st->last_value;
-    if (sparkline_advance_time(cfg, st, fill)) {
-        sparkline_redraw(cfg, st);
-    }
+    // Redraw from the data stream (which advances time independently)
+    sparkline_redraw(cfg, st);
 }
 
 static void sparkline_destroy(WidgetState* state) {
     auto* st = reinterpret_cast<SparklineState*>(state->data);
-    if (st->samples) { lv_free(st->samples); st->samples = nullptr; }
-    if (st->points)  { lv_free(st->points);  st->points  = nullptr; }
+    if (st->points) { lv_free(st->points); st->points = nullptr; }
     // LVGL line + chart_area are tile children — deleted automatically
+    // Ring buffer is owned by data_stream registry — not freed here
 }
 
 // ---- Registration ----
+
+static bool sparkline_get_stream_params(const uint8_t* config_data,
+                                        uint16_t* window_secs,
+                                        uint8_t* slot_count) {
+    auto* cfg = reinterpret_cast<const SparklineConfig*>(config_data);
+    if (window_secs) *window_secs = cfg->window_secs;
+    if (slot_count)  *slot_count  = cfg->slot_count;
+    return true;
+}
 
 const WidgetType sparkline_widget_type = {
     "sparkline",
@@ -408,7 +335,8 @@ const WidgetType sparkline_widget_type = {
     sparkline_create,
     sparkline_update,
     sparkline_destroy,
-    sparkline_tick
+    sparkline_tick,
+    sparkline_get_stream_params
 };
 
 #endif // HAS_DISPLAY

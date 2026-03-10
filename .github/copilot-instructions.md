@@ -31,11 +31,14 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `icon_store.cpp/h` - LittleFS I/O, lodepng decode with R↔B swap, growable PSRAM cache
   - `web_portal_icons.cpp/h` - REST API for icon upload, delete, list, and debug endpoints
 - **Widget Subsystem**: Extensible widget type system for specialized button visualizations (compile-time gated by `HAS_DISPLAY`)
-  - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI function pointers)
+  - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI, tick, getStreamParams function pointers)
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
   - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with color thresholds, binding-driven)
   - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, color thresholds, up to 3 concentric rings, binding-driven)
+  - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale, time-windowed display, threshold coloring, reads from data stream registry)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
+- **Data Stream Registry**: Background data collection for history-based widgets (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
+  - `data_stream.cpp/h` - Demand-driven registry of per-widget ring buffers; resolves bindings and feeds PSRAM-allocated ring buffers every LVGL cycle regardless of active screen; LOCF for data gaps; rebuild triggered by pad config generation changes
 - **Binding Template Engine**: Scheme-extensible `[scheme:params]` token resolver for label text (compile-time gated by `HAS_MQTT`)
   - `binding_template.cpp/h` - Token parser, scheme registry (max 8), `resolve()` and `collect_topics()` API; called only from LVGL task
   - MQTT scheme registered by `mqtt_sub_store_init()` — resolves `[mqtt:topic;path;format]` tokens against the subscription store
@@ -256,10 +259,12 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/screens/touch_test_screen.cpp/h` - Touch accuracy test (red dots + connecting lines, PSRAM canvas, HAS_TOUCH only)
 - `src/app/screens.cpp` - Screen compilation unit (includes all screen .cpp files)
 - `src/app/widgets.cpp` - Widget compilation unit (includes all widget .cpp files)
-- `src/app/widgets/widget.h` - Widget type interface (WidgetType struct with function pointers)
+- `src/app/data_stream.cpp/h` - Data stream registry for background ring buffer collection (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
+- `src/app/widgets/widget.h` - Widget type interface (WidgetType struct with function pointers: parseConfig, createUI, update, destroyUI, tick, getStreamParams)
 - `src/app/widgets/widget.cpp` - Widget type registry and lookup
 - `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (color thresholds, MQTT data binding)
 - `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, color thresholds, up to 3 concentric rings, binding-driven)
+- `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, reads from data stream registry, auto-scale, threshold coloring)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template

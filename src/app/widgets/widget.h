@@ -60,9 +60,18 @@ struct WidgetType {
     void (*destroyUI)(WidgetState* state);
 
     // Optional periodic tick called every poll cycle, even when the bound
-    // value hasn't changed.  Used by time-driven widgets (e.g. sparkline)
-    // to advance their internal timeline.  May be NULL.
+    // value hasn't changed.  Used by widgets that need periodic refresh
+    // from external data (e.g. sparkline reads from data stream registry).
+    // May be NULL.
     void (*tick)(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* state);
+
+    // Optional: return data stream requirements for background collection.
+    // Widgets that need historical data (ring buffers) implement this so the
+    // data_stream registry can collect data independently of the active screen.
+    // `config_data` is the parsed WidgetConfig.data[] blob.
+    // Returns true if this widget needs a data stream.  May be NULL.
+    bool (*getStreamParams)(const uint8_t* config_data,
+                            uint16_t* window_secs, uint8_t* slot_count);
 };
 
 // Look up a widget type by name. Returns NULL for "" or unknown types.

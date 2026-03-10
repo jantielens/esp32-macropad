@@ -253,7 +253,8 @@ const WidgetType bar_chart_widget_type = {
     bar_chart_create,
     bar_chart_update,
     bar_chart_destroy,
-    nullptr  // no tick
+    nullptr,  // no tick
+    nullptr   // no data stream
 };
 
 #endif // HAS_DISPLAY
