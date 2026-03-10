@@ -33,7 +33,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Widget Subsystem**: Extensible widget type system for specialized button visualizations (compile-time gated by `HAS_DISPLAY`)
   - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI function pointers)
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
-  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical bar with color thresholds, binding-driven)
+  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with color thresholds, binding-driven)
   - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, color thresholds, up to 3 concentric rings, binding-driven)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Binding Template Engine**: Scheme-extensible `[scheme:params]` token resolver for label text (compile-time gated by `HAS_MQTT`)

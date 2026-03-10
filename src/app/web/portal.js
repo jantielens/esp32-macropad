@@ -2227,6 +2227,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-color-warning').value = padColorToHex(btn.widget_color_warning, '#F44336');
     document.getElementById('pad-edit-widget-bar-bg-color').value = padColorToHex(btn.widget_bar_bg_color, '#1A1A1A');
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
+    document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
 
     // Gauge widget fields
     document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
@@ -2389,6 +2390,8 @@ function padDialogOk() {
             btn.widget_bar_bg_color = padHexToInt(document.getElementById('pad-edit-widget-bar-bg-color').value);
             const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
+            const orient = document.getElementById('pad-edit-widget-orientation').value;
+            if (orient === 'horizontal') btn.widget_orientation = 'horizontal';
         }
         if (wtype === 'gauge') {
             const gDataBinding = document.getElementById('pad-edit-gauge-data-binding').value.trim();

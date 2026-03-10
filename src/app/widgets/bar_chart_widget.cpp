@@ -42,6 +42,7 @@ struct BarChartConfig {
     bool     use_absolute;        // true = compare |value| (default); false = signed
     uint32_t bar_bg_color_rgb;    // Bar track background (default 0x1A1A1A)
     uint8_t  bar_width_pct;       // Bar width as % of tile width (1-100, default 100)
+    bool     horizontal;          // true = horizontal bar (grows left→right)
 };
 
 static_assert(sizeof(BarChartConfig) <= WIDGET_CONFIG_MAX_BYTES,
@@ -107,6 +108,9 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
     uint8_t wpct = btn["widget_bar_width_pct"] | (uint8_t)100;
     cfg->bar_width_pct = (wpct < 1) ? 1 : (wpct > 100) ? 100 : wpct;
 
+    const char* orient = btn["widget_orientation"] | "";
+    cfg->horizontal = (orient[0] == 'h' || orient[0] == 'H');
+
     // Thresholds default to even thirds of bar_max
     float range = cfg->bar_max - cfg->bar_min;
     cfg->threshold_1 = btn["widget_threshold_1"] | (cfg->bar_min + range * 0.33f);
@@ -144,20 +148,37 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_align(icon_img, LV_ALIGN_TOP_MID, 0, top_h);
     }
 
-    // Bar top position: right below icon + gap (all from top, no guessing)
-    int16_t bar_top = top_h + icon_h + gap;
-    int16_t bar_bottom_margin = bot_h + 4;  // space for bottom label
-    // Ask LVGL for the actual content height (accounts for padding + border)
+    // Ask LVGL for the actual content dimensions (accounts for padding + border)
     lv_obj_update_layout(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);
-    int16_t bar_h = content_h - bar_top - bar_bottom_margin;
-    if (bar_h < 8) bar_h = 8;
-    int16_t max_bar_w = rect->w - 16; // 8px margin each side
-    int16_t bar_w = (int16_t)(max_bar_w * cfg->bar_width_pct / 100);
-    if (bar_w < 4) bar_w = 4;
+    int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
 
-    LOGD(TAG, "Layout: rect=%dx%d content_h=%d top_h=%d icon_h=%d gap=%d bar_top=%d bar_h=%d bot_h=%d margin=%d",
-         rect->w, rect->h, content_h, top_h, icon_h, gap, bar_top, bar_h, bot_h, bar_bottom_margin);
+    int16_t bar_w, bar_h, bar_top;
+    int16_t bar_bottom_margin;
+
+    if (cfg->horizontal) {
+        // Horizontal: bar spans the full width, height controlled by bar_width_pct
+        int16_t bar_top_start = top_h + icon_h + (icon_img ? gap : 0);
+        bar_bottom_margin = bot_h + 4;
+        int16_t avail_h = content_h - bar_top_start - bar_bottom_margin;
+        if (avail_h < 8) avail_h = 8;
+        bar_h = (int16_t)(avail_h * cfg->bar_width_pct / 100);
+        if (bar_h < 4) bar_h = 4;
+        bar_w = content_w;  // full content width
+        bar_top = bar_top_start + (avail_h - bar_h) / 2; // vertically center in available space
+    } else {
+        // Vertical (original): bar spans the full height, width controlled by bar_width_pct
+        bar_top = top_h + icon_h + gap;
+        bar_bottom_margin = bot_h + 4;
+        bar_h = content_h - bar_top - bar_bottom_margin;
+        if (bar_h < 8) bar_h = 8;
+        int16_t max_bar_w = rect->w - 16; // 8px margin each side
+        bar_w = (int16_t)(max_bar_w * cfg->bar_width_pct / 100);
+        if (bar_w < 4) bar_w = 4;
+    }
+
+    LOGD(TAG, "Layout: rect=%dx%d content_h=%d top_h=%d icon_h=%d gap=%d bar_top=%d bar_w=%d bar_h=%d bot_h=%d horiz=%d",
+         rect->w, rect->h, content_h, top_h, icon_h, gap, bar_top, bar_w, bar_h, bot_h, cfg->horizontal);
 
     // Bar background — positioned from top so gap is guaranteed
     uint32_t bg_rgb = cfg->bar_bg_color_rgb;
@@ -171,10 +192,15 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_obj_set_style_pad_all(bar_bg, 0, 0);
     lv_obj_clear_flag(bar_bg, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
 
-    // Bar fill (grows from bottom)
+    // Bar fill (grows from bottom for vertical, from left for horizontal)
     lv_obj_t* bar_fill = lv_obj_create(bar_bg);
-    lv_obj_set_size(bar_fill, bar_w, 0); // start at 0 height
-    lv_obj_align(bar_fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+    if (cfg->horizontal) {
+        lv_obj_set_size(bar_fill, 0, bar_h); // start at 0 width
+        lv_obj_align(bar_fill, LV_ALIGN_LEFT_MID, 0, 0);
+    } else {
+        lv_obj_set_size(bar_fill, bar_w, 0); // start at 0 height
+        lv_obj_align(bar_fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+    }
     lv_obj_set_style_bg_color(bar_fill, lv_color_make(0x4C, 0xAF, 0x50), 0); // default green
     lv_obj_set_style_bg_opa(bar_fill, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(bar_fill, 4, 0);
@@ -209,13 +235,19 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (ratio < 0.0f) ratio = 0.0f;
     if (ratio > 1.0f) ratio = 1.0f;
 
-    int16_t bar_total_h = lv_obj_get_height(st->bar_bg);
-    int16_t fill_h = (int16_t)(ratio * bar_total_h);
-    // Ensure at least 1px fill for non-zero values
-    if (fill_h == 0 && fabsf(value) > 0.001f) fill_h = 1;
-
-    lv_obj_set_height(st->bar_fill, fill_h);
-    lv_obj_align(st->bar_fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+    if (cfg->horizontal) {
+        int16_t bar_total_w = lv_obj_get_width(st->bar_bg);
+        int16_t fill_w = (int16_t)(ratio * bar_total_w);
+        if (fill_w == 0 && fabsf(value) > 0.001f) fill_w = 1;
+        lv_obj_set_width(st->bar_fill, fill_w);
+        lv_obj_align(st->bar_fill, LV_ALIGN_LEFT_MID, 0, 0);
+    } else {
+        int16_t bar_total_h = lv_obj_get_height(st->bar_bg);
+        int16_t fill_h = (int16_t)(ratio * bar_total_h);
+        if (fill_h == 0 && fabsf(value) > 0.001f) fill_h = 1;
+        lv_obj_set_height(st->bar_fill, fill_h);
+        lv_obj_align(st->bar_fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+    }
 
     // Pick color tier
     lv_color_t color = pick_tier_color(cfg, value);

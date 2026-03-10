@@ -201,7 +201,7 @@ Widgets replace the standard button rendering with specialized visualizations. S
 
 ### Bar Chart
 
-The bar chart widget draws a vertical bar that fills up based on a numeric value — perfect for power meters, CPU gauges, or tank levels.
+The bar chart widget draws a vertical or horizontal bar that fills based on a numeric value — perfect for power meters, CPU gauges, progress bars, or tank levels.
 
 **Configuration:**
 
@@ -209,10 +209,11 @@ The bar chart widget draws a vertical bar that fills up based on a numeric value
 |---------|-------------|
 | **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
 | **Min / Max** | The value range. The bar is empty at min and full at max |
-| **Use absolute value** | When on, negative values fill the bar upward too (useful for grid power that can be negative) |
+| **Use absolute value** | When on, negative values fill the bar too (useful for grid power that can be negative) |
 | **Reversed, high values are better** | When toggled, the four color picker values swap in place so low values use warning colors and high values use good colors (e.g. battery level, signal strength). The zone labels stay fixed — only the colors move |
-| **Bar width %** | How wide the bar is relative to the button (1–100%) |
+| **Bar width %** | How wide the bar is relative to the button (1–100%). In horizontal mode, controls the bar height instead |
 | **Bar background** | The color of the empty bar track |
+| **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
 
 **Color thresholds** divide the bar into up to four colored zones. The zone labels are positional (Below T1, T1–T2, T2–T3, Above T3) and stay fixed. Toggling "Reversed" swaps the color picker values so the colors visually flip while labels remain in place:
 
