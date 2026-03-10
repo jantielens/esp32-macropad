@@ -235,7 +235,9 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 
 | Setting | Description |
 |---------|-------------|
-| **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temperature]`, `[time:%S]`) |
+| **Data Binding (outer ring)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temperature]`, `[time:%S]`) |
+| **Data Binding (middle ring)** | Optional — adds a concentric middle ring. Same settings (min/max, colors, thresholds) as the outer ring, different data source |
+| **Data Binding (inner ring)** | Optional — adds a concentric inner ring (requires middle ring). Same shared settings |
 | **Min / Max** | The value range. The arc is empty at min and full at max |
 | **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
 | **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
@@ -253,6 +255,8 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 **Color thresholds** work identically to the bar chart — four zones (Below T1, T1–T2, T2–T3, Above T3) with the same swap behavior when "Reversed" is checked.
 
 The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
+
+**Multi-ring gauges** — fill in the middle and/or inner ring data bindings to add concentric rings (Apple Health ring style). All rings share the same min/max, thresholds, colors, arc degrees, and start angle. Only the outer ring shows the needle and tick marks. The arc width percentage applies to each ring equally, with automatic gaps between them.
 
 **Clock example** (seconds hand on a full circle):
 - Data binding: `[time:%S]`, Min: 0, Max: 60

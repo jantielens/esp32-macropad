@@ -258,6 +258,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
+  - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
 - **HAS_IMAGE_FETCH**

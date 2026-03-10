@@ -26,7 +26,7 @@
 
 // Opaque per-tile widget runtime state (LVGL objects, cached values, etc.)
 // Created by createUI(), freed by destroyUI(). Stored in ButtonTile.
-#define WIDGET_STATE_MAX_BYTES 32
+#define WIDGET_STATE_MAX_BYTES 48
 
 struct WidgetState {
     uint8_t data[WIDGET_STATE_MAX_BYTES];

@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Gauge widget** — arc-based gauge visualization for buttons, with configurable arc sweep (10–360°), start angle, ticks, needle, and up to 4 color thresholds. Supports data binding for live values (e.g. `[time:%S]`, `[mqtt:sensor/temperature]`). Configurable track, needle, and tick colors, needle width (0 = hidden), tick width, and arc thickness. Center label and icon are positioned inside the arc. Tick marks are placed at interior positions only (N ticks divide the arc into N+1 equal segments)
+- **Gauge widget** — arc-based gauge visualization for buttons, with configurable arc sweep (10–360°), start angle, ticks, needle, and up to 4 color thresholds. Supports data binding for live values (e.g. `[time:%S]`, `[mqtt:sensor/temperature]`). Configurable track, needle, and tick colors, needle width (0 = hidden), tick width, and arc thickness. Center label and icon are positioned inside the arc. Tick marks are placed at interior positions only (N ticks divide the arc into N+1 equal segments). Supports up to 3 concentric rings (outer/middle/inner) — each with its own data binding but sharing the same scale, thresholds, and colors — for Apple Health ring–style visualizations
 - **Bar chart — reversed color mode** — new "Reversed, high values are better" checkbox in the bar chart widget settings. When toggled, the four color picker values swap in place (the positional labels Below T1 / T1–T2 / T2–T3 / Above T3 stay fixed). Ideal for battery level, signal strength, or any metric where higher is better
 
 ### Changed

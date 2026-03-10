@@ -34,7 +34,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI function pointers)
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
   - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical bar with color thresholds, binding-driven)
-  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, color thresholds, binding-driven)
+  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, color thresholds, up to 3 concentric rings, binding-driven)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Binding Template Engine**: Scheme-extensible `[scheme:params]` token resolver for label text (compile-time gated by `HAS_MQTT`)
   - `binding_template.cpp/h` - Token parser, scheme registry (max 8), `resolve()` and `collect_topics()` API; called only from LVGL task
@@ -259,7 +259,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/widgets/widget.h` - Widget type interface (WidgetType struct with function pointers)
 - `src/app/widgets/widget.cpp` - Widget type registry and lookup
 - `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (color thresholds, MQTT data binding)
-- `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, color thresholds, binding-driven)
+- `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, color thresholds, up to 3 concentric rings, binding-driven)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template

@@ -275,11 +275,27 @@
                     <summary>Gauge Settings</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding">Data Binding</label>
+                            <label for="pad-edit-gauge-data-binding">Data Binding (outer ring)</label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
                                 <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
                             </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-data-binding-2">Data Binding (middle ring)</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-2" maxlength="191" placeholder="Optional — leave empty for single ring">
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                            <small>Adds a concentric middle ring sharing the same settings</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-data-binding-3">Data Binding (inner ring)</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-3" maxlength="191" placeholder="Optional — leave empty for single or double ring">
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                            <small>Adds a concentric inner ring (requires middle ring)</small>
                         </div>
 
                         <div style="display:flex; gap:8px;">

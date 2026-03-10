@@ -2230,6 +2230,8 @@ function padDialogOpen(col, row) {
 
     // Gauge widget fields
     document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-gauge-data-binding-2').value = btn.widget_data_binding_2 || '';
+    document.getElementById('pad-edit-gauge-data-binding-3').value = btn.widget_data_binding_3 || '';
     document.getElementById('pad-edit-gauge-min').value = (btn.widget_gauge_min !== undefined) ? btn.widget_gauge_min : 0;
     document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : 100;
     document.getElementById('pad-edit-gauge-degrees').value = (btn.widget_gauge_degrees !== undefined) ? btn.widget_gauge_degrees : 180;
@@ -2391,6 +2393,8 @@ function padDialogOk() {
         if (wtype === 'gauge') {
             const gDataBinding = document.getElementById('pad-edit-gauge-data-binding').value.trim();
             if (gDataBinding) btn.widget_data_binding = gDataBinding;
+            btn.widget_data_binding_2 = document.getElementById('pad-edit-gauge-data-binding-2').value.trim();
+            btn.widget_data_binding_3 = document.getElementById('pad-edit-gauge-data-binding-3').value.trim();
             const gMin = parseFloat(document.getElementById('pad-edit-gauge-min').value);
             const gMax = parseFloat(document.getElementById('pad-edit-gauge-max').value);
             btn.widget_gauge_min = isNaN(gMin) ? 0 : gMin;

@@ -104,7 +104,9 @@ struct ButtonAction {
 // Widget type-specific config blob (parsed by widget implementations)
 struct WidgetConfig {
     char type[CONFIG_WIDGET_TYPE_MAX_LEN];     // "" = normal button (default)
-    char data_binding[CONFIG_LABEL_MAX_LEN];   // Binding template for widget data, e.g. [mqtt:topic;path]
+    char data_binding[CONFIG_LABEL_MAX_LEN];   // Binding template for widget data (outer ring)
+    char data_binding_2[CONFIG_LABEL_MAX_LEN]; // Optional 2nd binding (middle ring, gauge only)
+    char data_binding_3[CONFIG_LABEL_MAX_LEN]; // Optional 3rd binding (inner ring, gauge only)
     uint8_t data[WIDGET_CONFIG_MAX_BYTES];     // type-specific config, opaque to pad_config
 };
 
