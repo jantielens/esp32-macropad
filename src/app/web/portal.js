@@ -1408,6 +1408,12 @@ async function padUploadPageIcons() {
             iconH = Math.floor((fullH - topReserve - bottomReserve) / 2);
         }
 
+        // For gauge widgets, icon sits inside the arc — scale down
+        if (btn.widget_type === 'gauge') {
+            iconW = Math.floor(iconW * 0.4);
+            iconH = Math.floor(iconH * 0.4);
+        }
+
         // Apply explicit icon_scale_pct if set (1-250%)
         if (btn.icon_scale_pct && btn.icon_scale_pct > 0) {
             iconW = Math.max(1, Math.round(iconW * btn.icon_scale_pct / 100));
@@ -1578,14 +1584,18 @@ function padActionTypeChanged(prefix) {
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
     document.getElementById('pad-edit-bar-chart-section').style.display = (wtype === 'bar_chart') ? '' : 'none';
+    document.getElementById('pad-edit-gauge-section').style.display = (wtype === 'gauge') ? '' : 'none';
     if (wtype === 'bar_chart') {
         document.getElementById('pad-edit-bar-chart-section').open = true;
     }
+    if (wtype === 'gauge') {
+        document.getElementById('pad-edit-gauge-section').open = true;
+    }
 }
 
-function padSwapBarColors() {
-    const ids = ['pad-edit-widget-color-good', 'pad-edit-widget-color-ok',
-                 'pad-edit-widget-color-attention', 'pad-edit-widget-color-warning'];
+function padSwapColors(prefix) {
+    const ids = [prefix + '-good', prefix + '-ok',
+                 prefix + '-attention', prefix + '-warning'];
     const vals = ids.map(id => document.getElementById(id).value);
     vals.reverse();
     ids.forEach((id, i) => { document.getElementById(id).value = vals[i]; });
@@ -1801,6 +1811,12 @@ function padRenderGrid() {
                     bar.className = 'pad-cell-widget-bar';
                     bar.title = 'Bar Chart Widget';
                     cell.appendChild(bar);
+                }
+                if (btn.widget_type === 'gauge') {
+                    const arc = document.createElement('div');
+                    arc.className = 'pad-cell-widget-gauge';
+                    arc.title = 'Gauge Widget';
+                    cell.appendChild(arc);
                 }
 
                 cell.addEventListener('click', () => padDialogOpen(c, r));
@@ -2212,6 +2228,30 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-bar-bg-color').value = padColorToHex(btn.widget_bar_bg_color, '#1A1A1A');
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
 
+    // Gauge widget fields
+    document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-gauge-min').value = (btn.widget_gauge_min !== undefined) ? btn.widget_gauge_min : 0;
+    document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : 100;
+    document.getElementById('pad-edit-gauge-degrees').value = (btn.widget_gauge_degrees !== undefined) ? btn.widget_gauge_degrees : 180;
+    document.getElementById('pad-edit-gauge-start-angle').value = (btn.widget_gauge_start_angle !== undefined) ? btn.widget_gauge_start_angle : 180;
+    document.getElementById('pad-edit-gauge-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : true;
+    document.getElementById('pad-edit-gauge-show-needle').checked = (btn.widget_gauge_show_needle !== undefined) ? btn.widget_gauge_show_needle : true;
+    document.getElementById('pad-edit-gauge-higher-is-better').checked = (btn.widget_gauge_higher_is_better !== undefined) ? btn.widget_gauge_higher_is_better : false;
+    document.getElementById('pad-edit-gauge-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
+    document.getElementById('pad-edit-gauge-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
+    document.getElementById('pad-edit-gauge-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
+    document.getElementById('pad-edit-gauge-color-good').value = padColorToHex(btn.widget_color_good, '#4CAF50');
+    document.getElementById('pad-edit-gauge-color-ok').value = padColorToHex(btn.widget_color_ok, '#8BC34A');
+    document.getElementById('pad-edit-gauge-color-attention').value = padColorToHex(btn.widget_color_attention, '#FF9800');
+    document.getElementById('pad-edit-gauge-color-warning').value = padColorToHex(btn.widget_color_warning, '#F44336');
+    document.getElementById('pad-edit-gauge-track-color').value = padColorToHex(btn.widget_gauge_track_color, '#1A1A1A');
+    document.getElementById('pad-edit-gauge-needle-color').value = padColorToHex(btn.widget_gauge_needle_color, '#FFFFFF');
+    document.getElementById('pad-edit-gauge-tick-color').value = padColorToHex(btn.widget_gauge_tick_color, '#808080');
+    document.getElementById('pad-edit-gauge-arc-width-pct').value = (btn.widget_gauge_arc_width_pct !== undefined) ? btn.widget_gauge_arc_width_pct : 15;
+    document.getElementById('pad-edit-gauge-ticks').value = (btn.widget_gauge_ticks !== undefined) ? btn.widget_gauge_ticks : 5;
+    document.getElementById('pad-edit-gauge-needle-width').value = (btn.widget_gauge_needle_width !== undefined) ? btn.widget_gauge_needle_width : 2;
+    document.getElementById('pad-edit-gauge-tick-width').value = (btn.widget_gauge_tick_width !== undefined) ? btn.widget_gauge_tick_width : 1;
+
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
@@ -2347,6 +2387,42 @@ function padDialogOk() {
             btn.widget_bar_bg_color = padHexToInt(document.getElementById('pad-edit-widget-bar-bg-color').value);
             const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
+        }
+        if (wtype === 'gauge') {
+            const gDataBinding = document.getElementById('pad-edit-gauge-data-binding').value.trim();
+            if (gDataBinding) btn.widget_data_binding = gDataBinding;
+            const gMin = parseFloat(document.getElementById('pad-edit-gauge-min').value);
+            const gMax = parseFloat(document.getElementById('pad-edit-gauge-max').value);
+            btn.widget_gauge_min = isNaN(gMin) ? 0 : gMin;
+            btn.widget_gauge_max = isNaN(gMax) ? 100 : gMax;
+            const gDeg = parseInt(document.getElementById('pad-edit-gauge-degrees').value);
+            btn.widget_gauge_degrees = (isNaN(gDeg) || gDeg < 10) ? 180 : (gDeg > 360) ? 360 : gDeg;
+            const gSa = parseInt(document.getElementById('pad-edit-gauge-start-angle').value);
+            btn.widget_gauge_start_angle = (isNaN(gSa)) ? 180 : gSa % 360;
+            btn.widget_use_absolute = document.getElementById('pad-edit-gauge-use-absolute').checked;
+            btn.widget_gauge_show_needle = document.getElementById('pad-edit-gauge-show-needle').checked;
+            btn.widget_gauge_higher_is_better = document.getElementById('pad-edit-gauge-higher-is-better').checked;
+            const gt1 = parseFloat(document.getElementById('pad-edit-gauge-threshold-1').value);
+            const gt2 = parseFloat(document.getElementById('pad-edit-gauge-threshold-2').value);
+            const gt3 = parseFloat(document.getElementById('pad-edit-gauge-threshold-3').value);
+            if (!isNaN(gt1)) btn.widget_threshold_1 = gt1;
+            if (!isNaN(gt2)) btn.widget_threshold_2 = gt2;
+            if (!isNaN(gt3)) btn.widget_threshold_3 = gt3;
+            btn.widget_color_good = padHexToInt(document.getElementById('pad-edit-gauge-color-good').value);
+            btn.widget_color_ok = padHexToInt(document.getElementById('pad-edit-gauge-color-ok').value);
+            btn.widget_color_attention = padHexToInt(document.getElementById('pad-edit-gauge-color-attention').value);
+            btn.widget_color_warning = padHexToInt(document.getElementById('pad-edit-gauge-color-warning').value);
+            btn.widget_gauge_track_color = padHexToInt(document.getElementById('pad-edit-gauge-track-color').value);
+            btn.widget_gauge_needle_color = padHexToInt(document.getElementById('pad-edit-gauge-needle-color').value);
+            btn.widget_gauge_tick_color = padHexToInt(document.getElementById('pad-edit-gauge-tick-color').value);
+            const awPct = parseInt(document.getElementById('pad-edit-gauge-arc-width-pct').value);
+            btn.widget_gauge_arc_width_pct = (isNaN(awPct) || awPct > 50) ? 15 : (awPct < 5) ? 5 : awPct;
+            const gTicks = parseInt(document.getElementById('pad-edit-gauge-ticks').value);
+            btn.widget_gauge_ticks = (isNaN(gTicks) || gTicks < 0) ? 5 : (gTicks > 20) ? 20 : gTicks;
+            const gNeedleW = parseInt(document.getElementById('pad-edit-gauge-needle-width').value);
+            btn.widget_gauge_needle_width = (isNaN(gNeedleW) || gNeedleW < 0) ? 2 : (gNeedleW > 10) ? 10 : gNeedleW;
+            const gTickW = parseInt(document.getElementById('pad-edit-gauge-tick-width').value);
+            btn.widget_gauge_tick_width = (isNaN(gTickW) || gTickW < 1) ? 1 : (gTickW > 5) ? 5 : gTickW;
         }
     }
 

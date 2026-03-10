@@ -134,6 +134,7 @@
                             <select id="pad-edit-widget-type" onchange="padWidgetTypeChanged()">
                                 <option value="">Normal Button</option>
                                 <option value="bar_chart">Bar Chart</option>
+                                <option value="gauge">Gauge</option>
                             </select>
                         </div>
                         <div style="display:flex; gap:12px;">
@@ -218,7 +219,7 @@
                             <label><input type="checkbox" id="pad-edit-widget-use-absolute" checked> Use absolute value</label>
                         </div>
                         <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-widget-higher-is-better" onchange="padSwapBarColors()"> Reversed, high values are better</label>
+                            <label><input type="checkbox" id="pad-edit-widget-higher-is-better" onchange="padSwapColors('pad-edit-widget-color')"> Reversed, high values are better</label>
                             <small>When checked, low values use warning colors and high values use good colors (e.g. battery level, signal strength)</small>
                         </div>
 
@@ -264,6 +265,130 @@
                             <div class="form-group" style="flex:1;">
                                 <label for="pad-edit-widget-bar-width-pct">Bar Width %</label>
                                 <input type="number" id="pad-edit-widget-bar-width-pct" min="1" max="100" value="100" placeholder="100">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Gauge Settings (conditional, shown only for gauge widget type) -->
+                <details class="editor-group" id="pad-edit-gauge-section" style="display:none;">
+                    <summary>Gauge Settings</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-data-binding">Data Binding</label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
+                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-min">Min Value</label>
+                                <input type="number" id="pad-edit-gauge-min" step="any" value="0" placeholder="0">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-max">Max Value</label>
+                                <input type="number" id="pad-edit-gauge-max" step="any" value="100" placeholder="100">
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-degrees">Arc Degrees</label>
+                                <input type="number" id="pad-edit-gauge-degrees" min="10" max="360" value="180" placeholder="180">
+                                <small>10–360. Use 180 for half-circle, 270 for ¾ circle</small>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-start-angle">Start Angle</label>
+                                <input type="number" id="pad-edit-gauge-start-angle" min="0" max="359" value="180" placeholder="180">
+                                <small>0=right, 90=bottom, 180=left, 270=top</small>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-gauge-use-absolute" checked> Use absolute value</label>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-gauge-show-needle" checked> Show needle</label>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-gauge-higher-is-better" onchange="padSwapColors('pad-edit-gauge-color')"> Reversed, high values are better</label>
+                            <small>When checked, low values use warning colors and high values use good colors</small>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-threshold-1">Threshold 1</label>
+                                <input type="number" id="pad-edit-gauge-threshold-1" step="any" placeholder="auto">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-threshold-2">Threshold 2</label>
+                                <input type="number" id="pad-edit-gauge-threshold-2" step="any" placeholder="auto">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-threshold-3">Threshold 3</label>
+                                <input type="number" id="pad-edit-gauge-threshold-3" step="any" placeholder="auto">
+                            </div>
+                        </div>
+
+                        <div class="bar-chart-colors">
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-color-good">Below T1</label>
+                                <input type="color" id="pad-edit-gauge-color-good" value="#4CAF50">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-color-ok">T1 – T2</label>
+                                <input type="color" id="pad-edit-gauge-color-ok" value="#8BC34A">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-color-attention">T2 – T3</label>
+                                <input type="color" id="pad-edit-gauge-color-attention" value="#FF9800">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-color-warning">Above T3</label>
+                                <input type="color" id="pad-edit-gauge-color-warning" value="#F44336">
+                            </div>
+                        </div>
+
+                        <div class="bar-chart-colors">
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-track-color">Track Color</label>
+                                <input type="color" id="pad-edit-gauge-track-color" value="#1A1A1A">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-needle-color">Needle Color</label>
+                                <input type="color" id="pad-edit-gauge-needle-color" value="#FFFFFF">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-tick-color">Tick Color</label>
+                                <input type="color" id="pad-edit-gauge-tick-color" value="#808080">
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-arc-width-pct">Arc Width %</label>
+                                <input type="number" id="pad-edit-gauge-arc-width-pct" min="5" max="50" value="15" placeholder="15">
+                                <small>Thickness as % of radius</small>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-ticks">Tick Marks</label>
+                                <input type="number" id="pad-edit-gauge-ticks" min="0" max="20" value="5" placeholder="5">
+                                <small>0 = no ticks</small>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-needle-width">Needle Width</label>
+                                <input type="number" id="pad-edit-gauge-needle-width" min="0" max="10" value="2" placeholder="2">
+                                <small>Line width (px)</small>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-tick-width">Tick Width</label>
+                                <input type="number" id="pad-edit-gauge-tick-width" min="1" max="5" value="1" placeholder="1">
+                                <small>Line width (px)</small>
                             </div>
                         </div>
                     </div>

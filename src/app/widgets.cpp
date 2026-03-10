@@ -11,5 +11,6 @@
 
 #include "widgets/widget.cpp"
 #include "widgets/bar_chart_widget.cpp"
+#include "widgets/gauge_widget.cpp"
 
 #endif // HAS_DISPLAY

@@ -227,6 +227,38 @@ Thresholds default to 33%, 66%, and 90% of the range. Customize them to match yo
 
 Labels, icons, and colors still work alongside the widget. A typical bar chart button uses the top label for a title ("Solar") and the bottom label for the current value (`[mqtt:solar/power;watts;%.0f W]`).
 
+### Gauge
+
+The gauge widget draws an arc that fills based on a numeric value — ideal for clocks, speedometers, temperature dials, or any circular meter.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temperature]`, `[time:%S]`) |
+| **Min / Max** | The value range. The arc is empty at min and full at max |
+| **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
+| **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
+| **Use absolute value** | When on, negative values fill the arc too |
+| **Show needle** | Display a line from the center to the current value position on the arc |
+| **Reversed, high values are better** | Swaps the four color picker values (same behavior as bar chart) |
+| **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
+| **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
+| **Needle Width** | Line width in pixels (0 = hidden, max 10) |
+| **Tick Width** | Tick line width in pixels (1–5) |
+| **Track Color** | Color of the unfilled arc background |
+| **Needle Color** | Color of the needle line |
+| **Tick Color** | Color of the tick marks |
+
+**Color thresholds** work identically to the bar chart — four zones (Below T1, T1–T2, T2–T3, Above T3) with the same swap behavior when "Reversed" is checked.
+
+The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
+
+**Clock example** (seconds hand on a full circle):
+- Data binding: `[time:%S]`, Min: 0, Max: 60
+- Arc Degrees: 359, Start Angle: 270 (12 o'clock)
+- Tick Marks: 12, Center label: `[time:%H:%M]`
+
 ---
 
 ## Binding Templates
