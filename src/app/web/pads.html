@@ -77,10 +77,25 @@
                     <p><small>Adjust columns and rows above, then click empty cells to add buttons.</small></p>
                 </div>
 
-                <!-- Background color -->
-                <div id="pad-page-bg-color-wrap" class="pad-color-bind-group" style="margin-top:8px; margin-bottom:4px;"></div>
-
                 <small style="margin-top:8px; display:block;">Click a cell to edit its button.</small>
+
+                <!-- Background Color -->
+                <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
+                    <label style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Background Color</label>
+                    <div id="pad-page-bg-color-wrap" class="pad-color-bind-group"></div>
+                </div>
+
+                <!-- Pad Bindings -->
+                <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
+                    <div id="pad-bindings-section">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                            <label style="font-weight:600; font-size:13px;">Pad Bindings</label>
+                            <button type="button" class="btn btn-small" id="pad-binding-add" style="padding:2px 10px; font-size:12px;">+ Add</button>
+                        </div>
+                        <div id="pad-bindings-list"></div>
+                        <small style="display:block; color:#86868b; margin-top:2px;">Define named bindings to reuse across buttons via <code>[pad:name]</code>. Names must start with a letter and contain only letters, digits, or underscores.</small>
+                    </div>
+                </div>
             </section>
 
             <!-- No-display fallback -->

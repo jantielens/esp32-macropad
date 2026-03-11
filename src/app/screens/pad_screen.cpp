@@ -7,6 +7,7 @@
 #if HAS_MQTT
 #include "../mqtt_manager.h"
 #include "../mqtt_sub_store.h"
+#include "../pad_binding.h"
 #include <ArduinoJson.h>
 #endif
 #if HAS_IMAGE_FETCH
@@ -56,6 +57,7 @@ PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
     wakeScreen[0] = '\0';
     pageBgTemplate[0] = '\0';
     pageBgDefault = 0x000000;
+    pageBindingCount = 0;
 }
 
 PadScreen::~PadScreen() {
@@ -134,10 +136,17 @@ void PadScreen::update() {
     uint32_t gen = pad_config_get_generation();
     if (tilesBuilt && gen == cachedGeneration) {
         // Config unchanged — poll bindings in priority order
+#if HAS_MQTT
+        // Set page context so [pad:] tokens in bindings can resolve
+        pad_binding_set_bindings(pageBindings, pageBindingCount);
+#endif
         pollBtnStateBindings();   // Visibility/interactivity first
         pollMqttBindings();
         pollColorBindings();
         mqtt_sub_store_clear_dirty();
+#if HAS_MQTT
+        pad_binding_set_bindings(nullptr, 0);
+#endif
 #if HAS_IMAGE_FETCH
         pollImageFrames();
 #endif
@@ -221,6 +230,10 @@ void PadScreen::buildTiles() {
     strlcpy(pageBgTemplate, cfg->bg_color, sizeof(pageBgTemplate));
     pageBgDefault = cfg->bg_color_default;
     if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);
+
+    // Cache page-level named bindings for [pad:] scheme resolution
+    pageBindingCount = cfg->binding_count;
+    memcpy(pageBindings, cfg->bindings, cfg->binding_count * sizeof(PadBinding));
 
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {

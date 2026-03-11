@@ -1195,6 +1195,7 @@ const padState = {
     editRow: 0,
     btnClipboard: null,  // Copied button settings (position-independent)
     padClipboard: null,  // Copied pad settings { cols, rows, buttons, name }
+    bindings: [],        // Page-level named bindings [{name, value}]
     colorCache: {},      // page → hex[] — colors from visited pads
 };
 
@@ -1471,6 +1472,7 @@ function padInit() {
     document.getElementById('pad-save-btn').addEventListener('click', padSavePage);
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
     document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
+    document.getElementById('pad-binding-add').addEventListener('click', padAddBinding);
 
     // More menu toggle
     const moreBtn = document.getElementById('pad-more-btn');
@@ -1614,6 +1616,7 @@ async function padLoadPage(page) {
     padState.page = page;
     padState.rawJson = null;
     padState.buttons = [];
+    padState.bindings = [];
     padClearDirty();
 
     try {
@@ -1628,6 +1631,8 @@ async function padLoadPage(page) {
             document.getElementById('pad-wake-screen').value = '';
             padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
             padSetColorBind('page_bg_color', '#000000', undefined, '#000000');
+            padState.bindings = [];
+            padRenderBindings();
             padCacheColors(page, [], '#000000');
             padRenderPageSwatches();
             padRenderGrid();
@@ -1646,6 +1651,10 @@ async function padLoadPage(page) {
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
         padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
         padSetColorBind('page_bg_color', json.bg_color, json.bg_color_default, '#000000');
+
+        // Load pad bindings
+        padState.bindings = padBindingsFromJson(json.bindings);
+        padRenderBindings();
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -1935,6 +1944,74 @@ function syncLabelStyleVisibility(slot) {
     var hasValue = input.value.trim().length > 0;
     wrap.style.display = hasValue ? 'flex' : 'none';
     btn.classList.toggle('active', hasValue);
+}
+
+// --- Pad Bindings helpers ---
+
+function padRenderBindings() {
+    const list = document.getElementById('pad-bindings-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!padState.bindings || padState.bindings.length === 0) return;
+    padState.bindings.forEach(function(b, idx) {
+        const row = document.createElement('div');
+        row.className = 'pad-binding-row';
+        row.innerHTML =
+            '<input type="text" class="pad-binding-name" value="' + escAttr(b.name) + '" placeholder="name" maxlength="31" spellcheck="false">' +
+            '<span style="color:#86868b; flex-shrink:0;">→</span>' +
+            '<input type="text" class="pad-binding-value" value="' + escAttr(b.value) + '" placeholder="[mqtt:topic;path]" maxlength="191" spellcheck="false">' +
+            '<button type="button" class="btn btn-small pad-binding-del" style="padding:2px 8px; font-size:12px; color:#ff3b30;">✕</button>';
+        row.querySelector('.pad-binding-name').addEventListener('input', function() {
+            var v = this.value.trim();
+            padState.bindings[idx].name = v;
+            var ok = v === '' || padIsValidBindingName(v);
+            this.style.borderColor = ok ? '' : '#ff3b30';
+            this.title = ok ? '' : 'Must start with a letter; only letters, digits, and underscores allowed';
+            padMarkDirty();
+        });
+        row.querySelector('.pad-binding-value').addEventListener('input', function() {
+            padState.bindings[idx].value = this.value;
+            padMarkDirty();
+        });
+        row.querySelector('.pad-binding-del').addEventListener('click', function() {
+            padState.bindings.splice(idx, 1);
+            padRenderBindings();
+            padMarkDirty();
+        });
+        list.appendChild(row);
+    });
+}
+
+function padIsValidBindingName(name) {
+    return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(name) && name.length < 32;
+}
+
+function padAddBinding() {
+    if (!padState.bindings) padState.bindings = [];
+    padState.bindings.push({ name: '', value: '' });
+    padRenderBindings();
+    // Focus the new name input
+    const names = document.querySelectorAll('.pad-binding-name');
+    if (names.length) names[names.length - 1].focus();
+    padMarkDirty();
+}
+
+function escAttr(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function padBindingsFromJson(obj) {
+    var arr = [];
+    if (obj && typeof obj === 'object') {
+        Object.keys(obj).forEach(function(k) { arr.push({ name: k, value: obj[k] }); });
+    }
+    return arr;
+}
+
+function padBindingsToDict(bindings) {
+    var bd = {};
+    if (bindings) bindings.forEach(function(b) { if (b.name) bd[b.name] = b.value || ''; });
+    return Object.keys(bd).length > 0 ? bd : null;
 }
 
 /**
@@ -2602,6 +2679,21 @@ async function padSavePage() {
         delete payload.bg_color;
         delete payload.bg_color_default;
     }
+
+    // Pad bindings → dict (skip entries with invalid names)
+    if (padState.bindings && padState.bindings.length > 0) {
+        var badNames = padState.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
+        if (badNames.length > 0) {
+            alert('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.');
+            return;
+        }
+        var bd = padBindingsToDict(padState.bindings);
+        if (bd) payload.bindings = bd;
+        else delete payload.bindings;
+    } else {
+        delete payload.bindings;
+    }
+
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));
 
     // Convert color ints to hex strings for JSON
@@ -2772,6 +2864,7 @@ function padCopyPad() {
         bg_color: cbBgC.value || '#000000',
         bg_color_default: cbBgC.defaultInt,
         buttons: padState.buttons.map(b => Object.assign({}, b)),
+        bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
     };
     document.getElementById('pad-paste-btn').disabled = false;
     showMessage('Pad ' + (padState.page + 1) + ' copied', 'success');
@@ -2790,6 +2883,9 @@ function padPastePad() {
     document.getElementById('pad-wake-screen').value = padState.padClipboard.wake_screen || '';
     padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
     padSetColorBind('page_bg_color', padState.padClipboard.bg_color, padState.padClipboard.bg_color_default, '#000000');
+
+    padState.bindings = padState.padClipboard.bindings ? padState.padClipboard.bindings.map(b => Object.assign({}, b)) : [];
+    padRenderBindings();
 
     padRenderGrid();
     padMarkDirty();
@@ -2817,6 +2913,10 @@ function padExportPad() {
     if (expBgC.value && expBgC.value !== '#000000') {
         payload.bg_color = expBgC.value.replace(/^#/, '');
         if (expBgC.defaultInt !== undefined) payload.bg_color_default = expBgC.defaultInt;
+    }
+    if (padState.bindings && padState.bindings.length > 0) {
+        var bd = padBindingsToDict(padState.bindings);
+        if (bd) payload.bindings = bd;
     }
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -2854,6 +2954,9 @@ async function padImportPad(evt) {
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
         padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
         padSetColorBind('page_bg_color', json.bg_color, json.bg_color_default, '#000000');
+
+        padState.bindings = padBindingsFromJson(json.bindings);
+        padRenderBindings();
 
         padRenderGrid();
         padMarkDirty();
@@ -3014,6 +3117,8 @@ async function padDeletePage() {
         document.getElementById('pad-wake-screen').value = '';
         padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
         padSetColorBind('page_bg_color', '#000000', undefined, '#000000');
+        padState.bindings = [];
+        padRenderBindings();
         padUpdateDropdownLabel(padState.page, '');
         padRenderGrid();
     } catch (err) {

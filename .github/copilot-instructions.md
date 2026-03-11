@@ -49,6 +49,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - Expr scheme registered by `expr_binding_init()` — resolves `[expr:expression;format]` tokens by first resolving inner bindings, then evaluating with a recursive-descent expression evaluator
   - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings); no ESP32 dependencies, host-testable
   - `expr_binding.cpp/h` - Glue between expr_eval and binding_template engine; bracket-depth `;` splitting (compile-time gated by `HAS_DISPLAY`)
+  - Pad scheme registered by `pad_binding_init()` — resolves `[pad:name;format]` tokens against page-level named bindings; supports per-usage format override; enables define-once-use-everywhere pattern for repeated MQTT topics
+  - `pad_binding.cpp/h` - Pad binding scheme resolver with page-context pointer, expand utility for data streams, and topic collector that recurses into underlying bindings (compile-time gated by `HAS_DISPLAY`)
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
 - **Screen Saver Subsystem**: Inactivity-based display sleep with backlight fading and per-screen wake redirect (compile-time gated by `HAS_DISPLAY`)
   - `screen_saver_manager.cpp/h` - State machine (Awake/FadingOut/Asleep/FadingIn), fade animation, touch wake polling, pixel shift burn-in prevention
@@ -223,6 +225,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/binding_template.cpp/h` - Scheme-extensible token resolver for label text (compile-time gated by `HAS_MQTT`)
 - `src/app/expr_eval.cpp/h` - Pure C expression evaluator (arithmetic, comparisons, ternary); host-testable, no ESP32 deps
 - `src/app/expr_binding.cpp/h` - Expression binding glue — registers `[expr:]` scheme (compile-time gated by `HAS_DISPLAY`)
+- `src/app/pad_binding.cpp/h` - Pad binding scheme — resolves `[pad:name;format]` against page-level named bindings (compile-time gated by `HAS_DISPLAY`)
 - `src/app/health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
 - `src/app/time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
@@ -250,7 +253,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for page-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides
 - `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`)
 - `src/app/screens/pad_screen.cpp/h` - Pad screen with LVGL button tiles, label rendering (uses label style resolvers), icon/widget layout, binding updates, and image fetch integration
 - `src/app/screens/splash_screen.cpp/h` - Boot splash with animated spinner

@@ -6,6 +6,7 @@
 #include "config_manager.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
+#include "pad_binding.h"
 #include "pad_config.h"
 
 #include <ArduinoJson.h>
@@ -223,6 +224,8 @@ void mqtt_sub_store_subscribe_all() {
 
     for (uint8_t page = 0; page < MAX_PAD_PAGES; page++) {
         if (!pad_config_load(page, cfg)) continue;
+        // Set page context so [pad:] collector can resolve named bindings
+        pad_binding_set_page(cfg);
         // Scan page-level background color for binding tokens
         binding_template_collect_topics(cfg->bg_color, &ctx);
         for (uint8_t b = 0; b < cfg->button_count; b++) {
@@ -240,6 +243,7 @@ void mqtt_sub_store_subscribe_all() {
             binding_template_collect_topics(btn.widget.data_binding_3, &ctx);
         }
     }
+    pad_binding_set_page(nullptr);
 
     free(cfg);
 

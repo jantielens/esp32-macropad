@@ -121,6 +121,10 @@ private:
     char pageBgTemplate[CONFIG_COLOR_MAX_LEN];     // Page background color/binding
     uint32_t pageBgDefault;                        // Fallback page bg color
 
+    // Cached page-level named bindings for [pad:] scheme resolution
+    PadBinding pageBindings[PAD_MAX_BINDINGS];
+    uint8_t pageBindingCount;
+
     // Build/destroy tile LVGL objects from config
     void buildTiles();
     void clearTiles();

@@ -4,6 +4,7 @@
 
 #include "binding_template.h"
 #include "log_manager.h"
+#include "pad_binding.h"
 #include "pad_config.h"
 #include "widgets/widget.h"
 #include <esp_heap_caps.h>
@@ -181,6 +182,12 @@ void data_stream_rebuild() {
                                          &window_secs, &slot_count, &binding))
                     break;  // No more streams for this widget
                 if (!binding || !binding[0]) continue;
+
+                // Expand [pad:] tokens so streams store the underlying template
+                char expanded[BINDING_TEMPLATE_MAX_LEN];
+                if (pad_binding_expand(cfg, binding, expanded, sizeof(expanded))) {
+                    binding = expanded;
+                }
 
                 // Check if an existing stream matches
                 data_stream_handle_t existing = data_stream_find(binding, window_secs, slot_count);

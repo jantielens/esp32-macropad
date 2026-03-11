@@ -616,6 +616,61 @@ Toggles between bright red and dark red every second — useful for alert button
 
 > Always set a sensible **default color** when using color bindings. The default is shown while the binding resolves (during startup or reconnection). Otherwise you'll see black or white flashes.
 
+### Pad Bindings (Named Data Sources)
+
+**Syntax:** `[pad:name]` or `[pad:name;format]`
+
+Pad bindings let you define a data source once at the page level and reference it across all buttons and widgets on that page. This avoids repeating the same MQTT topic everywhere and makes it easy to switch data sources — change one binding instead of editing every button.
+
+**Defining bindings** — in the pad JSON config, add a `"bindings"` object at the page level:
+
+```json
+{
+  "bindings": {
+    "power": "[mqtt:home/solar/power;$.value]",
+    "current": "[mqtt:home/solar/current;$.amps]",
+    "power_kw": "[expr:[mqtt:home/solar/power;$.value]/1000]"
+  },
+  "buttons": [...]
+}
+```
+
+**Using bindings** — reference them anywhere you'd normally write a binding:
+
+```
+[pad:power]                                   → 3842.5 (raw value)
+[pad:power;%.0f]                              → 3843 (formatted)
+Power: [pad:power;%.0f] W                     → Power: 3843 W
+[pad:power_kw;%.2f] kW                        → 3.84 kW
+```
+
+The optional `;format` parameter applies a printf format to the resolved value, just like other bindings.
+
+**Inside expressions** — `[pad:]` tokens work naturally inside `[expr:]`:
+
+```
+[expr:[pad:power] > 3000 ? "High" : "Low"]   → High
+[expr:[pad:power] > 3000 ? "#00AA00" : "#333"] → #00AA00
+```
+
+**In widget data bindings** — use `[pad:power]` as a widget's data binding, sparkline source, or gauge ring binding.
+
+**Naming rules**: Binding names must start with a letter and contain only letters, digits, and underscores (e.g., `power`, `solar_current`, `temp1`). Maximum 31 characters.
+
+**Limit**: Up to 16 named bindings per page.
+
+**Why use pad bindings?**
+
+Consider a solar monitoring button with these fields all referencing the same topic:
+
+| Field | Without pad bindings | With pad bindings |
+|-------|---------------------|-------------------|
+| Bottom label | `[mqtt:solar/power;$.value;%.0f W]` | `[pad:power;%.0f W]` |
+| Background color | `[expr:[mqtt:solar/power;$.value]>3000?"#0A0":"#333"]` | `[expr:[pad:power]>3000?"#0A0":"#333"]` |
+| Widget data | `[mqtt:solar/power;$.value]` | `[pad:power]` |
+
+Switching from solar to grid power? Without pad bindings: 3+ edits per button. With pad bindings: change one line in `"bindings"`.
+
 ---
 
 ## Pad Actions (Bulk Operations)

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Pad bindings** — define named data sources once at the page level (`"bindings": {"power": "[mqtt:solar/power;$.value]"}`) and reference them across all buttons and widgets on that page via `[pad:name]` or `[pad:name;format]`. Avoids repeating the same MQTT topic in every field and makes it easy to switch data sources — change one binding instead of editing every button. Up to 16 named bindings per page. Works inside expressions, widget data bindings, color bindings, and sparkline sources. Includes full web portal UI for adding, editing, and deleting bindings
+
 ## [1.7.0] - 2026-03-11
 
 ### Fixed

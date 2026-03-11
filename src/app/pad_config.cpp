@@ -110,6 +110,18 @@ void label_style_parse(const char* dsl, LabelStyle* out) {
     }
 }
 
+// Validate a pad binding name: [a-zA-Z][a-zA-Z0-9_]*, non-empty, max len.
+static bool is_valid_binding_name(const char* name) {
+    if (!name || !name[0]) return false;
+    if (!((name[0] >= 'a' && name[0] <= 'z') || (name[0] >= 'A' && name[0] <= 'Z'))) return false;
+    for (const char* p = name + 1; *p; p++) {
+        char c = *p;
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_')) return false;
+    }
+    return strlen(name) < PAD_BINDING_NAME_MAX_LEN;
+}
+
 static void init_button_defaults(ScreenButtonConfig* btn) {
     memset(btn, 0, sizeof(ScreenButtonConfig));
     btn->col_span = 1;
@@ -376,6 +388,32 @@ static bool pad_config_load_from_flash(uint8_t page, PadPageConfig* out) {
     strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
     parse_color_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN, "#000000");
     out->bg_color_default = parse_color(doc["bg_color_default"], parse_static_color(out->bg_color, 0x000000));
+
+    // Parse named page-level bindings: { "bindings": { "name": "template", ... } }
+    out->binding_count = 0;
+    JsonObject bindings_obj = doc["bindings"];
+    if (!bindings_obj.isNull()) {
+        for (JsonPair kv : bindings_obj) {
+            if (out->binding_count >= PAD_MAX_BINDINGS) {
+                LOGW(TAG, "Page %u: max %d bindings reached, skipping rest", page, PAD_MAX_BINDINGS);
+                break;
+            }
+            const char* name = kv.key().c_str();
+            const char* value = kv.value().as<const char*>();
+            if (!name || !value) continue;
+            if (!is_valid_binding_name(name)) {
+                LOGW(TAG, "Page %u: skipping invalid binding name '%s'", page, name);
+                continue;
+            }
+            PadBinding& b = out->bindings[out->binding_count];
+            strlcpy(b.name, name, PAD_BINDING_NAME_MAX_LEN);
+            strlcpy(b.value, value, CONFIG_LABEL_MAX_LEN);
+            out->binding_count++;
+        }
+        if (out->binding_count > 0) {
+            LOGI(TAG, "Page %u: %u named bindings loaded", page, out->binding_count);
+        }
+    }
 
     if (out->cols < 1) out->cols = 1;
     if (out->cols > MAX_GRID_COLS) out->cols = MAX_GRID_COLS;

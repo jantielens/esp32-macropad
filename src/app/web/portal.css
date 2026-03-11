@@ -1317,6 +1317,19 @@ footer {
     padding: 2px; cursor: pointer; flex-shrink: 0;
 }
 
+/* Page bindings list */
+.pad-binding-row {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+}
+.pad-binding-row .pad-binding-name {
+    width: 110px; flex-shrink: 0; padding: 5px 8px; font-size: 13px;
+    font-family: monospace;
+}
+.pad-binding-row .pad-binding-value {
+    flex: 1; min-width: 0; padding: 5px 8px; font-size: 13px;
+    font-family: monospace;
+}
+
 /* Sparkline: color swatch row below binding input */
 .sparkline-color-row {
     display: flex; align-items: center; gap: 6px; margin-top: 4px;
