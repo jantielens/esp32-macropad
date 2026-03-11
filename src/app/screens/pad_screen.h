@@ -74,9 +74,12 @@ struct ButtonTile {
     const WidgetType* widget_type;
     WidgetConfig widget_cfg;   // Copy of config (needed for update calls)
     WidgetState widget_state;
-    // Widget data binding template (e.g. "[mqtt:topic;path]")
+    // Widget data binding templates (primary + optional middle/inner ring for gauge)
     char widget_binding[CONFIG_LABEL_MAX_LEN];
-    char widget_last[BINDING_TEMPLATE_MAX_LEN]; // Last resolved value (dedup)
+    char widget_last[BINDING_TEMPLATE_MAX_LEN * 3 + 4]; // Last resolved combined value (dedup)
+    // Optional extra bindings for multi-ring gauges (middle/inner rings)
+    char widget_binding_2[CONFIG_LABEL_MAX_LEN];
+    char widget_binding_3[CONFIG_LABEL_MAX_LEN];
     lv_obj_t* tap_overlay;    // Semi-transparent overlay shown briefly on tap
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)

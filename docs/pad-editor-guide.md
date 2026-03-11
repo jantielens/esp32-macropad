@@ -2,7 +2,7 @@
 
 The pad editor is the heart of ESP32 Macropad — it turns your touch screen into a fully custom dashboard, remote control, or status panel. Each device supports up to **8 independent pads**, each with its own grid of buttons that can display live data, control smart home devices, and react to real-time conditions.
 
-You'll find the pad editor on the **Home** page of the web portal (Full mode only). If you haven't connected your device to WiFi yet, complete the [first-time setup](first-time-setup.md) first.
+You'll find the pad editor on the **Pads** page of the web portal (Full mode only). If you haven't connected your device to WiFi yet, complete the [first-time setup](first-time-setup.md) first.
 
 ---
 
@@ -201,7 +201,7 @@ Widgets replace the standard button rendering with specialized visualizations. S
 
 ### Bar Chart
 
-The bar chart widget draws a vertical bar that fills up based on a numeric value — perfect for power meters, CPU gauges, or tank levels.
+The bar chart widget draws a vertical or horizontal bar that fills based on a numeric value — perfect for power meters, CPU gauges, progress bars, or tank levels.
 
 **Configuration:**
 
@@ -209,22 +209,111 @@ The bar chart widget draws a vertical bar that fills up based on a numeric value
 |---------|-------------|
 | **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
 | **Min / Max** | The value range. The bar is empty at min and full at max |
-| **Use absolute value** | When on, negative values fill the bar upward too (useful for grid power that can be negative) |
-| **Bar width %** | How wide the bar is relative to the button (1–100%) |
+| **Use absolute value** | When on, negative values fill the bar too (useful for grid power that can be negative) |
+| **Reversed, high values are better** | When toggled, the four color picker values swap in place so low values use warning colors and high values use good colors (e.g. battery level, signal strength). The zone labels stay fixed — only the colors move |
+| **Bar width %** | How wide the bar is relative to the button (1–100%). In horizontal mode, controls the bar height instead |
 | **Bar background** | The color of the empty bar track |
+| **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
 
-**Color thresholds** divide the bar into up to four colored zones:
+**Color thresholds** divide the bar into up to four colored zones. The zone labels are positional (Below T1, T1–T2, T2–T3, Above T3) and stay fixed. Toggling "Reversed" swaps the color picker values so the colors visually flip while labels remain in place:
 
-| Zone | Default color | Meaning |
-|------|--------------|---------|
-| Good | Green (`#4CAF50`) | Below threshold 1 |
-| OK | Light green (`#8BC34A`) | Between threshold 1 and 2 |
-| Attention | Orange (`#FF9800`) | Between threshold 2 and 3 |
-| Warning | Red (`#F44336`) | Above threshold 3 |
+| Zone label | Default color (normal) | Default color (reversed) |
+|-----------|----------------------|-------------------------|
+| Below T1 | Green (`#4CAF50`) | Red (`#F44336`) |
+| T1 – T2 | Light green (`#8BC34A`) | Orange (`#FF9800`) |
+| T2 – T3 | Orange (`#FF9800`) | Light green (`#8BC34A`) |
+| Above T3 | Red (`#F44336`) | Green (`#4CAF50`) |
 
 Thresholds default to 33%, 66%, and 90% of the range. Customize them to match your use case — for a solar panel with a 5 kW max, you might set thresholds at 1.0, 3.0, and 4.5 kW.
 
 Labels, icons, and colors still work alongside the widget. A typical bar chart button uses the top label for a title ("Solar") and the bottom label for the current value (`[mqtt:solar/power;watts;%.0f W]`).
+
+### Gauge
+
+The gauge widget draws an arc that fills based on a numeric value — ideal for clocks, speedometers, temperature dials, or any circular meter.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Data Binding (outer ring)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temperature]`, `[time:%S]`) |
+| **Data Binding (middle ring)** | Optional — adds a concentric middle ring. Same settings (min/max, colors, thresholds) as the outer ring, different data source |
+| **Data Binding (inner ring)** | Optional — adds a concentric inner ring (requires middle ring). Same shared settings |
+| **Min / Max** | The value range. The arc is empty at min and full at max |
+| **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
+| **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
+| **Use absolute value** | When on, negative values fill the arc too |
+| **Show needle** | Display a line from the center to the current value position on the arc |
+| **Reversed, high values are better** | Swaps the four color picker values (same behavior as bar chart) |
+| **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
+| **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
+| **Needle Width** | Line width in pixels (0 = hidden, max 10) |
+| **Tick Width** | Tick line width in pixels (1–5) |
+| **Track Color** | Color of the unfilled arc background |
+| **Needle Color** | Color of the needle line |
+| **Tick Color** | Color of the tick marks |
+
+**Color thresholds** work identically to the bar chart — four zones (Below T1, T1–T2, T2–T3, Above T3) with the same swap behavior when "Reversed" is checked.
+
+The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
+
+**Multi-ring gauges** — fill in the middle and/or inner ring data bindings to add concentric rings (Apple Health ring style). All rings share the same min/max, thresholds, colors, arc degrees, and start angle. Only the outer ring shows the needle and tick marks. The arc width percentage applies to each ring equally, with automatic gaps between them.
+
+**Clock example** (seconds hand on a full circle):
+- Data binding: `[time:%S]`, Min: 0, Max: 60
+- Arc Degrees: 359, Start Angle: 270 (12 o'clock)
+- Tick Marks: 12, Center label: `[time:%H:%M]`
+
+### Sparkline
+
+The sparkline widget draws a mini trend line showing how a value changes over time — perfect for temperature history, power consumption trends, network latency, or any metric you want to watch evolve.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Data binding (main line)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`). Each line has a color swatch below the binding input |
+| **Data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream and color. Leave empty for single line |
+| **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data |
+| **Same scale for all lines** | When enabled (default), all lines in a multi-line sparkline share the same auto-scaled Y-axis range, so values are visually comparable. Disable to let each line auto-scale independently — useful when lines have very different magnitudes and you want to compare trends/shapes rather than absolute values. Has no effect when explicit min/max are configured or with single-line sparklines |
+| **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
+| **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
+| **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
+| **Color by value** | Enable 4-zone color thresholds on the main line (same system as bar chart and gauge). When enabled with auto min/max, thresholds are computed dynamically from observed data range |
+| **Max marker size** | Dot radius for the maximum-value marker (0 = off, 1–20 px). When non-zero, a dot and optional label are drawn at the highest point in the visible data |
+| **Max format** | Printf format string for the max label (e.g., `hi %.1f`). Only one `%f`/`%e`/`%g` specifier allowed. Leave empty for dot only (no label) |
+| **Max label color** | Override color for the max label text. White (#FFFFFF) means "auto" — the label inherits the line's current color |
+| **Min marker size** | Same as max marker, but for the lowest point in the visible data |
+| **Min format** | Printf format string for the min label (e.g., `lo %.1f`) |
+| **Min label color** | Override color for the min label text. White = auto |
+| **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Follows threshold color when "Color by value" is enabled |
+| **Reference line 1/2/3** | Up to 3 horizontal reference lines at fixed Y values. Each has a Y value (numeric), a color, and a line pattern (Solid, Dotted, or Dashed). Drawn behind the data lines. Only lines with a valid Y value are rendered |
+| **Keep reference lines in view** | When enabled, auto-scale expands the Y range to include all configured reference line values, so they are always visible. Data that exceeds the reference lines still expands the range normally. Only affects auto-scaled axes (explicit min/max take priority) |
+| **Smoothing** | Gaussian kernel smoothing radius (0 = off, 1–8). Smooths the trend line by averaging neighboring data points — higher values produce a smoother curve. A value of 3–4 gives a pleasant smoothing effect; 8 gives heavy averaging. Min/max markers and current-value dot are positioned on the smoothed line. Set to 0 for raw data rendering |
+
+**Background data collection** — unlike bar chart and gauge which only show the current value, sparklines need historical data. The data stream registry collects data continuously in the background, even when the sparkline's screen is not visible. When you navigate to a sparkline's screen, the graph is immediately populated with all collected history.
+
+**Auto-scaling** — when min and max are left empty, the sparkline automatically scales the Y-axis to fit the observed data range. This is the recommended default for most use cases. With multiple lines and **Same scale for all lines** enabled (default), all lines share the same Y-axis range computed from the global min/max across all streams — so a value of 50 on line 1 and 50 on line 2 appear at the same height. Disable it if your lines have very different magnitudes (e.g., watts 0–5000 vs efficiency 0–100) and you want each to fill the chart independently.
+
+**Data gaps** — if data stops arriving (e.g., MQTT sensor goes offline), the sparkline uses Last Observation Carried Forward (LOCF) to fill gaps, keeping the graph smooth instead of showing holes.
+
+Labels, icons, and colors still work alongside the widget. A typical sparkline button uses the top label for a title ("Temperature") and the bottom label for the current value (`[mqtt:sensor/temp;temperature;%.1f°C]`).
+
+**Temperature trend example:**
+- Data binding: `[mqtt:home/sensor/living_room;temperature]`
+- Min: 15, Max: 35, Time window: 600 (10 minutes), Slots: 60
+- Top label: `Living Room`, Bottom label: `[mqtt:home/sensor/living_room;temperature;%.1f°C]`
+
+**CPU usage sparkline:**
+- Data binding: `[health:cpu]`
+- Min: 0, Max: 100, Time window: 300 (5 minutes), Slots: 60
+- Use thresholds: on (green→red as CPU increases)
+
+**Multi-line solar comparison:**
+- Data binding: `[mqtt:home/solar/power;production]` (green line)
+- Data binding (line 2): `[mqtt:home/solar/power;grid_import]` (blue line)
+- Min: 0, Max: auto, Time window: 600 (10 minutes), Slots: 60
+- Top label: `Solar`, Bottom label: `[mqtt:home/solar/power;production;%.0fW]`
 
 ---
 

@@ -12,6 +12,8 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols), background images, and per-label style overrides (font size, alignment, text overflow mode)
 - **Multi-span buttons** — buttons can span multiple columns and rows
 - **Bar chart widgets** — visualize data with color-coded threshold bars
+- **Gauge widgets** — arc-based gauges with ticks, needle, and color thresholds
+- **Sparkline widgets** — mini trend lines with background data collection and auto-scaling
 - **Screen saver** — automatic backlight fade with pixel-shift burn-in prevention
 
 ### Connectivity & Smart Home
@@ -90,7 +92,8 @@ After flashing, the device creates its own Wi-Fi hotspot for initial configurati
 
 Everything is configured from your browser — no flashing or coding needed after the initial install.
 
-- **Home page** — operating mode, display settings, and the visual pad editor
+- **Home page** — operating mode, display settings, and sensor configuration
+- **Pads page** — visual pad editor for designing button layouts
 - **Network page** — Wi-Fi, MQTT, device name, static IP, and security
 - **Firmware page** — OTA updates, manual upload, and factory reset
 

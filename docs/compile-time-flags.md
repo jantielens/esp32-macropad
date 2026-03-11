@@ -227,6 +227,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/data_stream.cpp
+  - src/app/data_stream.h
   - src/app/device_telemetry.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
@@ -258,6 +260,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
+  - src/app/widgets/gauge_widget.cpp
+  - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
 - **HAS_IMAGE_FETCH**
@@ -274,7 +278,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
+  - src/app/data_stream.cpp
+  - src/app/data_stream.h
   - src/app/device_telemetry.cpp
+  - src/app/display_manager.cpp
   - src/app/duty_cycle.cpp
   - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
@@ -296,6 +303,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/sensor_manager.cpp
   - src/app/sensors/sensor_manager.h
   - src/app/web_portal_pad.cpp
+  - src/app/widgets/sparkline_widget.cpp
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp

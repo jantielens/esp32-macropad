@@ -391,14 +391,25 @@ void PadScreen::buildTiles() {
         tile.widget_type = nullptr;
         memset(&tile.widget_state, 0, sizeof(WidgetState));
         tile.widget_binding[0] = '\0';
+        tile.widget_binding_2[0] = '\0';
+        tile.widget_binding_3[0] = '\0';
         tile.widget_last[0] = '\0';
         if (bcfg.widget.type[0]) {
             const WidgetType* wt = widget_find(bcfg.widget.type);
             if (wt) {
                 tile.widget_type = wt;
                 memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
-                // Widget data binding template (e.g. "[mqtt:topic;path]")
+                // Widget data binding templates
+                // If binding_3 is set but binding_2 is empty, promote binding_3
+                // to the middle slot to match gauge_widget's ring promotion logic.
                 strlcpy(tile.widget_binding, bcfg.widget.data_binding, CONFIG_LABEL_MAX_LEN);
+                if (bcfg.widget.data_binding_2[0]) {
+                    strlcpy(tile.widget_binding_2, bcfg.widget.data_binding_2, CONFIG_LABEL_MAX_LEN);
+                    strlcpy(tile.widget_binding_3, bcfg.widget.data_binding_3, CONFIG_LABEL_MAX_LEN);
+                } else if (bcfg.widget.data_binding_3[0]) {
+                    strlcpy(tile.widget_binding_2, bcfg.widget.data_binding_3, CONFIG_LABEL_MAX_LEN);
+                    tile.widget_binding_3[0] = '\0';
+                }
                 if (wt->createUI) {
                     // Pass icon or center label — widget positions it above the bar
                     lv_obj_t* header_obj = tile.icon_img ? tile.icon_img : tile.label_center;
@@ -661,22 +672,48 @@ void PadScreen::pollMqttBindings() {
         lv_label_set_text(rb.label, resolved);
     }
 
-    // Update widget tiles from their data binding template
+    // Update widget tiles from their data binding template(s)
+    // Multi-ring gauges use binding_2/3 for middle/inner rings.
+    // All resolved values are joined with '\t' so the widget update()
+    // receives "val1\tval2\tval3" and can split them internally.
     char widget_resolved[BINDING_TEMPLATE_MAX_LEN];
+    char widget_combined[BINDING_TEMPLATE_MAX_LEN * 3 + 4];
 
     for (uint8_t i = 0; i < tileCount; i++) {
         ButtonTile& tile = tiles[i];
         if (!tile.widget_type || !tile.widget_type->update) continue;
         if (!tile.widget_binding[0]) continue;
 
-        // Resolve binding template — replaces [scheme:...] tokens with live values
+        // Resolve primary binding
         binding_template_resolve(tile.widget_binding, widget_resolved, sizeof(widget_resolved));
 
-        // Only update widget if resolved value changed
-        if (strcmp(widget_resolved, tile.widget_last) == 0) continue;
-        strlcpy(tile.widget_last, widget_resolved, sizeof(tile.widget_last));
+        // Build combined string: "val1" or "val1\tval2" or "val1\tval2\tval3"
+        size_t off = strlcpy(widget_combined, widget_resolved, sizeof(widget_combined));
+        if (tile.widget_binding_2[0]) {
+            binding_template_resolve(tile.widget_binding_2, widget_resolved, sizeof(widget_resolved));
+            if (off < sizeof(widget_combined) - 1) {
+                widget_combined[off++] = '\t';
+                off += strlcpy(widget_combined + off, widget_resolved, sizeof(widget_combined) - off);
+            }
+        }
+        if (tile.widget_binding_3[0]) {
+            binding_template_resolve(tile.widget_binding_3, widget_resolved, sizeof(widget_resolved));
+            if (off < sizeof(widget_combined) - 1) {
+                widget_combined[off++] = '\t';
+                strlcpy(widget_combined + off, widget_resolved, sizeof(widget_combined) - off);
+            }
+        }
 
-        tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, widget_resolved);
+        // Only update widget if any resolved value changed
+        if (strcmp(widget_combined, tile.widget_last) != 0) {
+            strlcpy(tile.widget_last, widget_combined, sizeof(tile.widget_last));
+            tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, widget_combined);
+        }
+
+        // Always call tick (if implemented) for time-driven widgets
+        if (tile.widget_type->tick) {
+            tile.widget_type->tick(tile.obj, &tile.widget_cfg, &tile.widget_state);
+        }
     }
 #endif
 }

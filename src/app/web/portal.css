@@ -911,7 +911,7 @@ footer {
     padding: 16px;
     max-height: 500px;
     overflow-y: auto;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 13px;
     line-height: 1.6;
     color: #d4d4d4;
@@ -1132,6 +1132,30 @@ footer {
     opacity: 0.6;
 }
 
+.pad-cell-widget-gauge {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 14px;
+    height: 8px;
+    border-top: 3px solid #4CAF50;
+    border-radius: 8px 8px 0 0;
+    border-left: 3px solid #FF9800;
+    border-right: 3px solid #F44336;
+    opacity: 0.6;
+}
+
+.pad-cell-widget-sparkline {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 20px;
+    height: 10px;
+    opacity: 0.6;
+    background: linear-gradient(135deg, transparent 20%, #4CAF50 20%, #4CAF50 30%, transparent 30%, transparent 50%, #4CAF50 50%, #4CAF50 60%, transparent 60%, transparent 80%, #4CAF50 80%);
+    border-bottom: 1px solid #4CAF50;
+}
+
 .pad-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1217,6 +1241,40 @@ footer {
     margin-bottom: 12px;
 }
 
+/* Editor group: card-like <details> in button editor */
+.editor-group {
+    border: 1px solid #e5e5ea;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    background: #fafafa;
+}
+.editor-group > summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    color: #1d1d1f;
+    padding: 10px 14px;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    user-select: none;
+}
+.editor-group > summary::-webkit-details-marker { display: none; }
+.editor-group > summary::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 8px;
+    transition: transform 0.15s;
+    font-size: 12px;
+    color: #86868b;
+}
+.editor-group[open] > summary::before {
+    transform: rotate(90deg);
+}
+.editor-group-body {
+    padding: 0 14px 14px;
+}
+
 .pad-swatch-strip {
     display: flex;
     flex-wrap: wrap;
@@ -1259,6 +1317,41 @@ footer {
     padding: 2px; cursor: pointer; flex-shrink: 0;
 }
 
+/* Sparkline: color swatch row below binding input */
+.sparkline-color-row {
+    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+}
+.sparkline-color-row input[type="color"] {
+    width: 34px; min-width: 34px; max-width: 34px; height: 34px;
+    border: 2px solid #d2d2d7; border-radius: 8px;
+    padding: 2px; cursor: pointer; flex-shrink: 0;
+}
+.sparkline-color-row small { color: #86868b; font-size: 12px; }
+
+/* Widget sub-group headings (reusable across widget sections) */
+.widget-sub-heading {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: #86868b;
+    margin: 14px 0 6px; padding-top: 10px;
+    border-top: 1px solid #e5e5ea;
+}
+.widget-sub-heading:first-child {
+    margin-top: 0; padding-top: 0; border-top: none;
+}
+
+/* Bar chart threshold color picker row */
+.bar-chart-colors {
+    display: flex; gap: 8px; align-items: end;
+}
+.bar-chart-colors .form-group { flex: 1; min-width: 0; }
+.bar-chart-colors input[type="color"],
+#pad-edit-bar-chart-section input[type="color"],
+#pad-edit-gauge-section input[type="color"],
+#pad-edit-sparkline-section input[type="color"] {
+    width: 100%; height: 34px; border: 2px solid #d2d2d7; border-radius: 8px;
+    padding: 2px; cursor: pointer;
+}
+
 /* Binding input: flex row with ? help button */
 .binding-input-wrap {
     display: flex; align-items: center; gap: 6px;
@@ -1268,10 +1361,10 @@ footer {
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .binding-input-wrap input.binding-mono {
-    font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px;
 }
 input.binding-mono {
-    font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px;
 }
 .binding-help-btn {
     background: none; border: 1px solid #d2d2d7; border-radius: 50%;
@@ -1290,16 +1383,16 @@ input.binding-mono {
 .style-toggle-btn:hover { border-color: #007aff; color: #007aff; }
 .style-toggle-btn.active { border-color: #007aff; color: #007aff; background: rgba(0,122,255,.08); }
 /* Mixed labels: monospace when binding detected — match binding-mono size */
-input.has-binding { font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace; font-size: 13px; }
+input.has-binding { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; }
 /* Label style wrap: flex row with input + help button */
 .label-style-wrap {
     display: flex; align-items: center; gap: 6px; margin-top: 4px;
 }
 .label-style-wrap .label-style-input { flex: 1; min-width: 0; margin-top: 0; }
 /* Label style DSL input — compact, monospace */
-.label-style-input {
+input[type="text"].label-style-input {
     width: 100%; box-sizing: border-box; height: 32px;
-    font-family: 'SF Mono', Consolas, 'DejaVu Sans Mono', 'Ubuntu Mono', monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 12px; color: #86868b; border: 1px dashed #d2d2d7; border-radius: 6px;
     padding: 4px 8px; background: #fafafa;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;

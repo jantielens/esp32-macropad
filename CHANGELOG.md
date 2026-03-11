@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-03-11
+
+### Fixed
+- **Health bubble on Pads page** — the floating health widget was not working on the Pads page because the expanded health overlay HTML (from `{{FOOTER}}`) was missing. Added the health widget expanded overlay directly to `pads.html`
+- **Sparkline dot alignment** — current-value dots, min/max markers now use the exact pixel coordinates from the rendered line points, eliminating sub-pixel gaps between dots and the sparkline line
+
+### Added
+- **Sparkline smoothing** — new "Smoothing" setting (0–8) applies Gaussian kernel smoothing to sparkline data, producing visually smoother trend lines. Higher values = more smoothing (radius 8 averages 17 neighbors per sample). Min/max markers and current-value dots are repositioned to sit on the smoothed line. Set to 0 (default) for raw data rendering
+- **Sparkline widget** — mini trend line that plots the last N data points over a configurable time window. Supports auto or manual min/max, configurable line width and color, optional color thresholds (4-zone, like bar chart), and any binding type (MQTT, health, time, expressions). Supports up to 3 overlaid lines (each with its own data binding and color) sharing the same Y-axis — ideal for comparing related metrics (e.g., solar production vs grid import). Unified auto-scale (default on) ensures all lines share the same Y-axis range for visual comparability; disable for independent per-line scaling. Backed by the new data stream registry for background data collection — sparklines have historical data ready even when navigating to a screen for the first time
+- **Sparkline min/max markers** — configurable dot markers at the minimum and maximum data points in the visible range. Each marker has its own size (0 = off, 1–20 px), printf format string for numeric labels (e.g., `hi %.1f`), and optional color override (defaults to line color)
+- **Sparkline current-value dot** — optional dot at the right edge of the chart showing the most recent value. Size configurable (0 = off, 1–20 px). Follows threshold color when "Color by value" is enabled
+- **Sparkline reference lines** — up to 3 horizontal reference lines at fixed Y values, drawn behind the data. Each line has a configurable color and pattern (Solid, Dotted, or Dashed). Optional "Keep in view" toggle expands auto-scale to guarantee reference lines are always visible (explicit min/max take priority). Useful for target values, alert thresholds, or baseline indicators
+- **Data stream registry** — demand-driven background data collection subsystem. History-based widgets (sparkline) register their data needs at config load time; the registry continuously resolves bindings and feeds ring buffers regardless of which screen is active. Per-widget ring buffers with PSRAM allocation and LOCF (Last Observation Carried Forward) for data gaps
+- **Bar chart — horizontal orientation** — new "Orientation" dropdown in bar chart settings (Vertical / Horizontal). Horizontal mode fills the bar left-to-right instead of bottom-to-top; Bar Width % controls bar thickness (height) in horizontal mode. Useful for progress-bar style visualizations on wide buttons
+- **Gauge widget** — arc-based gauge visualization for buttons, with configurable arc sweep (10–360°), start angle, ticks, needle, and up to 4 color thresholds. Supports data binding for live values (e.g. `[time:%S]`, `[mqtt:sensor/temperature]`). Configurable track, needle, and tick colors, needle width (0 = hidden), tick width, and arc thickness. Center label and icon are positioned inside the arc. Tick marks are placed at interior positions only (N ticks divide the arc into N+1 equal segments). Supports up to 3 concentric rings (outer/middle/inner) — each with its own data binding but sharing the same scale, thresholds, and colors — for Apple Health ring–style visualizations
+- **Bar chart — reversed color mode** — new "Reversed, high values are better" checkbox in the bar chart widget settings. When toggled, the four color picker values swap in place (the positional labels Below T1 / T1–T2 / T2–T3 / Above T3 stay fixed). Ideal for battery level, signal strength, or any metric where higher is better
+
+### Changed
+- **Web portal — separate Pads page** — the pad editor has moved from the Home page to its own dedicated **Pads** page, accessible via a new tab in the navigation bar (Home | **Pads** | Network | Firmware). The Home page now shows a welcome card with quick links, plus device settings (Operating Mode, Display, Sensors). The Pads page has its own floating footer with Save Pad / Show on Device / More actions, completely separate from the device config Save & Reboot flow
+- **Button editor — collapsible card groups** — the button editor dialog is reorganized into card-like collapsible `<details>` sections: Layout, Labels, Bar Chart (conditional), Actions, Icon, Image Background, Appearance, and State. Layout, Labels, and Actions are open by default; the rest are collapsed to reduce visual clutter
+- **Unsaved pad changes protection** — switching between pads or navigating away from the Pads page with unsaved changes now shows a confirmation dialog. The browser's `beforeunload` event also warns before closing the tab
+- **Home page section order** — reordered sections to Welcome → Display Settings → Operating Mode & Cadence. The welcome card now includes a link to the GitHub repo for docs, source code, and issue tracking
+- **Removed `dummy_setting`** — cleaned up the unused example config field from the backend, REST API, JavaScript, and documentation
+
 ## [1.6.0] - 2026-03-08
 
 ### Added

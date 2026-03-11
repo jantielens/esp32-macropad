@@ -26,7 +26,7 @@
 
 // Opaque per-tile widget runtime state (LVGL objects, cached values, etc.)
 // Created by createUI(), freed by destroyUI(). Stored in ButtonTile.
-#define WIDGET_STATE_MAX_BYTES 32
+#define WIDGET_STATE_MAX_BYTES 80
 
 struct WidgetState {
     uint8_t data[WIDGET_STATE_MAX_BYTES];
@@ -58,9 +58,49 @@ struct WidgetType {
     // Clean up any resources in WidgetState before tile deletion.
     // LVGL child objects are deleted automatically when the tile is deleted.
     void (*destroyUI)(WidgetState* state);
+
+    // Optional periodic tick called every poll cycle, even when the bound
+    // value hasn't changed.  Used by widgets that need periodic refresh
+    // from external data (e.g. sparkline reads from data stream registry).
+    // May be NULL.
+    void (*tick)(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* state);
+
+    // Optional: return data stream requirements for background collection.
+    // Widgets that need historical data (ring buffers) implement this so the
+    // data_stream registry can collect data independently of the active screen.
+    // Called with stream_index 0, 1, 2, ... until it returns false.
+    // Index 0 uses cfg->data_binding; higher indices use data_binding_2/3.
+    // Returns true if stream_index is valid and needs a data stream.
+    // May be NULL (widget needs no data streams).
+    bool (*getStreamParams)(const WidgetConfig* cfg, uint8_t stream_index,
+                            uint16_t* window_secs, uint8_t* slot_count,
+                            const char** out_binding);
 };
 
 // Look up a widget type by name. Returns NULL for "" or unknown types.
 const WidgetType* widget_find(const char* type_name);
+
+// ---- Shared color-parsing helper for widget config ----
+// Accepts numeric JSON values, "#RRGGBB", or "0xRRGGBB" strings.
+inline uint32_t widget_parse_color(JsonVariant v, uint32_t def) {
+    if (v.isNull()) return def;
+    if (v.is<unsigned long>() || v.is<long>()) return (uint32_t)v.as<unsigned long>();
+    if (!v.is<const char*>()) return def;
+    const char* s = v.as<const char*>();
+    if (!s || !*s) return def;
+    if (s[0] == '#') s++;
+    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
+    char* end = nullptr;
+    uint32_t val = strtoul(s, &end, 16);
+    return (end == s) ? def : val;
+}
+
+// Parse an optional color: returns 0 if absent/null, or 0x01RRGGBB with
+// marker bit 24 set when a color is present (same convention as LabelStyle.color).
+inline uint32_t widget_parse_color_opt(JsonVariant v) {
+    if (v.isNull()) return 0;
+    uint32_t c = widget_parse_color(v, 0xFFFFFFFF);
+    return (c == 0xFFFFFFFF) ? 0 : (0x01000000 | (c & 0x00FFFFFF));
+}
 
 #endif // HAS_DISPLAY

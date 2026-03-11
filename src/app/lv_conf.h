@@ -233,7 +233,7 @@
     #define LV_LABEL_LONG_TXT_HINT 0
 #endif
 #define LV_USE_LED        0
-#define LV_USE_LINE       0
+#define LV_USE_LINE       1
 #define LV_USE_LIST       0
 #define LV_USE_MENU       0
 #define LV_USE_MSGBOX     0

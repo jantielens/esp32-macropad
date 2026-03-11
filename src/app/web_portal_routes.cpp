@@ -24,6 +24,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Page routes
 		server->on("/", HTTP_GET, handleRoot);
 		server->on("/home.html", HTTP_GET, handleHome);
+		server->on("/pads.html", HTTP_GET, handlePad);
 		server->on("/network.html", HTTP_GET, handleNetwork);
 		server->on("/firmware.html", HTTP_GET, handleFirmware);
 

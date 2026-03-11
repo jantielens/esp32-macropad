@@ -33,28 +33,28 @@ Once connected to Wi-Fi, you can access the full configuration portal:
 
 > **Tip**: The device's IP address and mDNS name are also shown on the device's info screen (if your board has a display).
 
-The portal has three pages:
+The portal has four pages:
 
 | Page | What it does |
 |------|--------------|
-| **Home** | Configure the pad layout, display settings, operating mode, and more |
+| **Home** | Welcome overview, operating mode, display settings, and sensors |
+| **Pads** | Design and configure your pad layouts and buttons |
 | **Network** | Manage Wi-Fi, MQTT, device name, static IP, and security settings |
 | **Firmware** | Update firmware over Wi-Fi (OTA) or via file upload, and factory reset |
 
 ## Step 4: Set Up Your Pads
 
-If your device has a display, head to the **Home** page to configure your pad layout:
+If your device has a display, head to the **Pads** page to configure your pad layout:
 
-1. Open the **Pad Editor** section
-2. Choose the number of **columns** and **rows** for your grid
-3. Click any cell to open the **button editor**
-4. Configure each button with:
+1. Choose the number of **columns** and **rows** for your grid
+2. Click any cell to open the **button editor**
+3. Configure each button with:
    - **Labels** (top, center, bottom) — supports live data via [MQTT bindings](#mqtt-bindings)
    - **Icons** — choose from emoji or Material Symbols
    - **Colors** — background, text, border
    - **Tap/long-press actions** — navigate screens or publish MQTT messages
    - **Background images** — load images from a URL (JPEG/PNG)
-5. Click **Save Pad** when you're done
+4. Click **Save Pad** when you're done
 
 You can create up to **8 pad pages** and switch between them on the device or via Home Assistant.
 
@@ -73,7 +73,7 @@ A full binding reference is available in the pad editor's built-in help dialog.
 If you have an MQTT broker and Home Assistant:
 
 1. Go to the **Network** page and fill in your **MQTT Host**, **Port**, and credentials
-2. On the **Home** page, configure the **Operating Mode** and **Transport** settings
+2. On the **Home** page, configure the **Operating Mode** and **Transport Mode** settings
 3. Save and reboot
 
 The device will automatically register itself with Home Assistant via **MQTT Discovery** — no manual YAML needed. You'll see:

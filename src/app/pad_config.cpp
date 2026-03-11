@@ -91,9 +91,9 @@ void label_style_parse(const char* dsl, LabelStyle* out) {
                 else if (strcmp(val, "center") == 0) out->align = LABEL_ALIGN_CENTER;
             } else if (strcmp(key, "y") == 0) {
                 int y = atoi(val);
-                if (y < -128) y = -128;
-                if (y > 127)  y = 127;
-                out->y_offset = (int8_t)y;
+                if (y < -999) y = -999;
+                if (y > 999)  y = 999;
+                out->y_offset = (int16_t)y;
             } else if (strcmp(key, "mode") == 0) {
                 if (strcmp(val, "clip") == 0)        out->long_mode = LABEL_MODE_CLIP;
                 else if (strcmp(val, "scroll") == 0) out->long_mode = LABEL_MODE_SCROLL;
@@ -226,6 +226,8 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     const char* wtype = obj["widget_type"] | "";
     strlcpy(btn->widget.type, wtype, CONFIG_WIDGET_TYPE_MAX_LEN);
     strlcpy(btn->widget.data_binding, obj["widget_data_binding"] | "", CONFIG_LABEL_MAX_LEN);
+    strlcpy(btn->widget.data_binding_2, obj["widget_data_binding_2"] | "", CONFIG_LABEL_MAX_LEN);
+    strlcpy(btn->widget.data_binding_3, obj["widget_data_binding_3"] | "", CONFIG_LABEL_MAX_LEN);
     memset(btn->widget.data, 0, WIDGET_CONFIG_MAX_BYTES);
 #if HAS_DISPLAY
     if (wtype[0]) {
@@ -278,6 +280,7 @@ bool pad_config_init() {
 
     // Pre-load all existing page configs into RAM cache.
     // This runs on the main task (internal stack) so flash access is safe.
+    bool any_loaded = false;
     for (uint8_t i = 0; i < MAX_PAD_PAGES; i++) {
         char path[32];
         pad_config_path(i, path, sizeof(path));
@@ -290,12 +293,22 @@ bool pad_config_init() {
                 memset(cfg, 0, sizeof(PadPageConfig));
                 if (pad_config_load_from_flash(i, cfg)) {
                     g_cache[i] = cfg;
+                    any_loaded = true;
                     LOGD(TAG, "Cached page %u", i);
                 } else {
                     free(cfg);
                 }
             }
         }
+    }
+
+    // Bump generation so subsystems that depend on pad configs (data stream
+    // registry, pad screens) detect that configs are now available.  The LVGL
+    // task may have already run data_stream_rebuild() before LittleFS was
+    // mounted and found zero configs — this ensures it re-scans.
+    if (any_loaded) {
+        g_generation++;
+        LOGI(TAG, "Configs cached, gen=%u", g_generation);
     }
 
     return true;

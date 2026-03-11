@@ -203,17 +203,28 @@ Real-time device health monitoring integrated as a header badge with expandable 
 **Sections:**
 - **⚡ Operating Mode & Cadence**: Mode selection, transport, cycle interval, portal idle timeout, WiFi backoff cap, and MQTT payload scope
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
-- **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
-  - **Pad selection & naming**: Dropdown for Pad 1–8 with optional custom names (max 31 chars)
-  - **Grid preview**: Click any cell to open the button editor dialog
-  - **Button editor dialog**: Label, icon (emoji / Material Symbol), per-label style overrides (font, alignment, y-offset, text overflow mode, color via DSL), colors, actions (screen navigate, MQTT), bindings, image backgrounds, button state (enabled/disabled/hidden with binding support)
-  - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
-  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 8 pad configs), Clear Pad
-  - **Device config export/import**: Exports NVS settings (excluding network) plus all 8 pad pages to a single JSON file; import overwrites settings and reboots
+- **Sensor & Display settings**: Threshold and display configuration sections
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
 
-**Purpose:** Demonstrates how to add custom application-specific settings
+**Purpose:** Device-level settings (operating mode, sensors, display)
+
+#### Pads Page (`/pads.html`)
+
+**Available In:** Full Mode only (redirects to Network page in AP mode)
+
+**Sections:**
+- **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
+  - **Pad selection & naming**: Dropdown for Pad 1–8 with optional custom names (max 31 chars)
+  - **Grid preview**: Click any cell to open the button editor dialog
+  - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Actions, Icon, Image Background, Appearance, State)
+  - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
+  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 8 pad configs), Clear Pad
+  - **Device config export/import**: Exports NVS settings (excluding network) plus all 8 pad pages to a single JSON file; import overwrites settings and reboots
+- **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
+- **Custom floating footer**: Save Pad, Show on Device, and More menu (not the shared `{{FOOTER}}` template)
+
+**Layout:** Full-width pad grid with responsive button editor dialog
 
 #### Network Page (`/network.html`)
 
@@ -550,7 +561,6 @@ Returns current device configuration (passwords excluded).
   "gateway": "",
   "dns1": "",
   "dns2": "",
-  "dummy_setting": "",
 
   "power_mode": "always_on",
   "publish_transport": "ble",
@@ -599,7 +609,6 @@ Save new configuration. Device reboots after successful save.
   "gateway": "192.168.1.1",
   "dns1": "8.8.8.8",
   "dns2": "8.8.4.4",
-  "dummy_setting": "value",
 
   "power_mode": "duty_cycle",
   "publish_transport": "ble_mqtt",
