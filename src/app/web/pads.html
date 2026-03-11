@@ -602,11 +602,18 @@
                             <small>Auto-expand Y range so reference lines are always visible.</small>
                         </div>
 
-                        <div class="widget-sub-heading">Line Width</div>
+                        <div class="widget-sub-heading">Line Style</div>
 
-                        <div class="form-group" style="max-width:120px;">
-                            <label for="pad-edit-sparkline-line-width">Line Width (px)</label>
-                            <input type="number" id="pad-edit-sparkline-line-width" min="1" max="10" value="2" placeholder="2">
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:0 0 100px;">
+                                <label for="pad-edit-sparkline-line-width">Line Width (px)</label>
+                                <input type="number" id="pad-edit-sparkline-line-width" min="1" max="10" value="2" placeholder="2">
+                            </div>
+                            <div class="form-group" style="flex:0 0 100px;">
+                                <label for="pad-edit-sparkline-smooth">Smoothing</label>
+                                <input type="number" id="pad-edit-sparkline-smooth" min="0" max="8" value="0" placeholder="0">
+                                <small>0 = off, 3-4 = smooth</small>
+                            </div>
                         </div>
 
                         <div class="widget-sub-heading">Main Line Color by Value</div>

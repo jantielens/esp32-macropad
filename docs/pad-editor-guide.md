@@ -289,6 +289,7 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Follows threshold color when "Color by value" is enabled |
 | **Reference line 1/2/3** | Up to 3 horizontal reference lines at fixed Y values. Each has a Y value (numeric), a color, and a line pattern (Solid, Dotted, or Dashed). Drawn behind the data lines. Only lines with a valid Y value are rendered |
 | **Keep reference lines in view** | When enabled, auto-scale expands the Y range to include all configured reference line values, so they are always visible. Data that exceeds the reference lines still expands the range normally. Only affects auto-scaled axes (explicit min/max take priority) |
+| **Smoothing** | Gaussian kernel smoothing radius (0 = off, 1–8). Smooths the trend line by averaging neighboring data points — higher values produce a smoother curve. A value of 3–4 gives a pleasant smoothing effect; 8 gives heavy averaging. Min/max markers and current-value dot are positioned on the smoothed line. Set to 0 for raw data rendering |
 
 **Background data collection** — unlike bar chart and gauge which only show the current value, sparklines need historical data. The data stream registry collects data continuously in the background, even when the sparkline's screen is not visible. When you navigate to a sparkline's screen, the graph is immediately populated with all collected history.
 

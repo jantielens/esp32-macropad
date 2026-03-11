@@ -2282,6 +2282,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-sparkline-line-color-2').value = padColorToHex(btn.widget_sparkline_line_color_2, '#2196F3');
     document.getElementById('pad-edit-sparkline-line-color-3').value = padColorToHex(btn.widget_sparkline_line_color_3, '#9C27B0');
     document.getElementById('pad-edit-sparkline-line-width').value = (btn.widget_sparkline_line_width !== undefined) ? btn.widget_sparkline_line_width : 2;
+    document.getElementById('pad-edit-sparkline-smooth').value = (btn.widget_sparkline_smooth !== undefined) ? btn.widget_sparkline_smooth : 0;
     document.getElementById('pad-edit-sparkline-use-thresholds').checked = btn.widget_sparkline_use_thresholds || false;
     document.getElementById('pad-edit-sparkline-unified-scale').checked = (btn.widget_sparkline_unified_scale !== undefined) ? btn.widget_sparkline_unified_scale : true;
 
@@ -2508,6 +2509,8 @@ function padDialogOk() {
             btn.widget_sparkline_line_color_3 = padHexToInt(document.getElementById('pad-edit-sparkline-line-color-3').value);
             const sLw = parseInt(document.getElementById('pad-edit-sparkline-line-width').value);
             btn.widget_sparkline_line_width = (isNaN(sLw) || sLw < 1) ? 2 : (sLw > 10) ? 10 : sLw;
+            const sSmooth = parseInt(document.getElementById('pad-edit-sparkline-smooth').value);
+            btn.widget_sparkline_smooth = (isNaN(sSmooth) || sSmooth < 0) ? 0 : (sSmooth > 8) ? 8 : sSmooth;
             btn.widget_sparkline_use_thresholds = document.getElementById('pad-edit-sparkline-use-thresholds').checked;
             btn.widget_sparkline_unified_scale = document.getElementById('pad-edit-sparkline-unified-scale').checked;
 

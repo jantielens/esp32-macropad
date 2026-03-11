@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Health bubble on Pads page** — the floating health widget was not working on the Pads page because the expanded health overlay HTML (from `{{FOOTER}}`) was missing. Added the health widget expanded overlay directly to `pads.html`
+- **Sparkline dot alignment** — current-value dots, min/max markers now use the exact pixel coordinates from the rendered line points, eliminating sub-pixel gaps between dots and the sparkline line
 
 ### Added
+- **Sparkline smoothing** — new "Smoothing" setting (0–8) applies Gaussian kernel smoothing to sparkline data, producing visually smoother trend lines. Higher values = more smoothing (radius 8 averages 17 neighbors per sample). Min/max markers and current-value dots are repositioned to sit on the smoothed line. Set to 0 (default) for raw data rendering
 - **Sparkline widget** — mini trend line that plots the last N data points over a configurable time window. Supports auto or manual min/max, configurable line width and color, optional color thresholds (4-zone, like bar chart), and any binding type (MQTT, health, time, expressions). Supports up to 3 overlaid lines (each with its own data binding and color) sharing the same Y-axis — ideal for comparing related metrics (e.g., solar production vs grid import). Unified auto-scale (default on) ensures all lines share the same Y-axis range for visual comparability; disable for independent per-line scaling. Backed by the new data stream registry for background data collection — sparklines have historical data ready even when navigating to a screen for the first time
 - **Sparkline min/max markers** — configurable dot markers at the minimum and maximum data points in the visible range. Each marker has its own size (0 = off, 1–20 px), printf format string for numeric labels (e.g., `hi %.1f`), and optional color override (defaults to line color)
 - **Sparkline current-value dot** — optional dot at the right edge of the chart showing the most recent value. Size configurable (0 = off, 1–20 px). Follows threshold color when "Color by value" is enabled

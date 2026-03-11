@@ -65,6 +65,7 @@ struct SparklineConfig {
     bool     use_thresholds;       // true = color by current value tier
     bool     unified_autoscale;    // true = shared auto min/max across all lines
     bool     ref_in_view;          // true = expand auto-scale to include ref lines
+    uint8_t  smooth_factor;         // Gaussian smoothing radius (0=off, 1-8 = kernel radius)
     char     min_fmt[16];          // Printf format for min label (e.g. "lo %.1f")
     char     max_fmt[16];          // Printf format for max label (e.g. "hi %.1f")
 };
@@ -228,6 +229,10 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
         if (cfg->ref_line_pattern[i] > 2) cfg->ref_line_pattern[i] = 0;
     }
     cfg->ref_in_view = btn["widget_sparkline_ref_in_view"] | false;
+
+    // Smoothing: Gaussian kernel radius (0 = off, 1-8)
+    uint8_t sm = btn["widget_sparkline_smooth"] | (uint8_t)0;
+    cfg->smooth_factor = (sm > 8) ? 8 : sm;
 }
 
 // Helper: populate line color array from config (used by create and redraw)
@@ -270,11 +275,12 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 #endif
 
     // Allocate point arrays for each line
+    uint16_t max_pts = cfg->slot_count;
     for (uint8_t i = 0; i < st->line_count; i++) {
         st->points[i] = (lv_point_precise_t*)lv_malloc(
-            sizeof(lv_point_precise_t) * cfg->slot_count);
+            sizeof(lv_point_precise_t) * max_pts);
         if (!st->points[i]) {
-            LOGE(TAG, "Failed to allocate points array[%d] (%d slots)", i, cfg->slot_count);
+            LOGE(TAG, "Failed to allocate points array[%d] (%d pts)", i, max_pts);
             return;
         }
     }
@@ -407,6 +413,49 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 }
 
+// ---- Smoothed line info (returned by rebuild for overlay positioning) ----
+
+struct SmoothLineInfo {
+    float    smoothed_min;     // Min value after smoothing
+    float    smoothed_max;     // Max value after smoothing
+    float    smoothed_last;    // Smoothed value at rightmost slot
+    int16_t  last_px;          // Last point pixel X (chart-area relative)
+    int16_t  last_py;          // Last point pixel Y (chart-area relative)
+    int16_t  min_px;           // Min point pixel X (chart-area relative)
+    int16_t  min_py;           // Min point pixel Y (chart-area relative)
+    int16_t  max_px;           // Max point pixel X (chart-area relative)
+    int16_t  max_py;           // Max point pixel Y (chart-area relative)
+    uint8_t  min_line;         // Which line owns the min (for multi-line scans)
+    uint8_t  max_line;         // Which line owns the max (for multi-line scans)
+    uint8_t  valid_count;      // Number of valid rendered points
+};
+
+// ---- Gaussian kernel smoothing ----
+// Smooths a contiguous float array in-place using a weighted Gaussian window.
+// radius = number of neighbors on each side; sigma = radius.
+
+static void gaussian_smooth(float* vals, uint8_t n, uint8_t radius) {
+    if (radius == 0 || n < 2) return;
+    float* tmp = (float*)alloca(sizeof(float) * n);
+    memcpy(tmp, vals, sizeof(float) * n);
+    float sigma = (float)radius;
+    float inv_2s2 = -0.5f / (sigma * sigma);
+    for (uint8_t i = 0; i < n; i++) {
+        float sum = 0.0f, wsum = 0.0f;
+        int lo = (int)i - (int)radius;
+        int hi = (int)i + (int)radius;
+        if (lo < 0) lo = 0;
+        if (hi >= (int)n) hi = (int)n - 1;
+        for (int j = lo; j <= hi; j++) {
+            float d = (float)(j - (int)i);
+            float w = expf(inv_2s2 * d * d);
+            sum += w * tmp[j];
+            wsum += w;
+        }
+        vals[i] = sum / wsum;
+    }
+}
+
 // ---- Rebuild the LVGL point array from a data stream snapshot ----
 
 static void sparkline_rebuild_points(const SparklineConfig* cfg,
@@ -415,49 +464,92 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
                                      const DataStreamSnapshot* snap,
                                      int16_t chart_w, int16_t chart_h,
                                      float shared_auto_min, float shared_auto_max,
-                                     float ref_expand_min, float ref_expand_max) {
+                                     float ref_expand_min, float ref_expand_max,
+                                     SmoothLineInfo* out_info) {
+    // Initialize output info
+    if (out_info) {
+        out_info->smoothed_min = INFINITY;
+        out_info->smoothed_max = -INFINITY;
+        out_info->smoothed_last = NAN;
+        out_info->last_px = 0;
+        out_info->last_py = 0;
+        out_info->min_px = 0;
+        out_info->min_py = 0;
+        out_info->max_px = 0;
+        out_info->max_py = 0;
+        out_info->valid_count = 0;
+    }
+
     // Determine Y-axis range
-    // When shared min/max are provided (unified auto-scale), use them
-    // instead of the per-line snapshot auto values.
     float y_min = cfg->min_val;
     float y_max = cfg->max_val;
     if (isnan(y_min)) y_min = isnan(shared_auto_min) ? snap->auto_min : shared_auto_min;
     if (isnan(y_max)) y_max = isnan(shared_auto_max) ? snap->auto_max : shared_auto_max;
-    // Expand auto-scaled axes to include reference lines (ref_in_view)
     if (isnan(cfg->min_val) && isfinite(ref_expand_min) && ref_expand_min < y_min) y_min = ref_expand_min;
     if (isnan(cfg->max_val) && isfinite(ref_expand_max) && ref_expand_max > y_max) y_max = ref_expand_max;
-    if (y_min >= y_max) { y_min -= 1.0f; y_max += 1.0f; }  // degenerate range guard
+    if (y_min >= y_max) { y_min -= 1.0f; y_max += 1.0f; }
     if (!isfinite(y_min) || !isfinite(y_max)) { y_min = 0.0f; y_max = 1.0f; }
     float y_range = y_max - y_min;
 
-    // Build points from oldest to newest
     uint8_t n = snap->slot_count;
+
+    // Step 1: Extract valid float values and their original slot indices
+    float* vals = (float*)alloca(sizeof(float) * snap->count);
+    uint8_t* slot_map = (uint8_t*)alloca(sizeof(uint8_t) * snap->count);
     uint8_t valid = 0;
+    for (uint8_t i = 0; i < snap->count; i++) {
+        uint8_t idx = (snap->count < n)
+            ? i
+            : (uint8_t)((snap->head + i) % n);
+        float val = snap->samples[idx];
+        if (!isfinite(val)) continue;
+        vals[valid] = val;
+        slot_map[valid] = i;
+        valid++;
+    }
+
+    // Step 2: Apply Gaussian kernel smoothing on the float values
+    if (cfg->smooth_factor > 0 && valid >= 2) {
+        gaussian_smooth(vals, valid, cfg->smooth_factor);
+    }
+
+    // Step 3: Convert smoothed values to pixel coordinates
     float x_step = (n > 1) ? (float)chart_w / (float)(n - 1) : 0.0f;
-    // Right-align: when buffer not yet full, offset so newest point sits at right edge
     uint8_t x_offset = (snap->count < n) ? (n - snap->count) : 0;
 
-    // Walk the ring buffer from oldest to newest
-    for (uint8_t i = 0; i < n; i++) {
-        uint8_t idx = (snap->count < n)
-            ? i                                    // buffer not yet full: 0..count-1
-            : (uint8_t)((snap->head + i) % n);    // buffer full: head is oldest
-        if (i >= snap->count) break;               // no more valid samples
-        float val = snap->samples[idx];
-        if (!isfinite(val)) continue;              // skip invalid entries
+    for (uint8_t vi = 0; vi < valid; vi++) {
+        float val = vals[vi];
+        uint8_t si = slot_map[vi];
 
         float ratio = (val - y_min) / y_range;
         if (ratio < 0.0f) ratio = 0.0f;
         if (ratio > 1.0f) ratio = 1.0f;
 
-        // X: right-aligned (newest=right edge, grows leftward as buffer fills)
-        points[valid].x = (lv_value_precise_t)((i + x_offset) * x_step);
-        // Y: top=max, bottom=min (LVGL Y grows downward)
-        points[valid].y = (lv_value_precise_t)((1.0f - ratio) * (chart_h - 1));
-        valid++;
+        int16_t px = (int16_t)((si + x_offset) * x_step);
+        int16_t py = (int16_t)((1.0f - ratio) * (chart_h - 1));
+        points[vi].x = (lv_value_precise_t)px;
+        points[vi].y = (lv_value_precise_t)py;
+
+        // Track smoothed min/max and their pixel coords for overlay positioning
+        if (out_info) {
+            if (val < out_info->smoothed_min) {
+                out_info->smoothed_min = val;
+                out_info->min_px = px;
+                out_info->min_py = py;
+            }
+            if (val > out_info->smoothed_max) {
+                out_info->smoothed_max = val;
+                out_info->max_px = px;
+                out_info->max_py = py;
+            }
+            out_info->smoothed_last = val;
+            out_info->last_px = px;
+            out_info->last_py = py;
+        }
     }
 
-    // Update the line with the valid point count
+    if (out_info) out_info->valid_count = valid;
+
     if (line_obj) {
         lv_line_set_points(line_obj, points, valid);
     }
@@ -507,7 +599,9 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         }
     }
 
-    // Redraw each line from its data stream; cache main line snapshot for overlay positioning
+    // Redraw each line from its data stream; collect smoothed info per line
+    SmoothLineInfo smooth_info[MAX_SPARKLINE_LINES];
+    memset(smooth_info, 0, sizeof(smooth_info));
     DataStreamSnapshot main_snap;
     bool main_snap_valid = false;
     for (uint8_t i = 0; i < st->line_count; i++) {
@@ -520,7 +614,8 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         sparkline_rebuild_points(cfg, st->points[i], st->lines[i],
                                  &snap, chart_w, chart_h,
                                  shared_auto_min, shared_auto_max,
-                                 ref_expand_min, ref_expand_max);
+                                 ref_expand_min, ref_expand_max,
+                                 &smooth_info[i]);
 
         // Threshold coloring applies to main line only
         if (i == 0 && cfg->use_thresholds && isfinite(snap.last_value)) {
@@ -578,34 +673,26 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
     uint32_t line_colors[MAX_SPARKLINE_LINES];
     sparkline_get_line_colors(cfg, line_colors);
 
-    // Helper: slot index → chart-relative X
-    auto slot_x = [&](uint8_t si, uint8_t scount, uint8_t n) -> int16_t {
-        float x_step = (n > 1) ? (float)chart_w / (float)(n - 1) : 0.0f;
-        uint8_t x_off = (scount < n) ? (n - scount) : 0;
-        return (int16_t)((si + x_off) * x_step);
-    };
-
-    // ---- Current-value dot positioning (one per line) ----
+    // ---- Current-value dot positioning (one per line, uses actual line endpoint) ----
     for (uint8_t ci = 0; ci < st->line_count; ci++) {
         if (!st->dot_current[ci]) continue;
-        DataStreamSnapshot sc;
-        if (st->ds_handles[ci] != DATA_STREAM_INVALID && data_stream_get(st->ds_handles[ci], &sc)
-            && sc.count > 0 && isfinite(sc.last_value)) {
-            uint8_t last_si = sc.count - 1;
-            int16_t cx = slot_x(last_si, sc.count, sc.slot_count);
-            int16_t cy = val_to_y(sc.last_value);
+        const SmoothLineInfo& si = smooth_info[ci];
+        if (si.valid_count > 0 && isfinite(si.smoothed_last)) {
             int16_t cr = cfg->current_dot_size / 2;
 
             // Color: threshold color if thresholds on (main line only), else line color
             lv_color_t cd_clr;
             if (ci == 0 && cfg->use_thresholds) {
-                cd_clr = pick_tier_color(cfg, sc.auto_min, sc.auto_max, sc.last_value);
+                cd_clr = pick_tier_color(cfg,
+                    main_snap_valid ? main_snap.auto_min : si.smoothed_min,
+                    main_snap_valid ? main_snap.auto_max : si.smoothed_max,
+                    si.smoothed_last);
             } else {
                 uint32_t lc = line_colors[ci];
                 cd_clr = lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF);
             }
             lv_obj_set_style_bg_color(st->dot_current[ci], cd_clr, 0);
-            lv_obj_set_pos(st->dot_current[ci], ca_x + cx - cr, ca_y + cy - cr);
+            lv_obj_set_pos(st->dot_current[ci], ca_x + si.last_px - cr, ca_y + si.last_py - cr);
             lv_obj_clear_flag(st->dot_current[ci], LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_add_flag(st->dot_current[ci], LV_OBJ_FLAG_HIDDEN);
@@ -621,29 +708,23 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         uint8_t scan_count = (use_shared || st->line_count == 1) ? st->line_count : 1;
 
         float found_min = INFINITY, found_max = -INFINITY;
-        uint8_t min_slot_i = 0, max_slot_i = 0;
+        int16_t min_px = 0, min_py = 0, max_px = 0, max_py = 0;
         uint8_t min_line = 0, max_line = 0;
-        uint8_t min_snap_count = 0, max_snap_count = 0;
-        uint8_t min_n = 0, max_n = 0;
 
         for (uint8_t li = 0; li < scan_count; li++) {
-            if (st->ds_handles[li] == DATA_STREAM_INVALID) continue;
-            DataStreamSnapshot s;
-            if (!data_stream_get(st->ds_handles[li], &s)) continue;
-            if (s.count == 0) continue;
-            for (uint8_t si = 0; si < s.count; si++) {
-                uint8_t idx = (s.count < s.slot_count)
-                    ? si : (uint8_t)((s.head + si) % s.slot_count);
-                float val = s.samples[idx];
-                if (!isfinite(val)) continue;
-                if (val < found_min) {
-                    found_min = val; min_slot_i = si; min_line = li;
-                    min_snap_count = s.count; min_n = s.slot_count;
-                }
-                if (val > found_max) {
-                    found_max = val; max_slot_i = si; max_line = li;
-                    max_snap_count = s.count; max_n = s.slot_count;
-                }
+            const SmoothLineInfo& si = smooth_info[li];
+            if (si.valid_count == 0) continue;
+            if (si.smoothed_min < found_min) {
+                found_min = si.smoothed_min;
+                min_px = si.min_px;
+                min_py = si.min_py;
+                min_line = li;
+            }
+            if (si.smoothed_max > found_max) {
+                found_max = si.smoothed_max;
+                max_px = si.max_px;
+                max_py = si.max_py;
+                max_line = li;
             }
         }
 
@@ -662,8 +743,8 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
 
             // Position max dot + label (above)
             if (has_max_marker) {
-                int16_t max_cx = slot_x(max_slot_i, max_snap_count, max_n);
-                int16_t max_cy = val_to_y(found_max);
+                int16_t max_cx = max_px;
+                int16_t max_cy = max_py;
                 int16_t max_r = cfg->marker_size_max / 2;
                 lv_color_t max_clr = resolve_marker_color(cfg->max_label_color, max_line);
                 lv_obj_set_style_bg_color(st->dot_max, max_clr, 0);
@@ -685,8 +766,8 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
 
             // Position min dot + label (below)
             if (has_min_marker) {
-                int16_t min_cx = slot_x(min_slot_i, min_snap_count, min_n);
-                int16_t min_cy = val_to_y(found_min);
+                int16_t min_cx = min_px;
+                int16_t min_cy = min_py;
                 int16_t min_r = cfg->marker_size_min / 2;
                 lv_color_t min_clr = resolve_marker_color(cfg->min_label_color, min_line);
                 lv_obj_set_style_bg_color(st->dot_min, min_clr, 0);
