@@ -280,6 +280,15 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
 | **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
 | **Color by value** | Enable 4-zone color thresholds on the main line (same system as bar chart and gauge). When enabled with auto min/max, thresholds are computed dynamically from observed data range |
+| **Max marker size** | Dot radius for the maximum-value marker (0 = off, 1–20 px). When non-zero, a dot and optional label are drawn at the highest point in the visible data |
+| **Max format** | Printf format string for the max label (e.g., `hi %.1f`). Only one `%f`/`%e`/`%g` specifier allowed. Leave empty for dot only (no label) |
+| **Max label color** | Override color for the max label text. White (#FFFFFF) means "auto" — the label inherits the line's current color |
+| **Min marker size** | Same as max marker, but for the lowest point in the visible data |
+| **Min format** | Printf format string for the min label (e.g., `lo %.1f`) |
+| **Min label color** | Override color for the min label text. White = auto |
+| **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Follows threshold color when "Color by value" is enabled |
+| **Reference line 1/2/3** | Up to 3 horizontal reference lines at fixed Y values. Each has a Y value (numeric), a color, and a line pattern (Solid, Dotted, or Dashed). Drawn behind the data lines. Only lines with a valid Y value are rendered |
+| **Keep reference lines in view** | When enabled, auto-scale expands the Y range to include all configured reference line values, so they are always visible. Data that exceeds the reference lines still expands the range normally. Only affects auto-scaled axes (explicit min/max take priority) |
 
 **Background data collection** — unlike bar chart and gauge which only show the current value, sparklines need historical data. The data stream registry collects data continuously in the background, even when the sparkline's screen is not visible. When you navigate to a sparkline's screen, the graph is immediately populated with all collected history.
 

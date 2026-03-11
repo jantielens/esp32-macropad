@@ -30,12 +30,20 @@
 
 // ---- Config struct (packed into WidgetConfig.data[]) ----
 
+// Reference line pattern enumeration
+#define REF_LINE_SOLID   0
+#define REF_LINE_DOTTED  1  // 2px dash, 4px gap
+#define REF_LINE_DASHED  2  // 6px dash, 4px gap
+
+#define MAX_REF_LINES 3
+
 struct SparklineConfig {
     float    min_val;              // Y-axis minimum (NAN = auto-scale)
     float    max_val;              // Y-axis maximum (NAN = auto-scale)
     float    threshold_1;          // Color tier breakpoints
     float    threshold_2;
     float    threshold_3;
+    float    ref_line_y[MAX_REF_LINES];   // Reference line Y-values (NAN = disabled)
     uint32_t color_good_rgb;       // Color tier 0: below threshold 1
     uint32_t color_ok_rgb;         // Color tier 1: threshold 1 → 2
     uint32_t color_attention_rgb;  // Color tier 2: threshold 2 → 3
@@ -43,12 +51,22 @@ struct SparklineConfig {
     uint32_t line_color_rgb;       // Main line color (when thresholds not used)
     uint32_t line_color_2_rgb;     // Extra line 2 color
     uint32_t line_color_3_rgb;     // Extra line 3 color
+    uint32_t min_label_color;      // 0 = follow line color, else 0x01RRGGBB
+    uint32_t max_label_color;      // 0 = follow line color, else 0x01RRGGBB
+    uint32_t ref_line_color_rgb[MAX_REF_LINES]; // Reference line colors
     uint16_t window_secs;          // Time window in seconds (e.g. 300 = 5 min)
     uint8_t  slot_count;           // Number of sample slots (default 60)
     uint8_t  line_width;           // Line thickness in pixels (default 2)
+    uint8_t  marker_size_min;      // Min marker dot size (0 = off, default 5)
+    uint8_t  marker_size_max;      // Max marker dot size (0 = off, default 5)
+    uint8_t  current_dot_size;     // Current-value dot size at right edge (0 = off)
+    uint8_t  ref_line_pattern[MAX_REF_LINES]; // REF_LINE_SOLID/DOTTED/DASHED
     bool     use_absolute;         // Compare |value| for color tiers
     bool     use_thresholds;       // true = color by current value tier
     bool     unified_autoscale;    // true = shared auto min/max across all lines
+    bool     ref_in_view;          // true = expand auto-scale to include ref lines
+    char     min_fmt[16];          // Printf format for min label (e.g. "lo %.1f")
+    char     max_fmt[16];          // Printf format for max label (e.g. "hi %.1f")
 };
 
 static_assert(sizeof(SparklineConfig) <= WIDGET_CONFIG_MAX_BYTES,
@@ -70,6 +88,13 @@ struct SparklineState {
 #if HAS_MQTT
     data_stream_handle_t ds_handles[MAX_SPARKLINE_LINES]; // Data stream handles
 #endif
+    lv_obj_t* dot_min;               // Min marker dot (tile child)
+    lv_obj_t* dot_max;               // Max marker dot (tile child)
+    lv_obj_t* lbl_min;               // Min value label (tile child)
+    lv_obj_t* lbl_max;               // Max value label (tile child)
+    lv_obj_t* dot_current[MAX_SPARKLINE_LINES]; // Current-value dot per line
+    lv_obj_t* ref_line_objs[MAX_REF_LINES]; // Reference line LVGL objects
+    lv_point_precise_t* ref_pts;     // Heap-allocated ref line point pairs (MAX_REF_LINES * 2)
 };
 
 static_assert(sizeof(SparklineState) <= WIDGET_STATE_MAX_BYTES,
@@ -146,6 +171,71 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     cfg->threshold_1 = vt1.isNull() ? NAN : vt1.as<float>();
     cfg->threshold_2 = vt2.isNull() ? NAN : vt2.as<float>();
     cfg->threshold_3 = vt3.isNull() ? NAN : vt3.as<float>();
+
+    // Min/max markers
+    cfg->marker_size_min = btn["widget_sparkline_marker_size_min"] | (uint8_t)0;
+    cfg->marker_size_max = btn["widget_sparkline_marker_size_max"] | (uint8_t)0;
+
+    // Min/max label colors (0 = follow line color)
+    cfg->min_label_color = widget_parse_color_opt(btn["widget_sparkline_min_label_color"]);
+    cfg->max_label_color = widget_parse_color_opt(btn["widget_sparkline_max_label_color"]);
+
+    // Format string validation helper (shared for min/max)
+    auto parse_fmt = [](const char* fmt, char* dest, size_t dest_sz) {
+        if (!fmt || !fmt[0]) {
+            strlcpy(dest, "%.0f", dest_sz);
+            return;
+        }
+        const char* p = fmt;
+        int spec_count = 0;
+        bool valid = true;
+        while (*p && valid) {
+            if (*p == '%') {
+                p++;
+                if (*p == '%') { p++; continue; }
+                while (*p && strchr("-+ #0", *p)) p++;
+                while (*p >= '0' && *p <= '9') p++;
+                if (*p == '.') { p++; while (*p >= '0' && *p <= '9') p++; }
+                if (*p == 'f' || *p == 'e' || *p == 'g' ||
+                    *p == 'F' || *p == 'E' || *p == 'G') {
+                    spec_count++; p++;
+                } else { valid = false; }
+            } else { p++; }
+        }
+        if (valid && spec_count <= 1) {
+            strlcpy(dest, fmt, dest_sz);
+        } else {
+            strlcpy(dest, "%.0f", dest_sz);
+            LOGW(TAG, "Invalid format '%s', using default", fmt);
+        }
+    };
+    parse_fmt(btn["widget_sparkline_min_fmt"] | "", cfg->min_fmt, sizeof(cfg->min_fmt));
+    parse_fmt(btn["widget_sparkline_max_fmt"] | "", cfg->max_fmt, sizeof(cfg->max_fmt));
+
+    // Current-value dot
+    cfg->current_dot_size = btn["widget_sparkline_current_dot"] | (uint8_t)0;
+
+    // Reference lines (up to 3)
+    for (int i = 0; i < MAX_REF_LINES; i++) {
+        char key_y[40], key_c[40], key_p[40];
+        snprintf(key_y, sizeof(key_y), "widget_sparkline_ref_%d_y", i + 1);
+        snprintf(key_c, sizeof(key_c), "widget_sparkline_ref_%d_color", i + 1);
+        snprintf(key_p, sizeof(key_p), "widget_sparkline_ref_%d_pattern", i + 1);
+        JsonVariant vy = btn[key_y];
+        cfg->ref_line_y[i] = vy.isNull() ? NAN : vy.as<float>();
+        cfg->ref_line_color_rgb[i] = widget_parse_color(btn[key_c], 0x888888);
+        cfg->ref_line_pattern[i] = btn[key_p] | (uint8_t)0;
+        if (cfg->ref_line_pattern[i] > 2) cfg->ref_line_pattern[i] = 0;
+    }
+    cfg->ref_in_view = btn["widget_sparkline_ref_in_view"] | false;
+}
+
+// Helper: populate line color array from config (used by create and redraw)
+static inline void sparkline_get_line_colors(const SparklineConfig* cfg,
+                                             uint32_t out[MAX_SPARKLINE_LINES]) {
+    out[0] = cfg->line_color_rgb;
+    out[1] = cfg->line_color_2_rgb;
+    out[2] = cfg->line_color_3_rgb;
 }
 
 static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
@@ -208,8 +298,14 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_align(icon_img, LV_ALIGN_TOP_MID, 0, top_h);
     }
 
-    int16_t chart_top = top_h + icon_h + gap;
-    int16_t bot_margin = bot_h + 4;
+    // Reserve margin for min/max labels above and below chart
+    int16_t mm_margin = 0;
+    if (cfg->marker_size_min > 0 || cfg->marker_size_max > 0) {
+        mm_margin = label_h + 3;  // label height + dot radius + gap
+    }
+
+    int16_t chart_top = top_h + icon_h + gap + mm_margin;
+    int16_t bot_margin = bot_h + 4 + mm_margin;
     lv_obj_update_layout(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);
     int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
@@ -233,9 +329,8 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_obj_clear_flag(chart_area, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
 
     // Create line objects — extra lines first (drawn behind main line)
-    const uint32_t line_colors[MAX_SPARKLINE_LINES] = {
-        cfg->line_color_rgb, cfg->line_color_2_rgb, cfg->line_color_3_rgb
-    };
+    uint32_t line_colors[MAX_SPARKLINE_LINES];
+    sparkline_get_line_colors(cfg, line_colors);
     for (int8_t i = (int8_t)(st->line_count - 1); i >= 0; i--) {
         lv_obj_t* line = lv_line_create(chart_area);
         uint32_t lc = line_colors[i];
@@ -246,6 +341,70 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_line_set_points(line, st->points[i], 0);
         st->lines[i] = line;
     }
+
+    // Allocate per-instance ref line point pairs (avoids shared static buffer)
+    st->ref_pts = (lv_point_precise_t*)lv_malloc(sizeof(lv_point_precise_t) * MAX_REF_LINES * 2);
+    if (!st->ref_pts) { LOGE(TAG, "Failed to alloc ref_pts"); }
+
+    // Create reference lines behind data (move_to_index(0) sends each behind existing children)
+    for (int r = 0; r < MAX_REF_LINES; r++) {
+        if (!st->ref_pts) { st->ref_line_objs[r] = nullptr; continue; }
+        if (!isfinite(cfg->ref_line_y[r])) { st->ref_line_objs[r] = nullptr; continue; }
+        lv_obj_t* rl = lv_line_create(chart_area);
+        uint32_t rc = cfg->ref_line_color_rgb[r];
+        lv_obj_set_style_line_color(rl, lv_color_make((rc >> 16) & 0xFF, (rc >> 8) & 0xFF, rc & 0xFF), 0);
+        lv_obj_set_style_line_width(rl, 1, 0);
+        lv_obj_set_style_line_opa(rl, LV_OPA_70, 0);
+        if (cfg->ref_line_pattern[r] == REF_LINE_DOTTED) {
+            lv_obj_set_style_line_dash_width(rl, 2, 0);
+            lv_obj_set_style_line_dash_gap(rl, 4, 0);
+        } else if (cfg->ref_line_pattern[r] == REF_LINE_DASHED) {
+            lv_obj_set_style_line_dash_width(rl, 6, 0);
+            lv_obj_set_style_line_dash_gap(rl, 4, 0);
+        }
+        lv_obj_clear_flag(rl, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+        lv_obj_move_to_index(rl, 0);  // behind data lines
+        st->ref_line_objs[r] = rl;
+    }
+
+    // Create min/max marker dots and labels (tile children, on top of chart)
+    auto create_marker = [&](uint8_t dot_sz, lv_obj_t** out_dot, lv_obj_t** out_lbl) {
+        if (dot_sz == 0) { *out_dot = nullptr; *out_lbl = nullptr; return; }
+        lv_obj_t* dot = lv_obj_create(tile);
+        lv_obj_set_size(dot, dot_sz, dot_sz);
+        lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(dot, 0, 0);
+        lv_obj_set_style_pad_all(dot, 0, 0);
+        lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+        lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
+        *out_dot = dot;
+
+        lv_obj_t* lbl = lv_label_create(tile);
+        lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+        lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+        lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(lbl, "");
+        *out_lbl = lbl;
+    };
+    create_marker(cfg->marker_size_max, &st->dot_max, &st->lbl_max);
+    create_marker(cfg->marker_size_min, &st->dot_min, &st->lbl_min);
+
+    // Current-value dots (one per line, tile children, rightmost point)
+    if (cfg->current_dot_size > 0) {
+        for (uint8_t i = 0; i < st->line_count; i++) {
+            lv_obj_t* cd = lv_obj_create(tile);
+            lv_obj_set_size(cd, cfg->current_dot_size, cfg->current_dot_size);
+            lv_obj_set_style_radius(cd, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_bg_opa(cd, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(cd, 0, 0);
+            lv_obj_set_style_pad_all(cd, 0, 0);
+            lv_obj_clear_flag(cd, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+            lv_obj_add_flag(cd, LV_OBJ_FLAG_HIDDEN);
+            st->dot_current[i] = cd;
+        }
+    }
 }
 
 // ---- Rebuild the LVGL point array from a data stream snapshot ----
@@ -255,7 +414,8 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
                                      lv_obj_t* line_obj,
                                      const DataStreamSnapshot* snap,
                                      int16_t chart_w, int16_t chart_h,
-                                     float shared_auto_min, float shared_auto_max) {
+                                     float shared_auto_min, float shared_auto_max,
+                                     float ref_expand_min, float ref_expand_max) {
     // Determine Y-axis range
     // When shared min/max are provided (unified auto-scale), use them
     // instead of the per-line snapshot auto values.
@@ -263,6 +423,9 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
     float y_max = cfg->max_val;
     if (isnan(y_min)) y_min = isnan(shared_auto_min) ? snap->auto_min : shared_auto_min;
     if (isnan(y_max)) y_max = isnan(shared_auto_max) ? snap->auto_max : shared_auto_max;
+    // Expand auto-scaled axes to include reference lines (ref_in_view)
+    if (isnan(cfg->min_val) && isfinite(ref_expand_min) && ref_expand_min < y_min) y_min = ref_expand_min;
+    if (isnan(cfg->max_val) && isfinite(ref_expand_max) && ref_expand_max > y_max) y_max = ref_expand_max;
     if (y_min >= y_max) { y_min -= 1.0f; y_max += 1.0f; }  // degenerate range guard
     if (!isfinite(y_min) || !isfinite(y_max)) { y_min = 0.0f; y_max = 1.0f; }
     float y_range = y_max - y_min;
@@ -333,7 +496,20 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         }
     }
 
-    // Redraw each line from its data stream
+    // Pre-compute ref_in_view expansion bounds
+    float ref_expand_min = NAN, ref_expand_max = NAN;
+    if (cfg->ref_in_view) {
+        for (int r = 0; r < MAX_REF_LINES; r++) {
+            float ry = cfg->ref_line_y[r];
+            if (!isfinite(ry)) continue;
+            if (isnan(ref_expand_min) || ry < ref_expand_min) ref_expand_min = ry;
+            if (isnan(ref_expand_max) || ry > ref_expand_max) ref_expand_max = ry;
+        }
+    }
+
+    // Redraw each line from its data stream; cache main line snapshot for overlay positioning
+    DataStreamSnapshot main_snap;
+    bool main_snap_valid = false;
     for (uint8_t i = 0; i < st->line_count; i++) {
         if (!st->lines[i] || !st->points[i]) continue;
 
@@ -343,12 +519,196 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
 
         sparkline_rebuild_points(cfg, st->points[i], st->lines[i],
                                  &snap, chart_w, chart_h,
-                                 shared_auto_min, shared_auto_max);
+                                 shared_auto_min, shared_auto_max,
+                                 ref_expand_min, ref_expand_max);
 
         // Threshold coloring applies to main line only
         if (i == 0 && cfg->use_thresholds && isfinite(snap.last_value)) {
             lv_color_t color = pick_tier_color(cfg, snap.auto_min, snap.auto_max, snap.last_value);
             lv_obj_set_style_line_color(st->lines[0], color, 0);
+        }
+        if (i == 0) { main_snap = snap; main_snap_valid = true; }
+    }
+
+    // ---- Reference line positioning ----
+    // Compute effective Y range once (shared by ref lines, min/max, current dot)
+    float eff_y_min = cfg->min_val, eff_y_max = cfg->max_val;
+    if (main_snap_valid) {
+        if (isnan(eff_y_min)) eff_y_min = isnan(shared_auto_min) ? main_snap.auto_min : shared_auto_min;
+        if (isnan(eff_y_max)) eff_y_max = isnan(shared_auto_max) ? main_snap.auto_max : shared_auto_max;
+    }
+    // Expand auto-scaled range to include reference lines if configured
+    if (isnan(cfg->min_val) && isfinite(ref_expand_min) && ref_expand_min < eff_y_min) eff_y_min = ref_expand_min;
+    if (isnan(cfg->max_val) && isfinite(ref_expand_max) && ref_expand_max > eff_y_max) eff_y_max = ref_expand_max;
+    if (eff_y_min >= eff_y_max) { eff_y_min -= 1.0f; eff_y_max += 1.0f; }
+    if (!isfinite(eff_y_min) || !isfinite(eff_y_max)) { eff_y_min = 0.0f; eff_y_max = 1.0f; }
+    float eff_y_range = eff_y_max - eff_y_min;
+
+    // Helper lambdas for coordinate mapping
+    auto val_to_y = [&](float val) -> int16_t {
+        float ratio = (val - eff_y_min) / eff_y_range;
+        if (ratio < 0.0f) ratio = 0.0f;
+        if (ratio > 1.0f) ratio = 1.0f;
+        return (int16_t)((1.0f - ratio) * (chart_h - 1));
+    };
+
+    // Use per-instance point pairs for reference lines (2 points each: left to right)
+    for (int r = 0; r < MAX_REF_LINES; r++) {
+        if (!st->ref_line_objs[r]) continue;
+        float ry_val = cfg->ref_line_y[r];
+        if (!isfinite(ry_val) || ry_val < eff_y_min || ry_val > eff_y_max) {
+            // Outside visible range or disabled — hide
+            lv_line_set_points(st->ref_line_objs[r], &st->ref_pts[r * 2], 0);
+            lv_obj_add_flag(st->ref_line_objs[r], LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        int16_t ry = val_to_y(ry_val);
+        st->ref_pts[r * 2 + 0] = { 0, (lv_value_precise_t)ry };
+        st->ref_pts[r * 2 + 1] = { (lv_value_precise_t)chart_w, (lv_value_precise_t)ry };
+        lv_line_set_points(st->ref_line_objs[r], &st->ref_pts[r * 2], 2);
+        lv_obj_clear_flag(st->ref_line_objs[r], LV_OBJ_FLAG_HIDDEN);
+    }
+
+    // ---- Chart area position for tile-child overlays ----
+    int16_t ca_x = (int16_t)lv_obj_get_x(chart_area);
+    int16_t ca_y = (int16_t)lv_obj_get_y(chart_area);
+    lv_obj_t* tile = lv_obj_get_parent(chart_area);
+    int16_t tile_cw = (int16_t)lv_obj_get_content_width(tile);
+
+    uint32_t line_colors[MAX_SPARKLINE_LINES];
+    sparkline_get_line_colors(cfg, line_colors);
+
+    // Helper: slot index → chart-relative X
+    auto slot_x = [&](uint8_t si, uint8_t scount, uint8_t n) -> int16_t {
+        float x_step = (n > 1) ? (float)chart_w / (float)(n - 1) : 0.0f;
+        uint8_t x_off = (scount < n) ? (n - scount) : 0;
+        return (int16_t)((si + x_off) * x_step);
+    };
+
+    // ---- Current-value dot positioning (one per line) ----
+    for (uint8_t ci = 0; ci < st->line_count; ci++) {
+        if (!st->dot_current[ci]) continue;
+        DataStreamSnapshot sc;
+        if (st->ds_handles[ci] != DATA_STREAM_INVALID && data_stream_get(st->ds_handles[ci], &sc)
+            && sc.count > 0 && isfinite(sc.last_value)) {
+            uint8_t last_si = sc.count - 1;
+            int16_t cx = slot_x(last_si, sc.count, sc.slot_count);
+            int16_t cy = val_to_y(sc.last_value);
+            int16_t cr = cfg->current_dot_size / 2;
+
+            // Color: threshold color if thresholds on (main line only), else line color
+            lv_color_t cd_clr;
+            if (ci == 0 && cfg->use_thresholds) {
+                cd_clr = pick_tier_color(cfg, sc.auto_min, sc.auto_max, sc.last_value);
+            } else {
+                uint32_t lc = line_colors[ci];
+                cd_clr = lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF);
+            }
+            lv_obj_set_style_bg_color(st->dot_current[ci], cd_clr, 0);
+            lv_obj_set_pos(st->dot_current[ci], ca_x + cx - cr, ca_y + cy - cr);
+            lv_obj_clear_flag(st->dot_current[ci], LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(st->dot_current[ci], LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    // ---- Min/max marker positioning ----
+    bool has_min_marker = (st->dot_min != nullptr);
+    bool has_max_marker = (st->dot_max != nullptr);
+    if (has_min_marker || has_max_marker) {
+        // Determine scan scope: shared scale → all lines, else main only
+        bool use_shared = cfg->unified_autoscale && st->line_count > 1;
+        uint8_t scan_count = (use_shared || st->line_count == 1) ? st->line_count : 1;
+
+        float found_min = INFINITY, found_max = -INFINITY;
+        uint8_t min_slot_i = 0, max_slot_i = 0;
+        uint8_t min_line = 0, max_line = 0;
+        uint8_t min_snap_count = 0, max_snap_count = 0;
+        uint8_t min_n = 0, max_n = 0;
+
+        for (uint8_t li = 0; li < scan_count; li++) {
+            if (st->ds_handles[li] == DATA_STREAM_INVALID) continue;
+            DataStreamSnapshot s;
+            if (!data_stream_get(st->ds_handles[li], &s)) continue;
+            if (s.count == 0) continue;
+            for (uint8_t si = 0; si < s.count; si++) {
+                uint8_t idx = (s.count < s.slot_count)
+                    ? si : (uint8_t)((s.head + si) % s.slot_count);
+                float val = s.samples[idx];
+                if (!isfinite(val)) continue;
+                if (val < found_min) {
+                    found_min = val; min_slot_i = si; min_line = li;
+                    min_snap_count = s.count; min_n = s.slot_count;
+                }
+                if (val > found_max) {
+                    found_max = val; max_slot_i = si; max_line = li;
+                    max_snap_count = s.count; max_n = s.slot_count;
+                }
+            }
+        }
+
+        if (isfinite(found_min) && isfinite(found_max)) {
+            // Resolve marker label color: use override if set, else line color
+            auto resolve_marker_color = [&](uint32_t override_c, uint8_t line_idx) -> lv_color_t {
+                if (override_c & 0x01000000) {
+                    // Marker bit set — use override color
+                    return lv_color_make((override_c >> 16) & 0xFF, (override_c >> 8) & 0xFF, override_c & 0xFF);
+                }
+                uint32_t lc = line_colors[line_idx];
+                return lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF);
+            };
+
+            char buf[24];
+
+            // Position max dot + label (above)
+            if (has_max_marker) {
+                int16_t max_cx = slot_x(max_slot_i, max_snap_count, max_n);
+                int16_t max_cy = val_to_y(found_max);
+                int16_t max_r = cfg->marker_size_max / 2;
+                lv_color_t max_clr = resolve_marker_color(cfg->max_label_color, max_line);
+                lv_obj_set_style_bg_color(st->dot_max, max_clr, 0);
+                lv_obj_set_pos(st->dot_max, ca_x + max_cx - max_r, ca_y + max_cy - max_r);
+                lv_obj_clear_flag(st->dot_max, LV_OBJ_FLAG_HIDDEN);
+
+                snprintf(buf, sizeof(buf), cfg->max_fmt, (double)found_max);
+                lv_label_set_text(st->lbl_max, buf);
+                lv_obj_set_style_text_color(st->lbl_max, max_clr, 0);
+                lv_obj_update_layout(st->lbl_max);
+                int16_t lw = (int16_t)lv_obj_get_width(st->lbl_max);
+                int16_t lh = (int16_t)lv_obj_get_height(st->lbl_max);
+                int16_t lx = ca_x + max_cx - lw / 2;
+                if (lx < 0) lx = 0;
+                if (lx + lw > tile_cw) lx = tile_cw - lw;
+                lv_obj_set_pos(st->lbl_max, lx, ca_y + max_cy - max_r - lh - 1);
+                lv_obj_clear_flag(st->lbl_max, LV_OBJ_FLAG_HIDDEN);
+            }
+
+            // Position min dot + label (below)
+            if (has_min_marker) {
+                int16_t min_cx = slot_x(min_slot_i, min_snap_count, min_n);
+                int16_t min_cy = val_to_y(found_min);
+                int16_t min_r = cfg->marker_size_min / 2;
+                lv_color_t min_clr = resolve_marker_color(cfg->min_label_color, min_line);
+                lv_obj_set_style_bg_color(st->dot_min, min_clr, 0);
+                lv_obj_set_pos(st->dot_min, ca_x + min_cx - min_r, ca_y + min_cy - min_r);
+                lv_obj_clear_flag(st->dot_min, LV_OBJ_FLAG_HIDDEN);
+
+                snprintf(buf, sizeof(buf), cfg->min_fmt, (double)found_min);
+                lv_label_set_text(st->lbl_min, buf);
+                lv_obj_set_style_text_color(st->lbl_min, min_clr, 0);
+                lv_obj_update_layout(st->lbl_min);
+                int16_t lw = (int16_t)lv_obj_get_width(st->lbl_min);
+                int16_t lx = ca_x + min_cx - lw / 2;
+                if (lx < 0) lx = 0;
+                if (lx + lw > tile_cw) lx = tile_cw - lw;
+                lv_obj_set_pos(st->lbl_min, lx, ca_y + min_cy + min_r + 1);
+                lv_obj_clear_flag(st->lbl_min, LV_OBJ_FLAG_HIDDEN);
+            }
+        } else {
+            if (st->dot_min) lv_obj_add_flag(st->dot_min, LV_OBJ_FLAG_HIDDEN);
+            if (st->dot_max) lv_obj_add_flag(st->dot_max, LV_OBJ_FLAG_HIDDEN);
+            if (st->lbl_min) lv_obj_add_flag(st->lbl_min, LV_OBJ_FLAG_HIDDEN);
+            if (st->lbl_max) lv_obj_add_flag(st->lbl_max, LV_OBJ_FLAG_HIDDEN);
         }
     }
 #endif
@@ -381,6 +741,7 @@ static void sparkline_destroy(WidgetState* state) {
     for (uint8_t i = 0; i < MAX_SPARKLINE_LINES; i++) {
         if (st->points[i]) { lv_free(st->points[i]); st->points[i] = nullptr; }
     }
+    if (st->ref_pts) { lv_free(st->ref_pts); st->ref_pts = nullptr; }
     // LVGL line + chart_area are tile children — deleted automatically
     // Ring buffers are owned by data_stream registry — not freed here
 }

@@ -51,7 +51,7 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 }
 #define CONFIG_COLOR_MAX_LEN            192
 #define CONFIG_WIDGET_TYPE_MAX_LEN     16
-#define WIDGET_CONFIG_MAX_BYTES        64
+#define WIDGET_CONFIG_MAX_BYTES       128
 
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
@@ -74,7 +74,7 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 
 struct LabelStyle {
     uint8_t font_size;     // 0 = auto (from scale tier), 12/14/18/24/32/36
-    int8_t  y_offset;      // pixel nudge from default anchor (-128..+127)
+    int16_t y_offset;      // pixel nudge from default anchor (-999..+999)
     uint8_t align;         // LABEL_ALIGN_* (0 = default/center)
     uint8_t long_mode;     // LABEL_MODE_* (0 = default/clip)
     uint32_t color;        // 0 = inherit fg_color, else 0x00RRGGBB with high byte = 1 to mark as set

@@ -2284,6 +2284,25 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-sparkline-line-width').value = (btn.widget_sparkline_line_width !== undefined) ? btn.widget_sparkline_line_width : 2;
     document.getElementById('pad-edit-sparkline-use-thresholds').checked = btn.widget_sparkline_use_thresholds || false;
     document.getElementById('pad-edit-sparkline-unified-scale').checked = (btn.widget_sparkline_unified_scale !== undefined) ? btn.widget_sparkline_unified_scale : true;
+
+    // Min/max markers
+    document.getElementById('pad-edit-sparkline-marker-size-max').value = (btn.widget_sparkline_marker_size_max !== undefined) ? btn.widget_sparkline_marker_size_max : 0;
+    document.getElementById('pad-edit-sparkline-max-fmt').value = btn.widget_sparkline_max_fmt || '';
+    document.getElementById('pad-edit-sparkline-max-label-color').value = padColorToHex(btn.widget_sparkline_max_label_color, '#FFFFFF');
+    document.getElementById('pad-edit-sparkline-marker-size-min').value = (btn.widget_sparkline_marker_size_min !== undefined) ? btn.widget_sparkline_marker_size_min : 0;
+    document.getElementById('pad-edit-sparkline-min-fmt').value = btn.widget_sparkline_min_fmt || '';
+    document.getElementById('pad-edit-sparkline-min-label-color').value = padColorToHex(btn.widget_sparkline_min_label_color, '#FFFFFF');
+
+    // Current value dot
+    document.getElementById('pad-edit-sparkline-current-dot').value = (btn.widget_sparkline_current_dot !== undefined) ? btn.widget_sparkline_current_dot : 0;
+
+    // Reference lines
+    for (let r = 1; r <= 3; r++) {
+        document.getElementById('pad-edit-sparkline-ref-' + r + '-y').value = (btn['widget_sparkline_ref_' + r + '_y'] !== undefined) ? btn['widget_sparkline_ref_' + r + '_y'] : '';
+        document.getElementById('pad-edit-sparkline-ref-' + r + '-color').value = padColorToHex(btn['widget_sparkline_ref_' + r + '_color'], '#888888');
+        document.getElementById('pad-edit-sparkline-ref-' + r + '-pattern').value = (btn['widget_sparkline_ref_' + r + '_pattern'] !== undefined) ? btn['widget_sparkline_ref_' + r + '_pattern'] : 0;
+    }
+    document.getElementById('pad-edit-sparkline-ref-in-view').checked = btn.widget_sparkline_ref_in_view || false;
     document.getElementById('pad-edit-sparkline-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : false;
     document.getElementById('pad-edit-sparkline-higher-is-better').checked = btn.widget_sparkline_higher_is_better || false;
     document.getElementById('pad-edit-sparkline-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
@@ -2491,6 +2510,36 @@ function padDialogOk() {
             btn.widget_sparkline_line_width = (isNaN(sLw) || sLw < 1) ? 2 : (sLw > 10) ? 10 : sLw;
             btn.widget_sparkline_use_thresholds = document.getElementById('pad-edit-sparkline-use-thresholds').checked;
             btn.widget_sparkline_unified_scale = document.getElementById('pad-edit-sparkline-unified-scale').checked;
+
+            // Min/max markers
+            const maxSz = parseInt(document.getElementById('pad-edit-sparkline-marker-size-max').value);
+            btn.widget_sparkline_marker_size_max = (isNaN(maxSz) || maxSz < 0) ? 0 : (maxSz > 20) ? 20 : maxSz;
+            const maxFmt = document.getElementById('pad-edit-sparkline-max-fmt').value.trim();
+            if (maxFmt) btn.widget_sparkline_max_fmt = maxFmt;
+            const maxLblClr = document.getElementById('pad-edit-sparkline-max-label-color').value;
+            if (maxLblClr && maxLblClr.toLowerCase() !== '#ffffff') btn.widget_sparkline_max_label_color = padHexToInt(maxLblClr);
+
+            const minSz = parseInt(document.getElementById('pad-edit-sparkline-marker-size-min').value);
+            btn.widget_sparkline_marker_size_min = (isNaN(minSz) || minSz < 0) ? 0 : (minSz > 20) ? 20 : minSz;
+            const minFmt = document.getElementById('pad-edit-sparkline-min-fmt').value.trim();
+            if (minFmt) btn.widget_sparkline_min_fmt = minFmt;
+            const minLblClr = document.getElementById('pad-edit-sparkline-min-label-color').value;
+            if (minLblClr && minLblClr.toLowerCase() !== '#ffffff') btn.widget_sparkline_min_label_color = padHexToInt(minLblClr);
+
+            // Current value dot
+            const cdSz = parseInt(document.getElementById('pad-edit-sparkline-current-dot').value);
+            btn.widget_sparkline_current_dot = (isNaN(cdSz) || cdSz < 0) ? 0 : (cdSz > 20) ? 20 : cdSz;
+
+            // Reference lines
+            for (let r = 1; r <= 3; r++) {
+                const ry = parseFloat(document.getElementById('pad-edit-sparkline-ref-' + r + '-y').value);
+                if (!isNaN(ry)) {
+                    btn['widget_sparkline_ref_' + r + '_y'] = ry;
+                    btn['widget_sparkline_ref_' + r + '_color'] = padHexToInt(document.getElementById('pad-edit-sparkline-ref-' + r + '-color').value);
+                    btn['widget_sparkline_ref_' + r + '_pattern'] = parseInt(document.getElementById('pad-edit-sparkline-ref-' + r + '-pattern').value) || 0;
+                }
+            }
+            if (document.getElementById('pad-edit-sparkline-ref-in-view').checked) btn.widget_sparkline_ref_in_view = true;
             if (btn.widget_sparkline_use_thresholds) {
                 btn.widget_use_absolute = document.getElementById('pad-edit-sparkline-use-absolute').checked;
                 btn.widget_sparkline_higher_is_better = document.getElementById('pad-edit-sparkline-higher-is-better').checked;

@@ -91,9 +91,9 @@ void label_style_parse(const char* dsl, LabelStyle* out) {
                 else if (strcmp(val, "center") == 0) out->align = LABEL_ALIGN_CENTER;
             } else if (strcmp(key, "y") == 0) {
                 int y = atoi(val);
-                if (y < -128) y = -128;
-                if (y > 127)  y = 127;
-                out->y_offset = (int8_t)y;
+                if (y < -999) y = -999;
+                if (y > 999)  y = 999;
+                out->y_offset = (int16_t)y;
             } else if (strcmp(key, "mode") == 0) {
                 if (strcmp(val, "clip") == 0)        out->long_mode = LABEL_MODE_CLIP;
                 else if (strcmp(val, "scroll") == 0) out->long_mode = LABEL_MODE_SCROLL;

@@ -26,7 +26,7 @@
 
 // Opaque per-tile widget runtime state (LVGL objects, cached values, etc.)
 // Created by createUI(), freed by destroyUI(). Stored in ButtonTile.
-#define WIDGET_STATE_MAX_BYTES 48
+#define WIDGET_STATE_MAX_BYTES 80
 
 struct WidgetState {
     uint8_t data[WIDGET_STATE_MAX_BYTES];
@@ -93,6 +93,14 @@ inline uint32_t widget_parse_color(JsonVariant v, uint32_t def) {
     char* end = nullptr;
     uint32_t val = strtoul(s, &end, 16);
     return (end == s) ? def : val;
+}
+
+// Parse an optional color: returns 0 if absent/null, or 0x01RRGGBB with
+// marker bit 24 set when a color is present (same convention as LabelStyle.color).
+inline uint32_t widget_parse_color_opt(JsonVariant v) {
+    if (v.isNull()) return 0;
+    uint32_t c = widget_parse_color(v, 0xFFFFFFFF);
+    return (c == 0xFFFFFFFF) ? 0 : (0x01000000 | (c & 0x00FFFFFF));
 }
 
 #endif // HAS_DISPLAY
