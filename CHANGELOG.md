@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-03-11
+
 ### Fixed
 - **Health bubble on Pads page** — the floating health widget was not working on the Pads page because the expanded health overlay HTML (from `{{FOOTER}}`) was missing. Added the health widget expanded overlay directly to `pads.html`
 - **Sparkline dot alignment** — current-value dots, min/max markers now use the exact pixel coordinates from the rendered line points, eliminating sub-pixel gaps between dots and the sparkline line
