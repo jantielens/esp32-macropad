@@ -582,6 +582,12 @@ Expressions let you do math, comparisons, and conditional logic on binding resul
 | `>` `<` `>=` `<=` `==` `!=` | Comparisons (return 1 or 0) | `temp > 30` |
 | `? :` | Ternary (if/then/else) | `temp > 30 ? "Hot" : "OK"` |
 
+**Built-in functions:**
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `threshold(value, color0, t1, color1, ..., tN, colorN)` | Maps a numeric value to a color via ascending thresholds. Returns `color_i` where `value < t_(i+1)`, or the last color if value ≥ all thresholds. | `threshold(temp, "#4CAF50", 25, "#FF9800", 35, "#FF0000")` |
+
 Ternary branches can return numbers or `"quoted strings"`.
 
 **Practical examples:**
@@ -643,6 +649,20 @@ The button turns red when the temperature exceeds 30°C, green otherwise.
 ```
 
 Red above 35°C, orange above 28°C, green otherwise.
+
+**Multi-tier colors** with `threshold()` — cleaner alternative to nested ternaries:
+
+```
+[expr:threshold([mqtt:sensor;temp], "#4CAF50", 28, "#FF9800", 35, "#FF0000")]
+```
+
+Same result: green below 28°C, orange 28–35°C, red above 35°C. Add as many thresholds as needed:
+
+```
+[expr:threshold([mqtt:aqi;value], "#4CAF50", 50, "#FFEB3B", 100, "#FF9800", 150, "#FF5722", 200, "#9C27B0", 300, "#7E0023")]
+```
+
+Six color zones for an AQI indicator — much cleaner than five levels of nested ternaries.
 
 **State-based colors** — match string values:
 

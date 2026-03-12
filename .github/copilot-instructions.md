@@ -47,7 +47,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries); extends strftime with sub-second codes (`%ms` millis, `%cs` centisec, `%ds` decisec) and standalone `%ums` (device uptime ms)
   - `time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
   - Expr scheme registered by `expr_binding_init()` — resolves `[expr:expression;format]` tokens by first resolving inner bindings, then evaluating with a recursive-descent expression evaluator
-  - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings); no ESP32 dependencies, host-testable
+  - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings, threshold function); no ESP32 dependencies, host-testable
   - `expr_binding.cpp/h` - Glue between expr_eval and binding_template engine; bracket-depth `;` splitting (compile-time gated by `HAS_DISPLAY`)
   - Pad scheme registered by `pad_binding_init()` — resolves `[pad:name;format]` tokens against page-level named bindings; supports per-usage format override; enables define-once-use-everywhere pattern for repeated MQTT topics
   - `pad_binding.cpp/h` - Pad binding scheme resolver with page-context pointer, expand utility for data streams, and topic collector that recurses into underlying bindings (compile-time gated by `HAS_DISPLAY`)
@@ -224,7 +224,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/wifi_manager.cpp/h` - WiFi connect + mDNS (replaces inline connect logic)
 - `src/app/portal_idle.cpp/h` - Portal idle timeout in Config/AP modes
 - `src/app/binding_template.cpp/h` - Scheme-extensible token resolver for label text (compile-time gated by `HAS_MQTT`)
-- `src/app/expr_eval.cpp/h` - Pure C expression evaluator (arithmetic, comparisons, ternary); host-testable, no ESP32 deps
+- `src/app/expr_eval.cpp/h` - Pure C expression evaluator (arithmetic, comparisons, ternary, threshold function); host-testable, no ESP32 deps
 - `src/app/expr_binding.cpp/h` - Expression binding glue — registers `[expr:]` scheme (compile-time gated by `HAS_DISPLAY`)
 - `src/app/pad_binding.cpp/h` - Pad binding scheme — resolves `[pad:name;format]` against page-level named bindings (compile-time gated by `HAS_DISPLAY`)
 - `src/app/health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)

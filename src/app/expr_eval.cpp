@@ -94,6 +94,67 @@ static ExprVal parse_primary(Parser* p) {
     skip_ws(p);
     char c = p->src[p->pos];
 
+    // Built-in function: threshold(value, color0, t1, color1, ..., tN, colorN)
+    // Stream-processed to avoid large stack allocation (ExprVal is ~140 bytes).
+    if (strncmp(p->src + p->pos, "threshold(", 10) == 0) {
+        p->pos += 10; // skip "threshold("
+
+        // Empty arg list?
+        skip_ws(p);
+        if (p->src[p->pos] == ')') return make_err("threshold: need value+color");
+
+        // Parse value (first arg, must be numeric)
+        ExprVal value_arg = parse_ternary(p);
+        if (value_arg.type == VAL_ERR) return value_arg;
+        if (value_arg.type != VAL_NUM) return make_err("threshold: value must be number");
+
+        // Need at least value + base color
+        if (!match_char(p, ','))
+            return make_err("threshold: need value, color [, thresh, color]*");
+
+        // Parse base color (second arg)
+        ExprVal result = parse_ternary(p);
+        if (result.type == VAL_ERR) return result;
+        if (result.type != VAL_STR) return make_err("threshold: color must be string");
+
+        double value = value_arg.num;
+        double prev_threshold = 0;
+        bool   has_prev_thresh = false;
+        bool   decided = false; // true once value < threshold found
+
+        // Parse threshold-color pairs
+        while (match_char(p, ',')) {
+            ExprVal thresh = parse_ternary(p);
+            if (thresh.type == VAL_ERR) return thresh;
+            if (thresh.type != VAL_NUM)
+                return make_err("threshold: threshold must be number");
+            if (has_prev_thresh && thresh.num <= prev_threshold)
+                return make_err("threshold: thresholds must be ascending");
+            prev_threshold  = thresh.num;
+            has_prev_thresh = true;
+
+            // Each threshold must be followed by a paired color
+            if (!match_char(p, ','))
+                return make_err("threshold: need value, color [, thresh, color]*");
+
+            ExprVal color = parse_ternary(p);
+            if (color.type == VAL_ERR) return color;
+            if (color.type != VAL_STR)
+                return make_err("threshold: color must be string");
+
+            if (!decided) {
+                if (value < thresh.num) {
+                    decided = true; // result already holds the correct color
+                } else {
+                    result = color;
+                }
+            }
+        }
+
+        if (!match_char(p, ')')) return make_err("threshold: missing ')'");
+        return result;
+    }
+
     // Parenthesized expression
     if (c == '(') {
         p->pos++;
