@@ -51,6 +51,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `expr_binding.cpp/h` - Glue between expr_eval and binding_template engine; bracket-depth `;` splitting (compile-time gated by `HAS_DISPLAY`)
   - Pad scheme registered by `pad_binding_init()` — resolves `[pad:name;format]` tokens against page-level named bindings; supports per-usage format override; enables define-once-use-everywhere pattern for repeated MQTT topics
   - `pad_binding.cpp/h` - Pad binding scheme resolver with page-context pointer, expand utility for data streams, and topic collector that recurses into underlying bindings (compile-time gated by `HAS_DISPLAY`)
+  - Pipe fallback syntax: `[scheme:params|fallback]` — replaces default `---` placeholder when a binding can't resolve (e.g., before first MQTT message, during reconnect). Parsed by `split_pipe_fallback()` at outermost bracket depth.
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
 - **Screen Saver Subsystem**: Inactivity-based display sleep with backlight fading and per-screen wake redirect (compile-time gated by `HAS_DISPLAY`)
   - `screen_saver_manager.cpp/h` - State machine (Awake/FadingOut/Asleep/FadingIn), fade animation, touch wake polling, pixel shift burn-in prevention

@@ -333,6 +333,40 @@ Binding templates are the engine behind live data on your buttons. They follow a
 
 Static text before, after, or between tokens is preserved. If a binding can't resolve (topic not received yet, invalid path), it shows `---` as a placeholder. Errors show `ERR:reason`.
 
+### Pipe Fallback
+
+**Syntax:** `[scheme:params|fallback]`
+
+Append `|value` to any binding to show a custom fallback instead of the default `---` placeholder.
+
+#### Why this exists
+
+Without a pipe fallback, unresolved bindings display `---`. That's fine for label text, but it causes problems in two common situations:
+
+- **Boot / startup delay** — After a reboot, it takes a few seconds before WiFi connects, MQTT subscribes, and the first messages arrive. During this window every MQTT-bound label flashes `---`, which looks broken.
+- **MQTT reconnect** — If the broker restarts or the network hiccups, retained values are cleared from the subscription store. Labels revert to `---` until new messages come in.
+- **Color bindings** — A `---` fallback in a color field (background, text color) isn't a valid color and falls through to the firmware default. By providing a pipe fallback like `|#333333`, you control exactly what color appears during these gaps.
+- **Expression bindings** — An `[expr:]` that depends on an MQTT value will fail to evaluate while the inner binding is unresolved. The pipe fallback provides a clean result instead of `ERR:` or `---`.
+
+The pipe character (`|`) is parsed at the outermost bracket level only — pipes inside nested bindings (e.g., inside an `[expr:]`) are left alone.
+
+**Examples:**
+
+```
+[mqtt:solar/power;watts|0]               → 0 until first MQTT message arrives
+[mqtt:light/color;hex|#ffffff]           → #ffffff as default color
+[health:cpu|--]                          → -- instead of --- placeholder
+[pad:power|0]                            → 0 when named binding hasn't resolved
+```
+
+Pipe fallbacks work with **color bindings** too — set a sensible default color that shows until the binding resolves:
+
+```
+[expr:[mqtt:sensor;temp] > 30 ? "#FF4444" : "#4CAF50"|#333333]
+```
+
+This shows dark gray (`#333333`) during startup, then switches to red/green once the MQTT value arrives.
+
 ### MQTT Binding
 
 **Syntax:** `[mqtt:topic;path;format]`
