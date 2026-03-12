@@ -59,6 +59,7 @@ struct GaugeConfig {
     uint8_t  tick_width;             // Tick line width in pixels (1–5, default 1)
     bool     use_absolute;           // Compare |value| for color thresholds
     bool     show_needle;            // Draw a needle line (default true)
+    bool     zero_centered;          // Arc fills from zero point instead of min (default false)
 };
 
 static_assert(sizeof(GaugeConfig) <= WIDGET_CONFIG_MAX_BYTES,
@@ -208,8 +209,9 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     int sa = btn["widget_gauge_start_angle"] | 180;
     cfg->start_angle = (uint16_t)(sa % 360);
 
-    cfg->use_absolute = btn["widget_use_absolute"] | true;
-    cfg->show_needle  = btn["widget_gauge_show_needle"] | true;
+    cfg->use_absolute    = btn["widget_use_absolute"] | true;
+    cfg->show_needle     = btn["widget_gauge_show_needle"] | true;
+    cfg->zero_centered   = btn["widget_gauge_zero_centered"] | false;
 
     // Color tiers (same keys as bar chart for consistency)
     cfg->color_good_rgb      = widget_parse_color(btn["widget_color_good"],      0x4CAF50);
@@ -451,10 +453,22 @@ static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
     if (ratio < 0.0f) ratio = 0.0f;
     if (ratio > 1.0f) ratio = 1.0f;
 
-    // Compute indicator angle directly (bypasses LVGL's lv_map integer division)
-    float fill_angle = ratio * (float)cfg->arc_degrees;
-    int32_t fill_angle_int = (int32_t)roundf(fill_angle);
-    lv_arc_set_angles(arc, 0, fill_angle_int);
+    if (cfg->zero_centered) {
+        // Arc fills from the zero point; negative values grow left, positive grow right
+        float zero_ratio = (0.0f - cfg->min_value) / range;
+        if (zero_ratio < 0.0f) zero_ratio = 0.0f;
+        if (zero_ratio > 1.0f) zero_ratio = 1.0f;
+        float zero_angle = zero_ratio * (float)cfg->arc_degrees;
+        float val_angle  = ratio * (float)cfg->arc_degrees;
+        int32_t a_start = (int32_t)roundf(fminf(zero_angle, val_angle));
+        int32_t a_end   = (int32_t)roundf(fmaxf(zero_angle, val_angle));
+        lv_arc_set_angles(arc, a_start, a_end);
+    } else {
+        // Normal: fill from start edge
+        float fill_angle = ratio * (float)cfg->arc_degrees;
+        int32_t fill_angle_int = (int32_t)roundf(fill_angle);
+        lv_arc_set_angles(arc, 0, fill_angle_int);
+    }
 
     // Pick color tier and apply to indicator
     lv_color_t color = gauge_pick_tier_color(cfg, value);

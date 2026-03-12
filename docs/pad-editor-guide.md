@@ -242,6 +242,7 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Min / Max** | The value range. The arc is empty at min and full at max |
 | **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
 | **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
+| **Zero centered** | Arc fills from the zero point instead of the start edge. Negative values grow one direction, positive values grow the other. The zero point is derived from where 0 falls in the min/max range |
 | **Use absolute value** | When on, negative values fill the arc too |
 | **Show needle** | Display a line from the center to the current value position on the arc |
 | **Reversed, high values are better** | Swaps the four color picker values (same behavior as bar chart) |
@@ -258,6 +259,11 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
 
 **Multi-ring gauges** — fill in the middle and/or inner ring data bindings to add concentric rings (Apple Health ring style). All rings share the same min/max, thresholds, colors, arc degrees, and start angle. Only the outer ring shows the needle and tick marks. The arc width percentage applies to each ring equally, with automatic gaps between them.
+
+**Zero centered example** (grid power, -3 kW to +3 kW):
+- Data binding: `[mqtt:grid/power;$.value]`, Min: -3, Max: 3
+- Arc Degrees: 180, Start Angle: 180, Zero centered: on
+- Negative values (import) fill leftward from center, positive values (export) fill rightward
 
 **Clock example** (seconds hand on a full circle):
 - Data binding: `[time:%S]`, Min: 0, Max: 60

@@ -2329,6 +2329,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : 100;
     document.getElementById('pad-edit-gauge-degrees').value = (btn.widget_gauge_degrees !== undefined) ? btn.widget_gauge_degrees : 180;
     document.getElementById('pad-edit-gauge-start-angle').value = (btn.widget_gauge_start_angle !== undefined) ? btn.widget_gauge_start_angle : 180;
+    document.getElementById('pad-edit-gauge-zero-centered').checked = (btn.widget_gauge_zero_centered !== undefined) ? btn.widget_gauge_zero_centered : false;
     document.getElementById('pad-edit-gauge-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : true;
     document.getElementById('pad-edit-gauge-show-needle').checked = (btn.widget_gauge_show_needle !== undefined) ? btn.widget_gauge_show_needle : true;
     document.getElementById('pad-edit-gauge-higher-is-better').checked = (btn.widget_gauge_higher_is_better !== undefined) ? btn.widget_gauge_higher_is_better : false;
@@ -2543,6 +2544,7 @@ function padDialogOk() {
             btn.widget_gauge_degrees = (isNaN(gDeg) || gDeg < 10) ? 180 : (gDeg > 360) ? 360 : gDeg;
             const gSa = parseInt(document.getElementById('pad-edit-gauge-start-angle').value);
             btn.widget_gauge_start_angle = (isNaN(gSa)) ? 180 : gSa % 360;
+            btn.widget_gauge_zero_centered = document.getElementById('pad-edit-gauge-zero-centered').checked;
             btn.widget_use_absolute = document.getElementById('pad-edit-gauge-use-absolute').checked;
             btn.widget_gauge_show_needle = document.getElementById('pad-edit-gauge-show-needle').checked;
             btn.widget_gauge_higher_is_better = document.getElementById('pad-edit-gauge-higher-is-better').checked;
