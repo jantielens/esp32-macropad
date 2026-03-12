@@ -311,6 +311,55 @@ static void test_topic_collection() {
     g_pass++;
 }
 
+static void test_pipe_fallback() {
+    printf("--- Pipe fallback ---\n");
+
+    // Basic: unresolved mqtt with pipe fallback
+    auto saved = g_mqtt_values;
+    g_mqtt_values.clear();
+    check("[mqtt:unknown/topic|N/A]", "N/A", "basic pipe fallback");
+
+    // Resolved value ignores fallback
+    g_mqtt_values["sensor/temp;value"] = "22.5";
+    check("[mqtt:sensor/temp;value|--]", "22.5", "resolved ignores fallback");
+
+    // No pipe, unresolved → classic "---" placeholder
+    g_mqtt_values.clear();
+    check("[mqtt:unknown/topic]", "---", "no pipe → placeholder");
+
+    // Fallback with static prefix/suffix
+    check("Temp: [mqtt:sensor/temp;value|??]C", "Temp: ??C", "fallback in context");
+
+    // Fallback inside expr — inner mqtt unresolved, expr sees "---" and fails,
+    // expr's own pipe fallback is used
+    check("[expr:[mqtt:missing;val] * 2;%.1f|--]", "--", "expr pipe fallback");
+
+    // Health fallback
+    auto saved_health = g_health_values;
+    g_health_values.clear();
+    check("[health:cpu|?]", "?", "health pipe fallback");
+    g_health_values = saved_health;
+
+    // Pipe inside nested brackets should NOT split (bracket-depth aware)
+    g_mqtt_values["sensor/temp;value"] = "42";
+    check("[expr:[mqtt:sensor/temp;value] > 30 ? \"Hot\" : \"Cold\"|err]",
+          "Hot", "pipe not split inside nested brackets — resolved");
+
+    // Empty fallback → empty string (not "---")
+    g_mqtt_values.clear();
+    check("[mqtt:unknown/topic|]", "", "empty fallback");
+
+    // Multiple tokens, mixed resolved and fallback
+    g_mqtt_values["solar/power;watts"] = "3200";
+    check("[mqtt:solar/power;watts|0]W / [mqtt:grid/power;watts|0]W",
+          "3200W / 0W", "mixed resolved and fallback");
+
+    // Fallback with color hex value (practical use case)
+    check("[mqtt:theme/color|#FF0000]", "#FF0000", "color hex fallback");
+
+    g_mqtt_values = saved;
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -333,6 +382,7 @@ int main() {
     test_multiple_expr_tokens();
     test_plain_bindings_unaffected();
     test_topic_collection();
+    test_pipe_fallback();
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

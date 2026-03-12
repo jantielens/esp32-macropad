@@ -32,15 +32,15 @@
 struct BarChartConfig {
     float    bar_max;              // Full-scale value (default 3.0)
     float    bar_min;              // Minimum value (default 0.0)
-    uint32_t color_good_rgb;      // Color tier 0: below threshold 1
-    uint32_t color_ok_rgb;        // Color tier 1: threshold 1 → 2
-    uint32_t color_attention_rgb; // Color tier 2: threshold 2 → 3
-    uint32_t color_warning_rgb;   // Color tier 3: at/above threshold 3
+    char     color_good[CONFIG_BINDABLE_SHORT_LEN];      // Color tier 0 (default "#4CAF50")
+    char     color_ok[CONFIG_BINDABLE_SHORT_LEN];        // Color tier 1 (default "#8BC34A")
+    char     color_attention[CONFIG_BINDABLE_SHORT_LEN]; // Color tier 2 (default "#FF9800")
+    char     color_warning[CONFIG_BINDABLE_SHORT_LEN];   // Color tier 3 (default "#F44336")
     float    threshold_1;         // Breakpoint tier 0 → 1
     float    threshold_2;         // Breakpoint tier 1 → 2
     float    threshold_3;         // Breakpoint tier 2 → 3
     bool     use_absolute;        // true = compare |value| (default); false = signed
-    uint32_t bar_bg_color_rgb;    // Bar track background (default 0x1A1A1A)
+    char     bar_bg_color[CONFIG_BINDABLE_SHORT_LEN];    // Bar track background (default "#1A1A1A")
     uint8_t  bar_width_pct;       // Bar width as % of tile width (1-100, default 100)
     bool     horizontal;          // true = horizontal bar (grows left→right)
 };
@@ -63,14 +63,12 @@ static_assert(sizeof(BarChartState) <= WIDGET_STATE_MAX_BYTES,
 
 static lv_color_t pick_tier_color(const BarChartConfig* cfg, float value) {
     float cmp = cfg->use_absolute ? fabsf(value) : value;
-    uint32_t rgb;
     // Color values are already arranged by the web UI (swapped when "reversed" is on),
     // so the firmware always uses the same ascending threshold logic.
-    if (cmp >= cfg->threshold_3) rgb = cfg->color_warning_rgb;
-    else if (cmp >= cfg->threshold_2) rgb = cfg->color_attention_rgb;
-    else if (cmp >= cfg->threshold_1) rgb = cfg->color_ok_rgb;
-    else rgb = cfg->color_good_rgb;
-    return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+    if (cmp >= cfg->threshold_3) return resolve_lv_color(cfg->color_warning, 0xF44336);
+    if (cmp >= cfg->threshold_2) return resolve_lv_color(cfg->color_attention, 0xFF9800);
+    if (cmp >= cfg->threshold_1) return resolve_lv_color(cfg->color_ok, 0x8BC34A);
+    return resolve_lv_color(cfg->color_good, 0x4CAF50);
 }
 
 // ---- WidgetType callbacks ----
@@ -84,12 +82,12 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
     cfg->use_absolute = btn["widget_use_absolute"] | true;
 
     // Color tiers with energy-monitor-inspired defaults
-    cfg->color_good_rgb     = widget_parse_color(btn["widget_color_good"],      0x4CAF50); // green
-    cfg->color_ok_rgb       = widget_parse_color(btn["widget_color_ok"],        0x8BC34A); // light green
-    cfg->color_attention_rgb = widget_parse_color(btn["widget_color_attention"], 0xFF9800); // orange
-    cfg->color_warning_rgb  = widget_parse_color(btn["widget_color_warning"],   0xF44336); // red
+    widget_parse_field(btn["widget_color_good"],      cfg->color_good,      sizeof(cfg->color_good),      "#4CAF50");
+    widget_parse_field(btn["widget_color_ok"],        cfg->color_ok,        sizeof(cfg->color_ok),        "#8BC34A");
+    widget_parse_field(btn["widget_color_attention"], cfg->color_attention, sizeof(cfg->color_attention), "#FF9800");
+    widget_parse_field(btn["widget_color_warning"],   cfg->color_warning,   sizeof(cfg->color_warning),   "#F44336");
 
-    cfg->bar_bg_color_rgb = widget_parse_color(btn["widget_bar_bg_color"], 0x1A1A1A);
+    widget_parse_field(btn["widget_bar_bg_color"],    cfg->bar_bg_color,    sizeof(cfg->bar_bg_color),    "#1A1A1A");
     uint8_t wpct = btn["widget_bar_width_pct"] | (uint8_t)100;
     cfg->bar_width_pct = (wpct < 1) ? 1 : (wpct > 100) ? 100 : wpct;
 
@@ -166,11 +164,10 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
          rect->w, rect->h, content_h, top_h, icon_h, gap, bar_top, bar_w, bar_h, bot_h, cfg->horizontal);
 
     // Bar background — positioned from top so gap is guaranteed
-    uint32_t bg_rgb = cfg->bar_bg_color_rgb;
     lv_obj_t* bar_bg = lv_obj_create(tile);
     lv_obj_set_size(bar_bg, bar_w, bar_h);
     lv_obj_align(bar_bg, LV_ALIGN_TOP_MID, 0, bar_top);
-    lv_obj_set_style_bg_color(bar_bg, lv_color_make((bg_rgb >> 16) & 0xFF, (bg_rgb >> 8) & 0xFF, bg_rgb & 0xFF), 0);
+    lv_obj_set_style_bg_color(bar_bg, resolve_lv_color(cfg->bar_bg_color, 0x1A1A1A), 0);
     lv_obj_set_style_bg_opa(bar_bg, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(bar_bg, 4, 0);
     lv_obj_set_style_border_width(bar_bg, 0, 0);
@@ -237,6 +234,24 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Pick color tier
     lv_color_t color = pick_tier_color(cfg, value);
     lv_obj_set_style_bg_color(st->bar_fill, color, 0);
+
+}
+
+// ---- Tick: re-resolve binding-driven colors every cycle ----
+
+static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
+                           WidgetState* state) {
+    auto* cfg = reinterpret_cast<const BarChartConfig*>(wcfg->data);
+    auto* st = reinterpret_cast<BarChartState*>(state->data);
+    if (!st->bar_fill || !st->bar_bg) return;
+
+    // Re-resolve bar background color
+    lv_obj_set_style_bg_color(st->bar_bg, resolve_lv_color(cfg->bar_bg_color, 0x1A1A1A), 0);
+
+    // Re-apply threshold color using stored last_value
+    if (!isnan(st->last_value)) {
+        lv_obj_set_style_bg_color(st->bar_fill, pick_tier_color(cfg, st->last_value), 0);
+    }
 }
 
 static void bar_chart_destroy(WidgetState* state) {
@@ -247,14 +262,18 @@ static void bar_chart_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
-const WidgetType bar_chart_widget_type = {
+static const WidgetType bar_chart_widget_type = {
     "bar_chart",
     bar_chart_parse,
     bar_chart_create,
     bar_chart_update,
     bar_chart_destroy,
-    nullptr,  // no tick
+    bar_chart_tick,
     nullptr   // no getStreamParams
 };
+
+static struct BarChartAutoReg {
+    BarChartAutoReg() { widget_register(&bar_chart_widget_type); }
+} _bar_chart_auto_reg;
 
 #endif // HAS_DISPLAY

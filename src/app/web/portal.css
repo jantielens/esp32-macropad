@@ -1275,47 +1275,53 @@ footer {
     padding: 0 14px 14px;
 }
 
-.pad-swatch-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 4px;
-    min-height: 0;
+/* ── Color picker popover ── */
+.color-popover {
+    position: fixed; z-index: 10001;
+    background: #fff; border: 1px solid #d2d2d7; border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 14px;
+    width: 380px; max-width: calc(100vw - 24px); max-height: 80vh; overflow-y: auto;
 }
+.color-popover-close { position: absolute; top: 6px; right: 10px; font-size: 20px; line-height: 1; color: #86868b; cursor: pointer; z-index: 1; padding: 2px 4px; }
+.color-popover-close:hover { color: #333; }
+.color-popover-section { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #86868b; margin: 10px 0 6px; }
+.color-popover-section:first-child { margin-top: 0; }
+.color-popover-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.color-popover-swatch {
+    width: 24px; height: 24px; border-radius: 6px;
+    border: 2px solid transparent; cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+    transition: transform 0.1s, border-color 0.1s;
+}
+.color-popover-swatch:hover { transform: scale(1.15); border-color: #0071e3; }
+.color-popover-swatch.active { border-color: #0071e3; box-shadow: 0 0 0 2px rgba(0,113,227,0.3); }
+.color-popover-input-row { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.color-popover-input-row input { width: 100%; height: 34px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; box-sizing: border-box; }
+.color-popover-input-row button { height: 34px; padding: 0 12px; font-size: 13px; align-self: flex-end; }
+.color-popover-backdrop { position: fixed; inset: 0; z-index: 10000; }
 
-.pad-swatch-strip:empty {
+/* Bindable color field — inline swatch + text input */
+.bindable-color {
+    margin-bottom: 4px;
+}
+.bindable-color .bc-swatch {
+    width: 44px; height: 44px; border-radius: 6px;
+    border: 2px solid #d2d2d7; cursor: pointer;
+    box-sizing: border-box;
+}
+.bindable-color .bc-swatch.bc-binding {
+    background: linear-gradient(90deg, #f44336, #ff9800, #ffeb3b, #4caf50, #2196f3, #9c27b0) !important;
+}
+.bindable-color .bc-input {
     display: none;
 }
-
-.pad-swatch {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    border: 2px solid #d2d2d7;
-    cursor: pointer;
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
-    transition: transform 0.1s;
+/* Binding-capable field hint badge */
+.fx-hint {
+    display: inline-block; font-size: 10px; font-weight: 700; font-style: italic;
+    color: rgba(0,113,227,0.55); margin-left: 4px; vertical-align: baseline;
+    user-select: none; letter-spacing: -0.5px; cursor: pointer;
 }
-
-.pad-swatch:hover {
-    transform: scale(1.2);
-    border-color: #0071e3;
-}
-
-.pad-swatch.active {
-    border-color: #0071e3;
-    box-shadow: 0 0 0 2px rgba(0,113,227,0.3);
-}
-
-/* Bindable color field component */
-.pad-color-bind-group { margin-bottom: 10px; }
-.pad-color-bind-row {
-    display: flex; align-items: center; gap: 6px;
-}
-.pad-color-bind-row input[type="color"] {
-    width: 34px; height: 34px; border: 2px solid #d2d2d7; border-radius: 8px;
-    padding: 2px; cursor: pointer; flex-shrink: 0;
-}
+.fx-hint:hover { color: rgba(0,113,227,0.85); }
 
 /* Page bindings list */
 .pad-binding-row {
@@ -1330,16 +1336,11 @@ footer {
     font-family: monospace;
 }
 
-/* Sparkline: color swatch row below binding input */
-.sparkline-color-row {
-    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+/* Sparkline: binding + color on same row */
+.sparkline-binding-color-row {
+    display: flex; align-items: center; gap: 8px;
 }
-.sparkline-color-row input[type="color"] {
-    width: 34px; min-width: 34px; max-width: 34px; height: 34px;
-    border: 2px solid #d2d2d7; border-radius: 8px;
-    padding: 2px; cursor: pointer; flex-shrink: 0;
-}
-.sparkline-color-row small { color: #86868b; font-size: 12px; }
+.sparkline-binding-color-row .bindable-color .bc-input { display: none; }
 
 /* Widget sub-group headings (reusable across widget sections) */
 .widget-sub-heading {
@@ -1352,18 +1353,11 @@ footer {
     margin-top: 0; padding-top: 0; border-top: none;
 }
 
-/* Bar chart threshold color picker row */
+/* Widget threshold / status color row */
 .bar-chart-colors {
     display: flex; gap: 8px; align-items: end;
 }
 .bar-chart-colors .form-group { flex: 1; min-width: 0; }
-.bar-chart-colors input[type="color"],
-#pad-edit-bar-chart-section input[type="color"],
-#pad-edit-gauge-section input[type="color"],
-#pad-edit-sparkline-section input[type="color"] {
-    width: 100%; height: 34px; border: 2px solid #d2d2d7; border-radius: 8px;
-    padding: 2px; cursor: pointer;
-}
 
 /* Binding input: flex row with ? help button */
 .binding-input-wrap {

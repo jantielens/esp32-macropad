@@ -308,6 +308,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/sensor_manager.h
   - src/app/web_portal_pad.cpp
   - src/app/widgets/sparkline_widget.cpp
+  - src/app/widgets/widget.h
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp

@@ -43,16 +43,16 @@ struct GaugeConfig {
     float    max_value;              // Scale maximum (default 100)
     uint16_t arc_degrees;            // Arc span (10–360, default 180)
     uint16_t start_angle;            // Rotation offset in degrees (default 180)
-    uint32_t color_good_rgb;         // Color tier 0: below threshold 1
-    uint32_t color_ok_rgb;           // Color tier 1: threshold 1 → 2
-    uint32_t color_attention_rgb;    // Color tier 2: threshold 2 → 3
-    uint32_t color_warning_rgb;      // Color tier 3: at/above threshold 3
+    char     color_good[CONFIG_BINDABLE_SHORT_LEN];         // Color tier 0 (default "#4CAF50")
+    char     color_ok[CONFIG_BINDABLE_SHORT_LEN];           // Color tier 1 (default "#8BC34A")
+    char     color_attention[CONFIG_BINDABLE_SHORT_LEN];    // Color tier 2 (default "#FF9800")
+    char     color_warning[CONFIG_BINDABLE_SHORT_LEN];      // Color tier 3 (default "#F44336")
     float    threshold_1;            // Breakpoint tier 0 → 1
     float    threshold_2;            // Breakpoint tier 1 → 2
     float    threshold_3;            // Breakpoint tier 2 → 3
-    uint32_t track_color_rgb;        // Inactive arc background (default 0x1A1A1A)
-    uint32_t needle_color_rgb;       // Needle color (default 0xFFFFFF)
-    uint32_t tick_color_rgb;          // Tick mark color (default 0x808080)
+    char     track_color[CONFIG_BINDABLE_SHORT_LEN];        // Inactive arc background (default "#1A1A1A")
+    char     needle_color[CONFIG_BINDABLE_SHORT_LEN];       // Needle color (default "#FFFFFF")
+    char     tick_color[CONFIG_BINDABLE_SHORT_LEN];          // Tick mark color (default "#808080")
     uint8_t  arc_width_pct;          // Arc thickness as % of radius (5–50, default 15)
     uint8_t  tick_count;             // Major tick count (0 = none, default 5)
     uint8_t  needle_width;           // Needle line width in pixels (1–10, default 2)
@@ -88,12 +88,10 @@ static_assert(sizeof(GaugeState) <= WIDGET_STATE_MAX_BYTES,
 
 static lv_color_t gauge_pick_tier_color(const GaugeConfig* cfg, float value) {
     float cmp = cfg->use_absolute ? fabsf(value) : value;
-    uint32_t rgb;
-    if (cmp >= cfg->threshold_3) rgb = cfg->color_warning_rgb;
-    else if (cmp >= cfg->threshold_2) rgb = cfg->color_attention_rgb;
-    else if (cmp >= cfg->threshold_1) rgb = cfg->color_ok_rgb;
-    else rgb = cfg->color_good_rgb;
-    return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+    if (cmp >= cfg->threshold_3) return resolve_lv_color(cfg->color_warning, 0xF44336);
+    if (cmp >= cfg->threshold_2) return resolve_lv_color(cfg->color_attention, 0xFF9800);
+    if (cmp >= cfg->threshold_1) return resolve_lv_color(cfg->color_ok, 0x8BC34A);
+    return resolve_lv_color(cfg->color_good, 0x4CAF50);
 }
 
 // ---- Helper: compute arc bounding box (unit circle) ----
@@ -176,8 +174,7 @@ static lv_obj_t* gauge_create_arc(lv_obj_t* tile, const GaugeConfig* cfg,
     lv_arc_set_bg_angles(arc, 0, cfg->arc_degrees);
     lv_arc_set_mode(arc, LV_ARC_MODE_NORMAL);
     // Track
-    uint32_t trk_rgb = cfg->track_color_rgb;
-    lv_obj_set_style_arc_color(arc, lv_color_make((trk_rgb >> 16) & 0xFF, (trk_rgb >> 8) & 0xFF, trk_rgb & 0xFF), LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, resolve_lv_color(cfg->track_color, 0x1A1A1A), LV_PART_MAIN);
     lv_obj_set_style_arc_width(arc, arc_width, LV_PART_MAIN);
     lv_obj_set_style_arc_rounded(arc, false, LV_PART_MAIN);
     // Indicator
@@ -214,14 +211,14 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     cfg->zero_centered   = btn["widget_gauge_zero_centered"] | false;
 
     // Color tiers (same keys as bar chart for consistency)
-    cfg->color_good_rgb      = widget_parse_color(btn["widget_color_good"],      0x4CAF50);
-    cfg->color_ok_rgb        = widget_parse_color(btn["widget_color_ok"],        0x8BC34A);
-    cfg->color_attention_rgb = widget_parse_color(btn["widget_color_attention"], 0xFF9800);
-    cfg->color_warning_rgb   = widget_parse_color(btn["widget_color_warning"],   0xF44336);
+    widget_parse_field(btn["widget_color_good"],      cfg->color_good,      sizeof(cfg->color_good),      "#4CAF50");
+    widget_parse_field(btn["widget_color_ok"],        cfg->color_ok,        sizeof(cfg->color_ok),        "#8BC34A");
+    widget_parse_field(btn["widget_color_attention"], cfg->color_attention, sizeof(cfg->color_attention), "#FF9800");
+    widget_parse_field(btn["widget_color_warning"],   cfg->color_warning,   sizeof(cfg->color_warning),   "#F44336");
 
-    cfg->track_color_rgb  = widget_parse_color(btn["widget_gauge_track_color"],  0x1A1A1A);
-    cfg->needle_color_rgb = widget_parse_color(btn["widget_gauge_needle_color"], 0xFFFFFF);
-    cfg->tick_color_rgb   = widget_parse_color(btn["widget_gauge_tick_color"],   0x808080);
+    widget_parse_field(btn["widget_gauge_track_color"],  cfg->track_color,  sizeof(cfg->track_color),  "#1A1A1A");
+    widget_parse_field(btn["widget_gauge_needle_color"], cfg->needle_color, sizeof(cfg->needle_color), "#FFFFFF");
+    widget_parse_field(btn["widget_gauge_tick_color"],   cfg->tick_color,   sizeof(cfg->tick_color),   "#808080");
 
     uint8_t awpct = btn["widget_gauge_arc_width_pct"] | (uint8_t)15;
     cfg->arc_width_pct = (awpct < 5) ? 5 : (awpct > 50) ? 50 : awpct;
@@ -254,11 +251,11 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->last_value_3 = NAN;
 
     // Determine ring count from presence of extra data bindings.
-    // If binding_3 is set but binding_2 is empty, treat binding_3 as binding_2
+    // If binding[2] is set but binding[1] is empty, treat binding[2] as binding[1]
     // (promote to middle ring to avoid a visual gap).
     uint8_t ring_count = 1;
-    if (wcfg->data_binding_2[0] && wcfg->data_binding_3[0]) ring_count = 3;
-    else if (wcfg->data_binding_2[0] || wcfg->data_binding_3[0]) ring_count = 2;
+    if (wcfg->data_binding[1][0] && wcfg->data_binding[2][0]) ring_count = 3;
+    else if (wcfg->data_binding[1][0] || wcfg->data_binding[2][0]) ring_count = 2;
     st->ring_count = ring_count;
 
     // ---- Compute available space ----
@@ -332,8 +329,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // ---- Tick marks (outer ring only) ----
     if (cfg->tick_count > 0) {
-        uint32_t t_rgb = cfg->tick_color_rgb;
-        lv_color_t tick_color = lv_color_make((t_rgb >> 16) & 0xFF, (t_rgb >> 8) & 0xFF, t_rgb & 0xFF);
+        lv_color_t tick_color = resolve_lv_color(cfg->tick_color, 0x808080);
         int16_t tick_outer = radius - 1;
         int16_t tick_inner = radius - arc_width + 1;
         for (uint8_t i = 1; i <= cfg->tick_count; i++) {
@@ -357,9 +353,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         st->n_pts = (lv_point_precise_t*)lv_malloc(sizeof(lv_point_precise_t) * 2);
         if (st->n_pts) {
             st->needle = lv_line_create(tile);
-            uint32_t n_rgb = cfg->needle_color_rgb;
-            lv_obj_set_style_line_color(st->needle,
-                lv_color_make((n_rgb >> 16) & 0xFF, (n_rgb >> 8) & 0xFF, n_rgb & 0xFF), 0);
+            lv_obj_set_style_line_color(st->needle, resolve_lv_color(cfg->needle_color, 0xFFFFFF), 0);
             lv_obj_set_style_line_width(st->needle, cfg->needle_width, 0);
             lv_obj_clear_flag(st->needle, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
@@ -533,6 +527,51 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
             gauge_update_ring(st->arc_ring3, cfg, value, &st->last_value_3);
         }
     }
+
+}
+
+// ---- Tick: re-resolve binding-driven colors every cycle ----
+
+static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
+                       WidgetState* state) {
+    auto* cfg = reinterpret_cast<const GaugeConfig*>(wcfg->data);
+    auto* st = reinterpret_cast<GaugeState*>(state->data);
+    if (!st->arc_bg) return;
+
+    // Track color (background arc)
+    lv_color_t track_clr = resolve_lv_color(cfg->track_color, 0x1A1A1A);
+    lv_obj_set_style_arc_color(st->arc_bg, track_clr, LV_PART_MAIN);
+    if (st->arc_ring2) lv_obj_set_style_arc_color(st->arc_ring2, track_clr, LV_PART_MAIN);
+    if (st->arc_ring3) lv_obj_set_style_arc_color(st->arc_ring3, track_clr, LV_PART_MAIN);
+
+    // Needle color
+    if (st->needle) {
+        lv_obj_set_style_line_color(st->needle, resolve_lv_color(cfg->needle_color, 0xFFFFFF), 0);
+    }
+
+    // Tick mark color
+    if (cfg->tick_count > 0) {
+        lv_color_t tick_clr = resolve_lv_color(cfg->tick_color, 0x808080);
+        uint32_t cnt = lv_obj_get_child_count(tile);
+        for (uint32_t i = 0; i < cnt; i++) {
+            lv_obj_t* child = lv_obj_get_child(tile, i);
+            if (child == st->arc_bg || child == st->arc_ring2 || child == st->arc_ring3 || child == st->needle) continue;
+            if (lv_obj_check_type(child, &lv_line_class)) {
+                lv_obj_set_style_line_color(child, tick_clr, 0);
+            }
+        }
+    }
+
+    // Threshold (indicator) colors — re-apply using stored last_value
+    if (!isnan(st->last_value)) {
+        lv_obj_set_style_arc_color(st->arc_bg, gauge_pick_tier_color(cfg, st->last_value), LV_PART_INDICATOR);
+    }
+    if (st->arc_ring2 && !isnan(st->last_value_2)) {
+        lv_obj_set_style_arc_color(st->arc_ring2, gauge_pick_tier_color(cfg, st->last_value_2), LV_PART_INDICATOR);
+    }
+    if (st->arc_ring3 && !isnan(st->last_value_3)) {
+        lv_obj_set_style_arc_color(st->arc_ring3, gauge_pick_tier_color(cfg, st->last_value_3), LV_PART_INDICATOR);
+    }
 }
 
 static void gauge_destroy(WidgetState* state) {
@@ -548,14 +587,18 @@ static void gauge_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
-const WidgetType gauge_widget_type = {
+static const WidgetType gauge_widget_type = {
     "gauge",
     gauge_parse,
     gauge_create,
     gauge_update,
     gauge_destroy,
-    nullptr,  // no tick
+    gauge_tick,
     nullptr   // no getStreamParams
 };
+
+static struct GaugeAutoReg {
+    GaugeAutoReg() { widget_register(&gauge_widget_type); }
+} _gauge_auto_reg;
 
 #endif // HAS_DISPLAY

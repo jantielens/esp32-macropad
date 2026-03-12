@@ -81,8 +81,14 @@
 
                 <!-- Background Color -->
                 <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
-                    <label style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Background Color</label>
-                    <div id="pad-page-bg-color-wrap" class="pad-color-bind-group"></div>
+                    <div id="pad-page-bg-color-wrap">
+                        <label style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Background Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                        <div class="bindable-color">
+                            <div class="bc-swatch"></div>
+                            <input type="text" id="pad-edit-page-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                            
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Pad Bindings -->
@@ -171,11 +177,11 @@
                     <summary>Labels</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-label-top">Top Label</label>
+                            <label for="pad-edit-label-top">Top Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" id="pad-edit-label-top" maxlength="191" placeholder="e.g. Living Room or Power: [mqtt:topic;path;fmt] W">
                                 <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('top')" title="Label style override">Aa</button>
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                                
                             </div>
                             <div id="pad-edit-label-top-style-wrap" class="label-style-wrap" style="display:none;">
                                 <input type="text" id="pad-edit-label-top-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
@@ -183,11 +189,11 @@
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-label-center">Center Label</label>
+                            <label for="pad-edit-label-center">Center Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" id="pad-edit-label-center" maxlength="191" placeholder="e.g. 21.5°C or [mqtt:sensors/temp;temp;%.1f°C]">
                                 <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('center')" title="Label style override">Aa</button>
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                                
                             </div>
                             <div id="pad-edit-label-center-style-wrap" class="label-style-wrap" style="display:none;">
                                 <input type="text" id="pad-edit-label-center-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
@@ -195,11 +201,11 @@
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-label-bottom">Bottom Label</label>
+                            <label for="pad-edit-label-bottom">Bottom Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" id="pad-edit-label-bottom" maxlength="191" placeholder="e.g. Lights or [mqtt:topic;path;format]">
                                 <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('bottom')" title="Label style override">Aa</button>
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                                
                             </div>
                             <div id="pad-edit-label-bottom-style-wrap" class="label-style-wrap" style="display:none;">
                                 <input type="text" id="pad-edit-label-bottom-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
@@ -214,10 +220,10 @@
                     <summary>Bar Chart Settings</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-widget-data-binding">Data Binding</label>
+                            <label for="pad-edit-widget-data-binding">Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-widget-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/energy/solar_power;power]">
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                                
                             </div>
                         </div>
 
@@ -256,27 +262,27 @@
 
                         <div class="bar-chart-colors">
                             <div class="form-group">
-                                <label for="pad-edit-widget-color-good">Below T1</label>
-                                <input type="color" id="pad-edit-widget-color-good" value="#4CAF50">
+                                <label for="pad-edit-widget-color-good">Below T1 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-color-good" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-widget-color-ok">T1 – T2</label>
-                                <input type="color" id="pad-edit-widget-color-ok" value="#8BC34A">
+                                <label for="pad-edit-widget-color-ok">T1 – T2 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-color-ok" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#8BC34A"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-widget-color-attention">T2 – T3</label>
-                                <input type="color" id="pad-edit-widget-color-attention" value="#FF9800">
+                                <label for="pad-edit-widget-color-attention">T2 – T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-color-attention" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-widget-color-warning">Above T3</label>
-                                <input type="color" id="pad-edit-widget-color-warning" value="#F44336">
+                                <label for="pad-edit-widget-color-warning">Above T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-color-warning" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#F44336"></div>
                             </div>
                         </div>
 
                         <div style="display:flex; gap:8px;">
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-bg-color">Bar Background</label>
-                                <input type="color" id="pad-edit-widget-bar-bg-color" value="#1A1A1A">
+                                <label for="pad-edit-widget-bar-bg-color">Bar Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-bg-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#1A1A1A"></div>
                             </div>
                             <div class="form-group" style="flex:1;">
                                 <label for="pad-edit-widget-bar-width-pct">Bar Width %</label>
@@ -298,25 +304,25 @@
                     <summary>Gauge Settings</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding">Data Binding (outer ring)</label>
+                            <label for="pad-edit-gauge-data-binding">Data Binding (outer ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                                
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding-2">Data Binding (middle ring)</label>
+                            <label for="pad-edit-gauge-data-binding-2">Data Binding (middle ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-2" maxlength="191" placeholder="Optional — leave empty for single ring">
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                                
                             </div>
                             <small>Adds a concentric middle ring sharing the same settings</small>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding-3">Data Binding (inner ring)</label>
+                            <label for="pad-edit-gauge-data-binding-3">Data Binding (inner ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-3" maxlength="191" placeholder="Optional — leave empty for single or double ring">
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                                
                             </div>
                             <small>Adds a concentric inner ring (requires middle ring)</small>
                         </div>
@@ -377,35 +383,35 @@
 
                         <div class="bar-chart-colors">
                             <div class="form-group">
-                                <label for="pad-edit-gauge-color-good">Below T1</label>
-                                <input type="color" id="pad-edit-gauge-color-good" value="#4CAF50">
+                                <label for="pad-edit-gauge-color-good">Below T1 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-color-good" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-gauge-color-ok">T1 – T2</label>
-                                <input type="color" id="pad-edit-gauge-color-ok" value="#8BC34A">
+                                <label for="pad-edit-gauge-color-ok">T1 – T2 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-color-ok" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#8BC34A"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-gauge-color-attention">T2 – T3</label>
-                                <input type="color" id="pad-edit-gauge-color-attention" value="#FF9800">
+                                <label for="pad-edit-gauge-color-attention">T2 – T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-color-attention" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-gauge-color-warning">Above T3</label>
-                                <input type="color" id="pad-edit-gauge-color-warning" value="#F44336">
+                                <label for="pad-edit-gauge-color-warning">Above T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-color-warning" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#F44336"></div>
                             </div>
                         </div>
 
                         <div class="bar-chart-colors">
                             <div class="form-group">
-                                <label for="pad-edit-gauge-track-color">Track Color</label>
-                                <input type="color" id="pad-edit-gauge-track-color" value="#1A1A1A">
+                                <label for="pad-edit-gauge-track-color">Track Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-track-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#1A1A1A"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-gauge-needle-color">Needle Color</label>
-                                <input type="color" id="pad-edit-gauge-needle-color" value="#FFFFFF">
+                                <label for="pad-edit-gauge-needle-color">Needle Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-needle-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-gauge-tick-color">Tick Color</label>
-                                <input type="color" id="pad-edit-gauge-tick-color" value="#808080">
+                                <label for="pad-edit-gauge-tick-color">Tick Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-tick-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#808080"></div>
                             </div>
                         </div>
 
@@ -444,38 +450,41 @@
                         <div class="widget-sub-heading">Data Sources</div>
 
                         <div class="form-group">
-                            <label for="pad-edit-sparkline-data-binding">Data Binding (main line)</label>
-                            <div class="binding-input-wrap">
-                                <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
-                            </div>
-                            <div class="sparkline-color-row">
-                                <input type="color" id="pad-edit-sparkline-line-color" value="#4CAF50">
-                                <small>Line color</small>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="pad-edit-sparkline-data-binding-2">Data Binding (line 2)</label>
-                            <div class="binding-input-wrap">
-                                <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-2" maxlength="191" placeholder="Optional — leave empty for single line">
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
-                            </div>
-                            <div class="sparkline-color-row">
-                                <input type="color" id="pad-edit-sparkline-line-color-2" value="#2196F3">
-                                <small>Line 2 color</small>
+                            <label for="pad-edit-sparkline-data-binding">Data Binding (main line) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="sparkline-binding-color-row">
+                                <div class="binding-input-wrap" style="flex:1;min-width:0;">
+                                    <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
+                                </div>
+                                <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:start;">
+                                    <label for="pad-edit-sparkline-line-color" style="margin:0;"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
+                                </div>
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <label for="pad-edit-sparkline-data-binding-3">Data Binding (line 3)</label>
-                            <div class="binding-input-wrap">
-                                <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-3" maxlength="191" placeholder="Optional — leave empty for single or double line">
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                            <label for="pad-edit-sparkline-data-binding-2">Data Binding (line 2) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="sparkline-binding-color-row">
+                                <div class="binding-input-wrap" style="flex:1;min-width:0;">
+                                    <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-2" maxlength="191" placeholder="Optional — leave empty for single line">
+                                </div>
+                                <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:start;">
+                                    <label for="pad-edit-sparkline-line-color-2" style="margin:0;"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-2" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
+                                </div>
                             </div>
-                            <div class="sparkline-color-row">
-                                <input type="color" id="pad-edit-sparkline-line-color-3" value="#9C27B0">
-                                <small>Line 3 color</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="pad-edit-sparkline-data-binding-3">Data Binding (line 3) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="sparkline-binding-color-row">
+                                <div class="binding-input-wrap" style="flex:1;min-width:0;">
+                                    <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-3" maxlength="191" placeholder="Optional — leave empty for single or double line">
+                                </div>
+                                <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:start;">
+                                    <label for="pad-edit-sparkline-line-color-3" style="margin:0;"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-3" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
+                                </div>
                             </div>
                         </div>
 
@@ -525,9 +534,9 @@
                                 <label for="pad-edit-sparkline-min-fmt">Format</label>
                                 <input type="text" id="pad-edit-sparkline-min-fmt" maxlength="15" placeholder="%.0f">
                             </div>
-                            <div class="form-group" style="flex:0 0 60px;">
-                                <label for="pad-edit-sparkline-min-label-color">Color</label>
-                                <input type="color" id="pad-edit-sparkline-min-label-color" value="#FFFFFF">
+                            <div class="form-group" style="flex:0 0 auto;">
+                                <label for="pad-edit-sparkline-min-label-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-min-label-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
                         </div>
 
@@ -542,9 +551,9 @@
                                 <label for="pad-edit-sparkline-max-fmt">Format</label>
                                 <input type="text" id="pad-edit-sparkline-max-fmt" maxlength="15" placeholder="%.0f">
                             </div>
-                            <div class="form-group" style="flex:0 0 60px;">
-                                <label for="pad-edit-sparkline-max-label-color">Color</label>
-                                <input type="color" id="pad-edit-sparkline-max-label-color" value="#FFFFFF">
+                            <div class="form-group" style="flex:0 0 auto;">
+                                <label for="pad-edit-sparkline-max-label-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-max-label-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
                         </div>
                         <small>Size 0 = off. Format: e.g. hi %.1f kW. Color white = auto (follows line color).</small>
@@ -564,11 +573,11 @@
                                 <label for="pad-edit-sparkline-ref-1-y">Line 1 Y</label>
                                 <input type="number" id="pad-edit-sparkline-ref-1-y" step="any" placeholder="off">
                             </div>
-                            <div class="form-group" style="flex:0 0 60px;">
-                                <label for="pad-edit-sparkline-ref-1-color">Color</label>
-                                <input type="color" id="pad-edit-sparkline-ref-1-color" value="#888888">
+                            <div class="form-group" style="flex:0 0 auto;">
+                                <label for="pad-edit-sparkline-ref-1-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-ref-1-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#888888"></div>
                             </div>
-                            <div class="form-group" style="flex:0 0 90px;">
+                            <div class="form-group" style="flex:1;min-width:80px;">
                                 <label for="pad-edit-sparkline-ref-1-pattern">Pattern</label>
                                 <select id="pad-edit-sparkline-ref-1-pattern" style="font-size:13px;">
                                     <option value="0">Solid</option>
@@ -582,11 +591,11 @@
                                 <label for="pad-edit-sparkline-ref-2-y">Line 2 Y</label>
                                 <input type="number" id="pad-edit-sparkline-ref-2-y" step="any" placeholder="off">
                             </div>
-                            <div class="form-group" style="flex:0 0 60px;">
-                                <label for="pad-edit-sparkline-ref-2-color">Color</label>
-                                <input type="color" id="pad-edit-sparkline-ref-2-color" value="#888888">
+                            <div class="form-group" style="flex:0 0 auto;">
+                                <label for="pad-edit-sparkline-ref-2-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-ref-2-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#888888"></div>
                             </div>
-                            <div class="form-group" style="flex:0 0 90px;">
+                            <div class="form-group" style="flex:1;min-width:80px;">
                                 <label for="pad-edit-sparkline-ref-2-pattern">Pattern</label>
                                 <select id="pad-edit-sparkline-ref-2-pattern" style="font-size:13px;">
                                     <option value="0">Solid</option>
@@ -600,11 +609,11 @@
                                 <label for="pad-edit-sparkline-ref-3-y">Line 3 Y</label>
                                 <input type="number" id="pad-edit-sparkline-ref-3-y" step="any" placeholder="off">
                             </div>
-                            <div class="form-group" style="flex:0 0 60px;">
-                                <label for="pad-edit-sparkline-ref-3-color">Color</label>
-                                <input type="color" id="pad-edit-sparkline-ref-3-color" value="#888888">
+                            <div class="form-group" style="flex:0 0 auto;">
+                                <label for="pad-edit-sparkline-ref-3-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-ref-3-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#888888"></div>
                             </div>
-                            <div class="form-group" style="flex:0 0 90px;">
+                            <div class="form-group" style="flex:1;min-width:80px;">
                                 <label for="pad-edit-sparkline-ref-3-pattern">Pattern</label>
                                 <select id="pad-edit-sparkline-ref-3-pattern" style="font-size:13px;">
                                     <option value="0">Solid</option>
@@ -668,20 +677,20 @@
 
                             <div class="bar-chart-colors">
                                 <div class="form-group">
-                                    <label for="pad-edit-sparkline-color-good">Below T1</label>
-                                    <input type="color" id="pad-edit-sparkline-color-good" value="#4CAF50">
+                                    <label for="pad-edit-sparkline-color-good">Below T1 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-color-good" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="pad-edit-sparkline-color-ok">T1 – T2</label>
-                                    <input type="color" id="pad-edit-sparkline-color-ok" value="#8BC34A">
+                                    <label for="pad-edit-sparkline-color-ok">T1 – T2 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-color-ok" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#8BC34A"></div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="pad-edit-sparkline-color-attention">T2 – T3</label>
-                                    <input type="color" id="pad-edit-sparkline-color-attention" value="#FF9800">
+                                    <label for="pad-edit-sparkline-color-attention">T2 – T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-color-attention" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="pad-edit-sparkline-color-warning">Above T3</label>
-                                    <input type="color" id="pad-edit-sparkline-color-warning" value="#F44336">
+                                    <label for="pad-edit-sparkline-color-warning">Above T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-color-warning" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#F44336"></div>
                                 </div>
                             </div>
                         </div>
@@ -834,20 +843,40 @@
                 <details class="editor-group" id="pad-edit-colors-section">
                     <summary>Appearance</summary>
                     <div class="editor-group-body">
-                        <small style="display:block; margin-bottom:12px; color:#86868b;">Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. When using a binding, set a default color as fallback. <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button></small>
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. </small>
 
-                        <div id="pad-edit-bg-color-wrap" class="pad-color-bind-group"></div>
-                        <div id="pad-edit-fg-color-wrap" class="pad-color-bind-group"></div>
-                        <div id="pad-edit-border-color-wrap" class="pad-color-bind-group"></div>
+                        <div style="display:flex; gap:12px; margin-bottom:8px;">
+                            <div id="pad-edit-bg-color-wrap" style="flex:1;">
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color">
+                                    <div class="bc-swatch"></div>
+                                    <input type="text" id="pad-edit-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                                </div>
+                            </div>
+                            <div id="pad-edit-fg-color-wrap" style="flex:1;">
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color">
+                                    <div class="bc-swatch"></div>
+                                    <input type="text" id="pad-edit-fg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                                </div>
+                            </div>
+                            <div id="pad-edit-border-color-wrap" style="flex:1;">
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Border <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color">
+                                    <div class="bc-swatch"></div>
+                                    <input type="text" id="pad-edit-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                                </div>
+                            </div>
+                        </div>
 
                         <div style="display:flex; gap:12px; margin-top:4px;">
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-border-width">Border Width</label>
-                                <input type="number" id="pad-edit-border-width" min="0" max="10" value="0" style="width:100%;">
+                                <label for="pad-edit-border-width">Border Width <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" id="pad-edit-border-width" value="0" maxlength="63" style="width:100%;" placeholder="0 or [binding]">
                             </div>
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-corner-radius">Radius</label>
-                                <input type="number" id="pad-edit-corner-radius" min="0" max="50" value="8" style="width:100%;">
+                                <label for="pad-edit-corner-radius">Radius <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" id="pad-edit-corner-radius" value="8" maxlength="63" style="width:100%;" placeholder="8 or [binding]">
                             </div>
                         </div>
                     </div>
@@ -859,10 +888,10 @@
                     <div class="editor-group-body">
                         <small style="display:block; margin-bottom:12px; color:#86868b;">Control button visibility and interactivity. Use a static value or a binding expression that resolves to <code>enabled</code>, <code>disabled</code>, or <code>hidden</code>.</small>
                         <div class="form-group">
-                            <label for="pad-edit-btn-state">State</label>
+                            <label for="pad-edit-btn-state">State <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" id="pad-edit-btn-state" class="binding-mono" maxlength="191" placeholder="e.g. enabled, disabled, hidden, or [expr:…]">
-                                <button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>
+                                
                             </div>
                             <small><b>enabled</b> = normal (default when empty), <b>disabled</b> = visible but no tap/hold, <b>hidden</b> = invisible.</small>
                         </div>

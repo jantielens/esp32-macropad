@@ -50,10 +50,12 @@ static lv_color_t rgb_to_lv(uint32_t rgb) {
 
 PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
     : pageIndex(page), displayMgr(manager), screen(nullptr), container(nullptr),
-      tileCount(0), bindingCount(0), colorBindingCount(0), cachedGeneration(UINT32_MAX), tilesBuilt(false) {
+      tileCount(0), bindingCount(0), colorBindingCount(0), numberBindingCount(0),
+      cachedGeneration(UINT32_MAX), tilesBuilt(false) {
     memset(tiles, 0, sizeof(tiles));
     memset(bindings, 0, sizeof(bindings));
     memset(colorBindings, 0, sizeof(colorBindings));
+    memset(numberBindings, 0, sizeof(numberBindings));
     wakeScreen[0] = '\0';
     pageBgTemplate[0] = '\0';
     pageBgDefault = 0x000000;
@@ -111,6 +113,9 @@ void PadScreen::show() {
     for (uint16_t i = 0; i < colorBindingCount; i++) {
         colorBindings[i].lastApplied = UINT32_MAX; // Force re-apply
     }
+    for (uint16_t i = 0; i < numberBindingCount; i++) {
+        numberBindings[i].lastApplied = INT16_MIN; // Force re-apply
+    }
 
 #if HAS_IMAGE_FETCH
     for (uint8_t i = 0; i < tileCount; i++) {
@@ -143,6 +148,7 @@ void PadScreen::update() {
         pollBtnStateBindings();   // Visibility/interactivity first
         pollMqttBindings();
         pollColorBindings();
+        pollNumberBindings();
         mqtt_sub_store_clear_dirty();
 #if HAS_MQTT
         pad_binding_set_bindings(nullptr, 0);
@@ -193,6 +199,7 @@ void PadScreen::clearTiles() {
     tileCount = 0;
     bindingCount = 0;
     colorBindingCount = 0;
+    numberBindingCount = 0;
     btnStateBindingCount = 0;
     tilesBuilt = false;
 }
@@ -228,7 +235,7 @@ void PadScreen::buildTiles() {
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
     strlcpy(pageBgTemplate, cfg->bg_color, sizeof(pageBgTemplate));
-    pageBgDefault = cfg->bg_color_default;
+    { uint32_t bg = 0x000000; parse_hex_color(cfg->bg_color, &bg); pageBgDefault = bg; }
     if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);
 
     // Cache page-level named bindings for [pad:] scheme resolution
@@ -287,16 +294,21 @@ void PadScreen::buildTiles() {
         lv_obj_set_size(obj, r.w, r.h);
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 
-        // Styling — use default colors for initial render
-        lv_obj_set_style_bg_color(obj, rgb_to_lv(bcfg.bg_color_default), 0);
+        // Styling — compute initial colors from config strings
+        uint32_t bg_def = 0x333333; parse_hex_color(bcfg.bg_color, &bg_def);
+        uint32_t fg_def = 0xFFFFFF; parse_hex_color(bcfg.fg_color, &fg_def);
+        uint32_t border_def = 0x000000; parse_hex_color(bcfg.border_color, &border_def);
+        lv_obj_set_style_bg_color(obj, rgb_to_lv(bg_def), 0);
         lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_color(obj, rgb_to_lv(bcfg.border_color_default), 0);
-        lv_obj_set_style_border_width(obj, bcfg.border_width_px, 0);
-        lv_obj_set_style_radius(obj, bcfg.corner_radius_px, 0);
+        lv_obj_set_style_border_color(obj, rgb_to_lv(border_def), 0);
+        lv_coord_t bw_def = (lv_coord_t)strtol(bcfg.border_width, nullptr, 10);
+        lv_coord_t cr_def = (lv_coord_t)strtol(bcfg.corner_radius, nullptr, 10);
+        lv_obj_set_style_border_width(obj, bw_def, 0);
+        lv_obj_set_style_radius(obj, cr_def, 0);
         lv_obj_set_style_clip_corner(obj, true, 0);
         lv_obj_set_style_pad_all(obj, TILE_PAD_PX, 0);
 
-        lv_color_t fg = rgb_to_lv(bcfg.fg_color_default);
+        lv_color_t fg = rgb_to_lv(fg_def);
 
         // Top label
         lv_obj_t* lbl_top = nullptr;
@@ -403,9 +415,7 @@ void PadScreen::buildTiles() {
         // Widget initialization
         tile.widget_type = nullptr;
         memset(&tile.widget_state, 0, sizeof(WidgetState));
-        tile.widget_binding[0] = '\0';
-        tile.widget_binding_2[0] = '\0';
-        tile.widget_binding_3[0] = '\0';
+        for (int wb = 0; wb < MAX_WIDGET_BINDINGS; wb++) tile.widget_binding[wb][0] = '\0';
         tile.widget_last[0] = '\0';
         if (bcfg.widget.type[0]) {
             const WidgetType* wt = widget_find(bcfg.widget.type);
@@ -413,15 +423,15 @@ void PadScreen::buildTiles() {
                 tile.widget_type = wt;
                 memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
                 // Widget data binding templates
-                // If binding_3 is set but binding_2 is empty, promote binding_3
+                // If binding[2] is set but binding[1] is empty, promote binding[2]
                 // to the middle slot to match gauge_widget's ring promotion logic.
-                strlcpy(tile.widget_binding, bcfg.widget.data_binding, CONFIG_LABEL_MAX_LEN);
-                if (bcfg.widget.data_binding_2[0]) {
-                    strlcpy(tile.widget_binding_2, bcfg.widget.data_binding_2, CONFIG_LABEL_MAX_LEN);
-                    strlcpy(tile.widget_binding_3, bcfg.widget.data_binding_3, CONFIG_LABEL_MAX_LEN);
-                } else if (bcfg.widget.data_binding_3[0]) {
-                    strlcpy(tile.widget_binding_2, bcfg.widget.data_binding_3, CONFIG_LABEL_MAX_LEN);
-                    tile.widget_binding_3[0] = '\0';
+                strlcpy(tile.widget_binding[0], bcfg.widget.data_binding[0], CONFIG_LABEL_MAX_LEN);
+                if (bcfg.widget.data_binding[1][0]) {
+                    strlcpy(tile.widget_binding[1], bcfg.widget.data_binding[1], CONFIG_LABEL_MAX_LEN);
+                    strlcpy(tile.widget_binding[2], bcfg.widget.data_binding[2], CONFIG_LABEL_MAX_LEN);
+                } else if (bcfg.widget.data_binding[2][0]) {
+                    strlcpy(tile.widget_binding[1], bcfg.widget.data_binding[2], CONFIG_LABEL_MAX_LEN);
+                    tile.widget_binding[2][0] = '\0';
                 }
                 if (wt->createUI) {
                     // Pass icon or center label — widget positions it above the bar
@@ -464,9 +474,26 @@ void PadScreen::buildTiles() {
             cb.hasBindings = binding_template_has_bindings(templ);
             colorBindingCount++;
         };
-        addColorBinding(i, bcfg.bg_color, bcfg.bg_color_default, 0);
-        addColorBinding(i, bcfg.fg_color, bcfg.fg_color_default, 1);
-        addColorBinding(i, bcfg.border_color, bcfg.border_color_default, 2);
+        addColorBinding(i, bcfg.bg_color, bg_def, 0);
+        addColorBinding(i, bcfg.fg_color, fg_def, 1);
+        addColorBinding(i, bcfg.border_color, border_def, 2);
+
+        // Register number bindings for border_width and corner_radius
+        auto addNumberBinding = [this](uint8_t ti, const char* templ, lv_coord_t def, uint8_t target) {
+            if (!templ || !templ[0]) return;
+            if (numberBindingCount >= MAX_NUMBER_BINDINGS) return;
+            RuntimeNumberBinding& nb = numberBindings[numberBindingCount];
+            nb.tileIndex = ti;
+            strlcpy(nb.templ, templ, sizeof(nb.templ));
+            nb.defaultVal = def;
+            nb.lastApplied = def;
+            nb.target = target;
+            nb.active = true;
+            nb.hasBindings = binding_template_has_bindings(templ);
+            numberBindingCount++;
+        };
+        addNumberBinding(i, bcfg.border_width, bw_def, 0);
+        addNumberBinding(i, bcfg.corner_radius, cr_def, 1);
 #endif
 
         // Event handlers — store tile index in user_data
@@ -521,8 +548,8 @@ void PadScreen::buildTiles() {
         // Created last so it renders on top of all children (image bg, widgets, labels).
         // Color adapts to background luminance: dark overlay on light bg, light on dark.
         {
-            bool is_light = perceived_luminance(bcfg.bg_color_default) > TAP_LUMINANCE_THRESH;
-            int16_t inset = TILE_PAD_PX + bcfg.border_width_px; // pad + border
+            bool is_light = perceived_luminance(bg_def) > TAP_LUMINANCE_THRESH;
+            int16_t inset = TILE_PAD_PX + bw_def; // pad + border
             lv_obj_t* ov = lv_obj_create(obj);
             lv_obj_set_pos(ov, -inset, -inset);
             lv_obj_set_size(ov, r.w, r.h);
@@ -695,25 +722,19 @@ void PadScreen::pollMqttBindings() {
     for (uint8_t i = 0; i < tileCount; i++) {
         ButtonTile& tile = tiles[i];
         if (!tile.widget_type || !tile.widget_type->update) continue;
-        if (!tile.widget_binding[0]) continue;
+        if (!tile.widget_binding[0][0]) continue;
 
         // Resolve primary binding
-        binding_template_resolve(tile.widget_binding, widget_resolved, sizeof(widget_resolved));
+        binding_template_resolve(tile.widget_binding[0], widget_resolved, sizeof(widget_resolved));
 
         // Build combined string: "val1" or "val1\tval2" or "val1\tval2\tval3"
         size_t off = strlcpy(widget_combined, widget_resolved, sizeof(widget_combined));
-        if (tile.widget_binding_2[0]) {
-            binding_template_resolve(tile.widget_binding_2, widget_resolved, sizeof(widget_resolved));
+        for (int wb = 1; wb < MAX_WIDGET_BINDINGS; wb++) {
+            if (!tile.widget_binding[wb][0]) continue;
+            binding_template_resolve(tile.widget_binding[wb], widget_resolved, sizeof(widget_resolved));
             if (off < sizeof(widget_combined) - 1) {
                 widget_combined[off++] = '\t';
                 off += strlcpy(widget_combined + off, widget_resolved, sizeof(widget_combined) - off);
-            }
-        }
-        if (tile.widget_binding_3[0]) {
-            binding_template_resolve(tile.widget_binding_3, widget_resolved, sizeof(widget_resolved));
-            if (off < sizeof(widget_combined) - 1) {
-                widget_combined[off++] = '\t';
-                strlcpy(widget_combined + off, widget_resolved, sizeof(widget_combined) - off);
             }
         }
 
@@ -798,6 +819,49 @@ void PadScreen::pollColorBindings() {
             break;
         case 2: // border
             lv_obj_set_style_border_color(tile.obj, rgb_to_lv(color), 0);
+            break;
+        }
+    }
+#endif
+}
+
+// ============================================================================
+// Number Binding Polling (border_width, corner_radius)
+// ============================================================================
+
+void PadScreen::pollNumberBindings() {
+#if HAS_MQTT
+    char resolved[BINDING_TEMPLATE_MAX_LEN];
+    for (uint16_t i = 0; i < numberBindingCount; i++) {
+        RuntimeNumberBinding& nb = numberBindings[i];
+        if (!nb.active) continue;
+
+        lv_coord_t val = nb.defaultVal;
+        if (nb.hasBindings) {
+            binding_template_resolve(nb.templ, resolved, sizeof(resolved));
+            char* end = nullptr;
+            float fv = strtof(resolved, &end);
+            if (end != resolved) val = (lv_coord_t)fv;
+        } else {
+            char* end = nullptr;
+            float fv = strtof(nb.templ, &end);
+            if (end != nb.templ) val = (lv_coord_t)fv;
+            nb.active = false; // static value won't change; stop polling
+        }
+
+        if (val == nb.lastApplied) continue;
+        nb.lastApplied = val;
+
+        uint8_t ti = nb.tileIndex;
+        if (ti >= tileCount) continue;
+        ButtonTile& tile = tiles[ti];
+
+        switch (nb.target) {
+        case 0: // border_width
+            lv_obj_set_style_border_width(tile.obj, val, 0);
+            break;
+        case 1: // corner_radius
+            lv_obj_set_style_radius(tile.obj, val, 0);
             break;
         }
     }

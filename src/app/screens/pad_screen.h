@@ -57,6 +57,18 @@ struct RuntimeBtnStateBinding {
     bool hasBindings;                                 // true if template contains [xxx:...] tokens
 };
 
+// Runtime number binding — a numeric field (border_width, corner_radius) that may contain binding templates.
+// Resolved each poll cycle; only applies LVGL style on change.
+struct RuntimeNumberBinding {
+    uint8_t tileIndex;                                // index into tiles[]
+    char templ[CONFIG_BINDABLE_SHORT_LEN];            // Original string (number or binding template)
+    lv_coord_t defaultVal;                            // Fallback value when unresolved
+    lv_coord_t lastApplied;                           // Last applied value (skip if unchanged)
+    uint8_t target;                                   // 0=border_width, 1=corner_radius
+    bool active;
+    bool hasBindings;                                 // true if template contains [xxx:...] tokens
+};
+
 // Runtime state per button tile (kept in memory while screen is active)
 struct ButtonTile {
     lv_obj_t* obj;            // Button container object
@@ -75,11 +87,8 @@ struct ButtonTile {
     WidgetConfig widget_cfg;   // Copy of config (needed for update calls)
     WidgetState widget_state;
     // Widget data binding templates (primary + optional middle/inner ring for gauge)
-    char widget_binding[CONFIG_LABEL_MAX_LEN];
+    char widget_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN];
     char widget_last[BINDING_TEMPLATE_MAX_LEN * 3 + 4]; // Last resolved combined value (dedup)
-    // Optional extra bindings for multi-ring gauges (middle/inner rings)
-    char widget_binding_2[CONFIG_LABEL_MAX_LEN];
-    char widget_binding_3[CONFIG_LABEL_MAX_LEN];
     lv_obj_t* tap_overlay;    // Semi-transparent overlay shown briefly on tap
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
@@ -111,6 +120,11 @@ private:
     RuntimeColorBinding colorBindings[MAX_PAD_BUTTONS * 3 + 1];
     uint16_t colorBindingCount;
 
+    // Number bindings (border_width + corner_radius per button)
+    static const int MAX_NUMBER_BINDINGS = MAX_PAD_BUTTONS * 2;
+    RuntimeNumberBinding numberBindings[MAX_PAD_BUTTONS * 2];
+    uint16_t numberBindingCount;
+
     // Button state bindings (1 per button max)
     RuntimeBtnStateBinding btnStateBindings[MAX_PAD_BUTTONS];
     uint16_t btnStateBindingCount;
@@ -130,6 +144,7 @@ private:
     void clearTiles();
     void pollMqttBindings();
     void pollColorBindings();
+    void pollNumberBindings();
     void pollBtnStateBindings();
 #if HAS_IMAGE_FETCH
     void pollImageFrames();

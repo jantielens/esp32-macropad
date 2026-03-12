@@ -238,9 +238,9 @@ void mqtt_sub_store_subscribe_all() {
             binding_template_collect_topics(btn.bg_color, &ctx);
             binding_template_collect_topics(btn.fg_color, &ctx);
             binding_template_collect_topics(btn.border_color, &ctx);
-            binding_template_collect_topics(btn.widget.data_binding, &ctx);
-            binding_template_collect_topics(btn.widget.data_binding_2, &ctx);
-            binding_template_collect_topics(btn.widget.data_binding_3, &ctx);
+            binding_template_collect_topics(btn.widget.data_binding[0], &ctx);
+            binding_template_collect_topics(btn.widget.data_binding[1], &ctx);
+            binding_template_collect_topics(btn.widget.data_binding[2], &ctx);
         }
     }
     pad_binding_set_page(nullptr);

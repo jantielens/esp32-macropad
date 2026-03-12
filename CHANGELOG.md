@@ -9,9 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Widget color bindings not updating** — all binding-driven color fields in gauge, bar chart, and sparkline widgets (track color, needle color, tick color, bar background, line colors, threshold colors, reference line colors, min/max marker colors) were only resolved once at widget creation and never re-resolved during display updates. Colors driven by binding expressions (e.g. `[expr:[mqtt:topic]>50?"#ff0000":"#00ff00"]`) now update live every display cycle via the widget `tick()` callback. Also fixed the pad screen's `update()` gating — widget color re-resolution no longer depends on a data value change
+
 ### Added
 - **Gauge — zero centered mode** — new "Zero centered" option for gauges with negative-to-positive ranges (e.g., grid power -3 kW to +3 kW). The arc fills from the zero point instead of the start edge: negative values grow leftward and positive values grow rightward from zero. The zero point is derived from where 0 falls in the min/max range. Ideal for bidirectional metrics like electricity import/export, temperature deviation, or balance indicators
 - **Pad bindings** — define named data sources once at the page level (`"bindings": {"power": "[mqtt:solar/power;$.value]"}`) and reference them across all buttons and widgets on that page via `[pad:name]` or `[pad:name;format]`. Avoids repeating the same MQTT topic in every field and makes it easy to switch data sources — change one binding instead of editing every button. Up to 16 named bindings per page. Works inside expressions, widget data bindings, color bindings, and sparkline sources. Includes full web portal UI for adding, editing, and deleting bindings
+
+### Changed
+- **Color picker — unified input** — the color picker popover now uses a single unified input field that accepts both static hex colors and binding expressions. The previous separate hex/binding dual-input design has been replaced with a wider 380px popover with a close button. Color fields that support bindings show an **fx** badge hint above the color swatch
 
 ## [1.7.0] - 2026-03-11
 

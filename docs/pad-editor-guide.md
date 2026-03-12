@@ -117,7 +117,7 @@ The **Colors** section (collapsible) controls the button's appearance:
 - **Text color** — applies to labels and Material Symbol icons
 - **Border color** — the button outline
 
-Each color field accepts either a static `#hex` value or a binding expression for dynamic colors — more on that in [Dynamic Colors](#dynamic-colors-with-bindings).
+Each color field accepts either a static `#hex` value or a binding expression for dynamic colors — more on that in [Dynamic Colors](#dynamic-colors-with-bindings). Click the color swatch to open the color picker popover. Fields that support bindings show an **fx** badge above the swatch — type a binding expression (e.g. `[expr:...]`) directly into the picker input.
 
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
@@ -212,7 +212,7 @@ The bar chart widget draws a vertical or horizontal bar that fills based on a nu
 | **Use absolute value** | When on, negative values fill the bar too (useful for grid power that can be negative) |
 | **Reversed, high values are better** | When toggled, the four color picker values swap in place so low values use warning colors and high values use good colors (e.g. battery level, signal strength). The zone labels stay fixed — only the colors move |
 | **Bar width %** | How wide the bar is relative to the button (1–100%). In horizontal mode, controls the bar height instead |
-| **Bar background** | The color of the empty bar track |
+| **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
 | **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
 
 **Color thresholds** divide the bar into up to four colored zones. The zone labels are positional (Below T1, T1–T2, T2–T3, Above T3) and stay fixed. Toggling "Reversed" swaps the color picker values so the colors visually flip while labels remain in place:
@@ -250,9 +250,9 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
 | **Needle Width** | Line width in pixels (0 = hidden, max 10) |
 | **Tick Width** | Tick line width in pixels (1–5) |
-| **Track Color** | Color of the unfilled arc background |
-| **Needle Color** | Color of the needle line |
-| **Tick Color** | Color of the tick marks |
+| **Track Color** | Color of the unfilled arc background. Supports binding expressions for dynamic color |
+| **Needle Color** | Color of the needle line. Supports binding expressions for dynamic color |
+| **Tick Color** | Color of the tick marks. Supports binding expressions for dynamic color |
 
 **Color thresholds** work identically to the bar chart — four zones (Below T1, T1–T2, T2–T3, Above T3) with the same swap behavior when "Reversed" is checked.
 
@@ -586,7 +586,13 @@ If any inner binding hasn't resolved yet (shows `---`), the entire expression re
 
 ### Dynamic Colors with Bindings
 
-Color fields (background, text, border) accept binding expressions, making buttons change color based on live data.
+Color fields throughout the button editor accept binding expressions, making buttons and widgets change color based on live data. This includes:
+
+- **Button colors** — background, text, and border
+- **Widget colors** — bar chart background, gauge track/needle/tick, sparkline line colors, reference line colors, min/max marker colors
+- **Threshold colors** — the four color zone pickers in bar chart, gauge, and sparkline widgets
+
+All color bindings update live every display cycle — you don't need new data to arrive for a color change to take effect.
 
 **Basic pattern** — change color based on a threshold:
 

@@ -52,8 +52,10 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
     return true;
 }
 #define CONFIG_COLOR_MAX_LEN            192
+#define CONFIG_BINDABLE_SHORT_LEN       64
 #define CONFIG_WIDGET_TYPE_MAX_LEN     16
-#define WIDGET_CONFIG_MAX_BYTES       128
+#define MAX_WIDGET_BINDINGS             3
+#define WIDGET_CONFIG_MAX_BYTES      1024
 
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
@@ -106,9 +108,7 @@ struct ButtonAction {
 // Widget type-specific config blob (parsed by widget implementations)
 struct WidgetConfig {
     char type[CONFIG_WIDGET_TYPE_MAX_LEN];     // "" = normal button (default)
-    char data_binding[CONFIG_LABEL_MAX_LEN];   // Binding template for widget data (outer ring)
-    char data_binding_2[CONFIG_LABEL_MAX_LEN]; // Optional 2nd binding (middle ring, gauge only)
-    char data_binding_3[CONFIG_LABEL_MAX_LEN]; // Optional 3rd binding (inner ring, gauge only)
+    char data_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN]; // Binding templates (0=primary, 1/2=extra)
     uint8_t data[WIDGET_CONFIG_MAX_BYTES];     // type-specific config, opaque to pad_config
 };
 
@@ -139,11 +139,8 @@ struct ScreenButtonConfig {
     char bg_color[CONFIG_COLOR_MAX_LEN];          // default "#333333"
     char fg_color[CONFIG_COLOR_MAX_LEN];          // default "#FFFFFF"
     char border_color[CONFIG_COLOR_MAX_LEN];      // default "#000000"
-    uint32_t bg_color_default;      // fallback when binding unresolved (default 0x333333)
-    uint32_t fg_color_default;      // fallback when binding unresolved (default 0xFFFFFF)
-    uint32_t border_color_default;  // fallback when binding unresolved (default 0x000000)
-    uint16_t border_width_px;       // default 0
-    uint16_t corner_radius_px;      // default 8
+    char border_width[CONFIG_BINDABLE_SHORT_LEN]; // default "0" — static or binding
+    char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // default "8" — static or binding
 
     // Typed actions
     ButtonAction action;     // tap action
@@ -178,7 +175,6 @@ struct PadPageConfig {
     uint8_t rows;                            // 1-8 (grid mode only)
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     char bg_color[CONFIG_COLOR_MAX_LEN];         // page background color (default "#000000")
-    uint32_t bg_color_default;                   // fallback when binding unresolved (default 0x000000)
 
     // Named page-level bindings for [pad:name] references
     uint8_t binding_count;
