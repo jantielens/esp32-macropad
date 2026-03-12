@@ -201,7 +201,7 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     cfg->max_value  = btn["widget_gauge_max"] | 100.0f;
 
     int deg = btn["widget_gauge_degrees"] | 180;
-    cfg->arc_degrees = (uint16_t)((deg < 10) ? 10 : (deg > 360) ? 360 : deg);
+    cfg->arc_degrees = (uint16_t)clamp_val(deg, 10, 360);
 
     int sa = btn["widget_gauge_start_angle"] | 180;
     cfg->start_angle = (uint16_t)(sa % 360);
@@ -221,7 +221,7 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     widget_parse_field(btn["widget_gauge_tick_color"],   cfg->tick_color,   sizeof(cfg->tick_color),   "#808080");
 
     uint8_t awpct = btn["widget_gauge_arc_width_pct"] | (uint8_t)15;
-    cfg->arc_width_pct = (awpct < 5) ? 5 : (awpct > 50) ? 50 : awpct;
+    cfg->arc_width_pct = clamp_val<uint8_t>(awpct, 5, 50);
 
     uint8_t tc = btn["widget_gauge_ticks"] | (uint8_t)5;
     cfg->tick_count = (tc > 20) ? 20 : tc;
@@ -230,7 +230,7 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     cfg->needle_width = (nw > 10) ? 10 : nw;  // 0 = no needle
 
     uint8_t tw = btn["widget_gauge_tick_width"] | (uint8_t)1;
-    cfg->tick_width = (tw < 1) ? 1 : (tw > 5) ? 5 : tw;
+    cfg->tick_width = clamp_val<uint8_t>(tw, 1, 5);
 
     // Thresholds default to even thirds of range
     float range = cfg->max_value - cfg->min_value;
@@ -587,18 +587,6 @@ static void gauge_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
-static const WidgetType gauge_widget_type = {
-    "gauge",
-    gauge_parse,
-    gauge_create,
-    gauge_update,
-    gauge_destroy,
-    gauge_tick,
-    nullptr   // no getStreamParams
-};
-
-static struct GaugeAutoReg {
-    GaugeAutoReg() { widget_register(&gauge_widget_type); }
-} _gauge_auto_reg;
+REGISTER_WIDGET(gauge, nullptr);
 
 #endif // HAS_DISPLAY

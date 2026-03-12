@@ -2,6 +2,11 @@
 
 #include "../board_config.h"
 
+// Utility: clamp a value to [lo, hi].  Placed outside the HAS_DISPLAY guard
+// so host-side tests can include it without pulling in LVGL dependencies.
+template<typename T>
+inline T clamp_val(T v, T lo, T hi) { return (v < lo) ? lo : (v > hi) ? hi : v; }
+
 #if HAS_DISPLAY
 
 #include "../binding_template.h"
@@ -20,8 +25,8 @@
 // Adding a new widget type:
 // 1. Create widgets/<name>_widget.cpp
 // 2. Define a WidgetTypeConfig-sized config struct
-// 3. Implement parse/create/update/destroy functions
-// 4. Declare a const WidgetType and register it in widget.cpp
+// 3. Implement parse/create/update/destroy/tick functions
+// 4. Add  REGISTER_WIDGET(name, stream_fn);  at the bottom (nullptr if no data stream)
 
 // WidgetConfig is defined in pad_config.h (type[16] + data[WIDGET_CONFIG_MAX_BYTES])
 
@@ -142,5 +147,20 @@ inline lv_color_t resolve_lv_color(const char* s, uint32_t def) {
     uint32_t rgb = resolve_color(s, def);
     return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 }
+
+// ----------------------------------------------------------------------------
+// Widget auto-registration macro.
+// Derives prefix_parse, prefix_create, prefix_update, prefix_destroy,
+// prefix_tick from the given prefix.  stream_fn is passed verbatim
+// (use nullptr when the widget has no data-stream support).
+// ----------------------------------------------------------------------------
+#define REGISTER_WIDGET(prefix, stream_fn)                                     \
+    static const WidgetType prefix##_widget_type = {                           \
+        #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
+        prefix##_destroy, prefix##_tick, stream_fn                             \
+    };                                                                         \
+    static struct prefix##AutoReg {                                            \
+        prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
+    } _##prefix##_auto_reg
 
 #endif // HAS_DISPLAY

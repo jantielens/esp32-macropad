@@ -49,4 +49,14 @@ echo "=== Running integration tests: pad_binding ==="
 ./tests/bin/test_pad_binding
 echo
 
+echo "=== Building unit tests: widget_common ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_widget_common.cpp \
+    -o tests/bin/test_widget_common -lm
+
+echo "=== Running unit tests: widget_common ==="
+./tests/bin/test_widget_common
+echo
+
 echo "=== All tests passed ==="

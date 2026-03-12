@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pad bindings** — define named data sources once at the page level (`"bindings": {"power": "[mqtt:solar/power;$.value]"}`) and reference them across all buttons and widgets on that page via `[pad:name]` or `[pad:name;format]`. Avoids repeating the same MQTT topic in every field and makes it easy to switch data sources — change one binding instead of editing every button. Up to 16 named bindings per page. Works inside expressions, widget data bindings, color bindings, and sparkline sources. Includes full web portal UI for adding, editing, and deleting bindings
 - **Expression `threshold()` function** — new built-in function `threshold(value, color0, t1, color1, ..., tN, colorN)` for mapping a numeric value to color strings based on ascending thresholds. Variable arity (1–N thresholds), returns a `"#RRGGBB"` string. Replaces verbose nested ternaries for multi-zone color bindings. Composable with any binding type — e.g. `[expr:threshold([mqtt:sensor;temp], "#4CAF50", 25, "#FF9800", 35, "#FF0000")]`
 
+### Improved
+- **Widget registration macro** — new `REGISTER_WIDGET(name, stream_fn)` macro in `widget.h` replaces 10-line boilerplate registration blocks in each widget file with a one-liner; applied to bar chart, gauge, and sparkline widgets
+- **Widget value clamping utility** — new `clamp_val<T>(v, lo, hi)` template in `widget.h` replaces ad-hoc ternary chains for two-sided clamping in widget config parsing (4 call sites in bar chart and gauge)
+- **Widget utility tests** — new `test_widget_common.cpp` with 27 host-native tests covering `clamp_val` across int, uint8_t, float, and uint16_t types including widget-specific ranges; total test count: 191
+
 ### Changed
 - **Color picker — unified input** — the color picker popover now uses a single unified input field that accepts both static hex colors and binding expressions. The previous separate hex/binding dual-input design has been replaced with a wider 380px popover with a close button. Color fields that support bindings show an **fx** badge hint above the color swatch
 

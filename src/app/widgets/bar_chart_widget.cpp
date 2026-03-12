@@ -89,7 +89,7 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
 
     widget_parse_field(btn["widget_bar_bg_color"],    cfg->bar_bg_color,    sizeof(cfg->bar_bg_color),    "#1A1A1A");
     uint8_t wpct = btn["widget_bar_width_pct"] | (uint8_t)100;
-    cfg->bar_width_pct = (wpct < 1) ? 1 : (wpct > 100) ? 100 : wpct;
+    cfg->bar_width_pct = clamp_val<uint8_t>(wpct, 1, 100);
 
     const char* orient = btn["widget_orientation"] | "";
     cfg->horizontal = (orient[0] == 'h' || orient[0] == 'H');
@@ -262,18 +262,6 @@ static void bar_chart_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
-static const WidgetType bar_chart_widget_type = {
-    "bar_chart",
-    bar_chart_parse,
-    bar_chart_create,
-    bar_chart_update,
-    bar_chart_destroy,
-    bar_chart_tick,
-    nullptr   // no getStreamParams
-};
-
-static struct BarChartAutoReg {
-    BarChartAutoReg() { widget_register(&bar_chart_widget_type); }
-} _bar_chart_auto_reg;
+REGISTER_WIDGET(bar_chart, nullptr);
 
 #endif // HAS_DISPLAY

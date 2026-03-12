@@ -840,18 +840,6 @@ static bool sparkline_get_stream_params(const WidgetConfig* wcfg,
     return true;
 }
 
-static const WidgetType sparkline_widget_type = {
-    "sparkline",
-    sparkline_parse,
-    sparkline_create,
-    sparkline_update,
-    sparkline_destroy,
-    sparkline_tick,
-    sparkline_get_stream_params
-};
-
-static struct SparklineAutoReg {
-    SparklineAutoReg() { widget_register(&sparkline_widget_type); }
-} _sparkline_auto_reg;
+REGISTER_WIDGET(sparkline, sparkline_get_stream_params);
 
 #endif // HAS_DISPLAY
