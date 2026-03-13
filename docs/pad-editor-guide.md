@@ -772,11 +772,13 @@ The **More ▾** dropdown above the grid preview provides shortcuts for working 
 
 ### Copy and Paste Buttons
 
-In the button editor dialog, **Copy** saves the current button's settings (everything except grid position) to a clipboard. **Paste** applies the clipboard to whichever button you're editing. This is the fastest way to create multiple similar buttons — configure one, then copy-paste and adjust the differences.
+In the button editor dialog, **Copy** saves the current button's settings to a clipboard — the editor stays open so you can keep editing. **Paste** applies the clipboard to the button you're editing and keeps the editor open so you can review or tweak the result. Column and row span values are preserved in the clipboard and applied on a best-effort basis: if the span fits at the target position (within grid bounds and no overlap with existing buttons) it is applied, otherwise it falls back to 1×1.
+
+This is the fastest way to create multiple similar buttons — configure one, copy it, then paste into other positions and adjust the differences.
 
 ### Fill Pad
 
-After copying a button, **Fill Pad** applies it to every empty position in the grid. Useful for quickly populating a pad with a template button that you then customize individually.
+After copying a button, **Fill Pad** applies it to every position in the grid (column/row spans are stripped — every cell gets a 1×1 button). Useful for quickly populating a pad with a template button that you then customize individually.
 
 ### Copy / Paste Pad
 

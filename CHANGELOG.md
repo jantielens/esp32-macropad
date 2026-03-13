@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated user-facing docs (`pad-editor-guide.md`, `first-time-setup.md`, `README.md`) to use consistent terminology
   - Added enforced **Terminology Conventions** section to `.github/copilot-instructions.md` with definitions, retired terms, and rules
 
+### Improved
+- **Pad editor Copy keeps dialog open** — the Copy button now saves the current button state and copies to clipboard without closing the editor, so you can continue editing or immediately paste elsewhere
+- **Pad editor Paste keeps dialog open** — pasting a button now re-opens the editor showing the pasted content, so you can review or tweak before closing
+- **Pad editor Paste preserves col/row span** — copied buttons now retain their column and row span values in the clipboard. On paste, spans are applied if they fit at the target position (within grid bounds and no overlap with existing buttons); otherwise they gracefully fall back to 1×1
+- **Pad editor Fill strips span** — "Fill pad with copied button" now strips col/row span values so every cell gets a clean 1×1 button
+
 ---
 
 ## [1.9.0] - 2026-03-13

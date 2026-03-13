@@ -312,7 +312,7 @@ function padInit() {
     });
 
     // Dialog buttons
-    document.getElementById('pad-edit-ok').addEventListener('click', padDialogOk);
+    document.getElementById('pad-edit-ok').addEventListener('click', () => padDialogOk());
     document.getElementById('pad-edit-copy').addEventListener('click', padDialogCopyBtn);
     document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
@@ -1019,7 +1019,7 @@ function padDialogClose() {
     document.documentElement.style.overflow = '';
 }
 
-function padDialogOk() {
+function padDialogOk(keepOpen) {
     const col = padState.editCol;
     const row = padState.editRow;
 
@@ -1225,7 +1225,7 @@ function padDialogOk() {
 
     padState.buttons.push(btn);
     padMarkDirty();
-    padDialogClose();
+    if (!keepOpen) padDialogClose();
     padRenderGrid();
 }
 
