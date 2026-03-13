@@ -1237,6 +1237,11 @@ function padSimplifyBindings(text) {
     return text.replace(/\[(\w+):([^\];]*)[^\]]*\]/g, '[$1:$2]');
 }
 
+// Convert stored label value (real \n) to display string (\n escape) for <input>
+function padLabelToInput(val) { return (val || '').replace(/\n/g, '\\n'); }
+// Convert user-typed string (\n escape) back to stored value (real \n)
+function padLabelFromInput(id) { return document.getElementById(id).value.trim().replace(/\\n/g, '\n'); }
+
 function padIconIdToType(iconId) {
     if (!iconId) return { type: '', value: '' };
     if (iconId.startsWith('emoji_')) return { type: 'emoji', value: iconId.substring(6) };
@@ -2312,9 +2317,9 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-title').textContent =
         'Button [' + col + ', ' + row + ']';
 
-    document.getElementById('pad-edit-label-top').value = btn.label_top || '';
-    document.getElementById('pad-edit-label-center').value = btn.label_center || '';
-    document.getElementById('pad-edit-label-bottom').value = btn.label_bottom || '';
+    document.getElementById('pad-edit-label-top').value = padLabelToInput(btn.label_top);
+    document.getElementById('pad-edit-label-center').value = padLabelToInput(btn.label_center);
+    document.getElementById('pad-edit-label-bottom').value = padLabelToInput(btn.label_bottom);
     document.getElementById('pad-edit-label-top-style').value = btn.label_top_style || '';
     document.getElementById('pad-edit-label-center-style').value = btn.label_center_style || '';
     document.getElementById('pad-edit-label-bottom-style').value = btn.label_bottom_style || '';
@@ -2421,9 +2426,9 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
     document.getElementById('pad-edit-gauge-data-binding-2').value = btn.widget_data_binding_2 || '';
     document.getElementById('pad-edit-gauge-data-binding-3').value = btn.widget_data_binding_3 || '';
-    document.getElementById('pad-edit-gauge-start-label').value = btn.widget_gauge_start_label || '';
-    document.getElementById('pad-edit-gauge-start-label-2').value = btn.widget_gauge_start_label_2 || '';
-    document.getElementById('pad-edit-gauge-start-label-3').value = btn.widget_gauge_start_label_3 || '';
+    document.getElementById('pad-edit-gauge-start-label').value = padLabelToInput(btn.widget_gauge_start_label);
+    document.getElementById('pad-edit-gauge-start-label-2').value = padLabelToInput(btn.widget_gauge_start_label_2);
+    document.getElementById('pad-edit-gauge-start-label-3').value = padLabelToInput(btn.widget_gauge_start_label_3);
     document.getElementById('pad-edit-gauge-min').value = (btn.widget_gauge_min !== undefined) ? btn.widget_gauge_min : 0;
     document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : 100;
     document.getElementById('pad-edit-gauge-degrees').value = (btn.widget_gauge_degrees !== undefined) ? btn.widget_gauge_degrees : 180;
@@ -2509,9 +2514,9 @@ function padDialogOk() {
     if (cs > 1) btn.col_span = cs;
     if (rs > 1) btn.row_span = rs;
 
-    const lt = document.getElementById('pad-edit-label-top').value.trim();
-    const lc = document.getElementById('pad-edit-label-center').value.trim();
-    const lb = document.getElementById('pad-edit-label-bottom').value.trim();
+    const lt = padLabelFromInput('pad-edit-label-top');
+    const lc = padLabelFromInput('pad-edit-label-center');
+    const lb = padLabelFromInput('pad-edit-label-bottom');
     if (lt) btn.label_top = lt;
     if (lc) btn.label_center = lc;
     if (lb) btn.label_bottom = lb;
@@ -2603,9 +2608,9 @@ function padDialogOk() {
             if (gDataBinding) btn.widget_data_binding = gDataBinding;
             btn.widget_data_binding_2 = document.getElementById('pad-edit-gauge-data-binding-2').value.trim();
             btn.widget_data_binding_3 = document.getElementById('pad-edit-gauge-data-binding-3').value.trim();
-            const gStartLabel = document.getElementById('pad-edit-gauge-start-label').value.trim();
-            const gStartLabel2 = document.getElementById('pad-edit-gauge-start-label-2').value.trim();
-            const gStartLabel3 = document.getElementById('pad-edit-gauge-start-label-3').value.trim();
+            const gStartLabel = padLabelFromInput('pad-edit-gauge-start-label');
+            const gStartLabel2 = padLabelFromInput('pad-edit-gauge-start-label-2');
+            const gStartLabel3 = padLabelFromInput('pad-edit-gauge-start-label-3');
             btn.widget_gauge_start_label = gStartLabel;
             btn.widget_gauge_start_label_2 = gStartLabel2;
             btn.widget_gauge_start_label_3 = gStartLabel3;

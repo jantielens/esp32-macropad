@@ -54,6 +54,14 @@ This subscribes to the `home/solar` MQTT topic, extracts the `power` field from 
 Solar: [mqtt:home/solar;power;%.0f] W
 ```
 
+**Explicit line breaks** are supported in label inputs using `\n`:
+
+```
+Line 1\nLine 2
+```
+
+This is saved as a real newline and rendered as two lines on the device. When you reopen the button editor, it is shown again as `\n` so you can edit it predictably.
+
 You can even put multiple bindings in a single label:
 
 ```

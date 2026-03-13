@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Widget color bindings not updating** — all binding-driven color fields in gauge, bar chart, and sparkline widgets (track color, needle color, tick color, bar background, arc colors, line colors, reference line colors, min/max marker colors) were only resolved once at widget creation and never re-resolved during display updates. Colors driven by binding expressions (e.g. `[expr:threshold([mqtt:topic;value], "#4CAF50", 50, "#FF9800", 80, "#F44336")]`) now update live every display cycle via the widget `tick()` callback. Also fixed the pad screen's `update()` gating — widget color re-resolution no longer depends on a data value change
+- **Pad editor newline escape for labels** — label inputs now support explicit `\n` escapes: typing `Line1\nLine2` in the editor is converted to a real newline when saved, and converted back to `\n` when reopened for editing. Applied to top/center/bottom button labels and gauge start labels (`start_label`, `start_label_2`, `start_label_3`), so multi-line text is preserved round-trip instead of being stored as literal backslash+n characters
 
-### Fixed
 - **Gauge center label clipping** — the center label inside a gauge arc was clipped to the innermost ring width, causing bound labels (driven by binding templates) to vanish entirely when text was set dynamically. The label now uses a wide draw area (`content_w × 3`) so CLIP-mode rendering is stable after binding updates. `LV_OBJ_FLAG_OVERFLOW_VISIBLE` is set on both the tile and the label so text can render outside the tile bounds
 
 ### Added
@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Expression `threshold()` function** — new built-in function `threshold(value, color0, t1, color1, ..., tN, colorN)` for mapping a numeric value to color strings based on ascending thresholds. Variable arity (1–N thresholds), returns a `"#RRGGBB"` string. Replaces verbose nested ternaries for multi-zone color bindings. Composable with any binding type — e.g. `[expr:threshold([mqtt:sensor;temp], "#4CAF50", 25, "#FF9800", 35, "#FF0000")]`
 
 ### Improved
+- **Pad grid preview newline rendering** — preview label elements now use newline-preserving white-space (`pre-line`), so stored multi-line label content renders as line breaks in the web editor preview instead of a single collapsed line
 - **Gauge tick marks on all rings** — concentric gauge widgets now repeat their configured tick marks on the middle and inner rings instead of drawing them only on the outer ring, keeping multi-ring gauges visually consistent across all active arcs
 - **Gauge multi-ring slot behavior** — inner-ring bindings now remain in slot 3 even when slot 2 is empty (no auto-promotion), so concentric gauges preserve intentional ring gaps from editor configuration through runtime updates
 - **Gauge start-label placement** — start-label angle and placement math was refined for consistent readable orientation and tighter ring proximity across all quadrants
