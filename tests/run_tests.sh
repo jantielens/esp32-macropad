@@ -34,4 +34,29 @@ echo "=== Running integration tests: expr_binding ==="
 ./tests/bin/test_expr_binding
 echo
 
+echo "=== Building integration tests: pad_binding ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    tests/test_pad_binding.cpp \
+    src/app/binding_template.cpp \
+    src/app/pad_binding.cpp \
+    src/app/expr_eval.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_pad_binding -lm
+
+echo "=== Running integration tests: pad_binding ==="
+./tests/bin/test_pad_binding
+echo
+
+echo "=== Building unit tests: widget_common ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_widget_common.cpp \
+    -o tests/bin/test_widget_common -lm
+
+echo "=== Running unit tests: widget_common ==="
+./tests/bin/test_widget_common
+echo
+
 echo "=== All tests passed ==="

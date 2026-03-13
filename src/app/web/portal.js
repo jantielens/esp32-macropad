@@ -1195,6 +1195,7 @@ const padState = {
     editRow: 0,
     btnClipboard: null,  // Copied button settings (position-independent)
     padClipboard: null,  // Copied pad settings { cols, rows, buttons, name }
+    bindings: [],        // Page-level named bindings [{name, value}]
     colorCache: {},      // page → hex[] — colors from visited pads
 };
 
@@ -1235,6 +1236,11 @@ function padSimplifyBindings(text) {
     if (!text) return text;
     return text.replace(/\[(\w+):([^\];]*)[^\]]*\]/g, '[$1:$2]');
 }
+
+// Convert stored label value (real \n) to display string (\n escape) for <input>
+function padLabelToInput(val) { return (val || '').replace(/\n/g, '\\n'); }
+// Convert user-typed string (\n escape) back to stored value (real \n)
+function padLabelFromInput(id) { return document.getElementById(id).value.trim().replace(/\\n/g, '\n'); }
 
 function padIconIdToType(iconId) {
     if (!iconId) return { type: '', value: '' };
@@ -1471,6 +1477,7 @@ function padInit() {
     document.getElementById('pad-save-btn').addEventListener('click', padSavePage);
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
     document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
+    document.getElementById('pad-binding-add').addEventListener('click', padAddBinding);
 
     // More menu toggle
     const moreBtn = document.getElementById('pad-more-btn');
@@ -1581,39 +1588,21 @@ function padActionTypeChanged(prefix) {
     document.getElementById('pad-edit-' + pfx + '-mqtt-group').style.display = (type === 'mqtt') ? '' : 'none';
 }
 
+const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline'];
+
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
-    document.getElementById('pad-edit-bar-chart-section').style.display = (wtype === 'bar_chart') ? '' : 'none';
-    document.getElementById('pad-edit-gauge-section').style.display = (wtype === 'gauge') ? '' : 'none';
-    document.getElementById('pad-edit-sparkline-section').style.display = (wtype === 'sparkline') ? '' : 'none';
-    if (wtype === 'bar_chart') {
-        document.getElementById('pad-edit-bar-chart-section').open = true;
-    }
-    if (wtype === 'gauge') {
-        document.getElementById('pad-edit-gauge-section').open = true;
-    }
-    if (wtype === 'sparkline') {
-        document.getElementById('pad-edit-sparkline-section').open = true;
-    }
-}
-
-function padSwapColors(prefix) {
-    const ids = [prefix + '-good', prefix + '-ok',
-                 prefix + '-attention', prefix + '-warning'];
-    const vals = ids.map(id => document.getElementById(id).value);
-    vals.reverse();
-    ids.forEach((id, i) => { document.getElementById(id).value = vals[i]; });
-}
-
-function padSparklineThresholdToggle() {
-    const show = document.getElementById('pad-edit-sparkline-use-thresholds').checked;
-    document.getElementById('pad-edit-sparkline-threshold-section').style.display = show ? '' : 'none';
+    WIDGET_SECTIONS.forEach(s => {
+        const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
+        if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
+    });
 }
 
 async function padLoadPage(page) {
     padState.page = page;
     padState.rawJson = null;
     padState.buttons = [];
+    padState.bindings = [];
     padClearDirty();
 
     try {
@@ -1626,10 +1615,11 @@ async function padLoadPage(page) {
             document.getElementById('pad-rows').value = padState.rows;
             document.getElementById('pad-name').value = '';
             document.getElementById('pad-wake-screen').value = '';
-            padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
-            padSetColorBind('page_bg_color', '#000000', undefined, '#000000');
+            padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
+            padSetBindableColor('pad-edit-page-bg-color', '#000000');
+            padState.bindings = [];
+            padRenderBindings();
             padCacheColors(page, [], '#000000');
-            padRenderPageSwatches();
             padRenderGrid();
             return;
         }
@@ -1644,8 +1634,12 @@ async function padLoadPage(page) {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
-        padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
-        padSetColorBind('page_bg_color', json.bg_color, json.bg_color_default, '#000000');
+        padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
+        padSetBindableColor('pad-edit-page-bg-color', json.bg_color, '#000000');
+
+        // Load pad bindings
+        padState.bindings = padBindingsFromJson(json.bindings);
+        padRenderBindings();
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -1660,8 +1654,6 @@ async function padLoadPage(page) {
 
         // Cache colors for cross-pad swatches
         padCacheColors(page, padState.buttons, padColorToHex(json.bg_color, '#000000'));
-        padRenderPageSwatches();
-
         padRenderGrid();
     } catch (err) {
         console.error('padLoadPage error:', err);
@@ -1700,8 +1692,8 @@ function padRenderGrid() {
     if (deviceInfoCache && deviceInfoCache.display_coord_width && deviceInfoCache.display_coord_height) {
         grid.style.aspectRatio = deviceInfoCache.display_coord_width + ' / ' + deviceInfoCache.display_coord_height;
     }
-    const pageBgPick = document.getElementById('pad-edit-page_bg_color-pick');
-    grid.style.background = pageBgPick ? pageBgPick.value : '#000000';
+    const pageBgInput = document.getElementById('pad-edit-page-bg-color');
+    grid.style.background = (pageBgInput && /^#[0-9a-fA-F]{6}$/.test(pageBgInput.value.trim())) ? pageBgInput.value.trim() : '#000000';
     grid.innerHTML = '';
 
     if (emptyState) emptyState.style.display = 'none';
@@ -1847,13 +1839,12 @@ function padRenderGrid() {
 }
 
 function padColorToHex(val, fallback) {
-    if (val === undefined || val === null) return fallback;
+    if (val === undefined || val === null || val === '') return fallback;
     if (typeof val === 'string') {
         if (val.startsWith('#')) return val;
-        if (val.startsWith('[')) return fallback; // binding template — use fallback
-        // Try parsing as hex number string
-        const n = parseInt(val, 16);
-        if (!isNaN(n)) return '#' + n.toString(16).padStart(6, '0');
+        if (val.startsWith('[')) return val; // binding template — return as-is
+        // Try parsing as bare hex string (legacy "4caf50" format)
+        if (/^[0-9a-fA-F]{6}$/.test(val)) return '#' + val;
         return fallback;
     }
     if (typeof val === 'number') {
@@ -1864,23 +1855,17 @@ function padColorToHex(val, fallback) {
 
 // Returns the raw color string (hex or binding) for storing in config
 function padColorValue(val) {
-    if (val === undefined || val === null) return '';
+    if (val === undefined || val === null || val === '') return '';
     if (typeof val === 'number') return '#' + (val & 0xFFFFFF).toString(16).padStart(6, '0');
     if (typeof val === 'string') {
         if (val.startsWith('#') || val.startsWith('[')) return val;
-        const n = parseInt(val, 16);
-        if (!isNaN(n)) return '#' + n.toString(16).padStart(6, '0');
+        if (/^[0-9a-fA-F]{6}$/.test(val)) return '#' + val;
     }
     return String(val);
 }
 
 function padIsBinding(val) {
     return typeof val === 'string' && val.startsWith('[');
-}
-
-function padHexToInt(hex) {
-    if (!hex || hex === '') return undefined;
-    return parseInt(hex.replace('#', ''), 16);
 }
 
 function padColorsToHex(btn) {
@@ -1896,6 +1881,278 @@ function padColorsToHex(btn) {
     });
 }
 
+/** Basic palette colors for the color picker popover. */
+var PAD_COLOR_PALETTE = [
+    '#000000','#333333','#666666','#999999','#CCCCCC','#FFFFFF',
+    '#F44336','#FF9800','#FFEB3B','#4CAF50','#2196F3','#9C27B0',
+    '#E91E63','#FF5722','#FFC107','#8BC34A','#03A9F4','#673AB7',
+    '#1A1A1A','#263238','#37474F','#455A64','#607D8B','#795548'
+];
+
+/** Singleton popover state. */
+var _cpPopover = null;
+
+/** Create (once) the singleton color popover DOM. */
+function padColorPopoverCreate() {
+    if (_cpPopover) return _cpPopover;
+    // Backdrop
+    var bd = document.createElement('div');
+    bd.className = 'color-popover-backdrop';
+    bd.style.display = 'none';
+    bd.addEventListener('click', padColorPopoverClose);
+    document.body.appendChild(bd);
+    // Popover
+    var pop = document.createElement('div');
+    pop.className = 'color-popover';
+    pop.style.display = 'none';
+    pop.innerHTML =
+        '<div class="color-popover-close" id="cp-close">&times;</div>' +
+        '<div class="color-popover-section" id="cp-recent-heading" style="display:none;">Recently Used</div>' +
+        '<div class="color-popover-grid" id="cp-recent-grid"></div>' +
+        '<div class="color-popover-section">Palette</div>' +
+        '<div class="color-popover-grid" id="cp-palette-grid"></div>' +
+        '<details class="cp-gen" id="cp-gen">' +
+            '<summary class="color-popover-section" style="cursor:pointer;list-style:none;margin-bottom:0;">' +
+                '<span class="cp-gen-arrow">&#9654;</span> Generate Color by Threshold' +
+            '</summary>' +
+            '<div class="cp-gen-body">' +
+                '<label class="cp-gen-label">Data Source</label>' +
+                '<input type="text" id="cp-gen-source" class="cp-gen-input" maxlength="191" placeholder="[mqtt:topic;$.path]" spellcheck="false">' +
+                '<label class="cp-gen-label">Color Stops</label>' +
+                '<div id="cp-gen-stops"></div>' +
+            '</div>' +
+        '</details>' +
+        '<div class="color-popover-input-row">' +
+            '<input type="text" id="cp-input" maxlength="191" placeholder="#RRGGBB or [expr:…]" spellcheck="false">' +
+            '<button type="button" class="btn btn-small btn-primary" id="cp-apply">Apply</button>' +
+        '</div>';
+    document.body.appendChild(pop);
+    // Build palette grid (static)
+    var pg = pop.querySelector('#cp-palette-grid');
+    PAD_COLOR_PALETTE.forEach(function(hex) {
+        var sw = document.createElement('div');
+        sw.className = 'color-popover-swatch';
+        sw.style.background = hex;
+        sw.title = hex;
+        sw.dataset.hex = hex;
+        sw.addEventListener('click', function() { padColorPopoverApply(hex); });
+        pg.appendChild(sw);
+    });
+    // Unified input apply
+    pop.querySelector('#cp-apply').addEventListener('click', function() {
+        var v = pop.querySelector('#cp-input').value.trim();
+        if (v) padColorPopoverApply(v);
+    });
+    pop.querySelector('#cp-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { pop.querySelector('#cp-apply').click(); e.preventDefault(); }
+    });
+    // Close button
+    pop.querySelector('#cp-close').addEventListener('click', padColorPopoverClose);
+    // Escape to close
+    pop.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') padColorPopoverClose();
+    });
+    // Generator: toggle arrow on open/close + reposition popover
+    var genDetails = pop.querySelector('#cp-gen');
+    genDetails.addEventListener('toggle', function() {
+        genDetails.querySelector('.cp-gen-arrow').textContent = genDetails.open ? '\u25BC' : '\u25B6';
+        padColorPopoverReposition();
+    });
+    // Generator: auto-generate on source changes
+    pop.querySelector('#cp-gen-source').addEventListener('input', padThresholdGenerate);
+    _cpPopover = { pop: pop, bd: bd, target: null, anchor: null };
+    return _cpPopover;
+}
+
+/** Open the color popover anchored to a swatch element, targeting a specific input. */
+function padColorPopoverOpen(swatch, input) {
+    var cp = padColorPopoverCreate();
+    cp.target = input;
+    cp.anchor = swatch;
+    // Reset generator state
+    padThresholdGenReset();
+    // Show off-screen first so we can measure
+    cp.pop.style.left = '-9999px';
+    cp.pop.style.top = '-9999px';
+    cp.pop.style.display = 'block';
+    cp.bd.style.display = 'block';
+    // Populate recently used (before measuring)
+    var recentGrid = cp.pop.querySelector('#cp-recent-grid');
+    var recentHeading = cp.pop.querySelector('#cp-recent-heading');
+    recentGrid.innerHTML = '';
+    var usedColors = padCollectUsedColors(padState.editCol || -1, padState.editRow || -1);
+    if (usedColors.length > 0) {
+        recentHeading.style.display = '';
+        usedColors.forEach(function(hex) {
+            if (!hex.startsWith('#')) return; // skip bindings in used list
+            var sw = document.createElement('div');
+            sw.className = 'color-popover-swatch';
+            sw.style.background = hex;
+            sw.title = hex;
+            sw.addEventListener('click', function() { padColorPopoverApply(hex); });
+            recentGrid.appendChild(sw);
+        });
+        if (recentGrid.children.length === 0) recentHeading.style.display = 'none';
+    } else {
+        recentHeading.style.display = 'none';
+    }
+    // Highlight active color in palette & recent
+    var cur = input.value.trim().toUpperCase();
+    cp.pop.querySelectorAll('.color-popover-swatch').forEach(function(sw) {
+        sw.classList.toggle('active', (sw.dataset.hex || sw.title || '').toUpperCase() === cur);
+    });
+    // Set input to current value
+    cp.pop.querySelector('#cp-input').value = input.value.trim();
+    cp.bd.style.display = 'block';
+    cp.pop.style.display = 'block';
+    padColorPopoverReposition();
+    cp.pop.querySelector('#cp-input').focus();
+}
+
+/** Reposition the popover to stay within the viewport. */
+function padColorPopoverReposition() {
+    if (!_cpPopover || !_cpPopover.anchor) return;
+    var cp = _cpPopover;
+    var rect = cp.anchor.getBoundingClientRect();
+    var popRect = cp.pop.getBoundingClientRect();
+    var popW = popRect.width, popH = popRect.height, margin = 8;
+    var left = rect.left;
+    var top = rect.bottom + margin;
+    if (left + popW > window.innerWidth - margin) left = window.innerWidth - popW - margin;
+    if (left < margin) left = margin;
+    if (top + popH > window.innerHeight - margin) top = rect.top - popH - margin;
+    if (top < margin) top = margin;
+    cp.pop.style.left = left + 'px';
+    cp.pop.style.top = top + 'px';
+}
+
+var CP_GEN_DEFAULT_COLORS = ['#4CAF50', '#8BC34A', '#FF9800', '#F44336'];
+
+/** Add one color-stop row to the generator. */
+function padThresholdGenAddStop(container, color, threshold) {
+    var row = document.createElement('div');
+    row.className = 'cp-gen-stop';
+    var isFirst = container.children.length === 0;
+    row.innerHTML =
+        '<div class="cp-gen-swatch" style="background:' + (color || '#888') + '"></div>' +
+        '<input type="color" class="cp-gen-cpick" value="' + (color || '#888888') + '">' +
+        (isFirst
+            ? '<span class="cp-gen-base-label">Base</span>'
+            : '<span class="cp-gen-ge">&ge;</span><input type="text" class="cp-gen-tval" placeholder="" value="' + (threshold || '') + '">');
+    var swatch = row.querySelector('.cp-gen-swatch');
+    var cpick = row.querySelector('.cp-gen-cpick');
+    cpick.addEventListener('input', function() { swatch.style.background = cpick.value; padThresholdGenerate(); });
+    swatch.addEventListener('click', function() { cpick.click(); });
+    var tval = row.querySelector('.cp-gen-tval');
+    if (tval) tval.addEventListener('input', padThresholdGenerate);
+    container.appendChild(row);
+}
+
+/** Reset the generator to default state. */
+function padThresholdGenReset() {
+    if (!_cpPopover) return;
+    var pop = _cpPopover.pop;
+    var gen = pop.querySelector('#cp-gen');
+    gen.removeAttribute('open');
+    gen.querySelector('.cp-gen-arrow').textContent = '\u25B6';
+    pop.querySelector('#cp-gen-source').value = '';
+    var stops = pop.querySelector('#cp-gen-stops');
+    stops.innerHTML = '';
+    CP_GEN_DEFAULT_COLORS.forEach(function(c) { padThresholdGenAddStop(stops, c, ''); });
+}
+
+/** Build threshold expression from generator inputs and write to #cp-input. */
+function padThresholdGenerate() {
+    if (!_cpPopover) return;
+    var pop = _cpPopover.pop;
+    var src = pop.querySelector('#cp-gen-source').value.trim();
+    if (!src) return;
+    var rows = pop.querySelectorAll('#cp-gen-stops .cp-gen-stop');
+    var colors = [];
+    var thresholds = [];
+    for (var i = 0; i < rows.length; i++) {
+        colors.push(rows[i].querySelector('.cp-gen-cpick').value.toUpperCase());
+        if (i > 0) {
+            var tInput = rows[i].querySelector('.cp-gen-tval');
+            thresholds.push(tInput ? tInput.value.trim() : '');
+        }
+    }
+    // Auto-fill empty thresholds with even spacing over 0-100
+    var allEmpty = thresholds.every(function(v) { return v === ''; });
+    if (allEmpty && thresholds.length > 0) {
+        var step = 100 / colors.length;
+        for (var j = 0; j < thresholds.length; j++) {
+            thresholds[j] = String(Math.round(step * (j + 1)));
+        }
+    }
+    // Build expression: threshold(src, "#c0", t1, "#c1", ...)
+    var parts = '[expr:threshold(' + src + ', "' + colors[0] + '"';
+    for (var k = 0; k < thresholds.length; k++) {
+        parts += ', ' + thresholds[k] + ', "' + colors[k + 1] + '"';
+    }
+    parts += ')]';
+    pop.querySelector('#cp-input').value = parts;
+}
+
+/** Apply a value from the popover to the target input. */
+function padColorPopoverApply(val) {
+    if (!_cpPopover || !_cpPopover.target) return;
+    _cpPopover.target.value = val;
+    _cpPopover.target.dispatchEvent(new Event('input', { bubbles: true }));
+    padColorPopoverClose();
+}
+
+/** Close the popover. */
+function padColorPopoverClose() {
+    if (!_cpPopover) return;
+    _cpPopover.pop.style.display = 'none';
+    _cpPopover.bd.style.display = 'none';
+    _cpPopover.target = null;
+}
+
+/** Initialize a .bindable-color container: wire swatch click to open popover. Idempotent. */
+function padInitBindableColor(container) {
+    if (!container || container.dataset.bcInit) return;
+    container.dataset.bcInit = '1';
+    const input = container.querySelector('.bc-input');
+    const swatch = container.querySelector('.bc-swatch');
+    if (!input || !swatch) return;
+
+    function syncSwatch() {
+        const v = input.value.trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+            swatch.style.background = v;
+            swatch.classList.remove('bc-binding');
+        } else if (v.length > 0) {
+            swatch.style.background = '';
+            swatch.classList.add('bc-binding');
+        } else {
+            swatch.style.background = '#e5e5ea';
+            swatch.classList.remove('bc-binding');
+        }
+    }
+
+    input.addEventListener('input', syncSwatch);
+    swatch.addEventListener('click', function() {
+        padColorPopoverOpen(swatch, input);
+    });
+    syncSwatch();
+}
+
+/** Set a bindable color input value and sync its swatch. */
+function padSetBindableColor(id, val, fallback) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = padColorValue(val) || fallback || '';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** Get a bindable color input value as a string. */
+function padGetBindableColor(id) {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+}
+
 /**
  * Toggle monospace font on mixed-binding inputs based on whether they contain a binding token.
  */
@@ -1908,8 +2165,73 @@ function padUpdateMixedBindingFont(input) {
 }
 
 /** Show the binding help overlay. */
-function showBindingHelp() {
-    document.getElementById('binding-help-overlay').style.display = 'flex';
+function showBindingHelp(section) {
+    const overlay = document.getElementById('binding-help-overlay');
+    if (!overlay) return;
+
+    overlay.style.display = 'flex';
+
+    const body = overlay.querySelector('.binding-docs-body');
+    const target = section ? overlay.querySelector(`[data-binding-section="${section}"]`) : null;
+    overlay.querySelectorAll('.binding-docs-section').forEach(sectionEl => {
+        sectionEl.classList.toggle('is-active', sectionEl === target);
+    });
+
+    requestAnimationFrame(() => {
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (body) {
+            body.scrollTop = 0;
+        }
+    });
+}
+
+function closeBindingHelp() {
+    const overlay = document.getElementById('binding-help-overlay');
+    if (!overlay) return;
+
+    overlay.style.display = 'none';
+    overlay.querySelectorAll('.binding-docs-section').forEach(sectionEl => {
+        sectionEl.classList.remove('is-active');
+    });
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const temp = document.createElement('textarea');
+    temp.value = text;
+    temp.setAttribute('readonly', '');
+    temp.style.position = 'absolute';
+    temp.style.left = '-9999px';
+    document.body.appendChild(temp);
+    temp.select();
+    document.execCommand('copy');
+    document.body.removeChild(temp);
+}
+
+function copyBindingExample(button) {
+    const example = button.closest('.binding-example');
+    const code = example ? example.querySelector('code') : null;
+    if (!code) return;
+
+    copyTextToClipboard(code.textContent.trim())
+        .then(() => {
+            const original = button.dataset.label || button.textContent;
+            button.dataset.label = original;
+            button.textContent = 'Copied';
+            button.classList.add('is-copied');
+            window.setTimeout(() => {
+                button.textContent = original;
+                button.classList.remove('is-copied');
+            }, 1200);
+        })
+        .catch(() => {
+            showMessage('Could not copy binding', 'error');
+        });
 }
 
 /** Show the label style help overlay. */
@@ -1937,79 +2259,72 @@ function syncLabelStyleVisibility(slot) {
     btn.classList.toggle('active', hasValue);
 }
 
-/**
- * Build a bindable color component inside a container element.
- * Layout: [color picker] ○○○○○ (swatches)  /  [expression textbox]
- * @param {string} containerId - ID of the wrapper div
- * @param {string} label - Display label (e.g. "Background")
- * @param {string} fieldName - Field key (e.g. "bg_color") used for element IDs
- * @param {string} defaultHex - Default hex color when field is empty
- */
-function padBuildColorBind(containerId, label, fieldName, defaultHex) {
-    const wrap = document.getElementById(containerId);
-    if (!wrap) return;
-    const pickId = 'pad-edit-' + fieldName + '-pick';
-    const exprId = 'pad-edit-' + fieldName + '-expr';
+// --- Pad Bindings helpers ---
 
-    wrap.innerHTML =
-        '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">' + label + '</label>' +
-        '<div class="pad-color-bind-row">' +
-            '<input type="color" id="' + pickId + '" value="' + defaultHex + '">' +
-            '<div class="pad-swatch-strip" data-picker="' + pickId + '" style="margin-top:0;"></div>' +
-        '</div>' +
-        '<div style="margin-top:6px;">' +
-            '<label for="' + exprId + '" style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Data Binding</label>' +
-            '<div class="binding-input-wrap">' +
-                '<input type="text" class="binding-mono" id="' + exprId + '" maxlength="191" placeholder="e.g. [expr:[mqtt:topic;path]>50?&quot;#ff0000&quot;:&quot;#00ff00&quot;]">' +
-                '<button type="button" class="binding-help-btn" onclick="showBindingHelp()">?</button>' +
-            '</div>' +
-        '</div>';
-
-    // Re-render grid preview when page-level color picker changes
-    if (fieldName === 'page_bg_color') {
-        document.getElementById(pickId).addEventListener('input', () => { padRenderGrid(); });
-    }
+function padRenderBindings() {
+    const list = document.getElementById('pad-bindings-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!padState.bindings || padState.bindings.length === 0) return;
+    padState.bindings.forEach(function(b, idx) {
+        const row = document.createElement('div');
+        row.className = 'pad-binding-row';
+        row.innerHTML =
+            '<input type="text" class="pad-binding-name" value="' + escAttr(b.name) + '" placeholder="name" maxlength="31" spellcheck="false">' +
+            '<span style="color:#86868b; flex-shrink:0;">→</span>' +
+            '<input type="text" class="pad-binding-value" value="' + escAttr(b.value) + '" placeholder="[mqtt:topic;path]" maxlength="191" spellcheck="false">' +
+            '<button type="button" class="btn btn-small pad-binding-del" style="padding:2px 8px; font-size:12px; color:#ff3b30;">✕</button>';
+        row.querySelector('.pad-binding-name').addEventListener('input', function() {
+            var v = this.value.trim();
+            padState.bindings[idx].name = v;
+            var ok = v === '' || padIsValidBindingName(v);
+            this.style.borderColor = ok ? '' : '#ff3b30';
+            this.title = ok ? '' : 'Must start with a letter; only letters, digits, and underscores allowed';
+            padMarkDirty();
+        });
+        row.querySelector('.pad-binding-value').addEventListener('input', function() {
+            padState.bindings[idx].value = this.value;
+            padMarkDirty();
+        });
+        row.querySelector('.pad-binding-del').addEventListener('click', function() {
+            padState.bindings.splice(idx, 1);
+            padRenderBindings();
+            padMarkDirty();
+        });
+        list.appendChild(row);
+    });
 }
 
-/**
- * Set value of a bindable color component.
- * If colorVal is a binding → picker shows defaultColor, expression shows binding.
- * If colorVal is a static hex → picker shows that hex, expression is empty.
- */
-function padSetColorBind(fieldName, colorVal, defaultColor, fallbackHex) {
-    const pick = document.getElementById('pad-edit-' + fieldName + '-pick');
-    const expr = document.getElementById('pad-edit-' + fieldName + '-expr');
-    if (!pick) return;
-
-    const raw = padColorValue(colorVal) || fallbackHex;
-
-    if (padIsBinding(raw)) {
-        // Binding: picker = default/fallback color, expression = binding string
-        pick.value = defaultColor !== undefined ? padColorToHex(defaultColor, fallbackHex) : fallbackHex;
-        if (expr) expr.value = raw;
-    } else {
-        // Static color: picker = that color, expression empty
-        pick.value = padColorToHex(raw, fallbackHex);
-        if (expr) expr.value = '';
-    }
+function padIsValidBindingName(name) {
+    return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(name) && name.length < 32;
 }
 
-/**
- * Read value from a bindable color component.
- * If expression is empty → value = picker hex, no defaultInt.
- * If expression is present → value = expression, defaultInt = picker color.
- * @returns {{ value: string, defaultInt: number|undefined }}
- */
-function padGetColorBind(fieldName) {
-    const pick = document.getElementById('pad-edit-' + fieldName + '-pick');
-    const expr = document.getElementById('pad-edit-' + fieldName + '-expr');
-    if (!pick) return { value: '', defaultInt: undefined };
+function padAddBinding() {
+    if (!padState.bindings) padState.bindings = [];
+    padState.bindings.push({ name: '', value: '' });
+    padRenderBindings();
+    // Focus the new name input
+    const names = document.querySelectorAll('.pad-binding-name');
+    if (names.length) names[names.length - 1].focus();
+    padMarkDirty();
+}
 
-    const binding = expr ? expr.value.trim() : '';
-    if (binding) {
-        return { value: binding, defaultInt: padHexToInt(pick.value) };
+function escAttr(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function padBindingsFromJson(obj) {
+    var arr = [];
+    if (obj && typeof obj === 'object') {
+        Object.keys(obj).forEach(function(k) { arr.push({ name: k, value: obj[k] }); });
     }
-    return { value: pick.value, defaultInt: undefined };
+    return arr;
+}
+
+function padBindingsToDict(bindings) {
+    var bd = {};
+    if (bindings) bindings.forEach(function(b) { if (b.name) bd[b.name] = b.value || ''; });
+    return Object.keys(bd).length > 0 ? bd : null;
 }
 
 function padCacheColors(page, buttons, pageBgColor) {
@@ -2028,37 +2343,7 @@ function padCacheColors(page, buttons, pageBgColor) {
     padState.colorCache[page] = colors;
 }
 
-function padRenderPageSwatches() {
-    padRenderSwatchesInto('pad-page-bg-color-wrap');
-}
 
-function padRenderSwatchesInto(containerId) {
-    const container = containerId ? document.getElementById(containerId) : null;
-    const strips = container
-        ? container.querySelectorAll('.pad-swatch-strip')
-        : document.querySelectorAll('.pad-swatch-strip');
-    const colors = padCollectUsedColors(padState.editCol || -1, padState.editRow || -1);
-    strips.forEach(strip => {
-        strip.innerHTML = '';
-        if (colors.length === 0) return;
-        const targetId = strip.dataset.picker;
-        const target = document.getElementById(targetId);
-        if (!target) return;
-        colors.forEach(hex => {
-            const sw = document.createElement('div');
-            sw.className = 'pad-swatch';
-            sw.style.background = hex;
-            sw.title = hex;
-            sw.addEventListener('click', () => {
-                target.value = hex;
-                target.dispatchEvent(new Event('input', { bubbles: true }));
-                sw.classList.add('active');
-                setTimeout(() => sw.classList.remove('active'), 300);
-            });
-            strip.appendChild(sw);
-        });
-    });
-}
 
 function padCollectUsedColors(editCol, editRow) {
     const seen = new Set();
@@ -2085,36 +2370,6 @@ function padCollectUsedColors(editCol, editRow) {
     return colors.slice(0, 9);
 }
 
-function padRenderSwatches(editCol, editRow) {
-    padState.editCol = editCol;
-    padState.editRow = editRow;
-    // Render swatches in all .pad-swatch-strip elements in the dialog
-    const dialog = document.querySelector('.pad-edit-modal');
-    if (!dialog) return;
-    const strips = dialog.querySelectorAll('.pad-swatch-strip');
-    const colors = padCollectUsedColors(editCol, editRow);
-    strips.forEach(strip => {
-        strip.innerHTML = '';
-        if (colors.length === 0) return;
-        const targetId = strip.dataset.picker;
-        const target = document.getElementById(targetId);
-        if (!target) return;
-        colors.forEach(hex => {
-            const sw = document.createElement('div');
-            sw.className = 'pad-swatch';
-            sw.style.background = hex;
-            sw.title = hex;
-            sw.addEventListener('click', () => {
-                target.value = hex;
-                target.dispatchEvent(new Event('input', { bubbles: true }));
-                sw.classList.add('active');
-                setTimeout(() => sw.classList.remove('active'), 300);
-            });
-            strip.appendChild(sw);
-        });
-    });
-}
-
 function padDialogOpen(col, row) {
     padState.editCol = col;
     padState.editRow = row;
@@ -2127,9 +2382,9 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-title').textContent =
         'Button [' + col + ', ' + row + ']';
 
-    document.getElementById('pad-edit-label-top').value = btn.label_top || '';
-    document.getElementById('pad-edit-label-center').value = btn.label_center || '';
-    document.getElementById('pad-edit-label-bottom').value = btn.label_bottom || '';
+    document.getElementById('pad-edit-label-top').value = padLabelToInput(btn.label_top);
+    document.getElementById('pad-edit-label-center').value = padLabelToInput(btn.label_center);
+    document.getElementById('pad-edit-label-bottom').value = padLabelToInput(btn.label_bottom);
     document.getElementById('pad-edit-label-top-style').value = btn.label_top_style || '';
     document.getElementById('pad-edit-label-center-style').value = btn.label_center_style || '';
     document.getElementById('pad-edit-label-bottom-style').value = btn.label_bottom_style || '';
@@ -2147,14 +2402,12 @@ function padDialogOpen(col, row) {
     btnStateEl.value = btn.btn_state || '';
     document.getElementById('pad-edit-btn-state-section').open = !!btn.btn_state;
 
-    // Build bindable color components (rebuilds DOM each open)
-    padBuildColorBind('pad-edit-bg-color-wrap', 'Background', 'bg_color', '#333333');
-    padBuildColorBind('pad-edit-fg-color-wrap', 'Text Color', 'fg_color', '#ffffff');
-    padBuildColorBind('pad-edit-border-color-wrap', 'Border', 'border_color', '#000000');
+    // Initialize bindable color components and set values
+    document.querySelectorAll('.pad-edit-modal .bindable-color').forEach(padInitBindableColor);
 
-    padSetColorBind('bg_color', btn.bg_color, btn.bg_color_default, '#333333');
-    padSetColorBind('fg_color', btn.fg_color, btn.fg_color_default, '#ffffff');
-    padSetColorBind('border_color', btn.border_color, btn.border_color_default, '#000000');
+    padSetBindableColor('pad-edit-bg-color', btn.bg_color || '#333333');
+    padSetBindableColor('pad-edit-fg-color', btn.fg_color || '#ffffff');
+    padSetBindableColor('pad-edit-border-color', btn.border_color || '#000000');
 
     // Auto-open colors section if any color has a binding
     document.getElementById('pad-edit-colors-section').open =
@@ -2162,8 +2415,7 @@ function padDialogOpen(col, row) {
 
     document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 0;
     document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
-
-    padRenderSwatches(col, row);
+    document.getElementById('pad-edit-ui-offset').value = btn.ui_offset || '';
 
     // Populate col_span / row_span dropdowns based on available space
     const maxCs = padState.cols - col;
@@ -2230,17 +2482,8 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : 0;
     document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : 3;
     document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
-    document.getElementById('pad-edit-widget-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : true;
-    document.getElementById('pad-edit-widget-higher-is-better').checked = (btn.widget_higher_is_better !== undefined) ? btn.widget_higher_is_better : false;
-    /* labels are static; colors loaded from config */
-    document.getElementById('pad-edit-widget-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
-    document.getElementById('pad-edit-widget-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
-    document.getElementById('pad-edit-widget-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
-    document.getElementById('pad-edit-widget-color-good').value = padColorToHex(btn.widget_color_good, '#4CAF50');
-    document.getElementById('pad-edit-widget-color-ok').value = padColorToHex(btn.widget_color_ok, '#8BC34A');
-    document.getElementById('pad-edit-widget-color-attention').value = padColorToHex(btn.widget_color_attention, '#FF9800');
-    document.getElementById('pad-edit-widget-color-warning').value = padColorToHex(btn.widget_color_warning, '#F44336');
-    document.getElementById('pad-edit-widget-bar-bg-color').value = padColorToHex(btn.widget_bar_bg_color, '#1A1A1A');
+    padSetBindableColor('pad-edit-widget-bar-color', btn.widget_bar_color, '#4CAF50');
+    padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, '#1A1A1A');
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
     document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
 
@@ -2248,23 +2491,26 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
     document.getElementById('pad-edit-gauge-data-binding-2').value = btn.widget_data_binding_2 || '';
     document.getElementById('pad-edit-gauge-data-binding-3').value = btn.widget_data_binding_3 || '';
+    document.getElementById('pad-edit-gauge-data-binding-4').value = btn.widget_data_binding_4 || '';
+    document.getElementById('pad-edit-gauge-start-label').value = padLabelToInput(btn.widget_gauge_start_label);
+    document.getElementById('pad-edit-gauge-start-label-2').value = padLabelToInput(btn.widget_gauge_start_label_2);
+    document.getElementById('pad-edit-gauge-start-label-3').value = padLabelToInput(btn.widget_gauge_start_label_3);
+    document.getElementById('pad-edit-gauge-start-label-4').value = padLabelToInput(btn.widget_gauge_start_label_4);
     document.getElementById('pad-edit-gauge-min').value = (btn.widget_gauge_min !== undefined) ? btn.widget_gauge_min : 0;
     document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : 100;
     document.getElementById('pad-edit-gauge-degrees').value = (btn.widget_gauge_degrees !== undefined) ? btn.widget_gauge_degrees : 180;
     document.getElementById('pad-edit-gauge-start-angle').value = (btn.widget_gauge_start_angle !== undefined) ? btn.widget_gauge_start_angle : 180;
-    document.getElementById('pad-edit-gauge-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : true;
+    document.getElementById('pad-edit-gauge-zero-centered').checked = (btn.widget_gauge_zero_centered !== undefined) ? btn.widget_gauge_zero_centered : false;
+    document.getElementById('pad-edit-gauge-dual-binding-pair-1').checked = (btn.widget_gauge_dual_binding_pair_1 !== undefined) ? btn.widget_gauge_dual_binding_pair_1 : false;
+    document.getElementById('pad-edit-gauge-dual-binding-pair-2').checked = (btn.widget_gauge_dual_binding_pair_2 !== undefined) ? btn.widget_gauge_dual_binding_pair_2 : false;
     document.getElementById('pad-edit-gauge-show-needle').checked = (btn.widget_gauge_show_needle !== undefined) ? btn.widget_gauge_show_needle : true;
-    document.getElementById('pad-edit-gauge-higher-is-better').checked = (btn.widget_gauge_higher_is_better !== undefined) ? btn.widget_gauge_higher_is_better : false;
-    document.getElementById('pad-edit-gauge-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
-    document.getElementById('pad-edit-gauge-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
-    document.getElementById('pad-edit-gauge-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
-    document.getElementById('pad-edit-gauge-color-good').value = padColorToHex(btn.widget_color_good, '#4CAF50');
-    document.getElementById('pad-edit-gauge-color-ok').value = padColorToHex(btn.widget_color_ok, '#8BC34A');
-    document.getElementById('pad-edit-gauge-color-attention').value = padColorToHex(btn.widget_color_attention, '#FF9800');
-    document.getElementById('pad-edit-gauge-color-warning').value = padColorToHex(btn.widget_color_warning, '#F44336');
-    document.getElementById('pad-edit-gauge-track-color').value = padColorToHex(btn.widget_gauge_track_color, '#1A1A1A');
-    document.getElementById('pad-edit-gauge-needle-color').value = padColorToHex(btn.widget_gauge_needle_color, '#FFFFFF');
-    document.getElementById('pad-edit-gauge-tick-color').value = padColorToHex(btn.widget_gauge_tick_color, '#808080');
+    padSetBindableColor('pad-edit-gauge-arc-color', btn.widget_arc_color, '#4CAF50');
+    padSetBindableColor('pad-edit-gauge-arc-color-2', btn.widget_arc_color_2, '#2196F3');
+    padSetBindableColor('pad-edit-gauge-arc-color-3', btn.widget_arc_color_3, '#9C27B0');
+    padSetBindableColor('pad-edit-gauge-arc-color-4', btn.widget_arc_color_4, '#FF9800');
+    padSetBindableColor('pad-edit-gauge-track-color', btn.widget_gauge_track_color, '#1A1A1A');
+    padSetBindableColor('pad-edit-gauge-needle-color', btn.widget_gauge_needle_color, '#FFFFFF');
+    padSetBindableColor('pad-edit-gauge-tick-color', btn.widget_gauge_tick_color, '#808080');
     document.getElementById('pad-edit-gauge-arc-width-pct').value = (btn.widget_gauge_arc_width_pct !== undefined) ? btn.widget_gauge_arc_width_pct : 15;
     document.getElementById('pad-edit-gauge-ticks').value = (btn.widget_gauge_ticks !== undefined) ? btn.widget_gauge_ticks : 5;
     document.getElementById('pad-edit-gauge-needle-width').value = (btn.widget_gauge_needle_width !== undefined) ? btn.widget_gauge_needle_width : 2;
@@ -2278,21 +2524,20 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-sparkline-max').value = (btn.widget_sparkline_max !== undefined && btn.widget_sparkline_max !== null) ? btn.widget_sparkline_max : '';
     document.getElementById('pad-edit-sparkline-window').value = (btn.widget_sparkline_window !== undefined) ? btn.widget_sparkline_window : 300;
     document.getElementById('pad-edit-sparkline-slots').value = (btn.widget_sparkline_slots !== undefined) ? btn.widget_sparkline_slots : 60;
-    document.getElementById('pad-edit-sparkline-line-color').value = padColorToHex(btn.widget_sparkline_line_color, '#4CAF50');
-    document.getElementById('pad-edit-sparkline-line-color-2').value = padColorToHex(btn.widget_sparkline_line_color_2, '#2196F3');
-    document.getElementById('pad-edit-sparkline-line-color-3').value = padColorToHex(btn.widget_sparkline_line_color_3, '#9C27B0');
+    padSetBindableColor('pad-edit-sparkline-line-color', btn.widget_sparkline_line_color, '#4CAF50');
+    padSetBindableColor('pad-edit-sparkline-line-color-2', btn.widget_sparkline_line_color_2, '#2196F3');
+    padSetBindableColor('pad-edit-sparkline-line-color-3', btn.widget_sparkline_line_color_3, '#9C27B0');
     document.getElementById('pad-edit-sparkline-line-width').value = (btn.widget_sparkline_line_width !== undefined) ? btn.widget_sparkline_line_width : 2;
     document.getElementById('pad-edit-sparkline-smooth').value = (btn.widget_sparkline_smooth !== undefined) ? btn.widget_sparkline_smooth : 0;
-    document.getElementById('pad-edit-sparkline-use-thresholds').checked = btn.widget_sparkline_use_thresholds || false;
     document.getElementById('pad-edit-sparkline-unified-scale').checked = (btn.widget_sparkline_unified_scale !== undefined) ? btn.widget_sparkline_unified_scale : true;
 
     // Min/max markers
     document.getElementById('pad-edit-sparkline-marker-size-max').value = (btn.widget_sparkline_marker_size_max !== undefined) ? btn.widget_sparkline_marker_size_max : 0;
     document.getElementById('pad-edit-sparkline-max-fmt').value = btn.widget_sparkline_max_fmt || '';
-    document.getElementById('pad-edit-sparkline-max-label-color').value = padColorToHex(btn.widget_sparkline_max_label_color, '#FFFFFF');
+    padSetBindableColor('pad-edit-sparkline-max-label-color', btn.widget_sparkline_max_label_color, '#FFFFFF');
     document.getElementById('pad-edit-sparkline-marker-size-min').value = (btn.widget_sparkline_marker_size_min !== undefined) ? btn.widget_sparkline_marker_size_min : 0;
     document.getElementById('pad-edit-sparkline-min-fmt').value = btn.widget_sparkline_min_fmt || '';
-    document.getElementById('pad-edit-sparkline-min-label-color').value = padColorToHex(btn.widget_sparkline_min_label_color, '#FFFFFF');
+    padSetBindableColor('pad-edit-sparkline-min-label-color', btn.widget_sparkline_min_label_color, '#FFFFFF');
 
     // Current value dot
     document.getElementById('pad-edit-sparkline-current-dot').value = (btn.widget_sparkline_current_dot !== undefined) ? btn.widget_sparkline_current_dot : 0;
@@ -2300,20 +2545,11 @@ function padDialogOpen(col, row) {
     // Reference lines
     for (let r = 1; r <= 3; r++) {
         document.getElementById('pad-edit-sparkline-ref-' + r + '-y').value = (btn['widget_sparkline_ref_' + r + '_y'] !== undefined) ? btn['widget_sparkline_ref_' + r + '_y'] : '';
-        document.getElementById('pad-edit-sparkline-ref-' + r + '-color').value = padColorToHex(btn['widget_sparkline_ref_' + r + '_color'], '#888888');
+        padSetBindableColor('pad-edit-sparkline-ref-' + r + '-color', btn['widget_sparkline_ref_' + r + '_color'], '#888888');
         document.getElementById('pad-edit-sparkline-ref-' + r + '-pattern').value = (btn['widget_sparkline_ref_' + r + '_pattern'] !== undefined) ? btn['widget_sparkline_ref_' + r + '_pattern'] : 0;
     }
     document.getElementById('pad-edit-sparkline-ref-in-view').checked = btn.widget_sparkline_ref_in_view || false;
-    document.getElementById('pad-edit-sparkline-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : false;
-    document.getElementById('pad-edit-sparkline-higher-is-better').checked = btn.widget_sparkline_higher_is_better || false;
-    document.getElementById('pad-edit-sparkline-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
-    document.getElementById('pad-edit-sparkline-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
-    document.getElementById('pad-edit-sparkline-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
-    document.getElementById('pad-edit-sparkline-color-good').value = padColorToHex(btn.widget_color_good, '#4CAF50');
-    document.getElementById('pad-edit-sparkline-color-ok').value = padColorToHex(btn.widget_color_ok, '#8BC34A');
-    document.getElementById('pad-edit-sparkline-color-attention').value = padColorToHex(btn.widget_color_attention, '#FF9800');
-    document.getElementById('pad-edit-sparkline-color-warning').value = padColorToHex(btn.widget_color_warning, '#F44336');
-    padSparklineThresholdToggle();
+
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -2331,7 +2567,6 @@ function padDialogClose() {
     document.getElementById('pad-edit-overlay').style.display = 'none';
     document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
-    padRenderPageSwatches();
 }
 
 function padDialogOk() {
@@ -2349,9 +2584,9 @@ function padDialogOk() {
     if (cs > 1) btn.col_span = cs;
     if (rs > 1) btn.row_span = rs;
 
-    const lt = document.getElementById('pad-edit-label-top').value.trim();
-    const lc = document.getElementById('pad-edit-label-center').value.trim();
-    const lb = document.getElementById('pad-edit-label-bottom').value.trim();
+    const lt = padLabelFromInput('pad-edit-label-top');
+    const lc = padLabelFromInput('pad-edit-label-center');
+    const lb = padLabelFromInput('pad-edit-label-bottom');
     if (lt) btn.label_top = lt;
     if (lc) btn.label_center = lc;
     if (lb) btn.label_bottom = lb;
@@ -2363,20 +2598,16 @@ function padDialogOk() {
     if (lcs) btn.label_center_style = lcs;
     if (lbs) btn.label_bottom_style = lbs;
 
-    const bgC = padGetColorBind('bg_color');
-    const fgC = padGetColorBind('fg_color');
-    const bdC = padGetColorBind('border_color');
-    btn.bg_color = bgC.value || '#333333';
-    btn.fg_color = fgC.value || '#ffffff';
-    btn.border_color = bdC.value || '#000000';
-    if (bgC.defaultInt !== undefined) btn.bg_color_default = bgC.defaultInt;
-    if (fgC.defaultInt !== undefined) btn.fg_color_default = fgC.defaultInt;
-    if (bdC.defaultInt !== undefined) btn.border_color_default = bdC.defaultInt;
+    btn.bg_color = padGetBindableColor('pad-edit-bg-color') || '#333333';
+    btn.fg_color = padGetBindableColor('pad-edit-fg-color') || '#ffffff';
+    btn.border_color = padGetBindableColor('pad-edit-border-color') || '#000000';
 
-    const bw = parseInt(document.getElementById('pad-edit-border-width').value);
-    btn.border_width = isNaN(bw) ? 0 : bw;
-    const cr = parseInt(document.getElementById('pad-edit-corner-radius').value);
-    btn.corner_radius = isNaN(cr) ? 8 : cr;
+    const bw = document.getElementById('pad-edit-border-width').value.trim();
+    btn.border_width = bw || '0';
+    const cr = document.getElementById('pad-edit-corner-radius').value.trim();
+    btn.corner_radius = cr || '8';
+    const uiOffset = document.getElementById('pad-edit-ui-offset').value.trim();
+    if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
 
     // Tap action
     const tapType = document.getElementById('pad-edit-action-type').value;
@@ -2435,19 +2666,8 @@ function padDialogOk() {
             const barMax = parseFloat(document.getElementById('pad-edit-widget-bar-max').value);
             btn.widget_bar_min = isNaN(barMin) ? 0 : barMin;
             btn.widget_bar_max = isNaN(barMax) ? 3 : barMax;
-            btn.widget_use_absolute = document.getElementById('pad-edit-widget-use-absolute').checked;
-            btn.widget_higher_is_better = document.getElementById('pad-edit-widget-higher-is-better').checked;
-            const t1 = parseFloat(document.getElementById('pad-edit-widget-threshold-1').value);
-            const t2 = parseFloat(document.getElementById('pad-edit-widget-threshold-2').value);
-            const t3 = parseFloat(document.getElementById('pad-edit-widget-threshold-3').value);
-            if (!isNaN(t1)) btn.widget_threshold_1 = t1;
-            if (!isNaN(t2)) btn.widget_threshold_2 = t2;
-            if (!isNaN(t3)) btn.widget_threshold_3 = t3;
-            btn.widget_color_good = padHexToInt(document.getElementById('pad-edit-widget-color-good').value);
-            btn.widget_color_ok = padHexToInt(document.getElementById('pad-edit-widget-color-ok').value);
-            btn.widget_color_attention = padHexToInt(document.getElementById('pad-edit-widget-color-attention').value);
-            btn.widget_color_warning = padHexToInt(document.getElementById('pad-edit-widget-color-warning').value);
-            btn.widget_bar_bg_color = padHexToInt(document.getElementById('pad-edit-widget-bar-bg-color').value);
+            btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');
+            btn.widget_bar_bg_color = padGetBindableColor('pad-edit-widget-bar-bg-color');
             const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
             const orient = document.getElementById('pad-edit-widget-orientation').value;
@@ -2458,6 +2678,15 @@ function padDialogOk() {
             if (gDataBinding) btn.widget_data_binding = gDataBinding;
             btn.widget_data_binding_2 = document.getElementById('pad-edit-gauge-data-binding-2').value.trim();
             btn.widget_data_binding_3 = document.getElementById('pad-edit-gauge-data-binding-3').value.trim();
+            btn.widget_data_binding_4 = document.getElementById('pad-edit-gauge-data-binding-4').value.trim();
+            const gStartLabel = padLabelFromInput('pad-edit-gauge-start-label');
+            const gStartLabel2 = padLabelFromInput('pad-edit-gauge-start-label-2');
+            const gStartLabel3 = padLabelFromInput('pad-edit-gauge-start-label-3');
+            const gStartLabel4 = padLabelFromInput('pad-edit-gauge-start-label-4');
+            btn.widget_gauge_start_label = gStartLabel;
+            btn.widget_gauge_start_label_2 = gStartLabel2;
+            btn.widget_gauge_start_label_3 = gStartLabel3;
+            btn.widget_gauge_start_label_4 = gStartLabel4;
             const gMin = parseFloat(document.getElementById('pad-edit-gauge-min').value);
             const gMax = parseFloat(document.getElementById('pad-edit-gauge-max').value);
             btn.widget_gauge_min = isNaN(gMin) ? 0 : gMin;
@@ -2466,22 +2695,17 @@ function padDialogOk() {
             btn.widget_gauge_degrees = (isNaN(gDeg) || gDeg < 10) ? 180 : (gDeg > 360) ? 360 : gDeg;
             const gSa = parseInt(document.getElementById('pad-edit-gauge-start-angle').value);
             btn.widget_gauge_start_angle = (isNaN(gSa)) ? 180 : gSa % 360;
-            btn.widget_use_absolute = document.getElementById('pad-edit-gauge-use-absolute').checked;
+            btn.widget_gauge_zero_centered = document.getElementById('pad-edit-gauge-zero-centered').checked;
+            btn.widget_gauge_dual_binding_pair_1 = document.getElementById('pad-edit-gauge-dual-binding-pair-1').checked;
+            btn.widget_gauge_dual_binding_pair_2 = document.getElementById('pad-edit-gauge-dual-binding-pair-2').checked;
             btn.widget_gauge_show_needle = document.getElementById('pad-edit-gauge-show-needle').checked;
-            btn.widget_gauge_higher_is_better = document.getElementById('pad-edit-gauge-higher-is-better').checked;
-            const gt1 = parseFloat(document.getElementById('pad-edit-gauge-threshold-1').value);
-            const gt2 = parseFloat(document.getElementById('pad-edit-gauge-threshold-2').value);
-            const gt3 = parseFloat(document.getElementById('pad-edit-gauge-threshold-3').value);
-            if (!isNaN(gt1)) btn.widget_threshold_1 = gt1;
-            if (!isNaN(gt2)) btn.widget_threshold_2 = gt2;
-            if (!isNaN(gt3)) btn.widget_threshold_3 = gt3;
-            btn.widget_color_good = padHexToInt(document.getElementById('pad-edit-gauge-color-good').value);
-            btn.widget_color_ok = padHexToInt(document.getElementById('pad-edit-gauge-color-ok').value);
-            btn.widget_color_attention = padHexToInt(document.getElementById('pad-edit-gauge-color-attention').value);
-            btn.widget_color_warning = padHexToInt(document.getElementById('pad-edit-gauge-color-warning').value);
-            btn.widget_gauge_track_color = padHexToInt(document.getElementById('pad-edit-gauge-track-color').value);
-            btn.widget_gauge_needle_color = padHexToInt(document.getElementById('pad-edit-gauge-needle-color').value);
-            btn.widget_gauge_tick_color = padHexToInt(document.getElementById('pad-edit-gauge-tick-color').value);
+            btn.widget_arc_color = padGetBindableColor('pad-edit-gauge-arc-color');
+            btn.widget_arc_color_2 = padGetBindableColor('pad-edit-gauge-arc-color-2');
+            btn.widget_arc_color_3 = padGetBindableColor('pad-edit-gauge-arc-color-3');
+            btn.widget_arc_color_4 = padGetBindableColor('pad-edit-gauge-arc-color-4');
+            btn.widget_gauge_track_color = padGetBindableColor('pad-edit-gauge-track-color');
+            btn.widget_gauge_needle_color = padGetBindableColor('pad-edit-gauge-needle-color');
+            btn.widget_gauge_tick_color = padGetBindableColor('pad-edit-gauge-tick-color');
             const awPct = parseInt(document.getElementById('pad-edit-gauge-arc-width-pct').value);
             btn.widget_gauge_arc_width_pct = (isNaN(awPct) || awPct > 50) ? 15 : (awPct < 5) ? 5 : awPct;
             const gTicks = parseInt(document.getElementById('pad-edit-gauge-ticks').value);
@@ -2504,14 +2728,13 @@ function padDialogOk() {
             btn.widget_sparkline_window = (isNaN(sWindow) || sWindow < 10) ? 300 : sWindow;
             const sSlots = parseInt(document.getElementById('pad-edit-sparkline-slots').value);
             btn.widget_sparkline_slots = (isNaN(sSlots) || sSlots < 2) ? 60 : (sSlots > 255) ? 255 : sSlots;
-            btn.widget_sparkline_line_color = padHexToInt(document.getElementById('pad-edit-sparkline-line-color').value);
-            btn.widget_sparkline_line_color_2 = padHexToInt(document.getElementById('pad-edit-sparkline-line-color-2').value);
-            btn.widget_sparkline_line_color_3 = padHexToInt(document.getElementById('pad-edit-sparkline-line-color-3').value);
+            btn.widget_sparkline_line_color = padGetBindableColor('pad-edit-sparkline-line-color');
+            btn.widget_sparkline_line_color_2 = padGetBindableColor('pad-edit-sparkline-line-color-2');
+            btn.widget_sparkline_line_color_3 = padGetBindableColor('pad-edit-sparkline-line-color-3');
             const sLw = parseInt(document.getElementById('pad-edit-sparkline-line-width').value);
             btn.widget_sparkline_line_width = (isNaN(sLw) || sLw < 1) ? 2 : (sLw > 10) ? 10 : sLw;
             const sSmooth = parseInt(document.getElementById('pad-edit-sparkline-smooth').value);
             btn.widget_sparkline_smooth = (isNaN(sSmooth) || sSmooth < 0) ? 0 : (sSmooth > 8) ? 8 : sSmooth;
-            btn.widget_sparkline_use_thresholds = document.getElementById('pad-edit-sparkline-use-thresholds').checked;
             btn.widget_sparkline_unified_scale = document.getElementById('pad-edit-sparkline-unified-scale').checked;
 
             // Min/max markers
@@ -2519,15 +2742,15 @@ function padDialogOk() {
             btn.widget_sparkline_marker_size_max = (isNaN(maxSz) || maxSz < 0) ? 0 : (maxSz > 20) ? 20 : maxSz;
             const maxFmt = document.getElementById('pad-edit-sparkline-max-fmt').value.trim();
             if (maxFmt) btn.widget_sparkline_max_fmt = maxFmt;
-            const maxLblClr = document.getElementById('pad-edit-sparkline-max-label-color').value;
-            if (maxLblClr && maxLblClr.toLowerCase() !== '#ffffff') btn.widget_sparkline_max_label_color = padHexToInt(maxLblClr);
+            const maxLblClr = padGetBindableColor('pad-edit-sparkline-max-label-color');
+            if (maxLblClr && maxLblClr.toLowerCase() !== '#ffffff') btn.widget_sparkline_max_label_color = maxLblClr;
 
             const minSz = parseInt(document.getElementById('pad-edit-sparkline-marker-size-min').value);
             btn.widget_sparkline_marker_size_min = (isNaN(minSz) || minSz < 0) ? 0 : (minSz > 20) ? 20 : minSz;
             const minFmt = document.getElementById('pad-edit-sparkline-min-fmt').value.trim();
             if (minFmt) btn.widget_sparkline_min_fmt = minFmt;
-            const minLblClr = document.getElementById('pad-edit-sparkline-min-label-color').value;
-            if (minLblClr && minLblClr.toLowerCase() !== '#ffffff') btn.widget_sparkline_min_label_color = padHexToInt(minLblClr);
+            const minLblClr = padGetBindableColor('pad-edit-sparkline-min-label-color');
+            if (minLblClr && minLblClr.toLowerCase() !== '#ffffff') btn.widget_sparkline_min_label_color = minLblClr;
 
             // Current value dot
             const cdSz = parseInt(document.getElementById('pad-edit-sparkline-current-dot').value);
@@ -2538,25 +2761,11 @@ function padDialogOk() {
                 const ry = parseFloat(document.getElementById('pad-edit-sparkline-ref-' + r + '-y').value);
                 if (!isNaN(ry)) {
                     btn['widget_sparkline_ref_' + r + '_y'] = ry;
-                    btn['widget_sparkline_ref_' + r + '_color'] = padHexToInt(document.getElementById('pad-edit-sparkline-ref-' + r + '-color').value);
+                    btn['widget_sparkline_ref_' + r + '_color'] = padGetBindableColor('pad-edit-sparkline-ref-' + r + '-color');
                     btn['widget_sparkline_ref_' + r + '_pattern'] = parseInt(document.getElementById('pad-edit-sparkline-ref-' + r + '-pattern').value) || 0;
                 }
             }
             if (document.getElementById('pad-edit-sparkline-ref-in-view').checked) btn.widget_sparkline_ref_in_view = true;
-            if (btn.widget_sparkline_use_thresholds) {
-                btn.widget_use_absolute = document.getElementById('pad-edit-sparkline-use-absolute').checked;
-                btn.widget_sparkline_higher_is_better = document.getElementById('pad-edit-sparkline-higher-is-better').checked;
-                const st1 = parseFloat(document.getElementById('pad-edit-sparkline-threshold-1').value);
-                const st2 = parseFloat(document.getElementById('pad-edit-sparkline-threshold-2').value);
-                const st3 = parseFloat(document.getElementById('pad-edit-sparkline-threshold-3').value);
-                if (!isNaN(st1)) btn.widget_threshold_1 = st1;
-                if (!isNaN(st2)) btn.widget_threshold_2 = st2;
-                if (!isNaN(st3)) btn.widget_threshold_3 = st3;
-                btn.widget_color_good = padHexToInt(document.getElementById('pad-edit-sparkline-color-good').value);
-                btn.widget_color_ok = padHexToInt(document.getElementById('pad-edit-sparkline-color-ok').value);
-                btn.widget_color_attention = padHexToInt(document.getElementById('pad-edit-sparkline-color-attention').value);
-                btn.widget_color_warning = padHexToInt(document.getElementById('pad-edit-sparkline-color-warning').value);
-            }
         }
     }
 
@@ -2567,7 +2776,6 @@ function padDialogOk() {
     padState.buttons.push(btn);
     padMarkDirty();
     padDialogClose();
-    padRenderPageSwatches();
     padRenderGrid();
 }
 
@@ -2577,7 +2785,6 @@ function padDialogClear() {
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
     padMarkDirty();
     padDialogClose();
-    padRenderPageSwatches();
     padRenderGrid();
 }
 
@@ -2593,15 +2800,28 @@ async function padSavePage() {
     const wakeScreen = document.getElementById('pad-wake-screen').value;
     if (wakeScreen) payload.wake_screen = wakeScreen;
     else delete payload.wake_screen;
-    const pageBgC = padGetColorBind('page_bg_color');
-    if (pageBgC.value && pageBgC.value !== '#000000') {
-        payload.bg_color = pageBgC.value.replace(/^#/, '');
-        if (pageBgC.defaultInt !== undefined) payload.bg_color_default = pageBgC.defaultInt;
-        else delete payload.bg_color_default;
+    const pageBgC = padGetBindableColor('pad-edit-page-bg-color');
+    if (pageBgC && pageBgC !== '#000000') {
+        payload.bg_color = pageBgC.startsWith('#') ? pageBgC.slice(1) : pageBgC;
     } else {
         delete payload.bg_color;
-        delete payload.bg_color_default;
     }
+    delete payload.bg_color_default;
+
+    // Pad bindings → dict (skip entries with invalid names)
+    if (padState.bindings && padState.bindings.length > 0) {
+        var badNames = padState.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
+        if (badNames.length > 0) {
+            alert('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.');
+            return;
+        }
+        var bd = padBindingsToDict(padState.bindings);
+        if (bd) payload.bindings = bd;
+        else delete payload.bindings;
+    } else {
+        delete payload.bindings;
+    }
+
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));
 
     // Convert color ints to hex strings for JSON
@@ -2763,15 +2983,14 @@ function padFillWithClipboard() {
 // --- Pad clipboard (copy/paste entire pad) ---
 
 function padCopyPad() {
-    const cbBgC = padGetColorBind('page_bg_color');
     padState.padClipboard = {
         cols: padState.cols,
         rows: padState.rows,
         name: document.getElementById('pad-name').value.trim(),
         wake_screen: document.getElementById('pad-wake-screen').value,
-        bg_color: cbBgC.value || '#000000',
-        bg_color_default: cbBgC.defaultInt,
+        bg_color: padGetBindableColor('pad-edit-page-bg-color') || '#000000',
         buttons: padState.buttons.map(b => Object.assign({}, b)),
+        bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
     };
     document.getElementById('pad-paste-btn').disabled = false;
     showMessage('Pad ' + (padState.page + 1) + ' copied', 'success');
@@ -2788,8 +3007,11 @@ function padPastePad() {
     document.getElementById('pad-rows').value = padState.rows;
     document.getElementById('pad-name').value = padState.padClipboard.name || '';
     document.getElementById('pad-wake-screen').value = padState.padClipboard.wake_screen || '';
-    padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
-    padSetColorBind('page_bg_color', padState.padClipboard.bg_color, padState.padClipboard.bg_color_default, '#000000');
+    padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
+    padSetBindableColor('pad-edit-page-bg-color', padState.padClipboard.bg_color, '#000000');
+
+    padState.bindings = padState.padClipboard.bindings ? padState.padClipboard.bindings.map(b => Object.assign({}, b)) : [];
+    padRenderBindings();
 
     padRenderGrid();
     padMarkDirty();
@@ -2813,10 +3035,13 @@ function padExportPad() {
     if (padName) payload.name = padName;
     const wakeScreen = document.getElementById('pad-wake-screen').value;
     if (wakeScreen) payload.wake_screen = wakeScreen;
-    const expBgC = padGetColorBind('page_bg_color');
-    if (expBgC.value && expBgC.value !== '#000000') {
-        payload.bg_color = expBgC.value.replace(/^#/, '');
-        if (expBgC.defaultInt !== undefined) payload.bg_color_default = expBgC.defaultInt;
+    const expBgC = padGetBindableColor('pad-edit-page-bg-color');
+    if (expBgC && expBgC !== '#000000') {
+        payload.bg_color = expBgC.startsWith('#') ? expBgC.slice(1) : expBgC;
+    }
+    if (padState.bindings && padState.bindings.length > 0) {
+        var bd = padBindingsToDict(padState.bindings);
+        if (bd) payload.bindings = bd;
     }
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -2852,8 +3077,11 @@ async function padImportPad(evt) {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = json.name || '';
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
-        padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
-        padSetColorBind('page_bg_color', json.bg_color, json.bg_color_default, '#000000');
+        padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
+        padSetBindableColor('pad-edit-page-bg-color', json.bg_color, '#000000');
+
+        padState.bindings = padBindingsFromJson(json.bindings);
+        padRenderBindings();
 
         padRenderGrid();
         padMarkDirty();
@@ -2969,8 +3197,8 @@ async function deviceImportConfig(evt) {
                 document.getElementById('pad-rows').value = padState.rows;
                 document.getElementById('pad-name').value = padJson.name || '';
                 document.getElementById('pad-wake-screen').value = padJson.wake_screen || '';
-                padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
-                padSetColorBind('page_bg_color', padJson.bg_color, padJson.bg_color_default, '#000000');
+                padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
+                padSetBindableColor('pad-edit-page-bg-color', padJson.bg_color, '#000000');
 
                 // Delete old icons first
                 await fetch('/api/icons/page?page=' + i, { method: 'DELETE' }).catch(() => {});
@@ -3012,8 +3240,10 @@ async function padDeletePage() {
         document.getElementById('pad-rows').value = padState.rows;
         document.getElementById('pad-name').value = '';
         document.getElementById('pad-wake-screen').value = '';
-        padBuildColorBind('pad-page-bg-color-wrap', 'Background', 'page_bg_color', '#000000');
-        padSetColorBind('page_bg_color', '#000000', undefined, '#000000');
+        padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
+        padSetBindableColor('pad-edit-page-bg-color', '#000000');
+        padState.bindings = [];
+        padRenderBindings();
         padUpdateDropdownLabel(padState.page, '');
         padRenderGrid();
     } catch (err) {

@@ -2,8 +2,14 @@
 
 #include "../board_config.h"
 
+// Utility: clamp a value to [lo, hi].  Placed outside the HAS_DISPLAY guard
+// so host-side tests can include it without pulling in LVGL dependencies.
+template<typename T>
+inline T clamp_val(T v, T lo, T hi) { return (v < lo) ? lo : (v > hi) ? hi : v; }
+
 #if HAS_DISPLAY
 
+#include "../binding_template.h"
 #include "../pad_config.h"
 #include "../pad_layout.h"
 #include <ArduinoJson.h>
@@ -19,14 +25,14 @@
 // Adding a new widget type:
 // 1. Create widgets/<name>_widget.cpp
 // 2. Define a WidgetTypeConfig-sized config struct
-// 3. Implement parse/create/update/destroy functions
-// 4. Declare a const WidgetType and register it in widget.cpp
+// 3. Implement parse/create/update/destroy/tick functions
+// 4. Add  REGISTER_WIDGET(name, stream_fn);  at the bottom (nullptr if no data stream)
 
 // WidgetConfig is defined in pad_config.h (type[16] + data[WIDGET_CONFIG_MAX_BYTES])
 
 // Opaque per-tile widget runtime state (LVGL objects, cached values, etc.)
 // Created by createUI(), freed by destroyUI(). Stored in ButtonTile.
-#define WIDGET_STATE_MAX_BYTES 80
+#define WIDGET_STATE_MAX_BYTES 192
 
 struct WidgetState {
     uint8_t data[WIDGET_STATE_MAX_BYTES];
@@ -69,7 +75,7 @@ struct WidgetType {
     // Widgets that need historical data (ring buffers) implement this so the
     // data_stream registry can collect data independently of the active screen.
     // Called with stream_index 0, 1, 2, ... until it returns false.
-    // Index 0 uses cfg->data_binding; higher indices use data_binding_2/3.
+    // Index maps to cfg->data_binding[stream_index].
     // Returns true if stream_index is valid and needs a data stream.
     // May be NULL (widget needs no data streams).
     bool (*getStreamParams)(const WidgetConfig* cfg, uint8_t stream_index,
@@ -80,27 +86,93 @@ struct WidgetType {
 // Look up a widget type by name. Returns NULL for "" or unknown types.
 const WidgetType* widget_find(const char* type_name);
 
-// ---- Shared color-parsing helper for widget config ----
-// Accepts numeric JSON values, "#RRGGBB", or "0xRRGGBB" strings.
-inline uint32_t widget_parse_color(JsonVariant v, uint32_t def) {
-    if (v.isNull()) return def;
-    if (v.is<unsigned long>() || v.is<long>()) return (uint32_t)v.as<unsigned long>();
-    if (!v.is<const char*>()) return def;
+// Register a widget type at startup (called from each widget .cpp via auto-registration).
+void widget_register(const WidgetType* type);
+
+// ---- JSON→string field parser for widget config ----
+// Converts a JSON value (integer, hex string, or binding template) into a
+// string stored in the widget config struct. For colors, integers are
+// formatted as "#RRGGBB". For absent/null values, stores the default string.
+inline void widget_parse_field(JsonVariant v, char* out, size_t out_len,
+                               const char* def, bool is_color = true) {
+    if (v.isNull() || (!v.is<const char*>() && !v.is<long>() && !v.is<unsigned long>())) {
+        strlcpy(out, def, out_len);
+        return;
+    }
+    if (v.is<long>() || v.is<unsigned long>()) {
+        long val = v.as<long>();
+        if (is_color) snprintf(out, out_len, "#%06lX", val & 0xFFFFFF);
+        else          snprintf(out, out_len, "%ld", val);
+        return;
+    }
     const char* s = v.as<const char*>();
-    if (!s || !*s) return def;
-    if (s[0] == '#') s++;
-    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
+    strlcpy(out, (s && *s) ? s : def, out_len);
+}
+
+// ---- Runtime binding-aware resolvers ----
+// Resolve a color string (static "#RRGGBB" or "[scheme:...]") to uint32_t RGB.
+inline uint32_t resolve_color(const char* s, uint32_t def) {
+    if (!s || !s[0]) return def;
+#if HAS_MQTT
+    if (binding_template_has_bindings(s)) {
+        char resolved[BINDING_TEMPLATE_MAX_LEN];
+        binding_template_resolve(s, resolved, sizeof(resolved));
+        uint32_t out;
+        return parse_hex_color(resolved, &out) ? out : def;
+    }
+#endif
+    uint32_t out;
+    return parse_hex_color(s, &out) ? out : def;
+}
+
+// Resolve a number string (static "8" or "[scheme:...]") to float.
+inline float resolve_number(const char* s, float def) {
+    if (!s || !s[0]) return def;
+#if HAS_MQTT
+    if (binding_template_has_bindings(s)) {
+        char resolved[BINDING_TEMPLATE_MAX_LEN];
+        binding_template_resolve(s, resolved, sizeof(resolved));
+        char* end = nullptr;
+        float val = strtof(resolved, &end);
+        return (end == resolved) ? def : val;
+    }
+#endif
     char* end = nullptr;
-    uint32_t val = strtoul(s, &end, 16);
+    float val = strtof(s, &end);
     return (end == s) ? def : val;
 }
 
-// Parse an optional color: returns 0 if absent/null, or 0x01RRGGBB with
-// marker bit 24 set when a color is present (same convention as LabelStyle.color).
-inline uint32_t widget_parse_color_opt(JsonVariant v) {
-    if (v.isNull()) return 0;
-    uint32_t c = widget_parse_color(v, 0xFFFFFFFF);
-    return (c == 0xFFFFFFFF) ? 0 : (0x01000000 | (c & 0x00FFFFFF));
+// Shorthand: resolve a color string directly to lv_color_t.
+inline lv_color_t resolve_lv_color(const char* s, uint32_t def) {
+    uint32_t rgb = resolve_color(s, def);
+    return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 }
+
+// Cached variant: resolve color, skip LVGL setter if unchanged.
+// `cache` must be initialized to UINT32_MAX (invalid sentinel) before first use.
+// Returns true if the color changed (setter should be called).
+#define COLOR_CACHE_INIT UINT32_MAX
+inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, lv_color_t* out) {
+    uint32_t rgb = resolve_color(s, def);
+    if (rgb == *cache) return false;
+    *cache = rgb;
+    *out = lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+    return true;
+}
+
+// ----------------------------------------------------------------------------
+// Widget auto-registration macro.
+// Derives prefix_parse, prefix_create, prefix_update, prefix_destroy,
+// prefix_tick from the given prefix.  stream_fn is passed verbatim
+// (use nullptr when the widget has no data-stream support).
+// ----------------------------------------------------------------------------
+#define REGISTER_WIDGET(prefix, stream_fn)                                     \
+    static const WidgetType prefix##_widget_type = {                           \
+        #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
+        prefix##_destroy, prefix##_tick, stream_fn                             \
+    };                                                                         \
+    static struct prefix##AutoReg {                                            \
+        prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
+    } _##prefix##_auto_reg
 
 #endif // HAS_DISPLAY

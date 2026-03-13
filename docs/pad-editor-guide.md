@@ -54,6 +54,14 @@ This subscribes to the `home/solar` MQTT topic, extracts the `power` field from 
 Solar: [mqtt:home/solar;power;%.0f] W
 ```
 
+**Explicit line breaks** are supported in label inputs using `\n`:
+
+```
+Line 1\nLine 2
+```
+
+This is saved as a real newline and rendered as two lines on the device. When you reopen the button editor, it is shown again as `\n` so you can edit it predictably.
+
 You can even put multiple bindings in a single label:
 
 ```
@@ -74,7 +82,8 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 |----------|--------|-------------|
 | `font` | `12`, `14`, `18`, `24`, `32`, `36` | Override the automatic font size |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
-| `y` | `-128` to `127` | Shift the label up (negative) or down (positive) in pixels |
+| `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
+| `y` | `-999` to `999` | Shift the label up (negative) or down (positive) in pixels |
 | `mode` | `clip`, `scroll`, `dot`, `wrap` | How to handle text that doesn't fit |
 | `color` | `#RGB` or `#RRGGBB` | Override the label's text color |
 
@@ -89,7 +98,7 @@ This renders a large left-aligned label that shows "..." when the text is too lo
 A few more examples:
 
 - `font:14;color:#FF0` — small yellow text
-- `y:-4;align:right` — right-aligned and nudged up 4 pixels
+- `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
 - `font:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
 
@@ -117,11 +126,13 @@ The **Colors** section (collapsible) controls the button's appearance:
 - **Text color** — applies to labels and Material Symbol icons
 - **Border color** — the button outline
 
-Each color field accepts either a static `#hex` value or a binding expression for dynamic colors — more on that in [Dynamic Colors](#dynamic-colors-with-bindings).
+Each color field accepts either a static `#hex` value or a binding expression for dynamic colors — more on that in [Dynamic Colors](#dynamic-colors-with-bindings). Click the color swatch to open the color picker popover. Fields that support bindings show an **fx** badge above the swatch — type a binding expression (e.g. `[expr:...]`) directly into the picker input.
 
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
 **Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons.
+
+**UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
 
 ### Button State (Conditional Visibility)
 
@@ -209,22 +220,18 @@ The bar chart widget draws a vertical or horizontal bar that fills based on a nu
 |---------|-------------|
 | **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
 | **Min / Max** | The value range. The bar is empty at min and full at max |
-| **Use absolute value** | When on, negative values fill the bar too (useful for grid power that can be negative) |
-| **Reversed, high values are better** | When toggled, the four color picker values swap in place so low values use warning colors and high values use good colors (e.g. battery level, signal strength). The zone labels stay fixed — only the colors move |
 | **Bar width %** | How wide the bar is relative to the button (1–100%). In horizontal mode, controls the bar height instead |
-| **Bar background** | The color of the empty bar track |
+| **Bar color** | The fill color of the bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
+| **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
 | **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
 
-**Color thresholds** divide the bar into up to four colored zones. The zone labels are positional (Below T1, T1–T2, T2–T3, Above T3) and stay fixed. Toggling "Reversed" swaps the color picker values so the colors visually flip while labels remain in place:
+**Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: pick your zone colors, set breakpoints, and the expression auto-generates as you type. For a solar panel with a 5 kW max:
 
-| Zone label | Default color (normal) | Default color (reversed) |
-|-----------|----------------------|-------------------------|
-| Below T1 | Green (`#4CAF50`) | Red (`#F44336`) |
-| T1 – T2 | Light green (`#8BC34A`) | Orange (`#FF9800`) |
-| T2 – T3 | Orange (`#FF9800`) | Light green (`#8BC34A`) |
-| Above T3 | Red (`#F44336`) | Green (`#4CAF50`) |
+```
+[expr:threshold([mqtt:solar/power;watts], "#4CAF50", 1000, "#8BC34A", 3000, "#FF9800", 4500, "#F44336")]
+```
 
-Thresholds default to 33%, 66%, and 90% of the range. Customize them to match your use case — for a solar panel with a 5 kW max, you might set thresholds at 1.0, 3.0, and 4.5 kW.
+Green below 1 kW, light green 1–3 kW, orange 3–4.5 kW, red above 4.5 kW.
 
 Labels, icons, and colors still work alongside the widget. A typical bar chart button uses the top label for a title ("Solar") and the bottom label for the current value (`[mqtt:solar/power;watts;%.0f W]`).
 
@@ -236,28 +243,56 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 
 | Setting | Description |
 |---------|-------------|
-| **Data Binding (outer ring)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temperature]`, `[time:%S]`) |
-| **Data Binding (middle ring)** | Optional — adds a concentric middle ring. Same settings (min/max, colors, thresholds) as the outer ring, different data source |
-| **Data Binding (inner ring)** | Optional — adds a concentric inner ring (requires middle ring). Same shared settings |
+| **Data Binding (slot 1 / ring 1)** | Primary binding template for the outer ring (for example `[mqtt:sensor/temperature]` or `[time:%S]`) |
+| **Data Binding (slot 2 / ring 2 or pair-1 negative)** | Optional. In normal mode this creates a second ring. In Dual Binding Pair 1 mode it becomes the negative direction for slot 1's ring |
+| **Data Binding (slot 3 / ring 3 or pair-2 positive)** | Optional. In normal mode this creates a third ring. In Dual Binding Pair 2 mode it becomes the positive direction for the next combined ring |
+| **Data Binding (slot 4 / ring 4 or pair-2 negative)** | Optional. In normal mode this creates a fourth ring. In Dual Binding Pair 2 mode it becomes the negative direction for slot 3's ring |
+| **Start Label (slot 1)** | Optional text or binding shown at the start of slot 1's ring. Uses that ring's arc color and the same font size as the top/bottom labels |
+| **Start Label (slot 2)** | Optional text or binding for slot 2. In dual mode, slot 2 still has its own color but shares the same physical ring as slot 1 |
+| **Start Label (slot 3)** | Optional text or binding for slot 3 |
+| **Start Label (slot 4)** | Optional text or binding for slot 4 when it renders as its own ring |
 | **Min / Max** | The value range. The arc is empty at min and full at max |
 | **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
 | **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
-| **Use absolute value** | When on, negative values fill the arc too |
+| **Zero-Centered** | Arc fills from the zero point — negative values grow left, positive grow right. Only applicable to single mode rings. |
+| **Dual Binding Pair 1** | Combines slots 1 and 2 into one ring: slot 1 fills the positive direction, slot 2 fills the negative direction |
+| **Dual Binding Pair 2** | Combines slots 3 and 4 into one ring using the same positive/negative split |
 | **Show needle** | Display a line from the center to the current value position on the arc |
-| **Reversed, high values are better** | Swaps the four color picker values (same behavior as bar chart) |
 | **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
 | **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
 | **Needle Width** | Line width in pixels (0 = hidden, max 10) |
 | **Tick Width** | Tick line width in pixels (1–5) |
-| **Track Color** | Color of the unfilled arc background |
-| **Needle Color** | Color of the needle line |
-| **Tick Color** | Color of the tick marks |
+| **Arc Color** | Fill color for slot 1. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
+| **Arc Color 2** | Fill color for slot 2, or the negative half of Dual Binding Pair 1. Default: blue (`#2196F3`) |
+| **Arc Color 3** | Fill color for slot 3, or the positive half of Dual Binding Pair 2. Default: purple (`#9C27B0`) |
+| **Arc Color 4** | Fill color for slot 4, or the negative half of Dual Binding Pair 2. Default: orange (`#FF9800`) |
+| **Track Color** | Color of the unfilled arc background. Supports binding expressions for dynamic color |
+| **Needle Color** | Color of the needle line. Supports binding expressions for dynamic color |
+| **Tick Color** | Color of the tick marks. Supports binding expressions for dynamic color |
 
-**Color thresholds** work identically to the bar chart — four zones (Below T1, T1–T2, T2–T3, Above T3) with the same swap behavior when "Reversed" is checked.
+Each ring has its own arc color field, so rings can be independently colored or threshold-driven. Use `[expr:threshold(...)]` in any arc color field for value-based coloring — the color picker's built-in **Generate Color by Threshold** helper makes this easy.
 
 The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
 
-**Multi-ring gauges** — fill in the middle and/or inner ring data bindings to add concentric rings (Apple Health ring style). All rings share the same min/max, thresholds, colors, arc degrees, and start angle. Only the outer ring shows the needle and tick marks. The arc width percentage applies to each ring equally, with automatic gaps between them.
+**Multi-ring gauges** — fill in slots 2, 3, and 4 to add up to four concentric rings (Apple Health ring style). All active rings share the same min/max, arc degrees, and start angle, but each slot has its own arc color and optional start label. The needle is shown on the outermost active gauge ring only; tick marks are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
+
+**Dual binding gauges** — enable Dual Binding Pair 1 and/or Pair 2 to collapse slot pairs into shared rings. In a dual pair, the first slot fills from zero toward the positive direction and the second slot fills from zero toward the negative direction. If the partner binding is empty or invalid, it is treated as `0`. Pair 1 also drives the needle using the signed difference `slot1 - slot2`.
+
+**Power balance example** (house vs solar vs grid, in kW):
+- Ring 1 data binding: house consumption (for example `[mqtt:home/house;power_kw]`)
+- Ring 2 data binding: solar production (for example `[mqtt:home/solar;power_kw]`)
+- Ring 3 data binding: grid power (for example `[mqtt:home/grid;power_kw]`) where positive = import, negative = injection
+- Dual Binding Ring 1 and 2: enabled
+- Min / Max: `-3` / `3`
+- Zero-Centered: enabled
+- Show needle: disabled
+
+This visualization shows system balance at a glance: the outer combined ring contrasts house load against solar production, while the inner ring shows resulting grid exchange. Mental model: house load + solar (negative contribution on ring 2) should align with grid power on ring 3.
+
+**Zero centered example** (grid power, -3 kW to +3 kW):
+- Data binding: `[mqtt:grid/power;$.value]`, Min: -3, Max: 3
+- Arc Degrees: 180, Start Angle: 180, Zero centered: on
+- Negative values (import) fill leftward from center, positive values (export) fill rightward
 
 **Clock example** (seconds hand on a full circle):
 - Data binding: `[time:%S]`, Min: 0, Max: 60
@@ -279,14 +314,13 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
 | **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
 | **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
-| **Color by value** | Enable 4-zone color thresholds on the main line (same system as bar chart and gauge). When enabled with auto min/max, thresholds are computed dynamically from observed data range |
 | **Max marker size** | Dot radius for the maximum-value marker (0 = off, 1–20 px). When non-zero, a dot and optional label are drawn at the highest point in the visible data |
 | **Max format** | Printf format string for the max label (e.g., `hi %.1f`). Only one `%f`/`%e`/`%g` specifier allowed. Leave empty for dot only (no label) |
 | **Max label color** | Override color for the max label text. White (#FFFFFF) means "auto" — the label inherits the line's current color |
 | **Min marker size** | Same as max marker, but for the lowest point in the visible data |
 | **Min format** | Printf format string for the min label (e.g., `lo %.1f`) |
 | **Min label color** | Override color for the min label text. White = auto |
-| **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Follows threshold color when "Color by value" is enabled |
+| **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Uses the line’s resolved color |
 | **Reference line 1/2/3** | Up to 3 horizontal reference lines at fixed Y values. Each has a Y value (numeric), a color, and a line pattern (Solid, Dotted, or Dashed). Drawn behind the data lines. Only lines with a valid Y value are rendered |
 | **Keep reference lines in view** | When enabled, auto-scale expands the Y range to include all configured reference line values, so they are always visible. Data that exceeds the reference lines still expands the range normally. Only affects auto-scaled axes (explicit min/max take priority) |
 | **Smoothing** | Gaussian kernel smoothing radius (0 = off, 1–8). Smooths the trend line by averaging neighboring data points — higher values produce a smoother curve. A value of 3–4 gives a pleasant smoothing effect; 8 gives heavy averaging. Min/max markers and current-value dot are positioned on the smoothed line. Set to 0 for raw data rendering |
@@ -307,7 +341,7 @@ Labels, icons, and colors still work alongside the widget. A typical sparkline b
 **CPU usage sparkline:**
 - Data binding: `[health:cpu]`
 - Min: 0, Max: 100, Time window: 300 (5 minutes), Slots: 60
-- Use thresholds: on (green→red as CPU increases)
+- Line color: `[expr:threshold([health:cpu], "#4CAF50", 50, "#FF9800", 80, "#F44336")]` (green→orange→red as CPU increases)
 
 **Multi-line solar comparison:**
 - Data binding: `[mqtt:home/solar/power;production]` (green line)
@@ -326,6 +360,40 @@ Binding templates are the engine behind live data on your buttons. They follow a
 ```
 
 Static text before, after, or between tokens is preserved. If a binding can't resolve (topic not received yet, invalid path), it shows `---` as a placeholder. Errors show `ERR:reason`.
+
+### Pipe Fallback
+
+**Syntax:** `[scheme:params|fallback]`
+
+Append `|value` to any binding to show a custom fallback instead of the default `---` placeholder.
+
+#### Why this exists
+
+Without a pipe fallback, unresolved bindings display `---`. That's fine for label text, but it causes problems in two common situations:
+
+- **Boot / startup delay** — After a reboot, it takes a few seconds before WiFi connects, MQTT subscribes, and the first messages arrive. During this window every MQTT-bound label flashes `---`, which looks broken.
+- **MQTT reconnect** — If the broker restarts or the network hiccups, retained values are cleared from the subscription store. Labels revert to `---` until new messages come in.
+- **Color bindings** — A `---` fallback in a color field (background, text color) isn't a valid color and falls through to the firmware default. By providing a pipe fallback like `|#333333`, you control exactly what color appears during these gaps.
+- **Expression bindings** — An `[expr:]` that depends on an MQTT value will fail to evaluate while the inner binding is unresolved. The pipe fallback provides a clean result instead of `ERR:` or `---`.
+
+The pipe character (`|`) is parsed at the outermost bracket level only — pipes inside nested bindings (e.g., inside an `[expr:]`) are left alone.
+
+**Examples:**
+
+```
+[mqtt:solar/power;watts|0]               → 0 until first MQTT message arrives
+[mqtt:light/color;hex|#ffffff]           → #ffffff as default color
+[health:cpu|--]                          → -- instead of --- placeholder
+[pad:power|0]                            → 0 when named binding hasn't resolved
+```
+
+Pipe fallbacks work with **color bindings** too — set a sensible default color that shows until the binding resolves:
+
+```
+[expr:[mqtt:sensor;temp] > 30 ? "#FF4444" : "#4CAF50"|#333333]
+```
+
+This shows dark gray (`#333333`) during startup, then switches to red/green once the MQTT value arrives.
 
 ### MQTT Binding
 
@@ -542,6 +610,12 @@ Expressions let you do math, comparisons, and conditional logic on binding resul
 | `>` `<` `>=` `<=` `==` `!=` | Comparisons (return 1 or 0) | `temp > 30` |
 | `? :` | Ternary (if/then/else) | `temp > 30 ? "Hot" : "OK"` |
 
+**Built-in functions:**
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `threshold(value, color0, t1, color1, ..., tN, colorN)` | Maps a numeric value to a color via ascending thresholds. Returns `color_i` where `value < t_(i+1)`, or the last color if value ≥ all thresholds. | `threshold(temp, "#4CAF50", 25, "#FF9800", 35, "#FF0000")` |
+
 Ternary branches can return numbers or `"quoted strings"`.
 
 **Practical examples:**
@@ -580,7 +654,12 @@ If any inner binding hasn't resolved yet (shows `---`), the entire expression re
 
 ### Dynamic Colors with Bindings
 
-Color fields (background, text, border) accept binding expressions, making buttons change color based on live data.
+Color fields throughout the button editor accept binding expressions, making buttons and widgets change color based on live data. This includes:
+
+- **Button colors** — background, text, and border
+- **Widget colors** — bar chart bar color, gauge arc/track/needle/tick colors, sparkline line colors, reference line colors, min/max marker colors
+
+All color bindings update live every display cycle — you don't need new data to arrive for a color change to take effect.
 
 **Basic pattern** — change color based on a threshold:
 
@@ -597,6 +676,20 @@ The button turns red when the temperature exceeds 30°C, green otherwise.
 ```
 
 Red above 35°C, orange above 28°C, green otherwise.
+
+**Multi-tier colors** with `threshold()` — cleaner alternative to nested ternaries:
+
+```
+[expr:threshold([mqtt:sensor;temp], "#4CAF50", 28, "#FF9800", 35, "#FF0000")]
+```
+
+Same result: green below 28°C, orange 28–35°C, red above 35°C. Add as many thresholds as needed:
+
+```
+[expr:threshold([mqtt:aqi;value], "#4CAF50", 50, "#FFEB3B", 100, "#FF9800", 150, "#FF5722", 200, "#9C27B0", 300, "#7E0023")]
+```
+
+Six color zones for an AQI indicator — much cleaner than five levels of nested ternaries.
 
 **State-based colors** — match string values:
 
@@ -615,6 +708,61 @@ Green when on, gray when off.
 Toggles between bright red and dark red every second — useful for alert buttons.
 
 > Always set a sensible **default color** when using color bindings. The default is shown while the binding resolves (during startup or reconnection). Otherwise you'll see black or white flashes.
+
+### Pad Bindings (Named Data Sources)
+
+**Syntax:** `[pad:name]` or `[pad:name;format]`
+
+Pad bindings let you define a data source once at the page level and reference it across all buttons and widgets on that page. This avoids repeating the same MQTT topic everywhere and makes it easy to switch data sources — change one binding instead of editing every button.
+
+**Defining bindings** — in the pad JSON config, add a `"bindings"` object at the page level:
+
+```json
+{
+  "bindings": {
+    "power": "[mqtt:home/solar/power;$.value]",
+    "current": "[mqtt:home/solar/current;$.amps]",
+    "power_kw": "[expr:[mqtt:home/solar/power;$.value]/1000]"
+  },
+  "buttons": [...]
+}
+```
+
+**Using bindings** — reference them anywhere you'd normally write a binding:
+
+```
+[pad:power]                                   → 3842.5 (raw value)
+[pad:power;%.0f]                              → 3843 (formatted)
+Power: [pad:power;%.0f] W                     → Power: 3843 W
+[pad:power_kw;%.2f] kW                        → 3.84 kW
+```
+
+The optional `;format` parameter applies a printf format to the resolved value, just like other bindings.
+
+**Inside expressions** — `[pad:]` tokens work naturally inside `[expr:]`:
+
+```
+[expr:[pad:power] > 3000 ? "High" : "Low"]   → High
+[expr:[pad:power] > 3000 ? "#00AA00" : "#333"] → #00AA00
+```
+
+**In widget data bindings** — use `[pad:power]` as a widget's data binding, sparkline source, or gauge ring binding.
+
+**Naming rules**: Binding names must start with a letter and contain only letters, digits, and underscores (e.g., `power`, `solar_current`, `temp1`). Maximum 31 characters.
+
+**Limit**: Up to 16 named bindings per page.
+
+**Why use pad bindings?**
+
+Consider a solar monitoring button with these fields all referencing the same topic:
+
+| Field | Without pad bindings | With pad bindings |
+|-------|---------------------|-------------------|
+| Bottom label | `[mqtt:solar/power;$.value;%.0f W]` | `[pad:power;%.0f W]` |
+| Background color | `[expr:[mqtt:solar/power;$.value]>3000?"#0A0":"#333"]` | `[expr:[pad:power]>3000?"#0A0":"#333"]` |
+| Widget data | `[mqtt:solar/power;$.value]` | `[pad:power]` |
+
+Switching from solar to grid power? Without pad bindings: 3+ edits per button. With pad bindings: change one line in `"bindings"`.
 
 ---
 

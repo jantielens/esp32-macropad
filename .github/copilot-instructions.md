@@ -33,9 +33,9 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Widget Subsystem**: Extensible widget type system for specialized button visualizations (compile-time gated by `HAS_DISPLAY`)
   - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI, tick, getStreamParams function pointers)
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
-  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with color thresholds, binding-driven)
-  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, color thresholds, up to 3 concentric rings, binding-driven)
-  - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale, time-windowed display, threshold coloring, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry, per-marker min/max dots with labels, current-value dot, up to 3 reference lines)
+  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color, binding-driven)
+  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, up to 4 slots with optional dual-binding pairs, binding-driven)
+  - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale, time-windowed display, bindable line colors, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry, per-marker min/max dots with labels, current-value dot, up to 3 reference lines)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Data Stream Registry**: Background data collection for history-based widgets (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
   - `data_stream.cpp/h` - Demand-driven registry of per-widget ring buffers; resolves bindings and feeds PSRAM-allocated ring buffers every LVGL cycle regardless of active screen; LOCF for data gaps; rebuild triggered by pad config generation changes
@@ -47,8 +47,11 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries); extends strftime with sub-second codes (`%ms` millis, `%cs` centisec, `%ds` decisec) and standalone `%ums` (device uptime ms)
   - `time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
   - Expr scheme registered by `expr_binding_init()` — resolves `[expr:expression;format]` tokens by first resolving inner bindings, then evaluating with a recursive-descent expression evaluator
-  - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings); no ESP32 dependencies, host-testable
+  - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings, threshold function); no ESP32 dependencies, host-testable
   - `expr_binding.cpp/h` - Glue between expr_eval and binding_template engine; bracket-depth `;` splitting (compile-time gated by `HAS_DISPLAY`)
+  - Pad scheme registered by `pad_binding_init()` — resolves `[pad:name;format]` tokens against page-level named bindings; supports per-usage format override; enables define-once-use-everywhere pattern for repeated MQTT topics
+  - `pad_binding.cpp/h` - Pad binding scheme resolver with page-context pointer, expand utility for data streams, and topic collector that recurses into underlying bindings (compile-time gated by `HAS_DISPLAY`)
+  - Pipe fallback syntax: `[scheme:params|fallback]` — replaces default `---` placeholder when a binding can't resolve (e.g., before first MQTT message, during reconnect). Parsed by `split_pipe_fallback()` at outermost bracket depth.
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
 - **Screen Saver Subsystem**: Inactivity-based display sleep with backlight fading and per-screen wake redirect (compile-time gated by `HAS_DISPLAY`)
   - `screen_saver_manager.cpp/h` - State machine (Awake/FadingOut/Asleep/FadingIn), fade animation, touch wake polling, pixel shift burn-in prevention
@@ -71,7 +74,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `project_branding.h` - Project branding defines (`PROJECT_NAME`, `PROJECT_DISPLAY_NAME`) (auto-generated)
   - `config_manager.cpp/h` - NVS configuration storage
   - Multi-page architecture: Home, Network, Firmware
-  - Template system: `_header.html`, `_nav.html`, `_footer.html` for DRY
+  - Template system: `_header.html`, `_nav.html`, `_footer.html`, `_binding_help.html` for DRY
 - **Output**: Compiled binaries in `./build/<board-name>/` directories
 - **Board Targets**: Multi-board support via `FQBN_TARGETS` associative array in `config.sh`
   - Board name → FQBN mapping allows multiple board variants with same FQBN
@@ -138,7 +141,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution - they work from any 
 - **Pads** (`/pads.html`): Visual pad editor with button editor dialog (Full Mode only)
 - **Network** (`/network.html`): WiFi, device, and network configuration (both modes)
 - **Firmware** (`/firmware.html`): Online update (GitHub Releases), manual upload, and factory reset (Full Mode only)
-- Template fragments: `_header.html`, `_nav.html`, `_footer.html` used via `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}` placeholders
+- Template fragments: `_header.html`, `_nav.html`, `_footer.html`, `_binding_help.html` used via `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders
 - Build-time template replacement in `tools/minify-web-assets.sh`
 
 **Portal Modes**:
@@ -221,8 +224,9 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/wifi_manager.cpp/h` - WiFi connect + mDNS (replaces inline connect logic)
 - `src/app/portal_idle.cpp/h` - Portal idle timeout in Config/AP modes
 - `src/app/binding_template.cpp/h` - Scheme-extensible token resolver for label text (compile-time gated by `HAS_MQTT`)
-- `src/app/expr_eval.cpp/h` - Pure C expression evaluator (arithmetic, comparisons, ternary); host-testable, no ESP32 deps
+- `src/app/expr_eval.cpp/h` - Pure C expression evaluator (arithmetic, comparisons, ternary, threshold function); host-testable, no ESP32 deps
 - `src/app/expr_binding.cpp/h` - Expression binding glue — registers `[expr:]` scheme (compile-time gated by `HAS_DISPLAY`)
+- `src/app/pad_binding.cpp/h` - Pad binding scheme — resolves `[pad:name;format]` against page-level named bindings (compile-time gated by `HAS_DISPLAY`)
 - `src/app/health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
 - `src/app/time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
@@ -250,7 +254,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for page-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides
 - `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`)
 - `src/app/screens/pad_screen.cpp/h` - Pad screen with LVGL button tiles, label rendering (uses label style resolvers), icon/widget layout, binding updates, and image fetch integration
 - `src/app/screens/splash_screen.cpp/h` - Boot splash with animated spinner
@@ -262,9 +266,9 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/data_stream.cpp/h` - Data stream registry for background ring buffer collection (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
 - `src/app/widgets/widget.h` - Widget type interface (WidgetType struct with function pointers: parseConfig, createUI, update, destroyUI, tick, getStreamParams)
 - `src/app/widgets/widget.cpp` - Widget type registry and lookup
-- `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (color thresholds, MQTT data binding)
-- `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, color thresholds, up to 3 concentric rings, binding-driven)
-- `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, up to 3 overlaid lines, reads from data stream registry, auto-scale, threshold coloring, per-marker min/max dots with labels and color overrides, current-value dot, up to 3 reference lines with color and pattern)
+- `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (bindable bar color, MQTT data binding)
+- `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, per-ring bindable arc colors, up to 4 slots with optional dual-binding pairs, binding-driven)
+- `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, up to 3 overlaid lines, reads from data stream registry, auto-scale, bindable line colors, per-marker min/max dots with labels and color overrides, current-value dot, up to 3 reference lines with color and pattern)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template
@@ -281,7 +285,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 
 ### Tools
 - `tools/minify-web-assets.sh` - Minifies and embeds web assets into `web_assets.h`
-  - Replaces `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}` placeholders in HTML files
+  - Replaces `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders in HTML files
   - Minifies CSS and JavaScript
   - Gzips all assets for efficient storage
   - Excludes template fragments (files starting with `_`)

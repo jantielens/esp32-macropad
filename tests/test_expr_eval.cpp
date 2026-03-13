@@ -156,6 +156,106 @@ static void test_errors() {
     check_err("1 ? 2",         "ERR:",    "incomplete ternary");
 }
 
+static void test_threshold_basic() {
+    printf("--- threshold() basic ---\n");
+    // 1 threshold (2 colors): <50 green, >=50 red
+    check_ok("threshold(25, \"#00FF00\", 50, \"#FF0000\")",   "#00FF00", "below T1");
+    check_ok("threshold(75, \"#00FF00\", 50, \"#FF0000\")",   "#FF0000", "above T1");
+    check_ok("threshold(50, \"#00FF00\", 50, \"#FF0000\")",   "#FF0000", "exactly at T1");
+
+    // 3 thresholds (4 colors): the classic widget pattern
+    check_ok("threshold(10, \"#4CAF50\", 33, \"#8BC34A\", 66, \"#FF9800\", 90, \"#F44336\")",
+             "#4CAF50", "3T: below T1");
+    check_ok("threshold(50, \"#4CAF50\", 33, \"#8BC34A\", 66, \"#FF9800\", 90, \"#F44336\")",
+             "#8BC34A", "3T: between T1 and T2");
+    check_ok("threshold(80, \"#4CAF50\", 33, \"#8BC34A\", 66, \"#FF9800\", 90, \"#F44336\")",
+             "#FF9800", "3T: between T2 and T3");
+    check_ok("threshold(95, \"#4CAF50\", 33, \"#8BC34A\", 66, \"#FF9800\", 90, \"#F44336\")",
+             "#F44336", "3T: above T3");
+
+    // Exactly at each threshold boundary
+    check_ok("threshold(33, \"#4CAF50\", 33, \"#8BC34A\", 66, \"#FF9800\", 90, \"#F44336\")",
+             "#8BC34A", "3T: exactly at T1");
+    check_ok("threshold(66, \"#4CAF50\", 33, \"#8BC34A\", 66, \"#FF9800\", 90, \"#F44336\")",
+             "#FF9800", "3T: exactly at T2");
+    check_ok("threshold(90, \"#4CAF50\", 33, \"#8BC34A\", 66, \"#FF9800\", 90, \"#F44336\")",
+             "#F44336", "3T: exactly at T3");
+}
+
+static void test_threshold_variable_arity() {
+    printf("--- threshold() variable arity ---\n");
+    // 0 thresholds (1 color): always returns the single color
+    check_ok("threshold(42, \"#AABBCC\")", "#AABBCC", "0T: single color");
+
+    // 2 thresholds (3 colors)
+    check_ok("threshold(10, \"#111111\", 30, \"#222222\", 70, \"#333333\")",
+             "#111111", "2T: below T1");
+    check_ok("threshold(50, \"#111111\", 30, \"#222222\", 70, \"#333333\")",
+             "#222222", "2T: between");
+    check_ok("threshold(90, \"#111111\", 30, \"#222222\", 70, \"#333333\")",
+             "#333333", "2T: above T2");
+
+    // 5 thresholds (6 colors) — AQI color bands
+    check_ok("threshold(25, \"#00E400\", 50, \"#FFFF00\", 100, \"#FF7E00\", 150, \"#FF0000\", 200, \"#8F3F97\", 300, \"#7E0023\")",
+             "#00E400", "5T: tier 0");
+    check_ok("threshold(75, \"#00E400\", 50, \"#FFFF00\", 100, \"#FF7E00\", 150, \"#FF0000\", 200, \"#8F3F97\", 300, \"#7E0023\")",
+             "#FFFF00", "5T: tier 1");
+    check_ok("threshold(125, \"#00E400\", 50, \"#FFFF00\", 100, \"#FF7E00\", 150, \"#FF0000\", 200, \"#8F3F97\", 300, \"#7E0023\")",
+             "#FF7E00", "5T: tier 2");
+    check_ok("threshold(175, \"#00E400\", 50, \"#FFFF00\", 100, \"#FF7E00\", 150, \"#FF0000\", 200, \"#8F3F97\", 300, \"#7E0023\")",
+             "#FF0000", "5T: tier 3");
+    check_ok("threshold(250, \"#00E400\", 50, \"#FFFF00\", 100, \"#FF7E00\", 150, \"#FF0000\", 200, \"#8F3F97\", 300, \"#7E0023\")",
+             "#8F3F97", "5T: tier 4");
+    check_ok("threshold(400, \"#00E400\", 50, \"#FFFF00\", 100, \"#FF7E00\", 150, \"#FF0000\", 200, \"#8F3F97\", 300, \"#7E0023\")",
+             "#7E0023", "5T: tier 5");
+}
+
+static void test_threshold_expressions_as_value() {
+    printf("--- threshold() expression as value ---\n");
+    // Value can be an arithmetic expression
+    check_ok("threshold(10 + 20, \"#00FF00\", 50, \"#FF0000\")",
+             "#00FF00", "expr value below");
+    check_ok("threshold(30 + 30, \"#00FF00\", 50, \"#FF0000\")",
+             "#FF0000", "expr value above");
+
+    // Negative values
+    check_ok("threshold(-10, \"#00FF00\", 0, \"#FF0000\")",
+             "#00FF00", "negative value below 0");
+    check_ok("threshold(10, \"#00FF00\", 0, \"#FF0000\")",
+             "#FF0000", "positive value above 0");
+
+    // Float thresholds
+    check_ok("threshold(3.14, \"#AAA\", 2.5, \"#BBB\", 5.0, \"#CCC\")",
+             "#BBB", "float threshold between");
+}
+
+static void test_threshold_errors() {
+    printf("--- threshold() errors ---\n");
+    // No arguments
+    check_err("threshold()", "ERR:", "no args");
+    // Missing color (value only, no color)
+    check_err("threshold(42)", "ERR:", "value only no color");
+    // Wrong arg count: value + color + threshold but no second color (3 args)
+    check_err("threshold(42, \"#AAA\", 50)", "ERR:", "odd args missing final color");
+    // Non-numeric threshold
+    check_err("threshold(42, \"#AAA\", \"not_a_number\", \"#BBB\")", "ERR:", "non-numeric threshold");
+    // Non-numeric value
+    check_err("threshold(\"text\", \"#AAA\", 50, \"#BBB\")", "ERR:", "non-numeric value");
+    // Non-string color
+    check_err("threshold(42, 123, 50, \"#BBB\")", "ERR:", "non-string color");
+    // Thresholds not ascending
+    check_err("threshold(42, \"#AAA\", 50, \"#BBB\", 30, \"#CCC\")", "ERR:", "non-ascending thresholds");
+}
+
+static void test_threshold_in_larger_expression() {
+    printf("--- threshold() in expressions ---\n");
+    // threshold() result used in string comparison
+    check_ok("threshold(25, \"#00FF00\", 50, \"#FF0000\") == \"#00FF00\"",
+             "1", "result string cmp true");
+    check_ok("threshold(75, \"#00FF00\", 50, \"#FF0000\") == \"#00FF00\"",
+             "0", "result string cmp false");
+}
+
 static void test_output_buffer_limits() {
     printf("--- Output buffer limits ---\n");
     char tiny[4];
@@ -187,6 +287,11 @@ int main() {
     test_realistic_expressions();
     test_edge_cases();
     test_errors();
+    test_threshold_basic();
+    test_threshold_variable_arity();
+    test_threshold_expressions_as_value();
+    test_threshold_errors();
+    test_threshold_in_larger_expression();
     test_output_buffer_limits();
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);

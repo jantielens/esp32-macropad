@@ -1,6 +1,7 @@
 # Build output
 build/
 bin/arduino-cli
+tests/bin/
 
 # Generated ESP Web Tools installer site
 site/

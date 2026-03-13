@@ -103,6 +103,26 @@ static bool find_next_token(const char* templ, const char** out_token_start,
     return false;
 }
 
+// Split pipe fallback from params: "actual_params|fallback"
+// Finds the LAST '|' at bracket-depth 0, not inside quotes or nested tokens.
+// If found, null-terminates at '|' and returns pointer to fallback string.
+static char* split_pipe_fallback(char* buf) {
+    char* last_pipe = NULL;
+    bool in_quotes = false;
+    int bracket_depth = 0;
+    for (char* p = buf; *p; p++) {
+        if (*p == '"') in_quotes = !in_quotes;
+        else if (!in_quotes) {
+            if (*p == '[') bracket_depth++;
+            else if (*p == ']') { if (bracket_depth > 0) bracket_depth--; }
+            else if (*p == '|' && bracket_depth == 0) last_pipe = p;
+        }
+    }
+    if (!last_pipe) return NULL;
+    *last_pipe = '\0';
+    return last_pipe + 1;
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -167,6 +187,9 @@ bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
             memcpy(params_buf, params, plen);
             params_buf[plen] = '\0';
 
+            // Extract pipe fallback before resolving
+            char* fallback = split_pipe_fallback(params_buf);
+
             char resolved[128];
             if (entry->resolver(params_buf, resolved, sizeof(resolved))) {
                 any_resolved = true;
@@ -176,9 +199,9 @@ bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
                 memcpy(out + written, resolved, copy);
                 written += copy;
             } else {
-                // Resolver failed — placeholder
-                const char* ph = "---";
-                size_t phlen = 3;
+                // Resolver failed — use pipe fallback or placeholder
+                const char* ph = fallback ? fallback : "---";
+                size_t phlen = strlen(ph);
                 size_t space = out_len - 1 - written;
                 size_t copy = phlen < space ? phlen : space;
                 memcpy(out + written, ph, copy);
@@ -213,6 +236,7 @@ void binding_template_collect_topics(const char* templ, void* user_data) {
             size_t plen = params_len < sizeof(params_buf) - 1 ? params_len : sizeof(params_buf) - 1;
             memcpy(params_buf, params, plen);
             params_buf[plen] = '\0';
+            split_pipe_fallback(params_buf);  // strip fallback before collecting
             entry->collector(params_buf, user_data);
         }
 

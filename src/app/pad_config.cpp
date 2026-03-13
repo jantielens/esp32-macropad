@@ -14,6 +14,7 @@
 #include <esp_partition.h>
 
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 
 #define TAG "PadCfg"
@@ -36,31 +37,12 @@ static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
     snprintf(buf, buf_len, "/config/pad_%u.json", page);
 }
 
-// Parse a color value from JSON (supports "#RRGGBB", "RRGGBB", "0xRRGGBB", or integer)
-static uint32_t parse_color(JsonVariant v, uint32_t default_val) {
-    if (v.isNull()) return default_val;
-    if (v.is<unsigned long>() || v.is<long>()) return (uint32_t)v.as<unsigned long>();
-    if (!v.is<const char*>()) return default_val;
-
-    const char* s = v.as<const char*>();
-    if (!s || !*s) return default_val;
-
-    // Skip leading # or 0x
-    if (s[0] == '#') s++;
-    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
-
-    char* end = nullptr;
-    uint32_t val = strtoul(s, &end, 16);
-    if (end == s) return default_val;
-    return val;
-}
-
 // ============================================================================
 // Label Style DSL parser
 // ============================================================================
 // Format: "key:value;key:value;..."
 // Keys: font (12/14/18/24/32/36), align (left/center/right),
-//        y (int offset), mode (clip/scroll/dot/wrap), color (#RRGGBB)
+//        x/y (int offset), mode (clip/scroll/dot/wrap), color (#RRGGBB)
 void label_style_parse(const char* dsl, LabelStyle* out) {
     memset(out, 0, sizeof(LabelStyle));
     if (!dsl || !dsl[0]) return;
@@ -89,6 +71,11 @@ void label_style_parse(const char* dsl, LabelStyle* out) {
                 if (strcmp(val, "left") == 0)        out->align = LABEL_ALIGN_LEFT;
                 else if (strcmp(val, "right") == 0)  out->align = LABEL_ALIGN_RIGHT;
                 else if (strcmp(val, "center") == 0) out->align = LABEL_ALIGN_CENTER;
+            } else if (strcmp(key, "x") == 0) {
+                int x = atoi(val);
+                if (x < -999) x = -999;
+                if (x > 999)  x = 999;
+                out->x_offset = (int16_t)x;
             } else if (strcmp(key, "y") == 0) {
                 int y = atoi(val);
                 if (y < -999) y = -999;
@@ -110,6 +97,18 @@ void label_style_parse(const char* dsl, LabelStyle* out) {
     }
 }
 
+// Validate a pad binding name: [a-zA-Z][a-zA-Z0-9_]*, non-empty, max len.
+static bool is_valid_binding_name(const char* name) {
+    if (!name || !name[0]) return false;
+    if (!((name[0] >= 'a' && name[0] <= 'z') || (name[0] >= 'A' && name[0] <= 'Z'))) return false;
+    for (const char* p = name + 1; *p; p++) {
+        char c = *p;
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '_')) return false;
+    }
+    return strlen(name) < PAD_BINDING_NAME_MAX_LEN;
+}
+
 static void init_button_defaults(ScreenButtonConfig* btn) {
     memset(btn, 0, sizeof(ScreenButtonConfig));
     btn->col_span = 1;
@@ -117,24 +116,59 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     strlcpy(btn->bg_color, "#333333", CONFIG_COLOR_MAX_LEN);
     strlcpy(btn->fg_color, "#FFFFFF", CONFIG_COLOR_MAX_LEN);
     strlcpy(btn->border_color, "#000000", CONFIG_COLOR_MAX_LEN);
-    btn->bg_color_default = 0x333333;
-    btn->fg_color_default = 0xFFFFFF;
-    btn->border_color_default = 0x000000;
-    btn->border_width_px = 0;
-    btn->corner_radius_px = 8;
+    strlcpy(btn->border_width, "0", CONFIG_BINDABLE_SHORT_LEN);
+    strlcpy(btn->corner_radius, "8", CONFIG_BINDABLE_SHORT_LEN);
 }
 
-// Parse a color field from JSON into a string (binding or hex color).
-// If the JSON value is an integer, convert it to "#RRGGBB" string.
-static void parse_color_field(JsonVariant v, char* out, size_t out_len, const char* default_hex) {
+static void parse_ui_offset_field(JsonVariant v, int16_t* out_x, int16_t* out_y) {
+    *out_x = 0;
+    *out_y = 0;
+    if (v.isNull() || !v.is<const char*>()) return;
+
+    const char* raw = v.as<const char*>();
+    if (!raw || !raw[0]) return;
+
+    char buf[32];
+    strlcpy(buf, raw, sizeof(buf));
+
+    char* semi = strchr(buf, ';');
+    char* x_part = buf;
+    char* y_part = nullptr;
+    if (semi) {
+        *semi = '\0';
+        y_part = semi + 1;
+    }
+
+    auto parse_int_part = [](char* s, int16_t* out_val) {
+        if (!s) return;
+        while (*s && isspace((unsigned char)*s)) s++;
+        if (!*s) return;
+        char* end = nullptr;
+        long val = strtol(s, &end, 10);
+        if (end == s) return;
+        *out_val = (int16_t)val;
+    };
+
+    parse_int_part(x_part, out_x);
+    parse_int_part(y_part, out_y);
+}
+
+// Parse a bindable field from JSON into a string.
+// For colors (is_color=true): integers → "#RRGGBB", strings stored as-is.
+// For numbers (is_color=false): integers → decimal string, strings stored as-is.
+static void parse_bindable_field(JsonVariant v, char* out, size_t out_len, const char* default_str, bool is_color = true) {
     if (v.isNull()) {
-        strlcpy(out, default_hex, out_len);
+        strlcpy(out, default_str, out_len);
         return;
     }
     if (v.is<unsigned long>() || v.is<long>()) {
-        // Integer → convert to hex string
-        uint32_t val = (uint32_t)v.as<unsigned long>();
-        snprintf(out, out_len, "#%06X", val & 0xFFFFFF);
+        if (is_color) {
+            uint32_t val = (uint32_t)v.as<unsigned long>();
+            snprintf(out, out_len, "#%06X", val & 0xFFFFFF);
+        } else {
+            long val = v.as<long>();
+            snprintf(out, out_len, "%ld", val);
+        }
         return;
     }
     if (v.is<const char*>()) {
@@ -144,15 +178,7 @@ static void parse_color_field(JsonVariant v, char* out, size_t out_len, const ch
             return;
         }
     }
-    strlcpy(out, default_hex, out_len);
-}
-
-// Parse a static color string (hex only) to uint32_t.
-// Returns default_val if the string is empty, null, or a binding template.
-static uint32_t parse_static_color(const char* s, uint32_t default_val) {
-    if (!s || !s[0] || s[0] == '[') return default_val;
-    uint32_t val;
-    return parse_hex_color(s, &val) ? val : default_val;
+    strlcpy(out, default_str, out_len);
 }
 
 // Parse a typed action object: { "type": "screen", "target": "pad_1" }
@@ -201,15 +227,13 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
 
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
+    parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 
-    parse_color_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN, "#333333");
-    parse_color_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN, "#FFFFFF");
-    parse_color_field(obj["border_color"], btn->border_color, CONFIG_COLOR_MAX_LEN, "#000000");
-    btn->bg_color_default = parse_color(obj["bg_color_default"], parse_static_color(btn->bg_color, 0x333333));
-    btn->fg_color_default = parse_color(obj["fg_color_default"], parse_static_color(btn->fg_color, 0xFFFFFF));
-    btn->border_color_default = parse_color(obj["border_color_default"], parse_static_color(btn->border_color, 0x000000));
-    btn->border_width_px = obj["border_width"] | (uint16_t)0;
-    btn->corner_radius_px = obj["corner_radius"] | (uint16_t)8;
+    parse_bindable_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN, "#333333");
+    parse_bindable_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN, "#FFFFFF");
+    parse_bindable_field(obj["border_color"], btn->border_color, CONFIG_COLOR_MAX_LEN, "#000000");
+    parse_bindable_field(obj["border_width"], btn->border_width, CONFIG_BINDABLE_SHORT_LEN, "0", false);
+    parse_bindable_field(obj["corner_radius"], btn->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "8", false);
 
     // Typed actions (with legacy flat key fallback)
     parse_action(obj["action"], &btn->action, "action_screen", obj);
@@ -225,9 +249,12 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     // Widget type (bar_chart, gauge, etc.)
     const char* wtype = obj["widget_type"] | "";
     strlcpy(btn->widget.type, wtype, CONFIG_WIDGET_TYPE_MAX_LEN);
-    strlcpy(btn->widget.data_binding, obj["widget_data_binding"] | "", CONFIG_LABEL_MAX_LEN);
-    strlcpy(btn->widget.data_binding_2, obj["widget_data_binding_2"] | "", CONFIG_LABEL_MAX_LEN);
-    strlcpy(btn->widget.data_binding_3, obj["widget_data_binding_3"] | "", CONFIG_LABEL_MAX_LEN);
+    // Data bindings: data_binding[0] from "widget_data_binding",
+    // data_binding[1..3] from "widget_data_binding_2..4"
+    strlcpy(btn->widget.data_binding[0], obj["widget_data_binding"] | "", CONFIG_LABEL_MAX_LEN);
+    strlcpy(btn->widget.data_binding[1], obj["widget_data_binding_2"] | "", CONFIG_LABEL_MAX_LEN);
+    strlcpy(btn->widget.data_binding[2], obj["widget_data_binding_3"] | "", CONFIG_LABEL_MAX_LEN);
+    strlcpy(btn->widget.data_binding[3], obj["widget_data_binding_4"] | "", CONFIG_LABEL_MAX_LEN);
     memset(btn->widget.data, 0, WIDGET_CONFIG_MAX_BYTES);
 #if HAS_DISPLAY
     if (wtype[0]) {
@@ -374,8 +401,33 @@ static bool pad_config_load_from_flash(uint8_t page, PadPageConfig* out) {
     out->cols = doc["cols"] | (uint8_t)3;
     out->rows = doc["rows"] | (uint8_t)3;
     strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
-    parse_color_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN, "#000000");
-    out->bg_color_default = parse_color(doc["bg_color_default"], parse_static_color(out->bg_color, 0x000000));
+    parse_bindable_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN, "#000000");
+
+    // Parse named page-level bindings: { "bindings": { "name": "template", ... } }
+    out->binding_count = 0;
+    JsonObject bindings_obj = doc["bindings"];
+    if (!bindings_obj.isNull()) {
+        for (JsonPair kv : bindings_obj) {
+            if (out->binding_count >= PAD_MAX_BINDINGS) {
+                LOGW(TAG, "Page %u: max %d bindings reached, skipping rest", page, PAD_MAX_BINDINGS);
+                break;
+            }
+            const char* name = kv.key().c_str();
+            const char* value = kv.value().as<const char*>();
+            if (!name || !value) continue;
+            if (!is_valid_binding_name(name)) {
+                LOGW(TAG, "Page %u: skipping invalid binding name '%s'", page, name);
+                continue;
+            }
+            PadBinding& b = out->bindings[out->binding_count];
+            strlcpy(b.name, name, PAD_BINDING_NAME_MAX_LEN);
+            strlcpy(b.value, value, CONFIG_LABEL_MAX_LEN);
+            out->binding_count++;
+        }
+        if (out->binding_count > 0) {
+            LOGI(TAG, "Page %u: %u named bindings loaded", page, out->binding_count);
+        }
+    }
 
     if (out->cols < 1) out->cols = 1;
     if (out->cols > MAX_GRID_COLS) out->cols = MAX_GRID_COLS;

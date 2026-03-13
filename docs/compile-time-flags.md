@@ -242,6 +242,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_screen.h
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
+  - src/app/pad_binding.cpp
+  - src/app/pad_binding.h
   - src/app/pad_config.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
@@ -294,6 +296,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_sub_store.h
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
+  - src/app/pad_binding.cpp
+  - src/app/pad_binding.h
   - src/app/screens/pad_screen.cpp
   - src/app/sensors/bme280_sensor.cpp
   - src/app/sensors/bme280_sensor.h
@@ -303,7 +307,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/sensor_manager.cpp
   - src/app/sensors/sensor_manager.h
   - src/app/web_portal_pad.cpp
+  - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
+  - src/app/widgets/widget.h
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp
