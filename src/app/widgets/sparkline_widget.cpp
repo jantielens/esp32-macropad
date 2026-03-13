@@ -790,7 +790,7 @@ static bool sparkline_get_stream_params(const WidgetConfig* wcfg,
                                         uint8_t* slot_count,
                                         const char** out_binding) {
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
-    if (stream_index >= MAX_WIDGET_BINDINGS) return false;
+    if (stream_index >= MAX_SPARKLINE_LINES) return false;
     const char* binding = wcfg->data_binding[stream_index];
     if (!binding || !binding[0]) return false;
     if (window_secs) *window_secs = cfg->window_secs;

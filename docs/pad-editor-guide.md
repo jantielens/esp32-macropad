@@ -243,24 +243,29 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 
 | Setting | Description |
 |---------|-------------|
-| **Data Binding (outer ring)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temperature]`, `[time:%S]`) |
-| **Data Binding (middle ring)** | Optional — adds a concentric middle ring with its own data source |
-| **Data Binding (inner ring)** | Optional — adds a concentric inner ring in the third slot. If the middle ring is empty, the inner ring still renders with a visual gap |
-| **Start Label (outer ring)** | Optional text or binding shown at the start of the outer ring. Uses the outer ring color and the same font size as the top/bottom labels |
-| **Start Label (middle ring)** | Optional text or binding shown at the start of the middle ring. Uses the middle ring color |
-| **Start Label (inner ring)** | Optional text or binding shown at the start of the inner ring. Uses the inner ring color |
+| **Data Binding (slot 1 / ring 1)** | Primary binding template for the outer ring (for example `[mqtt:sensor/temperature]` or `[time:%S]`) |
+| **Data Binding (slot 2 / ring 2 or pair-1 negative)** | Optional. In normal mode this creates a second ring. In Dual Binding Pair 1 mode it becomes the negative direction for slot 1's ring |
+| **Data Binding (slot 3 / ring 3 or pair-2 positive)** | Optional. In normal mode this creates a third ring. In Dual Binding Pair 2 mode it becomes the positive direction for the next combined ring |
+| **Data Binding (slot 4 / ring 4 or pair-2 negative)** | Optional. In normal mode this creates a fourth ring. In Dual Binding Pair 2 mode it becomes the negative direction for slot 3's ring |
+| **Start Label (slot 1)** | Optional text or binding shown at the start of slot 1's ring. Uses that ring's arc color and the same font size as the top/bottom labels |
+| **Start Label (slot 2)** | Optional text or binding for slot 2. In dual mode, slot 2 still has its own color but shares the same physical ring as slot 1 |
+| **Start Label (slot 3)** | Optional text or binding for slot 3 |
+| **Start Label (slot 4)** | Optional text or binding for slot 4 when it renders as its own ring |
 | **Min / Max** | The value range. The arc is empty at min and full at max |
 | **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
 | **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
-| **Zero centered** | Arc fills from the zero point instead of the start edge. Negative values grow one direction, positive values grow the other. The zero point is derived from where 0 falls in the min/max range |
+| **Zero-Centered** | Arc fills from the zero point — negative values grow left, positive grow right. Only applicable to single mode rings. |
+| **Dual Binding Pair 1** | Combines slots 1 and 2 into one ring: slot 1 fills the positive direction, slot 2 fills the negative direction |
+| **Dual Binding Pair 2** | Combines slots 3 and 4 into one ring using the same positive/negative split |
 | **Show needle** | Display a line from the center to the current value position on the arc |
 | **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
 | **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
 | **Needle Width** | Line width in pixels (0 = hidden, max 10) |
 | **Tick Width** | Tick line width in pixels (1–5) |
-| **Arc Color** | Fill color of the outer ring arc. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
-| **Arc Color 2** | Fill color of the middle ring arc (shown when middle ring is active). Default: blue (`#2196F3`) |
-| **Arc Color 3** | Fill color of the inner ring arc (shown when inner ring is active). Default: purple (`#9C27B0`) |
+| **Arc Color** | Fill color for slot 1. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
+| **Arc Color 2** | Fill color for slot 2, or the negative half of Dual Binding Pair 1. Default: blue (`#2196F3`) |
+| **Arc Color 3** | Fill color for slot 3, or the positive half of Dual Binding Pair 2. Default: purple (`#9C27B0`) |
+| **Arc Color 4** | Fill color for slot 4, or the negative half of Dual Binding Pair 2. Default: orange (`#FF9800`) |
 | **Track Color** | Color of the unfilled arc background. Supports binding expressions for dynamic color |
 | **Needle Color** | Color of the needle line. Supports binding expressions for dynamic color |
 | **Tick Color** | Color of the tick marks. Supports binding expressions for dynamic color |
@@ -269,7 +274,20 @@ Each ring has its own arc color field, so rings can be independently colored or 
 
 The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
 
-**Multi-ring gauges** — fill in the middle and/or inner ring data bindings to add concentric rings (Apple Health ring style). All rings share the same min/max, arc degrees, and start angle, but each ring has its own arc color and optional start label. The needle is shown on the outer ring only; tick marks are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
+**Multi-ring gauges** — fill in slots 2, 3, and 4 to add up to four concentric rings (Apple Health ring style). All active rings share the same min/max, arc degrees, and start angle, but each slot has its own arc color and optional start label. The needle is shown on the outermost active gauge ring only; tick marks are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
+
+**Dual binding gauges** — enable Dual Binding Pair 1 and/or Pair 2 to collapse slot pairs into shared rings. In a dual pair, the first slot fills from zero toward the positive direction and the second slot fills from zero toward the negative direction. If the partner binding is empty or invalid, it is treated as `0`. Pair 1 also drives the needle using the signed difference `slot1 - slot2`.
+
+**Power balance example** (house vs solar vs grid, in kW):
+- Ring 1 data binding: house consumption (for example `[mqtt:home/house;power_kw]`)
+- Ring 2 data binding: solar production (for example `[mqtt:home/solar;power_kw]`)
+- Ring 3 data binding: grid power (for example `[mqtt:home/grid;power_kw]`) where positive = import, negative = injection
+- Dual Binding Ring 1 and 2: enabled
+- Min / Max: `-3` / `3`
+- Zero-Centered: enabled
+- Show needle: disabled
+
+This visualization shows system balance at a glance: the outer combined ring contrasts house load against solar production, while the inner ring shows resulting grid exchange. Mental model: house load + solar (negative contribution on ring 2) should align with grid power on ring 3.
 
 **Zero centered example** (grid power, -3 kW to +3 kW):
 - Data binding: `[mqtt:grid/power;$.value]`, Min: -3, Max: 3

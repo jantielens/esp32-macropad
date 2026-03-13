@@ -54,8 +54,8 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define CONFIG_COLOR_MAX_LEN            192
 #define CONFIG_BINDABLE_SHORT_LEN       64
 #define CONFIG_WIDGET_TYPE_MAX_LEN     16
-#define MAX_WIDGET_BINDINGS             3
-#define WIDGET_CONFIG_MAX_BYTES      1024
+#define MAX_WIDGET_BINDINGS             4
+#define WIDGET_CONFIG_MAX_BYTES      1536
 
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
@@ -109,7 +109,7 @@ struct ButtonAction {
 // Widget type-specific config blob (parsed by widget implementations)
 struct WidgetConfig {
     char type[CONFIG_WIDGET_TYPE_MAX_LEN];     // "" = normal button (default)
-    char data_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN]; // Binding templates (0=primary, 1/2=extra)
+    char data_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN]; // Binding templates (0=primary, 1-3=extra)
     uint8_t data[WIDGET_CONFIG_MAX_BYTES];     // type-specific config, opaque to pad_config
 };
 

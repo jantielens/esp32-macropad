@@ -34,7 +34,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI, tick, getStreamParams function pointers)
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
   - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color, binding-driven)
-  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, up to 3 concentric rings, binding-driven)
+  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, up to 4 slots with optional dual-binding pairs, binding-driven)
   - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale, time-windowed display, bindable line colors, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry, per-marker min/max dots with labels, current-value dot, up to 3 reference lines)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Data Stream Registry**: Background data collection for history-based widgets (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
@@ -267,7 +267,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/widgets/widget.h` - Widget type interface (WidgetType struct with function pointers: parseConfig, createUI, update, destroyUI, tick, getStreamParams)
 - `src/app/widgets/widget.cpp` - Widget type registry and lookup
 - `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (bindable bar color, MQTT data binding)
-- `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, per-ring bindable arc colors, up to 3 concentric rings, binding-driven)
+- `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, per-ring bindable arc colors, up to 4 slots with optional dual-binding pairs, binding-driven)
 - `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, up to 3 overlaid lines, reads from data stream registry, auto-scale, bindable line colors, per-marker min/max dots with labels and color overrides, current-value dot, up to 3 reference lines with color and pattern)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper

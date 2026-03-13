@@ -250,10 +250,11 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     const char* wtype = obj["widget_type"] | "";
     strlcpy(btn->widget.type, wtype, CONFIG_WIDGET_TYPE_MAX_LEN);
     // Data bindings: data_binding[0] from "widget_data_binding",
-    // data_binding[1] from "widget_data_binding_2", data_binding[2] from "widget_data_binding_3"
+    // data_binding[1..3] from "widget_data_binding_2..4"
     strlcpy(btn->widget.data_binding[0], obj["widget_data_binding"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->widget.data_binding[1], obj["widget_data_binding_2"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->widget.data_binding[2], obj["widget_data_binding_3"] | "", CONFIG_LABEL_MAX_LEN);
+    strlcpy(btn->widget.data_binding[3], obj["widget_data_binding_4"] | "", CONFIG_LABEL_MAX_LEN);
     memset(btn->widget.data, 0, WIDGET_CONFIG_MAX_BYTES);
 #if HAS_DISPLAY
     if (wtype[0]) {

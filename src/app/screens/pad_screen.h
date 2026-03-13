@@ -86,9 +86,9 @@ struct ButtonTile {
     const WidgetType* widget_type;
     WidgetConfig widget_cfg;   // Copy of config (needed for update calls)
     WidgetState widget_state;
-    // Widget data binding templates (primary + optional middle/inner ring for gauge)
+    // Widget data binding templates (primary + up to 3 extra slots)
     char widget_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN];
-    char widget_last[BINDING_TEMPLATE_MAX_LEN * 3 + 4]; // Last resolved combined value (dedup)
+    char widget_last[BINDING_TEMPLATE_MAX_LEN * MAX_WIDGET_BINDINGS + MAX_WIDGET_BINDINGS + 1]; // Last resolved combined value (dedup)
     lv_obj_t* tap_overlay;    // Semi-transparent overlay shown briefly on tap
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)

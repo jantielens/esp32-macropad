@@ -268,48 +268,56 @@
                     <summary>Gauge Settings</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding">Data Binding (outer ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-data-binding">Ring 1 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
                                 
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-start-label">Start Label (outer ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-start-label">Ring 1 label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-start-label" maxlength="63" placeholder="Optional text or [binding]">
                             </div>
-                            <small>Rendered at the start of the outer ring using the ring color</small>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding-2">Data Binding (middle ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-data-binding-2">Ring 2 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
-                                <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-2" maxlength="191" placeholder="Optional — leave empty for single ring">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-2" maxlength="191" placeholder="Optional — used as negative side when dual pair 1 is enabled">
                                 
                             </div>
-                            <small>Adds a concentric middle ring sharing the same settings</small>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-start-label-2">Start Label (middle ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-start-label-2">Ring 2 label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-start-label-2" maxlength="63" placeholder="Optional text or [binding]">
                             </div>
-                            <small>Rendered at the start of the middle ring using the ring color</small>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding-3">Data Binding (inner ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-data-binding-3">Ring 3 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
-                                <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-3" maxlength="191" placeholder="Optional — leave empty for single or double ring">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-3" maxlength="191" placeholder="Optional — primary for pair 2 when enabled">
                                 
                             </div>
-                            <small>Adds a concentric inner ring in the third slot; leaving the middle ring empty keeps a visual gap</small>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-start-label-3">Start Label (inner ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-start-label-3">Ring 3 label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-start-label-3" maxlength="63" placeholder="Optional text or [binding]">
                             </div>
-                            <small>Rendered at the start of the inner ring using the ring color</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-data-binding-4">Ring 4 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-4" maxlength="191" placeholder="Optional — used as negative side when dual pair 2 is enabled">
+
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-start-label-4">Ring 4 label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-start-label-4" maxlength="63" placeholder="Optional text or [binding]">
+                            </div>
                         </div>
 
                         <div style="display:flex; gap:8px;">
@@ -337,8 +345,16 @@
                         </div>
 
                         <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-gauge-zero-centered"> Zero centered</label>
-                            <small>Arc fills from the zero point — negative values grow left, positive grow right</small>
+                            <label><input type="checkbox" id="pad-edit-gauge-zero-centered"> Zero-Centered</label>
+                            <small>Arc fills from the zero point — negative values grow left, positive grow right. Only applicable to single mode rings.</small>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-gauge-dual-binding-pair-1"> Dual Binding Ring 1 and 2</label>
+                            <small>Combines ring 1 and 2 into one ring. Ring 2 maps to negative values, so set a negative minimum value accordingly.</small>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-gauge-dual-binding-pair-2"> Dual Binding Ring 3 and 4</label>
+                            <small>Combines ring 3 and 4 into one ring. Ring 4 maps to negative values, so set a negative minimum value accordingly.</small>
                         </div>
                         <div class="form-group">
                             <label><input type="checkbox" id="pad-edit-gauge-show-needle" checked> Show needle</label>
@@ -356,6 +372,10 @@
                             <div class="form-group">
                                 <label for="pad-edit-gauge-arc-color-3">Arc Color 3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-3" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-arc-color-4">Arc Color 4 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-4" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
                             </div>
                         </div>
                         <small>Use an <code>[expr:threshold(…)]</code> binding for color-by-value</small>

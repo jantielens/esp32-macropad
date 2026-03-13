@@ -3,8 +3,7 @@ name: sanitycheck
 description: Pre-commit sanity check — dead code, comments, KISS, DRY, docs, architecture
 ---
 
-Review all changes in scope and report findings for each category below.
-Scope: if on a feature branch, review the full branch diff against main (committed + uncommitted). If on main, review uncommitted changes only.
+Review all changes in scope and report findings for each category below. If no scope is provided, review all uncommitted changes in the current branch.
 For each category, list concrete findings with file paths and line numbers — or state "No issues found."
 Do NOT fix anything — only report.
 
@@ -90,3 +89,15 @@ Recommended to fix:
 ...
 Recommended to skip:
 - KISS03: (Super short description & why it should be skipped.)
+
+Checklist (to copy/paste as a reply):
+````
+Fix: 
+- DEAD01
+- DEAD02
+- COMMENT01
+- KISS01
+- DRY01
+- DOC01
+- ARCH01
+````
