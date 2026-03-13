@@ -24,6 +24,9 @@
 #include "screens/fps_screen.cpp"
 
 #include "screens/pad_screen.cpp"
+#include "screens/pad_tile_builder.cpp"
+#include "screens/pad_screen_events.cpp"
+#include "screens/pad_screen_poll.cpp"
 
 #endif // HAS_DISPLAY
 
