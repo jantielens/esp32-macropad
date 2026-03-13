@@ -14,6 +14,7 @@
 #include <esp_partition.h>
 
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 
 #define TAG "PadCfg"
@@ -41,7 +42,7 @@ static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
 // ============================================================================
 // Format: "key:value;key:value;..."
 // Keys: font (12/14/18/24/32/36), align (left/center/right),
-//        y (int offset), mode (clip/scroll/dot/wrap), color (#RRGGBB)
+//        x/y (int offset), mode (clip/scroll/dot/wrap), color (#RRGGBB)
 void label_style_parse(const char* dsl, LabelStyle* out) {
     memset(out, 0, sizeof(LabelStyle));
     if (!dsl || !dsl[0]) return;
@@ -70,6 +71,11 @@ void label_style_parse(const char* dsl, LabelStyle* out) {
                 if (strcmp(val, "left") == 0)        out->align = LABEL_ALIGN_LEFT;
                 else if (strcmp(val, "right") == 0)  out->align = LABEL_ALIGN_RIGHT;
                 else if (strcmp(val, "center") == 0) out->align = LABEL_ALIGN_CENTER;
+            } else if (strcmp(key, "x") == 0) {
+                int x = atoi(val);
+                if (x < -999) x = -999;
+                if (x > 999)  x = 999;
+                out->x_offset = (int16_t)x;
             } else if (strcmp(key, "y") == 0) {
                 int y = atoi(val);
                 if (y < -999) y = -999;
@@ -112,6 +118,39 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     strlcpy(btn->border_color, "#000000", CONFIG_COLOR_MAX_LEN);
     strlcpy(btn->border_width, "0", CONFIG_BINDABLE_SHORT_LEN);
     strlcpy(btn->corner_radius, "8", CONFIG_BINDABLE_SHORT_LEN);
+}
+
+static void parse_ui_offset_field(JsonVariant v, int16_t* out_x, int16_t* out_y) {
+    *out_x = 0;
+    *out_y = 0;
+    if (v.isNull() || !v.is<const char*>()) return;
+
+    const char* raw = v.as<const char*>();
+    if (!raw || !raw[0]) return;
+
+    char buf[32];
+    strlcpy(buf, raw, sizeof(buf));
+
+    char* semi = strchr(buf, ';');
+    char* x_part = buf;
+    char* y_part = nullptr;
+    if (semi) {
+        *semi = '\0';
+        y_part = semi + 1;
+    }
+
+    auto parse_int_part = [](char* s, int16_t* out_val) {
+        if (!s) return;
+        while (*s && isspace((unsigned char)*s)) s++;
+        if (!*s) return;
+        char* end = nullptr;
+        long val = strtol(s, &end, 10);
+        if (end == s) return;
+        *out_val = (int16_t)val;
+    };
+
+    parse_int_part(x_part, out_x);
+    parse_int_part(y_part, out_y);
 }
 
 // Parse a bindable field from JSON into a string.
@@ -188,6 +227,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
 
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
+    parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 
     parse_bindable_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN, "#333333");
     parse_bindable_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN, "#FFFFFF");

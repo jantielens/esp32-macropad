@@ -2345,6 +2345,7 @@ function padDialogOpen(col, row) {
 
     document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 0;
     document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
+    document.getElementById('pad-edit-ui-offset').value = btn.ui_offset || '';
 
     // Populate col_span / row_span dropdowns based on available space
     const maxCs = padState.cols - col;
@@ -2530,6 +2531,8 @@ function padDialogOk() {
     btn.border_width = bw || '0';
     const cr = document.getElementById('pad-edit-corner-radius').value.trim();
     btn.corner_radius = cr || '8';
+    const uiOffset = document.getElementById('pad-edit-ui-offset').value.trim();
+    if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
 
     // Tap action
     const tapType = document.getElementById('pad-edit-action-type').value;

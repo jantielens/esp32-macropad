@@ -287,6 +287,8 @@ void PadScreen::buildTiles() {
         const ScreenButtonConfig& bcfg = cfg->buttons[i];
         const PadRect& r = rects[i];
         ButtonTile& tile = tiles[i];
+        const int16_t ui_ofs_x = bcfg.ui_offset_x;
+        const int16_t ui_ofs_y = bcfg.ui_offset_y;
 
         // Create tile container
         lv_obj_t* obj = lv_obj_create(container);
@@ -319,7 +321,9 @@ void PadScreen::buildTiles() {
             lv_obj_set_width(lbl_top, r.w - 8);
             pad_apply_long_mode(lbl_top, bcfg.style_top);
             lv_label_set_text(lbl_top, bcfg.label_top);
-            lv_obj_align(lbl_top, LV_ALIGN_TOP_MID, 0, bcfg.style_top.y_offset);
+            lv_obj_align(lbl_top, LV_ALIGN_TOP_MID,
+                         ui_ofs_x + bcfg.style_top.x_offset,
+                         bcfg.style_top.y_offset + ui_ofs_y);
             lv_obj_set_style_text_align(lbl_top, pad_resolve_align(bcfg.style_top), 0);
             lv_obj_clear_flag(lbl_top, LV_OBJ_FLAG_CLICKABLE);
         }
@@ -333,7 +337,9 @@ void PadScreen::buildTiles() {
             lv_obj_set_width(lbl_center, r.w - 8);
             pad_apply_long_mode(lbl_center, bcfg.style_center);
             lv_label_set_text(lbl_center, bcfg.label_center);
-            lv_obj_align(lbl_center, LV_ALIGN_CENTER, 0, bcfg.style_center.y_offset);
+            lv_obj_align(lbl_center, LV_ALIGN_CENTER,
+                         ui_ofs_x + bcfg.style_center.x_offset,
+                         bcfg.style_center.y_offset + ui_ofs_y);
             lv_obj_set_style_text_align(lbl_center, pad_resolve_align(bcfg.style_center), 0);
             lv_obj_clear_flag(lbl_center, LV_OBJ_FLAG_CLICKABLE);
         }
@@ -359,7 +365,7 @@ void PadScreen::buildTiles() {
                 const int16_t bot_h = bcfg.label_bottom[0] ?
                     lv_font_get_line_height(bot_font) : 0;
                 const int16_t y_ofs = (top_h - bot_h) / 2;
-                lv_obj_align(icon_img, LV_ALIGN_CENTER, 0, y_ofs);
+                lv_obj_align(icon_img, LV_ALIGN_CENTER, ui_ofs_x, y_ofs + ui_ofs_y);
 
                 lv_obj_clear_flag(icon_img, LV_OBJ_FLAG_CLICKABLE);
                 if (ref.kind == ICON_KIND_MONO) {
@@ -379,7 +385,9 @@ void PadScreen::buildTiles() {
             lv_obj_set_width(lbl_bottom, r.w - 8);
             pad_apply_long_mode(lbl_bottom, bcfg.style_bottom);
             lv_label_set_text(lbl_bottom, bcfg.label_bottom);
-            lv_obj_align(lbl_bottom, LV_ALIGN_BOTTOM_MID, 0, bcfg.style_bottom.y_offset);
+            lv_obj_align(lbl_bottom, LV_ALIGN_BOTTOM_MID,
+                         ui_ofs_x + bcfg.style_bottom.x_offset,
+                         bcfg.style_bottom.y_offset + ui_ofs_y);
             lv_obj_set_style_text_align(lbl_bottom, pad_resolve_align(bcfg.style_bottom), 0);
             lv_obj_clear_flag(lbl_bottom, LV_OBJ_FLAG_CLICKABLE);
         }
@@ -406,7 +414,9 @@ void PadScreen::buildTiles() {
             lv_obj_set_width(tile.label_center, r.w - 8);
             pad_apply_long_mode(tile.label_center, bcfg.style_center);
             lv_label_set_text(tile.label_center, "");
-            lv_obj_align(tile.label_center, LV_ALIGN_CENTER, 0, bcfg.style_center.y_offset);
+            lv_obj_align(tile.label_center, LV_ALIGN_CENTER,
+                         ui_ofs_x + bcfg.style_center.x_offset,
+                         bcfg.style_center.y_offset + ui_ofs_y);
             lv_obj_set_style_text_align(tile.label_center, pad_resolve_align(bcfg.style_center), 0);
             lv_obj_clear_flag(tile.label_center, LV_OBJ_FLAG_CLICKABLE);
         }

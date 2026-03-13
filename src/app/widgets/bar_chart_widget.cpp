@@ -89,6 +89,8 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int16_t label_h = lv_font_get_line_height(scale->font_small) + 2;
     int16_t top_h = has_top ? label_h : 0;
     int16_t bot_h = has_bot ? label_h : 0;
+    const int16_t ui_ofs_x = btn->ui_offset_x;
+    const int16_t ui_ofs_y = btn->ui_offset_y;
     // Use actual icon image height if available (PNG is pre-sized by JS)
     int16_t icon_h = 0;
     if (icon_img) {
@@ -101,7 +103,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // Position icon right below the top label
     if (icon_img) {
-        lv_obj_align(icon_img, LV_ALIGN_TOP_MID, 0, top_h);
+        lv_obj_align(icon_img, LV_ALIGN_TOP_MID, ui_ofs_x, top_h + ui_ofs_y);
     }
 
     // Ask LVGL for the actual content dimensions (accounts for padding + border)
@@ -133,13 +135,15 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (bar_w < 4) bar_w = 4;
     }
 
+    bar_top += ui_ofs_y;
+
     LOGD(TAG, "Layout: rect=%dx%d content_h=%d top_h=%d icon_h=%d gap=%d bar_top=%d bar_w=%d bar_h=%d bot_h=%d horiz=%d",
          rect->w, rect->h, content_h, top_h, icon_h, gap, bar_top, bar_w, bar_h, bot_h, cfg->horizontal);
 
     // Bar background — positioned from top so gap is guaranteed
     lv_obj_t* bar_bg = lv_obj_create(tile);
     lv_obj_set_size(bar_bg, bar_w, bar_h);
-    lv_obj_align(bar_bg, LV_ALIGN_TOP_MID, 0, bar_top);
+    lv_obj_align(bar_bg, LV_ALIGN_TOP_MID, ui_ofs_x, bar_top);
     lv_obj_set_style_bg_color(bar_bg, resolve_lv_color(cfg->bar_bg_color, 0x1A1A1A), 0);
     lv_obj_set_style_bg_opa(bar_bg, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(bar_bg, 4, 0);

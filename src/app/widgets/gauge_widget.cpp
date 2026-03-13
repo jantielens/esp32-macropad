@@ -457,6 +457,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int16_t arc_pixel_h = (int16_t)(y_span * radius);
     int16_t cx = content_w / 2 - (int16_t)((x_min + x_max) * radius / 2);
     int16_t cy = top_h + (avail_h - arc_pixel_h) / 2 - (int16_t)(y_min * radius);
+    cx += btn->ui_offset_x;
+    cy += btn->ui_offset_y;
 
     st->cx = cx;
     st->cy = cy;
@@ -599,17 +601,22 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 
     if (center_lbl) {
-        // Constrain label width to fit inside the innermost ring
-        int16_t inner_r = radius - ring_count * arc_width - (ring_count - 1) * ring_gap;
-        int16_t lbl_max_w = (int16_t)(inner_r * 1.4f); // ~70% of diameter
-        if (lbl_max_w > content_w - 8) lbl_max_w = content_w - 8;
-        if (lbl_max_w < 30) lbl_max_w = 30;
-        lv_obj_set_width(center_lbl, lbl_max_w);
+        // Disable center-label clipping for gauge tiles by giving the label a
+        // wide draw area. This keeps CLIP-mode labels rendering reliably even
+        // when center text is updated dynamically from bindings.
+        lv_obj_add_flag(tile, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        lv_obj_add_flag(center_lbl, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        int16_t lbl_draw_w = content_w * 3;
+        if (lbl_draw_w < 30) lbl_draw_w = 30;
+        lv_obj_set_width(center_lbl, lbl_draw_w);
         lv_obj_set_style_text_align(center_lbl, LV_TEXT_ALIGN_CENTER, 0);
-        int16_t lbl_y = real_icon ? (stack_top + icon_h + 2) : (cy - lbl_total_h / 2);
+        int16_t lbl_y = (real_icon ? (stack_top + icon_h + 2) : (cy - lbl_total_h / 2))
+                        + btn->style_center.y_offset;
         // Override PadScreen's LV_ALIGN_CENTER so LVGL won't revert
         // position when binding text triggers a layout update.
-        lv_obj_align(center_lbl, LV_ALIGN_TOP_LEFT, cx - lbl_max_w / 2, lbl_y);
+        // ui_offset_x/y are already absorbed into cx/cy; only add style offsets here.
+        lv_obj_align(center_lbl, LV_ALIGN_TOP_LEFT,
+                     cx - lbl_draw_w / 2 + btn->style_center.x_offset, lbl_y);
         lv_obj_move_foreground(center_lbl);
     }
 }

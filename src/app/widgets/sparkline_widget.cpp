@@ -235,6 +235,8 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int16_t label_h = lv_font_get_line_height(scale->font_small) + 2;
     int16_t top_h = has_top ? label_h : 0;
     int16_t bot_h = has_bot ? label_h : 0;
+    const int16_t ui_ofs_x = btn->ui_offset_x;
+    const int16_t ui_ofs_y = btn->ui_offset_y;
 
     int16_t icon_h = 0;
     if (icon_img) {
@@ -245,7 +247,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int16_t gap = (icon_img) ? 4 : 0;
 
     if (icon_img) {
-        lv_obj_align(icon_img, LV_ALIGN_TOP_MID, 0, top_h);
+        lv_obj_align(icon_img, LV_ALIGN_TOP_MID, ui_ofs_x, top_h + ui_ofs_y);
     }
 
     // Reserve margin for min/max labels above and below chart
@@ -262,6 +264,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int16_t chart_h = content_h - chart_top - bot_margin;
     if (chart_h < 8) chart_h = 8;
     int16_t chart_w = content_w;
+    chart_top += ui_ofs_y;
 
     st->cached_chart_w = chart_w;
     st->cached_chart_h = chart_h;
@@ -273,7 +276,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Create a container for the sparkline area (clips the lines)
     lv_obj_t* chart_area = lv_obj_create(tile);
     lv_obj_set_size(chart_area, chart_w, chart_h);
-    lv_obj_align(chart_area, LV_ALIGN_TOP_MID, 0, chart_top);
+    lv_obj_align(chart_area, LV_ALIGN_TOP_MID, ui_ofs_x, chart_top);
     lv_obj_set_style_bg_opa(chart_area, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(chart_area, 0, 0);
     lv_obj_set_style_pad_all(chart_area, 0, 0);

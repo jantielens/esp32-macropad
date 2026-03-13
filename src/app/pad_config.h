@@ -78,6 +78,7 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 
 struct LabelStyle {
     uint8_t font_size;     // 0 = auto (from scale tier), 12/14/18/24/32/36
+    int16_t x_offset;      // pixel nudge from default anchor (-999..+999)
     int16_t y_offset;      // pixel nudge from default anchor (-999..+999)
     uint8_t align;         // LABEL_ALIGN_* (0 = default/center)
     uint8_t long_mode;     // LABEL_MODE_* (0 = default/clip)
@@ -133,6 +134,8 @@ struct ScreenButtonConfig {
     // Icon reference
     char icon_id[CONFIG_ICON_ID_MAX_LEN];
     uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
+    int16_t ui_offset_x;                // Optional visual nudge X in px (+right, -left)
+    int16_t ui_offset_y;                // Optional visual nudge Y in px (+down, -up)
 
     // Visual styling — color fields are strings that may contain binding templates
     // e.g. "#FF0000" (static) or "[expr:[mqtt:t;.;%s]==\"ON\"?\"#00FF00\":\"#333333\"]" (dynamic)

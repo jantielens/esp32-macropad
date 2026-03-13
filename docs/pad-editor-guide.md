@@ -74,7 +74,8 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 |----------|--------|-------------|
 | `font` | `12`, `14`, `18`, `24`, `32`, `36` | Override the automatic font size |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
-| `y` | `-128` to `127` | Shift the label up (negative) or down (positive) in pixels |
+| `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
+| `y` | `-999` to `999` | Shift the label up (negative) or down (positive) in pixels |
 | `mode` | `clip`, `scroll`, `dot`, `wrap` | How to handle text that doesn't fit |
 | `color` | `#RGB` or `#RRGGBB` | Override the label's text color |
 
@@ -89,7 +90,7 @@ This renders a large left-aligned label that shows "..." when the text is too lo
 A few more examples:
 
 - `font:14;color:#FF0` — small yellow text
-- `y:-4;align:right` — right-aligned and nudged up 4 pixels
+- `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
 - `font:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
 
@@ -122,6 +123,8 @@ Each color field accepts either a static `#hex` value or a binding expression fo
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
 **Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons.
+
+**UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
 
 ### Button State (Conditional Visibility)
 
