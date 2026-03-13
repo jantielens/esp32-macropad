@@ -94,6 +94,7 @@ JS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.js" -not -name "_*.js" -type f 
 HEADER_TEMPLATE=""
 NAV_TEMPLATE=""
 FOOTER_TEMPLATE=""
+BINDING_HELP_TEMPLATE=""
 
 if [ -f "$WEB_DIR/_header.html" ]; then
     HEADER_TEMPLATE=$(cat "$WEB_DIR/_header.html")
@@ -105,6 +106,10 @@ fi
 
 if [ -f "$WEB_DIR/_footer.html" ]; then
     FOOTER_TEMPLATE=$(cat "$WEB_DIR/_footer.html")
+fi
+
+if [ -f "$WEB_DIR/_binding_help.html" ]; then
+    BINDING_HELP_TEMPLATE=$(cat "$WEB_DIR/_binding_help.html")
 fi
 
 if [ ${#HTML_FILES[@]} -eq 0 ] && [ ${#CSS_FILES[@]} -eq 0 ] && [ ${#JS_FILES[@]} -eq 0 ]; then
@@ -199,6 +204,7 @@ import sys
 header_template = '''$HEADER_TEMPLATE'''
 nav_template = '''$NAV_TEMPLATE'''
 footer_template = '''$FOOTER_TEMPLATE'''
+binding_help_template = '''$BINDING_HELP_TEMPLATE'''
 
 with open('$html_file', 'r') as f:
     html = f.read()
@@ -207,6 +213,7 @@ with open('$html_file', 'r') as f:
     html = html.replace('{{HEADER}}', header_template)
     html = html.replace('{{NAV}}', nav_template)
     html = html.replace('{{FOOTER}}', footer_template)
+    html = html.replace('{{BINDING_HELP}}', binding_help_template)
     
     # Project name substitution
     html = html.replace('{{PROJECT_NAME}}', '$PROJECT_NAME')

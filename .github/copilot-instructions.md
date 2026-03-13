@@ -74,7 +74,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `project_branding.h` - Project branding defines (`PROJECT_NAME`, `PROJECT_DISPLAY_NAME`) (auto-generated)
   - `config_manager.cpp/h` - NVS configuration storage
   - Multi-page architecture: Home, Network, Firmware
-  - Template system: `_header.html`, `_nav.html`, `_footer.html` for DRY
+  - Template system: `_header.html`, `_nav.html`, `_footer.html`, `_binding_help.html` for DRY
 - **Output**: Compiled binaries in `./build/<board-name>/` directories
 - **Board Targets**: Multi-board support via `FQBN_TARGETS` associative array in `config.sh`
   - Board name → FQBN mapping allows multiple board variants with same FQBN
@@ -141,7 +141,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution - they work from any 
 - **Pads** (`/pads.html`): Visual pad editor with button editor dialog (Full Mode only)
 - **Network** (`/network.html`): WiFi, device, and network configuration (both modes)
 - **Firmware** (`/firmware.html`): Online update (GitHub Releases), manual upload, and factory reset (Full Mode only)
-- Template fragments: `_header.html`, `_nav.html`, `_footer.html` used via `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}` placeholders
+- Template fragments: `_header.html`, `_nav.html`, `_footer.html`, `_binding_help.html` used via `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders
 - Build-time template replacement in `tools/minify-web-assets.sh`
 
 **Portal Modes**:
@@ -285,7 +285,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 
 ### Tools
 - `tools/minify-web-assets.sh` - Minifies and embeds web assets into `web_assets.h`
-  - Replaces `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}` placeholders in HTML files
+  - Replaces `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders in HTML files
   - Minifies CSS and JavaScript
   - Gzips all assets for efficient storage
   - Excludes template fragments (files starting with `_`)

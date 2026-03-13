@@ -1023,7 +1023,7 @@ DNS server redirects all requests to device IP in AP mode:
    ```
    
    This automatically:
-   - Replaces `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}` placeholders in HTML pages
+  - Replaces `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders in HTML pages
    - Minifies HTML (removes comments, collapses whitespace)
    - Minifies CSS using `csscompressor`
    - Minifies JavaScript using `rjsmin`

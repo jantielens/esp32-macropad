@@ -2165,8 +2165,73 @@ function padUpdateMixedBindingFont(input) {
 }
 
 /** Show the binding help overlay. */
-function showBindingHelp() {
-    document.getElementById('binding-help-overlay').style.display = 'flex';
+function showBindingHelp(section) {
+    const overlay = document.getElementById('binding-help-overlay');
+    if (!overlay) return;
+
+    overlay.style.display = 'flex';
+
+    const body = overlay.querySelector('.binding-docs-body');
+    const target = section ? overlay.querySelector(`[data-binding-section="${section}"]`) : null;
+    overlay.querySelectorAll('.binding-docs-section').forEach(sectionEl => {
+        sectionEl.classList.toggle('is-active', sectionEl === target);
+    });
+
+    requestAnimationFrame(() => {
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (body) {
+            body.scrollTop = 0;
+        }
+    });
+}
+
+function closeBindingHelp() {
+    const overlay = document.getElementById('binding-help-overlay');
+    if (!overlay) return;
+
+    overlay.style.display = 'none';
+    overlay.querySelectorAll('.binding-docs-section').forEach(sectionEl => {
+        sectionEl.classList.remove('is-active');
+    });
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const temp = document.createElement('textarea');
+    temp.value = text;
+    temp.setAttribute('readonly', '');
+    temp.style.position = 'absolute';
+    temp.style.left = '-9999px';
+    document.body.appendChild(temp);
+    temp.select();
+    document.execCommand('copy');
+    document.body.removeChild(temp);
+}
+
+function copyBindingExample(button) {
+    const example = button.closest('.binding-example');
+    const code = example ? example.querySelector('code') : null;
+    if (!code) return;
+
+    copyTextToClipboard(code.textContent.trim())
+        .then(() => {
+            const original = button.dataset.label || button.textContent;
+            button.dataset.label = original;
+            button.textContent = 'Copied';
+            button.classList.add('is-copied');
+            window.setTimeout(() => {
+                button.textContent = original;
+                button.classList.remove('is-copied');
+            }, 1200);
+        })
+        .catch(() => {
+            showMessage('Could not copy binding', 'error');
+        });
 }
 
 /** Show the label style help overlay. */

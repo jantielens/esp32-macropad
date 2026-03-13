@@ -1,0 +1,428 @@
+<div id="binding-help-overlay" class="reboot-overlay binding-docs-overlay" style="display:none;" onclick="if(event.target===this)closeBindingHelp()">
+    <div class="reboot-modal binding-docs-modal">
+        <div class="binding-docs-header">
+            <div>
+                <p class="binding-docs-kicker">Binding Reference</p>
+                <h3>Binding syntax</h3>
+                <p class="binding-docs-lead">Use bindings in labels, colors, widget inputs, and wake expressions. Static text around tokens is preserved.</p>
+            </div>
+            <button type="button" class="binding-docs-close" onclick="closeBindingHelp()" aria-label="Close binding help">&times;</button>
+        </div>
+
+        <div class="binding-docs-toolbar">
+            <div class="binding-docs-toc">
+                <a href="#binding-docs-overview" onclick="showBindingHelp('overview'); return false;">Overview</a>
+                <a href="#binding-docs-format" onclick="showBindingHelp('format'); return false;">Format</a>
+                <a href="#binding-docs-fallback" onclick="showBindingHelp('fallback'); return false;">Fallback</a>
+                <a href="#binding-docs-mqtt" onclick="showBindingHelp('mqtt'); return false;">MQTT</a>
+                <a href="#binding-docs-health" onclick="showBindingHelp('health'); return false;">Health</a>
+                <a href="#binding-docs-time" onclick="showBindingHelp('time'); return false;">Time</a>
+                <a href="#binding-docs-expr" onclick="showBindingHelp('expr'); return false;">Expr</a>
+                <a href="#binding-docs-pad" onclick="showBindingHelp('pad'); return false;">Pad</a>
+                <a href="#binding-docs-widget" onclick="showBindingHelp('widget'); return false;">Widgets</a>
+            </div>
+        </div>
+
+        <div class="binding-docs-body">
+
+            <section id="binding-docs-overview" class="binding-docs-section" data-binding-section="overview">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Common snippets</h4>
+                        <p>Start here for the patterns you use most often.</p>
+                    </div>
+                </div>
+                <div class="binding-example-grid binding-example-grid-compact">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">MQTT raw value</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:sensors/temp]</code></pre>
+                        <p>Subscribe to a topic and display the raw payload.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Formatted MQTT JSON</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:sensors/state;temperature;%.1fC]</code></pre>
+                        <p>Read a JSON field and format it inline.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Health metric</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[health:cpu]</code></pre>
+                        <p>Show a device metric like CPU, RSSI, or free heap.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Clock</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[time:%H:%M;Europe/Amsterdam]</code></pre>
+                        <p>Render local time with an Olson timezone.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Threshold color</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:threshold([mqtt:sensor;temp],"#16a34a",25,"#f59e0b",35,"#dc2626")]</code></pre>
+                        <p>Map a number to a color without nested ternaries.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Pad reuse</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[pad:power;%.0f W]</code></pre>
+                        <p>Reuse a page-level binding across multiple buttons.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Multiple bindings</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:solar;power;%.0f] / [mqtt:battery;soc;%.0f%%]</code></pre>
+                        <p>Combine several tokens in one label — static text between them is preserved.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-format" class="binding-docs-section" data-binding-section="format">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Format strings</h4>
+                        <p>The optional <code>format</code> parameter is a printf-style specifier. Embed units directly inside it.</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[scheme:…;%.2f unit]</code></pre>
+                </div>
+                <dl class="binding-docs-spec">
+                    <div><dt>%d</dt><dd>Integer — <code>42</code></dd></div>
+                    <div><dt>%f</dt><dd>Float, full precision — <code>3.141593</code></dd></div>
+                    <div><dt>%.1f</dt><dd>1 decimal place — <code>3.1</code></dd></div>
+                    <div><dt>%.2f</dt><dd>2 decimal places — <code>3.14</code></dd></div>
+                    <div><dt>%.0f</dt><dd>Rounded to integer — <code>3</code></dd></div>
+                    <div><dt>%05d</dt><dd>Zero-padded to 5 chars — <code>00042</code></dd></div>
+                    <div><dt>%s</dt><dd>String — pass-through</dd></div>
+                    <div><dt>%%</dt><dd>Literal percent sign — <code>%</code></dd></div>
+                </dl>
+                <p class="binding-docs-note">Supported by: <code>mqtt</code>, <code>health</code>, <code>expr</code>, <code>pad</code>. Not used with <code>time</code> (uses strftime syntax instead) or in widget data-binding fields (those need a raw number, not formatted text).</p>
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Temperature with unit</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:sensors/state;temperature;%.1f °C]</code></pre>
+                        <p>Unit embedded in the format — no suffix needed outside the token.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Integer with unit</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:grid/state;power;%d W]</code></pre>
+                        <p>Drop decimals from whole-number readings.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Percentage sign</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[health:cpu;%.0f%%]</code></pre>
+                        <p>Use <code>%%</code> in the format string to output a literal <code>%</code>.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Two decimal precision</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:energy;cost;%.2f €]</code></pre>
+                        <p>Use <code>%.2f</code> for currency or high-precision sensors.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Zero-padded counter</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[health:uptime;%05d s]</code></pre>
+                        <p>Fixed-width output so the label does not shift width.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Format after expression</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[mqtt:solar;power] / 1000;%.2f kW]</code></pre>
+                        <p>Format applies after the expression is evaluated.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-fallback" class="binding-docs-section" data-binding-section="fallback">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Fallback values</h4>
+                        <p>Override the default <code>---</code> placeholder when a binding has not resolved yet.</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[scheme:params|fallback]</code></pre>
+                </div>
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Numeric startup default</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:solar/power;watts|0]</code></pre>
+                        <p>Use <code>0</code> while MQTT is still connecting.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Color-safe fallback</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:light/color;hex|#f8fafc]</code></pre>
+                        <p>Use a valid color value instead of <code>---</code> for color-capable fields.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-mqtt" class="binding-docs-section" data-binding-section="mqtt">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>MQTT bindings</h4>
+                        <p>Subscribe to a topic, optionally extract a JSON path, and optionally format the result.</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[mqtt:topic;path;format]</code></pre>
+                </div>
+                <dl class="binding-docs-spec">
+                    <div>
+                        <dt>topic</dt>
+                        <dd>MQTT topic to subscribe to. Required.</dd>
+                    </div>
+                    <div>
+                        <dt>path</dt>
+                        <dd>JSON field to extract. Use <code>.</code> or leave it empty for the raw payload.</dd>
+                    </div>
+                    <div>
+                        <dt>format</dt>
+                        <dd>Printf-style output like <code>%d</code>, <code>%.1f</code>, or <code>%s</code>. Omit for raw text.</dd>
+                    </div>
+                </dl>
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Raw payload</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:sensors/temp]</code></pre>
+                        <p>Use when the topic already contains the exact value you want.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">JSON field with formatting</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:sensors/state;temperature;%.1fC]</code></pre>
+                        <p>Extract <code>temperature</code> from JSON and format as a single decimal.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Text around a binding</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>Power: [mqtt:grid;power;%d] W</code></pre>
+                        <p>Static prefix and suffix are preserved.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-health" class="binding-docs-section" data-binding-section="health">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Health bindings</h4>
+                        <p>Read device telemetry without MQTT.</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[health:key;format]</code></pre>
+                </div>
+                <p class="binding-docs-note">Common keys: <code>cpu</code>, <code>rssi</code>, <code>uptime</code>, <code>heap_free</code>, <code>heap_min</code>, <code>heap_largest</code>, <code>heap_internal</code>, <code>psram_free</code>, <code>psram_min</code>, <code>psram_largest</code>, <code>ip</code>, <code>hostname</code>.</p>
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">CPU with suffix</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>CPU: [health:cpu]%</code></pre>
+                        <p>Keep the unit outside the token if you do not need printf formatting.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Formatted heap</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[health:heap_free;%d B]</code></pre>
+                        <p>Format a raw numeric metric with a unit in one step.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-time" class="binding-docs-section" data-binding-section="time">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Time bindings</h4>
+                        <p>Render time with standard <code>strftime</code> tokens plus sub-second helpers.</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[time:format;timezone]</code></pre>
+                </div>
+                <p class="binding-docs-note">Supported extras: <code>%ms</code>, <code>%cs</code>, <code>%ds</code>, and standalone <code>%ums</code> for uptime milliseconds. Use Olson names like <code>Europe/Amsterdam</code> or a POSIX timezone string.</p>
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Local time</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[time:%H:%M;Europe/Amsterdam]</code></pre>
+                        <p>Show local wall clock time with automatic DST handling.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Sub-second clock</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[time:%H:%M:%S.%ms]</code></pre>
+                        <p>Useful for debug labels or fast expressions.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Uptime in milliseconds</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[time:%ums]</code></pre>
+                        <p>Works even before NTP has synced.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-expr" class="binding-docs-section" data-binding-section="expr">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Expression bindings</h4>
+                        <p>Combine MQTT, health, time, and pad bindings with arithmetic, comparisons, ternaries, and <code>threshold()</code>.</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[expr:expression;format]</code></pre>
+                </div>
+                <p class="binding-docs-note">Inner bindings resolve first. Use this for derived values, label text, visibility logic, and dynamic colors.</p>
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Unit conversion</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[mqtt:sensors/temp;value] * 9/5 + 32;%.1f]</code></pre>
+                        <p>Convert Celsius to Fahrenheit before formatting.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Conditional text</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[health:cpu] > 80 ? "High" : "Normal"]</code></pre>
+                        <p>Return strings directly from a condition.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Threshold color map</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:threshold([mqtt:sensor;temp],"#16a34a",25,"#f59e0b",35,"#dc2626")]</code></pre>
+                        <p>Better than nested ternaries for 3+ color zones.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Fast blinking alert</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[mqtt:energy/power] > 2.5 ? ([time:%ms] % 500 < 250 ? "#dc2626" : "#f8fafc") : "#0f172a"]</code></pre>
+                        <p>Flash a color only while a live threshold is exceeded.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-pad" class="binding-docs-section" data-binding-section="pad">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Pad bindings <span class="binding-docs-badge">Pads only</span></h4>
+                        <p>Reuse a page-level binding by name instead of repeating the full source expression.</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[pad:name;format]</code></pre>
+                </div>
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Named binding</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[pad:power]</code></pre>
+                        <p>Use the raw value from the page-level <code>bindings</code> list.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Formatted pad binding</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[pad:power;%.0f W]</code></pre>
+                        <p>Apply a local format without redefining the source binding.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Pad binding inside expr</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[pad:power] > 3000 ? "High" : "Low"]</code></pre>
+                        <p>Good for status text or state logic based on reused inputs.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-widget" class="binding-docs-section" data-binding-section="widget">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Widget numeric bindings</h4>
+                        <p>Data-binding fields for widgets expect a number after resolution.</p>
+                    </div>
+                </div>
+                <p class="binding-docs-note binding-docs-note-strong">Do not include a format parameter in widget data bindings. Formatting turns the value into display text and breaks numeric parsing.</p>
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">MQTT JSON number</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[mqtt:home/energy/solar;power]</code></pre>
+                        <p>Feed a bar chart, gauge, or sparkline directly from JSON.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Health metric</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[health:cpu]</code></pre>
+                        <p>Useful for local device monitoring widgets.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Derived numeric value</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[mqtt:solar;w] - [mqtt:grid;w]]</code></pre>
+                        <p>Expressions are valid as long as they still resolve to a number.</p>
+                    </article>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
