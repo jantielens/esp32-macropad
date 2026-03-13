@@ -47,6 +47,8 @@ struct BarChartState {
     lv_obj_t* bar_bg;    // Bar background rectangle
     lv_obj_t* bar_fill;  // Bar fill rectangle (grows from bottom)
     float     last_value; // Last numeric value (for skipping redundant updates)
+    uint32_t  cached_bar_bg_color;  // Last resolved bar background color
+    uint32_t  cached_bar_color;     // Last resolved bar fill color
 };
 
 static_assert(sizeof(BarChartState) <= WIDGET_STATE_MAX_BYTES,
@@ -78,6 +80,8 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<BarChartState*>(state->data);
     memset(st, 0, sizeof(BarChartState));
     st->last_value = NAN;
+    st->cached_bar_bg_color = COLOR_CACHE_INIT;
+    st->cached_bar_color    = COLOR_CACHE_INIT;
 
     // Only reserve space for labels that are actually used (static text or MQTT binding)
     bool has_top = btn->label_top[0];
@@ -200,12 +204,14 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_align(st->bar_fill, LV_ALIGN_BOTTOM_MID, 0, 0);
     }
 
-    // Apply bar fill color (may be a threshold() binding expression)
-    lv_obj_set_style_bg_color(st->bar_fill, resolve_lv_color(cfg->bar_color, 0x4CAF50), 0);
+    // Apply bar fill color (uses shared cache with tick)
+    lv_color_t clr;
+    if (resolve_color_changed(cfg->bar_color, 0x4CAF50, &st->cached_bar_color, &clr))
+        lv_obj_set_style_bg_color(st->bar_fill, clr, 0);
 
 }
 
-// ---- Tick: re-resolve binding-driven colors every cycle ----
+// ---- Tick: re-resolve binding-driven colors (skip if unchanged) ----
 
 static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
                            WidgetState* state) {
@@ -213,9 +219,11 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<BarChartState*>(state->data);
     if (!st->bar_fill || !st->bar_bg) return;
 
-    // Re-resolve binding-driven colors
-    lv_obj_set_style_bg_color(st->bar_bg, resolve_lv_color(cfg->bar_bg_color, 0x1A1A1A), 0);
-    lv_obj_set_style_bg_color(st->bar_fill, resolve_lv_color(cfg->bar_color, 0x4CAF50), 0);
+    lv_color_t clr;
+    if (resolve_color_changed(cfg->bar_bg_color, 0x1A1A1A, &st->cached_bar_bg_color, &clr))
+        lv_obj_set_style_bg_color(st->bar_bg, clr, 0);
+    if (resolve_color_changed(cfg->bar_color, 0x4CAF50, &st->cached_bar_color, &clr))
+        lv_obj_set_style_bg_color(st->bar_fill, clr, 0);
 }
 
 static void bar_chart_destroy(WidgetState* state) {

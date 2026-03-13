@@ -75,11 +75,13 @@ static_assert(sizeof(SparklineConfig) <= WIDGET_CONFIG_MAX_BYTES,
 struct SparklineState {
     lv_obj_t*            lines[MAX_SPARKLINE_LINES];   // LVGL line objects
     lv_point_precise_t*  points[MAX_SPARKLINE_LINES];  // Heap-allocated point arrays
-    uint8_t  slot_count;             // Copy from config for points array size
     uint8_t  line_count;             // 1–3 (auto-detected from bindings)
 #if HAS_MQTT
     data_stream_handle_t ds_handles[MAX_SPARKLINE_LINES]; // Data stream handles
+    uint8_t  cached_heads[MAX_SPARKLINE_LINES]; // Change-detection: last seen head per stream
 #endif
+    int16_t  cached_chart_w;         // Cached chart area width (set once in create)
+    int16_t  cached_chart_h;         // Cached chart area height (set once in create)
     lv_obj_t* dot_min;               // Min marker dot (tile child)
     lv_obj_t* dot_max;               // Max marker dot (tile child)
     lv_obj_t* lbl_min;               // Min value label (tile child)
@@ -195,7 +197,6 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     auto* st = reinterpret_cast<SparklineState*>(state->data);
     memset(st, 0, sizeof(SparklineState));
-    st->slot_count = cfg->slot_count;
 
     // Determine line count from binding presence (same pattern as gauge rings)
     st->line_count = 1;
@@ -214,6 +215,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             }
         }
     }
+    memset(st->cached_heads, 0xFF, sizeof(st->cached_heads));
 #endif
 
     // Allocate point arrays for each line
@@ -260,6 +262,9 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int16_t chart_h = content_h - chart_top - bot_margin;
     if (chart_h < 8) chart_h = 8;
     int16_t chart_w = content_w;
+
+    st->cached_chart_w = chart_w;
+    st->cached_chart_h = chart_h;
 
     LOGD(TAG, "Layout: rect=%dx%d content=%dx%d chart_top=%d chart=%dx%d slots=%d window=%ds lines=%d",
          rect->w, rect->h, content_w, content_h, chart_top, chart_w, chart_h,
@@ -501,11 +506,10 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
     if (!st->lines[0] || !st->points[0]) return;
 
 #if HAS_MQTT
-    // Get chart area dimensions from the main line's parent
+    // Use cached chart dimensions (set once in create; avoids lv_obj_update_layout)
     lv_obj_t* chart_area = lv_obj_get_parent(st->lines[0]);
-    lv_obj_update_layout(chart_area);
-    int16_t chart_w = (int16_t)lv_obj_get_content_width(chart_area);
-    int16_t chart_h = (int16_t)lv_obj_get_content_height(chart_area);
+    int16_t chart_w = st->cached_chart_w;
+    int16_t chart_h = st->cached_chart_h;
 
     // Pre-scan: compute shared auto min/max across all lines when unified
     float shared_auto_min = NAN;
@@ -553,6 +557,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
 
         DataStreamSnapshot snap;
         if (!data_stream_get(st->ds_handles[i], &snap)) continue;
+        st->cached_heads[i] = snap.head;
         if (snap.count == 0) continue;
 
         sparkline_rebuild_points(cfg, st->points[i], st->lines[i],
@@ -747,7 +752,20 @@ static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<SparklineState*>(state->data);
     if (!st->lines[0] || !st->points[0]) return;
 
-    // Redraw from the data stream (which advances time independently)
+#if HAS_MQTT
+    // PERF01: skip full redraw if no data stream head has advanced
+    {
+        bool changed = false;
+        for (uint8_t i = 0; i < st->line_count; i++) {
+            if (st->ds_handles[i] == DATA_STREAM_INVALID) continue;
+            DataStreamSnapshot snap;
+            if (!data_stream_get(st->ds_handles[i], &snap)) continue;
+            if (snap.head != st->cached_heads[i]) { changed = true; break; }
+        }
+        if (!changed) return;
+    }
+#endif
+
     sparkline_redraw(cfg, st);
 }
 

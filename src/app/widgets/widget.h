@@ -148,6 +148,18 @@ inline lv_color_t resolve_lv_color(const char* s, uint32_t def) {
     return lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 }
 
+// Cached variant: resolve color, skip LVGL setter if unchanged.
+// `cache` must be initialized to UINT32_MAX (invalid sentinel) before first use.
+// Returns true if the color changed (setter should be called).
+#define COLOR_CACHE_INIT UINT32_MAX
+inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, lv_color_t* out) {
+    uint32_t rgb = resolve_color(s, def);
+    if (rgb == *cache) return false;
+    *cache = rgb;
+    *out = lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+    return true;
+}
+
 // ----------------------------------------------------------------------------
 // Widget auto-registration macro.
 // Derives prefix_parse, prefix_create, prefix_update, prefix_destroy,

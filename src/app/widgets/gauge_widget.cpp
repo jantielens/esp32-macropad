@@ -68,12 +68,21 @@ struct GaugeState {
     lv_obj_t* arc_ring3;           // Inner ring arc (or nullptr)
     lv_obj_t* needle;              // Needle line object (or nullptr)
     lv_point_precise_t* n_pts;     // Heap-allocated needle points (2 elements)
+    lv_obj_t** tick_lines;         // Heap-allocated tick line pointers (or nullptr)
     float     last_value;          // Last numeric value for outer ring
     float     last_value_2;        // Last numeric value for middle ring
     float     last_value_3;        // Last numeric value for inner ring
     int16_t   cx, cy;              // Arc geometric center in tile coords
     int16_t   needle_len;          // Needle length in pixels
     uint8_t   ring_count;          // Number of active rings (1–3)
+    uint8_t   tick_line_count;     // Number of cached tick line pointers
+    // Color cache (skip LVGL setters when unchanged)
+    uint32_t  cached_track;        // track_color
+    uint32_t  cached_needle;       // needle_color
+    uint32_t  cached_tick;         // tick_color
+    uint32_t  cached_arc1;         // arc_color (indicator)
+    uint32_t  cached_arc2;         // arc_color_2 (indicator)
+    uint32_t  cached_arc3;         // arc_color_3 (indicator)
 };
 
 static_assert(sizeof(GaugeState) <= WIDGET_STATE_MAX_BYTES,
@@ -226,6 +235,13 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->last_value = NAN;
     st->last_value_2 = NAN;
     st->last_value_3 = NAN;
+    st->tick_line_count = 0;
+    st->cached_track  = COLOR_CACHE_INIT;
+    st->cached_needle = COLOR_CACHE_INIT;
+    st->cached_tick   = COLOR_CACHE_INIT;
+    st->cached_arc1   = COLOR_CACHE_INIT;
+    st->cached_arc2   = COLOR_CACHE_INIT;
+    st->cached_arc3   = COLOR_CACHE_INIT;
 
     // Determine ring count from presence of extra data bindings.
     // If binding[2] is set but binding[1] is empty, treat binding[2] as binding[1]
@@ -309,6 +325,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_color_t tick_color = resolve_lv_color(cfg->tick_color, 0x808080);
         int16_t tick_outer = radius - 1;
         int16_t tick_inner = radius - arc_width + 1;
+        st->tick_lines = (lv_obj_t**)lv_malloc(sizeof(lv_obj_t*) * cfg->tick_count);
+        if (!st->tick_lines) { LOGW(TAG, "Failed to alloc tick_lines (%d)", cfg->tick_count); }
         for (uint8_t i = 1; i <= cfg->tick_count; i++) {
             float angle = (float)cfg->start_angle + (float)cfg->arc_degrees * i / (cfg->tick_count + 1);
             float a_rad = angle * (float)M_PI / 180.0f;
@@ -320,8 +338,10 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             int16_t x2 = cx + (int16_t)roundf(cos_a * tick_outer);
             int16_t y2 = cy + (int16_t)roundf(sin_a * tick_outer);
 
-            gauge_create_line(tile, x1, y1, x2, y2,
+            lv_obj_t* tl = gauge_create_line(tile, x1, y1, x2, y2,
                               tick_color, cfg->tick_width);
+            if (tl && st->tick_lines)
+                st->tick_lines[st->tick_line_count++] = tl;
         }
     }
 
@@ -411,7 +431,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 // ---- Helper: update a single arc ring ----
 static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
                                float value, float* last_value,
-                               const char* color_field, uint32_t color_default) {
+                               const char* color_field, uint32_t color_default,
+                               uint32_t* color_cache) {
     if (!arc) return;
 
     // Skip redundant updates
@@ -442,8 +463,10 @@ static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
         lv_arc_set_angles(arc, 0, fill_angle_int);
     }
 
-    // Apply indicator color (bindable — may resolve a threshold() expression)
-    lv_obj_set_style_arc_color(arc, resolve_lv_color(color_field, color_default), LV_PART_INDICATOR);
+    // Apply indicator color (uses shared cache with tick)
+    lv_color_t clr;
+    if (resolve_color_changed(color_field, color_default, color_cache, &clr))
+        lv_obj_set_style_arc_color(arc, clr, LV_PART_INDICATOR);
 }
 
 static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
@@ -470,7 +493,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         float value = strtof(vals[0], &end);
         if (end != vals[0]) {
             float prev = st->last_value;
-            gauge_update_ring(st->arc_bg, cfg, value, &st->last_value, cfg->arc_color, 0x4CAF50);
+            gauge_update_ring(st->arc_bg, cfg, value, &st->last_value, cfg->arc_color, 0x4CAF50, &st->cached_arc1);
 
             // Update needle for outer ring only
             if (st->needle && st->n_pts && cfg->show_needle && cfg->needle_width > 0
@@ -492,7 +515,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         char* end = nullptr;
         float value = strtof(vals[1], &end);
         if (end != vals[1]) {
-            gauge_update_ring(st->arc_ring2, cfg, value, &st->last_value_2, cfg->arc_color_2, 0x2196F3);
+            gauge_update_ring(st->arc_ring2, cfg, value, &st->last_value_2, cfg->arc_color_2, 0x2196F3, &st->cached_arc2);
         }
     }
 
@@ -501,13 +524,13 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         char* end = nullptr;
         float value = strtof(vals[2], &end);
         if (end != vals[2]) {
-            gauge_update_ring(st->arc_ring3, cfg, value, &st->last_value_3, cfg->arc_color_3, 0x9C27B0);
+            gauge_update_ring(st->arc_ring3, cfg, value, &st->last_value_3, cfg->arc_color_3, 0x9C27B0, &st->cached_arc3);
         }
     }
 
 }
 
-// ---- Tick: re-resolve binding-driven colors every cycle ----
+// ---- Tick: re-resolve binding-driven colors (skip if unchanged) ----
 
 static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
                        WidgetState* state) {
@@ -515,37 +538,39 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<GaugeState*>(state->data);
     if (!st->arc_bg) return;
 
+    lv_color_t clr;
+
     // Track color (background arc)
-    lv_color_t track_clr = resolve_lv_color(cfg->track_color, 0x1A1A1A);
-    lv_obj_set_style_arc_color(st->arc_bg, track_clr, LV_PART_MAIN);
-    if (st->arc_ring2) lv_obj_set_style_arc_color(st->arc_ring2, track_clr, LV_PART_MAIN);
-    if (st->arc_ring3) lv_obj_set_style_arc_color(st->arc_ring3, track_clr, LV_PART_MAIN);
+    if (resolve_color_changed(cfg->track_color, 0x1A1A1A, &st->cached_track, &clr)) {
+        lv_obj_set_style_arc_color(st->arc_bg, clr, LV_PART_MAIN);
+        if (st->arc_ring2) lv_obj_set_style_arc_color(st->arc_ring2, clr, LV_PART_MAIN);
+        if (st->arc_ring3) lv_obj_set_style_arc_color(st->arc_ring3, clr, LV_PART_MAIN);
+    }
 
     // Needle color
     if (st->needle) {
-        lv_obj_set_style_line_color(st->needle, resolve_lv_color(cfg->needle_color, 0xFFFFFF), 0);
+        if (resolve_color_changed(cfg->needle_color, 0xFFFFFF, &st->cached_needle, &clr))
+            lv_obj_set_style_line_color(st->needle, clr, 0);
     }
 
-    // Tick mark color
-    if (cfg->tick_count > 0) {
-        lv_color_t tick_clr = resolve_lv_color(cfg->tick_color, 0x808080);
-        uint32_t cnt = lv_obj_get_child_count(tile);
-        for (uint32_t i = 0; i < cnt; i++) {
-            lv_obj_t* child = lv_obj_get_child(tile, i);
-            if (child == st->arc_bg || child == st->arc_ring2 || child == st->arc_ring3 || child == st->needle) continue;
-            if (lv_obj_check_type(child, &lv_line_class)) {
-                lv_obj_set_style_line_color(child, tick_clr, 0);
-            }
+    // Tick mark color (uses cached tick line pointers — no child scan)
+    if (st->tick_line_count > 0) {
+        if (resolve_color_changed(cfg->tick_color, 0x808080, &st->cached_tick, &clr)) {
+            for (uint8_t i = 0; i < st->tick_line_count; i++)
+                lv_obj_set_style_line_color(st->tick_lines[i], clr, 0);
         }
     }
 
-    // Indicator colors — re-resolve bindings (may contain threshold() expressions)
-    lv_obj_set_style_arc_color(st->arc_bg, resolve_lv_color(cfg->arc_color, 0x4CAF50), LV_PART_INDICATOR);
+    // Indicator colors
+    if (resolve_color_changed(cfg->arc_color, 0x4CAF50, &st->cached_arc1, &clr))
+        lv_obj_set_style_arc_color(st->arc_bg, clr, LV_PART_INDICATOR);
     if (st->arc_ring2) {
-        lv_obj_set_style_arc_color(st->arc_ring2, resolve_lv_color(cfg->arc_color_2, 0x2196F3), LV_PART_INDICATOR);
+        if (resolve_color_changed(cfg->arc_color_2, 0x2196F3, &st->cached_arc2, &clr))
+            lv_obj_set_style_arc_color(st->arc_ring2, clr, LV_PART_INDICATOR);
     }
     if (st->arc_ring3) {
-        lv_obj_set_style_arc_color(st->arc_ring3, resolve_lv_color(cfg->arc_color_3, 0x9C27B0), LV_PART_INDICATOR);
+        if (resolve_color_changed(cfg->arc_color_3, 0x9C27B0, &st->cached_arc3, &clr))
+            lv_obj_set_style_arc_color(st->arc_ring3, clr, LV_PART_INDICATOR);
     }
 }
 
@@ -555,6 +580,11 @@ static void gauge_destroy(WidgetState* state) {
     if (st->n_pts) {
         lv_free(st->n_pts);
         st->n_pts = nullptr;
+    }
+    // Free heap-allocated tick line pointer array
+    if (st->tick_lines) {
+        lv_free(st->tick_lines);
+        st->tick_lines = nullptr;
     }
     // LVGL child objects (arc, ticks, needle line) are deleted automatically
     // when the tile is deleted. Tick points are freed via LV_EVENT_DELETE callbacks.
