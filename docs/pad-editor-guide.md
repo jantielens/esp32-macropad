@@ -234,7 +234,10 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 |---------|-------------|
 | **Data Binding (outer ring)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temperature]`, `[time:%S]`) |
 | **Data Binding (middle ring)** | Optional — adds a concentric middle ring with its own data source |
-| **Data Binding (inner ring)** | Optional — adds a concentric inner ring (requires middle ring) |
+| **Data Binding (inner ring)** | Optional — adds a concentric inner ring in the third slot. If the middle ring is empty, the inner ring still renders with a visual gap |
+| **Start Label (outer ring)** | Optional text or binding shown at the start of the outer ring. Uses the outer ring color and the same font size as the top/bottom labels |
+| **Start Label (middle ring)** | Optional text or binding shown at the start of the middle ring. Uses the middle ring color |
+| **Start Label (inner ring)** | Optional text or binding shown at the start of the inner ring. Uses the inner ring color |
 | **Min / Max** | The value range. The arc is empty at min and full at max |
 | **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
 | **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
@@ -255,7 +258,7 @@ Each ring has its own arc color field, so rings can be independently colored or 
 
 The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
 
-**Multi-ring gauges** — fill in the middle and/or inner ring data bindings to add concentric rings (Apple Health ring style). All rings share the same min/max, arc degrees, and start angle, but each ring has its own arc color. Only the outer ring shows the needle and tick marks. The arc width percentage applies to each ring equally, with automatic gaps between them.
+**Multi-ring gauges** — fill in the middle and/or inner ring data bindings to add concentric rings (Apple Health ring style). All rings share the same min/max, arc degrees, and start angle, but each ring has its own arc color and optional start label. The needle is shown on the outer ring only; tick marks are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
 
 **Zero centered example** (grid power, -3 kW to +3 kW):
 - Data binding: `[mqtt:grid/power;$.value]`, Min: -3, Max: 3

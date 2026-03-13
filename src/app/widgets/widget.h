@@ -32,7 +32,7 @@ inline T clamp_val(T v, T lo, T hi) { return (v < lo) ? lo : (v > hi) ? hi : v; 
 
 // Opaque per-tile widget runtime state (LVGL objects, cached values, etc.)
 // Created by createUI(), freed by destroyUI(). Stored in ButtonTile.
-#define WIDGET_STATE_MAX_BYTES 80
+#define WIDGET_STATE_MAX_BYTES 128
 
 struct WidgetState {
     uint8_t data[WIDGET_STATE_MAX_BYTES];

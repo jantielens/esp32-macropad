@@ -423,16 +423,9 @@ void PadScreen::buildTiles() {
                 tile.widget_type = wt;
                 memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
                 // Widget data binding templates
-                // If binding[2] is set but binding[1] is empty, promote binding[2]
-                // to the middle slot to match gauge_widget's ring promotion logic.
                 strlcpy(tile.widget_binding[0], bcfg.widget.data_binding[0], CONFIG_LABEL_MAX_LEN);
-                if (bcfg.widget.data_binding[1][0]) {
-                    strlcpy(tile.widget_binding[1], bcfg.widget.data_binding[1], CONFIG_LABEL_MAX_LEN);
-                    strlcpy(tile.widget_binding[2], bcfg.widget.data_binding[2], CONFIG_LABEL_MAX_LEN);
-                } else if (bcfg.widget.data_binding[2][0]) {
-                    strlcpy(tile.widget_binding[1], bcfg.widget.data_binding[2], CONFIG_LABEL_MAX_LEN);
-                    tile.widget_binding[2][0] = '\0';
-                }
+                strlcpy(tile.widget_binding[1], bcfg.widget.data_binding[1], CONFIG_LABEL_MAX_LEN);
+                strlcpy(tile.widget_binding[2], bcfg.widget.data_binding[2], CONFIG_LABEL_MAX_LEN);
                 if (wt->createUI) {
                     // Pass icon or center label — widget positions it above the bar
                     lv_obj_t* header_obj = tile.icon_img ? tile.icon_img : tile.label_center;
@@ -713,9 +706,9 @@ void PadScreen::pollMqttBindings() {
     }
 
     // Update widget tiles from their data binding template(s)
-    // Multi-ring gauges use binding_2/3 for middle/inner rings.
-    // All resolved values are joined with '\t' so the widget update()
-    // receives "val1\tval2\tval3" and can split them internally.
+    // Multi-ring widgets use binding_2/3 for additional slots.
+    // Preserve empty intermediate slots so widgets can distinguish
+    // "ring 3 only" from promoted ring 2 behavior.
     char widget_resolved[BINDING_TEMPLATE_MAX_LEN];
     char widget_combined[BINDING_TEMPLATE_MAX_LEN * 3 + 4];
 
@@ -727,14 +720,27 @@ void PadScreen::pollMqttBindings() {
         // Resolve primary binding
         binding_template_resolve(tile.widget_binding[0], widget_resolved, sizeof(widget_resolved));
 
-        // Build combined string: "val1" or "val1\tval2" or "val1\tval2\tval3"
+        // Build combined string with empty intermediate slots preserved,
+        // e.g. "val1\t\tval3" when only binding_3 is set.
         size_t off = strlcpy(widget_combined, widget_resolved, sizeof(widget_combined));
-        for (int wb = 1; wb < MAX_WIDGET_BINDINGS; wb++) {
-            if (!tile.widget_binding[wb][0]) continue;
-            binding_template_resolve(tile.widget_binding[wb], widget_resolved, sizeof(widget_resolved));
+        int max_slot = 0;
+        for (int wb = MAX_WIDGET_BINDINGS - 1; wb >= 1; wb--) {
+            if (tile.widget_binding[wb][0]) {
+                max_slot = wb;
+                break;
+            }
+        }
+        for (int wb = 1; wb <= max_slot; wb++) {
             if (off < sizeof(widget_combined) - 1) {
                 widget_combined[off++] = '\t';
-                off += strlcpy(widget_combined + off, widget_resolved, sizeof(widget_combined) - off);
+                widget_combined[off] = '\0';
+            }
+            if (!tile.widget_binding[wb][0]) continue;
+            binding_template_resolve(tile.widget_binding[wb], widget_resolved, sizeof(widget_resolved));
+            off += strlcpy(widget_combined + off, widget_resolved, sizeof(widget_combined) - off);
+            if (off >= sizeof(widget_combined)) {
+                off = sizeof(widget_combined) - 1;
+                widget_combined[off] = '\0';
             }
         }
 

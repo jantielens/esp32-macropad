@@ -275,6 +275,13 @@
                             </div>
                         </div>
                         <div class="form-group">
+                            <label for="pad-edit-gauge-start-label">Start Label (outer ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-start-label" maxlength="63" placeholder="Optional text or [binding]">
+                            </div>
+                            <small>Rendered at the start of the outer ring using the ring color</small>
+                        </div>
+                        <div class="form-group">
                             <label for="pad-edit-gauge-data-binding-2">Data Binding (middle ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-2" maxlength="191" placeholder="Optional — leave empty for single ring">
@@ -283,12 +290,26 @@
                             <small>Adds a concentric middle ring sharing the same settings</small>
                         </div>
                         <div class="form-group">
+                            <label for="pad-edit-gauge-start-label-2">Start Label (middle ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-start-label-2" maxlength="63" placeholder="Optional text or [binding]">
+                            </div>
+                            <small>Rendered at the start of the middle ring using the ring color</small>
+                        </div>
+                        <div class="form-group">
                             <label for="pad-edit-gauge-data-binding-3">Data Binding (inner ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-3" maxlength="191" placeholder="Optional — leave empty for single or double ring">
                                 
                             </div>
-                            <small>Adds a concentric inner ring (requires middle ring)</small>
+                            <small>Adds a concentric inner ring in the third slot; leaving the middle ring empty keeps a visual gap</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-start-label-3">Start Label (inner ring) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-start-label-3" maxlength="63" placeholder="Optional text or [binding]">
+                            </div>
+                            <small>Rendered at the start of the inner ring using the ring color</small>
                         </div>
 
                         <div style="display:flex; gap:8px;">

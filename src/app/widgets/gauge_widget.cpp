@@ -9,6 +9,7 @@
 #include <string.h>
 
 #define TAG "Gauge"
+#define GAUGE_START_LABEL_CONNECTOR_LEN 8
 
 // ============================================================================
 // Gauge Widget
@@ -43,6 +44,9 @@ struct GaugeConfig {
     float    max_value;              // Scale maximum (default 100)
     uint16_t arc_degrees;            // Arc span (10–360, default 180)
     uint16_t start_angle;            // Rotation offset in degrees (default 180)
+    char     start_label[CONFIG_BINDABLE_SHORT_LEN];       // Outer ring start label (plain text or binding)
+    char     start_label_2[CONFIG_BINDABLE_SHORT_LEN];     // Middle ring start label (plain text or binding)
+    char     start_label_3[CONFIG_BINDABLE_SHORT_LEN];     // Inner ring start label (plain text or binding)
     char     arc_color[CONFIG_COLOR_MAX_LEN];               // Arc indicator color (bindable, default "#4CAF50")
     char     arc_color_2[CONFIG_COLOR_MAX_LEN];             // Ring 2 indicator color (bindable, default "#2196F3")
     char     arc_color_3[CONFIG_COLOR_MAX_LEN];             // Ring 3 indicator color (bindable, default "#9C27B0")
@@ -66,6 +70,9 @@ struct GaugeState {
     lv_obj_t* arc_bg;              // Outer ring arc (track + indicator)
     lv_obj_t* arc_ring2;           // Middle ring arc (or nullptr)
     lv_obj_t* arc_ring3;           // Inner ring arc (or nullptr)
+    lv_obj_t* start_label_1;       // Outer ring start label (or nullptr)
+    lv_obj_t* start_label_2;       // Middle ring start label (or nullptr)
+    lv_obj_t* start_label_3;       // Inner ring start label (or nullptr)
     lv_obj_t* needle;              // Needle line object (or nullptr)
     lv_point_precise_t* n_pts;     // Heap-allocated needle points (2 elements)
     lv_obj_t** tick_lines;         // Heap-allocated tick line pointers (or nullptr)
@@ -73,8 +80,11 @@ struct GaugeState {
     float     last_value_2;        // Last numeric value for middle ring
     float     last_value_3;        // Last numeric value for inner ring
     int16_t   cx, cy;              // Arc geometric center in tile coords
+    int16_t   outer_radius;        // Outer ring radius in pixels
+    int16_t   arc_width_px;        // Arc thickness in pixels
+    int16_t   ring_gap_px;         // Gap between ring slots in pixels
     int16_t   needle_len;          // Needle length in pixels
-    uint8_t   ring_count;          // Number of active rings (1–3)
+    uint8_t   ring_count;          // Highest occupied ring slot (1–3)
     uint8_t   tick_line_count;     // Number of cached tick line pointers
     // Color cache (skip LVGL setters when unchanged)
     uint32_t  cached_track;        // track_color
@@ -212,6 +222,132 @@ static void gauge_create_ticks_for_radius(lv_obj_t* tile, GaugeState* st,
     }
 }
 
+static int16_t gauge_radius_for_slot(const GaugeState* st, uint8_t slot_index) {
+    return st->outer_radius - (int16_t)slot_index * (st->arc_width_px + st->ring_gap_px);
+}
+
+static float gauge_normalize_angle(float angle_deg) {
+    while (angle_deg >= 180.0f) angle_deg -= 360.0f;
+    while (angle_deg < -180.0f) angle_deg += 360.0f;
+    return angle_deg;
+}
+
+static float gauge_tangent_readable_angle(float ux, float uy, bool* flipped_for_readability) {
+    // Label baseline follows the tangent direction in screen coordinates.
+    // Keep text readable by flipping 180 deg when tangent points left.
+    float angle = atan2f(uy, ux) * 180.0f / (float)M_PI;
+    bool flipped = false;
+
+    if (ux < 0.0f) {
+        angle += 180.0f;
+        flipped = true;
+    }
+
+    angle = gauge_normalize_angle(angle);
+    if (flipped_for_readability) *flipped_for_readability = flipped;
+    return angle;
+}
+
+static lv_obj_t* gauge_create_start_label(lv_obj_t* tile, const lv_font_t* font, lv_color_t color) {
+    lv_obj_t* label = lv_label_create(tile);
+    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_color(label, color, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+    lv_label_set_text(label, "");
+    lv_obj_clear_flag(label, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+    lv_obj_move_foreground(label);
+    return label;
+}
+
+static void gauge_set_start_label_text(lv_obj_t* label, const char* templ) {
+    if (!label || !templ) return;
+
+    char resolved[CONFIG_BINDABLE_SHORT_LEN];
+    resolved[0] = '\0';
+#if HAS_MQTT
+    if (binding_template_has_bindings(templ)) {
+        binding_template_resolve(templ, resolved, sizeof(resolved));
+    } else
+#endif
+    {
+        strlcpy(resolved, templ, sizeof(resolved));
+    }
+
+    if (strcmp(lv_label_get_text(label), resolved) != 0) {
+        lv_label_set_text(label, resolved);
+    }
+
+    if (resolved[0]) lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void gauge_place_start_label(lv_obj_t* label, const GaugeConfig* cfg,
+                                    const GaugeState* st, uint8_t slot_index) {
+    if (!label || lv_obj_has_flag(label, LV_OBJ_FLAG_HIDDEN)) return;
+
+    const int16_t radius = gauge_radius_for_slot(st, slot_index);
+    const float angle_rad = (float)cfg->start_angle * (float)M_PI / 180.0f;
+    float sx = st->cx + cosf(angle_rad) * radius;
+    float sy = st->cy + sinf(angle_rad) * radius;
+
+    sx -= cosf(angle_rad) * (st->arc_width_px / 2.0f);
+    sy -= sinf(angle_rad) * (st->arc_width_px / 2.0f);
+
+    const float ux = sinf(angle_rad);
+    const float uy = -cosf(angle_rad);
+
+    const float bx = sx + ux * GAUGE_START_LABEL_CONNECTOR_LEN;
+    const float by = sy + uy * GAUGE_START_LABEL_CONNECTOR_LEN;
+
+    bool flipped = false;
+    const float label_angle = gauge_tangent_readable_angle(ux, uy, &flipped);
+
+    lv_obj_update_layout(label);
+    const lv_coord_t label_w = lv_obj_get_width(label);
+    const lv_coord_t label_h = lv_obj_get_height(label);
+    const lv_coord_t pivot_x = flipped ? label_w : 0;
+    const lv_coord_t pivot_y = label_h / 2;
+
+    // Ensure the full transformed label footprint is placed outward along the
+    // connector tangent direction so glyphs don't overlap the ring.
+    const float theta = label_angle * (float)M_PI / 180.0f;
+    const float dx = cosf(theta);
+    const float dy = sinf(theta);
+    const float nx = -sinf(theta);
+    const float ny = cosf(theta);
+
+    const float x0 = flipped ? -(float)label_w : 0.0f;
+    const float x1 = flipped ? 0.0f : (float)label_w;
+    const float y0 = -(float)label_h / 2.0f;
+    const float y1 = (float)label_h / 2.0f;
+
+    const float du = dx * ux + dy * uy;
+    const float nu = nx * ux + ny * uy;
+    const float min_x_proj = (du >= 0.0f) ? (x0 * du) : (x1 * du);
+    const float min_y_proj = (nu >= 0.0f) ? (y0 * nu) : (y1 * nu);
+    const float min_proj = min_x_proj + min_y_proj;
+    const float push_out = (min_proj < 0.0f) ? (-min_proj) : 0.0f;
+
+    const float anchor_x = bx + ux * push_out;
+    const float anchor_y = by + uy * push_out;
+
+    lv_obj_set_style_transform_pivot_x(label, pivot_x, 0);
+    lv_obj_set_style_transform_pivot_y(label, pivot_y, 0);
+    lv_obj_set_style_transform_rotation(label, (int32_t)lroundf(label_angle * 10.0f), 0);
+    lv_obj_set_pos(label,
+                   (lv_coord_t)lroundf(anchor_x) - pivot_x,
+                   (lv_coord_t)lroundf(anchor_y) - pivot_y);
+}
+
+static void gauge_update_start_label(lv_obj_t* label, const char* templ,
+                                     const GaugeConfig* cfg, const GaugeState* st,
+                                     uint8_t slot_index) {
+    if (!label || !templ || !templ[0]) return;
+    gauge_set_start_label_text(label, templ);
+    gauge_place_start_label(label, cfg, st, slot_index);
+}
+
 // ---- WidgetType callbacks ----
 
 static void gauge_parse(const JsonObject& btn, uint8_t* data) {
@@ -229,6 +365,10 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
 
     cfg->show_needle     = btn["widget_gauge_show_needle"] | true;
     cfg->zero_centered   = btn["widget_gauge_zero_centered"] | false;
+
+    widget_parse_field(btn["widget_gauge_start_label"],   cfg->start_label,   sizeof(cfg->start_label),   "", false);
+    widget_parse_field(btn["widget_gauge_start_label_2"], cfg->start_label_2, sizeof(cfg->start_label_2), "", false);
+    widget_parse_field(btn["widget_gauge_start_label_3"], cfg->start_label_3, sizeof(cfg->start_label_3), "", false);
 
     // Per-ring arc indicator colors (bindable — may contain threshold() expressions)
     widget_parse_field(btn["widget_arc_color"],   cfg->arc_color,   sizeof(cfg->arc_color),   "#4CAF50");
@@ -270,12 +410,12 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->cached_arc2   = COLOR_CACHE_INIT;
     st->cached_arc3   = COLOR_CACHE_INIT;
 
-    // Determine ring count from presence of extra data bindings.
-    // If binding[2] is set but binding[1] is empty, treat binding[2] as binding[1]
-    // (promote to middle ring to avoid a visual gap).
-    uint8_t ring_count = 1;
-    if (wcfg->data_binding[1][0] && wcfg->data_binding[2][0]) ring_count = 3;
-    else if (wcfg->data_binding[1][0] || wcfg->data_binding[2][0]) ring_count = 2;
+    // Determine occupied ring slots from presence of extra data bindings.
+    // Slots are literal: binding_2 controls the middle ring, binding_3 the inner ring.
+    const bool has_ring2 = wcfg->data_binding[1][0];
+    const bool has_ring3 = wcfg->data_binding[2][0];
+    uint8_t ring_count = has_ring3 ? 3 : (has_ring2 ? 2 : 1);
+    const uint8_t active_ring_count = 1 + (has_ring2 ? 1 : 0) + (has_ring3 ? 1 : 0);
     st->ring_count = ring_count;
 
     // ---- Compute available space ----
@@ -320,6 +460,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     st->cx = cx;
     st->cy = cy;
+    st->outer_radius = radius;
+    st->arc_width_px = arc_width;
     // Needle extends from center outward past the arc outer edge
     st->needle_len = radius + 4;
     if (st->needle_len < 10) st->needle_len = 10;
@@ -332,16 +474,17 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // ---- Gap between concentric rings ----
     int16_t ring_gap = (arc_width >= 8) ? (arc_width / 4) : 2;
+    st->ring_gap_px = ring_gap;
 
     // ---- Create middle ring (ring 2) ----
-    if (ring_count >= 2) {
+    if (has_ring2) {
         int16_t r2 = radius - arc_width - ring_gap;
         if (r2 < 8) r2 = 8;
         st->arc_ring2 = gauge_create_arc(tile, cfg, cx, cy, r2, arc_width);
     }
 
     // ---- Create inner ring (ring 3) ----
-    if (ring_count >= 3) {
+    if (has_ring3) {
         int16_t r3 = radius - 2 * (arc_width + ring_gap);
         if (r3 < 8) r3 = 8;
         st->arc_ring3 = gauge_create_arc(tile, cfg, cx, cy, r3, arc_width);
@@ -350,7 +493,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // ---- Tick marks (repeat across all active rings) ----
     if (cfg->tick_count > 0) {
         lv_color_t tick_color = resolve_lv_color(cfg->tick_color, 0x808080);
-        uint16_t total_tick_lines = (uint16_t)cfg->tick_count * ring_count;
+        uint16_t total_tick_lines = (uint16_t)cfg->tick_count * active_ring_count;
         st->tick_lines = (lv_obj_t**)lv_malloc(sizeof(lv_obj_t*) * total_tick_lines);
         if (!st->tick_lines) {
             LOGW(TAG, "Failed to alloc tick_lines (%u)", total_tick_lines);
@@ -358,17 +501,34 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
         gauge_create_ticks_for_radius(tile, st, cfg, cx, cy, radius, arc_width, tick_color);
 
-        if (ring_count >= 2) {
+        if (has_ring2) {
             int16_t r2 = radius - arc_width - ring_gap;
             if (r2 < 8) r2 = 8;
             gauge_create_ticks_for_radius(tile, st, cfg, cx, cy, r2, arc_width, tick_color);
         }
 
-        if (ring_count >= 3) {
+        if (has_ring3) {
             int16_t r3 = radius - 2 * (arc_width + ring_gap);
             if (r3 < 8) r3 = 8;
             gauge_create_ticks_for_radius(tile, st, cfg, cx, cy, r3, arc_width, tick_color);
         }
+    }
+
+    // ---- Start labels ----
+    if (cfg->start_label[0]) {
+        st->start_label_1 = gauge_create_start_label(tile, scale->font_small,
+                                                     resolve_lv_color(cfg->arc_color, 0x4CAF50));
+        gauge_update_start_label(st->start_label_1, cfg->start_label, cfg, st, 0);
+    }
+    if (has_ring2 && cfg->start_label_2[0]) {
+        st->start_label_2 = gauge_create_start_label(tile, scale->font_small,
+                                                     resolve_lv_color(cfg->arc_color_2, 0x2196F3));
+        gauge_update_start_label(st->start_label_2, cfg->start_label_2, cfg, st, 1);
+    }
+    if (has_ring3 && cfg->start_label_3[0]) {
+        st->start_label_3 = gauge_create_start_label(tile, scale->font_small,
+                                                     resolve_lv_color(cfg->arc_color_3, 0x9C27B0));
+        gauge_update_start_label(st->start_label_3, cfg->start_label_3, cfg, st, 2);
     }
 
     // ---- Needle ----
@@ -458,7 +618,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
                                float value, float* last_value,
                                const char* color_field, uint32_t color_default,
-                               uint32_t* color_cache) {
+                               uint32_t* color_cache, lv_obj_t* start_label) {
     if (!arc) return;
 
     // Skip redundant updates
@@ -491,8 +651,10 @@ static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
 
     // Apply indicator color (uses shared cache with tick)
     lv_color_t clr;
-    if (resolve_color_changed(color_field, color_default, color_cache, &clr))
+    if (resolve_color_changed(color_field, color_default, color_cache, &clr)) {
         lv_obj_set_style_arc_color(arc, clr, LV_PART_INDICATOR);
+        if (start_label) lv_obj_set_style_text_color(start_label, clr, 0);
+    }
 }
 
 static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
@@ -502,16 +664,21 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     if (!st->arc_bg) return;
 
-    // raw_value may be "val1\tval2\tval3" for multi-ring gauges.
-    // Split on '\t' and update each ring independently.
-    const char* p = raw_value;
-    const char* vals[3] = { p, nullptr, nullptr };
+    // raw_value may be "val1\tval2\tval3" with empty intermediate slots
+    // preserved as "val1\t\tval3".
+    char raw_copy[BINDING_TEMPLATE_MAX_LEN * 3 + 4];
+    strlcpy(raw_copy, raw_value ? raw_value : "", sizeof(raw_copy));
+    char* vals[3] = { raw_copy, nullptr, nullptr };
+    char* cursor = raw_copy;
     for (int i = 1; i < 3; i++) {
-        const char* tab = strchr(p, '\t');
+        char* tab = strchr(cursor, '\t');
         if (!tab) break;
+        *tab = '\0';
         vals[i] = tab + 1;
-        p = tab + 1;
+        cursor = vals[i];
     }
+    if (!vals[1]) vals[1] = const_cast<char*>("");
+    if (!vals[2]) vals[2] = const_cast<char*>("");
 
     // Ring 1 (outer / primary)
     {
@@ -519,7 +686,8 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         float value = strtof(vals[0], &end);
         if (end != vals[0]) {
             float prev = st->last_value;
-            gauge_update_ring(st->arc_bg, cfg, value, &st->last_value, cfg->arc_color, 0x4CAF50, &st->cached_arc1);
+            gauge_update_ring(st->arc_bg, cfg, value, &st->last_value, cfg->arc_color, 0x4CAF50,
+                              &st->cached_arc1, st->start_label_1);
 
             // Update needle for outer ring only
             if (st->needle && st->n_pts && cfg->show_needle && cfg->needle_width > 0
@@ -537,20 +705,22 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 
     // Ring 2 (middle)
-    if (vals[1] && st->arc_ring2) {
+    if (vals[1][0] && st->arc_ring2) {
         char* end = nullptr;
         float value = strtof(vals[1], &end);
         if (end != vals[1]) {
-            gauge_update_ring(st->arc_ring2, cfg, value, &st->last_value_2, cfg->arc_color_2, 0x2196F3, &st->cached_arc2);
+            gauge_update_ring(st->arc_ring2, cfg, value, &st->last_value_2, cfg->arc_color_2, 0x2196F3,
+                              &st->cached_arc2, st->start_label_2);
         }
     }
 
     // Ring 3 (inner)
-    if (vals[2] && st->arc_ring3) {
+    if (vals[2][0] && st->arc_ring3) {
         char* end = nullptr;
         float value = strtof(vals[2], &end);
         if (end != vals[2]) {
-            gauge_update_ring(st->arc_ring3, cfg, value, &st->last_value_3, cfg->arc_color_3, 0x9C27B0, &st->cached_arc3);
+            gauge_update_ring(st->arc_ring3, cfg, value, &st->last_value_3, cfg->arc_color_3, 0x9C27B0,
+                              &st->cached_arc3, st->start_label_3);
         }
     }
 
@@ -590,13 +760,25 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Indicator colors
     if (resolve_color_changed(cfg->arc_color, 0x4CAF50, &st->cached_arc1, &clr))
         lv_obj_set_style_arc_color(st->arc_bg, clr, LV_PART_INDICATOR);
+    if (st->start_label_1) {
+        gauge_update_start_label(st->start_label_1, cfg->start_label, cfg, st, 0);
+        lv_obj_set_style_text_color(st->start_label_1, lv_obj_get_style_arc_color(st->arc_bg, LV_PART_INDICATOR), 0);
+    }
     if (st->arc_ring2) {
         if (resolve_color_changed(cfg->arc_color_2, 0x2196F3, &st->cached_arc2, &clr))
             lv_obj_set_style_arc_color(st->arc_ring2, clr, LV_PART_INDICATOR);
+        if (st->start_label_2) {
+            gauge_update_start_label(st->start_label_2, cfg->start_label_2, cfg, st, 1);
+            lv_obj_set_style_text_color(st->start_label_2, lv_obj_get_style_arc_color(st->arc_ring2, LV_PART_INDICATOR), 0);
+        }
     }
     if (st->arc_ring3) {
         if (resolve_color_changed(cfg->arc_color_3, 0x9C27B0, &st->cached_arc3, &clr))
             lv_obj_set_style_arc_color(st->arc_ring3, clr, LV_PART_INDICATOR);
+        if (st->start_label_3) {
+            gauge_update_start_label(st->start_label_3, cfg->start_label_3, cfg, st, 2);
+            lv_obj_set_style_text_color(st->start_label_3, lv_obj_get_style_arc_color(st->arc_ring3, LV_PART_INDICATOR), 0);
+        }
     }
 }
 
