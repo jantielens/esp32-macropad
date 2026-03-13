@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.8.0] - 2026-03-13
 
 ### Fixed
 - **Binding reference modal corner clipping** — the new docs-style binding popup now enforces consistent rounded corners on all sides by clipping inner header/body layers to the modal radius (`overflow: hidden`), fixing the one-corner-only rounding artifact
