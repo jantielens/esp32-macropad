@@ -232,6 +232,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_telemetry.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
+  - src/app/display_manager_api.cpp
+  - src/app/display_screen_nav.cpp
+  - src/app/display_task.cpp
   - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
@@ -276,6 +279,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screen_saver_manager.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen.h
+  - src/app/screens/pad_screen_poll.cpp
+  - src/app/screens/pad_tile_builder.cpp
 - **HAS_MQTT**
   - src/app/app.ino
   - src/app/board_config.h
@@ -284,6 +289,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.h
   - src/app/device_telemetry.cpp
   - src/app/display_manager.cpp
+  - src/app/display_task.cpp
   - src/app/duty_cycle.cpp
   - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
@@ -299,6 +305,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
   - src/app/screens/pad_screen.cpp
+  - src/app/screens/pad_screen_events.cpp
+  - src/app/screens/pad_screen_poll.cpp
+  - src/app/screens/pad_tile_builder.cpp
   - src/app/sensors/bme280_sensor.cpp
   - src/app/sensors/bme280_sensor.h
   - src/app/sensors/dummy_sensor.cpp

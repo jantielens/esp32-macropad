@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.0] - 2026-03-13
+
+### Changed
+- **Refactor: split large/complex source files** — four high-maintenance-risk files have been split into focused, single-concern units with no behavior changes:
+  - `src/app/web/pads.html` (1043 → 453 lines): extracted 6 HTML fragments (`_widget_bar_chart.html`, `_widget_gauge.html`, `_widget_sparkline.html`, `_style_help.html`, `_health_widget.html`, `_reboot_overlay.html`) using the existing `{{PLACEHOLDER}}` template system; `{{REBOOT_OVERLAY}}` also applied to `network.html`
+  - `src/app/display_manager.cpp` (822 → 419 lines): split into `display_task.cpp` (LVGL render + present tasks + flush callback), `display_screen_nav.cpp` (screen navigation), and `display_manager_api.cpp` (C-API wrappers); no interface changes
+  - `src/app/screens/pad_screen.cpp` (1028 → 175 lines): split into `pad_tile_builder.cpp` (tile build/clear), `pad_screen_events.cpp` (event handlers), and `pad_screen_poll.cpp` (binding polling); compiled via the existing `screens.cpp` single-TU build; `pad_screen.h` unchanged
+  - `src/app/web/portal.js` (4357 → 3-line shim): split into 7 focused modules (`portal_core.js`, `portal_config.js`, `portal_firmware.js`, `portal_health.js`, `portal_pad_colors.js`, `portal_pad_io.js`, `portal_pad_editor.js`) served as individual routes and loaded in dependency order; 7 new route handlers added to `web_portal_pages.cpp/h` and `web_portal_routes.cpp`
+
+---
+
 ## [1.8.0] - 2026-03-13
 
 ### Fixed
