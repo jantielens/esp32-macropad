@@ -32,6 +32,15 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/portal.css", HTTP_GET, handleCSS);
 		server->on("/portal.js", HTTP_GET, handleJS);
 
+		// Split JS module routes
+		server->on("/portal_core.js", HTTP_GET, handleCoreJS);
+		server->on("/portal_config.js", HTTP_GET, handleConfigJS);
+		server->on("/portal_firmware.js", HTTP_GET, handleFirmwareJS);
+		server->on("/portal_health.js", HTTP_GET, handleHealthJS);
+		server->on("/portal_pad_colors.js", HTTP_GET, handlePadColorsJS);
+		server->on("/portal_pad_io.js", HTTP_GET, handlePadIOJS);
+		server->on("/portal_pad_editor.js", HTTP_GET, handlePadEditorJS);
+
 		// API endpoints
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
 		// Some AsyncWebServer matchers can behave like prefix matches depending on configuration.

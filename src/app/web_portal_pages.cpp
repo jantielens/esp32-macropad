@@ -139,3 +139,80 @@ void handleJS(AsyncWebServerRequest *request) {
 		);
 		request->send(response);
 }
+
+void handleCoreJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_core_js_gz,
+				portal_core_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+
+void handleConfigJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_config_js_gz,
+				portal_config_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+
+void handleFirmwareJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_firmware_js_gz,
+				portal_firmware_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+
+void handleHealthJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_health_js_gz,
+				portal_health_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+
+void handlePadColorsJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_pad_colors_js_gz,
+				portal_pad_colors_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+
+void handlePadIOJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_pad_io_js_gz,
+				portal_pad_io_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+
+void handlePadEditorJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_pad_editor_js_gz,
+				portal_pad_editor_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}

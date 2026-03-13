@@ -11,4 +11,13 @@ void handleFirmware(AsyncWebServerRequest *request);
 void handleCSS(AsyncWebServerRequest *request);
 void handleJS(AsyncWebServerRequest *request);
 
+// Split JS module handlers
+void handleCoreJS(AsyncWebServerRequest *request);
+void handleConfigJS(AsyncWebServerRequest *request);
+void handleFirmwareJS(AsyncWebServerRequest *request);
+void handleHealthJS(AsyncWebServerRequest *request);
+void handlePadColorsJS(AsyncWebServerRequest *request);
+void handlePadIOJS(AsyncWebServerRequest *request);
+void handlePadEditorJS(AsyncWebServerRequest *request);
+
 #endif // WEB_PORTAL_PAGES_H
