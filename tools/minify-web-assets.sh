@@ -95,6 +95,12 @@ HEADER_TEMPLATE=""
 NAV_TEMPLATE=""
 FOOTER_TEMPLATE=""
 BINDING_HELP_TEMPLATE=""
+WIDGET_BAR_CHART_TEMPLATE=""
+WIDGET_GAUGE_TEMPLATE=""
+WIDGET_SPARKLINE_TEMPLATE=""
+STYLE_HELP_TEMPLATE=""
+HEALTH_WIDGET_TEMPLATE=""
+REBOOT_OVERLAY_TEMPLATE=""
 
 if [ -f "$WEB_DIR/_header.html" ]; then
     HEADER_TEMPLATE=$(cat "$WEB_DIR/_header.html")
@@ -110,6 +116,30 @@ fi
 
 if [ -f "$WEB_DIR/_binding_help.html" ]; then
     BINDING_HELP_TEMPLATE=$(cat "$WEB_DIR/_binding_help.html")
+fi
+
+if [ -f "$WEB_DIR/_widget_bar_chart.html" ]; then
+    WIDGET_BAR_CHART_TEMPLATE=$(cat "$WEB_DIR/_widget_bar_chart.html")
+fi
+
+if [ -f "$WEB_DIR/_widget_gauge.html" ]; then
+    WIDGET_GAUGE_TEMPLATE=$(cat "$WEB_DIR/_widget_gauge.html")
+fi
+
+if [ -f "$WEB_DIR/_widget_sparkline.html" ]; then
+    WIDGET_SPARKLINE_TEMPLATE=$(cat "$WEB_DIR/_widget_sparkline.html")
+fi
+
+if [ -f "$WEB_DIR/_style_help.html" ]; then
+    STYLE_HELP_TEMPLATE=$(cat "$WEB_DIR/_style_help.html")
+fi
+
+if [ -f "$WEB_DIR/_health_widget.html" ]; then
+    HEALTH_WIDGET_TEMPLATE=$(cat "$WEB_DIR/_health_widget.html")
+fi
+
+if [ -f "$WEB_DIR/_reboot_overlay.html" ]; then
+    REBOOT_OVERLAY_TEMPLATE=$(cat "$WEB_DIR/_reboot_overlay.html")
 fi
 
 if [ ${#HTML_FILES[@]} -eq 0 ] && [ ${#CSS_FILES[@]} -eq 0 ] && [ ${#JS_FILES[@]} -eq 0 ]; then
@@ -205,6 +235,12 @@ header_template = '''$HEADER_TEMPLATE'''
 nav_template = '''$NAV_TEMPLATE'''
 footer_template = '''$FOOTER_TEMPLATE'''
 binding_help_template = '''$BINDING_HELP_TEMPLATE'''
+widget_bar_chart_template = '''$WIDGET_BAR_CHART_TEMPLATE'''
+widget_gauge_template = '''$WIDGET_GAUGE_TEMPLATE'''
+widget_sparkline_template = '''$WIDGET_SPARKLINE_TEMPLATE'''
+style_help_template = '''$STYLE_HELP_TEMPLATE'''
+health_widget_template = '''$HEALTH_WIDGET_TEMPLATE'''
+reboot_overlay_template = '''$REBOOT_OVERLAY_TEMPLATE'''
 
 with open('$html_file', 'r') as f:
     html = f.read()
@@ -214,6 +250,12 @@ with open('$html_file', 'r') as f:
     html = html.replace('{{NAV}}', nav_template)
     html = html.replace('{{FOOTER}}', footer_template)
     html = html.replace('{{BINDING_HELP}}', binding_help_template)
+    html = html.replace('{{WIDGET_BAR_CHART}}', widget_bar_chart_template)
+    html = html.replace('{{WIDGET_GAUGE}}', widget_gauge_template)
+    html = html.replace('{{WIDGET_SPARKLINE}}', widget_sparkline_template)
+    html = html.replace('{{STYLE_HELP}}', style_help_template)
+    html = html.replace('{{HEALTH_WIDGET}}', health_widget_template)
+    html = html.replace('{{REBOOT_OVERLAY}}', reboot_overlay_template)
     
     # Project name substitution
     html = html.replace('{{PROJECT_NAME}}', '$PROJECT_NAME')

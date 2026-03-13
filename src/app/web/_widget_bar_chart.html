@@ -1,0 +1,47 @@
+                <!-- Bar Chart Settings (conditional, shown only for bar_chart widget type) -->
+                <details class="editor-group" id="pad-edit-bar-chart-section" style="display:none;">
+                    <summary>Bar Chart Settings</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-widget-data-binding">Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-widget-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/energy/solar_power;power]">
+                                
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-bar-min">Min Value</label>
+                                <input type="number" id="pad-edit-widget-bar-min" step="any" value="0" placeholder="0">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-bar-max">Max Value</label>
+                                <input type="number" id="pad-edit-widget-bar-max" step="any" value="3" placeholder="3">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-color">Bar Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
+                            <small>Use an <code>[expr:threshold(…)]</code> binding for color-by-value</small>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-bar-bg-color">Bar Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-bg-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#1A1A1A"></div>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-bar-width-pct">Bar Width %</label>
+                                <input type="number" id="pad-edit-widget-bar-width-pct" min="1" max="100" value="100" placeholder="100">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-widget-orientation">Orientation</label>
+                                <select id="pad-edit-widget-orientation">
+                                    <option value="vertical">Vertical</option>
+                                    <option value="horizontal">Horizontal</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </details>
