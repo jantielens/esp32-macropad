@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Widget color bindings not updating** — all binding-driven color fields in gauge, bar chart, and sparkline widgets (track color, needle color, tick color, bar background, line colors, threshold colors, reference line colors, min/max marker colors) were only resolved once at widget creation and never re-resolved during display updates. Colors driven by binding expressions (e.g. `[expr:[mqtt:topic]>50?"#ff0000":"#00ff00"]`) now update live every display cycle via the widget `tick()` callback. Also fixed the pad screen's `update()` gating — widget color re-resolution no longer depends on a data value change
+- **Widget color bindings not updating** — all binding-driven color fields in gauge, bar chart, and sparkline widgets (track color, needle color, tick color, bar background, arc colors, line colors, reference line colors, min/max marker colors) were only resolved once at widget creation and never re-resolved during display updates. Colors driven by binding expressions (e.g. `[expr:threshold([mqtt:topic;value], "#4CAF50", 50, "#FF9800", 80, "#F44336")]`) now update live every display cycle via the widget `tick()` callback. Also fixed the pad screen's `update()` gating — widget color re-resolution no longer depends on a data value change
 
 ### Added
 - **Gauge — zero centered mode** — new "Zero centered" option for gauges with negative-to-positive ranges (e.g., grid power -3 kW to +3 kW). The arc fills from the zero point instead of the start edge: negative values grow leftward and positive values grow rightward from zero. The zero point is derived from where 0 falls in the min/max range. Ideal for bidirectional metrics like electricity import/export, temperature deviation, or balance indicators
@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Color picker — unified input** — the color picker popover now uses a single unified input field that accepts both static hex colors and binding expressions. The previous separate hex/binding dual-input design has been replaced with a wider 380px popover with a close button. Color fields that support bindings show an **fx** badge hint above the color swatch
+- **Threshold colors → bindable color fields** — replaced the per-widget 4-zone threshold color system (use absolute, reversed/higher-is-better, color tiers, threshold sliders) with single bindable color fields per widget: `bar_color` for bar chart, `arc_color`/`arc_color_2`/`arc_color_3` for gauge rings. Sparkline already had individual `line_color` fields. All color fields accept `[expr:threshold(...)]` expressions for the same (and more flexible) multi-zone coloring. **Breaking:** existing configs using `threshold_1`–`threshold_3`, `color_good`/`color_ok`/`color_warn`/`color_bad`, `use_absolute`, `higher_is_better`, and `use_thresholds` will have those fields silently ignored — reconfigure colors using binding expressions or the new threshold generator
+- **Color picker — threshold expression generator** — the color picker popover now includes a collapsible "Generate Color by Threshold" helper. Pick 4 zone colors, set breakpoints, and the expression auto-generates as you type into a ready-to-use `[expr:threshold(...)]` binding. Empty thresholds auto-fill with even spacing over 0–100
 
 ## [1.7.0] - 2026-03-11
 

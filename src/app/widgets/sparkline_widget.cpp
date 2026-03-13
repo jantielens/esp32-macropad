@@ -40,17 +40,10 @@
 struct SparklineConfig {
     float    min_val;              // Y-axis minimum (NAN = auto-scale)
     float    max_val;              // Y-axis maximum (NAN = auto-scale)
-    float    threshold_1;          // Color tier breakpoints
-    float    threshold_2;
-    float    threshold_3;
     float    ref_line_y[MAX_REF_LINES];   // Reference line Y-values (NAN = disabled)
-    char     color_good[CONFIG_BINDABLE_SHORT_LEN];       // Color tier 0 (default "#4CAF50")
-    char     color_ok[CONFIG_BINDABLE_SHORT_LEN];         // Color tier 1 (default "#8BC34A")
-    char     color_attention[CONFIG_BINDABLE_SHORT_LEN];  // Color tier 2 (default "#FF9800")
-    char     color_warning[CONFIG_BINDABLE_SHORT_LEN];    // Color tier 3 (default "#F44336")
-    char     line_color[CONFIG_BINDABLE_SHORT_LEN];       // Main line color (default "#4CAF50")
-    char     line_color_2[CONFIG_BINDABLE_SHORT_LEN];     // Extra line 2 color
-    char     line_color_3[CONFIG_BINDABLE_SHORT_LEN];     // Extra line 3 color
+    char     line_color[CONFIG_COLOR_MAX_LEN];            // Main line color (bindable, default "#4CAF50")
+    char     line_color_2[CONFIG_COLOR_MAX_LEN];          // Extra line 2 color
+    char     line_color_3[CONFIG_COLOR_MAX_LEN];          // Extra line 3 color
     char     min_label_color[CONFIG_BINDABLE_SHORT_LEN];  // Empty = follow line color
     char     max_label_color[CONFIG_BINDABLE_SHORT_LEN];  // Empty = follow line color
     char     ref_line_color[MAX_REF_LINES][CONFIG_BINDABLE_SHORT_LEN]; // Reference line colors
@@ -61,8 +54,6 @@ struct SparklineConfig {
     uint8_t  marker_size_max;      // Max marker dot size (0 = off, default 5)
     uint8_t  current_dot_size;     // Current-value dot size at right edge (0 = off)
     uint8_t  ref_line_pattern[MAX_REF_LINES]; // REF_LINE_SOLID/DOTTED/DASHED
-    bool     use_absolute;         // Compare |value| for color tiers
-    bool     use_thresholds;       // true = color by current value tier
     bool     unified_autoscale;    // true = shared auto min/max across all lines
     bool     ref_in_view;          // true = expand auto-scale to include ref lines
     uint8_t  smooth_factor;         // Gaussian smoothing radius (0=off, 1-8 = kernel radius)
@@ -101,34 +92,6 @@ struct SparklineState {
 static_assert(sizeof(SparklineState) <= WIDGET_STATE_MAX_BYTES,
               "SparklineState exceeds WIDGET_STATE_MAX_BYTES");
 
-// ---- Color tier helper (with dynamic thresholds for auto-scale) ----
-
-static lv_color_t pick_tier_color(const SparklineConfig* cfg,
-                                  float auto_min, float auto_max,
-                                  float value) {
-    float cmp = cfg->use_absolute ? fabsf(value) : value;
-
-    // Compute effective thresholds: use config values if explicit,
-    // otherwise derive from the effective Y-axis range
-    float t1 = cfg->threshold_1;
-    float t2 = cfg->threshold_2;
-    float t3 = cfg->threshold_3;
-    if (isnan(t1) || isnan(t2) || isnan(t3)) {
-        float lo = isnan(cfg->min_val) ? auto_min : cfg->min_val;
-        float hi = isnan(cfg->max_val) ? auto_max : cfg->max_val;
-        if (!isfinite(lo) || !isfinite(hi) || lo >= hi) { lo = 0.0f; hi = 1.0f; }
-        float r = hi - lo;
-        if (isnan(t1)) t1 = lo + r * 0.33f;
-        if (isnan(t2)) t2 = lo + r * 0.66f;
-        if (isnan(t3)) t3 = lo + r * 0.90f;
-    }
-
-    if (cmp >= t3) return resolve_lv_color(cfg->color_warning, 0xF44336);
-    if (cmp >= t2) return resolve_lv_color(cfg->color_attention, 0xFF9800);
-    if (cmp >= t1) return resolve_lv_color(cfg->color_ok, 0x8BC34A);
-    return resolve_lv_color(cfg->color_good, 0x4CAF50);
-}
-
 // ---- WidgetType callbacks ----
 
 static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
@@ -153,23 +116,7 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     widget_parse_field(btn["widget_sparkline_line_color"], cfg->line_color, sizeof(cfg->line_color), "#4CAF50");
     widget_parse_field(btn["widget_sparkline_line_color_2"], cfg->line_color_2, sizeof(cfg->line_color_2), "#2196F3");
     widget_parse_field(btn["widget_sparkline_line_color_3"], cfg->line_color_3, sizeof(cfg->line_color_3), "#9C27B0");
-    cfg->use_thresholds = btn["widget_sparkline_use_thresholds"] | false;
-    cfg->use_absolute = btn["widget_use_absolute"] | false;
     cfg->unified_autoscale = btn["widget_sparkline_unified_scale"] | true;  // default on
-
-    // Color tiers (same defaults as bar chart)
-    widget_parse_field(btn["widget_color_good"],      cfg->color_good,      sizeof(cfg->color_good),      "#4CAF50");
-    widget_parse_field(btn["widget_color_ok"],        cfg->color_ok,        sizeof(cfg->color_ok),        "#8BC34A");
-    widget_parse_field(btn["widget_color_attention"], cfg->color_attention, sizeof(cfg->color_attention), "#FF9800");
-    widget_parse_field(btn["widget_color_warning"],   cfg->color_warning,   sizeof(cfg->color_warning),   "#F44336");
-
-    // Thresholds: NAN = auto (computed dynamically from effective range)
-    JsonVariant vt1 = btn["widget_threshold_1"];
-    JsonVariant vt2 = btn["widget_threshold_2"];
-    JsonVariant vt3 = btn["widget_threshold_3"];
-    cfg->threshold_1 = vt1.isNull() ? NAN : vt1.as<float>();
-    cfg->threshold_2 = vt2.isNull() ? NAN : vt2.as<float>();
-    cfg->threshold_3 = vt3.isNull() ? NAN : vt3.as<float>();
 
     // Min/max markers
     cfg->marker_size_min = btn["widget_sparkline_marker_size_min"] | (uint8_t)0;
@@ -615,11 +562,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                                  &smooth_info[i]);
 
         // Re-resolve line color (binding may have changed)
-        if (i == 0 && cfg->use_thresholds && isfinite(snap.last_value)) {
-            // Threshold coloring applies to main line only
-            lv_color_t color = pick_tier_color(cfg, snap.auto_min, snap.auto_max, snap.last_value);
-            lv_obj_set_style_line_color(st->lines[0], color, 0);
-        } else {
+        {
             uint32_t lc = line_colors_resolved[i];
             lv_obj_set_style_line_color(st->lines[i],
                 lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF), 0);
@@ -680,14 +623,9 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         if (si.valid_count > 0 && isfinite(si.smoothed_last)) {
             int16_t cr = cfg->current_dot_size / 2;
 
-            // Color: threshold color if thresholds on (main line only), else line color
+            // Color: always use line color (threshold expressions are resolved in line_colors_resolved)
             lv_color_t cd_clr;
-            if (ci == 0 && cfg->use_thresholds) {
-                cd_clr = pick_tier_color(cfg,
-                    main_snap_valid ? main_snap.auto_min : si.smoothed_min,
-                    main_snap_valid ? main_snap.auto_max : si.smoothed_max,
-                    si.smoothed_last);
-            } else {
+            {
                 uint32_t lc = line_colors_resolved[ci];
                 cd_clr = lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF);
             }

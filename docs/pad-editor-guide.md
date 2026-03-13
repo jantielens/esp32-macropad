@@ -209,22 +209,18 @@ The bar chart widget draws a vertical or horizontal bar that fills based on a nu
 |---------|-------------|
 | **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
 | **Min / Max** | The value range. The bar is empty at min and full at max |
-| **Use absolute value** | When on, negative values fill the bar too (useful for grid power that can be negative) |
-| **Reversed, high values are better** | When toggled, the four color picker values swap in place so low values use warning colors and high values use good colors (e.g. battery level, signal strength). The zone labels stay fixed — only the colors move |
 | **Bar width %** | How wide the bar is relative to the button (1–100%). In horizontal mode, controls the bar height instead |
+| **Bar color** | The fill color of the bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
 | **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
 
-**Color thresholds** divide the bar into up to four colored zones. The zone labels are positional (Below T1, T1–T2, T2–T3, Above T3) and stay fixed. Toggling "Reversed" swaps the color picker values so the colors visually flip while labels remain in place:
+**Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: pick your zone colors, set breakpoints, and the expression auto-generates as you type. For a solar panel with a 5 kW max:
 
-| Zone label | Default color (normal) | Default color (reversed) |
-|-----------|----------------------|-------------------------|
-| Below T1 | Green (`#4CAF50`) | Red (`#F44336`) |
-| T1 – T2 | Light green (`#8BC34A`) | Orange (`#FF9800`) |
-| T2 – T3 | Orange (`#FF9800`) | Light green (`#8BC34A`) |
-| Above T3 | Red (`#F44336`) | Green (`#4CAF50`) |
+```
+[expr:threshold([mqtt:solar/power;watts], "#4CAF50", 1000, "#8BC34A", 3000, "#FF9800", 4500, "#F44336")]
+```
 
-Thresholds default to 33%, 66%, and 90% of the range. Customize them to match your use case — for a solar panel with a 5 kW max, you might set thresholds at 1.0, 3.0, and 4.5 kW.
+Green below 1 kW, light green 1–3 kW, orange 3–4.5 kW, red above 4.5 kW.
 
 Labels, icons, and colors still work alongside the widget. A typical bar chart button uses the top label for a title ("Solar") and the bottom label for the current value (`[mqtt:solar/power;watts;%.0f W]`).
 
@@ -237,28 +233,29 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | Setting | Description |
 |---------|-------------|
 | **Data Binding (outer ring)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temperature]`, `[time:%S]`) |
-| **Data Binding (middle ring)** | Optional — adds a concentric middle ring. Same settings (min/max, colors, thresholds) as the outer ring, different data source |
-| **Data Binding (inner ring)** | Optional — adds a concentric inner ring (requires middle ring). Same shared settings |
+| **Data Binding (middle ring)** | Optional — adds a concentric middle ring with its own data source |
+| **Data Binding (inner ring)** | Optional — adds a concentric inner ring (requires middle ring) |
 | **Min / Max** | The value range. The arc is empty at min and full at max |
 | **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
 | **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
 | **Zero centered** | Arc fills from the zero point instead of the start edge. Negative values grow one direction, positive values grow the other. The zero point is derived from where 0 falls in the min/max range |
-| **Use absolute value** | When on, negative values fill the arc too |
 | **Show needle** | Display a line from the center to the current value position on the arc |
-| **Reversed, high values are better** | Swaps the four color picker values (same behavior as bar chart) |
 | **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
 | **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
 | **Needle Width** | Line width in pixels (0 = hidden, max 10) |
 | **Tick Width** | Tick line width in pixels (1–5) |
+| **Arc Color** | Fill color of the outer ring arc. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
+| **Arc Color 2** | Fill color of the middle ring arc (shown when middle ring is active). Default: blue (`#2196F3`) |
+| **Arc Color 3** | Fill color of the inner ring arc (shown when inner ring is active). Default: purple (`#9C27B0`) |
 | **Track Color** | Color of the unfilled arc background. Supports binding expressions for dynamic color |
 | **Needle Color** | Color of the needle line. Supports binding expressions for dynamic color |
 | **Tick Color** | Color of the tick marks. Supports binding expressions for dynamic color |
 
-**Color thresholds** work identically to the bar chart — four zones (Below T1, T1–T2, T2–T3, Above T3) with the same swap behavior when "Reversed" is checked.
+Each ring has its own arc color field, so rings can be independently colored or threshold-driven. Use `[expr:threshold(...)]` in any arc color field for value-based coloring — the color picker's built-in **Generate Color by Threshold** helper makes this easy.
 
 The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
 
-**Multi-ring gauges** — fill in the middle and/or inner ring data bindings to add concentric rings (Apple Health ring style). All rings share the same min/max, thresholds, colors, arc degrees, and start angle. Only the outer ring shows the needle and tick marks. The arc width percentage applies to each ring equally, with automatic gaps between them.
+**Multi-ring gauges** — fill in the middle and/or inner ring data bindings to add concentric rings (Apple Health ring style). All rings share the same min/max, arc degrees, and start angle, but each ring has its own arc color. Only the outer ring shows the needle and tick marks. The arc width percentage applies to each ring equally, with automatic gaps between them.
 
 **Zero centered example** (grid power, -3 kW to +3 kW):
 - Data binding: `[mqtt:grid/power;$.value]`, Min: -3, Max: 3
@@ -285,14 +282,13 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
 | **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
 | **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
-| **Color by value** | Enable 4-zone color thresholds on the main line (same system as bar chart and gauge). When enabled with auto min/max, thresholds are computed dynamically from observed data range |
 | **Max marker size** | Dot radius for the maximum-value marker (0 = off, 1–20 px). When non-zero, a dot and optional label are drawn at the highest point in the visible data |
 | **Max format** | Printf format string for the max label (e.g., `hi %.1f`). Only one `%f`/`%e`/`%g` specifier allowed. Leave empty for dot only (no label) |
 | **Max label color** | Override color for the max label text. White (#FFFFFF) means "auto" — the label inherits the line's current color |
 | **Min marker size** | Same as max marker, but for the lowest point in the visible data |
 | **Min format** | Printf format string for the min label (e.g., `lo %.1f`) |
 | **Min label color** | Override color for the min label text. White = auto |
-| **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Follows threshold color when "Color by value" is enabled |
+| **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Uses the line’s resolved color |
 | **Reference line 1/2/3** | Up to 3 horizontal reference lines at fixed Y values. Each has a Y value (numeric), a color, and a line pattern (Solid, Dotted, or Dashed). Drawn behind the data lines. Only lines with a valid Y value are rendered |
 | **Keep reference lines in view** | When enabled, auto-scale expands the Y range to include all configured reference line values, so they are always visible. Data that exceeds the reference lines still expands the range normally. Only affects auto-scaled axes (explicit min/max take priority) |
 | **Smoothing** | Gaussian kernel smoothing radius (0 = off, 1–8). Smooths the trend line by averaging neighboring data points — higher values produce a smoother curve. A value of 3–4 gives a pleasant smoothing effect; 8 gives heavy averaging. Min/max markers and current-value dot are positioned on the smoothed line. Set to 0 for raw data rendering |
@@ -313,7 +309,7 @@ Labels, icons, and colors still work alongside the widget. A typical sparkline b
 **CPU usage sparkline:**
 - Data binding: `[health:cpu]`
 - Min: 0, Max: 100, Time window: 300 (5 minutes), Slots: 60
-- Use thresholds: on (green→red as CPU increases)
+- Line color: `[expr:threshold([health:cpu], "#4CAF50", 50, "#FF9800", 80, "#F44336")]` (green→orange→red as CPU increases)
 
 **Multi-line solar comparison:**
 - Data binding: `[mqtt:home/solar/power;production]` (green line)
@@ -629,8 +625,7 @@ If any inner binding hasn't resolved yet (shows `---`), the entire expression re
 Color fields throughout the button editor accept binding expressions, making buttons and widgets change color based on live data. This includes:
 
 - **Button colors** — background, text, and border
-- **Widget colors** — bar chart background, gauge track/needle/tick, sparkline line colors, reference line colors, min/max marker colors
-- **Threshold colors** — the four color zone pickers in bar chart, gauge, and sparkline widgets
+- **Widget colors** — bar chart bar color, gauge arc/track/needle/tick colors, sparkline line colors, reference line colors, min/max marker colors
 
 All color bindings update live every display cycle — you don't need new data to arrive for a color change to take effect.
 

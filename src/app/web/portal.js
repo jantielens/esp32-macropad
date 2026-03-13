@@ -1593,19 +1593,6 @@ function padWidgetTypeChanged() {
     });
 }
 
-function padSwapColors(prefix) {
-    const ids = [prefix + '-good', prefix + '-ok',
-                 prefix + '-attention', prefix + '-warning'];
-    const vals = ids.map(id => document.getElementById(id).value);
-    vals.reverse();
-    ids.forEach((id, i) => { document.getElementById(id).value = vals[i]; });
-}
-
-function padSparklineThresholdToggle() {
-    const show = document.getElementById('pad-edit-sparkline-use-thresholds').checked;
-    document.getElementById('pad-edit-sparkline-threshold-section').style.display = show ? '' : 'none';
-}
-
 async function padLoadPage(page) {
     padState.page = page;
     padState.rawJson = null;
@@ -1919,6 +1906,17 @@ function padColorPopoverCreate() {
         '<div class="color-popover-grid" id="cp-recent-grid"></div>' +
         '<div class="color-popover-section">Palette</div>' +
         '<div class="color-popover-grid" id="cp-palette-grid"></div>' +
+        '<details class="cp-gen" id="cp-gen">' +
+            '<summary class="color-popover-section" style="cursor:pointer;list-style:none;margin-bottom:0;">' +
+                '<span class="cp-gen-arrow">&#9654;</span> Generate Color by Threshold' +
+            '</summary>' +
+            '<div class="cp-gen-body">' +
+                '<label class="cp-gen-label">Data Source</label>' +
+                '<input type="text" id="cp-gen-source" class="cp-gen-input" maxlength="191" placeholder="[mqtt:topic;$.path]" spellcheck="false">' +
+                '<label class="cp-gen-label">Color Stops</label>' +
+                '<div id="cp-gen-stops"></div>' +
+            '</div>' +
+        '</details>' +
         '<div class="color-popover-input-row">' +
             '<input type="text" id="cp-input" maxlength="191" placeholder="#RRGGBB or [expr:…]" spellcheck="false">' +
             '<button type="button" class="btn btn-small btn-primary" id="cp-apply">Apply</button>' +
@@ -1949,7 +1947,15 @@ function padColorPopoverCreate() {
     pop.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') padColorPopoverClose();
     });
-    _cpPopover = { pop: pop, bd: bd, target: null };
+    // Generator: toggle arrow on open/close + reposition popover
+    var genDetails = pop.querySelector('#cp-gen');
+    genDetails.addEventListener('toggle', function() {
+        genDetails.querySelector('.cp-gen-arrow').textContent = genDetails.open ? '\u25BC' : '\u25B6';
+        padColorPopoverReposition();
+    });
+    // Generator: auto-generate on source changes
+    pop.querySelector('#cp-gen-source').addEventListener('input', padThresholdGenerate);
+    _cpPopover = { pop: pop, bd: bd, target: null, anchor: null };
     return _cpPopover;
 }
 
@@ -1957,6 +1963,9 @@ function padColorPopoverCreate() {
 function padColorPopoverOpen(swatch, input) {
     var cp = padColorPopoverCreate();
     cp.target = input;
+    cp.anchor = swatch;
+    // Reset generator state
+    padThresholdGenReset();
     // Show off-screen first so we can measure
     cp.pop.style.left = '-9999px';
     cp.pop.style.top = '-9999px';
@@ -1991,8 +2000,15 @@ function padColorPopoverOpen(swatch, input) {
     cp.pop.querySelector('#cp-input').value = input.value.trim();
     cp.bd.style.display = 'block';
     cp.pop.style.display = 'block';
-    // Measure and position
-    var rect = swatch.getBoundingClientRect();
+    padColorPopoverReposition();
+    cp.pop.querySelector('#cp-input').focus();
+}
+
+/** Reposition the popover to stay within the viewport. */
+function padColorPopoverReposition() {
+    if (!_cpPopover || !_cpPopover.anchor) return;
+    var cp = _cpPopover;
+    var rect = cp.anchor.getBoundingClientRect();
     var popRect = cp.pop.getBoundingClientRect();
     var popW = popRect.width, popH = popRect.height, margin = 8;
     var left = rect.left;
@@ -2003,7 +2019,74 @@ function padColorPopoverOpen(swatch, input) {
     if (top < margin) top = margin;
     cp.pop.style.left = left + 'px';
     cp.pop.style.top = top + 'px';
-    cp.pop.querySelector('#cp-input').focus();
+}
+
+var CP_GEN_DEFAULT_COLORS = ['#4CAF50', '#8BC34A', '#FF9800', '#F44336'];
+
+/** Add one color-stop row to the generator. */
+function padThresholdGenAddStop(container, color, threshold) {
+    var row = document.createElement('div');
+    row.className = 'cp-gen-stop';
+    var isFirst = container.children.length === 0;
+    row.innerHTML =
+        '<div class="cp-gen-swatch" style="background:' + (color || '#888') + '"></div>' +
+        '<input type="color" class="cp-gen-cpick" value="' + (color || '#888888') + '">' +
+        (isFirst
+            ? '<span class="cp-gen-base-label">Base</span>'
+            : '<span class="cp-gen-ge">&ge;</span><input type="text" class="cp-gen-tval" placeholder="" value="' + (threshold || '') + '">');
+    var swatch = row.querySelector('.cp-gen-swatch');
+    var cpick = row.querySelector('.cp-gen-cpick');
+    cpick.addEventListener('input', function() { swatch.style.background = cpick.value; padThresholdGenerate(); });
+    swatch.addEventListener('click', function() { cpick.click(); });
+    var tval = row.querySelector('.cp-gen-tval');
+    if (tval) tval.addEventListener('input', padThresholdGenerate);
+    container.appendChild(row);
+}
+
+/** Reset the generator to default state. */
+function padThresholdGenReset() {
+    if (!_cpPopover) return;
+    var pop = _cpPopover.pop;
+    var gen = pop.querySelector('#cp-gen');
+    gen.removeAttribute('open');
+    gen.querySelector('.cp-gen-arrow').textContent = '\u25B6';
+    pop.querySelector('#cp-gen-source').value = '';
+    var stops = pop.querySelector('#cp-gen-stops');
+    stops.innerHTML = '';
+    CP_GEN_DEFAULT_COLORS.forEach(function(c) { padThresholdGenAddStop(stops, c, ''); });
+}
+
+/** Build threshold expression from generator inputs and write to #cp-input. */
+function padThresholdGenerate() {
+    if (!_cpPopover) return;
+    var pop = _cpPopover.pop;
+    var src = pop.querySelector('#cp-gen-source').value.trim();
+    if (!src) return;
+    var rows = pop.querySelectorAll('#cp-gen-stops .cp-gen-stop');
+    var colors = [];
+    var thresholds = [];
+    for (var i = 0; i < rows.length; i++) {
+        colors.push(rows[i].querySelector('.cp-gen-cpick').value.toUpperCase());
+        if (i > 0) {
+            var tInput = rows[i].querySelector('.cp-gen-tval');
+            thresholds.push(tInput ? tInput.value.trim() : '');
+        }
+    }
+    // Auto-fill empty thresholds with even spacing over 0-100
+    var allEmpty = thresholds.every(function(v) { return v === ''; });
+    if (allEmpty && thresholds.length > 0) {
+        var step = 100 / colors.length;
+        for (var j = 0; j < thresholds.length; j++) {
+            thresholds[j] = String(Math.round(step * (j + 1)));
+        }
+    }
+    // Build expression: threshold(src, "#c0", t1, "#c1", ...)
+    var parts = '[expr:threshold(' + src + ', "' + colors[0] + '"';
+    for (var k = 0; k < thresholds.length; k++) {
+        parts += ', ' + thresholds[k] + ', "' + colors[k + 1] + '"';
+    }
+    parts += ')]';
+    pop.querySelector('#cp-input').value = parts;
 }
 
 /** Apply a value from the popover to the target input. */
@@ -2328,16 +2411,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : 0;
     document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : 3;
     document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
-    document.getElementById('pad-edit-widget-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : true;
-    document.getElementById('pad-edit-widget-higher-is-better').checked = (btn.widget_higher_is_better !== undefined) ? btn.widget_higher_is_better : false;
-    /* labels are static; colors loaded from config */
-    document.getElementById('pad-edit-widget-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
-    document.getElementById('pad-edit-widget-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
-    document.getElementById('pad-edit-widget-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
-    padSetBindableColor('pad-edit-widget-color-good', btn.widget_color_good, '#4CAF50');
-    padSetBindableColor('pad-edit-widget-color-ok', btn.widget_color_ok, '#8BC34A');
-    padSetBindableColor('pad-edit-widget-color-attention', btn.widget_color_attention, '#FF9800');
-    padSetBindableColor('pad-edit-widget-color-warning', btn.widget_color_warning, '#F44336');
+    padSetBindableColor('pad-edit-widget-bar-color', btn.widget_bar_color, '#4CAF50');
     padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, '#1A1A1A');
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
     document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
@@ -2351,16 +2425,10 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-degrees').value = (btn.widget_gauge_degrees !== undefined) ? btn.widget_gauge_degrees : 180;
     document.getElementById('pad-edit-gauge-start-angle').value = (btn.widget_gauge_start_angle !== undefined) ? btn.widget_gauge_start_angle : 180;
     document.getElementById('pad-edit-gauge-zero-centered').checked = (btn.widget_gauge_zero_centered !== undefined) ? btn.widget_gauge_zero_centered : false;
-    document.getElementById('pad-edit-gauge-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : true;
     document.getElementById('pad-edit-gauge-show-needle').checked = (btn.widget_gauge_show_needle !== undefined) ? btn.widget_gauge_show_needle : true;
-    document.getElementById('pad-edit-gauge-higher-is-better').checked = (btn.widget_gauge_higher_is_better !== undefined) ? btn.widget_gauge_higher_is_better : false;
-    document.getElementById('pad-edit-gauge-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
-    document.getElementById('pad-edit-gauge-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
-    document.getElementById('pad-edit-gauge-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
-    padSetBindableColor('pad-edit-gauge-color-good', btn.widget_color_good, '#4CAF50');
-    padSetBindableColor('pad-edit-gauge-color-ok', btn.widget_color_ok, '#8BC34A');
-    padSetBindableColor('pad-edit-gauge-color-attention', btn.widget_color_attention, '#FF9800');
-    padSetBindableColor('pad-edit-gauge-color-warning', btn.widget_color_warning, '#F44336');
+    padSetBindableColor('pad-edit-gauge-arc-color', btn.widget_arc_color, '#4CAF50');
+    padSetBindableColor('pad-edit-gauge-arc-color-2', btn.widget_arc_color_2, '#2196F3');
+    padSetBindableColor('pad-edit-gauge-arc-color-3', btn.widget_arc_color_3, '#9C27B0');
     padSetBindableColor('pad-edit-gauge-track-color', btn.widget_gauge_track_color, '#1A1A1A');
     padSetBindableColor('pad-edit-gauge-needle-color', btn.widget_gauge_needle_color, '#FFFFFF');
     padSetBindableColor('pad-edit-gauge-tick-color', btn.widget_gauge_tick_color, '#808080');
@@ -2382,7 +2450,6 @@ function padDialogOpen(col, row) {
     padSetBindableColor('pad-edit-sparkline-line-color-3', btn.widget_sparkline_line_color_3, '#9C27B0');
     document.getElementById('pad-edit-sparkline-line-width').value = (btn.widget_sparkline_line_width !== undefined) ? btn.widget_sparkline_line_width : 2;
     document.getElementById('pad-edit-sparkline-smooth').value = (btn.widget_sparkline_smooth !== undefined) ? btn.widget_sparkline_smooth : 0;
-    document.getElementById('pad-edit-sparkline-use-thresholds').checked = btn.widget_sparkline_use_thresholds || false;
     document.getElementById('pad-edit-sparkline-unified-scale').checked = (btn.widget_sparkline_unified_scale !== undefined) ? btn.widget_sparkline_unified_scale : true;
 
     // Min/max markers
@@ -2403,16 +2470,7 @@ function padDialogOpen(col, row) {
         document.getElementById('pad-edit-sparkline-ref-' + r + '-pattern').value = (btn['widget_sparkline_ref_' + r + '_pattern'] !== undefined) ? btn['widget_sparkline_ref_' + r + '_pattern'] : 0;
     }
     document.getElementById('pad-edit-sparkline-ref-in-view').checked = btn.widget_sparkline_ref_in_view || false;
-    document.getElementById('pad-edit-sparkline-use-absolute').checked = (btn.widget_use_absolute !== undefined) ? btn.widget_use_absolute : false;
-    document.getElementById('pad-edit-sparkline-higher-is-better').checked = btn.widget_sparkline_higher_is_better || false;
-    document.getElementById('pad-edit-sparkline-threshold-1').value = (btn.widget_threshold_1 !== undefined) ? btn.widget_threshold_1 : '';
-    document.getElementById('pad-edit-sparkline-threshold-2').value = (btn.widget_threshold_2 !== undefined) ? btn.widget_threshold_2 : '';
-    document.getElementById('pad-edit-sparkline-threshold-3').value = (btn.widget_threshold_3 !== undefined) ? btn.widget_threshold_3 : '';
-    padSetBindableColor('pad-edit-sparkline-color-good', btn.widget_color_good, '#4CAF50');
-    padSetBindableColor('pad-edit-sparkline-color-ok', btn.widget_color_ok, '#8BC34A');
-    padSetBindableColor('pad-edit-sparkline-color-attention', btn.widget_color_attention, '#FF9800');
-    padSetBindableColor('pad-edit-sparkline-color-warning', btn.widget_color_warning, '#F44336');
-    padSparklineThresholdToggle();
+
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -2527,18 +2585,7 @@ function padDialogOk() {
             const barMax = parseFloat(document.getElementById('pad-edit-widget-bar-max').value);
             btn.widget_bar_min = isNaN(barMin) ? 0 : barMin;
             btn.widget_bar_max = isNaN(barMax) ? 3 : barMax;
-            btn.widget_use_absolute = document.getElementById('pad-edit-widget-use-absolute').checked;
-            btn.widget_higher_is_better = document.getElementById('pad-edit-widget-higher-is-better').checked;
-            const t1 = parseFloat(document.getElementById('pad-edit-widget-threshold-1').value);
-            const t2 = parseFloat(document.getElementById('pad-edit-widget-threshold-2').value);
-            const t3 = parseFloat(document.getElementById('pad-edit-widget-threshold-3').value);
-            if (!isNaN(t1)) btn.widget_threshold_1 = t1;
-            if (!isNaN(t2)) btn.widget_threshold_2 = t2;
-            if (!isNaN(t3)) btn.widget_threshold_3 = t3;
-            btn.widget_color_good = padGetBindableColor('pad-edit-widget-color-good');
-            btn.widget_color_ok = padGetBindableColor('pad-edit-widget-color-ok');
-            btn.widget_color_attention = padGetBindableColor('pad-edit-widget-color-attention');
-            btn.widget_color_warning = padGetBindableColor('pad-edit-widget-color-warning');
+            btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');
             btn.widget_bar_bg_color = padGetBindableColor('pad-edit-widget-bar-bg-color');
             const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
@@ -2559,19 +2606,10 @@ function padDialogOk() {
             const gSa = parseInt(document.getElementById('pad-edit-gauge-start-angle').value);
             btn.widget_gauge_start_angle = (isNaN(gSa)) ? 180 : gSa % 360;
             btn.widget_gauge_zero_centered = document.getElementById('pad-edit-gauge-zero-centered').checked;
-            btn.widget_use_absolute = document.getElementById('pad-edit-gauge-use-absolute').checked;
             btn.widget_gauge_show_needle = document.getElementById('pad-edit-gauge-show-needle').checked;
-            btn.widget_gauge_higher_is_better = document.getElementById('pad-edit-gauge-higher-is-better').checked;
-            const gt1 = parseFloat(document.getElementById('pad-edit-gauge-threshold-1').value);
-            const gt2 = parseFloat(document.getElementById('pad-edit-gauge-threshold-2').value);
-            const gt3 = parseFloat(document.getElementById('pad-edit-gauge-threshold-3').value);
-            if (!isNaN(gt1)) btn.widget_threshold_1 = gt1;
-            if (!isNaN(gt2)) btn.widget_threshold_2 = gt2;
-            if (!isNaN(gt3)) btn.widget_threshold_3 = gt3;
-            btn.widget_color_good = padGetBindableColor('pad-edit-gauge-color-good');
-            btn.widget_color_ok = padGetBindableColor('pad-edit-gauge-color-ok');
-            btn.widget_color_attention = padGetBindableColor('pad-edit-gauge-color-attention');
-            btn.widget_color_warning = padGetBindableColor('pad-edit-gauge-color-warning');
+            btn.widget_arc_color = padGetBindableColor('pad-edit-gauge-arc-color');
+            btn.widget_arc_color_2 = padGetBindableColor('pad-edit-gauge-arc-color-2');
+            btn.widget_arc_color_3 = padGetBindableColor('pad-edit-gauge-arc-color-3');
             btn.widget_gauge_track_color = padGetBindableColor('pad-edit-gauge-track-color');
             btn.widget_gauge_needle_color = padGetBindableColor('pad-edit-gauge-needle-color');
             btn.widget_gauge_tick_color = padGetBindableColor('pad-edit-gauge-tick-color');
@@ -2604,7 +2642,6 @@ function padDialogOk() {
             btn.widget_sparkline_line_width = (isNaN(sLw) || sLw < 1) ? 2 : (sLw > 10) ? 10 : sLw;
             const sSmooth = parseInt(document.getElementById('pad-edit-sparkline-smooth').value);
             btn.widget_sparkline_smooth = (isNaN(sSmooth) || sSmooth < 0) ? 0 : (sSmooth > 8) ? 8 : sSmooth;
-            btn.widget_sparkline_use_thresholds = document.getElementById('pad-edit-sparkline-use-thresholds').checked;
             btn.widget_sparkline_unified_scale = document.getElementById('pad-edit-sparkline-unified-scale').checked;
 
             // Min/max markers
@@ -2636,20 +2673,6 @@ function padDialogOk() {
                 }
             }
             if (document.getElementById('pad-edit-sparkline-ref-in-view').checked) btn.widget_sparkline_ref_in_view = true;
-            if (btn.widget_sparkline_use_thresholds) {
-                btn.widget_use_absolute = document.getElementById('pad-edit-sparkline-use-absolute').checked;
-                btn.widget_sparkline_higher_is_better = document.getElementById('pad-edit-sparkline-higher-is-better').checked;
-                const st1 = parseFloat(document.getElementById('pad-edit-sparkline-threshold-1').value);
-                const st2 = parseFloat(document.getElementById('pad-edit-sparkline-threshold-2').value);
-                const st3 = parseFloat(document.getElementById('pad-edit-sparkline-threshold-3').value);
-                if (!isNaN(st1)) btn.widget_threshold_1 = st1;
-                if (!isNaN(st2)) btn.widget_threshold_2 = st2;
-                if (!isNaN(st3)) btn.widget_threshold_3 = st3;
-                btn.widget_color_good = padGetBindableColor('pad-edit-sparkline-color-good');
-                btn.widget_color_ok = padGetBindableColor('pad-edit-sparkline-color-ok');
-                btn.widget_color_attention = padGetBindableColor('pad-edit-sparkline-color-attention');
-                btn.widget_color_warning = padGetBindableColor('pad-edit-sparkline-color-warning');
-            }
         }
     }
 

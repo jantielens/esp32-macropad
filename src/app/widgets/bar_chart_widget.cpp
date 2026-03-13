@@ -32,14 +32,7 @@
 struct BarChartConfig {
     float    bar_max;              // Full-scale value (default 3.0)
     float    bar_min;              // Minimum value (default 0.0)
-    char     color_good[CONFIG_BINDABLE_SHORT_LEN];      // Color tier 0 (default "#4CAF50")
-    char     color_ok[CONFIG_BINDABLE_SHORT_LEN];        // Color tier 1 (default "#8BC34A")
-    char     color_attention[CONFIG_BINDABLE_SHORT_LEN]; // Color tier 2 (default "#FF9800")
-    char     color_warning[CONFIG_BINDABLE_SHORT_LEN];   // Color tier 3 (default "#F44336")
-    float    threshold_1;         // Breakpoint tier 0 → 1
-    float    threshold_2;         // Breakpoint tier 1 → 2
-    float    threshold_3;         // Breakpoint tier 2 → 3
-    bool     use_absolute;        // true = compare |value| (default); false = signed
+    char     bar_color[CONFIG_COLOR_MAX_LEN];            // Bar fill color (bindable, default "#4CAF50")
     char     bar_bg_color[CONFIG_BINDABLE_SHORT_LEN];    // Bar track background (default "#1A1A1A")
     uint8_t  bar_width_pct;       // Bar width as % of tile width (1-100, default 100)
     bool     horizontal;          // true = horizontal bar (grows left→right)
@@ -59,18 +52,6 @@ struct BarChartState {
 static_assert(sizeof(BarChartState) <= WIDGET_STATE_MAX_BYTES,
               "BarChartState exceeds WIDGET_STATE_MAX_BYTES");
 
-// ---- Helper: pick color tier based on value ----
-
-static lv_color_t pick_tier_color(const BarChartConfig* cfg, float value) {
-    float cmp = cfg->use_absolute ? fabsf(value) : value;
-    // Color values are already arranged by the web UI (swapped when "reversed" is on),
-    // so the firmware always uses the same ascending threshold logic.
-    if (cmp >= cfg->threshold_3) return resolve_lv_color(cfg->color_warning, 0xF44336);
-    if (cmp >= cfg->threshold_2) return resolve_lv_color(cfg->color_attention, 0xFF9800);
-    if (cmp >= cfg->threshold_1) return resolve_lv_color(cfg->color_ok, 0x8BC34A);
-    return resolve_lv_color(cfg->color_good, 0x4CAF50);
-}
-
 // ---- WidgetType callbacks ----
 
 static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
@@ -79,26 +60,14 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
 
     cfg->bar_max = btn["widget_bar_max"] | 3.0f;
     cfg->bar_min = btn["widget_bar_min"] | 0.0f;
-    cfg->use_absolute = btn["widget_use_absolute"] | true;
 
-    // Color tiers with energy-monitor-inspired defaults
-    widget_parse_field(btn["widget_color_good"],      cfg->color_good,      sizeof(cfg->color_good),      "#4CAF50");
-    widget_parse_field(btn["widget_color_ok"],        cfg->color_ok,        sizeof(cfg->color_ok),        "#8BC34A");
-    widget_parse_field(btn["widget_color_attention"], cfg->color_attention, sizeof(cfg->color_attention), "#FF9800");
-    widget_parse_field(btn["widget_color_warning"],   cfg->color_warning,   sizeof(cfg->color_warning),   "#F44336");
-
-    widget_parse_field(btn["widget_bar_bg_color"],    cfg->bar_bg_color,    sizeof(cfg->bar_bg_color),    "#1A1A1A");
+    widget_parse_field(btn["widget_bar_color"],     cfg->bar_color,     sizeof(cfg->bar_color),     "#4CAF50");
+    widget_parse_field(btn["widget_bar_bg_color"],  cfg->bar_bg_color,  sizeof(cfg->bar_bg_color),  "#1A1A1A");
     uint8_t wpct = btn["widget_bar_width_pct"] | (uint8_t)100;
     cfg->bar_width_pct = clamp_val<uint8_t>(wpct, 1, 100);
 
     const char* orient = btn["widget_orientation"] | "";
     cfg->horizontal = (orient[0] == 'h' || orient[0] == 'H');
-
-    // Thresholds default to even thirds of bar_max
-    float range = cfg->bar_max - cfg->bar_min;
-    cfg->threshold_1 = btn["widget_threshold_1"] | (cfg->bar_min + range * 0.33f);
-    cfg->threshold_2 = btn["widget_threshold_2"] | (cfg->bar_min + range * 0.66f);
-    cfg->threshold_3 = btn["widget_threshold_3"] | (cfg->bar_min + range * 0.90f);
 }
 
 static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
@@ -231,9 +200,8 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_align(st->bar_fill, LV_ALIGN_BOTTOM_MID, 0, 0);
     }
 
-    // Pick color tier
-    lv_color_t color = pick_tier_color(cfg, value);
-    lv_obj_set_style_bg_color(st->bar_fill, color, 0);
+    // Apply bar fill color (may be a threshold() binding expression)
+    lv_obj_set_style_bg_color(st->bar_fill, resolve_lv_color(cfg->bar_color, 0x4CAF50), 0);
 
 }
 
@@ -245,13 +213,9 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<BarChartState*>(state->data);
     if (!st->bar_fill || !st->bar_bg) return;
 
-    // Re-resolve bar background color
+    // Re-resolve binding-driven colors
     lv_obj_set_style_bg_color(st->bar_bg, resolve_lv_color(cfg->bar_bg_color, 0x1A1A1A), 0);
-
-    // Re-apply threshold color using stored last_value
-    if (!isnan(st->last_value)) {
-        lv_obj_set_style_bg_color(st->bar_fill, pick_tier_color(cfg, st->last_value), 0);
-    }
+    lv_obj_set_style_bg_color(st->bar_fill, resolve_lv_color(cfg->bar_color, 0x4CAF50), 0);
 }
 
 static void bar_chart_destroy(WidgetState* state) {

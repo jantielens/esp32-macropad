@@ -238,45 +238,9 @@
                             </div>
                         </div>
                         <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-widget-use-absolute" checked> Use absolute value</label>
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-widget-higher-is-better" onchange="padSwapColors('pad-edit-widget-color')"> Reversed, high values are better</label>
-                            <small>When checked, low values use warning colors and high values use good colors (e.g. battery level, signal strength)</small>
-                        </div>
-
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-threshold-1">Threshold 1</label>
-                                <input type="number" id="pad-edit-widget-threshold-1" step="any" placeholder="auto">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-threshold-2">Threshold 2</label>
-                                <input type="number" id="pad-edit-widget-threshold-2" step="any" placeholder="auto">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-threshold-3">Threshold 3</label>
-                                <input type="number" id="pad-edit-widget-threshold-3" step="any" placeholder="auto">
-                            </div>
-                        </div>
-
-                        <div class="bar-chart-colors">
-                            <div class="form-group">
-                                <label for="pad-edit-widget-color-good">Below T1 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-color-good" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
-                            </div>
-                            <div class="form-group">
-                                <label for="pad-edit-widget-color-ok">T1 – T2 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-color-ok" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#8BC34A"></div>
-                            </div>
-                            <div class="form-group">
-                                <label for="pad-edit-widget-color-attention">T2 – T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-color-attention" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
-                            </div>
-                            <div class="form-group">
-                                <label for="pad-edit-widget-color-warning">Above T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-color-warning" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#F44336"></div>
-                            </div>
+                            <label for="pad-edit-widget-bar-color">Bar Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
+                            <small>Use an <code>[expr:threshold(…)]</code> binding for color-by-value</small>
                         </div>
 
                         <div style="display:flex; gap:8px;">
@@ -356,49 +320,24 @@
                             <small>Arc fills from the zero point — negative values grow left, positive grow right</small>
                         </div>
                         <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-gauge-use-absolute" checked> Use absolute value</label>
-                        </div>
-                        <div class="form-group">
                             <label><input type="checkbox" id="pad-edit-gauge-show-needle" checked> Show needle</label>
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-gauge-higher-is-better" onchange="padSwapColors('pad-edit-gauge-color')"> Reversed, high values are better</label>
-                            <small>When checked, low values use warning colors and high values use good colors</small>
-                        </div>
-
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-threshold-1">Threshold 1</label>
-                                <input type="number" id="pad-edit-gauge-threshold-1" step="any" placeholder="auto">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-threshold-2">Threshold 2</label>
-                                <input type="number" id="pad-edit-gauge-threshold-2" step="any" placeholder="auto">
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-threshold-3">Threshold 3</label>
-                                <input type="number" id="pad-edit-gauge-threshold-3" step="any" placeholder="auto">
-                            </div>
                         </div>
 
                         <div class="bar-chart-colors">
                             <div class="form-group">
-                                <label for="pad-edit-gauge-color-good">Below T1 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-color-good" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
+                                <label for="pad-edit-gauge-arc-color">Arc Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-gauge-color-ok">T1 – T2 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-color-ok" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#8BC34A"></div>
+                                <label for="pad-edit-gauge-arc-color-2">Arc Color 2 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-2" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-gauge-color-attention">T2 – T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-color-attention" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
-                            </div>
-                            <div class="form-group">
-                                <label for="pad-edit-gauge-color-warning">Above T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-color-warning" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#F44336"></div>
+                                <label for="pad-edit-gauge-arc-color-3">Arc Color 3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-3" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
                             </div>
                         </div>
+                        <small>Use an <code>[expr:threshold(…)]</code> binding for color-by-value</small>
 
                         <div class="bar-chart-colors">
                             <div class="form-group">
@@ -644,56 +583,7 @@
                             </div>
                         </div>
 
-                        <div class="widget-sub-heading">Main Line Color by Value</div>
 
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-sparkline-use-thresholds" onchange="padSparklineThresholdToggle()"> Color by value</label>
-                            <small>Main line color changes based on current value (uses thresholds below)</small>
-                        </div>
-
-                        <div id="pad-edit-sparkline-threshold-section" style="display:none;">
-                            <div class="form-group">
-                                <label><input type="checkbox" id="pad-edit-sparkline-use-absolute"> Use absolute value</label>
-                                <small>Compare |value| for thresholds, ignoring sign</small>
-                            </div>
-                            <div class="form-group">
-                                <label><input type="checkbox" id="pad-edit-sparkline-higher-is-better" onchange="padSwapColors('pad-edit-sparkline-color')"> Reversed, high values are better</label>
-                            </div>
-
-                            <div style="display:flex; gap:8px;">
-                                <div class="form-group" style="flex:1;">
-                                    <label for="pad-edit-sparkline-threshold-1">Threshold 1</label>
-                                    <input type="number" id="pad-edit-sparkline-threshold-1" step="any" placeholder="auto">
-                                </div>
-                                <div class="form-group" style="flex:1;">
-                                    <label for="pad-edit-sparkline-threshold-2">Threshold 2</label>
-                                    <input type="number" id="pad-edit-sparkline-threshold-2" step="any" placeholder="auto">
-                                </div>
-                                <div class="form-group" style="flex:1;">
-                                    <label for="pad-edit-sparkline-threshold-3">Threshold 3</label>
-                                    <input type="number" id="pad-edit-sparkline-threshold-3" step="any" placeholder="auto">
-                                </div>
-                            </div>
-
-                            <div class="bar-chart-colors">
-                                <div class="form-group">
-                                    <label for="pad-edit-sparkline-color-good">Below T1 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-color-good" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="pad-edit-sparkline-color-ok">T1 – T2 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-color-ok" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#8BC34A"></div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="pad-edit-sparkline-color-attention">T2 – T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-color-attention" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="pad-edit-sparkline-color-warning">Above T3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-color-warning" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#F44336"></div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </details>
 
