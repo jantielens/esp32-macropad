@@ -185,6 +185,33 @@ static lv_obj_t* gauge_create_arc(lv_obj_t* tile, const GaugeConfig* cfg,
     return arc;
 }
 
+static void gauge_create_ticks_for_radius(lv_obj_t* tile, GaugeState* st,
+                                          const GaugeConfig* cfg,
+                                          int16_t cx, int16_t cy,
+                                          int16_t radius, int16_t arc_width,
+                                          lv_color_t tick_color) {
+    int16_t tick_outer = radius - 1;
+    int16_t tick_inner = radius - arc_width + 1;
+    if (tick_inner < 1) tick_inner = 1;
+
+    for (uint8_t i = 1; i <= cfg->tick_count; i++) {
+        float angle = (float)cfg->start_angle + (float)cfg->arc_degrees * i / (cfg->tick_count + 1);
+        float a_rad = angle * (float)M_PI / 180.0f;
+        float cos_a = cosf(a_rad);
+        float sin_a = sinf(a_rad);
+
+        int16_t x1 = cx + (int16_t)roundf(cos_a * tick_inner);
+        int16_t y1 = cy + (int16_t)roundf(sin_a * tick_inner);
+        int16_t x2 = cx + (int16_t)roundf(cos_a * tick_outer);
+        int16_t y2 = cy + (int16_t)roundf(sin_a * tick_outer);
+
+        lv_obj_t* tl = gauge_create_line(tile, x1, y1, x2, y2,
+                          tick_color, cfg->tick_width);
+        if (tl && st->tick_lines)
+            st->tick_lines[st->tick_line_count++] = tl;
+    }
+}
+
 // ---- WidgetType callbacks ----
 
 static void gauge_parse(const JsonObject& btn, uint8_t* data) {
@@ -320,28 +347,27 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         st->arc_ring3 = gauge_create_arc(tile, cfg, cx, cy, r3, arc_width);
     }
 
-    // ---- Tick marks (outer ring only) ----
+    // ---- Tick marks (repeat across all active rings) ----
     if (cfg->tick_count > 0) {
         lv_color_t tick_color = resolve_lv_color(cfg->tick_color, 0x808080);
-        int16_t tick_outer = radius - 1;
-        int16_t tick_inner = radius - arc_width + 1;
-        st->tick_lines = (lv_obj_t**)lv_malloc(sizeof(lv_obj_t*) * cfg->tick_count);
-        if (!st->tick_lines) { LOGW(TAG, "Failed to alloc tick_lines (%d)", cfg->tick_count); }
-        for (uint8_t i = 1; i <= cfg->tick_count; i++) {
-            float angle = (float)cfg->start_angle + (float)cfg->arc_degrees * i / (cfg->tick_count + 1);
-            float a_rad = angle * (float)M_PI / 180.0f;
-            float cos_a = cosf(a_rad);
-            float sin_a = sinf(a_rad);
+        uint16_t total_tick_lines = (uint16_t)cfg->tick_count * ring_count;
+        st->tick_lines = (lv_obj_t**)lv_malloc(sizeof(lv_obj_t*) * total_tick_lines);
+        if (!st->tick_lines) {
+            LOGW(TAG, "Failed to alloc tick_lines (%u)", total_tick_lines);
+        }
 
-            int16_t x1 = cx + (int16_t)roundf(cos_a * tick_inner);
-            int16_t y1 = cy + (int16_t)roundf(sin_a * tick_inner);
-            int16_t x2 = cx + (int16_t)roundf(cos_a * tick_outer);
-            int16_t y2 = cy + (int16_t)roundf(sin_a * tick_outer);
+        gauge_create_ticks_for_radius(tile, st, cfg, cx, cy, radius, arc_width, tick_color);
 
-            lv_obj_t* tl = gauge_create_line(tile, x1, y1, x2, y2,
-                              tick_color, cfg->tick_width);
-            if (tl && st->tick_lines)
-                st->tick_lines[st->tick_line_count++] = tl;
+        if (ring_count >= 2) {
+            int16_t r2 = radius - arc_width - ring_gap;
+            if (r2 < 8) r2 = 8;
+            gauge_create_ticks_for_radius(tile, st, cfg, cx, cy, r2, arc_width, tick_color);
+        }
+
+        if (ring_count >= 3) {
+            int16_t r3 = radius - 2 * (arc_width + ring_gap);
+            if (r3 < 8) r3 = 8;
+            gauge_create_ticks_for_radius(tile, st, cfg, cx, cy, r3, arc_width, tick_color);
         }
     }
 

@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Expression `threshold()` function** — new built-in function `threshold(value, color0, t1, color1, ..., tN, colorN)` for mapping a numeric value to color strings based on ascending thresholds. Variable arity (1–N thresholds), returns a `"#RRGGBB"` string. Replaces verbose nested ternaries for multi-zone color bindings. Composable with any binding type — e.g. `[expr:threshold([mqtt:sensor;temp], "#4CAF50", 25, "#FF9800", 35, "#FF0000")]`
 
 ### Improved
+- **Gauge tick marks on all rings** — concentric gauge widgets now repeat their configured tick marks on the middle and inner rings instead of drawing them only on the outer ring, keeping multi-ring gauges visually consistent across all active arcs
 - **Widget registration macro** — new `REGISTER_WIDGET(name, stream_fn)` macro in `widget.h` replaces 10-line boilerplate registration blocks in each widget file with a one-liner; applied to bar chart, gauge, and sparkline widgets
 - **Widget value clamping utility** — new `clamp_val<T>(v, lo, hi)` template in `widget.h` replaces ad-hoc ternary chains for two-sided clamping in widget config parsing (4 call sites in bar chart and gauge)
 - **Widget utility tests** — new `test_widget_common.cpp` with 27 host-native tests covering `clamp_val` across int, uint8_t, float, and uint16_t types including widget-specific ranges; total test count: 191
