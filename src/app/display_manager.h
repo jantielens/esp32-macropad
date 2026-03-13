@@ -105,7 +105,7 @@ private:
 		#endif
 
 		// Pad screens (one per page, 0–7)
-		PadScreen padScreens[MAX_PAD_PAGES];
+		PadScreen padScreens[MAX_PADS];
 
 		// Screen registry for runtime navigation (static allocation, no heap)
 		// screenCount tracks how many slots are actually used (currently 2: info, test)

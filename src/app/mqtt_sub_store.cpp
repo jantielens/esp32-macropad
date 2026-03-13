@@ -214,15 +214,15 @@ void mqtt_sub_store_subscribe_all() {
     };
 
     // Temp config buffer
-    PadPageConfig* cfg = (PadPageConfig*)heap_caps_malloc(
-        sizeof(PadPageConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadPageConfig*)malloc(sizeof(PadPageConfig));
+    PadConfig* cfg = (PadConfig*)heap_caps_malloc(
+        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
     if (!cfg) {
         free(unique);
         return;
     }
 
-    for (uint8_t page = 0; page < MAX_PAD_PAGES; page++) {
+    for (uint8_t page = 0; page < MAX_PADS; page++) {
         if (!pad_config_load(page, cfg)) continue;
         // Set page context so [pad:] collector can resolve named bindings
         pad_binding_set_page(cfg);

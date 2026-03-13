@@ -73,11 +73,11 @@
 
                 <!-- Empty state -->
                 <div id="pad-empty-state" class="pad-empty-state" style="display:none;">
-                    <p>No configuration for this page yet.</p>
-                    <p><small>Adjust columns and rows above, then click empty cells to add buttons.</small></p>
+                    <p>No configuration for this pad yet.</p>
+                    <p><small>Adjust columns and rows above, then click empty buttons to configure them.</small></p>
                 </div>
 
-                <small style="margin-top:8px; display:block;">Click a cell to edit its button.</small>
+                <small style="margin-top:8px; display:block;">Click a button to edit it.</small>
 
                 <!-- Background Color -->
                 <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
@@ -151,9 +151,9 @@
                     <summary>Layout</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-widget-type">Button Type</label>
+                            <label for="pad-edit-widget-type">Widget</label>
                             <select id="pad-edit-widget-type" onchange="padWidgetTypeChanged()">
-                                <option value="">Normal Button</option>
+                                <option value="">None</option>
                                 <option value="bar_chart">Bar Chart</option>
                                 <option value="gauge">Gauge</option>
                                 <option value="sparkline">Sparkline</option>

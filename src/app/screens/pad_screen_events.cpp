@@ -121,7 +121,7 @@ void PadScreen::onSwipe(lv_event_t* e) {
 
     // Swipe left/right to move between pad pages
     int next_page = -1;
-    if (dir == LV_DIR_LEFT && self->pageIndex < MAX_PAD_PAGES - 1) {
+    if (dir == LV_DIR_LEFT && self->pageIndex < MAX_PADS - 1) {
         next_page = self->pageIndex + 1;
     } else if (dir == LV_DIR_RIGHT && self->pageIndex > 0) {
         next_page = self->pageIndex - 1;

@@ -32,7 +32,7 @@ const DEVICE_CONFIG_VERSION = 1;
 
 // --- Icon Support ---
 
-let padTileSizesCache = null;
+let padButtonSizesCache = null;
 
 // Lazy-load Material Symbols font
 let _materialSymbolsLoaded = false;
@@ -180,18 +180,18 @@ function padCanvasToPNG(canvas) {
     });
 }
 
-async function padGetTileSizes() {
-    if (padTileSizesCache &&
-        padTileSizesCache.cols === padState.cols &&
-        padTileSizesCache.rows === padState.rows) {
-        return padTileSizesCache;
+async function padGetButtonSizes() {
+    if (padButtonSizesCache &&
+        padButtonSizesCache.cols === padState.cols &&
+        padButtonSizesCache.rows === padState.rows) {
+        return padButtonSizesCache;
     }
-    const resp = await fetch('/api/pad/tile_sizes?cols=' + padState.cols + '&rows=' + padState.rows);
-    if (!resp.ok) throw new Error('Failed to get tile sizes');
+    const resp = await fetch('/api/pad/button_sizes?cols=' + padState.cols + '&rows=' + padState.rows);
+    if (!resp.ok) throw new Error('Failed to get button sizes');
     const data = await resp.json();
     data.cols = padState.cols;
     data.rows = padState.rows;
-    padTileSizesCache = data;
+    padButtonSizesCache = data;
     return data;
 }
 
@@ -202,9 +202,9 @@ async function padUploadPageIcons() {
     const iconButtons = padState.buttons.filter(b => b.icon_id);
     if (iconButtons.length === 0) return;
 
-    const tileSizes = await padGetTileSizes();
-    const baseW = tileSizes.tile_w - tileSizes.padding * 2;
-    const baseH = tileSizes.tile_h - tileSizes.padding * 2;
+    const btnSizes = await padGetButtonSizes();
+    const baseW = btnSizes.button_w - btnSizes.padding * 2;
+    const baseH = btnSizes.button_h - btnSizes.padding * 2;
 
     const needsMi = iconButtons.some(b => b.icon_id.startsWith('mi_'));
     if (needsMi) await padEnsureMaterialSymbols();
@@ -214,14 +214,14 @@ async function padUploadPageIcons() {
     for (const btn of iconButtons) {
         const cs = btn.col_span || 1;
         const rs = btn.row_span || 1;
-        // LVGL content area = tile - 2*padding - 2*border_width
+        // LVGL content area = button - 2*padding - 2*border_width
         const bw = (btn.border_width !== undefined) ? btn.border_width : 1;
-        const fullW = baseW * cs + tileSizes.gap * (cs - 1) - bw * 2;
-        const fullH = baseH * rs + tileSizes.gap * (rs - 1) - bw * 2;
+        const fullW = baseW * cs + btnSizes.gap * (cs - 1) - bw * 2;
+        const fullH = baseH * rs + btnSizes.gap * (rs - 1) - bw * 2;
         const kind = btn.icon_id.startsWith('mi_') ? 1 : 0;
 
         // Reserve space for top/bottom labels (font_small_h each)
-        const labelH = tileSizes.font_small_h || 0;
+        const labelH = btnSizes.font_small_h || 0;
         const topReserve = btn.label_top ? labelH : 0;
         const bottomReserve = btn.label_bottom ? labelH : 0;
         var iconW = fullW;

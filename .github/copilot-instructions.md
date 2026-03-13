@@ -49,7 +49,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - Expr scheme registered by `expr_binding_init()` — resolves `[expr:expression;format]` tokens by first resolving inner bindings, then evaluating with a recursive-descent expression evaluator
   - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings, threshold function); no ESP32 dependencies, host-testable
   - `expr_binding.cpp/h` - Glue between expr_eval and binding_template engine; bracket-depth `;` splitting (compile-time gated by `HAS_DISPLAY`)
-  - Pad scheme registered by `pad_binding_init()` — resolves `[pad:name;format]` tokens against page-level named bindings; supports per-usage format override; enables define-once-use-everywhere pattern for repeated MQTT topics
+  - Pad scheme registered by `pad_binding_init()` — resolves `[pad:name;format]` tokens against pad-level named bindings; supports per-usage format override; enables define-once-use-everywhere pattern for repeated MQTT topics
   - `pad_binding.cpp/h` - Pad binding scheme resolver with page-context pointer, expand utility for data streams, and topic collector that recurses into underlying bindings (compile-time gated by `HAS_DISPLAY`)
   - Pipe fallback syntax: `[scheme:params|fallback]` — replaces default `---` placeholder when a binding can't resolve (e.g., before first MQTT message, during reconnect). Parsed by `split_pipe_fallback()` at outermost bracket depth.
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
@@ -226,7 +226,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/binding_template.cpp/h` - Scheme-extensible token resolver for label text (compile-time gated by `HAS_MQTT`)
 - `src/app/expr_eval.cpp/h` - Pure C expression evaluator (arithmetic, comparisons, ternary, threshold function); host-testable, no ESP32 deps
 - `src/app/expr_binding.cpp/h` - Expression binding glue — registers `[expr:]` scheme (compile-time gated by `HAS_DISPLAY`)
-- `src/app/pad_binding.cpp/h` - Pad binding scheme — resolves `[pad:name;format]` against page-level named bindings (compile-time gated by `HAS_DISPLAY`)
+- `src/app/pad_binding.cpp/h` - Pad binding scheme — resolves `[pad:name;format]` against pad-level named bindings (compile-time gated by `HAS_DISPLAY`)
 - `src/app/health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
 - `src/app/time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
@@ -254,7 +254,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for page-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides
 - `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`)
 - `src/app/screens/pad_screen.cpp/h` - Pad screen with LVGL button tiles, label rendering (uses label style resolvers), icon/widget layout, binding updates, and image fetch integration
 - `src/app/screens/splash_screen.cpp/h` - Boot splash with animated spinner
@@ -525,3 +525,35 @@ If the build fails:
 - **Board→driver visibility**: after editing board overrides, regenerate the table in `src/app/drivers/README.md`:
   - `python3 tools/generate-board-driver-table.py --update-drivers-readme`
 - **Vendored code placement**: third-party source that is not an Arduino library should live under the driver that uses it (driver-scoped vendor code), not in a shared `drivers/vendor/` bucket.
+
+## Terminology Conventions (enforced)
+
+Use these terms consistently in user-facing text (UI, docs, log messages, API responses) and in code (identifiers, comments). Avoid retired synonyms.
+
+### Core Hierarchy
+
+| Term | Definition | Scope |
+|------|-----------|-------|
+| **Screen** | Any UI that can be displayed on the device (splash, info, test, pad, …). | User-facing + code |
+| **Pad** | A user-customizable screen containing a grid of buttons. The device supports up to 8 pads. | User-facing + code |
+| **Button** | An interactive element in a pad's grid. May host labels, icons, colors, actions, images, and optionally a widget. | User-facing + code |
+| **Widget** | A specialized data visualization (gauge, sparkline, bar chart) rendered inside a button. A button without a widget is just a normal button. | User-facing + code |
+
+### Retired / Internal-Only Terms
+
+| Term | Status | Replacement |
+|------|--------|-------------|
+| **Page** (as synonym for pad) | ❌ Retired from user-facing text | Use **pad** |
+| **Tile** (as synonym for button) | ❌ Retired from user-facing text | Use **button** |
+| **Cell** (as synonym for button in user-facing text) | ❌ Retired from user-facing text | Use **button** (or **position** when referring to a grid slot) |
+| `ButtonTile` (LVGL struct) | Internal-only | Acceptable in C++ code — not exposed to users |
+| `.pad-cell` (CSS class) | Internal-only | Acceptable in DOM — not shown in UI text |
+| `tile_w` / `tile_h` (local layout vars) | Internal-only | Acceptable in layout code — not exposed to API or docs |
+
+### Rules
+
+1. **User-facing surfaces** (web UI labels, docs, log messages, REST API field names, HA entity names) must use **screen**, **pad**, **button**, and **widget** exclusively.
+2. **Code identifiers** should follow the same convention for new code. Existing internal identifiers (`ButtonTile`, `.pad-cell`, etc.) may remain until a natural refactor opportunity.
+3. **API contracts**: The REST endpoint is `/api/pad/button_sizes` with JSON fields `button_w` / `button_h`. The `[pad:name]` binding scheme name is unchanged.
+4. **Singular vs plural**: "pad" / "pads", "button" / "buttons" — never "pad page" or "button tile" in user text.
+5. When describing the hierarchy in docs, prefer the natural nesting: *"A pad contains a grid of buttons. Buttons can optionally host a widget."*

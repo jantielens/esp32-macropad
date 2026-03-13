@@ -85,7 +85,7 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		#endif
 
 		// Register pad screens (pad_0 through pad_7)
-		for (uint8_t i = 0; i < MAX_PAD_PAGES && screenCount < MAX_SCREENS; i++) {
+		for (uint8_t i = 0; i < MAX_PADS && screenCount < MAX_SCREENS; i++) {
 				static const char* pad_ids[] = {"pad_0", "pad_1", "pad_2", "pad_3", "pad_4", "pad_5", "pad_6", "pad_7"};
 				static const char* pad_names[] = {"Pad 1", "Pad 2", "Pad 3", "Pad 4", "Pad 5", "Pad 6", "Pad 7", "Pad 8"};
 				availableScreens[screenCount++] = {pad_ids[i], pad_names[i], &padScreens[i]};
@@ -120,7 +120,7 @@ DisplayManager::~DisplayManager() {
 		#if HAS_TOUCH && LV_USE_CANVAS
 		touchTestScreen.destroy();
 		#endif
-		for (uint8_t i = 0; i < MAX_PAD_PAGES; i++) {
+		for (uint8_t i = 0; i < MAX_PADS; i++) {
 				padScreens[i].destroy();
 		}
 		
@@ -345,7 +345,7 @@ void DisplayManager::init() {
 		#if HAS_TOUCH && LV_USE_CANVAS
 		touchTestScreen.create();
 		#endif
-		for (uint8_t i = 0; i < MAX_PAD_PAGES; i++) {
+		for (uint8_t i = 0; i < MAX_PADS; i++) {
 				padScreens[i].create();
 		}
 

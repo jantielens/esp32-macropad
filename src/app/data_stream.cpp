@@ -154,16 +154,16 @@ void data_stream_rebuild() {
     bool keep[DATA_STREAM_MAX_STREAMS] = {};
 
     // Temp config buffer — PSRAM preferred
-    PadPageConfig* cfg = (PadPageConfig*)heap_caps_malloc(
-        sizeof(PadPageConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadPageConfig*)malloc(sizeof(PadPageConfig));
+    PadConfig* cfg = (PadConfig*)heap_caps_malloc(
+        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
     if (!cfg) {
         LOGE(TAG, "OOM for pad config in rebuild");
         return;
     }
 
     // Scan all pad pages for widgets that need data streams
-    for (uint8_t page = 0; page < MAX_PAD_PAGES; page++) {
+    for (uint8_t page = 0; page < MAX_PADS; page++) {
         if (!pad_config_load(page, cfg)) continue;
         for (uint8_t b = 0; b < cfg->button_count; b++) {
             const ScreenButtonConfig& btn = cfg->buttons[b];

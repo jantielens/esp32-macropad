@@ -47,7 +47,7 @@ The portal has four pages:
 If your device has a display, head to the **Pads** page to configure your pad layout:
 
 1. Choose the number of **columns** and **rows** for your grid
-2. Click any cell to open the **button editor**
+2. Click any button to open the **button editor**
 3. Configure each button with:
    - **Labels** (top, center, bottom) — supports live data via [MQTT bindings](#mqtt-bindings)
    - **Icons** — choose from emoji or Material Symbols
@@ -56,7 +56,7 @@ If your device has a display, head to the **Pads** page to configure your pad la
    - **Background images** — load images from a URL (JPEG/PNG)
 4. Click **Save Pad** when you're done
 
-You can create up to **8 pad pages** and switch between them on the device or via Home Assistant.
+You can create up to **8 pads** and switch between them on the device or via Home Assistant.
 
 ### MQTT Bindings
 

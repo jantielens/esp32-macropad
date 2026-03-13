@@ -8,11 +8,11 @@ You'll find the pad editor on the **Pads** page of the web portal (Full mode onl
 
 ## Designing a Pad
 
-A pad is a page of buttons arranged in a grid. You can think of each pad as a separate screen on your device — swipe or navigate between them using button actions.
+A pad is a grid of buttons displayed on the device — swipe or navigate between pads using button actions.
 
 ### Pad Settings
 
-At the top of the pad editor, you configure the page itself:
+At the top of the pad editor, you configure the pad itself:
 
 - **Pad selection** — switch between Pad 1 through 8. Each pad is saved independently.
 - **Pad Name** — an optional label shown in Home Assistant and on-device. For example, "Solar", "Lights", or "Cameras".
@@ -26,7 +26,7 @@ At the top of the pad editor, you configure the page itself:
 
 ## The Button Editor
 
-Click any cell in the grid preview to open the button editor. This is where each button gets its personality — from static labels and icons to live MQTT data and conditional colors.
+Click any button in the grid preview to open the button editor. This is where each button gets its personality — from static labels and icons to live MQTT data and conditional colors.
 
 The editor is organized into collapsible sections. Let's walk through each one.
 
@@ -158,7 +158,7 @@ This disables a door-lock button when the alarm is armed.
 
 > If a binding hasn't resolved yet (shows `---`) or returns an error, the button defaults to **enabled** to avoid hiding buttons during startup.
 
-### Spans (Multi-Cell Buttons)
+### Spans (Multi-Column/Row Buttons)
 
 **Column span** and **Row span** let a button occupy multiple grid cells. A button with col_span=2 takes up two columns; row_span=2 takes two rows. Use this for important display elements — a large clock button, a camera feed, or a prominent status indicator.
 
@@ -181,7 +181,7 @@ Any button can display an image fetched from a URL, rendered as the button backg
 - **Weather maps**: Fetch a radar image once per minute (interval: 60000).
 - **Album art**: Use a Home Assistant media player's entity picture URL.
 
-> Images are decoded in a background task and scaled to the button's pixel dimensions using bilinear filtering. Keep image resolution reasonable — the device fetches, decodes, and scales in PSRAM. A few camera tiles at 480×320 work fine; avoid huge 4K images.
+> Images are decoded in a background task and scaled to the button's pixel dimensions using bilinear filtering. Keep image resolution reasonable — the device fetches, decodes, and scales in PSRAM. A few camera buttons at 480×320 work fine; avoid huge 4K images.
 
 ### Actions (Tap and Long-Press)
 
@@ -713,9 +713,9 @@ Toggles between bright red and dark red every second — useful for alert button
 
 **Syntax:** `[pad:name]` or `[pad:name;format]`
 
-Pad bindings let you define a data source once at the page level and reference it across all buttons and widgets on that page. This avoids repeating the same MQTT topic everywhere and makes it easy to switch data sources — change one binding instead of editing every button.
+Pad bindings let you define a data source once at the pad level and reference it across all buttons and widgets on that pad. This avoids repeating the same MQTT topic everywhere and makes it easy to switch data sources — change one binding instead of editing every button.
 
-**Defining bindings** — in the pad JSON config, add a `"bindings"` object at the page level:
+**Defining bindings** — in the pad JSON config, add a `"bindings"` object at the pad level:
 
 ```json
 {
@@ -750,7 +750,7 @@ The optional `;format` parameter applies a printf format to the resolved value, 
 
 **Naming rules**: Binding names must start with a letter and contain only letters, digits, and underscores (e.g., `power`, `solar_current`, `temp1`). Maximum 31 characters.
 
-**Limit**: Up to 16 named bindings per page.
+**Limit**: Up to 16 named bindings per pad.
 
 **Why use pad bindings?**
 
@@ -772,11 +772,11 @@ The **More ▾** dropdown above the grid preview provides shortcuts for working 
 
 ### Copy and Paste Buttons
 
-In the button editor dialog, **Copy** saves the current button's settings (everything except grid position) to a clipboard. **Paste** applies the clipboard to whichever cell you're editing. This is the fastest way to create multiple similar buttons — configure one, then copy-paste and adjust the differences.
+In the button editor dialog, **Copy** saves the current button's settings (everything except grid position) to a clipboard. **Paste** applies the clipboard to whichever button you're editing. This is the fastest way to create multiple similar buttons — configure one, then copy-paste and adjust the differences.
 
 ### Fill Pad
 
-After copying a button, **Fill Pad** applies it to every empty cell in the grid. Useful for quickly populating a pad with a template button that you then customize per cell.
+After copying a button, **Fill Pad** applies it to every empty position in the grid. Useful for quickly populating a pad with a template button that you then customize individually.
 
 ### Copy / Paste Pad
 

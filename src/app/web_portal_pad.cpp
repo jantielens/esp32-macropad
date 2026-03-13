@@ -52,7 +52,7 @@ static int parse_page_param(AsyncWebServerRequest *request) {
     int page = val.toInt();
     // toInt() returns 0 for non-numeric; distinguish "0" from error
     if (page == 0 && val != "0") return -1;
-    if (page < 0 || page >= MAX_PAD_PAGES) return -1;
+    if (page < 0 || page >= MAX_PADS) return -1;
     return page;
 }
 

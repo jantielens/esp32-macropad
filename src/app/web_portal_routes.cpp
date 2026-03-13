@@ -126,9 +126,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		);
 		registerOptions("/api/display/screen");
 
-		// Pad tile sizes (registered before /api/pad to avoid prefix match)
-		registerOptions("/api/pad/tile_sizes");
-		server->on("/api/pad/tile_sizes", HTTP_GET, handleGetTileSizes);
+		// Pad button sizes (registered before /api/pad to avoid prefix match)
+		registerOptions("/api/pad/button_sizes");
+		server->on("/api/pad/button_sizes", HTTP_GET, handleGetButtonSizes);
 
 		// Pad config API
 		registerOptions("/api/pad");

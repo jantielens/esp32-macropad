@@ -54,16 +54,16 @@ void PadScreen::buildTiles() {
 
     if (!container) return;
 
-    // Allocate PadPageConfig in PSRAM (temporary — freed at end of this function)
-    PadPageConfig* cfg = nullptr;
+    // Allocate PadConfig in PSRAM (temporary — freed at end of this function)
+    PadConfig* cfg = nullptr;
     if (psramFound()) {
-        cfg = (PadPageConfig*)heap_caps_malloc(sizeof(PadPageConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        cfg = (PadConfig*)heap_caps_malloc(sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     }
     if (!cfg) {
-        cfg = (PadPageConfig*)malloc(sizeof(PadPageConfig));
+        cfg = (PadConfig*)malloc(sizeof(PadConfig));
     }
     if (!cfg) {
-        LOGE(TAG, "OOM for PadPageConfig");
+        LOGE(TAG, "OOM for PadConfig");
         return;
     }
 

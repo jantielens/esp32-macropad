@@ -6,13 +6,13 @@
 #include <stdint.h>
 
 // ============================================================================
-// Pad Config — per-page button configuration stored on LittleFS
+// Pad Config — per-pad button configuration stored on LittleFS
 // ============================================================================
-// Each page (0–7) is stored as /config/pad_N.json on LittleFS.
+// Each pad (0–7) is stored as /config/pad_N.json on LittleFS.
 // The REST API saves raw JSON to preserve all fields (including future ones).
 // pad_config_load() parses only the fields needed for rendering.
 
-#define MAX_PAD_PAGES          8
+#define MAX_PADS          8
 #define MAX_PAD_BUTTONS       64
 #define MAX_GRID_COLS          8
 #define MAX_GRID_ROWS          8
@@ -171,15 +171,15 @@ struct PadBinding {
     char value[CONFIG_LABEL_MAX_LEN];         // binding template, e.g. "[mqtt:solar/power;$.value]"
 };
 
-// Page-level config
-struct PadPageConfig {
+// Per-pad config
+struct PadConfig {
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
-    char bg_color[CONFIG_COLOR_MAX_LEN];         // page background color (default "#000000")
+    char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
 
-    // Named page-level bindings for [pad:name] references
+    // Named pad-level bindings for [pad:name] references
     uint8_t binding_count;
     PadBinding bindings[PAD_MAX_BINDINGS];
 
@@ -194,10 +194,10 @@ extern "C" {
 // Mount LittleFS filesystem. Call once at boot. Returns true on success.
 bool pad_config_init();
 
-// Load page config from LittleFS JSON. Caller provides PadPageConfig buffer.
+// Load pad config from LittleFS JSON. Caller provides PadConfig buffer.
 // On success, out is populated and returns true. On failure (file missing,
 // parse error), out is zeroed and returns false.
-bool pad_config_load(uint8_t page, PadPageConfig* out);
+bool pad_config_load(uint8_t page, PadConfig* out);
 
 // Save raw JSON bytes to LittleFS. Preserves all fields including future/unknown ones.
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len);
