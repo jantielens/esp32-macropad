@@ -95,18 +95,11 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["mqtt_username"] = current_config->mqtt_username;
 				(*doc)["mqtt_password"] = "";
 
-				// Power / transport settings
+				// Power settings
 				(*doc)["power_mode"] = current_config->power_mode;
-				(*doc)["publish_transport"] = current_config->publish_transport;
 				(*doc)["cycle_interval_seconds"] = current_config->cycle_interval_seconds;
 				(*doc)["portal_idle_timeout_seconds"] = current_config->portal_idle_timeout_seconds;
 				(*doc)["wifi_backoff_max_seconds"] = current_config->wifi_backoff_max_seconds;
-
-				// BLE timing
-				(*doc)["ble_adv_burst_ms"] = current_config->ble_adv_burst_ms;
-				(*doc)["ble_adv_gap_ms"] = current_config->ble_adv_gap_ms;
-				(*doc)["ble_adv_bursts"] = current_config->ble_adv_bursts;
-				(*doc)["ble_adv_interval_ms"] = current_config->ble_adv_interval_ms;
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;
@@ -345,11 +338,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				strlcpy(current_config->power_mode, doc["power_mode"] | "always_on", CONFIG_POWER_MODE_MAX_LEN);
 		}
 
-		// Publish transport
-		if (doc.containsKey("publish_transport")) {
-				strlcpy(current_config->publish_transport, doc["publish_transport"] | "ble", CONFIG_PUBLISH_TRANSPORT_MAX_LEN);
-		}
-
 		// Cycle interval (legacy mqtt_interval_seconds supported as alias)
 		const bool has_cycle_interval = doc.containsKey("cycle_interval_seconds");
 		const bool has_mqtt_interval = doc.containsKey("mqtt_interval_seconds");
@@ -380,43 +368,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						current_config->wifi_backoff_max_seconds = (uint16_t)atoi(v ? v : "0");
 				} else {
 						current_config->wifi_backoff_max_seconds = (uint16_t)(doc["wifi_backoff_max_seconds"] | 0);
-				}
-		}
-
-		// BLE timing settings
-		if (doc.containsKey("ble_adv_burst_ms")) {
-				if (doc["ble_adv_burst_ms"].is<const char*>()) {
-						const char* v = doc["ble_adv_burst_ms"];
-						current_config->ble_adv_burst_ms = (uint16_t)atoi(v ? v : "0");
-				} else {
-						current_config->ble_adv_burst_ms = (uint16_t)(doc["ble_adv_burst_ms"] | 0);
-				}
-		}
-
-		if (doc.containsKey("ble_adv_gap_ms")) {
-				if (doc["ble_adv_gap_ms"].is<const char*>()) {
-						const char* v = doc["ble_adv_gap_ms"];
-						current_config->ble_adv_gap_ms = (uint16_t)atoi(v ? v : "0");
-				} else {
-						current_config->ble_adv_gap_ms = (uint16_t)(doc["ble_adv_gap_ms"] | 0);
-				}
-		}
-
-		if (doc.containsKey("ble_adv_bursts")) {
-				if (doc["ble_adv_bursts"].is<const char*>()) {
-						const char* v = doc["ble_adv_bursts"];
-						current_config->ble_adv_bursts = (uint8_t)atoi(v ? v : "0");
-				} else {
-						current_config->ble_adv_bursts = (uint8_t)(doc["ble_adv_bursts"] | 0);
-				}
-		}
-
-		if (doc.containsKey("ble_adv_interval_ms")) {
-				if (doc["ble_adv_interval_ms"].is<const char*>()) {
-						const char* v = doc["ble_adv_interval_ms"];
-						current_config->ble_adv_interval_ms = (uint16_t)atoi(v ? v : "0");
-				} else {
-						current_config->ble_adv_interval_ms = (uint16_t)(doc["ble_adv_interval_ms"] | 0);
 				}
 		}
 

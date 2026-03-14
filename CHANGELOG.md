@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated user-facing docs (`pad-editor-guide.md`, `first-time-setup.md`, `README.md`) to use consistent terminology
   - Added enforced **Terminology Conventions** section to `.github/copilot-instructions.md` with definitions, retired terms, and rules
 
+### Removed
+- **NimBLE / BTHome BLE advertising** — removed the entire BLE BTHome v2 advertising subsystem (`ble_advertiser.cpp/h`, `NimBLE-Arduino` library dependency, `HAS_BLE` compile flag, `PublishTransport` enum, BLE timing config fields, web portal Transport Mode selector and BLE Advertising settings). This simplifies the codebase ahead of the BLE HID keyboard feature. Affected 23 files across firmware, web portal, build system, and documentation.
+
 ### Improved
 - **Pad editor Copy keeps dialog open** — the Copy button now saves the current button state and copies to clipboard without closing the editor, so you can continue editing or immediately paste elsewhere
 - **Pad editor Paste keeps dialog open** — pasting a button now re-opens the editor showing the pasted content, so you can review or tweak before closing

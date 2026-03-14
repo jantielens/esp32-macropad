@@ -111,18 +111,6 @@
                             <small>Always-On keeps services running. Duty-Cycle wakes, publishes, then sleeps.</small>
                         </div>
                     </section>
-
-                    <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                        <div class="form-group">
-                            <label for="publish_transport">Transport Mode</label>
-                            <select id="publish_transport" name="publish_transport">
-                                <option value="ble">BLE</option>
-                                <option value="mqtt">MQTT</option>
-                                <option value="ble_mqtt">BLE + MQTT</option>
-                            </select>
-                            <small>Select which transports publish telemetry.</small>
-                        </div>
-                    </section>
                 </div>
 
                 <div class="grid-2col">
@@ -130,7 +118,7 @@
                         <div class="form-group">
                             <label for="cycle_interval_seconds">Cycle Interval (seconds)</label>
                             <input type="number" id="cycle_interval_seconds" name="cycle_interval_seconds" min="1" max="65535" placeholder="120">
-                            <small>Duty-Cycle sleep interval and BLE/MQTT publish cadence.</small>
+                            <small>Duty-Cycle sleep interval and MQTT publish cadence.</small>
                         </div>
                     </section>
 
@@ -163,42 +151,6 @@
                     </div>
 
                     <small>MQTT publish cadence follows the Cycle Interval.</small>
-                </section>
-
-                <section class="section" id="ble-settings-section" style="margin-top: 12px;">
-                    <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #1d1d1f;">BLE Transport</h3>
-
-                    <div class="grid-2col">
-                        <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                            <div class="form-group">
-                                <label for="ble_adv_burst_ms">Burst Duration (ms)</label>
-                                <input type="number" id="ble_adv_burst_ms" name="ble_adv_burst_ms" min="100" max="60000" placeholder="900">
-                            </div>
-                        </section>
-                        <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                            <div class="form-group">
-                                <label for="ble_adv_gap_ms">Gap Duration (ms)</label>
-                                <input type="number" id="ble_adv_gap_ms" name="ble_adv_gap_ms" min="100" max="60000" placeholder="1100">
-                            </div>
-                        </section>
-                    </div>
-
-                    <div class="grid-2col">
-                        <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                            <div class="form-group">
-                                <label for="ble_adv_bursts">Bursts</label>
-                                <input type="number" id="ble_adv_bursts" name="ble_adv_bursts" min="1" max="10" placeholder="2">
-                            </div>
-                        </section>
-                        <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                            <div class="form-group">
-                                <label for="ble_adv_interval_ms">Adv Interval (ms)</label>
-                                <input type="number" id="ble_adv_interval_ms" name="ble_adv_interval_ms" min="20" max="10000" placeholder="100">
-                            </div>
-                        </section>
-                    </div>
-
-                    <small>Applies when BLE transport is enabled.</small>
                 </section>
             </section>
 

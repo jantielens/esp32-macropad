@@ -21,7 +21,6 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Live data bindings** — display MQTT topics, device health, or date/time directly on buttons
 - **Button actions** — tap or long-press to publish MQTT messages or navigate screens
 - **Toggle state** — buttons reflect on/off state from MQTT topics
-- **BLE advertising** — BTHome v2 support for Bluetooth-based integrations
 - **Remote screen control** — switch pads from Home Assistant
 
 ### Web Configuration Portal

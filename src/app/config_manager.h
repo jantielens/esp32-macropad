@@ -32,9 +32,8 @@
 #define CONFIG_MQTT_USERNAME_MAX_LEN 32
 #define CONFIG_MQTT_PASSWORD_MAX_LEN 64
 
-// Power / transport settings
+// Power settings
 #define CONFIG_POWER_MODE_MAX_LEN 16
-#define CONFIG_PUBLISH_TRANSPORT_MAX_LEN 16
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
 
 // Screen saver MQTT wake binding
@@ -66,18 +65,11 @@ struct DeviceConfig {
 		char mqtt_username[CONFIG_MQTT_USERNAME_MAX_LEN];
 		char mqtt_password[CONFIG_MQTT_PASSWORD_MAX_LEN];
 
-		// Power / transport settings
+		// Power settings
 		char power_mode[CONFIG_POWER_MODE_MAX_LEN];            // always_on | duty_cycle | config | ap
-		char publish_transport[CONFIG_PUBLISH_TRANSPORT_MAX_LEN]; // ble | mqtt | ble_mqtt
 		uint16_t cycle_interval_seconds;                       // default 120
 		uint16_t portal_idle_timeout_seconds;                  // default 120
 		uint16_t wifi_backoff_max_seconds;                     // default 900
-
-		// BLE timing
-		uint16_t ble_adv_burst_ms;                             // default 900
-		uint16_t ble_adv_gap_ms;                               // default 1100
-		uint8_t ble_adv_bursts;                                // default 2
-		uint16_t ble_adv_interval_ms;                          // default 100
 
 		// MQTT scope
 		char mqtt_publish_scope[CONFIG_MQTT_SCOPE_MAX_LEN];    // sensors_only | diagnostics_only | all

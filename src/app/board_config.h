@@ -45,11 +45,6 @@
 #define HAS_BUILTIN_LED false
 #endif
 
-// Enable BLE (NimBLE) advertising support.
-#ifndef HAS_BLE
-#define HAS_BLE false
-#endif
-
 // Enable MQTT and Home Assistant integration.
 #ifndef HAS_MQTT
 #define HAS_MQTT true

@@ -9,7 +9,6 @@
 #include "mqtt_wake.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
-#include "ble_advertiser.h"
 #include "power_config.h"
 #include "power_manager.h"
 #include "portal_idle.h"
@@ -250,17 +249,11 @@ void setup()
 	icon_store_preload_pad_pages();
 	#endif
 
-	const PublishTransport transport = power_config_parse_publish_transport(&device_config);
-	const bool ble_only_always_on = (boot_mode == PowerMode::AlwaysOn) && (transport == PublishTransport::Ble) && (strlen(device_config.wifi_ssid) == 0);
-
 	// Start WiFi BEFORE initializing web server (critical for ESP32-C3)
 	#if HAS_DISPLAY
 	display_manager_set_splash_status("Connecting WiFi...");
 	#endif
 
-	if (ble_only_always_on) {
-		LOGW("Main", "BLE-only mode active (no WiFi SSID); portal unavailable unless forced into Config Mode");
-	} else {
 		if (boot_mode == PowerMode::Ap) {
 			LOGI("Main", "AP mode selected - starting AP mode");
 			web_portal_start_ap();
@@ -290,7 +283,6 @@ void setup()
 		portal_idle_init();
 		portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);
 		portal_idle_set_mode(power_manager_get_current_mode());
-	}
 
 	// Initialize sensors (optional adapters)
 	sensor_manager_init();
@@ -399,10 +391,6 @@ void loop()
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).
 	sensor_manager_loop();
 
-	#if HAS_BLE
-	const bool allow_ble_always_on = config_loaded && power_manager_get_current_mode() != PowerMode::DutyCycle;
-	ble_advertiser_loop(&device_config, allow_ble_always_on);
-	#endif
 
 
 	unsigned long current_ms = millis();

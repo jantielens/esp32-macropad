@@ -15,19 +15,17 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 - The build script propagates a small allowlist of board override defines into global compiler flags so libraries are compiled with the same values.
   - Currently allowlisted:
     - `CONFIG_ASYNC_TCP_STACK_SIZE`
-    - NimBLE tuning (roles + limits + log levels)
     - TFT_eSPI essentials for clean/CI builds (pins + SPI frequencies + controller/bus flags)
   - For TFT_eSPI specifically, `build.sh` also supports a per-board `src/boards/<board>/User_Setup.h` which is force-included for that board (so the build does not depend on a locally modified Arduino library install).
 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 132
+Total flags: 131
 
 ### Features (HAS_*)
 
 - **HAS_BACKLIGHT** default: `false` — Enable backlight control (typically via PWM).
-- **HAS_BLE** default: `false` — Enable BLE (NimBLE) advertising support.
 - **HAS_BUILTIN_LED** default: `false` — Enable built-in status LED support.
 - **HAS_BUTTON** default: `false` — User Button (optional)
 - **HAS_DISPLAY** default: `false` — Enable display + LVGL UI support.
@@ -180,13 +178,13 @@ Total flags: 132
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_BACKLIGHT | HAS_BLE | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3248w535 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3636w518 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| esp32-p4-lcd4b | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc4880p433 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| board-name | HAS_BACKLIGHT | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3248w535 | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3636w518 | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| esp32-p4-lcd4b | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc4880p433 | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -213,12 +211,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/mipi_dsi_driver.cpp
   - src/app/drivers/st7701_rgb_driver.cpp
   - src/app/drivers/tft_espi_driver.cpp
-- **HAS_BLE**
-  - src/app/app.ino
-  - src/app/ble_advertiser.cpp
-  - src/app/ble_advertiser.h
-  - src/app/board_config.h
-  - src/app/duty_cycle.cpp
 - **HAS_BUILTIN_LED**
   - src/app/app.ino
   - src/app/board_config.h

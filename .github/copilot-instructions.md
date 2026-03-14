@@ -62,10 +62,9 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **MQTT Wake Subsystem**: Binding-driven screensaver wakeup (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
   - `mqtt_wake.cpp/h` - Resolves a user-configured binding expression each loop tick; wakes screensaver on OFF→ON edge; keeps screen awake while ON persists via throttled idle-timer reset (~1 s)
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
-  - `power_config.cpp/h` - Power mode and transport parsing helpers
+  - `power_config.cpp/h` - Power mode parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
-  - `duty_cycle.cpp/h` - Duty-cycle execution path (BLE/MQTT publish then sleep)
-  - `ble_advertiser.cpp/h` - BTHome v2 BLE advertising (compile-time gated)
+  - `duty_cycle.cpp/h` - Duty-cycle execution path (MQTT publish then sleep)
   - `wifi_manager.cpp/h` - WiFi connect, cached BSSID, and mDNS startup
   - `portal_idle.cpp/h` - Portal idle timeout and sleep (Config/AP only)
 - **Web Portal**: Multi-page async web server with captive portal support
@@ -218,9 +217,8 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/project_branding.h` - Project branding defines (`PROJECT_NAME`, `PROJECT_DISPLAY_NAME`) (auto-generated)
 - `src/app/config_manager.cpp/h` - NVS-based configuration storage
 - `src/app/power_manager.cpp/h` - Power mode selection, backoff, and sleep helpers
-- `src/app/power_config.cpp/h` - Power mode and transport parsing
+- `src/app/power_config.cpp/h` - Power mode parsing
 - `src/app/duty_cycle.cpp/h` - Duty-cycle runner
-- `src/app/ble_advertiser.cpp/h` - BLE BTHome advertiser (compile-time gated by `HAS_BLE`)
 - `src/app/wifi_manager.cpp/h` - WiFi connect + mDNS (replaces inline connect logic)
 - `src/app/portal_idle.cpp/h` - Portal idle timeout in Config/AP modes
 - `src/app/binding_template.cpp/h` - Scheme-extensible token resolver for label text (compile-time gated by `HAS_MQTT`)
