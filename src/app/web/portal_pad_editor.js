@@ -359,6 +359,7 @@ function padInit() {
                 section.style.display = 'block';
                 const padFooter = document.getElementById('pad-floating-footer');
                 if (padFooter) padFooter.style.display = '';
+                padPopulatePadDropdown();
                 padPopulateScreenDropdown();
                 padLoadPage(0);
                 padRefreshDropdownLabels();
@@ -371,6 +372,19 @@ function padInit() {
         }
     };
     waitForInfo();
+}
+
+function padPopulatePadDropdown() {
+    const sel = document.getElementById('pad-page-select');
+    if (!sel) return;
+    const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
+    sel.innerHTML = '';
+    for (let i = 0; i < maxPads; i++) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = 'Pad ' + (i + 1);
+        sel.appendChild(opt);
+    }
 }
 
 function padPopulateScreenDropdown() {

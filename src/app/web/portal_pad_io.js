@@ -265,9 +265,10 @@ async function deviceExportConfig() {
         delete config.wifi_ssid;
         delete config.wifi_password;
 
-        // Fetch all 8 pad configs
+        // Fetch all pad configs
+        const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
         const pads = [];
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < maxPads; i++) {
             try {
                 const resp = await fetch('/api/pad?page=' + i);
                 if (resp.ok) {
@@ -329,7 +330,8 @@ async function deviceImportConfig(evt) {
 
         // Step 2: Import all pad configs (save each to trigger icon rendering)
         if (Array.isArray(data.pads)) {
-            for (let i = 0; i < data.pads.length && i < 8; i++) {
+            const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
+            for (let i = 0; i < data.pads.length && i < maxPads; i++) {
                 const padJson = data.pads[i];
                 if (!padJson) {
                     // Delete pad if it was null in export

@@ -245,7 +245,7 @@ void setup()
 	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
 	pad_config_init();
 
-	// Initialize icon store and preload icons for all pad pages
+	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
 	#endif

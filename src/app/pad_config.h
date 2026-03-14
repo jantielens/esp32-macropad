@@ -1,5 +1,7 @@
 #pragma once
 
+#include "board_config.h"
+
 #include <cstdlib>
 #include <stdbool.h>
 #include <stddef.h>
@@ -8,11 +10,11 @@
 // ============================================================================
 // Pad Config — per-pad button configuration stored on LittleFS
 // ============================================================================
-// Each pad (0–7) is stored as /config/pad_N.json on LittleFS.
+// Each pad (0..MAX_PADS-1) is stored as /config/pad_N.json on LittleFS.
 // The REST API saves raw JSON to preserve all fields (including future ones).
 // pad_config_load() parses only the fields needed for rendering.
 
-#define MAX_PADS          8
+// MAX_PADS is defined in board_config.h (overridable per board, default 16)
 #define MAX_PAD_BUTTONS       64
 #define MAX_GRID_COLS          8
 #define MAX_GRID_ROWS          8

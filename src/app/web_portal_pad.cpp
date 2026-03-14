@@ -87,7 +87,7 @@ void handleGetPadConfig(AsyncWebServerRequest *request) {
 
     int page = parse_page_param(request);
     if (page < 0) {
-        web_portal_send_json_error(request, 400, "Missing or invalid page parameter (0-7)");
+        web_portal_send_json_error(request, 400, "Missing or invalid page parameter");
         return;
     }
 
@@ -119,7 +119,7 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
         // First chunk — parse page param, allocate buffer
         int page = parse_page_param(request);
         if (page < 0) {
-            web_portal_send_json_error(request, 400, "Missing or invalid page parameter (0-7)");
+            web_portal_send_json_error(request, 400, "Missing or invalid page parameter");
             return;
         }
 
@@ -217,7 +217,7 @@ void handleDeletePadConfig(AsyncWebServerRequest *request) {
 
     int page = parse_page_param(request);
     if (page < 0) {
-        web_portal_send_json_error(request, 400, "Missing or invalid page parameter (0-7)");
+        web_portal_send_json_error(request, 400, "Missing or invalid page parameter");
         return;
     }
 

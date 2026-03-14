@@ -191,7 +191,7 @@ void handleDeletePageIcons(AsyncWebServerRequest *request) {
         return;
     }
     if (page < 0 || page >= MAX_PADS) {
-        web_portal_send_json_error(request, 400, "Page must be 0-7");
+        web_portal_send_json_error(request, 400, "Page out of range");
         return;
     }
 

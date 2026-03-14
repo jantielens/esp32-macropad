@@ -131,6 +131,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		#if HAS_DISPLAY
 				// Display screen information
 				response->print(",\"has_display\":true");
+				response->print(",\"max_pads\":");
+				response->print(MAX_PADS);
 
 				// Display resolution (driver coordinate space for direct writes / image upload)
 				int display_coord_width = DISPLAY_WIDTH;

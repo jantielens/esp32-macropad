@@ -162,7 +162,7 @@ void data_stream_rebuild() {
         return;
     }
 
-    // Scan all pad pages for widgets that need data streams
+    // Scan all pads for widgets that need data streams
     for (uint8_t page = 0; page < MAX_PADS; page++) {
         if (!pad_config_load(page, cfg)) continue;
         for (uint8_t b = 0; b < cfg->button_count; b++) {

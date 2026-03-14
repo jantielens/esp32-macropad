@@ -535,7 +535,7 @@ Use these terms consistently in user-facing text (UI, docs, log messages, API re
 | Term | Definition | Scope |
 |------|-----------|-------|
 | **Screen** | Any UI that can be displayed on the device (splash, info, test, pad, …). | User-facing + code |
-| **Pad** | A user-customizable screen containing a grid of buttons. The device supports up to 8 pads. | User-facing + code |
+| **Pad** | A user-customizable screen containing a grid of buttons. The device supports up to 16 pads (configurable via MAX_PADS). | User-facing + code |
 | **Button** | An interactive element in a pad's grid. May host labels, icons, colors, actions, images, and optionally a widget. | User-facing + code |
 | **Widget** | A specialized data visualization (gauge, sparkline, bar chart) rendered inside a button. A button without a widget is just a normal button. | User-facing + code |
 

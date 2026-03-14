@@ -28,8 +28,7 @@
 typedef int8_t data_stream_handle_t;
 #define DATA_STREAM_INVALID ((data_stream_handle_t)-1)
 
-// Maximum number of concurrent data streams
-#define DATA_STREAM_MAX_STREAMS 16
+// DATA_STREAM_MAX_STREAMS is defined in board_config.h (overridable per board, default 64)
 
 // Read-only snapshot of a stream's ring buffer state.
 // Returned by data_stream_get(). Pointers are valid until next
@@ -48,7 +47,7 @@ struct DataStreamSnapshot {
 void data_stream_init();
 
 // Rebuild streams from current pad configuration.
-// Scans all pad pages for sparkline widgets and creates/removes streams
+// Scans all pads for sparkline widgets and creates/removes streams
 // to match. Preserves existing stream data when binding+config unchanged.
 // Call when pad_config_get_generation() changes.
 void data_stream_rebuild();

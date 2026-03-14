@@ -100,6 +100,14 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						mgr->currentScreen->show();
 						mgr->pendingScreen = nullptr;
 
+						// LRU promotion for pad screens — track which pads have arrays allocated
+						for (uint8_t pi = 0; pi < MAX_PADS; pi++) {
+								if (target == mgr->padScreens[pi]) {
+										mgr->lruPromote(pi);
+										break;
+								}
+						}
+
 						// Reset LVGL input device state so leftover PRESSED from the
 						// previous screen doesn't fire a phantom CLICKED on the new screen.
 						lv_indev_reset(NULL, NULL);

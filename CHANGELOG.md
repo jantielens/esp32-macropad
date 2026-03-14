@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **16-pad support with LRU memory management** — expanded from 8 to 16 configurable pads. Heavy per-pad arrays (bindings, tiles, color/number/state bindings) are now lazily allocated in PSRAM on first visit and freed via an LRU-8 eviction cache, keeping peak memory usage comparable to the previous 8-pad implementation. Key changes:
+  - `MAX_PADS` raised to 16 (overridable per board in `board_overrides.h`)
+  - `MAX_SCREENS` derived from `MAX_PADS + MAX_NON_PAD_SCREENS` (default 26)
+  - `SCREEN_HISTORY_MAX` controls both back-navigation depth and LRU cache size (default 8)
+  - `DATA_STREAM_MAX_STREAMS` raised to 64 for sparkline widget headroom
+  - Pad screen IDs and names generated dynamically (`pad_0`..`pad_15`, `Pad 1`..`Pad 16`)
+  - Web portal pad dropdown populated dynamically from `/api/info` `max_pads` field
+  - Device export/import loops use `max_pads` instead of hardcoded 8
+
 ### Changed
 - **Terminology consolidation** — standardized user-facing terminology across the entire project to a consistent hierarchy: **Screen** → **Pad** → **Button** → **Widget**. Retired "page" (as synonym for pad), "tile" (as synonym for button), and "cell" (in user-facing text). Key changes:
   - Renamed `PadPageConfig` → `PadConfig` and `MAX_PAD_PAGES` → `MAX_PADS` throughout source code

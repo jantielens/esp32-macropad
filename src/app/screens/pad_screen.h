@@ -16,7 +16,7 @@ class DisplayManager;
 // ============================================================================
 // Pad Screen
 // ============================================================================
-// Renders a single pad page (0–7) with grid-based button tiles.
+// Renders a single pad screen (0..MAX_PADS-1) with grid-based button tiles.
 // Config is loaded lazily from LittleFS on first update() and when the
 // generation counter changes.
 
@@ -107,37 +107,40 @@ private:
     lv_obj_t* screen;
     lv_obj_t* container;       // Content container (offset by pixel shift margin)
 
-    ButtonTile tiles[MAX_PAD_BUTTONS];
+    // --- Lazily allocated arrays (heavy, freed on LRU eviction) ---
+    ButtonTile* tiles;
     uint8_t tileCount;
 
-    // MQTT label bindings (max 3 per button * MAX_PAD_BUTTONS)
     static const int MAX_BINDINGS = MAX_PAD_BUTTONS * 3;
-    RuntimeLabelBinding bindings[MAX_PAD_BUTTONS * 3];
+    RuntimeLabelBinding* bindings;
     uint16_t bindingCount;
 
-    // Color bindings (max 3 per button: bg, fg, border + 1 page bg)
     static const int MAX_COLOR_BINDINGS = MAX_PAD_BUTTONS * 3 + 1;
-    RuntimeColorBinding colorBindings[MAX_PAD_BUTTONS * 3 + 1];
+    RuntimeColorBinding* colorBindings;
     uint16_t colorBindingCount;
 
-    // Number bindings (border_width + corner_radius per button)
     static const int MAX_NUMBER_BINDINGS = MAX_PAD_BUTTONS * 2;
-    RuntimeNumberBinding numberBindings[MAX_PAD_BUTTONS * 2];
+    RuntimeNumberBinding* numberBindings;
     uint16_t numberBindingCount;
 
-    // Button state bindings (1 per button max)
-    RuntimeBtnStateBinding btnStateBindings[MAX_PAD_BUTTONS];
+    RuntimeBtnStateBinding* btnStateBindings;
     uint16_t btnStateBindingCount;
 
+    PadBinding* pageBindings;
+    uint8_t pageBindingCount;
+
+    bool arraysAllocated;      // true when lazy arrays are live
+
+    // --- Lightweight state (kept even when evicted) ---
     uint32_t cachedGeneration; // Last seen pad_config generation
     bool tilesBuilt;
     char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
     char pageBgTemplate[CONFIG_COLOR_MAX_LEN];     // Page background color/binding
     uint32_t pageBgDefault;                        // Fallback page bg color
 
-    // Cached page-level named bindings for [pad:] scheme resolution
-    PadBinding pageBindings[PAD_MAX_BINDINGS];
-    uint8_t pageBindingCount;
+    // Allocate / free the heavy binding arrays (PSRAM preferred)
+    bool allocateArrays();
+    void freeArrays();
 
     // Build/destroy tile LVGL objects from config
     void buildTiles();
@@ -167,6 +170,10 @@ public:
     void hide() override;
     void update() override;
     const char* wakeScreenId() const override;
+
+    // LRU eviction: free heavy arrays while keeping LVGL shell alive
+    void evict();
+    bool isEvicted() const { return !arraysAllocated; }
 
     uint8_t getPageIndex() const { return pageIndex; }
 };

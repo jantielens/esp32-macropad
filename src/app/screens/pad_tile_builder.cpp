@@ -13,6 +13,7 @@
 // ============================================================================
 
 void PadScreen::clearTiles() {
+    if (!tiles) { tileCount = 0; tilesBuilt = false; return; }
     for (uint8_t i = 0; i < tileCount; i++) {
         // Destroy widget state before LVGL objects are deleted
         if (tiles[i].widget_type && tiles[i].widget_type->destroyUI) {
@@ -53,6 +54,12 @@ void PadScreen::buildTiles() {
     clearTiles();
 
     if (!container) return;
+
+    // Ensure lazy arrays are allocated before building
+    if (!allocateArrays()) {
+        LOGE(TAG, "Pad %u: OOM for binding arrays", pageIndex);
+        return;
+    }
 
     // Allocate PadConfig in PSRAM (temporary — freed at end of this function)
     PadConfig* cfg = nullptr;
