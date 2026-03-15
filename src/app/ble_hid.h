@@ -5,7 +5,7 @@
 
 #if HAS_BLE_HID
 
-// Initialize BLE HID stack (direct NimBLE HID server, security, HID service).
+// Initialize BLE HID stack (manual HID GATT service, security, advertising).
 // Uses device_name for the BLE device name and starts advertising immediately.
 void ble_hid_init(const char* device_name);
 
@@ -31,8 +31,7 @@ void ble_hid_loop();
 void ble_hid_send_key(uint16_t usage, uint8_t modifiers);
 
 // Send a consumer control key press + release.
-// Consumer control is currently disabled because the ESP32 core BLE HID
-// wrapper crashes when a second input report characteristic is added.
+// `usage` is a USB HID consumer usage code (0x00E9 = volume up, etc.).
 void ble_hid_send_consumer(uint16_t usage);
 
 // Returns true when a BLE HID host is connected.
