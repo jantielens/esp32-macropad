@@ -8,10 +8,10 @@
 #include <BLEServer.h>
 #include <BLEHIDDevice.h>
 #include <BLESecurity.h>
-#include <HIDKeyboardTypes.h>
+#include <HIDTypes.h>
 
 // NimBLE headers redefine LOG_LEVEL_* as plain ints, colliding with our
-// LogLevel enum.  Undefine them before including our logger.
+// LogLevel enum. Undefine them before including our logger.
 #undef LOG_LEVEL_ERROR
 #undef LOG_LEVEL_WARN
 #undef LOG_LEVEL_INFO
@@ -21,84 +21,66 @@
 
 static const char* TAG = "BleHID";
 
-// Minimal keyboard-only HID report descriptor.
-//
-// This deliberately removes consumer control for now so the HID report map,
-// GATT Report Reference descriptor, and notification payload all describe the
-// same thing: one keyboard input report with Report ID 1.
+#define KEYBOARD_ID 0x01
+typedef struct {
+    uint8_t modifiers;
+    uint8_t reserved;
+    uint8_t keys[6];
+} KeyReport;
+
 static const uint8_t HID_REPORT_MAP[] = {
-    0x05, 0x01,        // Usage Page (Generic Desktop)
-    0x09, 0x06,        // Usage (Keyboard)
-    0xa1, 0x01,        // Collection (Application)
-    0x85, 0x01,        //   Report ID (1)
-
-    // ---- Modifier byte (1 byte) ----
-    0x05, 0x07,        //   Usage Page (Key Codes)
-    0x19, 0xe0,        //   Usage Minimum (224) — Left Control
-    0x29, 0xe7,        //   Usage Maximum (231) — Right GUI
-    0x15, 0x00,        //   Logical Minimum (0)
-    0x25, 0x01,        //   Logical Maximum (1)
-    0x75, 0x01,        //   Report Size (1)
-    0x95, 0x08,        //   Report Count (8)
-    0x81, 0x02,        //   Input (Data, Variable, Absolute) — Modifier
-
-    // ---- Reserved byte (1 byte) ----
-    0x95, 0x01,        //   Report Count (1)
-    0x75, 0x08,        //   Report Size (8)
-    0x81, 0x01,        //   Input (Constant)
-
-    // ---- Keyboard LEDs output (1 byte incl. padding) ----
-    0x95, 0x05,        //   Report Count (5)
-    0x75, 0x01,        //   Report Size (1)
-    0x05, 0x08,        //   Usage Page (LEDs)
-    0x19, 0x01,        //   Usage Minimum (1)
-    0x29, 0x05,        //   Usage Maximum (5)
-    0x91, 0x02,        //   Output (Data, Variable, Absolute)
-    0x95, 0x01,        //   Report Count (1)
-    0x75, 0x03,        //   Report Size (3)
-    0x91, 0x01,        //   Output (Constant)
-
-    // ---- Key array (6 bytes) ----
-    0x95, 0x06,        //   Report Count (6)
-    0x75, 0x08,        //   Report Size (8)
-    0x15, 0x00,        //   Logical Minimum (0)
-    0x25, 0x65,        //   Logical Maximum (101)
-    0x05, 0x07,        //   Usage Page (Key Codes)
-    0x19, 0x00,        //   Usage Minimum (0)
-    0x29, 0x65,        //   Usage Maximum (101)
-    0x81, 0x00,        //   Input (Data, Array) — 6 keys
-
-    0xc0,              // End Collection (Application)
+    USAGE_PAGE(1),      0x01,
+    USAGE(1),           0x06,
+    COLLECTION(1),      0x01,
+    REPORT_ID(1),       KEYBOARD_ID,
+    USAGE_PAGE(1),      0x07,
+    USAGE_MINIMUM(1),   0xE0,
+    USAGE_MAXIMUM(1),   0xE7,
+    LOGICAL_MINIMUM(1), 0x00,
+    LOGICAL_MAXIMUM(1), 0x01,
+    REPORT_SIZE(1),     0x01,
+    REPORT_COUNT(1),    0x08,
+    HIDINPUT(1),        0x02,
+    REPORT_COUNT(1),    0x01,
+    REPORT_SIZE(1),     0x08,
+    HIDINPUT(1),        0x01,
+    REPORT_COUNT(1),    0x05,
+    REPORT_SIZE(1),     0x01,
+    USAGE_PAGE(1),      0x08,
+    USAGE_MINIMUM(1),   0x01,
+    USAGE_MAXIMUM(1),   0x05,
+    HIDOUTPUT(1),       0x02,
+    REPORT_COUNT(1),    0x01,
+    REPORT_SIZE(1),     0x03,
+    HIDOUTPUT(1),       0x01,
+    REPORT_COUNT(1),    0x06,
+    REPORT_SIZE(1),     0x08,
+    LOGICAL_MINIMUM(1), 0x00,
+    LOGICAL_MAXIMUM(1), 0x65,
+    USAGE_PAGE(1),      0x07,
+    USAGE_MINIMUM(1),   0x00,
+    USAGE_MAXIMUM(1),   0x65,
+    HIDINPUT(1),        0x00,
+    END_COLLECTION(0)
 };
 
-// Report-mode packet is 8 bytes of keyboard data. Report ID 1 is conveyed by
-// the Report Reference descriptor on the characteristic and the report map.
-#define HID_REPORT_ID 1
-#define HID_REPORT_SIZE 8
-#define HID_BOOT_REPORT_SIZE 8
+static BLEHIDDevice* hid = nullptr;
+static BLECharacteristic* inputKeyboard = nullptr;
+static BLECharacteristic* outputKeyboard = nullptr;
+static BLEServer* bleServer = nullptr;
+static bool connected = false;
+static bool pairing_mode = false;
 
-static BLEHIDDevice* hid            = nullptr;
-static BLECharacteristic* inputChar = nullptr;
-static BLECharacteristic* outputChar = nullptr;
-static BLECharacteristic* bootInputChar = nullptr;
-static BLEServer* bleServer         = nullptr;
-static bool connected               = false;
-static bool pairing_mode            = false;
-
-// Deferred request state (set from LVGL task, processed in ble_hid_loop)
-static volatile bool pending_pairing     = false;
-static char pending_sequence[256]         = {};
+static volatile bool pending_pairing = false;
+static char pending_sequence[256] = {};
 static volatile bool has_pending_sequence = false;
-
-// ============================================================================
-// BLE Callbacks
-// ============================================================================
 
 class HidCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer*) override {
         connected = true;
         LOGI(TAG, "Host connected");
     }
+
     void onDisconnect(BLEServer*) override {
         connected = false;
         LOGI(TAG, "Host disconnected");
@@ -136,25 +118,23 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
 #elif defined(CONFIG_NIMBLE_ENABLED)
     void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
         if (desc->sec_state.encrypted) {
-            LOGI(TAG, "Paired (NimBLE encrypted=%d bonded=%d)",
-                 desc->sec_state.encrypted, desc->sec_state.bonded);
+            LOGI(TAG, "Paired (encrypted=%d bonded=%d)",
+                 desc->sec_state.encrypted,
+                 desc->sec_state.bonded);
             pairing_mode = false;
-        } else {
-            LOGW(TAG, "Auth complete — NOT encrypted");
+            return;
         }
+
+        LOGW(TAG, "Auth complete - NOT encrypted");
     }
 #endif
 };
-
-// ============================================================================
-// Bond helpers
-// ============================================================================
 
 static void clear_all_bonds() {
 #if defined(CONFIG_BLUEDROID_ENABLED)
     int count = esp_ble_get_bond_device_num();
     if (count > 0) {
-        esp_ble_bond_dev_t* devs = (esp_ble_bond_dev_t*)malloc(count * sizeof(esp_ble_bond_dev_t));
+        esp_ble_bond_dev_t* devs = static_cast<esp_ble_bond_dev_t*>(malloc(count * sizeof(esp_ble_bond_dev_t)));
         if (devs) {
             esp_ble_get_bond_device_list(&count, devs);
             for (int i = 0; i < count; i++) {
@@ -170,9 +150,14 @@ static void clear_all_bonds() {
 #endif
 }
 
-// ============================================================================
-// Public API
-// ============================================================================
+static void send_keyboard_report(const KeyReport& report) {
+    if (!connected || !inputKeyboard) {
+        return;
+    }
+
+    inputKeyboard->setValue(reinterpret_cast<const uint8_t*>(&report), sizeof(report));
+    inputKeyboard->notify();
+}
 
 void ble_hid_init(const char* device_name) {
     LOGI(TAG, "Initializing BLE HID keyboard as '%s'", device_name);
@@ -184,31 +169,29 @@ void ble_hid_init(const char* device_name) {
     bleServer->setCallbacks(new HidCallbacks());
 
     hid = new BLEHIDDevice(bleServer);
-    inputChar = hid->inputReport(1);
-    outputChar = hid->outputReport(1);
-    bootInputChar = hid->bootInput();
-    hid->bootOutput();
+    inputKeyboard = hid->inputReport(KEYBOARD_ID);
+    outputKeyboard = hid->outputReport(KEYBOARD_ID);
 
-    if (outputChar) {
-        outputChar->setCallbacks(new KeyboardOutputCallbacks());
+    if (outputKeyboard) {
+        outputKeyboard->setCallbacks(new KeyboardOutputCallbacks());
     }
 
-    hid->manufacturer()->setValue(device_name);
-    hid->pnp(0x02, 0x02E5, 0xA111, 0x0210);
+    BLECharacteristic* manufacturerChar = hid->manufacturer();
+    if (manufacturerChar) {
+        manufacturerChar->setValue("Espressif");
+    }
+    hid->pnp(0x02, 0xE502, 0xA111, 0x0210);
     hid->hidInfo(0x00, 0x01);
-    hid->reportMap((uint8_t*)HID_REPORT_MAP, sizeof(HID_REPORT_MAP));
+    hid->reportMap(const_cast<uint8_t*>(HID_REPORT_MAP), sizeof(HID_REPORT_MAP));
+    hid->startServices();
     hid->setBatteryLevel(100);
 
-    hid->startServices();
-
-    // Security: bonding + encryption, "Just Works" (no IO capability)
     BLESecurity* security = new BLESecurity();
-    security->setAuthenticationMode(true, false, true);  // bonding=ON, MITM=OFF, SC=ON
+    security->setAuthenticationMode(true, true, false);
     security->setCapability(ESP_IO_CAP_NONE);
     security->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
     security->setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
 
-    // Start advertising
     BLEAdvertising* adv = BLEDevice::getAdvertising();
     adv->setAppearance(HID_KEYBOARD);
     adv->addServiceUUID(hid->hidService()->getUUID());
@@ -216,6 +199,7 @@ void ble_hid_init(const char* device_name) {
     adv->setMinPreferred(0x06);
     adv->setMaxPreferred(0x12);
     BLEDevice::startAdvertising();
+
     LOGI(TAG, "BLE HID ready, advertising started");
 }
 
@@ -230,7 +214,7 @@ void ble_hid_start_pairing() {
     clear_all_bonds();
     pairing_mode = true;
     BLEDevice::startAdvertising();
-    LOGI(TAG, "Pairing mode — discoverable advertising started");
+    LOGI(TAG, "Pairing mode - discoverable advertising started");
 }
 
 bool ble_hid_is_connected() {
@@ -238,46 +222,31 @@ bool ble_hid_is_connected() {
 }
 
 void ble_hid_send_key(uint16_t usage, uint8_t modifiers) {
-    if (!connected || !inputChar) {
-        LOGD(TAG, "Not connected — key 0x%04X dropped", usage);
+    if (!connected) {
+        LOGD(TAG, "Not connected - key 0x%04X dropped", usage);
         return;
     }
 
-    uint8_t report[HID_REPORT_SIZE] = {};
-    uint8_t bootReport[HID_BOOT_REPORT_SIZE] = {};
-
-    report[0] = modifiers;
-    report[2] = (uint8_t)(usage & 0xFF);
-
-    bootReport[0] = modifiers;
-    bootReport[2] = (uint8_t)(usage & 0xFF);
-
-    inputChar->setValue(report, sizeof(report));
-    inputChar->notify();
-    if (bootInputChar) {
-        bootInputChar->setValue(bootReport, sizeof(bootReport));
-        bootInputChar->notify();
-    }
+    KeyReport report = {};
+    report.modifiers = modifiers;
+    report.keys[0] = static_cast<uint8_t>(usage & 0xFF);
+    send_keyboard_report(report);
 
     delay(KS_DEFAULT_DELAY_MS);
 
-    memset(report, 0, sizeof(report));
-    memset(bootReport, 0, sizeof(bootReport));
-    inputChar->setValue(report, sizeof(report));
-    inputChar->notify();
-    if (bootInputChar) {
-        bootInputChar->setValue(bootReport, sizeof(bootReport));
-        bootInputChar->notify();
-    }
+    KeyReport released = {};
+    send_keyboard_report(released);
 }
 
 void ble_hid_send_consumer(uint16_t usage) {
     (void)usage;
-    LOGW(TAG, "Consumer control is temporarily disabled in keyboard-only BLE HID mode");
+    LOGW(TAG, "Consumer control is temporarily disabled: current ESP32 BLE HID wrapper crashes on a second input report characteristic");
 }
 
 void ble_hid_execute_sequence(const char* sequence) {
-    if (!sequence || !sequence[0]) return;
+    if (!sequence || !sequence[0]) {
+        return;
+    }
 
     KsSequence seq;
     if (!ks_parse(sequence, &seq)) {
@@ -297,15 +266,14 @@ void ble_hid_execute_sequence(const char* sequence) {
             }
             break;
 
-        case KS_STEP_TEXT: {
-            // Type each character using ASCII → HID mapping
+        case KS_STEP_TEXT:
             for (uint16_t c = 0; c < step.text.length; c++) {
                 char ch = step.text.start[c];
-                // Handle \" escape inside text literals
                 if (ch == '\\' && c + 1 < step.text.length && step.text.start[c + 1] == '"') {
                     ch = '"';
-                    c++; // skip the escaped char
+                    c++;
                 }
+
                 uint16_t usage;
                 uint8_t mods;
                 if (ks_ascii_to_hid(ch, &usage, &mods)) {
@@ -313,19 +281,14 @@ void ble_hid_execute_sequence(const char* sequence) {
                 }
             }
             break;
-        }
 
         case KS_STEP_DELAY:
             delay(step.delay.ms);
             break;
         }
 
-        // Inter-step delay (unless the step itself was a delay)
-        if (step.type != KS_STEP_DELAY && i + 1 < seq.count) {
-            // Only add inter-step delay if the next step isn't an explicit delay
-            if (seq.steps[i + 1].type != KS_STEP_DELAY) {
-                delay(KS_DEFAULT_DELAY_MS);
-            }
+        if (step.type != KS_STEP_DELAY && i + 1 < seq.count && seq.steps[i + 1].type != KS_STEP_DELAY) {
+            delay(KS_DEFAULT_DELAY_MS);
         }
     }
 }
@@ -335,7 +298,10 @@ void ble_hid_request_pairing() {
 }
 
 void ble_hid_request_sequence(const char* sequence) {
-    if (!sequence || !sequence[0]) return;
+    if (!sequence || !sequence[0]) {
+        return;
+    }
+
     strlcpy(pending_sequence, sequence, sizeof(pending_sequence));
     has_pending_sequence = true;
 }
@@ -345,6 +311,7 @@ void ble_hid_loop() {
         pending_pairing = false;
         ble_hid_start_pairing();
     }
+
     if (has_pending_sequence) {
         has_pending_sequence = false;
         ble_hid_execute_sequence(pending_sequence);

@@ -214,6 +214,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/tft_espi_driver.cpp
 - **HAS_BLE_HID**
   - src/app/app.ino
+  - src/app/ble_hid.cpp
+  - src/app/ble_hid.h
   - src/app/board_config.h
   - src/app/screens/pad_screen_events.cpp
 - **HAS_BUILTIN_LED**

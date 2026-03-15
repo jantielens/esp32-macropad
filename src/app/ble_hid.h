@@ -5,10 +5,8 @@
 
 #if HAS_BLE_HID
 
-// Initialize BLE HID stack (server, security, HID service).
-// Uses device_name for the BLE device name.
-// If a bonded host exists, starts whitelist-only advertising (auto-reconnect).
-// Otherwise, does NOT advertise (silent until ble_hid_start_pairing() is called).
+// Initialize BLE HID stack (direct NimBLE HID server, security, HID service).
+// Uses device_name for the BLE device name and starts advertising immediately.
 void ble_hid_init(const char* device_name);
 
 // Clear all bonded devices and start discoverable advertising.
@@ -33,8 +31,8 @@ void ble_hid_loop();
 void ble_hid_send_key(uint16_t usage, uint8_t modifiers);
 
 // Send a consumer control key press + release.
-// Consumer control is currently disabled while BLE HID runs in keyboard-only
-// compatibility mode.
+// Consumer control is currently disabled because the ESP32 core BLE HID
+// wrapper crashes when a second input report characteristic is added.
 void ble_hid_send_consumer(uint16_t usage);
 
 // Returns true when a BLE HID host is connected.
