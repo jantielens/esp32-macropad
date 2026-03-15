@@ -90,9 +90,9 @@ static const uint8_t HID_REPORT_MAP[] = {
 };
 
 static BLEServer* bleServer = nullptr;
-static bool connected = false;
-static bool pairing_mode = false;
-static bool hid_service_ready = false;
+static volatile bool connected = false;
+static volatile bool pairing_mode = false;
+static volatile bool hid_service_ready = false;
 
 static uint8_t protocolMode = 0x01;
 static uint8_t keyboardLedState = 0x00;
@@ -138,14 +138,14 @@ static volatile bool has_pending_sequence = false;
 
 // Single-owner BLE policy state
 static const unsigned long PAIRING_TIMEOUT_MS = 60000;  // 60s pairing window
-static unsigned long pairing_deadline = 0;
-static uint16_t active_conn_handle = 0xFFFF;
+static volatile unsigned long pairing_deadline = 0;
+static volatile uint16_t active_conn_handle = 0xFFFF;
 
 // Peer metadata (captured on auth complete)
 static char peer_addr_str[18] = {};
 static char peer_id_addr_str[18] = {};
-static bool peer_bonded = false;
-static bool peer_encrypted = false;
+static volatile bool peer_bonded = false;
+static volatile bool peer_encrypted = false;
 
 static void format_ble_addr(const uint8_t addr[6], char* out, size_t out_len) {
     snprintf(out, out_len, "%02X:%02X:%02X:%02X:%02X:%02X",

@@ -61,6 +61,10 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - HA discovery published via `ha_discovery_publish_screen_select_config()` with dynamic options list from screen registry
 - **MQTT Wake Subsystem**: Binding-driven screensaver wakeup (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
   - `mqtt_wake.cpp/h` - Resolves a user-configured binding expression each loop tick; wakes screensaver on OFF→ON edge; keeps screen awake while ON persists via throttled idle-timer reset (~1 s)
+- **BLE HID Subsystem**: Bluetooth LE keyboard with key sequence DSL (compile-time gated by `HAS_BLE_HID`)
+  - `ble_hid.cpp/h` - Manual NimBLE HID GATT service, single-owner pairing policy (one bond, 60s timeout), keyboard + consumer reports, peer metadata getters
+  - `key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable, no ESP32 deps
+  - `web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
@@ -234,6 +238,9 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/screen_saver_manager.cpp/h` - Screensaver state machine with fade, pixel shift, and wake-screen redirect
 - `src/app/mqtt_screen.cpp/h` - MQTT active-screen control (HA select entity, remote navigation + wake)
 - `src/app/mqtt_wake.cpp/h` - Binding-driven screensaver wakeup with idle-timer keep-alive (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
+- `src/app/ble_hid.cpp/h` - BLE HID keyboard with manual NimBLE GATT service, single-owner pairing, keyboard + consumer reports (compile-time gated by `HAS_BLE_HID`)
+- `src/app/key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable
+- `src/app/web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface
@@ -252,7 +259,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`)
 - `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`)
 - `src/app/screens/pad_screen.cpp/h` - Pad screen with LVGL button tiles, label rendering (uses label style resolvers), icon/widget layout, binding updates, and image fetch integration
 - `src/app/screens/splash_screen.cpp/h` - Boot splash with animated spinner
@@ -299,6 +306,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `tests/run_tests.sh` - Builds and runs all host-native tests (no ESP32 needed)
 - `tests/test_expr_eval.cpp` - Unit tests for pure expression evaluator (66 tests)
 - `tests/test_expr_binding.cpp` - Integration tests with mock MQTT/health resolvers (22 tests)
+- `tests/test_key_sequence.cpp` - Unit tests for key sequence DSL parser
 - `tests/stubs.cpp` - `strlcpy()` stub for glibc (not available on Linux)
 - `tests/log_manager.h` - No-op log macros for host compilation
 - `tests/board_config.h` - Minimal board config stub for host compilation

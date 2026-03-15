@@ -235,7 +235,7 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 - `"user@email.com" tab "password123" enter` — fill a login form
 
 **Delays** — insert a pause (in ms):
-- `ctrl+a delay(200) ctrl+c` — select all, wait 200ms, then copy
+- `ctrl+a 200ms ctrl+c` — select all, wait 200ms, then copy
 
 > **Tip**: Assign `ble_pair` to a dedicated button so you can pair a new host device directly from the macropad's touch screen.
 
