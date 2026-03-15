@@ -8,6 +8,7 @@
 
 #define HAS_DISPLAY true
 #define HAS_MQTT    true
+#define HAS_BLE_HID true
 
 // strlcpy is available on ESP32 (newlib) but not glibc — declare for host tests
 #include <stddef.h>

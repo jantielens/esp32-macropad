@@ -59,4 +59,14 @@ echo "=== Running unit tests: widget_common ==="
 ./tests/bin/test_widget_common
 echo
 
+echo "=== Building unit tests: key_sequence ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    tests/test_key_sequence.cpp \
+    src/app/key_sequence.cpp \
+    -o tests/bin/test_key_sequence
+
+echo "=== Running unit tests: key_sequence ==="
+./tests/bin/test_key_sequence
+echo
+
 echo "=== All tests passed ==="

@@ -192,6 +192,7 @@ static void parse_action(JsonVariant v, ButtonAction* act, const char* legacy_sc
         strlcpy(act->screen_id, a["target"] | "", CONFIG_SCREEN_ID_MAX_LEN);
         strlcpy(act->mqtt_topic, a["topic"] | "", CONFIG_MQTT_TOPIC_MAX_LEN);
         strlcpy(act->mqtt_payload, a["payload"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
+        strlcpy(act->key_sequence, a["sequence"] | "", CONFIG_KEY_SEQ_MAX_LEN);
         return;
     }
 

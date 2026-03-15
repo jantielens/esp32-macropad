@@ -5,6 +5,9 @@
 #include "../mqtt_manager.h"
 #include <ArduinoJson.h>
 #endif
+#if HAS_BLE_HID
+#include "../ble_hid.h"
+#endif
 
 // TAG and TAP_FLASH_DURATION_MS are defined in pad_screen.cpp which is
 // #included before this file in screens.cpp.
@@ -54,6 +57,24 @@ static void execute_action(const ButtonAction& act, const char* label) {
         }
 #else
         LOGW(TAG, "%s mqtt: not compiled (HAS_MQTT=false)", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
+#if HAS_BLE_HID
+        if (act.key_sequence[0]) {
+            LOGI(TAG, "%s key: '%s'", label, act.key_sequence);
+            ble_hid_request_sequence(act.key_sequence);
+        } else {
+            LOGW(TAG, "%s key: empty sequence", label);
+        }
+#else
+        LOGW(TAG, "%s key: not compiled (HAS_BLE_HID=false)", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_BLE_PAIR) == 0) {
+#if HAS_BLE_HID
+        LOGI(TAG, "%s ble_pair: starting pairing mode", label);
+        ble_hid_request_pairing();
+#else
+        LOGW(TAG, "%s ble_pair: not compiled (HAS_BLE_HID=false)", label);
 #endif
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);

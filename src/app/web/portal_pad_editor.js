@@ -418,6 +418,7 @@ function padActionTypeChanged(prefix) {
     const type = document.getElementById('pad-edit-' + pfx + '-type').value;
     document.getElementById('pad-edit-' + pfx + '-screen-group').style.display = (type === 'screen') ? '' : 'none';
     document.getElementById('pad-edit-' + pfx + '-mqtt-group').style.display = (type === 'mqtt') ? '' : 'none';
+    document.getElementById('pad-edit-' + pfx + '-key-group').style.display = (type === 'key') ? '' : 'none';
 }
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline'];
@@ -909,6 +910,7 @@ function padDialogOpen(col, row) {
         document.getElementById('pad-edit-action-target').value = '';
     document.getElementById('pad-edit-action-topic').value = tapAct.topic || '';
     document.getElementById('pad-edit-action-payload').value = tapAct.payload || '';
+    document.getElementById('pad-edit-action-sequence').value = tapAct.sequence || '';
     padActionTypeChanged('tap');
 
     // Long-press action
@@ -919,6 +921,7 @@ function padDialogOpen(col, row) {
         document.getElementById('pad-edit-lp-action-target').value = '';
     document.getElementById('pad-edit-lp-action-topic').value = lpAct.topic || '';
     document.getElementById('pad-edit-lp-action-payload').value = lpAct.payload || '';
+    document.getElementById('pad-edit-lp-action-sequence').value = lpAct.sequence || '';
     padActionTypeChanged('lp');
 
     // Image background
@@ -1082,6 +1085,7 @@ function padDialogOk(keepOpen) {
             act.topic = document.getElementById('pad-edit-action-topic').value.trim();
             act.payload = document.getElementById('pad-edit-action-payload').value.trim();
         }
+        if (tapType === 'key') act.sequence = document.getElementById('pad-edit-action-sequence').value.trim();
         btn.action = act;
     }
 
@@ -1094,6 +1098,7 @@ function padDialogOk(keepOpen) {
             act.topic = document.getElementById('pad-edit-lp-action-topic').value.trim();
             act.payload = document.getElementById('pad-edit-lp-action-payload').value.trim();
         }
+        if (lpType === 'key') act.sequence = document.getElementById('pad-edit-lp-action-sequence').value.trim();
         btn.lp_action = act;
     }
 

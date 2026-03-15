@@ -50,6 +50,11 @@
 #define HAS_MQTT true
 #endif
 
+// Enable BLE HID keyboard support.
+#ifndef HAS_BLE_HID
+#define HAS_BLE_HID true
+#endif
+
 // GPIO for the built-in LED (only used when HAS_BUILTIN_LED is true).
 #ifndef LED_PIN
 #define LED_PIN 2  // Common GPIO for ESP32 boards

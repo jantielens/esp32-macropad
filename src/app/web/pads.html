@@ -225,6 +225,8 @@
                                 <option value="screen">Navigate to Screen</option>
                                 <option value="back">Navigate Back</option>
                                 <option value="mqtt">MQTT Publish</option>
+                                <option value="key">BLE Key Sequence</option>
+                                <option value="ble_pair">BLE Pair</option>
                             </select>
                         </div>
                         <div id="pad-edit-action-screen-group" style="display:none;">
@@ -245,6 +247,13 @@
                                 <input type="text" id="pad-edit-action-payload" maxlength="127" placeholder="e.g. ON">
                             </div>
                         </div>
+                        <div id="pad-edit-action-key-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-action-sequence">Key Sequence</label>
+                                <input type="text" id="pad-edit-action-sequence" maxlength="255" placeholder='e.g. ctrl+c, "hello", 200ms'>
+                                <small>Space-separated: key combos (ctrl+shift+a), text ("hello"), delays (200ms)</small>
+                            </div>
+                        </div>
 
                         <hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">
 
@@ -255,6 +264,8 @@
                                 <option value="screen">Navigate to Screen</option>
                                 <option value="back">Navigate Back</option>
                                 <option value="mqtt">MQTT Publish</option>
+                                <option value="key">BLE Key Sequence</option>
+                                <option value="ble_pair">BLE Pair</option>
                             </select>
                         </div>
                         <div id="pad-edit-lp-action-screen-group" style="display:none;">
@@ -273,6 +284,13 @@
                             <div class="form-group">
                                 <label for="pad-edit-lp-action-payload">MQTT Payload</label>
                                 <input type="text" id="pad-edit-lp-action-payload" maxlength="127" placeholder="e.g. OFF">
+                            </div>
+                        </div>
+                        <div id="pad-edit-lp-action-key-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-lp-action-sequence">Key Sequence</label>
+                                <input type="text" id="pad-edit-lp-action-sequence" maxlength="255" placeholder='e.g. ctrl+c, "hello", 200ms'>
+                                <small>Space-separated: key combos (ctrl+shift+a), text ("hello"), delays (200ms)</small>
                             </div>
                         </div>
                     </div>

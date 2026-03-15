@@ -21,11 +21,12 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 131
+Total flags: 132
 
 ### Features (HAS_*)
 
 - **HAS_BACKLIGHT** default: `false` — Enable backlight control (typically via PWM).
+- **HAS_BLE_HID** default: `true` — Enable BLE HID keyboard support.
 - **HAS_BUILTIN_LED** default: `false` — Enable built-in status LED support.
 - **HAS_BUTTON** default: `false` — User Button (optional)
 - **HAS_DISPLAY** default: `false` — Enable display + LVGL UI support.
@@ -178,13 +179,13 @@ Total flags: 131
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_BACKLIGHT | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3248w535 | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3636w518 | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| esp32-p4-lcd4b | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc4880p433 | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| board-name | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3248w535 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3636w518 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc4880p433 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -211,6 +212,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/mipi_dsi_driver.cpp
   - src/app/drivers/st7701_rgb_driver.cpp
   - src/app/drivers/tft_espi_driver.cpp
+- **HAS_BLE_HID**
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/screens/pad_screen_events.cpp
 - **HAS_BUILTIN_LED**
   - src/app/app.ino
   - src/app/board_config.h

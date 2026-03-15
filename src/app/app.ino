@@ -34,6 +34,10 @@
 #include "image_fetch.h"
 #endif
 
+#if HAS_BLE_HID
+#include "ble_hid.h"
+#endif
+
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
 
@@ -287,6 +291,10 @@ void setup()
 	// Initialize sensors (optional adapters)
 	sensor_manager_init();
 
+	#if HAS_BLE_HID
+	ble_hid_init(device_config.device_name);
+	#endif
+
 	#if HAS_MQTT
 	// Initialize MQTT manager (will only connect/publish when configured)
 	char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
@@ -377,6 +385,10 @@ void loop()
 
 	#if HAS_TOUCH
 	touch_manager_loop();
+	#endif
+
+	#if HAS_BLE_HID
+	ble_hid_loop();
 	#endif
 
 	// Handle web portal (DNS for captive portal)

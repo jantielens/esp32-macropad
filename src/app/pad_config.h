@@ -24,6 +24,7 @@
 #define CONFIG_SCREEN_ID_MAX_LEN       16
 #define CONFIG_MQTT_TOPIC_MAX_LEN     128
 #define CONFIG_MQTT_PAYLOAD_MAX_LEN   128
+#define CONFIG_KEY_SEQ_MAX_LEN        256
 #define CONFIG_ACTION_TYPE_MAX_LEN     16
 #define CONFIG_LAYOUT_NAME_MAX_LEN     16
 #define CONFIG_JSON_PATH_MAX_LEN       48
@@ -92,17 +93,20 @@ struct LabelStyle {
 void label_style_parse(const char* dsl, LabelStyle* out);
 
 // Action types (string constants for type field)
-#define ACTION_TYPE_NONE    ""
-#define ACTION_TYPE_SCREEN  "screen"
-#define ACTION_TYPE_MQTT    "mqtt"
-#define ACTION_TYPE_BACK    "back"
+#define ACTION_TYPE_NONE     ""
+#define ACTION_TYPE_SCREEN   "screen"
+#define ACTION_TYPE_MQTT     "mqtt"
+#define ACTION_TYPE_BACK     "back"
+#define ACTION_TYPE_KEY      "key"
+#define ACTION_TYPE_BLE_PAIR "ble_pair"
 
 // Typed action for tap or long-press
 struct ButtonAction {
-    char type[CONFIG_ACTION_TYPE_MAX_LEN];           // "screen", "mqtt", or "" (none)
+    char type[CONFIG_ACTION_TYPE_MAX_LEN];           // "screen", "mqtt", "key", "ble_pair", or "" (none)
     char screen_id[CONFIG_SCREEN_ID_MAX_LEN];        // type="screen": target screen
     char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];      // type="mqtt": publish topic
     char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // type="mqtt": publish payload
+    char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // type="key": DSL key sequence
 };
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
