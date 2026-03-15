@@ -195,6 +195,8 @@ Each button has two action slots — one for **tap** and one for **long-press** 
 | **Navigate to screen** | Jump to another pad or screen (e.g., `pad_1`, `info_screen`) |
 | **Go back** | Return to the previous screen |
 | **Publish MQTT** | Send a message to an MQTT topic |
+| **BLE Key** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below) |
+| **BLE Pair** | Clear the existing bond and open a 60-second BLE pairing window |
 
 **Example setup for a smart light:**
 - **Tap action**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -203,6 +205,39 @@ Each button has two action slots — one for **tap** and one for **long-press** 
 **Example setup for navigation:**
 - **Tap action**: Navigate to screen → `pad_2` (cameras pad)
 - Button label: "Cameras" with a `videocam` Material Symbol icon
+
+### BLE Key Sequences
+
+The **BLE Key** action sends keystrokes over Bluetooth to a paired host device. The sequence field accepts a compact DSL:
+
+**Single keys:**
+- `a`, `enter`, `tab`, `esc`, `space`, `backspace`, `delete`
+- Arrow keys: `up`, `down`, `left`, `right`
+- Function keys: `f1` through `f12`
+
+**Modifier combos** — use `+` to combine modifiers:
+- `ctrl+c` — copy
+- `ctrl+shift+t` — reopen closed tab
+- `gui+l` — lock workstation (Windows)
+- `alt+f4` — close window
+
+Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
+
+**Media/consumer keys:**
+- `vol_up`, `vol_down`, `mute`
+- `play_pause`, `next_track`, `prev_track`
+
+**Text literals** — wrap in double quotes:
+- `"Hello World"` — types the text character by character
+
+**Multi-step sequences** — chain steps with spaces:
+- `ctrl+a ctrl+c` — select all, then copy
+- `"user@email.com" tab "password123" enter` — fill a login form
+
+**Delays** — insert a pause (in ms):
+- `ctrl+a delay(200) ctrl+c` — select all, wait 200ms, then copy
+
+> **Tip**: Assign `ble_pair` to a dedicated button so you can pair a new host device directly from the macropad's touch screen.
 
 ---
 
@@ -463,6 +498,12 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `psram_largest` | Largest free PSRAM block (bytes) | `4194304` |
 | `ip` | Device IP address | `192.168.1.42` |
 | `hostname` | Device hostname | `macropad` |
+| `ble_connected` | BLE HID host connected | `ON` / `OFF` |
+| `ble_pairing` | BLE pairing mode active | `ON` / `OFF` |
+| `ble_bonded` | Current connection is bonded | `ON` / `OFF` |
+| `ble_encrypted` | Current connection is encrypted | `ON` / `OFF` |
+| `ble_peer_addr` | Connected peer's Bluetooth address | `AA:BB:CC:DD:EE:FF` |
+| `ble_peer_id_addr` | Connected peer's identity address | `AA:BB:CC:DD:EE:FF` |
 
 Values are cached for up to 2 seconds to keep the CPU impact low.
 

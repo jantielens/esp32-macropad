@@ -136,6 +136,29 @@ static volatile bool pending_pairing = false;
 static char pending_sequence[256] = {};
 static volatile bool has_pending_sequence = false;
 
+// Single-owner BLE policy state
+static const unsigned long PAIRING_TIMEOUT_MS = 60000;  // 60s pairing window
+static unsigned long pairing_deadline = 0;
+static uint16_t active_conn_handle = 0xFFFF;
+
+// Peer metadata (captured on auth complete)
+static char peer_addr_str[18] = {};
+static char peer_id_addr_str[18] = {};
+static bool peer_bonded = false;
+static bool peer_encrypted = false;
+
+static void format_ble_addr(const uint8_t addr[6], char* out, size_t out_len) {
+    snprintf(out, out_len, "%02X:%02X:%02X:%02X:%02X:%02X",
+             addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
+}
+
+static void clear_peer_metadata() {
+    peer_addr_str[0] = '\0';
+    peer_id_addr_str[0] = '\0';
+    peer_bonded = false;
+    peer_encrypted = false;
+}
+
 static int hid_access(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt* ctxt, void* arg);
 
 static ble_gatt_dsc_def keyboardInputDescriptors[] = {
@@ -298,13 +321,23 @@ static void send_report_notification(uint16_t value_handle, const void* data, ui
 }
 
 class HidCallbacks : public BLEServerCallbacks {
-    void onConnect(BLEServer*) override {
+    void onConnect(BLEServer*, ble_gap_conn_desc* desc) override {
+        if (connected) {
+            LOGW(TAG, "Rejecting second connection (handle=%u)", desc->conn_handle);
+            ble_gap_terminate(desc->conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+            return;
+        }
         connected = true;
-        LOGI(TAG, "Host connected");
+        active_conn_handle = desc->conn_handle;
+        format_ble_addr(desc->peer_ota_addr.val, peer_addr_str, sizeof(peer_addr_str));
+        LOGI(TAG, "Host connected (handle=%u addr=%s)", desc->conn_handle, peer_addr_str);
     }
 
-    void onDisconnect(BLEServer*) override {
+    void onDisconnect(BLEServer*, ble_gap_conn_desc* desc) override {
+        if (desc->conn_handle != active_conn_handle) return;
         connected = false;
+        active_conn_handle = 0xFFFF;
+        clear_peer_metadata();
         LOGI(TAG, "Host disconnected");
         if (hid_service_ready) {
             BLEDevice::startAdvertising();
@@ -329,15 +362,30 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
     }
 #elif defined(CONFIG_NIMBLE_ENABLED)
     void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
+        // Capture peer metadata from the encryption result
+        peer_encrypted = desc->sec_state.encrypted;
+        peer_bonded = desc->sec_state.bonded;
+        format_ble_addr(desc->peer_ota_addr.val, peer_addr_str, sizeof(peer_addr_str));
+        format_ble_addr(desc->peer_id_addr.val, peer_id_addr_str, sizeof(peer_id_addr_str));
+
         if (desc->sec_state.encrypted) {
-            LOGI(TAG, "Paired (encrypted=%d bonded=%d)",
+            LOGI(TAG, "Paired (encrypted=%d bonded=%d id_addr=%s)",
                  desc->sec_state.encrypted,
-                 desc->sec_state.bonded);
+                 desc->sec_state.bonded,
+                 peer_id_addr_str);
             pairing_mode = false;
+            pairing_deadline = 0;
             return;
         }
 
-        LOGW(TAG, "Auth complete - NOT encrypted");
+        // Not encrypted — reject if not in pairing mode
+        if (!pairing_mode) {
+            LOGW(TAG, "Unbonded peer rejected (not in pairing mode)");
+            ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
+            return;
+        }
+
+        LOGW(TAG, "Auth complete - NOT encrypted (pairing mode active)");
     }
 #endif
 };
@@ -400,7 +448,7 @@ void ble_hid_init(const char* device_name) {
 }
 
 void ble_hid_start_pairing() {
-    LOGI(TAG, "Starting BLE pairing mode");
+    LOGI(TAG, "Starting BLE pairing mode (timeout=%lums)", PAIRING_TIMEOUT_MS);
 
     if (connected && bleServer) {
         bleServer->disconnect(bleServer->getConnId());
@@ -408,7 +456,9 @@ void ble_hid_start_pairing() {
     }
 
     clear_all_bonds();
+    clear_peer_metadata();
     pairing_mode = true;
+    pairing_deadline = millis() + PAIRING_TIMEOUT_MS;
     if (hid_service_ready) {
         BLEDevice::startAdvertising();
     }
@@ -525,6 +575,33 @@ void ble_hid_loop() {
         ble_hid_execute_sequence(pending_sequence);
         pending_sequence[0] = '\0';
     }
+
+    // Auto-close pairing window on timeout
+    if (pairing_mode && pairing_deadline != 0 && millis() >= pairing_deadline) {
+        pairing_mode = false;
+        pairing_deadline = 0;
+        LOGI(TAG, "Pairing mode timed out");
+    }
+}
+
+bool ble_hid_is_pairing() {
+    return pairing_mode;
+}
+
+const char* ble_hid_peer_addr() {
+    return peer_addr_str;
+}
+
+const char* ble_hid_peer_id_addr() {
+    return peer_id_addr_str;
+}
+
+bool ble_hid_is_bonded() {
+    return peer_bonded;
+}
+
+bool ble_hid_is_encrypted() {
+    return peer_encrypted;
 }
 
 #endif // HAS_BLE_HID

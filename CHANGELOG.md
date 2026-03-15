@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **BLE HID keyboard** — the macropad can now act as a Bluetooth keyboard. Assign a `key` action to any button to send keystrokes (single keys, modifier combos, media keys, or multi-step sequences) to a paired host. Assign a `ble_pair` action to open a 60-second pairing window. Features:
+  - Key sequence DSL with text literals, modifier keys, consumer/media keys, and delays
+  - Single-owner pairing policy: one bonded host at a time, unbonded peers rejected outside the pairing window
+  - BLE state exposed in `/api/health` (`ble_connected`, `ble_pairing`, `ble_bonded`, `ble_encrypted`, `ble_peer_addr`, `ble_peer_id_addr`)
+  - Health binding support: `[health:ble_connected]`, `[health:ble_pairing]`, etc.
+  - New BLE Keyboard section on the Home page with connection status, peer details, and "Pair New Device" button
+  - New `POST /api/ble/pairing/start` endpoint for triggering pairing from the portal
 - **16-pad support with LRU memory management** — expanded from 8 to 16 configurable pads. Heavy per-pad arrays (bindings, tiles, color/number/state bindings) are now lazily allocated in PSRAM on first visit and freed via an LRU-8 eviction cache, keeping peak memory usage comparable to the previous 8-pad implementation. Key changes:
   - `MAX_PADS` raised to 16 (overridable per board in `board_overrides.h`)
   - `MAX_SCREENS` derived from `MAX_PADS + MAX_NON_PAD_SCREENS` (default 26)

@@ -7,6 +7,10 @@
 #include "device_telemetry.h"
 #include "log_manager.h"
 
+#if HAS_BLE_HID
+#include "ble_hid.h"
+#endif
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <string.h>
@@ -115,6 +119,34 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         strlcpy(out, h ? h : "?", out_len);
         return true;
     }
+#if HAS_BLE_HID
+    if (strcmp(key, "ble_connected") == 0) {
+        strlcpy(out, ble_hid_is_connected() ? "ON" : "OFF", out_len);
+        return true;
+    }
+    if (strcmp(key, "ble_pairing") == 0) {
+        strlcpy(out, ble_hid_is_pairing() ? "ON" : "OFF", out_len);
+        return true;
+    }
+    if (strcmp(key, "ble_bonded") == 0) {
+        strlcpy(out, ble_hid_is_bonded() ? "ON" : "OFF", out_len);
+        return true;
+    }
+    if (strcmp(key, "ble_encrypted") == 0) {
+        strlcpy(out, ble_hid_is_encrypted() ? "ON" : "OFF", out_len);
+        return true;
+    }
+    if (strcmp(key, "ble_peer_addr") == 0) {
+        const char* a = ble_hid_peer_addr();
+        strlcpy(out, (a && a[0]) ? a : "?", out_len);
+        return true;
+    }
+    if (strcmp(key, "ble_peer_id_addr") == 0) {
+        const char* a = ble_hid_peer_id_addr();
+        strlcpy(out, (a && a[0]) ? a : "?", out_len);
+        return true;
+    }
+#endif
     return false;
 }
 

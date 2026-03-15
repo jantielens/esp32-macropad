@@ -16,10 +16,16 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Sparkline widgets** — mini trend lines with background data collection and auto-scaling
 - **Screen saver** — automatic backlight fade with pixel-shift burn-in prevention
 
+### BLE Keyboard
+- **Bluetooth HID keyboard** — pair with any Bluetooth host and send keystrokes from your macropad
+- **Key sequences** — single keys, modifier combos (`ctrl+c`), media keys (`vol_up`), text literals, and multi-step sequences with delays
+- **One-tap pairing** — assign a `ble_pair` action to a button or start pairing from the web portal
+- **Single-owner security** — one bonded host at a time; unbonded devices are rejected outside the pairing window
+
 ### Connectivity & Smart Home
 - **MQTT with Home Assistant Discovery** — auto-registers as an HA device, no YAML needed
 - **Live data bindings** — display MQTT topics, device health, or date/time directly on buttons
-- **Button actions** — tap or long-press to publish MQTT messages or navigate screens
+- **Button actions** — tap or long-press to publish MQTT messages, navigate screens, or send BLE keystrokes
 - **Toggle state** — buttons reflect on/off state from MQTT topics
 - **Remote screen control** — switch pads from Home Assistant
 
@@ -41,6 +47,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Home Assistant control panel** — lights, switches, scenes, climate — all one tap away
 - **Energy monitor dashboard** — real-time solar, battery, and grid power visualization
 - **Media controller** — play, pause, skip, volume for your media players
+- **Bluetooth macro keyboard** — launch apps, paste snippets, control presentations, or trigger shortcuts on your PC or Mac
 - **Smart home remote** — replace a drawer full of remotes with one touch screen
 - **Status display** — show weather, time, sensor readings, or system stats
 - **Security camera viewer** — live camera thumbnails on your desk

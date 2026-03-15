@@ -161,6 +161,34 @@
                 <small style="display:block; margin-top: 8px; color:#86868b;">Live values from /api/health</small>
             </section>
 
+            <!-- BLE Keyboard Section (hidden if BLE HID not available) -->
+            <section class="section" id="ble-section" style="display:none;">
+                <h2>⌨️ BLE Keyboard</h2>
+
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <span id="ble-status-dot" style="width:10px;height:10px;border-radius:50%;background:#ccc;display:inline-block;flex-shrink:0;"></span>
+                    <span id="ble-status-text" style="font-size:14px;color:#1d1d1f;">—</span>
+                </div>
+
+                <div id="ble-details" style="display:none; margin-bottom: 16px;">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+                        <span class="sensor-badge" id="ble-badge-bonded" style="display:none;"></span>
+                        <span class="sensor-badge" id="ble-badge-encrypted" style="display:none;"></span>
+                    </div>
+                    <div style="font-size:12px;color:#86868b;margin-top:6px;">
+                        <span id="ble-peer-addr-wrap" style="display:none;">Peer: <code id="ble-peer-addr"></code></span>
+                        <span id="ble-id-addr-wrap" style="display:none;margin-left:12px;">Identity: <code id="ble-peer-id-addr"></code></span>
+                    </div>
+                </div>
+
+                <button type="button" id="ble-pair-btn" class="btn btn-primary" style="margin-top:4px;" onclick="startBlePairing()">
+                    Pair New Device
+                </button>
+                <small style="display:block; margin-top: 8px; color:#86868b;">
+                    Clears existing bond and opens a 60-second pairing window.
+                </small>
+            </section>
+
             {{FOOTER}}
         </form>
     </div>

@@ -55,7 +55,6 @@ Controls how the device operates:
 | Setting | Description |
 |---------|-------------|
 | **Operating Mode** | **Always-On** keeps all services running continuously. **Duty-Cycle** wakes periodically, publishes data, then goes back to sleep to save power |
-| **Transport Mode** | Choose which protocols publish telemetry: BLE, MQTT, or both |
 | **Cycle Interval** | How often the device wakes and publishes in duty-cycle mode (seconds) |
 | **Portal Idle Timeout** | Auto-sleep timeout when in config/AP mode (seconds, 0 = disabled) |
 | **WiFi Backoff Max** | Maximum delay between WiFi reconnection attempts (seconds) |
@@ -66,14 +65,20 @@ Controls how the device operates:
 |---------|-------------|
 | **MQTT Payload Scope** | What to include in MQTT publishes: sensor data only, diagnostics only, or everything |
 
-#### BLE Transport Settings
+### BLE Keyboard
 
-| Setting | Description |
+*Shown only on boards with BLE HID support.*
+
+The BLE Keyboard section shows real-time Bluetooth connection status and lets you pair a new host device.
+
+| Element | Description |
 |---------|-------------|
-| **Burst Duration** | How long each BLE advertising burst lasts (ms) |
-| **Gap Duration** | Pause between bursts (ms) |
-| **Bursts** | Number of bursts per cycle (1–10) |
-| **Adv Interval** | BLE advertising interval within a burst (ms) |
+| **Status indicator** | Green dot = connected, orange = pairing mode, gray = disconnected |
+| **Bonded / Encrypted badges** | Shown when a host is connected |
+| **Peer address** | The connected host's Bluetooth address |
+| **Pair New Device** | Clears the existing bond and opens a 60-second pairing window. The button is disabled while pairing is in progress |
+
+You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
 
 ### Display Settings
 
@@ -103,7 +108,7 @@ Protects your LCD from burn-in by turning off the backlight after a period of in
 
 *Available in Full mode only.*
 
-The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 8 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
+The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 16 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
 
 The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import). This is completely separate from the device config Save & Reboot footer on other pages.
 

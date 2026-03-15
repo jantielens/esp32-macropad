@@ -12,6 +12,10 @@
 
 #include "board_config.h"
 
+#if HAS_BLE_HID
+#include "web_portal_ble.h"
+#endif
+
 void web_portal_register_routes(AsyncWebServer* server) {
 		auto handleCorsPreflight = [](AsyncWebServerRequest *request) {
 				web_portal_send_cors_preflight(request);
@@ -185,5 +189,14 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				handleOTAUpload
 		);
 		registerOptions("/api/update");
+
+#if HAS_BLE_HID
+		// BLE pairing endpoint
+		registerOptions("/api/ble/pairing/start");
+		server->on("/api/ble/pairing/start", HTTP_POST, [](AsyncWebServerRequest *request) {
+				if (!portal_auth_gate(request)) return;
+				handlePostBlePairingStart(request);
+		});
+#endif
 
 }

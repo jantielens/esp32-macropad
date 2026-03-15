@@ -903,6 +903,88 @@ function renderSensorsSection(health) {
     });
 }
 
+function renderBleSection(health) {
+    const section = document.getElementById('ble-section');
+    if (!section) return;
+
+    // Show section only if BLE data is present in health payload
+    const hasBle = (typeof health.ble_connected === 'boolean');
+    section.style.display = hasBle ? 'block' : 'none';
+    if (!hasBle) return;
+
+    const dot = document.getElementById('ble-status-dot');
+    const text = document.getElementById('ble-status-text');
+    const details = document.getElementById('ble-details');
+    const pairBtn = document.getElementById('ble-pair-btn');
+
+    const isConnected = health.ble_connected;
+    const isPairing = health.ble_pairing;
+
+    // Status dot color
+    if (dot) {
+        if (isPairing) dot.style.background = '#ff9500';
+        else if (isConnected) dot.style.background = '#34c759';
+        else dot.style.background = '#ccc';
+    }
+
+    // Status text
+    if (text) {
+        if (isPairing) text.textContent = 'Pairing mode (waiting for device\u2026)';
+        else if (isConnected) text.textContent = 'Connected';
+        else text.textContent = 'Disconnected';
+    }
+
+    // Details panel (only when connected)
+    if (details) details.style.display = isConnected ? 'block' : 'none';
+
+    if (isConnected) {
+        const bondBadge = document.getElementById('ble-badge-bonded');
+        if (bondBadge) {
+            bondBadge.style.display = '';
+            bondBadge.textContent = health.ble_bonded ? 'Bonded' : 'Not bonded';
+        }
+        const encBadge = document.getElementById('ble-badge-encrypted');
+        if (encBadge) {
+            encBadge.style.display = '';
+            encBadge.textContent = health.ble_encrypted ? 'Encrypted' : 'Not encrypted';
+        }
+        const peerWrap = document.getElementById('ble-peer-addr-wrap');
+        const peerEl = document.getElementById('ble-peer-addr');
+        if (peerWrap && peerEl) {
+            const addr = health.ble_peer_addr || '';
+            peerWrap.style.display = addr ? '' : 'none';
+            peerEl.textContent = addr;
+        }
+        const idWrap = document.getElementById('ble-id-addr-wrap');
+        const idEl = document.getElementById('ble-peer-id-addr');
+        if (idWrap && idEl) {
+            const addr = health.ble_peer_id_addr || '';
+            idWrap.style.display = addr ? '' : 'none';
+            idEl.textContent = addr;
+        }
+    }
+
+    // Disable pair button while pairing
+    if (pairBtn) {
+        pairBtn.disabled = isPairing;
+        pairBtn.textContent = isPairing ? 'Pairing\u2026' : 'Pair New Device';
+    }
+}
+
+async function startBlePairing() {
+    const btn = document.getElementById('ble-pair-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Starting\u2026'; }
+    try {
+        const resp = await fetch('/api/ble/pairing/start', { method: 'POST' });
+        if (!resp.ok) {
+            alert('Failed to start pairing: ' + resp.status);
+        }
+    } catch (e) {
+        alert('Failed to start pairing: ' + e.message);
+    }
+    // Next health poll will update the UI
+}
+
 async function updateHealth() {
     try {
         const response = await fetch(API_HEALTH);
@@ -945,6 +1027,7 @@ async function updateHealth() {
 
         renderHealth(health);
         renderSensorsSection(health);
+        renderBleSection(health);
         if (healthExpanded) {
             await updateHealthHistory({ hasPsram });
         }

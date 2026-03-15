@@ -37,6 +37,23 @@ void ble_hid_send_consumer(uint16_t usage);
 // Returns true when a BLE HID host is connected.
 bool ble_hid_is_connected();
 
+// Returns true when pairing mode is active (accepting new devices).
+bool ble_hid_is_pairing();
+
+// Returns the connected peer's OTA Bluetooth address ("XX:XX:XX:XX:XX:XX").
+// Empty string when no peer is connected.
+const char* ble_hid_peer_addr();
+
+// Returns the connected peer's identity address (stable across reconnections).
+// Empty string when no peer is connected or encryption hasn't completed.
+const char* ble_hid_peer_id_addr();
+
+// Returns true when the connected peer has an active bond.
+bool ble_hid_is_bonded();
+
+// Returns true when the connection is encrypted.
+bool ble_hid_is_encrypted();
+
 // Execute a parsed key sequence (called from action dispatch).
 // The sequence string is parsed on-the-fly and executed synchronously.
 void ble_hid_execute_sequence(const char* sequence);
