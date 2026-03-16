@@ -20,8 +20,44 @@ extern DeviceConfig device_config;
 #include <WiFi.h>
 #include <string.h>
 #include <stdio.h>
+#include <esp_heap_caps.h>
+
+#include "../version.h"
+#include "project_branding.h"
 
 #define TAG "HealthBind"
+
+// ============================================================================
+// Static system info — populated once at init, never changes
+// ============================================================================
+
+static struct {
+    bool     initialized;
+    char     chip[24];          // e.g. "ESP32-S3"
+    int      chip_rev;
+    int      chip_cores;
+    int      cpu_freq;          // MHz
+    uint32_t flash_size;        // bytes
+    uint32_t heap_total;        // total heap (internal + PSRAM)
+    uint32_t internal_total;    // internal RAM total
+    uint32_t psram_total;       // PSRAM total (0 if absent)
+    char     mac[18];           // "AA:BB:CC:DD:EE:FF"
+} s_static = {};
+
+static void ensure_static_initialized() {
+    if (s_static.initialized) return;
+    s_static.initialized = true;
+
+    strlcpy(s_static.chip, ESP.getChipModel(), sizeof(s_static.chip));
+    s_static.chip_rev     = ESP.getChipRevision();
+    s_static.chip_cores   = ESP.getChipCores();
+    s_static.cpu_freq     = ESP.getCpuFreqMHz();
+    s_static.flash_size   = ESP.getFlashChipSize();
+    s_static.heap_total     = (uint32_t)heap_caps_get_total_size(MALLOC_CAP_8BIT);
+    s_static.internal_total = (uint32_t)heap_caps_get_total_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    s_static.psram_total    = (uint32_t)heap_caps_get_total_size(MALLOC_CAP_SPIRAM);
+    strlcpy(s_static.mac, WiFi.macAddress().c_str(), sizeof(s_static.mac));
+}
 
 // ============================================================================
 // Cached telemetry snapshot — refreshed at most every 2 s
@@ -127,6 +163,86 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         snprintf(out, out_len, "%u", (unsigned)s_mem.psram_largest_free_block_bytes);
         return true;
     }
+    // --- Memory totals & used (static after boot) ---
+    if (strcmp(key, "heap_total") == 0) {
+        snprintf(out, out_len, "%u", (unsigned)s_static.heap_total);
+        return true;
+    }
+    if (strcmp(key, "heap_internal_total") == 0) {
+        snprintf(out, out_len, "%u", (unsigned)s_static.internal_total);
+        return true;
+    }
+    if (strcmp(key, "heap_internal_used") == 0) {
+        uint32_t used = s_static.internal_total > s_mem.heap_internal_free_bytes
+                      ? s_static.internal_total - (uint32_t)s_mem.heap_internal_free_bytes : 0;
+        snprintf(out, out_len, "%u", (unsigned)used);
+        return true;
+    }
+    if (strcmp(key, "psram_total") == 0) {
+        snprintf(out, out_len, "%u", (unsigned)s_static.psram_total);
+        return true;
+    }
+    if (strcmp(key, "psram_used") == 0) {
+        uint32_t used = s_static.psram_total > s_mem.psram_free_bytes
+                      ? s_static.psram_total - (uint32_t)s_mem.psram_free_bytes : 0;
+        snprintf(out, out_len, "%u", (unsigned)used);
+        return true;
+    }
+    // --- Static device info (cached once at init) ---
+    if (strcmp(key, "chip") == 0) {
+        strlcpy(out, s_static.chip, out_len);
+        return true;
+    }
+    if (strcmp(key, "chip_rev") == 0) {
+        snprintf(out, out_len, "%d", s_static.chip_rev);
+        return true;
+    }
+    if (strcmp(key, "chip_cores") == 0) {
+        snprintf(out, out_len, "%d", s_static.chip_cores);
+        return true;
+    }
+    if (strcmp(key, "cpu_freq") == 0) {
+        snprintf(out, out_len, "%d", s_static.cpu_freq);
+        return true;
+    }
+    if (strcmp(key, "flash_size") == 0) {
+        snprintf(out, out_len, "%u", (unsigned)s_static.flash_size);
+        return true;
+    }
+    if (strcmp(key, "firmware") == 0) {
+        strlcpy(out, FIRMWARE_VERSION, out_len);
+        return true;
+    }
+    if (strcmp(key, "board") == 0) {
+#ifdef BUILD_BOARD_NAME
+        strlcpy(out, BUILD_BOARD_NAME, out_len);
+#else
+        strlcpy(out, "unknown", out_len);
+#endif
+        return true;
+    }
+    if (strcmp(key, "mac") == 0) {
+        strlcpy(out, s_static.mac, out_len);
+        return true;
+    }
+    if (strcmp(key, "reset_reason") == 0) {
+        esp_reset_reason_t r = esp_reset_reason();
+        const char* s = "Unknown";
+        switch (r) {
+            case ESP_RST_POWERON:   s = "Power On"; break;
+            case ESP_RST_SW:        s = "Software"; break;
+            case ESP_RST_PANIC:     s = "Panic"; break;
+            case ESP_RST_INT_WDT:   s = "Interrupt WDT"; break;
+            case ESP_RST_TASK_WDT:  s = "Task WDT"; break;
+            case ESP_RST_WDT:       s = "WDT"; break;
+            case ESP_RST_DEEPSLEEP: s = "Deep Sleep"; break;
+            case ESP_RST_BROWNOUT:  s = "Brownout"; break;
+            case ESP_RST_SDIO:      s = "SDIO"; break;
+            default: break;
+        }
+        strlcpy(out, s, out_len);
+        return true;
+    }
     if (strcmp(key, "wifi_connected") == 0) {
         strlcpy(out, s_wifi_connected ? "ON" : "OFF", out_len);
         return true;
@@ -202,6 +318,7 @@ static bool health_binding_resolve(const char* params, char* out, size_t out_len
         return false;
     }
 
+    ensure_static_initialized();
     refresh_if_stale();
 
     char raw[64];

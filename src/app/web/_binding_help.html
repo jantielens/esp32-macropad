@@ -254,15 +254,29 @@
                 <dl class="binding-docs-spec">
                     <div><dt>cpu</dt><dd>CPU usage — <code>0</code>–<code>100</code> (integer)</dd></div>
                     <div><dt>uptime</dt><dd>Seconds since boot (integer)</dd></div>
+                    <div><dt>chip</dt><dd>SoC model name — e.g. <code>ESP32-S3</code></dd></div>
+                    <div><dt>chip_rev</dt><dd>Silicon revision number</dd></div>
+                    <div><dt>chip_cores</dt><dd>Number of CPU cores</dd></div>
+                    <div><dt>cpu_freq</dt><dd>CPU clock speed in MHz</dd></div>
+                    <div><dt>flash_size</dt><dd>Flash chip size (bytes)</dd></div>
+                    <div><dt>firmware</dt><dd>Firmware version string — e.g. <code>1.10.0</code></dd></div>
+                    <div><dt>board</dt><dd>Board name used at build time</dd></div>
+                    <div><dt>mac</dt><dd>WiFi MAC address</dd></div>
+                    <div><dt>reset_reason</dt><dd>Last reset cause — e.g. <code>Power On</code>, <code>Software</code></dd></div>
                 </dl>
 
                 <p class="binding-docs-note" style="margin-bottom:4px"><strong>Memory</strong></p>
                 <dl class="binding-docs-spec">
+                    <div><dt>heap_total</dt><dd>Total heap size (bytes)</dd></div>
                     <div><dt>heap_free</dt><dd>Free heap bytes</dd></div>
                     <div><dt>heap_min</dt><dd>Lowest free heap since boot</dd></div>
                     <div><dt>heap_largest</dt><dd>Largest free heap block</dd></div>
+                    <div><dt>heap_internal_total</dt><dd>Total internal (non-PSRAM) heap</dd></div>
                     <div><dt>heap_internal</dt><dd>Free internal (non-PSRAM) heap</dd></div>
+                    <div><dt>heap_internal_used</dt><dd>Used internal heap (total − free)</dd></div>
+                    <div><dt>psram_total</dt><dd>Total PSRAM size (bytes; 0 if absent)</dd></div>
                     <div><dt>psram_free</dt><dd>Free PSRAM bytes</dd></div>
+                    <div><dt>psram_used</dt><dd>Used PSRAM (total − free)</dd></div>
                     <div><dt>psram_min</dt><dd>Lowest free PSRAM since boot</dd></div>
                     <div><dt>psram_largest</dt><dd>Largest free PSRAM block</dd></div>
                 </dl>

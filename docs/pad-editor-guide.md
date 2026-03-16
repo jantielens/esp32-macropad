@@ -489,11 +489,25 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `cpu` | CPU usage percentage | `42` |
 | `rssi` | WiFi signal strength (dBm) | `-54` |
 | `uptime` | Seconds since boot | `86400` |
+| `chip` | SoC model name | `ESP32-S3` |
+| `chip_rev` | Silicon revision number | `1` |
+| `chip_cores` | Number of CPU cores | `2` |
+| `cpu_freq` | CPU clock speed (MHz) | `240` |
+| `flash_size` | Flash chip size (bytes) | `16777216` |
+| `firmware` | Firmware version string | `1.10.0` |
+| `board` | Board name used at build time | `esp32-4848S040` |
+| `mac` | WiFi MAC address | `AA:BB:CC:DD:EE:FF` |
+| `reset_reason` | Last reset cause | `Power On` |
+| `heap_total` | Total heap size (bytes) | `8390520` |
 | `heap_free` | Free heap memory (bytes) | `145320` |
 | `heap_min` | Heap low-water mark (bytes) | `98000` |
 | `heap_largest` | Largest free block (bytes) | `65536` |
+| `heap_internal_total` | Total internal RAM (bytes) | `327680` |
 | `heap_internal` | Free internal RAM (bytes) | `82000` |
+| `heap_internal_used` | Used internal RAM (total − free) | `245680` |
+| `psram_total` | Total PSRAM (bytes; 0 if absent) | `8388608` |
 | `psram_free` | Free PSRAM (bytes) | `6291456` |
+| `psram_used` | Used PSRAM (total − free) | `2097152` |
 | `psram_min` | PSRAM low-water mark (bytes) | `4194304` |
 | `psram_largest` | Largest free PSRAM block (bytes) | `4194304` |
 | `wifi_connected` | WiFi connection status | `ON` / `OFF` |

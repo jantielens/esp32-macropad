@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Zero-allocation health binding resolve** — WiFi SSID, IP address, and connection status are now cached in static buffers during the 2-second telemetry refresh instead of allocating Arduino `String` objects on every resolve call, eliminating heap fragmentation in the LVGL render loop
+- **Expanded health binding keys for system pad use** — added 14 new `[health:]` binding keys for building system-status pads with bar charts and labels. New keys fall into three categories:
+  - **Memory totals** (for bar chart `widget_bar_max`): `heap_total`, `heap_internal_total`, `psram_total` — read from `heap_caps_get_total_size()` cached once at init, zero runtime cost
+  - **Memory used** (for bar chart `data_binding`): `heap_internal_used`, `psram_used` — computed from `total − free` each refresh cycle
+  - **Static device info** (cached once at init): `chip`, `chip_rev`, `cores`, `cpu_freq`, `flash_size`, `firmware`, `board`, `mac`, `reset_reason` — zero ongoing overhead
+  - All new keys documented in the Binding Reference tooltip (System Info and Memory Totals sections) and user guides
 - **Terminology consolidation** — standardized user-facing terminology across the entire project to a consistent hierarchy: **Screen** → **Pad** → **Button** → **Widget**. Retired "page" (as synonym for pad), "tile" (as synonym for button), and "cell" (in user-facing text). Key changes:
   - Renamed `PadPageConfig` → `PadConfig` and `MAX_PAD_PAGES` → `MAX_PADS` throughout source code
   - Renamed REST endpoint `/api/pad/tile_sizes` → `/api/pad/button_sizes` with JSON fields `button_w` / `button_h` (breaking API change)
