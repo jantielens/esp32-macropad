@@ -259,6 +259,15 @@ async function loadConfig() {
 
         // Basic Auth settings
         setCheckedIfExists('basic_auth_enabled', config.basic_auth_enabled);
+
+        // BLE Keyboard settings
+        if (config.ble_enabled !== undefined) {
+            setCheckedIfExists('ble_enabled', config.ble_enabled);
+            const bleSection = document.getElementById('ble-section');
+            if (bleSection) bleSection.style.display = 'block';
+            toggleBleContent();
+        }
+
         setValueIfExists('basic_auth_username', config.basic_auth_username);
         const authPwdField = document.getElementById('basic_auth_password');
         if (authPwdField) {
@@ -322,6 +331,7 @@ function extractFormFields(formData) {
                     'power_mode', 'cycle_interval_seconds', 'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
                     'mqtt_publish_scope',
                     'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
+                    'ble_enabled',
                     'backlight_brightness',
                     'screen_saver_enabled', 'screen_saver_timeout_seconds', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms', 'screen_saver_wake_on_touch',
                     'screen_saver_wake_binding'];

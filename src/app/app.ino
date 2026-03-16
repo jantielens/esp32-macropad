@@ -292,7 +292,11 @@ void setup()
 	sensor_manager_init();
 
 	#if HAS_BLE_HID
-	ble_hid_init(device_config.device_name);
+	if (device_config.ble_enabled) {
+		ble_hid_init(device_config.device_name);
+	} else {
+		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
+	}
 	#endif
 
 	#if HAS_MQTT
@@ -388,7 +392,9 @@ void loop()
 	#endif
 
 	#if HAS_BLE_HID
-	ble_hid_loop();
+	if (device_config.ble_enabled) {
+		ble_hid_loop();
+	}
 	#endif
 
 	// Handle web portal (DNS for captive portal)

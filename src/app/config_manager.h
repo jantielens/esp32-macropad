@@ -82,6 +82,11 @@ struct DeviceConfig {
 		char basic_auth_username[CONFIG_BASIC_AUTH_USERNAME_MAX_LEN];
 		char basic_auth_password[CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN];
 
+#if HAS_BLE_HID
+		// BLE Keyboard (runtime toggle; saves ~70 KB internal RAM when disabled)
+		bool ble_enabled;                        // default false
+#endif
+
 #if HAS_DISPLAY
 		// Screen saver (burn-in prevention v1): backlight sleep on inactivity
 		bool screen_saver_enabled;               // default false

@@ -217,11 +217,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ble_hid.cpp
   - src/app/ble_hid.h
   - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
   - src/app/device_telemetry.cpp
   - src/app/health_binding.cpp
   - src/app/screens/pad_screen_events.cpp
   - src/app/web_portal_ble.cpp
   - src/app/web_portal_ble.h
+  - src/app/web_portal_config.cpp
   - src/app/web_portal_routes.cpp
 - **HAS_BUILTIN_LED**
   - src/app/app.ino

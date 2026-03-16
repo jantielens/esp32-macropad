@@ -69,11 +69,12 @@ Controls how the device operates:
 
 *Shown only on boards with BLE HID support.*
 
-The BLE Keyboard section shows real-time Bluetooth connection status and lets you pair a new host device.
+The BLE Keyboard section lets you enable/disable the Bluetooth keyboard and manage pairing.
 
 | Element | Description |
 |---------|-------------|
-| **Status indicator** | Green dot = connected, orange = pairing mode, gray = disconnected |
+| **Enable BLE Keyboard** | Checkbox to enable or disable BLE. Disabled by default to save ~70 KB RAM. Requires a reboot to take effect |
+| **Status indicator** | Green dot = connected, orange = pairing mode, gray = disconnected (visible when BLE is enabled) |
 | **Bonded / Encrypted badges** | Shown when a host is connected |
 | **Peer address** | The connected host's Bluetooth address |
 | **Pair New Device** | Clears the existing bond and opens a 60-second pairing window. The button is disabled while pairing is in progress |

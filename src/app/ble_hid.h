@@ -54,6 +54,9 @@ bool ble_hid_is_bonded();
 // Returns true when the connection is encrypted.
 bool ble_hid_is_encrypted();
 
+// Returns true when the BLE HID stack has been initialized.
+bool ble_hid_is_initialized();
+
 // Execute a parsed key sequence (called from action dispatch).
 // The sequence string is parsed on-the-fly and executed synchronously.
 void ble_hid_execute_sequence(const char* sequence);

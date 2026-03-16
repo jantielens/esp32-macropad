@@ -345,7 +345,7 @@ void device_telemetry_fill_api(JsonDocument &doc) {
 
 		// BLE HID state (API-only)
 		#if HAS_BLE_HID
-		{
+		if (ble_hid_is_initialized()) {
 				doc["ble_connected"] = ble_hid_is_connected();
 				doc["ble_pairing"] = ble_hid_is_pairing();
 				doc["ble_bonded"] = ble_hid_is_bonded();

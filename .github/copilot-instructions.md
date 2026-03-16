@@ -61,8 +61,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - HA discovery published via `ha_discovery_publish_screen_select_config()` with dynamic options list from screen registry
 - **MQTT Wake Subsystem**: Binding-driven screensaver wakeup (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
   - `mqtt_wake.cpp/h` - Resolves a user-configured binding expression each loop tick; wakes screensaver on OFF→ON edge; keeps screen awake while ON persists via throttled idle-timer reset (~1 s)
-- **BLE HID Subsystem**: Bluetooth LE keyboard with key sequence DSL (compile-time gated by `HAS_BLE_HID`)
-  - `ble_hid.cpp/h` - Manual NimBLE HID GATT service, single-owner pairing policy (one bond, 60s timeout), keyboard + consumer reports, peer metadata getters
+- **BLE HID Subsystem**: Bluetooth LE keyboard with key sequence DSL (compile-time gated by `HAS_BLE_HID`; runtime-toggled via `ble_enabled` config, default disabled, saves ~70 KB internal RAM when off)
+  - `ble_hid.cpp/h` - Manual NimBLE HID GATT service, single-owner pairing policy (one bond, 60s timeout), keyboard + consumer reports, peer metadata getters; `ble_hid_is_initialized()` used as runtime guard by other modules
   - `key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable, no ESP32 deps
   - `web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime

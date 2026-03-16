@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BLE HID keyboard** — the macropad can now act as a Bluetooth keyboard. Assign a `key` action to any button to send keystrokes (single keys, modifier combos, media keys, or multi-step sequences) to a paired host. Assign a `ble_pair` action to open a 60-second pairing window. Features:
   - Key sequence DSL with text literals, modifier keys, consumer/media keys, and delays
   - Single-owner pairing policy: one bonded host at a time, unbonded peers rejected outside the pairing window
+  - Runtime enable/disable toggle on the Home page (disabled by default, saves ~70 KB RAM when off; requires reboot)
   - BLE state exposed in `/api/health` (`ble_connected`, `ble_pairing`, `ble_bonded`, `ble_encrypted`, `ble_peer_addr`, `ble_peer_id_addr`)
   - Health binding support: `[health:ble_connected]`, `[health:ble_pairing]`, etc.
   - New BLE Keyboard section on the Home page with connection status, peer details, and "Pair New Device" button

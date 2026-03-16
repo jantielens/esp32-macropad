@@ -24,6 +24,15 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+// Parse a bool value from a JSON field that may arrive as string ("true"/"1"/"on") or native bool.
+static bool parseBoolField(const JsonDocument &doc, const char* key) {
+		if (doc[key].is<const char*>()) {
+				const char* v = doc[key];
+				return (v && (strcmp(v, "1") == 0 || strcasecmp(v, "true") == 0 || strcasecmp(v, "on") == 0));
+		}
+		return (bool)(doc[key] | false);
+}
+
 // /api/config body accumulator (chunk-safe)
 static portMUX_TYPE g_config_post_mux = portMUX_INITIALIZER_UNLOCKED;
 static struct {
@@ -112,6 +121,10 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				// Display settings
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
+
+				#if HAS_BLE_HID
+				(*doc)["ble_enabled"] = current_config->ble_enabled;
+				#endif
 
 				#if HAS_DISPLAY
 				// Screen saver settings
@@ -378,13 +391,14 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 
 		// Basic Auth enabled
 		if (doc.containsKey("basic_auth_enabled")) {
-				if (doc["basic_auth_enabled"].is<const char*>()) {
-						const char* v = doc["basic_auth_enabled"];
-						current_config->basic_auth_enabled = (v && (strcmp(v, "1") == 0 || strcasecmp(v, "true") == 0 || strcasecmp(v, "on") == 0));
-				} else {
-						current_config->basic_auth_enabled = (bool)(doc["basic_auth_enabled"] | false);
-				}
+				current_config->basic_auth_enabled = parseBoolField(doc, "basic_auth_enabled");
 		}
+
+		#if HAS_BLE_HID
+		if (doc.containsKey("ble_enabled")) {
+				current_config->ble_enabled = parseBoolField(doc, "ble_enabled");
+		}
+		#endif
 
 		// Basic Auth username
 		if (doc.containsKey("basic_auth_username")) {
@@ -429,12 +443,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		#if HAS_DISPLAY
 		// Screen saver settings
 		if (doc.containsKey("screen_saver_enabled")) {
-				if (doc["screen_saver_enabled"].is<const char*>()) {
-						const char* v = doc["screen_saver_enabled"];
-						current_config->screen_saver_enabled = (v && (strcmp(v, "1") == 0 || strcasecmp(v, "true") == 0 || strcasecmp(v, "on") == 0));
-				} else {
-						current_config->screen_saver_enabled = (bool)(doc["screen_saver_enabled"] | false);
-				}
+				current_config->screen_saver_enabled = parseBoolField(doc, "screen_saver_enabled");
 		}
 
 		if (doc.containsKey("screen_saver_timeout_seconds")) {
@@ -465,12 +474,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 
 		if (doc.containsKey("screen_saver_wake_on_touch")) {
-				if (doc["screen_saver_wake_on_touch"].is<const char*>()) {
-						const char* v = doc["screen_saver_wake_on_touch"];
-						current_config->screen_saver_wake_on_touch = (v && (strcmp(v, "1") == 0 || strcasecmp(v, "true") == 0 || strcasecmp(v, "on") == 0));
-				} else {
-						current_config->screen_saver_wake_on_touch = (bool)(doc["screen_saver_wake_on_touch"] | false);
-				}
+				current_config->screen_saver_wake_on_touch = parseBoolField(doc, "screen_saver_wake_on_touch");
 		}
 
 		if (doc.containsKey("screen_saver_wake_binding")) {

@@ -41,6 +41,9 @@
 #define KEY_BASIC_AUTH_ENABLED "ba_en"
 #define KEY_BASIC_AUTH_USER    "ba_user"
 #define KEY_BASIC_AUTH_PASS    "ba_pass"
+#if HAS_BLE_HID
+#define KEY_BLE_ENABLED    "ble_en"
+#endif
 #if HAS_DISPLAY
 #define KEY_SCREEN_SAVER_ENABLED "ss_en"
 #define KEY_SCREEN_SAVER_TIMEOUT "ss_to"
@@ -150,6 +153,10 @@ bool config_manager_load(DeviceConfig *config) {
 				config->basic_auth_username[0] = '\0';
 				config->basic_auth_password[0] = '\0';
 
+				#if HAS_BLE_HID
+				config->ble_enabled = false;
+				#endif
+
 				#if HAS_DISPLAY
 				// Screen saver defaults
 				config->screen_saver_enabled = false;
@@ -218,6 +225,10 @@ bool config_manager_load(DeviceConfig *config) {
 		config->basic_auth_enabled = preferences.getBool(KEY_BASIC_AUTH_ENABLED, false);
 		preferences.getString(KEY_BASIC_AUTH_USER, config->basic_auth_username, CONFIG_BASIC_AUTH_USERNAME_MAX_LEN);
 		preferences.getString(KEY_BASIC_AUTH_PASS, config->basic_auth_password, CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN);
+
+		#if HAS_BLE_HID
+		config->ble_enabled = preferences.getBool(KEY_BLE_ENABLED, false);
+		#endif
 
 		#if HAS_DISPLAY
 		// Load screen saver settings
@@ -300,6 +311,10 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putBool(KEY_BASIC_AUTH_ENABLED, config->basic_auth_enabled);
 		preferences.putString(KEY_BASIC_AUTH_USER, config->basic_auth_username);
 		preferences.putString(KEY_BASIC_AUTH_PASS, config->basic_auth_password);
+
+		#if HAS_BLE_HID
+		preferences.putBool(KEY_BLE_ENABLED, config->ble_enabled);
+		#endif
 
 		#if HAS_DISPLAY
 		// Save screen saver settings
@@ -404,6 +419,10 @@ LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
 #else
 		// MQTT config can still exist in NVS, but the firmware has MQTT support compiled out.
 		LOGI("Config", "MQTT: disabled (feature not compiled into firmware)");
+#endif
+
+#if HAS_BLE_HID
+		LOGI("Config", "BLE Keyboard: %s", config->ble_enabled ? "enabled" : "disabled");
 #endif
 
 #if HAS_DISPLAY

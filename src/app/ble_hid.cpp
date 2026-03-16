@@ -604,4 +604,8 @@ bool ble_hid_is_encrypted() {
     return peer_encrypted;
 }
 
+bool ble_hid_is_initialized() {
+    return hid_service_ready;
+}
+
 #endif // HAS_BLE_HID

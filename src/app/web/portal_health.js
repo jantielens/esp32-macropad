@@ -907,9 +907,8 @@ function renderBleSection(health) {
     const section = document.getElementById('ble-section');
     if (!section) return;
 
-    // Show section only if BLE data is present in health payload
+    // Update BLE status only when health payload contains BLE data
     const hasBle = (typeof health.ble_connected === 'boolean');
-    section.style.display = hasBle ? 'block' : 'none';
     if (!hasBle) return;
 
     const dot = document.getElementById('ble-status-dot');
@@ -969,6 +968,12 @@ function renderBleSection(health) {
         pairBtn.disabled = isPairing;
         pairBtn.textContent = isPairing ? 'Pairing\u2026' : 'Pair New Device';
     }
+}
+
+function toggleBleContent() {
+    const cb = document.getElementById('ble_enabled');
+    const content = document.getElementById('ble-content');
+    if (cb && content) content.style.display = cb.checked ? 'block' : 'none';
 }
 
 async function startBlePairing() {

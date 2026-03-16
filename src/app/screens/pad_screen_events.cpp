@@ -60,7 +60,9 @@ static void execute_action(const ButtonAction& act, const char* label) {
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
 #if HAS_BLE_HID
-        if (act.key_sequence[0]) {
+        if (!ble_hid_is_initialized()) {
+            LOGW(TAG, "%s key: BLE disabled in settings", label);
+        } else if (act.key_sequence[0]) {
             LOGI(TAG, "%s key: '%s'", label, act.key_sequence);
             ble_hid_request_sequence(act.key_sequence);
         } else {
@@ -71,8 +73,12 @@ static void execute_action(const ButtonAction& act, const char* label) {
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_BLE_PAIR) == 0) {
 #if HAS_BLE_HID
-        LOGI(TAG, "%s ble_pair: starting pairing mode", label);
-        ble_hid_request_pairing();
+        if (!ble_hid_is_initialized()) {
+            LOGW(TAG, "%s ble_pair: BLE disabled in settings", label);
+        } else {
+            LOGI(TAG, "%s ble_pair: starting pairing mode", label);
+            ble_hid_request_pairing();
+        }
 #else
         LOGW(TAG, "%s ble_pair: not compiled (HAS_BLE_HID=false)", label);
 #endif
