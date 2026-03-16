@@ -34,6 +34,9 @@ static int s_cpu = -1;
 static int16_t s_rssi = 0;
 static bool s_rssi_valid = false;
 static DeviceMemorySnapshot s_mem = {};
+static bool s_wifi_connected = false;
+static char s_wifi_ssid[33] = "";   // max SSID length is 32 + null
+static char s_ip[16] = "";          // "255.255.255.255" + null
 
 static void refresh_if_stale() {
     uint32_t now = millis();
@@ -43,6 +46,15 @@ static void refresh_if_stale() {
     s_cpu = device_telemetry_get_cpu_usage();
     s_rssi = device_telemetry_get_cached_rssi(&s_rssi_valid);
     s_mem = device_telemetry_get_memory_snapshot();
+
+    s_wifi_connected = (WiFi.status() == WL_CONNECTED);
+    if (s_wifi_connected) {
+        strlcpy(s_wifi_ssid, WiFi.SSID().c_str(), sizeof(s_wifi_ssid));
+        strlcpy(s_ip, WiFi.localIP().toString().c_str(), sizeof(s_ip));
+    } else {
+        s_wifi_ssid[0] = '\0';
+        s_ip[0] = '\0';
+    }
 }
 
 // ============================================================================
@@ -116,19 +128,15 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         return true;
     }
     if (strcmp(key, "wifi_connected") == 0) {
-        strlcpy(out, WiFi.status() == WL_CONNECTED ? "ON" : "OFF", out_len);
+        strlcpy(out, s_wifi_connected ? "ON" : "OFF", out_len);
         return true;
     }
     if (strcmp(key, "wifi_ssid") == 0) {
-        if (WiFi.status() == WL_CONNECTED) {
-            strlcpy(out, WiFi.SSID().c_str(), out_len);
-        } else {
-            strlcpy(out, "?", out_len);
-        }
+        strlcpy(out, s_wifi_connected ? s_wifi_ssid : "?", out_len);
         return true;
     }
     if (strcmp(key, "ip") == 0) {
-        strlcpy(out, WiFi.localIP().toString().c_str(), out_len);
+        strlcpy(out, s_ip[0] ? s_ip : "0.0.0.0", out_len);
         return true;
     }
     if (strcmp(key, "hostname") == 0) {

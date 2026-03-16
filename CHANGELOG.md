@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Device export/import loops use `max_pads` instead of hardcoded 8
 
 ### Changed
+- **Zero-allocation health binding resolve** — WiFi SSID, IP address, and connection status are now cached in static buffers during the 2-second telemetry refresh instead of allocating Arduino `String` objects on every resolve call, eliminating heap fragmentation in the LVGL render loop
 - **Terminology consolidation** — standardized user-facing terminology across the entire project to a consistent hierarchy: **Screen** → **Pad** → **Button** → **Widget**. Retired "page" (as synonym for pad), "tile" (as synonym for button), and "cell" (in user-facing text). Key changes:
   - Renamed `PadPageConfig` → `PadConfig` and `MAX_PAD_PAGES` → `MAX_PADS` throughout source code
   - Renamed REST endpoint `/api/pad/tile_sizes` → `/api/pad/button_sizes` with JSON fields `button_w` / `button_h` (breaking API change)
