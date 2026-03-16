@@ -76,7 +76,7 @@ static void execute_action(const ButtonAction& act, const char* label) {
         if (!ble_hid_is_initialized()) {
             LOGW(TAG, "%s ble_pair: BLE disabled in settings", label);
         } else {
-            LOGI(TAG, "%s ble_pair: scheduling reboot into pairing mode", label);
+            LOGI(TAG, "%s ble_pair: starting live re-pairing", label);
             ble_hid_request_pairing();
         }
 #else

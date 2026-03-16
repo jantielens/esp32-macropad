@@ -150,6 +150,7 @@ static volatile uint16_t active_conn_handle = 0xFFFF;
 static char peer_addr_str[18] = {};
 static char peer_id_addr_str[18] = {};
 static char ble_name_str[40] = {};
+static char device_base_name[40] = {};
 static volatile bool peer_bonded = false;
 static volatile bool peer_encrypted = false;
 
@@ -465,7 +466,6 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
             pairing_mode = false;
             owner_claimed = true;
             config_manager_set_ble_owner_claimed(true);
-            config_manager_set_ble_pairing_boot(false);
         } else {
             LOGW(TAG, "Pairing FAILED (reason=0x%02X)", auth.fail_reason);
         }
@@ -487,7 +487,6 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
             pairing_deadline = 0;
             owner_claimed = true;
             config_manager_set_ble_owner_claimed(true);
-            config_manager_set_ble_pairing_boot(false);
             return;
         }
 
@@ -499,8 +498,8 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
         }
 
         // In pairing mode, failed encryption means the peer did not complete a
-        // usable fresh pair. Keep the logic simple and disconnect; a reboot-based
-        // pairing reset ensures a clean subsequent attempt.
+        // usable fresh pair. Keep the logic simple and disconnect; the user can
+        // trigger a new live re-pairing attempt from the portal or a pad button.
         LOGW(TAG, "Pairing failed during pairing mode - disconnecting");
         ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
     }
@@ -541,6 +540,7 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     peer_bonded = false;
     clear_peer_metadata();
     owner_claimed = config_manager_get_ble_owner_claimed();
+    strlcpy(device_base_name, device_name ? device_name : "", sizeof(device_base_name));
 
     char identity_addr_str[18] = {};
     load_identity_address_string(identity_addr_str, sizeof(identity_addr_str));
@@ -574,7 +574,7 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     adv->setMaxPreferred(0x12);
 
     if (force_pairing_mode) {
-        LOGI(TAG, "Booting into BLE pairing mode after restart");
+        LOGI(TAG, "Entering BLE pairing mode");
         clear_all_bonds();
         clear_peer_metadata();
         owner_claimed = false;
@@ -596,15 +596,33 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
 }
 
 void ble_hid_start_pairing() {
-    LOGI(TAG, "Scheduling reboot into BLE pairing mode");
+    LOGI(TAG, "Starting live BLE re-pairing");
+
+    // 1. Disconnect any active peer
+    if (connected && active_conn_handle != 0xFFFF) {
+        ble_gap_terminate(active_conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        delay(100);
+    }
+
+    // 2. Rotate identity so the host sees a fresh peripheral
     BLEAddress next_addr;
     if (!persist_new_identity_address(&next_addr)) {
-        LOGW(TAG, "Continuing pairing reboot without BLE identity rotation");
+        LOGW(TAG, "Continuing re-pairing without BLE identity rotation");
     }
+
+    // 3. Full NimBLE stack teardown (keep BT controller memory for reinit)
+    BLEDevice::deinit(false);
+    bleServer = nullptr;
+    hid_service_ready = false;
+    advertising_active = false;
+    connected = false;
+    active_conn_handle = 0xFFFF;
+
+    // 4. Clear owner claim in NVS
     config_manager_set_ble_owner_claimed(false);
-    config_manager_set_ble_pairing_boot(true);
-    delay(100);
-    ESP.restart();
+
+    // 5. Reinitialize with fresh identity and pairing mode
+    ble_hid_init(device_base_name, true);
 }
 
 bool ble_hid_is_connected() {

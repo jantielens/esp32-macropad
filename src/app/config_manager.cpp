@@ -43,7 +43,6 @@
 #define KEY_BASIC_AUTH_PASS    "ba_pass"
 #if HAS_BLE_HID
 #define KEY_BLE_ENABLED    "ble_en"
-#define KEY_BLE_PAIR_BOOT  "ble_pair"
 #define KEY_BLE_OWNER      "ble_owner"
 #define KEY_BLE_ID_ADDR    "ble_addr"
 #endif
@@ -357,29 +356,6 @@ bool config_manager_reset() {
 }
 
 #if HAS_BLE_HID
-bool config_manager_set_ble_pairing_boot(bool enabled) {
-		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
-				LOGE("Config", "Failed to open NVS for BLE pairing flag");
-				return false;
-		}
-		const bool ok = preferences.putBool(KEY_BLE_PAIR_BOOT, enabled);
-		preferences.end();
-		return ok;
-}
-
-bool config_manager_consume_ble_pairing_boot() {
-		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
-				LOGE("Config", "Failed to open NVS for BLE pairing flag consume");
-				return false;
-		}
-		const bool enabled = preferences.getBool(KEY_BLE_PAIR_BOOT, false);
-		if (enabled) {
-				preferences.putBool(KEY_BLE_PAIR_BOOT, false);
-		}
-		preferences.end();
-		return enabled;
-}
-
 bool config_manager_get_ble_owner_claimed() {
 		if (!preferences.begin(CONFIG_NAMESPACE, true)) {
 				LOGE("Config", "Failed to open NVS for BLE owner read");

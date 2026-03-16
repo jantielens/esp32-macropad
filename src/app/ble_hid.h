@@ -6,19 +6,18 @@
 #if HAS_BLE_HID
 
 // Initialize BLE HID stack (manual HID GATT service, security, advertising).
-// Uses device_name for the BLE device name and can optionally boot directly
-// into pairing mode after a reboot-based ownership reset.
+// Uses device_name for the BLE device name and can optionally start directly
+// in pairing mode (clearing bonds and opening a 60-second window).
 void ble_hid_init(const char* device_name, bool force_pairing_mode);
 
-// Rotate the BLE identity if possible and reboot into a fresh pairing window.
+// Tear down the BLE stack, rotate the identity, and reinitialize in pairing mode.
 // WARNING: Must NOT be called from a PSRAM-stack task (flash ops crash).
 //          Use ble_hid_request_pairing() from LVGL instead.
 void ble_hid_start_pairing();
 
 // Request pairing — safe to call from any task (deferred to ble_hid_loop).
-// The robust flow uses a reboot into pairing mode instead of hot-swapping the
-// current BLE owner on a live connection. The BLE identity is rotated before
-// that reboot so hosts treat the next pairing window as a fresh peripheral.
+// Tears down the NimBLE stack, rotates the BLE identity, and reinitializes
+// in pairing mode so hosts treat the device as a fresh peripheral.
 void ble_hid_request_pairing();
 
 // Request a key sequence — safe to call from any task (deferred to ble_hid_loop).

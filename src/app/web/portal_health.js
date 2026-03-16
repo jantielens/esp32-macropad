@@ -994,7 +994,7 @@ function toggleBleContent() {
 
 async function startBlePairing() {
     const btn = document.getElementById('ble-pair-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Rebooting\u2026'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Starting\u2026'; }
     try {
         const resp = await fetch('/api/ble/pairing/start', { method: 'POST' });
         if (!resp.ok) {

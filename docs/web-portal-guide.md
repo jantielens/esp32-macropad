@@ -78,7 +78,7 @@ The BLE Keyboard section lets you enable/disable the Bluetooth keyboard and mana
 | **Name** | Shows the current BLE keyboard name, including the short identity suffix used to distinguish rotated pairings |
 | **Bonded / Encrypted badges** | Shown when a host is connected |
 | **Peer address** | The connected host's Bluetooth address |
-| **Pair New Device** | Schedules a reboot into pairing mode. On reboot the firmware clears the previous owner locally, rotates the device's underlying BLE identity address, and starts a fresh 60-second pairing window |
+| **Pair New Device** | Tears down the BLE stack, rotates the device's BLE identity address, clears the previous owner, and opens a fresh 60-second pairing window — no reboot required |
 
 You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
 

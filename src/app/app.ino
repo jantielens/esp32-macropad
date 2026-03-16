@@ -292,9 +292,8 @@ void setup()
 	sensor_manager_init();
 
 	#if HAS_BLE_HID
-	const bool ble_force_pairing_mode = config_manager_consume_ble_pairing_boot();
 	if (device_config.ble_enabled) {
-		ble_hid_init(device_config.device_name, ble_force_pairing_mode);
+		ble_hid_init(device_config.device_name, false);
 	} else {
 		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
 	}
