@@ -17,7 +17,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Screen saver** — automatic backlight fade with pixel-shift burn-in prevention
 
 ### BLE Keyboard
-- **Bluetooth HID keyboard** — pair with any Bluetooth host and send keystrokes from your macropad
+- **Bluetooth HID keyboard** — pair with any Bluetooth host and send keystrokes from your macropad (ESP32-P4 boards only; disabled on ESP32-S3 due to internal RAM constraints)
 - **Key sequences** — single keys, modifier combos (`ctrl+c`), media keys (`vol_up`), text literals, and multi-step sequences with delays
 - **One-tap pairing** — assign a `ble_pair` action to a button or start pairing from the web portal
 - **Single-owner security** — one bonded host at a time; unbonded devices are rejected outside the pairing window

@@ -11,6 +11,8 @@
 // ---------------------------------------------------------------------------
 // Enable display support on this board.
 #define HAS_DISPLAY true
+// BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
+#define HAS_BLE_HID false
 
 // LVGL: place built-in CPU/FPS perf monitor at bottom-center (round display)
 // LVGL perf monitor alignment.

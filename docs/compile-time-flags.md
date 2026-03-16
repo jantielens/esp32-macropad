@@ -181,9 +181,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 | board-name | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3248w535 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3636w518 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| esp32-4848S040 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3248w535 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3636w518 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 | esp32-p4-lcd4b | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 | jc4880p433 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->

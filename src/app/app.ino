@@ -291,6 +291,8 @@ void setup()
 	// Initialize sensors (optional adapters)
 	sensor_manager_init();
 
+	// BLE HID keyboard — guarded by ble_hid_init() which bails gracefully
+	// (init_error = true) if the NimBLE stack fails to allocate.
 	#if HAS_BLE_HID
 	if (device_config.ble_enabled) {
 		ble_hid_init(device_config.device_name, false);

@@ -547,10 +547,21 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     build_ble_name(device_name, identity_addr_str, ble_name_str, sizeof(ble_name_str));
 
     BLEDevice::init(ble_name_str);
+    if (!BLEDevice::getInitialized()) {
+        LOGE(TAG, "BLE stack init failed — BLE unavailable on this board");
+        init_error = true;
+        return;
+    }
     configure_identity_address();
-    BLEDevice::setSecurityCallbacks(new HidSecurityCallbacks());
+    static HidSecurityCallbacks secCb;
+    BLEDevice::setSecurityCallbacks(&secCb);
 
     bleServer = BLEDevice::createServer();
+    if (bleServer == nullptr) {
+        LOGE(TAG, "BLEDevice::createServer() returned null");
+        init_error = true;
+        return;
+    }
     bleServer->setCallbacks(new HidCallbacks());
 
     hid_service_ready = init_hid_service();
@@ -560,11 +571,11 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
         return;
     }
 
-    BLESecurity* security = new BLESecurity();
-    security->setAuthenticationMode(true, true, false);
-    security->setCapability(ESP_IO_CAP_NONE);
-    security->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
-    security->setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    static BLESecurity security;
+    security.setAuthenticationMode(true, true, false);
+    security.setCapability(ESP_IO_CAP_NONE);
+    security.setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    security.setRespEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
 
     BLEAdvertising* adv = BLEDevice::getAdvertising();
     adv->setAppearance(HID_KEYBOARD);

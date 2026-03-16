@@ -67,7 +67,7 @@ Controls how the device operates:
 
 ### BLE Keyboard
 
-*Shown only on boards with BLE HID support.*
+*Shown only on boards with BLE HID support (ESP32-P4 boards). Not available on ESP32-S3 boards due to internal RAM constraints.*
 
 The BLE Keyboard section lets you enable/disable the Bluetooth keyboard and manage pairing.
 
