@@ -43,6 +43,9 @@
 #define KEY_BASIC_AUTH_PASS    "ba_pass"
 #if HAS_BLE_HID
 #define KEY_BLE_ENABLED    "ble_en"
+#define KEY_BLE_PAIR_BOOT  "ble_pair"
+#define KEY_BLE_OWNER      "ble_owner"
+#define KEY_BLE_ID_ADDR    "ble_addr"
 #endif
 #if HAS_DISPLAY
 #define KEY_SCREEN_SAVER_ENABLED "ss_en"
@@ -352,6 +355,80 @@ bool config_manager_reset() {
 		
 		return success;
 }
+
+#if HAS_BLE_HID
+bool config_manager_set_ble_pairing_boot(bool enabled) {
+		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
+				LOGE("Config", "Failed to open NVS for BLE pairing flag");
+				return false;
+		}
+		const bool ok = preferences.putBool(KEY_BLE_PAIR_BOOT, enabled);
+		preferences.end();
+		return ok;
+}
+
+bool config_manager_consume_ble_pairing_boot() {
+		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
+				LOGE("Config", "Failed to open NVS for BLE pairing flag consume");
+				return false;
+		}
+		const bool enabled = preferences.getBool(KEY_BLE_PAIR_BOOT, false);
+		if (enabled) {
+				preferences.putBool(KEY_BLE_PAIR_BOOT, false);
+		}
+		preferences.end();
+		return enabled;
+}
+
+bool config_manager_get_ble_owner_claimed() {
+		if (!preferences.begin(CONFIG_NAMESPACE, true)) {
+				LOGE("Config", "Failed to open NVS for BLE owner read");
+				return false;
+		}
+		const bool claimed = preferences.getBool(KEY_BLE_OWNER, false);
+		preferences.end();
+		return claimed;
+}
+
+bool config_manager_set_ble_owner_claimed(bool claimed) {
+		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
+				LOGE("Config", "Failed to open NVS for BLE owner write");
+				return false;
+		}
+		const bool ok = preferences.putBool(KEY_BLE_OWNER, claimed);
+		preferences.end();
+		return ok;
+}
+
+bool config_manager_get_ble_identity_addr(char *addr, size_t addr_len) {
+		if (!addr || addr_len == 0) {
+				LOGE("Config", "Invalid BLE identity buffer");
+				return false;
+		}
+		if (!preferences.begin(CONFIG_NAMESPACE, true)) {
+				LOGE("Config", "Failed to open NVS for BLE identity read");
+				addr[0] = '\0';
+				return false;
+		}
+		preferences.getString(KEY_BLE_ID_ADDR, addr, addr_len);
+		preferences.end();
+		return addr[0] != '\0';
+}
+
+bool config_manager_set_ble_identity_addr(const char *addr) {
+		if (!addr || !addr[0]) {
+				LOGE("Config", "Invalid BLE identity address");
+				return false;
+		}
+		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
+				LOGE("Config", "Failed to open NVS for BLE identity write");
+				return false;
+		}
+		const bool ok = preferences.putString(KEY_BLE_ID_ADDR, addr);
+		preferences.end();
+		return ok;
+}
+#endif
 
 // Check if configuration is valid
 bool config_manager_is_valid(const DeviceConfig *config) {

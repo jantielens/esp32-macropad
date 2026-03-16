@@ -74,12 +74,47 @@ The BLE Keyboard section lets you enable/disable the Bluetooth keyboard and mana
 | Element | Description |
 |---------|-------------|
 | **Enable BLE Keyboard** | Checkbox to enable or disable BLE. Disabled by default to save ~70 KB RAM. Requires a reboot to take effect |
-| **Status indicator** | Green dot = connected, orange = pairing mode, gray = disconnected (visible when BLE is enabled) |
+| **Status indicator** | Reflects the compact `ble_status`: disabled, ready, pairing, connected, or error |
+| **Name** | Shows the current BLE keyboard name, including the short identity suffix used to distinguish rotated pairings |
 | **Bonded / Encrypted badges** | Shown when a host is connected |
 | **Peer address** | The connected host's Bluetooth address |
-| **Pair New Device** | Clears the existing bond and opens a 60-second pairing window. The button is disabled while pairing is in progress |
+| **Pair New Device** | Schedules a reboot into pairing mode. On reboot the firmware clears the previous owner locally, rotates the device's underlying BLE identity address, and starts a fresh 60-second pairing window |
 
 You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
+
+The configured base BLE name stays the same across this reboot, but the advertised BLE name gets a short identity suffix that changes with each rotated BLE identity. That makes old Windows entries easier to distinguish while still reflecting the new low-level BLE identity.
+
+#### BLE Signals
+
+The firmware exposes two BLE health signals for bindings and diagnostics:
+
+| Signal | Purpose | Values |
+|--------|---------|--------|
+| **`ble_status`** | Compact user-facing status | `disabled`, `ready`, `pairing`, `connected`, `error` |
+| **`ble_state`** | Detailed diagnostic status | `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, `error` |
+
+**`ble_status` values:**
+
+| Value | Meaning |
+|-------|---------|
+| `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ready` | BLE keyboard is enabled and waiting, but not currently pairing or in a secured active session |
+| `pairing` | BLE keyboard is in the new-device pairing window |
+| `connected` | A host is connected and the BLE HID session is encrypted and usable |
+| `error` | BLE initialization failed or the BLE stack entered a fault state |
+
+**`ble_state` values:**
+
+| Value | Meaning |
+|-------|---------|
+| `disabled` | BLE keyboard is turned off in runtime configuration |
+| `idle` | BLE stack is initialized but not advertising a stronger user-visible condition |
+| `advertising` | BLE is advertising without an owner claim yet |
+| `pairing` | BLE is in pairing mode and waiting for a new host |
+| `connecting` | A host connection exists, but the secure HID session is not fully established yet |
+| `claimed` | BLE has an owner on record and is advertising for that owner to reconnect |
+| `secured` | BLE has an encrypted active connection |
+| `error` | BLE initialization failed or the BLE stack entered a fault state |
 
 ### Display Settings
 

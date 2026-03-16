@@ -908,21 +908,28 @@ function renderBleSection(health) {
     if (!section) return;
 
     // Update BLE status only when health payload contains BLE data
-    const hasBle = (typeof health.ble_connected === 'boolean');
+    const hasBle = (typeof health.ble_status === 'string') || (typeof health.ble_state === 'string');
     if (!hasBle) return;
 
     const dot = document.getElementById('ble-status-dot');
     const text = document.getElementById('ble-status-text');
+    const nameWrap = document.getElementById('ble-name-wrap');
+    const nameEl = document.getElementById('ble-name');
     const details = document.getElementById('ble-details');
     const pairBtn = document.getElementById('ble-pair-btn');
 
-    const isConnected = health.ble_connected;
-    const isPairing = health.ble_pairing;
+    const bleStatus = health.ble_status || 'ready';
+    const isPairing = bleStatus === 'pairing';
+    const isConnected = bleStatus === 'connected';
+    const isDisabled = bleStatus === 'disabled';
+    const isError = bleStatus === 'error';
 
     // Status dot color
     if (dot) {
         if (isPairing) dot.style.background = '#ff9500';
         else if (isConnected) dot.style.background = '#34c759';
+        else if (isError) dot.style.background = '#ff3b30';
+        else if (bleStatus === 'ready') dot.style.background = '#0a84ff';
         else dot.style.background = '#ccc';
     }
 
@@ -930,7 +937,16 @@ function renderBleSection(health) {
     if (text) {
         if (isPairing) text.textContent = 'Pairing mode (waiting for device\u2026)';
         else if (isConnected) text.textContent = 'Connected';
-        else text.textContent = 'Disconnected';
+        else if (bleStatus === 'ready') text.textContent = 'Ready';
+        else if (isDisabled) text.textContent = 'Disabled';
+        else if (isError) text.textContent = 'Error';
+        else text.textContent = 'Ready';
+    }
+
+    if (nameWrap && nameEl) {
+        const bleName = health.ble_name || '';
+        nameWrap.style.display = bleName ? '' : 'none';
+        nameEl.textContent = bleName;
     }
 
     // Details panel (only when connected)
@@ -965,7 +981,7 @@ function renderBleSection(health) {
 
     // Disable pair button while pairing
     if (pairBtn) {
-        pairBtn.disabled = isPairing;
+        pairBtn.disabled = isPairing || isDisabled;
         pairBtn.textContent = isPairing ? 'Pairing\u2026' : 'Pair New Device';
     }
 }
@@ -978,7 +994,7 @@ function toggleBleContent() {
 
 async function startBlePairing() {
     const btn = document.getElementById('ble-pair-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Starting\u2026'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Rebooting\u2026'; }
     try {
         const resp = await fetch('/api/ble/pairing/start', { method: 'POST' });
         if (!resp.ok) {

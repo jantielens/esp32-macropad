@@ -509,6 +509,9 @@ Returns real-time device health statistics.
 ```
 
 **Notes:**
+- `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
+- `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
+- `ble_name`: current BLE keyboard name, including the short identity suffix when BLE identity rotation is active
 - `cpu_usage`: `null` when FreeRTOS runtime stats are unavailable/disabled
 - `cpu_temperature`: `null` on chips without an internal temperature sensor
 - `fs_mounted`: `null` when no filesystem partition is present; `false` when present but not mounted

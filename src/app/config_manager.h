@@ -114,4 +114,13 @@ void config_manager_print(const DeviceConfig *config); // Debug print config
 void config_manager_sanitize_device_name(const char *input, char *output, size_t max_len); // Sanitize name for mDNS
 String config_manager_get_default_device_name();      // Get default device name with chip ID
 
+#if HAS_BLE_HID
+bool config_manager_set_ble_pairing_boot(bool enabled); // One-shot reboot-into-pairing flag
+bool config_manager_consume_ble_pairing_boot();         // Read + clear one-shot pairing flag
+bool config_manager_get_ble_owner_claimed();            // Persistent "device has an owner" flag
+bool config_manager_set_ble_owner_claimed(bool claimed);
+bool config_manager_get_ble_identity_addr(char *addr, size_t addr_len); // Stored BLE identity address
+bool config_manager_set_ble_identity_addr(const char *addr);            // Persist BLE identity address
+#endif
+
 #endif // CONFIG_MANAGER_H

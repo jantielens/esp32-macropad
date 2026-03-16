@@ -249,7 +249,7 @@
                     </div>
                     <pre class="binding-docs-signature"><code>[health:key;format]</code></pre>
                 </div>
-                <p class="binding-docs-note">Common keys: <code>cpu</code>, <code>rssi</code>, <code>uptime</code>, <code>heap_free</code>, <code>heap_min</code>, <code>heap_largest</code>, <code>heap_internal</code>, <code>psram_free</code>, <code>psram_min</code>, <code>psram_largest</code>, <code>ip</code>, <code>hostname</code>.</p>
+                <p class="binding-docs-note">Common keys: <code>cpu</code>, <code>rssi</code>, <code>uptime</code>, <code>heap_free</code>, <code>heap_min</code>, <code>heap_largest</code>, <code>heap_internal</code>, <code>psram_free</code>, <code>psram_min</code>, <code>psram_largest</code>, <code>ip</code>, <code>hostname</code>, <code>ble_status</code>, <code>ble_state</code>, and <code>ble_name</code>.</p>
                 <div class="binding-example-grid">
                     <article class="binding-example">
                         <div class="binding-example-head">
@@ -266,6 +266,22 @@
                         </div>
                         <pre class="binding-example-code"><code>[health:heap_free;%d B]</code></pre>
                         <p>Format a raw numeric metric with a unit in one step.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Compact BLE status</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[health:ble_status]</code></pre>
+                        <p>User-facing BLE states: <code>disabled</code>, <code>ready</code>, <code>pairing</code>, <code>connected</code>, or <code>error</code>.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Detailed BLE state</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[health:ble_state]</code></pre>
+                        <p>Detailed BLE states: <code>disabled</code>, <code>idle</code>, <code>advertising</code>, <code>pairing</code>, <code>connecting</code>, <code>claimed</code>, <code>secured</code>, or <code>error</code>.</p>
                     </article>
                 </div>
             </section>

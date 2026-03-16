@@ -6,16 +6,19 @@
 #if HAS_BLE_HID
 
 // Initialize BLE HID stack (manual HID GATT service, security, advertising).
-// Uses device_name for the BLE device name and starts advertising immediately.
-void ble_hid_init(const char* device_name);
+// Uses device_name for the BLE device name and can optionally boot directly
+// into pairing mode after a reboot-based ownership reset.
+void ble_hid_init(const char* device_name, bool force_pairing_mode);
 
-// Clear all bonded devices and start discoverable advertising.
-// After a successful pairing, discoverable advertising stops automatically.
+// Rotate the BLE identity if possible and reboot into a fresh pairing window.
 // WARNING: Must NOT be called from a PSRAM-stack task (flash ops crash).
 //          Use ble_hid_request_pairing() from LVGL instead.
 void ble_hid_start_pairing();
 
 // Request pairing — safe to call from any task (deferred to ble_hid_loop).
+// The robust flow uses a reboot into pairing mode instead of hot-swapping the
+// current BLE owner on a live connection. The BLE identity is rotated before
+// that reboot so hosts treat the next pairing window as a fresh peripheral.
 void ble_hid_request_pairing();
 
 // Request a key sequence — safe to call from any task (deferred to ble_hid_loop).
@@ -44,6 +47,10 @@ bool ble_hid_is_pairing();
 // Empty string when no peer is connected.
 const char* ble_hid_peer_addr();
 
+// Returns the current BLE device name advertised by the keyboard.
+// Empty string until BLE has been initialized.
+const char* ble_hid_name();
+
 // Returns the connected peer's identity address (stable across reconnections).
 // Empty string when no peer is connected or encryption hasn't completed.
 const char* ble_hid_peer_id_addr();
@@ -56,6 +63,12 @@ bool ble_hid_is_encrypted();
 
 // Returns true when the BLE HID stack has been initialized.
 bool ble_hid_is_initialized();
+
+// Returns the detailed BLE state string for diagnostics and advanced bindings.
+const char* ble_hid_state();
+
+// Returns a compact user-facing BLE status string.
+const char* ble_hid_status();
 
 // Execute a parsed key sequence (called from action dispatch).
 // The sequence string is parsed on-the-fly and executed synchronously.

@@ -498,7 +498,9 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `psram_largest` | Largest free PSRAM block (bytes) | `4194304` |
 | `ip` | Device IP address | `192.168.1.42` |
 | `hostname` | Device hostname | `macropad` |
-| `ble_connected` | BLE HID host connected | `ON` / `OFF` |
+| `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
+| `ble_name` | Current BLE keyboard name | `Kitchen Pad EEFF` |
+| `ble_state` | Detailed BLE state | `disabled`, `pairing`, `connecting`, `secured`, `claimed`, ... |
 | `ble_pairing` | BLE pairing mode active | `ON` / `OFF` |
 | `ble_bonded` | Current connection is bonded | `ON` / `OFF` |
 | `ble_encrypted` | Current connection is encrypted | `ON` / `OFF` |
@@ -506,6 +508,24 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `ble_peer_id_addr` | Connected peer's identity address | `AA:BB:CC:DD:EE:FF` |
 
 Values are cached for up to 2 seconds to keep the CPU impact low.
+
+**BLE signal values:**
+
+| Signal | Value | Meaning |
+|--------|-------|---------|
+| `ble_status` | `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ble_status` | `ready` | BLE keyboard is enabled and available, but not currently in pairing mode or in an active secured session |
+| `ble_status` | `pairing` | BLE keyboard is in the 60-second pairing window and accepting a new owner |
+| `ble_status` | `connected` | A host is connected and the BLE link is encrypted and usable for HID input |
+| `ble_status` | `error` | BLE initialization failed or the stack is in a fault state |
+| `ble_state` | `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ble_state` | `idle` | BLE stack is initialized but not actively advertising a user-relevant state |
+| `ble_state` | `advertising` | BLE is advertising without an owner claim yet |
+| `ble_state` | `pairing` | BLE is in pairing mode and waiting for a new host |
+| `ble_state` | `connecting` | A host connection exists, but the secure usable HID session is not established yet |
+| `ble_state` | `claimed` | BLE has an owner on record and is advertising for that owner to reconnect |
+| `ble_state` | `secured` | BLE has an encrypted active connection |
+| `ble_state` | `error` | BLE initialization failed or the stack is in a fault state |
 
 **Examples:**
 

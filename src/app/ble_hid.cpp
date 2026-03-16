@@ -2,12 +2,14 @@
 
 #if HAS_BLE_HID
 
+#include "config_manager.h"
 #include "key_sequence.h"
 
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLESecurity.h>
 #include <HIDTypes.h>
+#include <esp_system.h>
 #include <host/ble_att.h>
 #include <host/ble_gatt.h>
 #include <host/ble_hs_mbuf.h>
@@ -93,6 +95,9 @@ static BLEServer* bleServer = nullptr;
 static volatile bool connected = false;
 static volatile bool pairing_mode = false;
 static volatile bool hid_service_ready = false;
+static volatile bool advertising_active = false;
+static volatile bool init_error = false;
+static volatile bool owner_claimed = false;
 
 static uint8_t protocolMode = 0x01;
 static uint8_t keyboardLedState = 0x00;
@@ -144,8 +149,110 @@ static volatile uint16_t active_conn_handle = 0xFFFF;
 // Peer metadata (captured on auth complete)
 static char peer_addr_str[18] = {};
 static char peer_id_addr_str[18] = {};
+static char ble_name_str[40] = {};
 static volatile bool peer_bonded = false;
 static volatile bool peer_encrypted = false;
+
+static void build_ble_name(const char* base_name, const char* identity_addr, char* out, size_t out_len) {
+    if (out == nullptr || out_len == 0) return;
+
+    const char* base = (base_name && base_name[0]) ? base_name : "BLE Keyboard";
+    if (identity_addr == nullptr || identity_addr[0] == '\0') {
+        strlcpy(out, base, out_len);
+        return;
+    }
+
+    char compact_addr[13] = {};
+    size_t compact_len = 0;
+    const size_t addr_len = strlen(identity_addr);
+    for (size_t i = 0; i < addr_len && compact_len < sizeof(compact_addr) - 1; ++i) {
+        const char c = identity_addr[i];
+        if (c == ':') continue;
+        compact_addr[compact_len++] = c;
+    }
+    compact_addr[compact_len] = '\0';
+
+    if (compact_len < 4) {
+        strlcpy(out, base, out_len);
+        return;
+    }
+
+    const char* suffix = compact_addr + (compact_len - 4);
+
+    snprintf(out, out_len, "%s %s", base, suffix);
+}
+
+static bool load_identity_address(BLEAddress* out_addr) {
+    if (out_addr == nullptr) return false;
+
+    char stored_addr[18] = {};
+    if (!config_manager_get_ble_identity_addr(stored_addr, sizeof(stored_addr))) {
+        return false;
+    }
+
+    *out_addr = BLEAddress(String(stored_addr), BLE_ADDR_RANDOM);
+    return true;
+}
+
+static bool load_identity_address_string(char* out, size_t out_len) {
+    if (out == nullptr || out_len == 0) return false;
+    return config_manager_get_ble_identity_addr(out, out_len);
+}
+
+static BLEAddress generate_random_static_identity_address() {
+    uint8_t addr[6];
+    for (size_t i = 0; i < sizeof(addr); ++i) {
+        addr[i] = static_cast<uint8_t>(esp_random() & 0xFF);
+    }
+
+    // Static random BLE identity: top two bits of the most significant octet must be 1.
+    addr[0] &= 0x3F;
+    addr[0] |= 0xC0;
+
+    return BLEAddress(addr, BLE_ADDR_RANDOM);
+}
+
+static bool persist_new_identity_address(BLEAddress* out_addr) {
+    if (out_addr == nullptr) return false;
+
+    BLEAddress next_addr = generate_random_static_identity_address();
+    const String next_addr_str = next_addr.toString();
+    if (!config_manager_set_ble_identity_addr(next_addr_str.c_str())) {
+        LOGE(TAG, "Failed to persist rotated BLE identity");
+        return false;
+    }
+
+    *out_addr = next_addr;
+    LOGI(TAG, "Rotated BLE identity to %s", next_addr_str.c_str());
+    return true;
+}
+
+static void configure_identity_address() {
+    BLEAddress identity_addr;
+    if (!load_identity_address(&identity_addr)) {
+        LOGI(TAG, "Using default BLE identity address");
+        return;
+    }
+
+    if (!BLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM)) {
+        LOGW(TAG, "Failed to switch BLE stack to random identity address");
+        return;
+    }
+
+    if (!BLEDevice::setOwnAddr(identity_addr)) {
+        LOGW(TAG, "Failed to apply stored BLE identity address");
+        return;
+    }
+
+    LOGI(TAG, "Using BLE identity address %s", identity_addr.toString().c_str());
+}
+
+static bool start_advertising() {
+    if (!hid_service_ready) return false;
+    BLEDevice::startAdvertising();
+    advertising_active = true;
+    return advertising_active;
+}
 
 static void format_ble_addr(const uint8_t addr[6], char* out, size_t out_len) {
     snprintf(out, out_len, "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -328,6 +435,7 @@ class HidCallbacks : public BLEServerCallbacks {
             return;
         }
         connected = true;
+        advertising_active = false;
         active_conn_handle = desc->conn_handle;
         format_ble_addr(desc->peer_ota_addr.val, peer_addr_str, sizeof(peer_addr_str));
         LOGI(TAG, "Host connected (handle=%u addr=%s)", desc->conn_handle, peer_addr_str);
@@ -339,9 +447,8 @@ class HidCallbacks : public BLEServerCallbacks {
         active_conn_handle = 0xFFFF;
         clear_peer_metadata();
         LOGI(TAG, "Host disconnected");
-        if (hid_service_ready) {
-            BLEDevice::startAdvertising();
-        }
+        if (!hid_service_ready) return;
+        start_advertising();
     }
 };
 
@@ -356,6 +463,9 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
         if (auth.success) {
             LOGI(TAG, "Paired (Bluedroid mode=%d)", auth.auth_mode);
             pairing_mode = false;
+            owner_claimed = true;
+            config_manager_set_ble_owner_claimed(true);
+            config_manager_set_ble_pairing_boot(false);
         } else {
             LOGW(TAG, "Pairing FAILED (reason=0x%02X)", auth.fail_reason);
         }
@@ -375,6 +485,9 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
                  peer_id_addr_str);
             pairing_mode = false;
             pairing_deadline = 0;
+            owner_claimed = true;
+            config_manager_set_ble_owner_claimed(true);
+            config_manager_set_ble_pairing_boot(false);
             return;
         }
 
@@ -385,7 +498,11 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
             return;
         }
 
-        LOGW(TAG, "Auth complete - NOT encrypted (pairing mode active)");
+        // In pairing mode, failed encryption means the peer did not complete a
+        // usable fresh pair. Keep the logic simple and disconnect; a reboot-based
+        // pairing reset ensures a clean subsequent attempt.
+        LOGW(TAG, "Pairing failed during pairing mode - disconnecting");
+        ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
     }
 #endif
 };
@@ -415,10 +532,22 @@ static void send_keyboard_report(const KeyReport& report) {
     send_report_notification(keyboardInputHandle, &keyboardInputReport, sizeof(keyboardInputReport));
 }
 
-void ble_hid_init(const char* device_name) {
+void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     LOGI(TAG, "Initializing BLE HID keyboard as '%s'", device_name);
 
-    BLEDevice::init(device_name);
+    init_error = false;
+    connected = false;
+    peer_encrypted = false;
+    peer_bonded = false;
+    clear_peer_metadata();
+    owner_claimed = config_manager_get_ble_owner_claimed();
+
+    char identity_addr_str[18] = {};
+    load_identity_address_string(identity_addr_str, sizeof(identity_addr_str));
+    build_ble_name(device_name, identity_addr_str, ble_name_str, sizeof(ble_name_str));
+
+    BLEDevice::init(ble_name_str);
+    configure_identity_address();
     BLEDevice::setSecurityCallbacks(new HidSecurityCallbacks());
 
     bleServer = BLEDevice::createServer();
@@ -427,6 +556,7 @@ void ble_hid_init(const char* device_name) {
     hid_service_ready = init_hid_service();
     if (!hid_service_ready) {
         LOGE(TAG, "Manual HID service registration failed");
+        init_error = true;
         return;
     }
 
@@ -442,27 +572,39 @@ void ble_hid_init(const char* device_name) {
     adv->setScanResponse(true);
     adv->setMinPreferred(0x06);
     adv->setMaxPreferred(0x12);
-    BLEDevice::startAdvertising();
+
+    if (force_pairing_mode) {
+        LOGI(TAG, "Booting into BLE pairing mode after restart");
+        clear_all_bonds();
+        clear_peer_metadata();
+        owner_claimed = false;
+        config_manager_set_ble_owner_claimed(false);
+        pairing_mode = true;
+        pairing_deadline = millis() + PAIRING_TIMEOUT_MS;
+    } else if (!owner_claimed) {
+        LOGI(TAG, "No BLE owner recorded - starting in pairing mode");
+        pairing_mode = true;
+        pairing_deadline = millis() + PAIRING_TIMEOUT_MS;
+    } else {
+        pairing_mode = false;
+        pairing_deadline = 0;
+    }
+
+    start_advertising();
 
     LOGI(TAG, "BLE HID ready, advertising started");
 }
 
 void ble_hid_start_pairing() {
-    LOGI(TAG, "Starting BLE pairing mode (timeout=%lums)", PAIRING_TIMEOUT_MS);
-
-    if (connected && bleServer) {
-        bleServer->disconnect(bleServer->getConnId());
-        delay(100);
+    LOGI(TAG, "Scheduling reboot into BLE pairing mode");
+    BLEAddress next_addr;
+    if (!persist_new_identity_address(&next_addr)) {
+        LOGW(TAG, "Continuing pairing reboot without BLE identity rotation");
     }
-
-    clear_all_bonds();
-    clear_peer_metadata();
-    pairing_mode = true;
-    pairing_deadline = millis() + PAIRING_TIMEOUT_MS;
-    if (hid_service_ready) {
-        BLEDevice::startAdvertising();
-    }
-    LOGI(TAG, "Pairing mode - discoverable advertising started");
+    config_manager_set_ble_owner_claimed(false);
+    config_manager_set_ble_pairing_boot(true);
+    delay(100);
+    ESP.restart();
 }
 
 bool ble_hid_is_connected() {
@@ -592,6 +734,10 @@ const char* ble_hid_peer_addr() {
     return peer_addr_str;
 }
 
+const char* ble_hid_name() {
+    return ble_name_str;
+}
+
 const char* ble_hid_peer_id_addr() {
     return peer_id_addr_str;
 }
@@ -606,6 +752,30 @@ bool ble_hid_is_encrypted() {
 
 bool ble_hid_is_initialized() {
     return hid_service_ready;
+}
+
+const char* ble_hid_state() {
+    if (init_error) return "error";
+    if (!hid_service_ready) return "idle";
+    if (pairing_mode) {
+        if (connected && !peer_encrypted) return "connecting";
+        return "pairing";
+    }
+    if (connected && peer_encrypted) return "secured";
+    if (connected) return "connecting";
+    if (advertising_active) {
+        return owner_claimed ? "claimed" : "advertising";
+    }
+    if (owner_claimed) return "claimed";
+    return "idle";
+}
+
+const char* ble_hid_status() {
+    const char* state = ble_hid_state();
+    if (strcmp(state, "pairing") == 0) return "pairing";
+    if (strcmp(state, "secured") == 0) return "connected";
+    if (strcmp(state, "error") == 0) return "error";
+    return "ready";
 }
 
 #endif // HAS_BLE_HID

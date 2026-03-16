@@ -8,7 +8,12 @@
 #include "log_manager.h"
 
 #if HAS_BLE_HID
+#include "config_manager.h"
+#endif
+
+#if HAS_BLE_HID
 #include "ble_hid.h"
+extern DeviceConfig device_config;
 #endif
 
 #include <Arduino.h>
@@ -120,8 +125,21 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         return true;
     }
 #if HAS_BLE_HID
-    if (strcmp(key, "ble_connected") == 0) {
-        strlcpy(out, ble_hid_is_connected() ? "ON" : "OFF", out_len);
+    if (strcmp(key, "ble_status") == 0) {
+        strlcpy(out, device_config.ble_enabled ? ble_hid_status() : "disabled", out_len);
+        return true;
+    }
+    if (strcmp(key, "ble_state") == 0) {
+        strlcpy(out, device_config.ble_enabled ? ble_hid_state() : "disabled", out_len);
+        return true;
+    }
+    if (strcmp(key, "ble_name") == 0) {
+        if (!device_config.ble_enabled) {
+            strlcpy(out, "?", out_len);
+            return true;
+        }
+        const char* name = ble_hid_name();
+        strlcpy(out, (name && name[0]) ? name : "?", out_len);
         return true;
     }
     if (strcmp(key, "ble_pairing") == 0) {
@@ -166,7 +184,7 @@ static bool health_binding_resolve(const char* params, char* out, size_t out_len
 
     refresh_if_stale();
 
-    char raw[32];
+    char raw[64];
     if (!lookup_value(key, raw, sizeof(raw))) {
         strlcpy(out, "ERR:bad key", out_len);
         return false;
