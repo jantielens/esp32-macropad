@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **WiFi health binding keys** — new `[health:wifi_connected]` (`ON`/`OFF`) and `[health:wifi_ssid]` (connected network name) binding keys for building WiFi status indicators directly on pad buttons
 - **BLE HID keyboard** — the macropad can now act as a Bluetooth keyboard. Assign a `key` action to any button to send keystrokes (single keys, modifier combos, media keys, or multi-step sequences) to a paired host. Assign a `ble_pair` action to tear down the BLE stack, rotate the identity, and open a fresh 60-second pairing window. Features:
   - Key sequence DSL with text literals, modifier keys, consumer/media keys, and delays
   - Single-owner pairing policy: one bonded host at a time, unbonded peers rejected outside the pairing window

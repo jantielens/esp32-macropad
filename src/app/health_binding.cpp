@@ -115,6 +115,18 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         snprintf(out, out_len, "%u", (unsigned)s_mem.psram_largest_free_block_bytes);
         return true;
     }
+    if (strcmp(key, "wifi_connected") == 0) {
+        strlcpy(out, WiFi.status() == WL_CONNECTED ? "ON" : "OFF", out_len);
+        return true;
+    }
+    if (strcmp(key, "wifi_ssid") == 0) {
+        if (WiFi.status() == WL_CONNECTED) {
+            strlcpy(out, WiFi.SSID().c_str(), out_len);
+        } else {
+            strlcpy(out, "?", out_len);
+        }
+        return true;
+    }
     if (strcmp(key, "ip") == 0) {
         strlcpy(out, WiFi.localIP().toString().c_str(), out_len);
         return true;

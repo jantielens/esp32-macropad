@@ -496,6 +496,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `psram_free` | Free PSRAM (bytes) | `6291456` |
 | `psram_min` | PSRAM low-water mark (bytes) | `4194304` |
 | `psram_largest` | Largest free PSRAM block (bytes) | `4194304` |
+| `wifi_connected` | WiFi connection status | `ON` / `OFF` |
+| `wifi_ssid` | Connected network name | `MyNetwork` |
 | `ip` | Device IP address | `192.168.1.42` |
 | `hostname` | Device hostname | `macropad` |
 | `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
@@ -533,6 +535,8 @@ Values are cached for up to 2 seconds to keep the CPU impact low.
 CPU: [health:cpu]%                                     → CPU: 42%
 [health:heap_free;%d] bytes free                       → 145320 bytes free
 WiFi: [health:rssi] dBm                               → WiFi: -54 dBm
+[health:wifi_ssid]                                     → MyNetwork
+[health:wifi_connected]                                → ON
 [health:ip]                                            → 192.168.1.42
 ```
 
