@@ -59,6 +59,10 @@ struct SparklineConfig {
     uint8_t  smooth_factor;         // Gaussian smoothing radius (0=off, 1-8 = kernel radius)
     char     min_fmt[16];          // Printf format for min label (e.g. "lo %.1f")
     char     max_fmt[16];          // Printf format for max label (e.g. "hi %.1f")
+    char     current_label[CONFIG_BINDABLE_SHORT_LEN];    // Line 1 current-value label (binding or text)
+    char     current_label_2[CONFIG_BINDABLE_SHORT_LEN];  // Line 2 current-value label
+    char     current_label_3[CONFIG_BINDABLE_SHORT_LEN];  // Line 3 current-value label
+    uint8_t  label_width;          // Right-side label area width in px (0 = 50px default)
 };
 
 static_assert(sizeof(SparklineConfig) <= WIDGET_CONFIG_MAX_BYTES,
@@ -87,8 +91,11 @@ struct SparklineState {
     lv_obj_t* lbl_min;               // Min value label (tile child)
     lv_obj_t* lbl_max;               // Max value label (tile child)
     lv_obj_t* dot_current[MAX_SPARKLINE_LINES]; // Current-value dot per line
+    lv_obj_t* lbl_current[MAX_SPARKLINE_LINES]; // Current-value labels per line (tile children)
     lv_obj_t* ref_line_objs[MAX_REF_LINES]; // Reference line LVGL objects
     lv_point_precise_t* ref_pts;     // Heap-allocated ref line point pairs (MAX_REF_LINES * 2)
+    int16_t  label_margin_r;         // Right margin reserved for current labels (0 = none)
+    uint32_t last_label_ms;          // millis() of last label-binding redraw (throttle)
 };
 
 static_assert(sizeof(SparklineState) <= WIDGET_STATE_MAX_BYTES,
@@ -178,6 +185,15 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     // Smoothing: Gaussian kernel radius (0 = off, 1-8)
     uint8_t sm = btn["widget_sparkline_smooth"] | (uint8_t)0;
     cfg->smooth_factor = (sm > 8) ? 8 : sm;
+
+    // Current-value labels (per-line, binding expressions)
+    widget_parse_field(btn["widget_sparkline_current_label"],   cfg->current_label,   sizeof(cfg->current_label),   "", false);
+    widget_parse_field(btn["widget_sparkline_current_label_2"], cfg->current_label_2, sizeof(cfg->current_label_2), "", false);
+    widget_parse_field(btn["widget_sparkline_current_label_3"], cfg->current_label_3, sizeof(cfg->current_label_3), "", false);
+
+    // Label area width (0 = auto, >0 = fixed pixels)
+    uint8_t lw2 = btn["widget_sparkline_label_width"] | (uint8_t)0;
+    cfg->label_width = (lw2 > 200) ? 200 : lw2;
 }
 
 // Helper: populate line color array from config (used by create and redraw)
@@ -264,6 +280,23 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int16_t chart_w = content_w;
     chart_top += ui_ofs_y;
 
+    // Reserve right margin for current-value labels (only when at least one is configured)
+    const char* cur_labels[MAX_SPARKLINE_LINES] = { cfg->current_label, cfg->current_label_2, cfg->current_label_3 };
+    bool has_cur_labels = false;
+    for (uint8_t i = 0; i < st->line_count; i++) {
+        if (cur_labels[i][0]) { has_cur_labels = true; break; }
+    }
+    st->label_margin_r = 0;
+    if (has_cur_labels) {
+        if (cfg->label_width > 0) {
+            st->label_margin_r = cfg->label_width;
+        } else {
+            st->label_margin_r = 50;
+        }
+        chart_w -= (st->label_margin_r + 2);  // +2 gap between chart and labels
+        if (chart_w < 20) chart_w = 20;
+    }
+
     st->cached_chart_w = chart_w;
     st->cached_chart_h = chart_h;
 
@@ -274,7 +307,8 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Create a container for the sparkline area (clips the lines)
     lv_obj_t* chart_area = lv_obj_create(tile);
     lv_obj_set_size(chart_area, chart_w, chart_h);
-    lv_obj_align(chart_area, LV_ALIGN_TOP_MID, ui_ofs_x, chart_top);
+    int16_t chart_left = (content_w - chart_w - st->label_margin_r - (st->label_margin_r > 0 ? 2 : 0)) / 2 + ui_ofs_x;
+    lv_obj_align(chart_area, LV_ALIGN_TOP_LEFT, chart_left, chart_top);
     lv_obj_set_style_bg_opa(chart_area, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(chart_area, 0, 0);
     lv_obj_set_style_pad_all(chart_area, 0, 0);
@@ -355,6 +389,24 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             lv_obj_clear_flag(cd, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
             lv_obj_add_flag(cd, LV_OBJ_FLAG_HIDDEN);
             st->dot_current[i] = cd;
+        }
+    }
+
+    // Current-value labels (one per line, positioned in right margin)
+    if (has_cur_labels) {
+        for (uint8_t i = 0; i < st->line_count; i++) {
+            if (!cur_labels[i][0]) { st->lbl_current[i] = nullptr; continue; }
+            lv_obj_t* lbl = lv_label_create(tile);
+            lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+            lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
+            lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
+            lv_obj_set_width(lbl, st->label_margin_r);
+            lv_obj_set_style_pad_left(lbl, 2, 0);
+            lv_obj_set_style_pad_right(lbl, 1, 0);
+            lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+            lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text(lbl, "");
+            st->lbl_current[i] = lbl;
         }
     }
 }
@@ -738,6 +790,127 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
             if (st->lbl_max) lv_obj_add_flag(st->lbl_max, LV_OBJ_FLAG_HIDDEN);
         }
     }
+
+    // ---- Current-value label positioning (right margin, one per line) ----
+    if (st->label_margin_r > 0) {
+        const char* cur_label_templates[MAX_SPARKLINE_LINES] = {
+            cfg->current_label, cfg->current_label_2, cfg->current_label_3
+        };
+
+        // Collect active labels with their ideal Y position
+        struct LabelSlot {
+            uint8_t line_idx;
+            int16_t ideal_y;   // Center Y in chart-area coordinates
+        };
+        LabelSlot active[MAX_SPARKLINE_LINES];
+        uint8_t active_count = 0;
+
+        // Find the first non-null label to query font_small height
+        lv_obj_t* font_src = tile;
+        for (uint8_t fi = 0; fi < st->line_count; fi++) {
+            if (st->lbl_current[fi]) { font_src = st->lbl_current[fi]; break; }
+        }
+        int16_t lbl_h = lv_font_get_line_height(
+            lv_obj_get_style_text_font(font_src, LV_PART_MAIN)) + 2;
+
+        for (uint8_t ci = 0; ci < st->line_count; ci++) {
+            if (!st->lbl_current[ci]) continue;
+            if (!cur_label_templates[ci][0]) continue;
+
+            const SmoothLineInfo& si = smooth_info[ci];
+            if (si.valid_count == 0 || !isfinite(si.smoothed_last)) {
+                lv_obj_add_flag(st->lbl_current[ci], LV_OBJ_FLAG_HIDDEN);
+                continue;
+            }
+
+            // Resolve binding template
+            char resolved[CONFIG_BINDABLE_SHORT_LEN];
+            resolved[0] = '\0';
+            if (binding_template_has_bindings(cur_label_templates[ci])) {
+                binding_template_resolve(cur_label_templates[ci], resolved, sizeof(resolved));
+            } else {
+                strlcpy(resolved, cur_label_templates[ci], sizeof(resolved));
+            }
+
+            if (!resolved[0]) {
+                lv_obj_add_flag(st->lbl_current[ci], LV_OBJ_FLAG_HIDDEN);
+                continue;
+            }
+
+            // Update label text (only if changed to avoid flicker)
+            if (strcmp(lv_label_get_text(st->lbl_current[ci]), resolved) != 0) {
+                lv_label_set_text(st->lbl_current[ci], resolved);
+            }
+
+            // Set color to line color
+            uint32_t lc = line_colors_resolved[ci];
+            lv_obj_set_style_text_color(st->lbl_current[ci],
+                lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF), 0);
+
+            active[active_count].line_idx = ci;
+            active[active_count].ideal_y = si.last_py;  // chart-area relative
+            active_count++;
+        }
+
+        // Hide labels that are not active
+        for (uint8_t ci = 0; ci < st->line_count; ci++) {
+            if (!st->lbl_current[ci]) continue;
+            bool is_active = false;
+            for (uint8_t a = 0; a < active_count; a++) {
+                if (active[a].line_idx == ci) { is_active = true; break; }
+            }
+            if (!is_active) lv_obj_add_flag(st->lbl_current[ci], LV_OBJ_FLAG_HIDDEN);
+        }
+
+        if (active_count > 0) {
+            // Sort by ideal_y (simple insertion sort, max 3 elements)
+            for (uint8_t i = 1; i < active_count; i++) {
+                LabelSlot tmp = active[i];
+                int8_t j = (int8_t)i - 1;
+                while (j >= 0 && active[j].ideal_y > tmp.ideal_y) {
+                    active[j + 1] = active[j];
+                    j--;
+                }
+                active[j + 1] = tmp;
+            }
+
+            // Compute adjusted Y positions with collision avoidance
+            int16_t adjusted_y[MAX_SPARKLINE_LINES];
+            for (uint8_t i = 0; i < active_count; i++) {
+                adjusted_y[i] = active[i].ideal_y - lbl_h / 2;  // top edge
+            }
+
+            // Push overlapping labels downward
+            for (uint8_t i = 1; i < active_count; i++) {
+                int16_t prev_bottom = adjusted_y[i - 1] + lbl_h;
+                if (adjusted_y[i] < prev_bottom) {
+                    adjusted_y[i] = prev_bottom;
+                }
+            }
+
+            // If bottom label exceeds chart area, shift entire stack up
+            int16_t overflow = (adjusted_y[active_count - 1] + lbl_h) - chart_h;
+            if (overflow > 0) {
+                for (uint8_t i = 0; i < active_count; i++) {
+                    adjusted_y[i] -= overflow;
+                }
+            }
+
+            // Clamp all to chart bounds
+            for (uint8_t i = 0; i < active_count; i++) {
+                if (adjusted_y[i] < 0) adjusted_y[i] = 0;
+                if (adjusted_y[i] + lbl_h > chart_h) adjusted_y[i] = chart_h - lbl_h;
+            }
+
+            // Position labels in the right margin
+            int16_t label_x = ca_x + chart_w + 2;  // 2px gap after chart
+            for (uint8_t i = 0; i < active_count; i++) {
+                uint8_t ci = active[i].line_idx;
+                lv_obj_set_pos(st->lbl_current[ci], label_x, ca_y + adjusted_y[i]);
+                lv_obj_clear_flag(st->lbl_current[ci], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
 #endif
 }
 
@@ -760,16 +933,21 @@ static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (!st->lines[0] || !st->points[0]) return;
 
 #if HAS_MQTT
-    // PERF01: skip full redraw if no data stream head has advanced
-    {
-        bool changed = false;
-        for (uint8_t i = 0; i < st->line_count; i++) {
-            if (st->ds_handles[i] == DATA_STREAM_INVALID) continue;
-            DataStreamSnapshot snap;
-            if (!data_stream_get(st->ds_handles[i], &snap)) continue;
-            if (snap.head != st->cached_heads[i]) { changed = true; break; }
-        }
-        if (!changed) return;
+    // PERF01: skip full redraw if no data stream head has advanced.
+    // When current-value labels are present, also allow a throttled redraw
+    // every ~1 s so binding text stays up-to-date without burning CPU.
+    bool data_changed = false;
+    for (uint8_t i = 0; i < st->line_count; i++) {
+        if (st->ds_handles[i] == DATA_STREAM_INVALID) continue;
+        DataStreamSnapshot snap;
+        if (!data_stream_get(st->ds_handles[i], &snap)) continue;
+        if (snap.head != st->cached_heads[i]) { data_changed = true; break; }
+    }
+    if (!data_changed) {
+        if (st->label_margin_r == 0) return;  // no labels → nothing else to do
+        uint32_t now = millis();
+        if (now - st->last_label_ms < 1000) return;  // throttle label-only redraws
+        st->last_label_ms = now;
     }
 #endif
 

@@ -1018,6 +1018,12 @@ function padDialogOpen(col, row) {
     // Current value dot
     document.getElementById('pad-edit-sparkline-current-dot').value = (btn.widget_sparkline_current_dot !== undefined) ? btn.widget_sparkline_current_dot : 0;
 
+    // Current value labels
+    document.getElementById('pad-edit-sparkline-label-width').value = (btn.widget_sparkline_label_width !== undefined) ? btn.widget_sparkline_label_width : 0;
+    document.getElementById('pad-edit-sparkline-current-label').value = btn.widget_sparkline_current_label || '';
+    document.getElementById('pad-edit-sparkline-current-label-2').value = btn.widget_sparkline_current_label_2 || '';
+    document.getElementById('pad-edit-sparkline-current-label-3').value = btn.widget_sparkline_current_label_3 || '';
+
     // Reference lines
     for (let r = 1; r <= 3; r++) {
         document.getElementById('pad-edit-sparkline-ref-' + r + '-y').value = (btn['widget_sparkline_ref_' + r + '_y'] !== undefined) ? btn['widget_sparkline_ref_' + r + '_y'] : '';
@@ -1238,6 +1244,16 @@ function padDialogOk(keepOpen) {
             // Current value dot
             const cdSz = parseInt(document.getElementById('pad-edit-sparkline-current-dot').value);
             btn.widget_sparkline_current_dot = (isNaN(cdSz) || cdSz < 0) ? 0 : (cdSz > 20) ? 20 : cdSz;
+
+            // Current value labels
+            const lblW = parseInt(document.getElementById('pad-edit-sparkline-label-width').value);
+            if (!isNaN(lblW) && lblW > 0) btn.widget_sparkline_label_width = (lblW > 200) ? 200 : lblW;
+            const cl1 = document.getElementById('pad-edit-sparkline-current-label').value.trim();
+            if (cl1) btn.widget_sparkline_current_label = cl1;
+            const cl2 = document.getElementById('pad-edit-sparkline-current-label-2').value.trim();
+            if (cl2) btn.widget_sparkline_current_label_2 = cl2;
+            const cl3 = document.getElementById('pad-edit-sparkline-current-label-3').value.trim();
+            if (cl3) btn.widget_sparkline_current_label_3 = cl3;
 
             // Reference lines
             for (let r = 1; r <= 3; r++) {

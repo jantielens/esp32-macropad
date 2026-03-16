@@ -121,6 +121,27 @@
                             <small>0 = off. Dot at rightmost data point.</small>
                         </div>
 
+                        <div class="widget-sub-heading">Current Value Labels</div>
+
+                        <div class="form-group" style="max-width:120px;">
+                            <label for="pad-edit-sparkline-label-width">Label Width (px)</label>
+                            <input type="number" id="pad-edit-sparkline-label-width" min="0" max="200" value="0" placeholder="0 = 50px default">
+                            <small>0 = 50px default. Fixed width (px) for the right-side label area.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-sparkline-current-label">Line 1 Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label" maxlength="63" placeholder="e.g. [mqtt:topic;path;%.1f] °C">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-sparkline-current-label-2">Line 2 Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-2" maxlength="63" placeholder="Optional — leave empty if unused">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-sparkline-current-label-3">Line 3 Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-3" maxlength="63" placeholder="Optional — leave empty if unused">
+                        </div>
+                        <small>Binding or static text shown at right edge. Labels track the current data point position. Color follows the line color.</small>
+
                         <div class="widget-sub-heading">Reference Lines</div>
 
                         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;" id="pad-edit-sparkline-ref-1-row">
