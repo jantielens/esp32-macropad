@@ -304,8 +304,8 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 
 ### Tests
 - `tests/run_tests.sh` - Builds and runs all host-native tests (no ESP32 needed)
-- `tests/test_expr_eval.cpp` - Unit tests for pure expression evaluator (66 tests)
-- `tests/test_expr_binding.cpp` - Integration tests with mock MQTT/health resolvers (22 tests)
+- `tests/test_expr_eval.cpp` - Unit tests for pure expression evaluator (100 tests)
+- `tests/test_expr_binding.cpp` - Integration tests with mock MQTT/health resolvers (64 tests)
 - `tests/test_key_sequence.cpp` - Unit tests for key sequence DSL parser
 - `tests/stubs.cpp` - `strlcpy()` stub for glibc (not available on Linux)
 - `tests/log_manager.h` - No-op log macros for host compilation
