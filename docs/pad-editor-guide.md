@@ -254,7 +254,7 @@ The bar chart widget draws a vertical or horizontal bar that fills based on a nu
 | Setting | Description |
 |---------|-------------|
 | **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
-| **Min / Max** | The value range. The bar is empty at min and full at max |
+| **Min / Max** | The value range. The bar is empty at min and full at max. Accepts a number or a binding expression (e.g. `[health:psram_total]`) for dynamic scaling |
 | **Bar width %** | How wide the bar is relative to the button (1–100%). In horizontal mode, controls the bar height instead |
 | **Bar color** | The fill color of the bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
@@ -286,7 +286,7 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Start Label (slot 2)** | Optional text or binding for slot 2. In dual mode, slot 2 still has its own color but shares the same physical ring as slot 1 |
 | **Start Label (slot 3)** | Optional text or binding for slot 3 |
 | **Start Label (slot 4)** | Optional text or binding for slot 4 when it renders as its own ring |
-| **Min / Max** | The value range. The arc is empty at min and full at max |
+| **Min / Max** | The value range. The arc is empty at min and full at max. Accepts a number or a binding expression for dynamic scaling |
 | **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
 | **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
 | **Zero-Centered** | Arc fills from the zero point — negative values grow left, positive grow right. Only applicable to single mode rings. |
@@ -344,7 +344,7 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 |---------|-------------|
 | **Data binding (main line)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`). Each line has a color swatch below the binding input |
 | **Data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream and color. Leave empty for single line |
-| **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data |
+| **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data. Accepts a number or a binding expression (e.g. `[health:heap_total]`) for dynamic scaling |
 | **Same scale for all lines** | When enabled (default), all lines in a multi-line sparkline share the same auto-scaled Y-axis range, so values are visually comparable. Disable to let each line auto-scale independently — useful when lines have very different magnitudes and you want to compare trends/shapes rather than absolute values. Has no effect when explicit min/max are configured or with single-line sparklines |
 | **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
 | **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |

@@ -38,8 +38,8 @@
 #define MAX_REF_LINES 3
 
 struct SparklineConfig {
-    float    min_val;              // Y-axis minimum (NAN = auto-scale)
-    float    max_val;              // Y-axis maximum (NAN = auto-scale)
+    char     min_val[CONFIG_BINDABLE_SHORT_LEN];  // Y-axis minimum (empty = auto-scale, or binding)
+    char     max_val[CONFIG_BINDABLE_SHORT_LEN];  // Y-axis maximum (empty = auto-scale, or binding)
     float    ref_line_y[MAX_REF_LINES];   // Reference line Y-values (NAN = disabled)
     char     line_color[CONFIG_COLOR_MAX_LEN];            // Main line color (bindable, default "#4CAF50")
     char     line_color_2[CONFIG_COLOR_MAX_LEN];          // Extra line 2 color
@@ -100,11 +100,9 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     auto* cfg = reinterpret_cast<SparklineConfig*>(data);
     memset(cfg, 0, sizeof(SparklineConfig));
 
-    // Min/max: use NAN sentinel for auto-scale when not provided
-    JsonVariant vmin = btn["widget_sparkline_min"];
-    JsonVariant vmax = btn["widget_sparkline_max"];
-    cfg->min_val = vmin.isNull() ? NAN : vmin.as<float>();
-    cfg->max_val = vmax.isNull() ? NAN : vmax.as<float>();
+    // Min/max: empty string = auto-scale (resolve_number returns NAN)
+    widget_parse_field(btn["widget_sparkline_min"], cfg->min_val, sizeof(cfg->min_val), "", false);
+    widget_parse_field(btn["widget_sparkline_max"], cfg->max_val, sizeof(cfg->max_val), "", false);
 
     cfg->window_secs = btn["widget_sparkline_window"] | (uint16_t)300;
     if (cfg->window_secs < 10) cfg->window_secs = 10;
@@ -411,6 +409,7 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
                                      lv_obj_t* line_obj,
                                      const DataStreamSnapshot* snap,
                                      int16_t chart_w, int16_t chart_h,
+                                     float resolved_min, float resolved_max,
                                      float shared_auto_min, float shared_auto_max,
                                      float ref_expand_min, float ref_expand_max,
                                      SmoothLineInfo* out_info) {
@@ -429,12 +428,12 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
     }
 
     // Determine Y-axis range
-    float y_min = cfg->min_val;
-    float y_max = cfg->max_val;
+    float y_min = resolved_min;
+    float y_max = resolved_max;
     if (isnan(y_min)) y_min = isnan(shared_auto_min) ? snap->auto_min : shared_auto_min;
     if (isnan(y_max)) y_max = isnan(shared_auto_max) ? snap->auto_max : shared_auto_max;
-    if (isnan(cfg->min_val) && isfinite(ref_expand_min) && ref_expand_min < y_min) y_min = ref_expand_min;
-    if (isnan(cfg->max_val) && isfinite(ref_expand_max) && ref_expand_max > y_max) y_max = ref_expand_max;
+    if (isnan(resolved_min) && isfinite(ref_expand_min) && ref_expand_min < y_min) y_min = ref_expand_min;
+    if (isnan(resolved_max) && isfinite(ref_expand_max) && ref_expand_max > y_max) y_max = ref_expand_max;
     if (y_min >= y_max) { y_min -= 1.0f; y_max += 1.0f; }
     if (!isfinite(y_min) || !isfinite(y_max)) { y_min = 0.0f; y_max = 1.0f; }
     float y_range = y_max - y_min;
@@ -514,21 +513,25 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
     int16_t chart_w = st->cached_chart_w;
     int16_t chart_h = st->cached_chart_h;
 
+    // Resolve bindable min/max once per redraw (NAN = auto-scale)
+    float resolved_min = resolve_number(cfg->min_val, NAN);
+    float resolved_max = resolve_number(cfg->max_val, NAN);
+
     // Pre-scan: compute shared auto min/max across all lines when unified
     float shared_auto_min = NAN;
     float shared_auto_max = NAN;
     if (cfg->unified_autoscale && st->line_count > 1
-        && (isnan(cfg->min_val) || isnan(cfg->max_val))) {
+        && (isnan(resolved_min) || isnan(resolved_max))) {
         for (uint8_t i = 0; i < st->line_count; i++) {
             if (st->ds_handles[i] == DATA_STREAM_INVALID) continue;
             DataStreamSnapshot s;
             if (!data_stream_get(st->ds_handles[i], &s)) continue;
             if (s.count == 0) continue;
-            if (isnan(cfg->min_val)) {
+            if (isnan(resolved_min)) {
                 if (isnan(shared_auto_min) || s.auto_min < shared_auto_min)
                     shared_auto_min = s.auto_min;
             }
-            if (isnan(cfg->max_val)) {
+            if (isnan(resolved_max)) {
                 if (isnan(shared_auto_max) || s.auto_max > shared_auto_max)
                     shared_auto_max = s.auto_max;
             }
@@ -565,6 +568,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
 
         sparkline_rebuild_points(cfg, st->points[i], st->lines[i],
                                  &snap, chart_w, chart_h,
+                                 resolved_min, resolved_max,
                                  shared_auto_min, shared_auto_max,
                                  ref_expand_min, ref_expand_max,
                                  &smooth_info[i]);
@@ -580,14 +584,14 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
 
     // ---- Reference line positioning ----
     // Compute effective Y range once (shared by ref lines, min/max, current dot)
-    float eff_y_min = cfg->min_val, eff_y_max = cfg->max_val;
+    float eff_y_min = resolved_min, eff_y_max = resolved_max;
     if (main_snap_valid) {
         if (isnan(eff_y_min)) eff_y_min = isnan(shared_auto_min) ? main_snap.auto_min : shared_auto_min;
         if (isnan(eff_y_max)) eff_y_max = isnan(shared_auto_max) ? main_snap.auto_max : shared_auto_max;
     }
     // Expand auto-scaled range to include reference lines if configured
-    if (isnan(cfg->min_val) && isfinite(ref_expand_min) && ref_expand_min < eff_y_min) eff_y_min = ref_expand_min;
-    if (isnan(cfg->max_val) && isfinite(ref_expand_max) && ref_expand_max > eff_y_max) eff_y_max = ref_expand_max;
+    if (isnan(resolved_min) && isfinite(ref_expand_min) && ref_expand_min < eff_y_min) eff_y_min = ref_expand_min;
+    if (isnan(resolved_max) && isfinite(ref_expand_max) && ref_expand_max > eff_y_max) eff_y_max = ref_expand_max;
     if (eff_y_min >= eff_y_max) { eff_y_min -= 1.0f; eff_y_max += 1.0f; }
     if (!isfinite(eff_y_min) || !isfinite(eff_y_max)) { eff_y_min = 0.0f; eff_y_max = 1.0f; }
     float eff_y_range = eff_y_max - eff_y_min;

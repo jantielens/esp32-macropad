@@ -55,6 +55,14 @@ function padSimplifyBindings(text) {
     return text.replace(/\[(\w+):([^\];]*)[^\]]*\]/g, '[$1:$2]');
 }
 
+// Read a bindable-number field: keep binding strings as-is, parse plain numbers, or return default.
+function padGetBindableNumber(id, def) {
+    const raw = document.getElementById(id).value.trim();
+    if (raw.includes('[')) return raw;
+    const n = parseFloat(raw);
+    return isNaN(n) ? def : n;
+}
+
 // Convert stored label value (real \n) to display string (\n escape) for <input>
 function padLabelToInput(val) { return (val || '').replace(/\n/g, '\\n'); }
 // Convert user-typed string (\n escape) back to stored value (real \n)
@@ -947,8 +955,8 @@ function padDialogOpen(col, row) {
     padWidgetTypeChanged();
 
     // Bar chart widget fields
-    document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : 0;
-    document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : 3;
+    document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : '0';
+    document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : '3';
     document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
     padSetBindableColor('pad-edit-widget-bar-color', btn.widget_bar_color, '#4CAF50');
     padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, '#1A1A1A');
@@ -964,8 +972,8 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-start-label-2').value = padLabelToInput(btn.widget_gauge_start_label_2);
     document.getElementById('pad-edit-gauge-start-label-3').value = padLabelToInput(btn.widget_gauge_start_label_3);
     document.getElementById('pad-edit-gauge-start-label-4').value = padLabelToInput(btn.widget_gauge_start_label_4);
-    document.getElementById('pad-edit-gauge-min').value = (btn.widget_gauge_min !== undefined) ? btn.widget_gauge_min : 0;
-    document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : 100;
+    document.getElementById('pad-edit-gauge-min').value = (btn.widget_gauge_min !== undefined) ? btn.widget_gauge_min : '0';
+    document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : '100';
     document.getElementById('pad-edit-gauge-degrees').value = (btn.widget_gauge_degrees !== undefined) ? btn.widget_gauge_degrees : 180;
     document.getElementById('pad-edit-gauge-start-angle').value = (btn.widget_gauge_start_angle !== undefined) ? btn.widget_gauge_start_angle : 180;
     document.getElementById('pad-edit-gauge-zero-centered').checked = (btn.widget_gauge_zero_centered !== undefined) ? btn.widget_gauge_zero_centered : false;
@@ -1022,6 +1030,15 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
+
+    // Wire and init monospace toggle for bindable min/max inputs
+    ['pad-edit-widget-bar-min', 'pad-edit-widget-bar-max',
+     'pad-edit-gauge-min', 'pad-edit-gauge-max',
+     'pad-edit-sparkline-min', 'pad-edit-sparkline-max'].forEach(function(id) {
+        var el = document.getElementById(id);
+        el.oninput = function() { padUpdateMixedBindingFont(el); };
+        padUpdateMixedBindingFont(el);
+    });
 
     // Enable paste button if clipboard has content
     document.getElementById('pad-edit-paste').disabled = !padState.btnClipboard;
@@ -1132,10 +1149,8 @@ function padDialogOk(keepOpen) {
         const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
         if (wDataBinding) btn.widget_data_binding = wDataBinding;
         if (wtype === 'bar_chart') {
-            const barMin = parseFloat(document.getElementById('pad-edit-widget-bar-min').value);
-            const barMax = parseFloat(document.getElementById('pad-edit-widget-bar-max').value);
-            btn.widget_bar_min = isNaN(barMin) ? 0 : barMin;
-            btn.widget_bar_max = isNaN(barMax) ? 3 : barMax;
+            btn.widget_bar_min = padGetBindableNumber('pad-edit-widget-bar-min', 0);
+            btn.widget_bar_max = padGetBindableNumber('pad-edit-widget-bar-max', 3);
             btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');
             btn.widget_bar_bg_color = padGetBindableColor('pad-edit-widget-bar-bg-color');
             const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
@@ -1157,10 +1172,8 @@ function padDialogOk(keepOpen) {
             btn.widget_gauge_start_label_2 = gStartLabel2;
             btn.widget_gauge_start_label_3 = gStartLabel3;
             btn.widget_gauge_start_label_4 = gStartLabel4;
-            const gMin = parseFloat(document.getElementById('pad-edit-gauge-min').value);
-            const gMax = parseFloat(document.getElementById('pad-edit-gauge-max').value);
-            btn.widget_gauge_min = isNaN(gMin) ? 0 : gMin;
-            btn.widget_gauge_max = isNaN(gMax) ? 100 : gMax;
+            btn.widget_gauge_min = padGetBindableNumber('pad-edit-gauge-min', 0);
+            btn.widget_gauge_max = padGetBindableNumber('pad-edit-gauge-max', 100);
             const gDeg = parseInt(document.getElementById('pad-edit-gauge-degrees').value);
             btn.widget_gauge_degrees = (isNaN(gDeg) || gDeg < 10) ? 180 : (gDeg > 360) ? 360 : gDeg;
             const gSa = parseInt(document.getElementById('pad-edit-gauge-start-angle').value);
@@ -1190,10 +1203,10 @@ function padDialogOk(keepOpen) {
             if (sDataBinding) btn.widget_data_binding = sDataBinding;
             btn.widget_data_binding_2 = document.getElementById('pad-edit-sparkline-data-binding-2').value.trim();
             btn.widget_data_binding_3 = document.getElementById('pad-edit-sparkline-data-binding-3').value.trim();
-            const sMin = parseFloat(document.getElementById('pad-edit-sparkline-min').value);
-            const sMax = parseFloat(document.getElementById('pad-edit-sparkline-max').value);
-            if (!isNaN(sMin)) btn.widget_sparkline_min = sMin;
-            if (!isNaN(sMax)) btn.widget_sparkline_max = sMax;
+            const sMin = padGetBindableNumber('pad-edit-sparkline-min', undefined);
+            const sMax = padGetBindableNumber('pad-edit-sparkline-max', undefined);
+            if (sMin !== undefined) btn.widget_sparkline_min = sMin;
+            if (sMax !== undefined) btn.widget_sparkline_max = sMax;
             const sWindow = parseInt(document.getElementById('pad-edit-sparkline-window').value);
             btn.widget_sparkline_window = (isNaN(sWindow) || sWindow < 10) ? 300 : sWindow;
             const sSlots = parseInt(document.getElementById('pad-edit-sparkline-slots').value);

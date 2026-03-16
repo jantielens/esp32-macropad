@@ -47,14 +47,14 @@
 
                         <div style="display:flex; gap:8px;">
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-min">Y-Axis Min</label>
-                                <input type="number" id="pad-edit-sparkline-min" step="any" placeholder="auto">
-                                <small>Leave empty for auto-scale</small>
+                                <label for="pad-edit-sparkline-min">Y-Axis Min <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" id="pad-edit-sparkline-min" maxlength="63" placeholder="auto or [binding]">
+                                <small>Empty = auto-scale, or number/binding</small>
                             </div>
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-max">Y-Axis Max</label>
-                                <input type="number" id="pad-edit-sparkline-max" step="any" placeholder="auto">
-                                <small>Leave empty for auto-scale</small>
+                                <label for="pad-edit-sparkline-max">Y-Axis Max <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" id="pad-edit-sparkline-max" maxlength="63" placeholder="auto or [binding]">
+                                <small>Empty = auto-scale, or number/binding</small>
                             </div>
                         </div>
 

@@ -40,8 +40,8 @@
 // ---- Config struct (packed into WidgetConfig.data[]) ----
 
 struct GaugeConfig {
-    float    min_value;              // Scale minimum (default 0)
-    float    max_value;              // Scale maximum (default 100)
+    char     min_value[CONFIG_BINDABLE_SHORT_LEN];  // Scale minimum (bindable, default "0")
+    char     max_value[CONFIG_BINDABLE_SHORT_LEN];  // Scale maximum (bindable, default "100")
     uint16_t arc_degrees;            // Arc span (10–360, default 180)
     uint16_t start_angle;            // Rotation offset in degrees (default 180)
     char     start_label[CONFIG_BINDABLE_SHORT_LEN];       // Outer ring start label (plain text or binding)
@@ -90,6 +90,8 @@ struct GaugeState {
     float     last_value_4;        // Last numeric value for 4th ring
     float     last_value_neg_1;    // Last numeric value for outer negative ring (dual pair 1)
     float     last_value_neg_2;    // Last numeric value for secondary negative ring (dual pair 2)
+    float     cached_min;           // Last resolved min (for detecting binding changes in tick)
+    float     cached_max;           // Last resolved max (for detecting binding changes in tick)
     int16_t   cx, cy;              // Arc geometric center in tile coords
     int16_t   outer_radius;        // Outer ring radius in pixels
     int16_t   arc_width_px;        // Arc thickness in pixels
@@ -373,8 +375,8 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     auto* cfg = reinterpret_cast<GaugeConfig*>(data);
     memset(cfg, 0, sizeof(GaugeConfig));
 
-    cfg->min_value  = btn["widget_gauge_min"] | 0.0f;
-    cfg->max_value  = btn["widget_gauge_max"] | 100.0f;
+    widget_parse_field(btn["widget_gauge_min"],  cfg->min_value,  sizeof(cfg->min_value),  "0", false);
+    widget_parse_field(btn["widget_gauge_max"],  cfg->max_value,  sizeof(cfg->max_value),  "100", false);
 
     int deg = btn["widget_gauge_degrees"] | 180;
     cfg->arc_degrees = (uint16_t)clamp_val(deg, 10, 360);
@@ -428,6 +430,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->last_value_4 = NAN;
     st->last_value_neg_1 = NAN;
     st->last_value_neg_2 = NAN;
+    st->cached_min = NAN;
+    st->cached_max = NAN;
     st->tick_line_count = 0;
     st->cached_track  = COLOR_CACHE_INIT;
     st->cached_needle = COLOR_CACHE_INIT;
@@ -712,6 +716,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
 // ---- Helper: update a single arc ring ----
 static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
+                               float min_val, float max_val,
                                float value, float* last_value,
                                const char* color_field, uint32_t color_default,
                                uint32_t* color_cache, lv_obj_t* start_label,
@@ -723,15 +728,15 @@ static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
     *last_value = value;
 
     // Compute fill ratio
-    float range = cfg->max_value - cfg->min_value;
+    float range = max_val - min_val;
     if (range <= 0.0f) range = 1.0f;
-    float ratio = (value - cfg->min_value) / range;
+    float ratio = (value - min_val) / range;
     if (ratio < 0.0f) ratio = 0.0f;
     if (ratio > 1.0f) ratio = 1.0f;
 
     if (cfg->zero_centered || force_zero_centered) {
         // Arc fills from the zero point; negative values grow left, positive grow right
-        float zero_ratio = (0.0f - cfg->min_value) / range;
+        float zero_ratio = (0.0f - min_val) / range;
         if (zero_ratio < 0.0f) zero_ratio = 0.0f;
         if (zero_ratio > 1.0f) zero_ratio = 1.0f;
         float zero_angle = zero_ratio * (float)cfg->arc_degrees;
@@ -760,6 +765,12 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<GaugeState*>(state->data);
 
     if (!st->arc_bg) return;
+
+    // Resolve bindable min/max once per update
+    float min_val = resolve_number(cfg->min_value, 0.0f);
+    float max_val = resolve_number(cfg->max_value, 100.0f);
+    st->cached_min = min_val;
+    st->cached_max = max_val;
 
     // raw_value may be "v1\tv2\tv3\tv4" with empty intermediate slots preserved.
     char raw_copy[BINDING_TEMPLATE_MAX_LEN * MAX_WIDGET_BINDINGS + MAX_WIDGET_BINDINGS + 1];
@@ -793,7 +804,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // Ring 1 always maps to slot 1 (positive direction).
     if (ok0) {
-        gauge_update_ring(st->arc_bg, cfg, v0, &st->last_value, cfg->arc_color, 0x4CAF50,
+        gauge_update_ring(st->arc_bg, cfg, min_val, max_val, v0, &st->last_value, cfg->arc_color, 0x4CAF50,
                           &st->cached_arc1, st->start_label_1,
                           st->dual_pair_1_active);
     }
@@ -802,12 +813,12 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (st->dual_pair_1_active && st->arc_dual_1_neg) {
         float neg_mag = ok1 ? v1 : 0.0f;
         if (neg_mag < 0.0f) neg_mag = 0.0f;
-        gauge_update_ring(st->arc_dual_1_neg, cfg, -neg_mag, &st->last_value_neg_1,
+        gauge_update_ring(st->arc_dual_1_neg, cfg, min_val, max_val, -neg_mag, &st->last_value_neg_1,
                           cfg->arc_color_2, 0x2196F3, &st->cached_arc_neg1, nullptr, true);
     } else if (st->arc_ring2) {
         // Non-dual: slot 2 is its own ring.
         if (ok1) {
-            gauge_update_ring(st->arc_ring2, cfg, v1, &st->last_value_2, cfg->arc_color_2, 0x2196F3,
+            gauge_update_ring(st->arc_ring2, cfg, min_val, max_val, v1, &st->last_value_2, cfg->arc_color_2, 0x2196F3,
                               &st->cached_arc2, st->start_label_2);
         }
     }
@@ -816,7 +827,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (st->dual_pair_1_active) {
         if (st->arc_ring2) {
             if (ok2) {
-                gauge_update_ring(st->arc_ring2, cfg, v2, &st->last_value_2, cfg->arc_color_3, 0x9C27B0,
+                gauge_update_ring(st->arc_ring2, cfg, min_val, max_val, v2, &st->last_value_2, cfg->arc_color_3, 0x9C27B0,
                                   &st->cached_arc3, st->start_label_2,
                                   st->dual_pair_2_active);
             }
@@ -824,7 +835,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     } else {
         if (st->arc_ring3) {
             if (ok2) {
-                gauge_update_ring(st->arc_ring3, cfg, v2, &st->last_value_3, cfg->arc_color_3, 0x9C27B0,
+                gauge_update_ring(st->arc_ring3, cfg, min_val, max_val, v2, &st->last_value_3, cfg->arc_color_3, 0x9C27B0,
                                   &st->cached_arc3, st->start_label_3,
                                   st->dual_pair_2_active);
             }
@@ -835,19 +846,19 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (st->dual_pair_2_active && st->arc_dual_2_neg) {
         float neg_mag = ok3 ? v3 : 0.0f;
         if (neg_mag < 0.0f) neg_mag = 0.0f;
-        gauge_update_ring(st->arc_dual_2_neg, cfg, -neg_mag, &st->last_value_neg_2,
+        gauge_update_ring(st->arc_dual_2_neg, cfg, min_val, max_val, -neg_mag, &st->last_value_neg_2,
                           cfg->arc_color_4, 0xFF9800, &st->cached_arc_neg2, nullptr, true);
     } else if (st->dual_pair_1_active) {
         if (st->arc_ring3) {
             if (ok3) {
-                gauge_update_ring(st->arc_ring3, cfg, v3, &st->last_value_3, cfg->arc_color_4, 0xFF9800,
+                gauge_update_ring(st->arc_ring3, cfg, min_val, max_val, v3, &st->last_value_3, cfg->arc_color_4, 0xFF9800,
                                   &st->cached_arc4, st->start_label_3);
             }
         }
     } else {
         if (st->arc_ring4) {
             if (ok3) {
-                gauge_update_ring(st->arc_ring4, cfg, v3, &st->last_value_4, cfg->arc_color_4, 0xFF9800,
+                gauge_update_ring(st->arc_ring4, cfg, min_val, max_val, v3, &st->last_value_4, cfg->arc_color_4, 0xFF9800,
                                   &st->cached_arc4, st->start_label_4);
             }
         }
@@ -864,9 +875,9 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 
     if (ok0 && st->needle && st->n_pts && cfg->show_needle && cfg->needle_width > 0) {
-        float range = cfg->max_value - cfg->min_value;
+        float range = max_val - min_val;
         if (range <= 0.0f) range = 1.0f;
-        float ratio = (needle_value - cfg->min_value) / range;
+        float ratio = (needle_value - min_val) / range;
         if (ratio < 0.0f) ratio = 0.0f;
         if (ratio > 1.0f) ratio = 1.0f;
         int32_t fill_angle_int = (int32_t)roundf(ratio * (float)cfg->arc_degrees);
@@ -883,6 +894,20 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* cfg = reinterpret_cast<const GaugeConfig*>(wcfg->data);
     auto* st = reinterpret_cast<GaugeState*>(state->data);
     if (!st->arc_bg) return;
+
+    // Re-resolve bindable min/max; invalidate last_values so next update re-applies
+    float mn = resolve_number(cfg->min_value, 0.0f);
+    float mx = resolve_number(cfg->max_value, 100.0f);
+    if (mn != st->cached_min || mx != st->cached_max) {
+        st->cached_min = mn;
+        st->cached_max = mx;
+        st->last_value = NAN;
+        st->last_value_2 = NAN;
+        st->last_value_3 = NAN;
+        st->last_value_4 = NAN;
+        st->last_value_neg_1 = NAN;
+        st->last_value_neg_2 = NAN;
+    }
 
     lv_color_t clr;
 

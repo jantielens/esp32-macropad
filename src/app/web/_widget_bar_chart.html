@@ -12,12 +12,14 @@
 
                         <div style="display:flex; gap:8px;">
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-min">Min Value</label>
-                                <input type="number" id="pad-edit-widget-bar-min" step="any" value="0" placeholder="0">
+                                <label for="pad-edit-widget-bar-min">Min Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" id="pad-edit-widget-bar-min" maxlength="63" value="0" placeholder="0 or [binding]">
+                                <small>Number or binding e.g. <code>[health:heap_total]</code></small>
                             </div>
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-max">Max Value</label>
-                                <input type="number" id="pad-edit-widget-bar-max" step="any" value="3" placeholder="3">
+                                <label for="pad-edit-widget-bar-max">Max Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" id="pad-edit-widget-bar-max" maxlength="63" value="3" placeholder="3 or [binding]">
+                                <small>Number or binding e.g. <code>[health:psram_total]</code></small>
                             </div>
                         </div>
                         <div class="form-group">
