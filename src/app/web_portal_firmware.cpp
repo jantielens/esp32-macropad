@@ -4,6 +4,7 @@
 #include "web_portal_state.h"
 
 #include "device_telemetry.h"
+#include "image_fetch.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
@@ -20,11 +21,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-#include "rtos_task_utils.h"
-
 // ===== GitHub Pages firmware update (app-only) =====
 static TaskHandle_t firmware_update_task_handle = nullptr;
-static RtosTaskPsramAlloc fw_update_task_alloc = {};
 static volatile bool firmware_update_in_progress = false;
 static volatile size_t firmware_update_progress = 0;
 static volatile size_t firmware_update_total = 0;
@@ -100,6 +98,10 @@ static void firmware_update_task(void *pv) {
 
 		web_portal_set_ota_in_progress(true);
 
+#if HAS_IMAGE_FETCH
+		image_fetch_suspend();
+#endif
+
 		const bool is_https = starts_with(url, "https://");
 
 		HTTPClient http;
@@ -152,6 +154,9 @@ static void firmware_update_task(void *pv) {
 				http.end();
 				firmware_update_in_progress = false;
 				web_portal_set_ota_in_progress(false);
+#if HAS_IMAGE_FETCH
+				image_fetch_unsuspend();
+#endif
 				vTaskDelete(nullptr);
 				return;
 		}
@@ -177,6 +182,9 @@ static void firmware_update_task(void *pv) {
 				http.end();
 				firmware_update_in_progress = false;
 				web_portal_set_ota_in_progress(false);
+#if HAS_IMAGE_FETCH
+				image_fetch_unsuspend();
+#endif
 				vTaskDelete(nullptr);
 				return;
 		}
@@ -188,6 +196,9 @@ static void firmware_update_task(void *pv) {
 				http.end();
 				firmware_update_in_progress = false;
 				web_portal_set_ota_in_progress(false);
+#if HAS_IMAGE_FETCH
+				image_fetch_unsuspend();
+#endif
 				vTaskDelete(nullptr);
 				return;
 		}
@@ -219,6 +230,9 @@ static void firmware_update_task(void *pv) {
 						http.end();
 						firmware_update_in_progress = false;
 						web_portal_set_ota_in_progress(false);
+#if HAS_IMAGE_FETCH
+						image_fetch_unsuspend();
+#endif
 						vTaskDelete(nullptr);
 						return;
 				}
@@ -241,6 +255,9 @@ static void firmware_update_task(void *pv) {
 				LOGE("OTA", "OTA finalize failed");
 				firmware_update_in_progress = false;
 				web_portal_set_ota_in_progress(false);
+#if HAS_IMAGE_FETCH
+				image_fetch_unsuspend();
+#endif
 				vTaskDelete(nullptr);
 				return;
 		}
@@ -409,19 +426,10 @@ void handlePostFirmwareUpdate(AsyncWebServerRequest *request, uint8_t *data, siz
 		LOGI("OTA", "Update requested url=%s size=%u", url, (unsigned)size);
 
 		// Spawn background task to avoid blocking AsyncTCP.
-		// Try PSRAM stack first (saves 12 KB internal RAM), fall back to internal.
-		bool task_ok = rtos_create_task_psram_stack(
-				firmware_update_task,
-				"fw_update",
-				12288,
-				nullptr,
-				1,
-				&firmware_update_task_handle,
-				&fw_update_task_alloc
-		);
-		if (!task_ok) {
-				task_ok = (xTaskCreate(firmware_update_task, "fw_update", 12288, nullptr, 1, &firmware_update_task_handle) == pdPASS);
-		}
+		// Must use internal RAM stack: Update.write() triggers SPI flash writes
+		// which disable the SPI cache.  A PSRAM stack is inaccessible with caches
+		// off, causing an assert in cache_utils.c on ESP32-P4.
+		bool task_ok = (xTaskCreate(firmware_update_task, "fw_update", 12288, nullptr, 1, &firmware_update_task_handle) == pdPASS);
 
 		if (!task_ok) {
 				firmware_update_in_progress = false;

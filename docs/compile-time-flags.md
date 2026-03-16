@@ -292,6 +292,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen.h
   - src/app/screens/pad_screen_poll.cpp
   - src/app/screens/pad_tile_builder.cpp
+  - src/app/web_portal_firmware.cpp
 - **HAS_MQTT**
   - src/app/app.ino
   - src/app/board_config.h

@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated user-facing docs (`pad-editor-guide.md`, `first-time-setup.md`, `README.md`) to use consistent terminology
   - Added enforced **Terminology Conventions** section to `.github/copilot-instructions.md` with definitions, retired terms, and rules
 
+### Fixed
+- **GitHub firmware update crash on ESP32-P4 boards** ([#14](https://github.com/jantielens/esp32-macropad/issues/14)) — OTA updates via GitHub Pages crashed on ESP32-P4 boards due to two independent bugs:
+  1. The firmware update task used a PSRAM stack (`rtos_create_task_psram_stack`), but `Update.write()` triggers SPI flash writes that disable the SPI cache — making the PSRAM stack inaccessible and causing an assert in `cache_utils.c`. Fixed by forcing the task to use an internal RAM stack via `xTaskCreate()`.
+  2. Concurrent image fetching during OTA exhausted the SDIO WiFi driver's RX buffer pool (the ESP32-P4 uses an external ESP32-C6 for WiFi over SDIO). Fixed by suspending image fetch slots before starting the OTA download and restoring them on error.
+
 ### Removed
 - **NimBLE / BTHome BLE advertising** — removed the entire BLE BTHome v2 advertising subsystem (`ble_advertiser.cpp/h`, `NimBLE-Arduino` library dependency, `HAS_BLE` compile flag, `PublishTransport` enum, BLE timing config fields, web portal Transport Mode selector and BLE Advertising settings). This simplifies the codebase ahead of the BLE HID keyboard feature. Affected 23 files across firmware, web portal, build system, and documentation.
 
