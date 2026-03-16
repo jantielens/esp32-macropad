@@ -196,7 +196,7 @@ Each button has two action slots — one for **tap** and one for **long-press** 
 | **Go back** | Return to the previous screen |
 | **Publish MQTT** | Send a message to an MQTT topic |
 | **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). ESP32-P4 boards only. |
-| **Start BLE Pairing** | Clear the existing bond, rotate the BLE identity, and open a 60-second pairing window. ESP32-P4 boards only. |
+| **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
 
 **Example setup for a smart light:**
 - **Tap action**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`

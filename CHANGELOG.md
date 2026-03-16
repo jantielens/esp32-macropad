@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **WiFi health binding keys** — new `[health:wifi_connected]` (`ON`/`OFF`) and `[health:wifi_ssid]` (connected network name) binding keys for building WiFi status indicators directly on pad buttons
-- **BLE HID keyboard** — the macropad can now act as a Bluetooth keyboard. Assign a `key` action to any button to send keystrokes (single keys, modifier combos, media keys, or multi-step sequences) to a paired host. Assign a `ble_pair` action to tear down the BLE stack, rotate the identity, and open a fresh 60-second pairing window. Features:
+- **BLE HID keyboard** — the macropad can now act as a Bluetooth keyboard. Assign a `key` action to any button to send keystrokes (single keys, modifier combos, media keys, or multi-step sequences) to a paired host. Assign a `ble_pair` action to clear bonds and open a fresh 60-second pairing window. Features:
   - Key sequence DSL with text literals, modifier keys, consumer/media keys, and delays
   - Single-owner pairing policy: one bonded host at a time, unbonded peers rejected outside the pairing window
   - Runtime enable/disable toggle on the Home page (disabled by default, saves ~70 KB RAM when off; requires reboot)
@@ -56,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **NimBLE / BTHome BLE advertising** — removed the entire BLE BTHome v2 advertising subsystem (`ble_advertiser.cpp/h`, `NimBLE-Arduino` library dependency, `HAS_BLE` compile flag, `PublishTransport` enum, BLE timing config fields, web portal Transport Mode selector and BLE Advertising settings). This simplifies the codebase ahead of the BLE HID keyboard feature. Affected 23 files across firmware, web portal, build system, and documentation.
 
 ### Improved
+- **Stable BLE identity** — BLE pairing no longer rotates the device's identity address or appends an address suffix to the device name. The device always advertises with the same hardware address and the configured device name, matching how standard BLE HID keyboards work. This fixes issues with Windows caching stale BLE device entries after re-pairing.
+- **Quieter BLE re-pairing** — after triggering "Pair New Device", the old host (especially Windows) may keep reconnecting briefly with stale keys. These failed reconnection attempts are now logged at DEBUG level instead of WARN to avoid flooding the serial monitor. The old host eventually backs off, or the user removes the device from their Bluetooth settings before pairing again.
 - **Health binding reference in tooltip** — replaced the single-line key list with organized tables grouped by category (System, Memory, WiFi, BLE), each key with a brief description of its value/format. Added color-mapping examples for WiFi status (green/red via `wifi_connected`) and BLE status (5-state color map via `ble_status`)
 - **Pad editor Copy keeps dialog open** — the Copy button now saves the current button state and copies to clipboard without closing the editor, so you can continue editing or immediately paste elsewhere
 - **Pad editor Paste keeps dialog open** — pasting a button now re-opens the editor showing the pasted content, so you can review or tweak before closing

@@ -10,14 +10,15 @@
 // in pairing mode (clearing bonds and opening a 60-second window).
 void ble_hid_init(const char* device_name, bool force_pairing_mode);
 
-// Tear down the BLE stack, rotate the identity, and reinitialize in pairing mode.
-// WARNING: Must NOT be called from a PSRAM-stack task (flash ops crash).
+// Clear bonds, disconnect, and enter pairing mode (60-second window).
+// The old host may keep reconnecting briefly until the user removes the
+// device from its Bluetooth settings — this is normal Windows behavior.
+// WARNING: Must NOT be called from a PSRAM-stack task (NVS flash ops crash).
 //          Use ble_hid_request_pairing() from LVGL instead.
 void ble_hid_start_pairing();
 
 // Request pairing — safe to call from any task (deferred to ble_hid_loop).
-// Tears down the NimBLE stack, rotates the BLE identity, and reinitializes
-// in pairing mode so hosts treat the device as a fresh peripheral.
+// Clears bonds and reopens the 60-second pairing window.
 void ble_hid_request_pairing();
 
 // Request a key sequence — safe to call from any task (deferred to ble_hid_loop).

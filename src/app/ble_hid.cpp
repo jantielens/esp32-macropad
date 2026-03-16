@@ -9,7 +9,6 @@
 #include <BLEServer.h>
 #include <BLESecurity.h>
 #include <HIDTypes.h>
-#include <esp_system.h>
 #include <host/ble_att.h>
 #include <host/ble_gatt.h>
 #include <host/ble_hs_mbuf.h>
@@ -150,103 +149,8 @@ static volatile uint16_t active_conn_handle = 0xFFFF;
 static char peer_addr_str[18] = {};
 static char peer_id_addr_str[18] = {};
 static char ble_name_str[40] = {};
-static char device_base_name[40] = {};
 static volatile bool peer_bonded = false;
 static volatile bool peer_encrypted = false;
-
-static void build_ble_name(const char* base_name, const char* identity_addr, char* out, size_t out_len) {
-    if (out == nullptr || out_len == 0) return;
-
-    const char* base = (base_name && base_name[0]) ? base_name : "BLE Keyboard";
-    if (identity_addr == nullptr || identity_addr[0] == '\0') {
-        strlcpy(out, base, out_len);
-        return;
-    }
-
-    char compact_addr[13] = {};
-    size_t compact_len = 0;
-    const size_t addr_len = strlen(identity_addr);
-    for (size_t i = 0; i < addr_len && compact_len < sizeof(compact_addr) - 1; ++i) {
-        const char c = identity_addr[i];
-        if (c == ':') continue;
-        compact_addr[compact_len++] = c;
-    }
-    compact_addr[compact_len] = '\0';
-
-    if (compact_len < 4) {
-        strlcpy(out, base, out_len);
-        return;
-    }
-
-    const char* suffix = compact_addr + (compact_len - 4);
-
-    snprintf(out, out_len, "%s %s", base, suffix);
-}
-
-static bool load_identity_address(BLEAddress* out_addr) {
-    if (out_addr == nullptr) return false;
-
-    char stored_addr[18] = {};
-    if (!config_manager_get_ble_identity_addr(stored_addr, sizeof(stored_addr))) {
-        return false;
-    }
-
-    *out_addr = BLEAddress(String(stored_addr), BLE_ADDR_RANDOM);
-    return true;
-}
-
-static bool load_identity_address_string(char* out, size_t out_len) {
-    if (out == nullptr || out_len == 0) return false;
-    return config_manager_get_ble_identity_addr(out, out_len);
-}
-
-static BLEAddress generate_random_static_identity_address() {
-    uint8_t addr[6];
-    for (size_t i = 0; i < sizeof(addr); ++i) {
-        addr[i] = static_cast<uint8_t>(esp_random() & 0xFF);
-    }
-
-    // Static random BLE identity: top two bits of the most significant octet must be 1.
-    addr[0] &= 0x3F;
-    addr[0] |= 0xC0;
-
-    return BLEAddress(addr, BLE_ADDR_RANDOM);
-}
-
-static bool persist_new_identity_address(BLEAddress* out_addr) {
-    if (out_addr == nullptr) return false;
-
-    BLEAddress next_addr = generate_random_static_identity_address();
-    const String next_addr_str = next_addr.toString();
-    if (!config_manager_set_ble_identity_addr(next_addr_str.c_str())) {
-        LOGE(TAG, "Failed to persist rotated BLE identity");
-        return false;
-    }
-
-    *out_addr = next_addr;
-    LOGI(TAG, "Rotated BLE identity to %s", next_addr_str.c_str());
-    return true;
-}
-
-static void configure_identity_address() {
-    BLEAddress identity_addr;
-    if (!load_identity_address(&identity_addr)) {
-        LOGI(TAG, "Using default BLE identity address");
-        return;
-    }
-
-    if (!BLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM)) {
-        LOGW(TAG, "Failed to switch BLE stack to random identity address");
-        return;
-    }
-
-    if (!BLEDevice::setOwnAddr(identity_addr)) {
-        LOGW(TAG, "Failed to apply stored BLE identity address");
-        return;
-    }
-
-    LOGI(TAG, "Using BLE identity address %s", identity_addr.toString().c_str());
-}
 
 static bool start_advertising() {
     if (!hid_service_ready) return false;
@@ -498,9 +402,10 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
         }
 
         // In pairing mode, failed encryption means the peer did not complete a
-        // usable fresh pair. Keep the logic simple and disconnect; the user can
-        // trigger a new live re-pairing attempt from the portal or a pad button.
-        LOGW(TAG, "Pairing failed during pairing mode - disconnecting");
+        // usable fresh pair.  This is expected when the old host reconnects
+        // repeatedly after bonds were cleared (common on Windows).  Log at
+        // DEBUG to avoid flooding the serial output.
+        LOGD(TAG, "Pairing failed during pairing mode - disconnecting");
         ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
     }
 #endif
@@ -540,11 +445,9 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     peer_bonded = false;
     clear_peer_metadata();
     owner_claimed = config_manager_get_ble_owner_claimed();
-    strlcpy(device_base_name, device_name ? device_name : "", sizeof(device_base_name));
 
-    char identity_addr_str[18] = {};
-    load_identity_address_string(identity_addr_str, sizeof(identity_addr_str));
-    build_ble_name(device_name, identity_addr_str, ble_name_str, sizeof(ble_name_str));
+    const char* name = (device_name && device_name[0]) ? device_name : "BLE Keyboard";
+    strlcpy(ble_name_str, name, sizeof(ble_name_str));
 
     BLEDevice::init(ble_name_str);
     if (!BLEDevice::getInitialized()) {
@@ -552,7 +455,6 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
         init_error = true;
         return;
     }
-    configure_identity_address();
     static HidSecurityCallbacks secCb;
     BLEDevice::setSecurityCallbacks(&secCb);
 
@@ -615,25 +517,27 @@ void ble_hid_start_pairing() {
         delay(100);
     }
 
-    // 2. Rotate identity so the host sees a fresh peripheral
-    BLEAddress next_addr;
-    if (!persist_new_identity_address(&next_addr)) {
-        LOGW(TAG, "Continuing re-pairing without BLE identity rotation");
+    // 2. Stop advertising while we clear bonds
+    if (advertising_active) {
+        BLEDevice::stopAdvertising();
+        advertising_active = false;
     }
 
-    // 3. Full NimBLE stack teardown (keep BT controller memory for reinit)
-    BLEDevice::deinit(false);
-    bleServer = nullptr;
-    hid_service_ready = false;
-    advertising_active = false;
-    connected = false;
-    active_conn_handle = 0xFFFF;
-
-    // 4. Clear owner claim in NVS
+    // 3. Clear bonds and owner claim
+    clear_all_bonds();
+    clear_peer_metadata();
+    owner_claimed = false;
     config_manager_set_ble_owner_claimed(false);
 
-    // 5. Reinitialize with fresh identity and pairing mode
-    ble_hid_init(device_base_name, true);
+    // 4. Enter pairing mode with fresh 60-second window
+    connected = false;
+    active_conn_handle = 0xFFFF;
+    pairing_mode = true;
+    pairing_deadline = millis() + PAIRING_TIMEOUT_MS;
+
+    // 5. Resume advertising
+    start_advertising();
+    LOGI(TAG, "BLE pairing mode active (60s window)");
 }
 
 bool ble_hid_is_connected() {

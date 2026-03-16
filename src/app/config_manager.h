@@ -117,8 +117,6 @@ String config_manager_get_default_device_name();      // Get default device name
 #if HAS_BLE_HID
 bool config_manager_get_ble_owner_claimed();            // Persistent "device has an owner" flag
 bool config_manager_set_ble_owner_claimed(bool claimed);
-bool config_manager_get_ble_identity_addr(char *addr, size_t addr_len); // Stored BLE identity address
-bool config_manager_set_ble_identity_addr(const char *addr);            // Persist BLE identity address
 #endif
 
 #endif // CONFIG_MANAGER_H

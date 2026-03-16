@@ -75,14 +75,16 @@ The BLE Keyboard section lets you enable/disable the Bluetooth keyboard and mana
 |---------|-------------|
 | **Enable BLE Keyboard** | Checkbox to enable or disable BLE. Disabled by default to save ~70 KB RAM. Requires a reboot to take effect |
 | **Status indicator** | Reflects the compact `ble_status`: disabled, ready, pairing, connected, or error |
-| **Name** | Shows the current BLE keyboard name, including the short identity suffix used to distinguish rotated pairings |
+| **Name** | Shows the current BLE keyboard name (same as the configured device name) |
 | **Bonded / Encrypted badges** | Shown when a host is connected |
 | **Peer address** | The connected host's Bluetooth address |
-| **Pair New Device** | Tears down the BLE stack, rotates the device's BLE identity address, clears the previous owner, and opens a fresh 60-second pairing window — no reboot required |
+| **Pair New Device** | Clears the previous bond and opens a fresh 60-second pairing window — no reboot required |
 
 You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
 
-The configured base BLE name stays the same across this reboot, but the advertised BLE name gets a short identity suffix that changes with each rotated BLE identity. That makes old Windows entries easier to distinguish while still reflecting the new low-level BLE identity.
+The BLE keyboard always advertises with the configured device name and the chip's stable hardware address, so the host always sees the same device.
+
+> **Re-pairing tip:** Before pairing a new host (or re-pairing the same host), remove the device from the old host's Bluetooth settings first. If you skip this step the old host may keep trying to reconnect with stale keys for a short while — this is normal BLE behavior and will eventually stop, but removing the device avoids the noise.
 
 #### BLE Signals
 
