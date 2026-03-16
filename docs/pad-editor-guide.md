@@ -195,8 +195,8 @@ Each button has two action slots — one for **tap** and one for **long-press** 
 | **Navigate to screen** | Jump to another pad or screen (e.g., `pad_1`, `info_screen`) |
 | **Go back** | Return to the previous screen |
 | **Publish MQTT** | Send a message to an MQTT topic |
-| **BLE Key** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). ESP32-P4 boards only. |
-| **BLE Pair** | Clear the existing bond, rotate the BLE identity, and open a 60-second pairing window. ESP32-P4 boards only. |
+| **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). ESP32-P4 boards only. |
+| **Start BLE Pairing** | Clear the existing bond, rotate the BLE identity, and open a 60-second pairing window. ESP32-P4 boards only. |
 
 **Example setup for a smart light:**
 - **Tap action**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`

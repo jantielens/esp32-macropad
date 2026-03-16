@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New BLE Keyboard section on the Home page with connection status, peer details, and "Pair New Device" button
   - New `POST /api/ble/pairing/start` endpoint for triggering pairing from the portal
   - **ESP32-P4 only** — disabled on ESP32-S3 boards (`HAS_BLE_HID false`) due to insufficient internal RAM for NimBLE + WiFi + display concurrently
+  - Improved button editor wording: "Send BLE Keys", "Start BLE Pairing", "Keys to Send" with contextual hint when BLE actions are selected
 - **16-pad support with LRU memory management** — expanded from 8 to 16 configurable pads. Heavy per-pad arrays (bindings, tiles, color/number/state bindings) are now lazily allocated in PSRAM on first visit and freed via an LRU-8 eviction cache, keeping peak memory usage comparable to the previous 8-pad implementation. Key changes:
   - `MAX_PADS` raised to 16 (overridable per board in `board_overrides.h`)
   - `MAX_SCREENS` derived from `MAX_PADS + MAX_NON_PAD_SCREENS` (default 26)

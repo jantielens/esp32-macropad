@@ -225,9 +225,10 @@
                                 <option value="screen">Navigate to Screen</option>
                                 <option value="back">Navigate Back</option>
                                 <option value="mqtt">MQTT Publish</option>
-                                <option value="key">BLE Key Sequence</option>
-                                <option value="ble_pair">BLE Pair</option>
+                                <option value="key">Send BLE Keys</option>
+                                <option value="ble_pair">Start BLE Pairing</option>
                             </select>
+                            <small id="pad-edit-action-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>
                         </div>
                         <div id="pad-edit-action-screen-group" style="display:none;">
                             <div class="form-group">
@@ -249,7 +250,7 @@
                         </div>
                         <div id="pad-edit-action-key-group" style="display:none;">
                             <div class="form-group">
-                                <label for="pad-edit-action-sequence">Key Sequence</label>
+                                <label for="pad-edit-action-sequence">Keys to Send</label>
                                 <input type="text" id="pad-edit-action-sequence" maxlength="255" placeholder='e.g. ctrl+c, "hello", 200ms'>
                                 <small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms</small>
                             </div>
@@ -264,9 +265,10 @@
                                 <option value="screen">Navigate to Screen</option>
                                 <option value="back">Navigate Back</option>
                                 <option value="mqtt">MQTT Publish</option>
-                                <option value="key">BLE Key Sequence</option>
-                                <option value="ble_pair">BLE Pair</option>
+                                <option value="key">Send BLE Keys</option>
+                                <option value="ble_pair">Start BLE Pairing</option>
                             </select>
+                            <small id="pad-edit-lp-action-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>
                         </div>
                         <div id="pad-edit-lp-action-screen-group" style="display:none;">
                             <div class="form-group">
@@ -288,7 +290,7 @@
                         </div>
                         <div id="pad-edit-lp-action-key-group" style="display:none;">
                             <div class="form-group">
-                                <label for="pad-edit-lp-action-sequence">Key Sequence</label>
+                                <label for="pad-edit-lp-action-sequence">Keys to Send</label>
                                 <input type="text" id="pad-edit-lp-action-sequence" maxlength="255" placeholder='e.g. ctrl+c, "hello", 200ms'>
                                 <small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms</small>
                             </div>

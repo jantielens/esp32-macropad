@@ -419,6 +419,7 @@ function padActionTypeChanged(prefix) {
     document.getElementById('pad-edit-' + pfx + '-screen-group').style.display = (type === 'screen') ? '' : 'none';
     document.getElementById('pad-edit-' + pfx + '-mqtt-group').style.display = (type === 'mqtt') ? '' : 'none';
     document.getElementById('pad-edit-' + pfx + '-key-group').style.display = (type === 'key') ? '' : 'none';
+    document.getElementById('pad-edit-' + pfx + '-ble-hint').style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
 }
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline'];
