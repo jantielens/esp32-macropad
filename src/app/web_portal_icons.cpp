@@ -190,8 +190,8 @@ void handleDeletePageIcons(AsyncWebServerRequest *request) {
         web_portal_send_json_error(request, 400, "Invalid page parameter");
         return;
     }
-    if (page < 0 || page >= MAX_PAD_PAGES) {
-        web_portal_send_json_error(request, 400, "Page must be 0-7");
+    if (page < 0 || page >= MAX_PADS) {
+        web_portal_send_json_error(request, 400, "Page out of range");
         return;
     }
 
@@ -360,9 +360,9 @@ void handleDeleteIconFile(AsyncWebServerRequest *request) {
 }
 
 // ============================================================================
-// GET /api/pad/tile_sizes?cols=N&rows=N
+// GET /api/pad/button_sizes?cols=N&rows=N
 // ============================================================================
-void handleGetTileSizes(AsyncWebServerRequest *request) {
+void handleGetButtonSizes(AsyncWebServerRequest *request) {
     if (!portal_auth_gate(request)) return;
 
     if (!request->hasParam("cols") || !request->hasParam("rows")) {
@@ -403,7 +403,7 @@ void handleGetTileSizes(AsyncWebServerRequest *request) {
     AsyncResponseStream *response = request->beginResponseStream("application/json");
     response->printf(
         "{\"display_w\":%d,\"display_h\":%d,"
-        "\"tile_w\":%u,\"tile_h\":%u,"
+        "\"button_w\":%u,\"button_h\":%u,"
         "\"gap\":%u,\"padding\":%u,"
         "\"pixel_shift_margin\":%u,"
         "\"font_small_h\":%u}",

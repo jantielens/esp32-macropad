@@ -33,23 +33,23 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Widget Subsystem**: Extensible widget type system for specialized button visualizations (compile-time gated by `HAS_DISPLAY`)
   - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI, tick, getStreamParams function pointers)
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
-  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color, binding-driven)
-  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, up to 4 slots with optional dual-binding pairs, binding-driven)
-  - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale, time-windowed display, bindable line colors, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry, per-marker min/max dots with labels, current-value dot, up to 3 reference lines)
+  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color and bindable min/max scale, binding-driven)
+  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, bindable min/max scale, up to 4 slots with optional dual-binding pairs, binding-driven)
+  - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale or bindable min/max, time-windowed display, bindable line colors, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry, per-marker min/max dots with labels, current-value dot, up to 3 reference lines)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Data Stream Registry**: Background data collection for history-based widgets (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
   - `data_stream.cpp/h` - Demand-driven registry of per-widget ring buffers; resolves bindings and feeds PSRAM-allocated ring buffers every LVGL cycle regardless of active screen; LOCF for data gaps; rebuild triggered by pad config generation changes
 - **Binding Template Engine**: Scheme-extensible `[scheme:params]` token resolver for label text (compile-time gated by `HAS_MQTT`)
   - `binding_template.cpp/h` - Token parser, scheme registry (max 8), `resolve()` and `collect_topics()` API; called only from LVGL task
   - MQTT scheme registered by `mqtt_sub_store_init()` — resolves `[mqtt:topic;path;format]` tokens against the subscription store
-  - Health scheme registered by `health_binding_init()` — resolves `[health:key;format]` tokens from local device telemetry (CPU, heap, PSRAM, RSSI, uptime, IP, hostname); expensive reads cached 2 s, lightweight keys live
+  - Health scheme registered by `health_binding_init()` — resolves `[health:key;format]` tokens from local device telemetry (CPU, heap, PSRAM, RSSI, uptime, WiFi status/SSID, IP, hostname) and static device info (chip, cores, cpu_freq, flash_size, firmware, board, mac, reset_reason) plus memory totals/used (heap_total, heap_internal_total, heap_internal_used, psram_total, psram_used); expensive reads cached 2 s, static keys cached once at init
   - `health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
   - Time scheme registered by `time_binding_init()` — resolves `[time:format;timezone]` tokens using NTP-synced clock with Olson→POSIX timezone lookup (~40 entries); extends strftime with sub-second codes (`%ms` millis, `%cs` centisec, `%ds` decisec) and standalone `%ums` (device uptime ms)
   - `time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
   - Expr scheme registered by `expr_binding_init()` — resolves `[expr:expression;format]` tokens by first resolving inner bindings, then evaluating with a recursive-descent expression evaluator
   - `expr_eval.cpp/h` - Pure C recursive-descent expression evaluator (arithmetic, comparisons, ternary, strings, threshold function); no ESP32 dependencies, host-testable
   - `expr_binding.cpp/h` - Glue between expr_eval and binding_template engine; bracket-depth `;` splitting (compile-time gated by `HAS_DISPLAY`)
-  - Pad scheme registered by `pad_binding_init()` — resolves `[pad:name;format]` tokens against page-level named bindings; supports per-usage format override; enables define-once-use-everywhere pattern for repeated MQTT topics
+  - Pad scheme registered by `pad_binding_init()` — resolves `[pad:name;format]` tokens against pad-level named bindings; supports per-usage format override; enables define-once-use-everywhere pattern for repeated MQTT topics
   - `pad_binding.cpp/h` - Pad binding scheme resolver with page-context pointer, expand utility for data streams, and topic collector that recurses into underlying bindings (compile-time gated by `HAS_DISPLAY`)
   - Pipe fallback syntax: `[scheme:params|fallback]` — replaces default `---` placeholder when a binding can't resolve (e.g., before first MQTT message, during reconnect). Parsed by `split_pipe_fallback()` at outermost bracket depth.
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
@@ -61,11 +61,14 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - HA discovery published via `ha_discovery_publish_screen_select_config()` with dynamic options list from screen registry
 - **MQTT Wake Subsystem**: Binding-driven screensaver wakeup (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
   - `mqtt_wake.cpp/h` - Resolves a user-configured binding expression each loop tick; wakes screensaver on OFF→ON edge; keeps screen awake while ON persists via throttled idle-timer reset (~1 s)
+- **BLE HID Subsystem**: Bluetooth LE keyboard with key sequence DSL (compile-time gated by `HAS_BLE_HID`; disabled on ESP32-S3 boards due to internal RAM constraints; runtime-toggled via `ble_enabled` config, default disabled, saves ~70 KB internal RAM when off)
+  - `ble_hid.cpp/h` - Manual NimBLE HID GATT service, single-owner pairing policy (one bond, 60s timeout), stable hardware address, keyboard + consumer reports, peer metadata getters; `ble_hid_is_initialized()` used as runtime guard by other modules
+  - `key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable, no ESP32 deps
+  - `web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
-  - `power_config.cpp/h` - Power mode and transport parsing helpers
+  - `power_config.cpp/h` - Power mode parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
-  - `duty_cycle.cpp/h` - Duty-cycle execution path (BLE/MQTT publish then sleep)
-  - `ble_advertiser.cpp/h` - BTHome v2 BLE advertising (compile-time gated)
+  - `duty_cycle.cpp/h` - Duty-cycle execution path (MQTT publish then sleep)
   - `wifi_manager.cpp/h` - WiFi connect, cached BSSID, and mDNS startup
   - `portal_idle.cpp/h` - Portal idle timeout and sleep (Config/AP only)
 - **Web Portal**: Multi-page async web server with captive portal support
@@ -218,15 +221,14 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/project_branding.h` - Project branding defines (`PROJECT_NAME`, `PROJECT_DISPLAY_NAME`) (auto-generated)
 - `src/app/config_manager.cpp/h` - NVS-based configuration storage
 - `src/app/power_manager.cpp/h` - Power mode selection, backoff, and sleep helpers
-- `src/app/power_config.cpp/h` - Power mode and transport parsing
+- `src/app/power_config.cpp/h` - Power mode parsing
 - `src/app/duty_cycle.cpp/h` - Duty-cycle runner
-- `src/app/ble_advertiser.cpp/h` - BLE BTHome advertiser (compile-time gated by `HAS_BLE`)
 - `src/app/wifi_manager.cpp/h` - WiFi connect + mDNS (replaces inline connect logic)
 - `src/app/portal_idle.cpp/h` - Portal idle timeout in Config/AP modes
 - `src/app/binding_template.cpp/h` - Scheme-extensible token resolver for label text (compile-time gated by `HAS_MQTT`)
 - `src/app/expr_eval.cpp/h` - Pure C expression evaluator (arithmetic, comparisons, ternary, threshold function); host-testable, no ESP32 deps
 - `src/app/expr_binding.cpp/h` - Expression binding glue — registers `[expr:]` scheme (compile-time gated by `HAS_DISPLAY`)
-- `src/app/pad_binding.cpp/h` - Pad binding scheme — resolves `[pad:name;format]` against page-level named bindings (compile-time gated by `HAS_DISPLAY`)
+- `src/app/pad_binding.cpp/h` - Pad binding scheme — resolves `[pad:name;format]` against pad-level named bindings (compile-time gated by `HAS_DISPLAY`)
 - `src/app/health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
 - `src/app/time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
@@ -236,6 +238,9 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/screen_saver_manager.cpp/h` - Screensaver state machine with fade, pixel shift, and wake-screen redirect
 - `src/app/mqtt_screen.cpp/h` - MQTT active-screen control (HA select entity, remote navigation + wake)
 - `src/app/mqtt_wake.cpp/h` - Binding-driven screensaver wakeup with idle-timer keep-alive (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
+- `src/app/ble_hid.cpp/h` - BLE HID keyboard with manual NimBLE GATT service, single-owner pairing, keyboard + consumer reports (compile-time gated by `HAS_BLE_HID`)
+- `src/app/key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable
+- `src/app/web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface
@@ -254,7 +259,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for page-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`)
 - `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`)
 - `src/app/screens/pad_screen.cpp/h` - Pad screen with LVGL button tiles, label rendering (uses label style resolvers), icon/widget layout, binding updates, and image fetch integration
 - `src/app/screens/splash_screen.cpp/h` - Boot splash with animated spinner
@@ -266,9 +271,9 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/data_stream.cpp/h` - Data stream registry for background ring buffer collection (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
 - `src/app/widgets/widget.h` - Widget type interface (WidgetType struct with function pointers: parseConfig, createUI, update, destroyUI, tick, getStreamParams)
 - `src/app/widgets/widget.cpp` - Widget type registry and lookup
-- `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (bindable bar color, MQTT data binding)
-- `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, per-ring bindable arc colors, up to 4 slots with optional dual-binding pairs, binding-driven)
-- `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, up to 3 overlaid lines, reads from data stream registry, auto-scale, bindable line colors, per-marker min/max dots with labels and color overrides, current-value dot, up to 3 reference lines with color and pattern)
+- `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (bindable bar color, bindable min/max scale, MQTT data binding)
+- `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, per-ring bindable arc colors, bindable min/max scale, up to 4 slots with optional dual-binding pairs, binding-driven)
+- `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, up to 3 overlaid lines, reads from data stream registry, auto-scale or bindable min/max, bindable line colors, per-marker min/max dots with labels and color overrides, current-value dot, up to 3 reference lines with color and pattern)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template
@@ -299,8 +304,9 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 
 ### Tests
 - `tests/run_tests.sh` - Builds and runs all host-native tests (no ESP32 needed)
-- `tests/test_expr_eval.cpp` - Unit tests for pure expression evaluator (66 tests)
-- `tests/test_expr_binding.cpp` - Integration tests with mock MQTT/health resolvers (22 tests)
+- `tests/test_expr_eval.cpp` - Unit tests for pure expression evaluator (100 tests)
+- `tests/test_expr_binding.cpp` - Integration tests with mock MQTT/health resolvers (64 tests)
+- `tests/test_key_sequence.cpp` - Unit tests for key sequence DSL parser
 - `tests/stubs.cpp` - `strlcpy()` stub for glibc (not available on Linux)
 - `tests/log_manager.h` - No-op log macros for host compilation
 - `tests/board_config.h` - Minimal board config stub for host compilation
@@ -525,3 +531,35 @@ If the build fails:
 - **Board→driver visibility**: after editing board overrides, regenerate the table in `src/app/drivers/README.md`:
   - `python3 tools/generate-board-driver-table.py --update-drivers-readme`
 - **Vendored code placement**: third-party source that is not an Arduino library should live under the driver that uses it (driver-scoped vendor code), not in a shared `drivers/vendor/` bucket.
+
+## Terminology Conventions (enforced)
+
+Use these terms consistently in user-facing text (UI, docs, log messages, API responses) and in code (identifiers, comments). Avoid retired synonyms.
+
+### Core Hierarchy
+
+| Term | Definition | Scope |
+|------|-----------|-------|
+| **Screen** | Any UI that can be displayed on the device (splash, info, test, pad, …). | User-facing + code |
+| **Pad** | A user-customizable screen containing a grid of buttons. The device supports up to 16 pads (configurable via MAX_PADS). | User-facing + code |
+| **Button** | An interactive element in a pad's grid. May host labels, icons, colors, actions, images, and optionally a widget. | User-facing + code |
+| **Widget** | A specialized data visualization (gauge, sparkline, bar chart) rendered inside a button. A button without a widget is just a normal button. | User-facing + code |
+
+### Retired / Internal-Only Terms
+
+| Term | Status | Replacement |
+|------|--------|-------------|
+| **Page** (as synonym for pad) | ❌ Retired from user-facing text | Use **pad** |
+| **Tile** (as synonym for button) | ❌ Retired from user-facing text | Use **button** |
+| **Cell** (as synonym for button in user-facing text) | ❌ Retired from user-facing text | Use **button** (or **position** when referring to a grid slot) |
+| `ButtonTile` (LVGL struct) | Internal-only | Acceptable in C++ code — not exposed to users |
+| `.pad-cell` (CSS class) | Internal-only | Acceptable in DOM — not shown in UI text |
+| `tile_w` / `tile_h` (local layout vars) | Internal-only | Acceptable in layout code — not exposed to API or docs |
+
+### Rules
+
+1. **User-facing surfaces** (web UI labels, docs, log messages, REST API field names, HA entity names) must use **screen**, **pad**, **button**, and **widget** exclusively.
+2. **Code identifiers** should follow the same convention for new code. Existing internal identifiers (`ButtonTile`, `.pad-cell`, etc.) may remain until a natural refactor opportunity.
+3. **API contracts**: The REST endpoint is `/api/pad/button_sizes` with JSON fields `button_w` / `button_h`. The `[pad:name]` binding scheme name is unchanged.
+4. **Singular vs plural**: "pad" / "pads", "button" / "buttons" — never "pad page" or "button tile" in user text.
+5. When describing the hierarchy in docs, prefer the natural nesting: *"A pad contains a grid of buttons. Buttons can optionally host a widget."*

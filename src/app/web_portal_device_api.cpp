@@ -121,8 +121,6 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 
 		response->print(",\"has_mqtt\":");
 		response->print(HAS_MQTT ? "true" : "false");
-		response->print(",\"has_ble\":");
-		response->print(HAS_BLE ? "true" : "false");
 		response->print(",\"has_backlight\":");
 		response->print(HAS_BACKLIGHT ? "true" : "false");
 		response->print(",\"display_blank_on_save\":");
@@ -131,6 +129,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		#if HAS_DISPLAY
 				// Display screen information
 				response->print(",\"has_display\":true");
+				response->print(",\"max_pads\":");
+				response->print(MAX_PADS);
 
 				// Display resolution (driver coordinate space for direct writes / image upload)
 				int display_coord_width = DISPLAY_WIDTH;
@@ -160,7 +160,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 						bool emitted = false;
 						if (strncmp(sid, "pad_", 4) == 0) {
 								uint8_t pg = (uint8_t)atoi(sid + 4);
-								if (pg < MAX_PAD_PAGES && pad_config_exists(pg)) {
+								if (pg < MAX_PADS && pad_config_exists(pg)) {
 										size_t len = 0;
 										char* raw = pad_config_read_raw(pg, &len);
 										if (raw) {

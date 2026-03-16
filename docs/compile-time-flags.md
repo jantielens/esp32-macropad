@@ -15,19 +15,18 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 - The build script propagates a small allowlist of board override defines into global compiler flags so libraries are compiled with the same values.
   - Currently allowlisted:
     - `CONFIG_ASYNC_TCP_STACK_SIZE`
-    - NimBLE tuning (roles + limits + log levels)
     - TFT_eSPI essentials for clean/CI builds (pins + SPI frequencies + controller/bus flags)
   - For TFT_eSPI specifically, `build.sh` also supports a per-board `src/boards/<board>/User_Setup.h` which is force-included for that board (so the build does not depend on a locally modified Arduino library install).
 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 128
+Total flags: 132
 
 ### Features (HAS_*)
 
 - **HAS_BACKLIGHT** default: `false` — Enable backlight control (typically via PWM).
-- **HAS_BLE** default: `false` — Enable BLE (NimBLE) advertising support.
+- **HAS_BLE_HID** default: `true` — Enable BLE HID keyboard support.
 - **HAS_BUILTIN_LED** default: `false` — Enable built-in status LED support.
 - **HAS_BUTTON** default: `false` — User Button (optional)
 - **HAS_DISPLAY** default: `false` — Enable display + LVGL UI support.
@@ -96,12 +95,15 @@ Total flags: 128
 
 ### Limits & Tuning
 
+- **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
+- **MAX_NON_PAD_SCREENS** default: `10` — Number of non-pad screens (info, test, fps, touch_test, + headroom).
+- **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
@@ -142,6 +144,7 @@ Total flags: 128
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
+- **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
 - **ST7701_DSI_HSYNC_BACK_PORCH** default: `42` — HSYNC back porch in pixel clocks.
 - **ST7701_DSI_HSYNC_FRONT_PORCH** default: `42` — HSYNC front porch in pixel clocks.
 - **ST7701_DSI_HSYNC_PULSE_WIDTH** default: `12` — HSYNC pulse width in pixel clocks.
@@ -176,13 +179,13 @@ Total flags: 128
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_BACKLIGHT | HAS_BLE | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
+| board-name | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | esp32-4848S040 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 | jc3248w535 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 | jc3636w518 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| esp32-p4-lcd4b | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc4880p433 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc4880p433 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -209,12 +212,20 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/mipi_dsi_driver.cpp
   - src/app/drivers/st7701_rgb_driver.cpp
   - src/app/drivers/tft_espi_driver.cpp
-- **HAS_BLE**
+- **HAS_BLE_HID**
   - src/app/app.ino
-  - src/app/ble_advertiser.cpp
-  - src/app/ble_advertiser.h
+  - src/app/ble_hid.cpp
+  - src/app/ble_hid.h
   - src/app/board_config.h
-  - src/app/duty_cycle.cpp
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/device_telemetry.cpp
+  - src/app/health_binding.cpp
+  - src/app/screens/pad_screen_events.cpp
+  - src/app/web_portal_ble.cpp
+  - src/app/web_portal_ble.h
+  - src/app/web_portal_config.cpp
+  - src/app/web_portal_routes.cpp
 - **HAS_BUILTIN_LED**
   - src/app/app.ino
   - src/app/board_config.h
@@ -281,6 +292,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen.h
   - src/app/screens/pad_screen_poll.cpp
   - src/app/screens/pad_tile_builder.cpp
+  - src/app/web_portal_firmware.cpp
 - **HAS_MQTT**
   - src/app/app.ino
   - src/app/board_config.h
@@ -360,6 +372,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **BUTTON_PIN**
   - src/app/board_config.h
+- **DATA_STREAM_MAX_STREAMS**
+  - src/app/board_config.h
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS**
   - src/app/board_config.h
 - **DEVICE_TELEMETRY_CPU_MONITOR**
@@ -428,10 +442,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LVGL_TICK_PERIOD_MS**
   - src/app/board_config.h
+- **MAX_NON_PAD_SCREENS**
+  - src/app/board_config.h
+- **MAX_PADS**
+  - src/app/board_config.h
 - **POWERON_CONFIG_BURST_ENABLED**
   - src/app/board_config.h
   - src/app/power_manager.cpp
 - **PROJECT_DISPLAY_NAME**
+  - src/app/board_config.h
+- **SCREEN_HISTORY_MAX**
   - src/app/board_config.h
 - **SENSOR_I2C_FREQUENCY**
   - src/app/board_config.h

@@ -7,37 +7,12 @@
 // Enable MQTT (required for HA discovery in this sample)
 #define HAS_MQTT true
 
-// Enable BLE (NimBLE)
-#define HAS_BLE true
-
 // Enable user button (GPIO9 on ESP32-C3 Super Mini)
 #define HAS_BUTTON true
 // User button GPIO
 #define BUTTON_PIN 9
 // Button polarity (active-low)
 #define BUTTON_ACTIVE_LOW true
-
-// NimBLE tuning (smaller footprint)
-// NimBLE role: peripheral (required)
-#define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL 1
-// NimBLE role: broadcaster
-#define CONFIG_BT_NIMBLE_ROLE_BROADCASTER 1
-// NimBLE role: central
-#define CONFIG_BT_NIMBLE_ROLE_CENTRAL 0
-// NimBLE role: observer
-#define CONFIG_BT_NIMBLE_ROLE_OBSERVER 0
-// NimBLE max connections
-#define CONFIG_BT_NIMBLE_MAX_CONNECTIONS 1
-// NimBLE max bonded devices (tuning for small footprint)
-#define CONFIG_BT_NIMBLE_MAX_BONDS 1
-// NimBLE max CCCDs
-#define CONFIG_BT_NIMBLE_MAX_CCCDS 4
-// NimBLE msys1 block count
-#define CONFIG_BT_NIMBLE_MSYS1_BLOCK_COUNT 6
-// NimBLE host log level
-#define CONFIG_BT_NIMBLE_LOG_LEVEL 0
-// NimBLE C++ wrapper log level
-#define CONFIG_NIMBLE_CPP_LOG_LEVEL 0
 
 // Enable BME280 sensor sample
 #define HAS_SENSOR_BME280 false

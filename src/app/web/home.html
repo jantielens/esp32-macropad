@@ -111,18 +111,6 @@
                             <small>Always-On keeps services running. Duty-Cycle wakes, publishes, then sleeps.</small>
                         </div>
                     </section>
-
-                    <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                        <div class="form-group">
-                            <label for="publish_transport">Transport Mode</label>
-                            <select id="publish_transport" name="publish_transport">
-                                <option value="ble">BLE</option>
-                                <option value="mqtt">MQTT</option>
-                                <option value="ble_mqtt">BLE + MQTT</option>
-                            </select>
-                            <small>Select which transports publish telemetry.</small>
-                        </div>
-                    </section>
                 </div>
 
                 <div class="grid-2col">
@@ -130,7 +118,7 @@
                         <div class="form-group">
                             <label for="cycle_interval_seconds">Cycle Interval (seconds)</label>
                             <input type="number" id="cycle_interval_seconds" name="cycle_interval_seconds" min="1" max="65535" placeholder="120">
-                            <small>Duty-Cycle sleep interval and BLE/MQTT publish cadence.</small>
+                            <small>Duty-Cycle sleep interval and MQTT publish cadence.</small>
                         </div>
                     </section>
 
@@ -164,42 +152,6 @@
 
                     <small>MQTT publish cadence follows the Cycle Interval.</small>
                 </section>
-
-                <section class="section" id="ble-settings-section" style="margin-top: 12px;">
-                    <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #1d1d1f;">BLE Transport</h3>
-
-                    <div class="grid-2col">
-                        <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                            <div class="form-group">
-                                <label for="ble_adv_burst_ms">Burst Duration (ms)</label>
-                                <input type="number" id="ble_adv_burst_ms" name="ble_adv_burst_ms" min="100" max="60000" placeholder="900">
-                            </div>
-                        </section>
-                        <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                            <div class="form-group">
-                                <label for="ble_adv_gap_ms">Gap Duration (ms)</label>
-                                <input type="number" id="ble_adv_gap_ms" name="ble_adv_gap_ms" min="100" max="60000" placeholder="1100">
-                            </div>
-                        </section>
-                    </div>
-
-                    <div class="grid-2col">
-                        <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                            <div class="form-group">
-                                <label for="ble_adv_bursts">Bursts</label>
-                                <input type="number" id="ble_adv_bursts" name="ble_adv_bursts" min="1" max="10" placeholder="2">
-                            </div>
-                        </section>
-                        <section class="section" style="padding: 0; background: transparent; box-shadow: none;">
-                            <div class="form-group">
-                                <label for="ble_adv_interval_ms">Adv Interval (ms)</label>
-                                <input type="number" id="ble_adv_interval_ms" name="ble_adv_interval_ms" min="20" max="10000" placeholder="100">
-                            </div>
-                        </section>
-                    </div>
-
-                    <small>Applies when BLE transport is enabled.</small>
-                </section>
             </section>
 
             <!-- Sensors Section (hidden if no sensor data) -->
@@ -207,6 +159,48 @@
                 <h2>🧪 Sensor data</h2>
                 <div id="sensor-badges" class="sensor-badges"></div>
                 <small style="display:block; margin-top: 8px; color:#86868b;">Live values from /api/health</small>
+            </section>
+
+            <!-- BLE Keyboard Section (hidden if BLE HID not available) -->
+            <section class="section" id="ble-section" style="display:none;">
+                <h2>⌨️ BLE Keyboard</h2>
+
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" id="ble_enabled" name="ble_enabled" onchange="toggleBleContent()">
+                        <span>Enable BLE Keyboard</span>
+                    </label>
+                    <small>Bluetooth LE keyboard for sending key sequences. Uses ~70 KB RAM when enabled. Requires reboot.</small>
+                </div>
+
+                <div id="ble-content" style="display:none;">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        <span id="ble-status-dot" style="width:10px;height:10px;border-radius:50%;background:#ccc;display:inline-block;flex-shrink:0;"></span>
+                        <span id="ble-status-text" style="font-size:14px;color:#1d1d1f;">—</span>
+                    </div>
+
+                    <div style="font-size:12px;color:#86868b;margin:-2px 0 12px 0;">
+                        <span id="ble-name-wrap" style="display:none;">Name: <code id="ble-name"></code></span>
+                    </div>
+
+                    <div id="ble-details" style="display:none; margin-bottom: 16px;">
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+                            <span class="sensor-badge" id="ble-badge-bonded" style="display:none;"></span>
+                            <span class="sensor-badge" id="ble-badge-encrypted" style="display:none;"></span>
+                        </div>
+                        <div style="font-size:12px;color:#86868b;margin-top:6px;">
+                            <span id="ble-peer-addr-wrap" style="display:none;">Peer: <code id="ble-peer-addr"></code></span>
+                            <span id="ble-id-addr-wrap" style="display:none;margin-left:12px;">Identity: <code id="ble-peer-id-addr"></code></span>
+                        </div>
+                    </div>
+
+                    <button type="button" id="ble-pair-btn" class="btn btn-primary" style="margin-top:4px;" onclick="startBlePairing()">
+                        Pair New Device
+                    </button>
+                    <small style="display:block; margin-top: 8px; color:#86868b;">
+                        Clears existing bond, rotates identity, and opens a 60-second pairing window.
+                    </small>
+                </div>
             </section>
 
             {{FOOTER}}

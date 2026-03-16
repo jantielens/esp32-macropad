@@ -1,18 +1,20 @@
 #pragma once
 
+#include "board_config.h"
+
 #include <cstdlib>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 // ============================================================================
-// Pad Config — per-page button configuration stored on LittleFS
+// Pad Config — per-pad button configuration stored on LittleFS
 // ============================================================================
-// Each page (0–7) is stored as /config/pad_N.json on LittleFS.
+// Each pad (0..MAX_PADS-1) is stored as /config/pad_N.json on LittleFS.
 // The REST API saves raw JSON to preserve all fields (including future ones).
 // pad_config_load() parses only the fields needed for rendering.
 
-#define MAX_PAD_PAGES          8
+// MAX_PADS is defined in board_config.h (overridable per board, default 16)
 #define MAX_PAD_BUTTONS       64
 #define MAX_GRID_COLS          8
 #define MAX_GRID_ROWS          8
@@ -22,6 +24,7 @@
 #define CONFIG_SCREEN_ID_MAX_LEN       16
 #define CONFIG_MQTT_TOPIC_MAX_LEN     128
 #define CONFIG_MQTT_PAYLOAD_MAX_LEN   128
+#define CONFIG_KEY_SEQ_MAX_LEN        256
 #define CONFIG_ACTION_TYPE_MAX_LEN     16
 #define CONFIG_LAYOUT_NAME_MAX_LEN     16
 #define CONFIG_JSON_PATH_MAX_LEN       48
@@ -90,17 +93,20 @@ struct LabelStyle {
 void label_style_parse(const char* dsl, LabelStyle* out);
 
 // Action types (string constants for type field)
-#define ACTION_TYPE_NONE    ""
-#define ACTION_TYPE_SCREEN  "screen"
-#define ACTION_TYPE_MQTT    "mqtt"
-#define ACTION_TYPE_BACK    "back"
+#define ACTION_TYPE_NONE     ""
+#define ACTION_TYPE_SCREEN   "screen"
+#define ACTION_TYPE_MQTT     "mqtt"
+#define ACTION_TYPE_BACK     "back"
+#define ACTION_TYPE_KEY      "key"
+#define ACTION_TYPE_BLE_PAIR "ble_pair"
 
 // Typed action for tap or long-press
 struct ButtonAction {
-    char type[CONFIG_ACTION_TYPE_MAX_LEN];           // "screen", "mqtt", or "" (none)
+    char type[CONFIG_ACTION_TYPE_MAX_LEN];           // "screen", "mqtt", "key", "ble_pair", or "" (none)
     char screen_id[CONFIG_SCREEN_ID_MAX_LEN];        // type="screen": target screen
     char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];      // type="mqtt": publish topic
     char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // type="mqtt": publish payload
+    char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // type="key": DSL key sequence
 };
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
@@ -171,15 +177,15 @@ struct PadBinding {
     char value[CONFIG_LABEL_MAX_LEN];         // binding template, e.g. "[mqtt:solar/power;$.value]"
 };
 
-// Page-level config
-struct PadPageConfig {
+// Per-pad config
+struct PadConfig {
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
-    char bg_color[CONFIG_COLOR_MAX_LEN];         // page background color (default "#000000")
+    char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
 
-    // Named page-level bindings for [pad:name] references
+    // Named pad-level bindings for [pad:name] references
     uint8_t binding_count;
     PadBinding bindings[PAD_MAX_BINDINGS];
 
@@ -194,10 +200,10 @@ extern "C" {
 // Mount LittleFS filesystem. Call once at boot. Returns true on success.
 bool pad_config_init();
 
-// Load page config from LittleFS JSON. Caller provides PadPageConfig buffer.
+// Load pad config from LittleFS JSON. Caller provides PadConfig buffer.
 // On success, out is populated and returns true. On failure (file missing,
 // parse error), out is zeroed and returns false.
-bool pad_config_load(uint8_t page, PadPageConfig* out);
+bool pad_config_load(uint8_t page, PadConfig* out);
 
 // Save raw JSON bytes to LittleFS. Preserves all fields including future/unknown ones.
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len);

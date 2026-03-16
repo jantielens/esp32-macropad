@@ -43,21 +43,38 @@ function padStripPosition(btn) {
     const copy = Object.assign({}, btn);
     delete copy.col;
     delete copy.row;
-    delete copy.col_span;
-    delete copy.row_span;
+    // Keep col_span/row_span in clipboard for best-effort paste
     return copy;
+}
+
+// Check whether a col_span × row_span rectangle fits at (col, row)
+// without exceeding grid bounds or overlapping existing buttons.
+function padCanSpanFit(col, row, cs, rs, buttons) {
+    if (col + cs > padState.cols || row + rs > padState.rows) return false;
+    for (let dc = 0; dc < cs; dc++) {
+        for (let dr = 0; dr < rs; dr++) {
+            if (dc === 0 && dr === 0) continue; // origin is ours
+            for (const b of buttons) {
+                const bcs = b.col_span || 1, brs = b.row_span || 1;
+                if ((col + dc) >= b.col && (col + dc) < b.col + bcs &&
+                    (row + dr) >= b.row && (row + dr) < b.row + brs) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
 }
 
 function padDialogCopyBtn() {
     const col = padState.editCol;
     const row = padState.editRow;
 
-    // Save dialog state as a button via padDialogOk (closes dialog + updates grid)
-    padDialogOk();
+    // Save dialog state to model without closing the dialog
+    padDialogOk(true);
     const btn = padFindButton(col, row);
     padState.btnClipboard = btn ? padStripPosition(btn) : null;
 
-    // padDialogOk closes the dialog and updates grid — that's fine, user sees feedback
     if (padState.btnClipboard) {
         document.getElementById('pad-edit-paste').disabled = false;
         document.getElementById('pad-fill-btn').disabled = false;
@@ -73,13 +90,23 @@ function padDialogPasteBtn() {
     // Remove existing button at this position
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
 
-    // Paste clipboard with new position
+    // Paste clipboard with new position — best-effort span fitting
     const btn = Object.assign({}, padState.btnClipboard, { col: col, row: row });
+    const srcCs = btn.col_span || 1;
+    const srcRs = btn.row_span || 1;
+    if (srcCs > 1 || srcRs > 1) {
+        if (!padCanSpanFit(col, row, srcCs, srcRs, padState.buttons)) {
+            delete btn.col_span;
+            delete btn.row_span;
+        }
+    }
     padState.buttons.push(btn);
 
-    padDialogClose();
     padMarkDirty();
     padRenderGrid();
+
+    // Reopen dialog to show pasted content
+    padDialogOpen(col, row);
     showMessage('Button pasted', 'success');
 }
 
@@ -93,8 +120,10 @@ function padFillWithClipboard() {
         for (let c = 0; c < padState.cols; c++) {
             // Remove existing button
             padState.buttons = padState.buttons.filter(b => !(b.col === c && b.row === r));
-            // Add copy
+            // Add copy (strip spans — every cell gets a 1×1 button)
             const btn = Object.assign({}, padState.btnClipboard, { col: c, row: r });
+            delete btn.col_span;
+            delete btn.row_span;
             padState.buttons.push(btn);
         }
     }
@@ -236,9 +265,10 @@ async function deviceExportConfig() {
         delete config.wifi_ssid;
         delete config.wifi_password;
 
-        // Fetch all 8 pad configs
+        // Fetch all pad configs
+        const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
         const pads = [];
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < maxPads; i++) {
             try {
                 const resp = await fetch('/api/pad?page=' + i);
                 if (resp.ok) {
@@ -300,7 +330,8 @@ async function deviceImportConfig(evt) {
 
         // Step 2: Import all pad configs (save each to trigger icon rendering)
         if (Array.isArray(data.pads)) {
-            for (let i = 0; i < data.pads.length && i < 8; i++) {
+            const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
+            for (let i = 0; i < data.pads.length && i < maxPads; i++) {
                 const padJson = data.pads[i];
                 if (!padJson) {
                     // Delete pad if it was null in export

@@ -32,7 +32,7 @@ const DEVICE_CONFIG_VERSION = 1;
 
 // --- Icon Support ---
 
-let padTileSizesCache = null;
+let padButtonSizesCache = null;
 
 // Lazy-load Material Symbols font
 let _materialSymbolsLoaded = false;
@@ -53,6 +53,14 @@ function padEnsureMaterialSymbols() {
 function padSimplifyBindings(text) {
     if (!text) return text;
     return text.replace(/\[(\w+):([^\];]*)[^\]]*\]/g, '[$1:$2]');
+}
+
+// Read a bindable-number field: keep binding strings as-is, parse plain numbers, or return default.
+function padGetBindableNumber(id, def) {
+    const raw = document.getElementById(id).value.trim();
+    if (raw.includes('[')) return raw;
+    const n = parseFloat(raw);
+    return isNaN(n) ? def : n;
 }
 
 // Convert stored label value (real \n) to display string (\n escape) for <input>
@@ -180,18 +188,18 @@ function padCanvasToPNG(canvas) {
     });
 }
 
-async function padGetTileSizes() {
-    if (padTileSizesCache &&
-        padTileSizesCache.cols === padState.cols &&
-        padTileSizesCache.rows === padState.rows) {
-        return padTileSizesCache;
+async function padGetButtonSizes() {
+    if (padButtonSizesCache &&
+        padButtonSizesCache.cols === padState.cols &&
+        padButtonSizesCache.rows === padState.rows) {
+        return padButtonSizesCache;
     }
-    const resp = await fetch('/api/pad/tile_sizes?cols=' + padState.cols + '&rows=' + padState.rows);
-    if (!resp.ok) throw new Error('Failed to get tile sizes');
+    const resp = await fetch('/api/pad/button_sizes?cols=' + padState.cols + '&rows=' + padState.rows);
+    if (!resp.ok) throw new Error('Failed to get button sizes');
     const data = await resp.json();
     data.cols = padState.cols;
     data.rows = padState.rows;
-    padTileSizesCache = data;
+    padButtonSizesCache = data;
     return data;
 }
 
@@ -202,9 +210,9 @@ async function padUploadPageIcons() {
     const iconButtons = padState.buttons.filter(b => b.icon_id);
     if (iconButtons.length === 0) return;
 
-    const tileSizes = await padGetTileSizes();
-    const baseW = tileSizes.tile_w - tileSizes.padding * 2;
-    const baseH = tileSizes.tile_h - tileSizes.padding * 2;
+    const btnSizes = await padGetButtonSizes();
+    const baseW = btnSizes.button_w - btnSizes.padding * 2;
+    const baseH = btnSizes.button_h - btnSizes.padding * 2;
 
     const needsMi = iconButtons.some(b => b.icon_id.startsWith('mi_'));
     if (needsMi) await padEnsureMaterialSymbols();
@@ -214,14 +222,14 @@ async function padUploadPageIcons() {
     for (const btn of iconButtons) {
         const cs = btn.col_span || 1;
         const rs = btn.row_span || 1;
-        // LVGL content area = tile - 2*padding - 2*border_width
+        // LVGL content area = button - 2*padding - 2*border_width
         const bw = (btn.border_width !== undefined) ? btn.border_width : 1;
-        const fullW = baseW * cs + tileSizes.gap * (cs - 1) - bw * 2;
-        const fullH = baseH * rs + tileSizes.gap * (rs - 1) - bw * 2;
+        const fullW = baseW * cs + btnSizes.gap * (cs - 1) - bw * 2;
+        const fullH = baseH * rs + btnSizes.gap * (rs - 1) - bw * 2;
         const kind = btn.icon_id.startsWith('mi_') ? 1 : 0;
 
         // Reserve space for top/bottom labels (font_small_h each)
-        const labelH = tileSizes.font_small_h || 0;
+        const labelH = btnSizes.font_small_h || 0;
         const topReserve = btn.label_top ? labelH : 0;
         const bottomReserve = btn.label_bottom ? labelH : 0;
         var iconW = fullW;
@@ -312,7 +320,7 @@ function padInit() {
     });
 
     // Dialog buttons
-    document.getElementById('pad-edit-ok').addEventListener('click', padDialogOk);
+    document.getElementById('pad-edit-ok').addEventListener('click', () => padDialogOk());
     document.getElementById('pad-edit-copy').addEventListener('click', padDialogCopyBtn);
     document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
@@ -359,6 +367,7 @@ function padInit() {
                 section.style.display = 'block';
                 const padFooter = document.getElementById('pad-floating-footer');
                 if (padFooter) padFooter.style.display = '';
+                padPopulatePadDropdown();
                 padPopulateScreenDropdown();
                 padLoadPage(0);
                 padRefreshDropdownLabels();
@@ -371,6 +380,19 @@ function padInit() {
         }
     };
     waitForInfo();
+}
+
+function padPopulatePadDropdown() {
+    const sel = document.getElementById('pad-page-select');
+    if (!sel) return;
+    const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
+    sel.innerHTML = '';
+    for (let i = 0; i < maxPads; i++) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = 'Pad ' + (i + 1);
+        sel.appendChild(opt);
+    }
 }
 
 function padPopulateScreenDropdown() {
@@ -404,6 +426,8 @@ function padActionTypeChanged(prefix) {
     const type = document.getElementById('pad-edit-' + pfx + '-type').value;
     document.getElementById('pad-edit-' + pfx + '-screen-group').style.display = (type === 'screen') ? '' : 'none';
     document.getElementById('pad-edit-' + pfx + '-mqtt-group').style.display = (type === 'mqtt') ? '' : 'none';
+    document.getElementById('pad-edit-' + pfx + '-key-group').style.display = (type === 'key') ? '' : 'none';
+    document.getElementById('pad-edit-' + pfx + '-ble-hint').style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
 }
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline'];
@@ -895,6 +919,7 @@ function padDialogOpen(col, row) {
         document.getElementById('pad-edit-action-target').value = '';
     document.getElementById('pad-edit-action-topic').value = tapAct.topic || '';
     document.getElementById('pad-edit-action-payload').value = tapAct.payload || '';
+    document.getElementById('pad-edit-action-sequence').value = tapAct.sequence || '';
     padActionTypeChanged('tap');
 
     // Long-press action
@@ -905,6 +930,7 @@ function padDialogOpen(col, row) {
         document.getElementById('pad-edit-lp-action-target').value = '';
     document.getElementById('pad-edit-lp-action-topic').value = lpAct.topic || '';
     document.getElementById('pad-edit-lp-action-payload').value = lpAct.payload || '';
+    document.getElementById('pad-edit-lp-action-sequence').value = lpAct.sequence || '';
     padActionTypeChanged('lp');
 
     // Image background
@@ -929,8 +955,8 @@ function padDialogOpen(col, row) {
     padWidgetTypeChanged();
 
     // Bar chart widget fields
-    document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : 0;
-    document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : 3;
+    document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : '0';
+    document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : '3';
     document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
     padSetBindableColor('pad-edit-widget-bar-color', btn.widget_bar_color, '#4CAF50');
     padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, '#1A1A1A');
@@ -946,8 +972,8 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-start-label-2').value = padLabelToInput(btn.widget_gauge_start_label_2);
     document.getElementById('pad-edit-gauge-start-label-3').value = padLabelToInput(btn.widget_gauge_start_label_3);
     document.getElementById('pad-edit-gauge-start-label-4').value = padLabelToInput(btn.widget_gauge_start_label_4);
-    document.getElementById('pad-edit-gauge-min').value = (btn.widget_gauge_min !== undefined) ? btn.widget_gauge_min : 0;
-    document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : 100;
+    document.getElementById('pad-edit-gauge-min').value = (btn.widget_gauge_min !== undefined) ? btn.widget_gauge_min : '0';
+    document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : '100';
     document.getElementById('pad-edit-gauge-degrees').value = (btn.widget_gauge_degrees !== undefined) ? btn.widget_gauge_degrees : 180;
     document.getElementById('pad-edit-gauge-start-angle').value = (btn.widget_gauge_start_angle !== undefined) ? btn.widget_gauge_start_angle : 180;
     document.getElementById('pad-edit-gauge-zero-centered').checked = (btn.widget_gauge_zero_centered !== undefined) ? btn.widget_gauge_zero_centered : false;
@@ -992,6 +1018,12 @@ function padDialogOpen(col, row) {
     // Current value dot
     document.getElementById('pad-edit-sparkline-current-dot').value = (btn.widget_sparkline_current_dot !== undefined) ? btn.widget_sparkline_current_dot : 0;
 
+    // Current value labels
+    document.getElementById('pad-edit-sparkline-label-width').value = (btn.widget_sparkline_label_width !== undefined) ? btn.widget_sparkline_label_width : 0;
+    document.getElementById('pad-edit-sparkline-current-label').value = btn.widget_sparkline_current_label || '';
+    document.getElementById('pad-edit-sparkline-current-label-2').value = btn.widget_sparkline_current_label_2 || '';
+    document.getElementById('pad-edit-sparkline-current-label-3').value = btn.widget_sparkline_current_label_3 || '';
+
     // Reference lines
     for (let r = 1; r <= 3; r++) {
         document.getElementById('pad-edit-sparkline-ref-' + r + '-y').value = (btn['widget_sparkline_ref_' + r + '_y'] !== undefined) ? btn['widget_sparkline_ref_' + r + '_y'] : '';
@@ -1004,6 +1036,15 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
+
+    // Wire and init monospace toggle for bindable min/max inputs
+    ['pad-edit-widget-bar-min', 'pad-edit-widget-bar-max',
+     'pad-edit-gauge-min', 'pad-edit-gauge-max',
+     'pad-edit-sparkline-min', 'pad-edit-sparkline-max'].forEach(function(id) {
+        var el = document.getElementById(id);
+        el.oninput = function() { padUpdateMixedBindingFont(el); };
+        padUpdateMixedBindingFont(el);
+    });
 
     // Enable paste button if clipboard has content
     document.getElementById('pad-edit-paste').disabled = !padState.btnClipboard;
@@ -1019,7 +1060,7 @@ function padDialogClose() {
     document.documentElement.style.overflow = '';
 }
 
-function padDialogOk() {
+function padDialogOk(keepOpen) {
     const col = padState.editCol;
     const row = padState.editRow;
 
@@ -1068,6 +1109,7 @@ function padDialogOk() {
             act.topic = document.getElementById('pad-edit-action-topic').value.trim();
             act.payload = document.getElementById('pad-edit-action-payload').value.trim();
         }
+        if (tapType === 'key') act.sequence = document.getElementById('pad-edit-action-sequence').value.trim();
         btn.action = act;
     }
 
@@ -1080,6 +1122,7 @@ function padDialogOk() {
             act.topic = document.getElementById('pad-edit-lp-action-topic').value.trim();
             act.payload = document.getElementById('pad-edit-lp-action-payload').value.trim();
         }
+        if (lpType === 'key') act.sequence = document.getElementById('pad-edit-lp-action-sequence').value.trim();
         btn.lp_action = act;
     }
 
@@ -1112,10 +1155,8 @@ function padDialogOk() {
         const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
         if (wDataBinding) btn.widget_data_binding = wDataBinding;
         if (wtype === 'bar_chart') {
-            const barMin = parseFloat(document.getElementById('pad-edit-widget-bar-min').value);
-            const barMax = parseFloat(document.getElementById('pad-edit-widget-bar-max').value);
-            btn.widget_bar_min = isNaN(barMin) ? 0 : barMin;
-            btn.widget_bar_max = isNaN(barMax) ? 3 : barMax;
+            btn.widget_bar_min = padGetBindableNumber('pad-edit-widget-bar-min', 0);
+            btn.widget_bar_max = padGetBindableNumber('pad-edit-widget-bar-max', 3);
             btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');
             btn.widget_bar_bg_color = padGetBindableColor('pad-edit-widget-bar-bg-color');
             const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
@@ -1137,10 +1178,8 @@ function padDialogOk() {
             btn.widget_gauge_start_label_2 = gStartLabel2;
             btn.widget_gauge_start_label_3 = gStartLabel3;
             btn.widget_gauge_start_label_4 = gStartLabel4;
-            const gMin = parseFloat(document.getElementById('pad-edit-gauge-min').value);
-            const gMax = parseFloat(document.getElementById('pad-edit-gauge-max').value);
-            btn.widget_gauge_min = isNaN(gMin) ? 0 : gMin;
-            btn.widget_gauge_max = isNaN(gMax) ? 100 : gMax;
+            btn.widget_gauge_min = padGetBindableNumber('pad-edit-gauge-min', 0);
+            btn.widget_gauge_max = padGetBindableNumber('pad-edit-gauge-max', 100);
             const gDeg = parseInt(document.getElementById('pad-edit-gauge-degrees').value);
             btn.widget_gauge_degrees = (isNaN(gDeg) || gDeg < 10) ? 180 : (gDeg > 360) ? 360 : gDeg;
             const gSa = parseInt(document.getElementById('pad-edit-gauge-start-angle').value);
@@ -1170,10 +1209,10 @@ function padDialogOk() {
             if (sDataBinding) btn.widget_data_binding = sDataBinding;
             btn.widget_data_binding_2 = document.getElementById('pad-edit-sparkline-data-binding-2').value.trim();
             btn.widget_data_binding_3 = document.getElementById('pad-edit-sparkline-data-binding-3').value.trim();
-            const sMin = parseFloat(document.getElementById('pad-edit-sparkline-min').value);
-            const sMax = parseFloat(document.getElementById('pad-edit-sparkline-max').value);
-            if (!isNaN(sMin)) btn.widget_sparkline_min = sMin;
-            if (!isNaN(sMax)) btn.widget_sparkline_max = sMax;
+            const sMin = padGetBindableNumber('pad-edit-sparkline-min', undefined);
+            const sMax = padGetBindableNumber('pad-edit-sparkline-max', undefined);
+            if (sMin !== undefined) btn.widget_sparkline_min = sMin;
+            if (sMax !== undefined) btn.widget_sparkline_max = sMax;
             const sWindow = parseInt(document.getElementById('pad-edit-sparkline-window').value);
             btn.widget_sparkline_window = (isNaN(sWindow) || sWindow < 10) ? 300 : sWindow;
             const sSlots = parseInt(document.getElementById('pad-edit-sparkline-slots').value);
@@ -1206,6 +1245,16 @@ function padDialogOk() {
             const cdSz = parseInt(document.getElementById('pad-edit-sparkline-current-dot').value);
             btn.widget_sparkline_current_dot = (isNaN(cdSz) || cdSz < 0) ? 0 : (cdSz > 20) ? 20 : cdSz;
 
+            // Current value labels
+            const lblW = parseInt(document.getElementById('pad-edit-sparkline-label-width').value);
+            if (!isNaN(lblW) && lblW > 0) btn.widget_sparkline_label_width = (lblW > 200) ? 200 : lblW;
+            const cl1 = document.getElementById('pad-edit-sparkline-current-label').value.trim();
+            if (cl1) btn.widget_sparkline_current_label = cl1;
+            const cl2 = document.getElementById('pad-edit-sparkline-current-label-2').value.trim();
+            if (cl2) btn.widget_sparkline_current_label_2 = cl2;
+            const cl3 = document.getElementById('pad-edit-sparkline-current-label-3').value.trim();
+            if (cl3) btn.widget_sparkline_current_label_3 = cl3;
+
             // Reference lines
             for (let r = 1; r <= 3; r++) {
                 const ry = parseFloat(document.getElementById('pad-edit-sparkline-ref-' + r + '-y').value);
@@ -1225,7 +1274,7 @@ function padDialogOk() {
 
     padState.buttons.push(btn);
     padMarkDirty();
-    padDialogClose();
+    if (!keepOpen) padDialogClose();
     padRenderGrid();
 }
 

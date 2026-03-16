@@ -5,6 +5,9 @@
 #include "../mqtt_manager.h"
 #include <ArduinoJson.h>
 #endif
+#if HAS_BLE_HID
+#include "../ble_hid.h"
+#endif
 
 // TAG and TAP_FLASH_DURATION_MS are defined in pad_screen.cpp which is
 // #included before this file in screens.cpp.
@@ -54,6 +57,30 @@ static void execute_action(const ButtonAction& act, const char* label) {
         }
 #else
         LOGW(TAG, "%s mqtt: not compiled (HAS_MQTT=false)", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
+#if HAS_BLE_HID
+        if (!ble_hid_is_initialized()) {
+            LOGW(TAG, "%s key: BLE disabled in settings", label);
+        } else if (act.key_sequence[0]) {
+            LOGI(TAG, "%s key: '%s'", label, act.key_sequence);
+            ble_hid_request_sequence(act.key_sequence);
+        } else {
+            LOGW(TAG, "%s key: empty sequence", label);
+        }
+#else
+        LOGW(TAG, "%s key: not compiled (HAS_BLE_HID=false)", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_BLE_PAIR) == 0) {
+#if HAS_BLE_HID
+        if (!ble_hid_is_initialized()) {
+            LOGW(TAG, "%s ble_pair: BLE disabled in settings", label);
+        } else {
+            LOGI(TAG, "%s ble_pair: starting live re-pairing", label);
+            ble_hid_request_pairing();
+        }
+#else
+        LOGW(TAG, "%s ble_pair: not compiled (HAS_BLE_HID=false)", label);
 #endif
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
@@ -119,9 +146,9 @@ void PadScreen::onSwipe(lv_event_t* e) {
 
     lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_active());
 
-    // Swipe left/right to move between pad pages
+    // Swipe left/right to move between pads
     int next_page = -1;
-    if (dir == LV_DIR_LEFT && self->pageIndex < MAX_PAD_PAGES - 1) {
+    if (dir == LV_DIR_LEFT && self->pageIndex < MAX_PADS - 1) {
         next_page = self->pageIndex + 1;
     } else if (dir == LV_DIR_RIGHT && self->pageIndex > 0) {
         next_page = self->pageIndex - 1;

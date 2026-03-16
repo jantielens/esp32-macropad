@@ -45,14 +45,14 @@
 #define HAS_BUILTIN_LED false
 #endif
 
-// Enable BLE (NimBLE) advertising support.
-#ifndef HAS_BLE
-#define HAS_BLE false
-#endif
-
 // Enable MQTT and Home Assistant integration.
 #ifndef HAS_MQTT
 #define HAS_MQTT true
+#endif
+
+// Enable BLE HID keyboard support.
+#ifndef HAS_BLE_HID
+#define HAS_BLE_HID true
 #endif
 
 // GPIO for the built-in LED (only used when HAS_BUILTIN_LED is true).
@@ -514,6 +514,34 @@
 // Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 #ifndef TOUCH_DRIVER
 #define TOUCH_DRIVER TOUCH_DRIVER_XPT2046  // Default to XPT2046
+#endif
+
+// ============================================================================
+// Pad & Screen Limits
+// ============================================================================
+// Maximum number of user-configurable pads (stored on LittleFS).
+// Override per-board in board_overrides.h for memory-constrained targets.
+#ifndef MAX_PADS
+#define MAX_PADS 16
+#endif
+
+// Number of non-pad screens (info, test, fps, touch_test, + headroom).
+#ifndef MAX_NON_PAD_SCREENS
+#define MAX_NON_PAD_SCREENS 10
+#endif
+
+// Total screen registry slots (derived from pad count + non-pad screens).
+#define MAX_SCREENS (MAX_PADS + MAX_NON_PAD_SCREENS)
+
+// Screen history depth for back-navigation. Also controls the LRU pad cache size.
+#ifndef SCREEN_HISTORY_MAX
+#define SCREEN_HISTORY_MAX 8
+#endif
+
+// Maximum number of concurrent data streams (ring buffers for sparkline widgets).
+// Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
+#ifndef DATA_STREAM_MAX_STREAMS
+#define DATA_STREAM_MAX_STREAMS 64
 #endif
 
 #endif // BOARD_CONFIG_H

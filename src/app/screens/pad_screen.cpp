@@ -53,20 +53,75 @@ static lv_color_t rgb_to_lv(uint32_t rgb) {
 
 PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
     : pageIndex(page), displayMgr(manager), screen(nullptr), container(nullptr),
-      tileCount(0), bindingCount(0), colorBindingCount(0), numberBindingCount(0),
+      tiles(nullptr), tileCount(0),
+      bindings(nullptr), bindingCount(0),
+      colorBindings(nullptr), colorBindingCount(0),
+      numberBindings(nullptr), numberBindingCount(0),
+      btnStateBindings(nullptr), btnStateBindingCount(0),
+      pageBindings(nullptr), pageBindingCount(0),
+      arraysAllocated(false),
       cachedGeneration(UINT32_MAX), tilesBuilt(false) {
-    memset(tiles, 0, sizeof(tiles));
-    memset(bindings, 0, sizeof(bindings));
-    memset(colorBindings, 0, sizeof(colorBindings));
-    memset(numberBindings, 0, sizeof(numberBindings));
     wakeScreen[0] = '\0';
     pageBgTemplate[0] = '\0';
     pageBgDefault = 0x000000;
-    pageBindingCount = 0;
 }
 
 PadScreen::~PadScreen() {
     destroy();
+    freeArrays();
+}
+
+// Allocate the heavy binding arrays in PSRAM (fallback to heap).
+bool PadScreen::allocateArrays() {
+    if (arraysAllocated) return true;
+
+    #define PAD_ALLOC(ptr, type, count) do { \
+        ptr = (type*)heap_caps_calloc(count, sizeof(type), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); \
+        if (!ptr) ptr = (type*)calloc(count, sizeof(type)); \
+        if (!ptr) { freeArrays(); return false; } \
+    } while(0)
+
+    PAD_ALLOC(tiles,            ButtonTile,             MAX_PAD_BUTTONS);
+    PAD_ALLOC(bindings,         RuntimeLabelBinding,    MAX_BINDINGS);
+    PAD_ALLOC(colorBindings,    RuntimeColorBinding,    MAX_COLOR_BINDINGS);
+    PAD_ALLOC(numberBindings,   RuntimeNumberBinding,   MAX_NUMBER_BINDINGS);
+    PAD_ALLOC(btnStateBindings, RuntimeBtnStateBinding, MAX_PAD_BUTTONS);
+    PAD_ALLOC(pageBindings,     PadBinding,             PAD_MAX_BINDINGS);
+
+    #undef PAD_ALLOC
+
+    arraysAllocated = true;
+    LOGD(TAG, "Pad %u: arrays allocated", pageIndex);
+    return true;
+}
+
+// Free the heavy binding arrays (called on eviction or destruction).
+void PadScreen::freeArrays() {
+    if (!arraysAllocated) return;
+
+    free(tiles);            tiles = nullptr;
+    free(bindings);         bindings = nullptr;
+    free(colorBindings);    colorBindings = nullptr;
+    free(numberBindings);   numberBindings = nullptr;
+    free(btnStateBindings); btnStateBindings = nullptr;
+    free(pageBindings);     pageBindings = nullptr;
+
+    tileCount = 0;
+    bindingCount = 0;
+    colorBindingCount = 0;
+    numberBindingCount = 0;
+    btnStateBindingCount = 0;
+    pageBindingCount = 0;
+
+    arraysAllocated = false;
+    tilesBuilt = false;
+    cachedGeneration = UINT32_MAX;
+    LOGD(TAG, "Pad %u: arrays freed", pageIndex);
+}
+
+void PadScreen::evict() {
+    clearTiles();
+    freeArrays();
 }
 
 const char* PadScreen::wakeScreenId() const {

@@ -164,9 +164,9 @@ static void check(const char* templ, const char* expected, const char* label) {
     }
 }
 
-// Helper to build a PadPageConfig with bindings
-static PadPageConfig make_page(std::initializer_list<std::pair<const char*, const char*>> bindings) {
-    PadPageConfig page = {};
+// Helper to build a PadConfig with bindings
+static PadConfig make_page(std::initializer_list<std::pair<const char*, const char*>> bindings) {
+    PadConfig page = {};
     uint8_t i = 0;
     for (auto& [name, value] : bindings) {
         if (i >= PAD_MAX_BINDINGS) break;

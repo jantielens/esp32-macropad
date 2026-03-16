@@ -76,12 +76,85 @@ static char* split_format(char* buf) {
 }
 
 // ============================================================================
-// Detect unresolved placeholders ("---") in the expression
+// Resolve inner binding tokens and auto-quote non-numeric results
 // ============================================================================
+// Walks the expression, resolves each [scheme:...] token individually.
+// Numeric results are pasted as-is; text results are wrapped in "..."
+// with embedded quotes and backslashes escaped.
+// Returns true on success, false if any binding is unresolved (out = "---").
 
-static bool has_placeholder(const char* s) {
-    // Check for "---" which is the default when a binding hasn't received data
-    return strstr(s, "---") != NULL;
+static bool resolve_and_quote(const char* expr, char* out, size_t out_len) {
+    size_t wp = 0;
+    const char* p = expr;
+    bool in_quotes = false;
+
+    while (*p && wp < out_len - 1) {
+        if (*p == '\\' && in_quotes && *(p + 1)) {
+            // Escape sequence inside user-written string — copy both chars
+            if (wp + 2 > out_len - 1) break;
+            out[wp++] = *p++;
+            out[wp++] = *p++;
+        } else if (*p == '"') {
+            // Toggle user-written string mode and copy the quote
+            in_quotes = !in_quotes;
+            out[wp++] = *p++;
+        } else if (*p == '[' && !in_quotes) {
+            // Binding token — find matching ']' with bracket nesting
+            int depth = 1;
+            const char* tok_start = p;
+            p++;
+            while (*p && depth > 0) {
+                if (*p == '[') depth++;
+                else if (*p == ']') depth--;
+                p++;
+            }
+
+            // Extract and resolve the token
+            size_t tok_len = (size_t)(p - tok_start);
+            char token[BINDING_TEMPLATE_MAX_LEN];
+            if (tok_len >= sizeof(token)) tok_len = sizeof(token) - 1;
+            memcpy(token, tok_start, tok_len);
+            token[tok_len] = '\0';
+
+            char resolved[BINDING_TEMPLATE_MAX_LEN];
+            binding_template_resolve(token, resolved, sizeof(resolved));
+
+            // Unresolved binding → whole expression is unresolved
+            if (strcmp(resolved, "---") == 0) {
+                snprintf(out, out_len, "---");
+                return false;
+            }
+
+            // Check if the resolved value is numeric (consumed entirely by strtod)
+            char* end = NULL;
+            strtod(resolved, &end);
+            bool is_numeric = (end && end != resolved && *end == '\0');
+
+            if (is_numeric) {
+                size_t rlen = strlen(resolved);
+                if (wp + rlen >= out_len) break;
+                memcpy(out + wp, resolved, rlen);
+                wp += rlen;
+            } else {
+                // Wrap in quotes, escaping embedded " and backslash
+                if (wp >= out_len - 1) break;
+                out[wp++] = '"';
+                for (const char* r = resolved; *r && wp < out_len - 2; r++) {
+                    if (*r == '"' || *r == '\\') {
+                        if (wp + 2 >= out_len - 1) break;
+                        out[wp++] = '\\';
+                    }
+                    out[wp++] = *r;
+                }
+                if (wp >= out_len - 1) break;
+                out[wp++] = '"';
+            }
+        } else {
+            out[wp++] = *p++;
+        }
+    }
+    out[wp] = '\0';
+    return true;
 }
 
 // ============================================================================
@@ -101,25 +174,21 @@ static bool expr_binding_resolve(const char* params, char* out, size_t out_len) 
     // Split optional format suffix: "expression;%.1f"
     char* fmt = split_format(buf);
 
-    // Step 1: Resolve inner bindings [mqtt:...], [health:...], [time:...] etc.
+    // Step 1: Resolve inner bindings, auto-quoting non-numeric text values
     char resolved[BINDING_TEMPLATE_MAX_LEN];
-    binding_template_resolve(buf, resolved, sizeof(resolved));
-
-    // Step 2: If any inner binding is still a placeholder, pass it through
-    if (has_placeholder(resolved)) {
+    if (!resolve_and_quote(buf, resolved, sizeof(resolved))) {
         snprintf(out, out_len, "---");
         return false;
     }
 
-    // Step 3: Evaluate the expression
+    // Step 2: Evaluate the expression
     char eval_result[EXPR_STR_MAX];
     if (!expr_eval(resolved, eval_result, sizeof(eval_result))) {
-        // eval_result contains "ERR:xxx"
         snprintf(out, out_len, "%s", eval_result);
         return false;
     }
 
-    // Step 4: Apply optional format
+    // Step 3: Apply optional format
     if (fmt) {
         apply_format(eval_result, fmt, out, out_len);
     } else {

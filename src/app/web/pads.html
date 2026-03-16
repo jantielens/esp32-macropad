@@ -15,14 +15,7 @@
                         <div class="form-group" style="margin-bottom:0; flex:1;">
                             <label for="pad-page-select">Pad</label>
                             <select id="pad-page-select">
-                                <option value="0">Pad 1</option>
-                                <option value="1">Pad 2</option>
-                                <option value="2">Pad 3</option>
-                                <option value="3">Pad 4</option>
-                                <option value="4">Pad 5</option>
-                                <option value="5">Pad 6</option>
-                                <option value="6">Pad 7</option>
-                                <option value="7">Pad 8</option>
+                                <!-- Populated dynamically from /api/info max_pads -->
                             </select>
                         </div>
                     </div>
@@ -73,11 +66,11 @@
 
                 <!-- Empty state -->
                 <div id="pad-empty-state" class="pad-empty-state" style="display:none;">
-                    <p>No configuration for this page yet.</p>
-                    <p><small>Adjust columns and rows above, then click empty cells to add buttons.</small></p>
+                    <p>No configuration for this pad yet.</p>
+                    <p><small>Adjust columns and rows above, then click empty buttons to configure them.</small></p>
                 </div>
 
-                <small style="margin-top:8px; display:block;">Click a cell to edit its button.</small>
+                <small style="margin-top:8px; display:block;">Click a button to edit it.</small>
 
                 <!-- Background Color -->
                 <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
@@ -151,9 +144,9 @@
                     <summary>Layout</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-widget-type">Button Type</label>
+                            <label for="pad-edit-widget-type">Widget</label>
                             <select id="pad-edit-widget-type" onchange="padWidgetTypeChanged()">
-                                <option value="">Normal Button</option>
+                                <option value="">None</option>
                                 <option value="bar_chart">Bar Chart</option>
                                 <option value="gauge">Gauge</option>
                                 <option value="sparkline">Sparkline</option>
@@ -232,7 +225,10 @@
                                 <option value="screen">Navigate to Screen</option>
                                 <option value="back">Navigate Back</option>
                                 <option value="mqtt">MQTT Publish</option>
+                                <option value="key">Send BLE Keys</option>
+                                <option value="ble_pair">Start BLE Pairing</option>
                             </select>
+                            <small id="pad-edit-action-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>
                         </div>
                         <div id="pad-edit-action-screen-group" style="display:none;">
                             <div class="form-group">
@@ -252,6 +248,13 @@
                                 <input type="text" id="pad-edit-action-payload" maxlength="127" placeholder="e.g. ON">
                             </div>
                         </div>
+                        <div id="pad-edit-action-key-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-action-sequence">Keys to Send</label>
+                                <input type="text" id="pad-edit-action-sequence" maxlength="255" placeholder='e.g. ctrl+c, "hello", 200ms'>
+                                <small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms</small>
+                            </div>
+                        </div>
 
                         <hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">
 
@@ -262,7 +265,10 @@
                                 <option value="screen">Navigate to Screen</option>
                                 <option value="back">Navigate Back</option>
                                 <option value="mqtt">MQTT Publish</option>
+                                <option value="key">Send BLE Keys</option>
+                                <option value="ble_pair">Start BLE Pairing</option>
                             </select>
+                            <small id="pad-edit-lp-action-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>
                         </div>
                         <div id="pad-edit-lp-action-screen-group" style="display:none;">
                             <div class="form-group">
@@ -280,6 +286,13 @@
                             <div class="form-group">
                                 <label for="pad-edit-lp-action-payload">MQTT Payload</label>
                                 <input type="text" id="pad-edit-lp-action-payload" maxlength="127" placeholder="e.g. OFF">
+                            </div>
+                        </div>
+                        <div id="pad-edit-lp-action-key-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-lp-action-sequence">Keys to Send</label>
+                                <input type="text" id="pad-edit-lp-action-sequence" maxlength="255" placeholder='e.g. ctrl+c, "hello", 200ms'>
+                                <small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms</small>
                             </div>
                         </div>
                     </div>

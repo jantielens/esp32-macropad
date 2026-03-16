@@ -82,7 +82,7 @@ void Bme280Sensor::appendJson(JsonObject &doc) {
 				return;
 		}
 
-		// Sensor missing: emit min-range sentinel values that fit BTHome encoding.
+		// Sensor missing: emit min-range sentinel values.
 		doc["temperature"] = -327.68f;
 		doc["humidity"] = 0.0f;
 		doc["pressure"] = 0.0f;

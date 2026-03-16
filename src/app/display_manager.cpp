@@ -10,6 +10,7 @@
 #include "screen_saver_manager.h"
 
 #include <esp_timer.h>
+#include <string.h>
 
 // Include selected display driver header.
 // Driver implementations are compiled via src/app/display_drivers.cpp.
@@ -47,10 +48,8 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 			#if HAS_TOUCH && LV_USE_CANVAS
 			touchTestScreen(this),
 			#endif
-			padScreens{
-				PadScreen(0, this), PadScreen(1, this), PadScreen(2, this), PadScreen(3, this),
-				PadScreen(4, this), PadScreen(5, this), PadScreen(6, this), PadScreen(7, this)
-			},
+			padScreens(nullptr), padIds(nullptr), padNames(nullptr),
+			lruCache(nullptr), lruCount(0),
 							lvglTaskHandle(nullptr), lvglTaskAlloc{}, lvglMutex(nullptr),
 						presentTaskHandle(nullptr), presentTaskAlloc{}, presentSem(nullptr), sharedLvTimerUs(0),
 						screenCount(0), buf(nullptr), buf2(nullptr), flushPending(false), pendingSplashStatusSet(false) {
@@ -74,6 +73,22 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		
 		// Create mutex for thread-safe LVGL access
 		lvglMutex = xSemaphoreCreateMutex();
+
+		// Allocate pad screens and their ID/name strings dynamically
+		padScreens = new PadScreen*[MAX_PADS];
+		padIds = new char*[MAX_PADS];
+		padNames = new char*[MAX_PADS];
+		lruCache = new uint8_t[SCREEN_HISTORY_MAX];
+
+		for (uint8_t i = 0; i < MAX_PADS; i++) {
+				padScreens[i] = new PadScreen(i, this);
+
+				padIds[i] = new char[8];  // "pad_" + up to 2 digits + null
+				snprintf(padIds[i], 8, "pad_%u", i);
+
+				padNames[i] = new char[8]; // "Pad " + up to 2 digits + null
+				snprintf(padNames[i], 8, "Pad %u", i + 1);
+		}
 		
 		// Initialize screen registry (exclude splash - it's boot-specific)
 		availableScreens[0] = {"info", "Info Screen", &infoScreen};
@@ -84,11 +99,9 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		availableScreens[screenCount++] = {"touch_test", "Touch Test", &touchTestScreen};
 		#endif
 
-		// Register pad screens (pad_0 through pad_7)
-		for (uint8_t i = 0; i < MAX_PAD_PAGES && screenCount < MAX_SCREENS; i++) {
-				static const char* pad_ids[] = {"pad_0", "pad_1", "pad_2", "pad_3", "pad_4", "pad_5", "pad_6", "pad_7"};
-				static const char* pad_names[] = {"Pad 1", "Pad 2", "Pad 3", "Pad 4", "Pad 5", "Pad 6", "Pad 7", "Pad 8"};
-				availableScreens[screenCount++] = {pad_ids[i], pad_names[i], &padScreens[i]};
+		// Register pad screens
+		for (uint8_t i = 0; i < MAX_PADS && screenCount < MAX_SCREENS; i++) {
+				availableScreens[screenCount++] = {padIds[i], padNames[i], padScreens[i]};
 		}
 }
 
@@ -120,9 +133,16 @@ DisplayManager::~DisplayManager() {
 		#if HAS_TOUCH && LV_USE_CANVAS
 		touchTestScreen.destroy();
 		#endif
-		for (uint8_t i = 0; i < MAX_PAD_PAGES; i++) {
-				padScreens[i].destroy();
+		for (uint8_t i = 0; i < MAX_PADS; i++) {
+				padScreens[i]->destroy();
+				delete padScreens[i];
+				delete[] padIds[i];
+				delete[] padNames[i];
 		}
+		delete[] padScreens;
+		delete[] padIds;
+		delete[] padNames;
+		delete[] lruCache;
 		
 		// Delete display driver
 		if (driver) {
@@ -144,6 +164,42 @@ DisplayManager::~DisplayManager() {
 		if (buf2) {
 				heap_caps_free(buf2);
 				buf2 = nullptr;
+		}
+}
+
+// ============================================================================
+// LRU Pad Cache
+// ============================================================================
+// Tracks which pad screens have their heavy arrays allocated.
+// When a pad is shown, it's promoted to the front of the cache.
+// When the cache exceeds SCREEN_HISTORY_MAX entries, the oldest pad is evicted.
+
+void DisplayManager::lruPromote(uint8_t padIndex) {
+		// Check if already in cache — remove it so we can re-insert at front
+		for (uint8_t i = 0; i < lruCount; i++) {
+				if (lruCache[i] == padIndex) {
+						// Shift remaining entries down
+						memmove(&lruCache[i], &lruCache[i + 1], (lruCount - i - 1) * sizeof(uint8_t));
+						lruCount--;
+						break;
+				}
+		}
+		// Evict oldest if at capacity
+		lruEvictIfNeeded();
+		// Shift everything right and insert at front
+		if (lruCount > 0) {
+				memmove(&lruCache[1], &lruCache[0], lruCount * sizeof(uint8_t));
+		}
+		lruCache[0] = padIndex;
+		lruCount++;
+}
+
+void DisplayManager::lruEvictIfNeeded() {
+		while (lruCount >= SCREEN_HISTORY_MAX && lruCount > 0) {
+				uint8_t victim = lruCache[lruCount - 1];
+				LOGD("Display", "LRU evicting pad %u", victim);
+				padScreens[victim]->evict();
+				lruCount--;
 		}
 }
 
@@ -345,8 +401,8 @@ void DisplayManager::init() {
 		#if HAS_TOUCH && LV_USE_CANVAS
 		touchTestScreen.create();
 		#endif
-		for (uint8_t i = 0; i < MAX_PAD_PAGES; i++) {
-				padScreens[i].create();
+		for (uint8_t i = 0; i < MAX_PADS; i++) {
+				padScreens[i]->create();
 		}
 
 		// Show splash immediately

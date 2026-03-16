@@ -14,8 +14,6 @@
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
 #define HAS_BACKLIGHT true
-#define HAS_BLE false          // No onboard Bluetooth (C6 co-proc is WiFi-only via SDIO)
-
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
 

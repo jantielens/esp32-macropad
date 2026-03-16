@@ -119,17 +119,6 @@ build_board() {
             SPI_READ_FREQUENCY
             SPI_TOUCH_FREQUENCY
 
-            # NimBLE tuning (optional BLE builds)
-            CONFIG_BT_NIMBLE_ROLE_PERIPHERAL
-            CONFIG_BT_NIMBLE_ROLE_BROADCASTER
-            CONFIG_BT_NIMBLE_ROLE_CENTRAL
-            CONFIG_BT_NIMBLE_ROLE_OBSERVER
-            CONFIG_BT_NIMBLE_MAX_CONNECTIONS
-            CONFIG_BT_NIMBLE_MAX_BONDS
-            CONFIG_BT_NIMBLE_MAX_CCCDS
-            CONFIG_BT_NIMBLE_MSYS1_BLOCK_COUNT
-            CONFIG_BT_NIMBLE_LOG_LEVEL
-            CONFIG_NIMBLE_CPP_LOG_LEVEL
         )
 
         for macro in "${numeric_allowlist[@]}"; do

@@ -13,10 +13,12 @@
 // - The sample defines a DC pin, but QSPI IO uses dc_gpio_num=-1.
 
 // ============================================================================
-// Display Configuration
+// Capabilities
 // ============================================================================
 // Enable display support on this board.
 #define HAS_DISPLAY true
+// BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
+#define HAS_BLE_HID false
 
 // ============================================================================
 // Driver Selection (HAL)

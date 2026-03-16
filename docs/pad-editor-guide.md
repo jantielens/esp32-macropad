@@ -8,13 +8,13 @@ You'll find the pad editor on the **Pads** page of the web portal (Full mode onl
 
 ## Designing a Pad
 
-A pad is a page of buttons arranged in a grid. You can think of each pad as a separate screen on your device — swipe or navigate between them using button actions.
+A pad is a grid of buttons displayed on the device — swipe or navigate between pads using button actions.
 
 ### Pad Settings
 
-At the top of the pad editor, you configure the page itself:
+At the top of the pad editor, you configure the pad itself:
 
-- **Pad selection** — switch between Pad 1 through 8. Each pad is saved independently.
+- **Pad selection** — switch between Pad 1 through 16. Each pad is saved independently.
 - **Pad Name** — an optional label shown in Home Assistant and on-device. For example, "Solar", "Lights", or "Cameras".
 - **Columns / Rows** — the grid size, from 1×1 up to 8×8. A 3×2 grid gives you 6 large buttons; a 4×4 grid gives you 16 smaller ones.
 - **Wake Screen** — when the screensaver wakes up, which screen should appear? Leave empty to return to the last active screen, or pick a specific pad.
@@ -26,7 +26,7 @@ At the top of the pad editor, you configure the page itself:
 
 ## The Button Editor
 
-Click any cell in the grid preview to open the button editor. This is where each button gets its personality — from static labels and icons to live MQTT data and conditional colors.
+Click any button in the grid preview to open the button editor. This is where each button gets its personality — from static labels and icons to live MQTT data and conditional colors.
 
 The editor is organized into collapsible sections. Let's walk through each one.
 
@@ -158,7 +158,7 @@ This disables a door-lock button when the alarm is armed.
 
 > If a binding hasn't resolved yet (shows `---`) or returns an error, the button defaults to **enabled** to avoid hiding buttons during startup.
 
-### Spans (Multi-Cell Buttons)
+### Spans (Multi-Column/Row Buttons)
 
 **Column span** and **Row span** let a button occupy multiple grid cells. A button with col_span=2 takes up two columns; row_span=2 takes two rows. Use this for important display elements — a large clock button, a camera feed, or a prominent status indicator.
 
@@ -181,7 +181,7 @@ Any button can display an image fetched from a URL, rendered as the button backg
 - **Weather maps**: Fetch a radar image once per minute (interval: 60000).
 - **Album art**: Use a Home Assistant media player's entity picture URL.
 
-> Images are decoded in a background task and scaled to the button's pixel dimensions using bilinear filtering. Keep image resolution reasonable — the device fetches, decodes, and scales in PSRAM. A few camera tiles at 480×320 work fine; avoid huge 4K images.
+> Images are decoded in a background task and scaled to the button's pixel dimensions using bilinear filtering. Keep image resolution reasonable — the device fetches, decodes, and scales in PSRAM. A few camera buttons at 480×320 work fine; avoid huge 4K images.
 
 ### Actions (Tap and Long-Press)
 
@@ -195,6 +195,8 @@ Each button has two action slots — one for **tap** and one for **long-press** 
 | **Navigate to screen** | Jump to another pad or screen (e.g., `pad_1`, `info_screen`) |
 | **Go back** | Return to the previous screen |
 | **Publish MQTT** | Send a message to an MQTT topic |
+| **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). ESP32-P4 boards only. |
+| **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
 
 **Example setup for a smart light:**
 - **Tap action**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -203,6 +205,39 @@ Each button has two action slots — one for **tap** and one for **long-press** 
 **Example setup for navigation:**
 - **Tap action**: Navigate to screen → `pad_2` (cameras pad)
 - Button label: "Cameras" with a `videocam` Material Symbol icon
+
+### BLE Key Sequences
+
+The **BLE Key** action sends keystrokes over Bluetooth to a paired host device. The sequence field accepts a compact DSL:
+
+**Single keys:**
+- `a`, `enter`, `tab`, `esc`, `space`, `backspace`, `delete`
+- Arrow keys: `up`, `down`, `left`, `right`
+- Function keys: `f1` through `f12`
+
+**Modifier combos** — use `+` to combine modifiers:
+- `ctrl+c` — copy
+- `ctrl+shift+t` — reopen closed tab
+- `gui+l` — lock workstation (Windows)
+- `alt+f4` — close window
+
+Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
+
+**Media/consumer keys:**
+- `vol_up`, `vol_down`, `mute`
+- `play_pause`, `next_track`, `prev_track`
+
+**Text literals** — wrap in double quotes:
+- `"Hello World"` — types the text character by character
+
+**Multi-step sequences** — chain steps with spaces:
+- `ctrl+a ctrl+c` — select all, then copy
+- `"user@email.com" tab "password123" enter` — fill a login form
+
+**Delays** — insert a pause (in ms):
+- `ctrl+a 200ms ctrl+c` — select all, wait 200ms, then copy
+
+> **Tip**: Assign `ble_pair` to a dedicated button so you can pair a new host device directly from the macropad's touch screen.
 
 ---
 
@@ -219,7 +254,7 @@ The bar chart widget draws a vertical or horizontal bar that fills based on a nu
 | Setting | Description |
 |---------|-------------|
 | **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
-| **Min / Max** | The value range. The bar is empty at min and full at max |
+| **Min / Max** | The value range. The bar is empty at min and full at max. Accepts a number or a binding expression (e.g. `[health:psram_total]`) for dynamic scaling |
 | **Bar width %** | How wide the bar is relative to the button (1–100%). In horizontal mode, controls the bar height instead |
 | **Bar color** | The fill color of the bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
@@ -251,7 +286,7 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Start Label (slot 2)** | Optional text or binding for slot 2. In dual mode, slot 2 still has its own color but shares the same physical ring as slot 1 |
 | **Start Label (slot 3)** | Optional text or binding for slot 3 |
 | **Start Label (slot 4)** | Optional text or binding for slot 4 when it renders as its own ring |
-| **Min / Max** | The value range. The arc is empty at min and full at max |
+| **Min / Max** | The value range. The arc is empty at min and full at max. Accepts a number or a binding expression for dynamic scaling |
 | **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
 | **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
 | **Zero-Centered** | Arc fills from the zero point — negative values grow left, positive grow right. Only applicable to single mode rings. |
@@ -309,7 +344,7 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 |---------|-------------|
 | **Data binding (main line)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`). Each line has a color swatch below the binding input |
 | **Data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream and color. Leave empty for single line |
-| **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data |
+| **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data. Accepts a number or a binding expression (e.g. `[health:heap_total]`) for dynamic scaling |
 | **Same scale for all lines** | When enabled (default), all lines in a multi-line sparkline share the same auto-scaled Y-axis range, so values are visually comparable. Disable to let each line auto-scale independently — useful when lines have very different magnitudes and you want to compare trends/shapes rather than absolute values. Has no effect when explicit min/max are configured or with single-line sparklines |
 | **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
 | **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
@@ -321,6 +356,8 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Min format** | Printf format string for the min label (e.g., `lo %.1f`) |
 | **Min label color** | Override color for the min label text. White = auto |
 | **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Uses the line’s resolved color |
+| **Label width (px)** | Width of the right-side label area in pixels (0 = 50px default, 1–200). Only takes effect when at least one current-value label is configured. The chart area shrinks to make room |
+| **Line 1/2/3 Label** | Binding expression or static text for a per-line current-value label displayed in the right margin (e.g., `[mqtt:sensor/temp;temperature;%.1f] °C`). Labels track the Y position of the rightmost data point and inherit the line’s color. Collision avoidance pushes overlapping labels apart. Leave empty to disable |
 | **Reference line 1/2/3** | Up to 3 horizontal reference lines at fixed Y values. Each has a Y value (numeric), a color, and a line pattern (Solid, Dotted, or Dashed). Drawn behind the data lines. Only lines with a valid Y value are rendered |
 | **Keep reference lines in view** | When enabled, auto-scale expands the Y range to include all configured reference line values, so they are always visible. Data that exceeds the reference lines still expands the range normally. Only affects auto-scaled axes (explicit min/max take priority) |
 | **Smoothing** | Gaussian kernel smoothing radius (0 = off, 1–8). Smooths the trend line by averaging neighboring data points — higher values produce a smoother curve. A value of 3–4 gives a pleasant smoothing effect; 8 gives heavy averaging. Min/max markers and current-value dot are positioned on the smoothed line. Set to 0 for raw data rendering |
@@ -454,17 +491,59 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `cpu` | CPU usage percentage | `42` |
 | `rssi` | WiFi signal strength (dBm) | `-54` |
 | `uptime` | Seconds since boot | `86400` |
+| `chip` | SoC model name | `ESP32-S3` |
+| `chip_rev` | Silicon revision number | `1` |
+| `chip_cores` | Number of CPU cores | `2` |
+| `cpu_freq` | CPU clock speed (MHz) | `240` |
+| `flash_size` | Flash chip size (bytes) | `16777216` |
+| `firmware` | Firmware version string | `1.10.0` |
+| `board` | Board name used at build time | `esp32-4848S040` |
+| `mac` | WiFi MAC address | `AA:BB:CC:DD:EE:FF` |
+| `reset_reason` | Last reset cause | `Power On` |
+| `heap_total` | Total heap size (bytes) | `8390520` |
 | `heap_free` | Free heap memory (bytes) | `145320` |
 | `heap_min` | Heap low-water mark (bytes) | `98000` |
 | `heap_largest` | Largest free block (bytes) | `65536` |
+| `heap_internal_total` | Total internal RAM (bytes) | `327680` |
 | `heap_internal` | Free internal RAM (bytes) | `82000` |
+| `heap_internal_used` | Used internal RAM (total − free) | `245680` |
+| `psram_total` | Total PSRAM (bytes; 0 if absent) | `8388608` |
 | `psram_free` | Free PSRAM (bytes) | `6291456` |
+| `psram_used` | Used PSRAM (total − free) | `2097152` |
 | `psram_min` | PSRAM low-water mark (bytes) | `4194304` |
 | `psram_largest` | Largest free PSRAM block (bytes) | `4194304` |
+| `wifi_connected` | WiFi connection status | `ON` / `OFF` |
+| `wifi_ssid` | Connected network name | `MyNetwork` |
 | `ip` | Device IP address | `192.168.1.42` |
 | `hostname` | Device hostname | `macropad` |
+| `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
+| `ble_name` | Current BLE keyboard name | `Kitchen Pad EEFF` |
+| `ble_state` | Detailed BLE state | `disabled`, `pairing`, `connecting`, `secured`, `claimed`, ... |
+| `ble_pairing` | BLE pairing mode active | `ON` / `OFF` |
+| `ble_bonded` | Current connection is bonded | `ON` / `OFF` |
+| `ble_encrypted` | Current connection is encrypted | `ON` / `OFF` |
+| `ble_peer_addr` | Connected peer's Bluetooth address | `AA:BB:CC:DD:EE:FF` |
+| `ble_peer_id_addr` | Connected peer's identity address | `AA:BB:CC:DD:EE:FF` |
 
 Values are cached for up to 2 seconds to keep the CPU impact low.
+
+**BLE signal values:**
+
+| Signal | Value | Meaning |
+|--------|-------|---------|
+| `ble_status` | `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ble_status` | `ready` | BLE keyboard is enabled and available, but not currently in pairing mode or in an active secured session |
+| `ble_status` | `pairing` | BLE keyboard is in the 60-second pairing window and accepting a new owner |
+| `ble_status` | `connected` | A host is connected and the BLE link is encrypted and usable for HID input |
+| `ble_status` | `error` | BLE initialization failed or the stack is in a fault state |
+| `ble_state` | `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ble_state` | `idle` | BLE stack is initialized but not actively advertising a user-relevant state |
+| `ble_state` | `advertising` | BLE is advertising without an owner claim yet |
+| `ble_state` | `pairing` | BLE is in pairing mode and waiting for a new host |
+| `ble_state` | `connecting` | A host connection exists, but the secure usable HID session is not established yet |
+| `ble_state` | `claimed` | BLE has an owner on record and is advertising for that owner to reconnect |
+| `ble_state` | `secured` | BLE has an encrypted active connection |
+| `ble_state` | `error` | BLE initialization failed or the stack is in a fault state |
 
 **Examples:**
 
@@ -472,6 +551,8 @@ Values are cached for up to 2 seconds to keep the CPU impact low.
 CPU: [health:cpu]%                                     → CPU: 42%
 [health:heap_free;%d] bytes free                       → 145320 bytes free
 WiFi: [health:rssi] dBm                               → WiFi: -54 dBm
+[health:wifi_ssid]                                     → MyNetwork
+[health:wifi_connected]                                → ON
 [health:ip]                                            → 192.168.1.42
 ```
 
@@ -713,9 +794,9 @@ Toggles between bright red and dark red every second — useful for alert button
 
 **Syntax:** `[pad:name]` or `[pad:name;format]`
 
-Pad bindings let you define a data source once at the page level and reference it across all buttons and widgets on that page. This avoids repeating the same MQTT topic everywhere and makes it easy to switch data sources — change one binding instead of editing every button.
+Pad bindings let you define a data source once at the pad level and reference it across all buttons and widgets on that pad. This avoids repeating the same MQTT topic everywhere and makes it easy to switch data sources — change one binding instead of editing every button.
 
-**Defining bindings** — in the pad JSON config, add a `"bindings"` object at the page level:
+**Defining bindings** — in the pad JSON config, add a `"bindings"` object at the pad level:
 
 ```json
 {
@@ -750,7 +831,7 @@ The optional `;format` parameter applies a printf format to the resolved value, 
 
 **Naming rules**: Binding names must start with a letter and contain only letters, digits, and underscores (e.g., `power`, `solar_current`, `temp1`). Maximum 31 characters.
 
-**Limit**: Up to 16 named bindings per page.
+**Limit**: Up to 16 named bindings per pad.
 
 **Why use pad bindings?**
 
@@ -772,11 +853,13 @@ The **More ▾** dropdown above the grid preview provides shortcuts for working 
 
 ### Copy and Paste Buttons
 
-In the button editor dialog, **Copy** saves the current button's settings (everything except grid position) to a clipboard. **Paste** applies the clipboard to whichever cell you're editing. This is the fastest way to create multiple similar buttons — configure one, then copy-paste and adjust the differences.
+In the button editor dialog, **Copy** saves the current button's settings to a clipboard — the editor stays open so you can keep editing. **Paste** applies the clipboard to the button you're editing and keeps the editor open so you can review or tweak the result. Column and row span values are preserved in the clipboard and applied on a best-effort basis: if the span fits at the target position (within grid bounds and no overlap with existing buttons) it is applied, otherwise it falls back to 1×1.
+
+This is the fastest way to create multiple similar buttons — configure one, copy it, then paste into other positions and adjust the differences.
 
 ### Fill Pad
 
-After copying a button, **Fill Pad** applies it to every empty cell in the grid. Useful for quickly populating a pad with a template button that you then customize per cell.
+After copying a button, **Fill Pad** applies it to every position in the grid (column/row spans are stripped — every cell gets a 1×1 button). Useful for quickly populating a pad with a template button that you then customize individually.
 
 ### Copy / Paste Pad
 

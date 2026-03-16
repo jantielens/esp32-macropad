@@ -125,7 +125,7 @@ static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
     int idx = find_entry(id);
     if (idx >= 0) {
         // Old draw_buf is orphaned — LVGL image widgets hold raw pointers to it.
-        // Leak is bounded by max button count (MAX_PAD_PAGES × MAX_PAD_BUTTONS).
+        // Leak is bounded by max button count (MAX_PADS × MAX_PAD_BUTTONS).
         IconEntry& e = g_entries[idx];
         e.draw_buf = buf;
         e.kind = kind;
@@ -285,13 +285,13 @@ bool icon_store_lookup(const char* id, IconRef* out) {
 void icon_store_preload_pad_pages() {
     uint16_t loaded = 0;
 
-    for (uint8_t page = 0; page < MAX_PAD_PAGES; page++) {
-        PadPageConfig* cfg = (PadPageConfig*)heap_caps_malloc(
-            sizeof(PadPageConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!cfg) cfg = (PadPageConfig*)malloc(sizeof(PadPageConfig));
+    for (uint8_t page = 0; page < MAX_PADS; page++) {
+        PadConfig* cfg = (PadConfig*)heap_caps_malloc(
+            sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
         if (!cfg) continue;
 
-        memset(cfg, 0, sizeof(PadPageConfig));
+        memset(cfg, 0, sizeof(PadConfig));
         if (!pad_config_load(page, cfg)) {
             free(cfg);
             continue;
@@ -317,7 +317,7 @@ void icon_store_preload_pad_pages() {
 }
 
 void icon_store_delete_page_icons(uint8_t page) {
-    if (page >= MAX_PAD_PAGES) return;
+    if (page >= MAX_PADS) return;
 
     char prefix[16];
     snprintf(prefix, sizeof(prefix), "pad_%u_", page);

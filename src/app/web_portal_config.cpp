@@ -24,6 +24,15 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+// Parse a bool value from a JSON field that may arrive as string ("true"/"1"/"on") or native bool.
+static bool parseBoolField(const JsonDocument &doc, const char* key) {
+		if (doc[key].is<const char*>()) {
+				const char* v = doc[key];
+				return (v && (strcmp(v, "1") == 0 || strcasecmp(v, "true") == 0 || strcasecmp(v, "on") == 0));
+		}
+		return (bool)(doc[key] | false);
+}
+
 // /api/config body accumulator (chunk-safe)
 static portMUX_TYPE g_config_post_mux = portMUX_INITIALIZER_UNLOCKED;
 static struct {
@@ -95,18 +104,11 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["mqtt_username"] = current_config->mqtt_username;
 				(*doc)["mqtt_password"] = "";
 
-				// Power / transport settings
+				// Power settings
 				(*doc)["power_mode"] = current_config->power_mode;
-				(*doc)["publish_transport"] = current_config->publish_transport;
 				(*doc)["cycle_interval_seconds"] = current_config->cycle_interval_seconds;
 				(*doc)["portal_idle_timeout_seconds"] = current_config->portal_idle_timeout_seconds;
 				(*doc)["wifi_backoff_max_seconds"] = current_config->wifi_backoff_max_seconds;
-
-				// BLE timing
-				(*doc)["ble_adv_burst_ms"] = current_config->ble_adv_burst_ms;
-				(*doc)["ble_adv_gap_ms"] = current_config->ble_adv_gap_ms;
-				(*doc)["ble_adv_bursts"] = current_config->ble_adv_bursts;
-				(*doc)["ble_adv_interval_ms"] = current_config->ble_adv_interval_ms;
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;
@@ -119,6 +121,10 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				// Display settings
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
+
+				#if HAS_BLE_HID
+				(*doc)["ble_enabled"] = current_config->ble_enabled;
+				#endif
 
 				#if HAS_DISPLAY
 				// Screen saver settings
@@ -345,11 +351,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				strlcpy(current_config->power_mode, doc["power_mode"] | "always_on", CONFIG_POWER_MODE_MAX_LEN);
 		}
 
-		// Publish transport
-		if (doc.containsKey("publish_transport")) {
-				strlcpy(current_config->publish_transport, doc["publish_transport"] | "ble", CONFIG_PUBLISH_TRANSPORT_MAX_LEN);
-		}
-
 		// Cycle interval (legacy mqtt_interval_seconds supported as alias)
 		const bool has_cycle_interval = doc.containsKey("cycle_interval_seconds");
 		const bool has_mqtt_interval = doc.containsKey("mqtt_interval_seconds");
@@ -383,43 +384,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		}
 
-		// BLE timing settings
-		if (doc.containsKey("ble_adv_burst_ms")) {
-				if (doc["ble_adv_burst_ms"].is<const char*>()) {
-						const char* v = doc["ble_adv_burst_ms"];
-						current_config->ble_adv_burst_ms = (uint16_t)atoi(v ? v : "0");
-				} else {
-						current_config->ble_adv_burst_ms = (uint16_t)(doc["ble_adv_burst_ms"] | 0);
-				}
-		}
-
-		if (doc.containsKey("ble_adv_gap_ms")) {
-				if (doc["ble_adv_gap_ms"].is<const char*>()) {
-						const char* v = doc["ble_adv_gap_ms"];
-						current_config->ble_adv_gap_ms = (uint16_t)atoi(v ? v : "0");
-				} else {
-						current_config->ble_adv_gap_ms = (uint16_t)(doc["ble_adv_gap_ms"] | 0);
-				}
-		}
-
-		if (doc.containsKey("ble_adv_bursts")) {
-				if (doc["ble_adv_bursts"].is<const char*>()) {
-						const char* v = doc["ble_adv_bursts"];
-						current_config->ble_adv_bursts = (uint8_t)atoi(v ? v : "0");
-				} else {
-						current_config->ble_adv_bursts = (uint8_t)(doc["ble_adv_bursts"] | 0);
-				}
-		}
-
-		if (doc.containsKey("ble_adv_interval_ms")) {
-				if (doc["ble_adv_interval_ms"].is<const char*>()) {
-						const char* v = doc["ble_adv_interval_ms"];
-						current_config->ble_adv_interval_ms = (uint16_t)atoi(v ? v : "0");
-				} else {
-						current_config->ble_adv_interval_ms = (uint16_t)(doc["ble_adv_interval_ms"] | 0);
-				}
-		}
-
 		// MQTT publish scope
 		if (doc.containsKey("mqtt_publish_scope")) {
 				strlcpy(current_config->mqtt_publish_scope, doc["mqtt_publish_scope"] | "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
@@ -427,13 +391,14 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 
 		// Basic Auth enabled
 		if (doc.containsKey("basic_auth_enabled")) {
-				if (doc["basic_auth_enabled"].is<const char*>()) {
-						const char* v = doc["basic_auth_enabled"];
-						current_config->basic_auth_enabled = (v && (strcmp(v, "1") == 0 || strcasecmp(v, "true") == 0 || strcasecmp(v, "on") == 0));
-				} else {
-						current_config->basic_auth_enabled = (bool)(doc["basic_auth_enabled"] | false);
-				}
+				current_config->basic_auth_enabled = parseBoolField(doc, "basic_auth_enabled");
 		}
+
+		#if HAS_BLE_HID
+		if (doc.containsKey("ble_enabled")) {
+				current_config->ble_enabled = parseBoolField(doc, "ble_enabled");
+		}
+		#endif
 
 		// Basic Auth username
 		if (doc.containsKey("basic_auth_username")) {
@@ -478,12 +443,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		#if HAS_DISPLAY
 		// Screen saver settings
 		if (doc.containsKey("screen_saver_enabled")) {
-				if (doc["screen_saver_enabled"].is<const char*>()) {
-						const char* v = doc["screen_saver_enabled"];
-						current_config->screen_saver_enabled = (v && (strcmp(v, "1") == 0 || strcasecmp(v, "true") == 0 || strcasecmp(v, "on") == 0));
-				} else {
-						current_config->screen_saver_enabled = (bool)(doc["screen_saver_enabled"] | false);
-				}
+				current_config->screen_saver_enabled = parseBoolField(doc, "screen_saver_enabled");
 		}
 
 		if (doc.containsKey("screen_saver_timeout_seconds")) {
@@ -514,12 +474,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 
 		if (doc.containsKey("screen_saver_wake_on_touch")) {
-				if (doc["screen_saver_wake_on_touch"].is<const char*>()) {
-						const char* v = doc["screen_saver_wake_on_touch"];
-						current_config->screen_saver_wake_on_touch = (v && (strcmp(v, "1") == 0 || strcasecmp(v, "true") == 0 || strcasecmp(v, "on") == 0));
-				} else {
-						current_config->screen_saver_wake_on_touch = (bool)(doc["screen_saver_wake_on_touch"] | false);
-				}
+				current_config->screen_saver_wake_on_touch = parseBoolField(doc, "screen_saver_wake_on_touch");
 		}
 
 		if (doc.containsKey("screen_saver_wake_binding")) {

@@ -509,6 +509,9 @@ Returns real-time device health statistics.
 ```
 
 **Notes:**
+- `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
+- `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
+- `ble_name`: current BLE keyboard name (same as the configured device name)
 - `cpu_usage`: `null` when FreeRTOS runtime stats are unavailable/disabled
 - `cpu_temperature`: `null` on chips without an internal temperature sensor
 - `fs_mounted`: `null` when no filesystem partition is present; `false` when present but not mounted
@@ -563,14 +566,9 @@ Returns current device configuration (passwords excluded).
   "dns2": "",
 
   "power_mode": "always_on",
-  "publish_transport": "ble",
   "cycle_interval_seconds": 120,
   "portal_idle_timeout_seconds": 120,
   "wifi_backoff_max_seconds": 900,
-  "ble_adv_burst_ms": 900,
-  "ble_adv_gap_ms": 1100,
-  "ble_adv_bursts": 2,
-  "ble_adv_interval_ms": 100,
   "mqtt_publish_scope": "sensors_only",
 
   "basic_auth_enabled": false,
@@ -591,7 +589,6 @@ Returns current device configuration (passwords excluded).
 **Notes:**
 - Some fields are build-time gated.
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
-  - BLE advertising fields are only used when `HAS_BLE` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
 
 #### `POST /api/config`
@@ -611,14 +608,9 @@ Save new configuration. Device reboots after successful save.
   "dns2": "8.8.4.4",
 
   "power_mode": "duty_cycle",
-  "publish_transport": "ble_mqtt",
   "cycle_interval_seconds": 120,
   "portal_idle_timeout_seconds": 120,
   "wifi_backoff_max_seconds": 900,
-  "ble_adv_burst_ms": 900,
-  "ble_adv_gap_ms": 1100,
-  "ble_adv_bursts": 2,
-  "ble_adv_interval_ms": 100,
   "mqtt_publish_scope": "sensors_only",
 
   "basic_auth_enabled": true,

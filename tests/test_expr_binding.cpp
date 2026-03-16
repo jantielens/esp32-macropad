@@ -110,6 +110,85 @@ static char* split_format(char* buf) {
     return fmt[0] ? fmt : NULL;
 }
 
+// ============================================================================
+// Resolve inner binding tokens and auto-quote non-numeric results
+// ============================================================================
+// Mirrors resolve_and_quote() from expr_binding.cpp for host-native tests.
+
+static bool resolve_and_quote(const char* expr, char* out, size_t out_len) {
+    size_t wp = 0;
+    const char* p = expr;
+    bool in_quotes = false;
+
+    while (*p && wp < out_len - 1) {
+        if (*p == '\\' && in_quotes && *(p + 1)) {
+            // Escape sequence inside user-written string — copy both chars
+            if (wp + 2 > out_len - 1) break;
+            out[wp++] = *p++;
+            out[wp++] = *p++;
+        } else if (*p == '"') {
+            // Toggle user-written string mode and copy the quote
+            in_quotes = !in_quotes;
+            out[wp++] = *p++;
+        } else if (*p == '[' && !in_quotes) {
+            // Binding token — find matching ']' with bracket nesting
+            int depth = 1;
+            const char* tok_start = p;
+            p++;
+            while (*p && depth > 0) {
+                if (*p == '[') depth++;
+                else if (*p == ']') depth--;
+                p++;
+            }
+
+            // Extract and resolve the token
+            size_t tok_len = (size_t)(p - tok_start);
+            char token[BINDING_TEMPLATE_MAX_LEN];
+            if (tok_len >= sizeof(token)) tok_len = sizeof(token) - 1;
+            memcpy(token, tok_start, tok_len);
+            token[tok_len] = '\0';
+
+            char resolved[BINDING_TEMPLATE_MAX_LEN];
+            binding_template_resolve(token, resolved, sizeof(resolved));
+
+            // Unresolved binding → whole expression is unresolved
+            if (strcmp(resolved, "---") == 0) {
+                snprintf(out, out_len, "---");
+                return false;
+            }
+
+            // Check if the resolved value is numeric (consumed entirely by strtod)
+            char* end = NULL;
+            strtod(resolved, &end);
+            bool is_numeric = (end && end != resolved && *end == '\0');
+
+            if (is_numeric) {
+                size_t rlen = strlen(resolved);
+                if (wp + rlen >= out_len) break;
+                memcpy(out + wp, resolved, rlen);
+                wp += rlen;
+            } else {
+                // Wrap in quotes, escaping embedded " and backslash
+                if (wp >= out_len - 1) break;
+                out[wp++] = '"';
+                for (const char* r = resolved; *r && wp < out_len - 2; r++) {
+                    if (*r == '"' || *r == '\\') {
+                        if (wp + 2 >= out_len - 1) break;
+                        out[wp++] = '\\';
+                    }
+                    out[wp++] = *r;
+                }
+                if (wp >= out_len - 1) break;
+                out[wp++] = '"';
+            }
+        } else {
+            out[wp++] = *p++;
+        }
+    }
+    out[wp] = '\0';
+    return true;
+}
+
 static bool expr_test_resolve(const char* params, char* out, size_t out_len) {
     if (!params || !params[0]) {
         snprintf(out, out_len, "ERR:empty expr");
@@ -121,12 +200,9 @@ static bool expr_test_resolve(const char* params, char* out, size_t out_len) {
 
     char* fmt = split_format(buf);
 
-    // Resolve inner bindings
+    // Resolve inner bindings, auto-quoting non-numeric text values
     char resolved[BINDING_TEMPLATE_MAX_LEN];
-    binding_template_resolve(buf, resolved, sizeof(resolved));
-
-    // Placeholder check
-    if (strstr(resolved, "---") != NULL) {
+    if (!resolve_and_quote(buf, resolved, sizeof(resolved))) {
         snprintf(out, out_len, "---");
         return false;
     }
@@ -311,6 +387,189 @@ static void test_topic_collection() {
     g_pass++;
 }
 
+static void test_auto_quoting_single_word() {
+    printf("--- Auto-quoting: single-word text values ---\n");
+    // Basic: non-numeric health value compared to quoted string
+    g_health_values["ble_status"] = "connected";
+    check("[expr:[health:ble_status]==\"connected\"?\"#00ff00\":\"#ff0000\"]",
+          "#00ff00", "ble connected → green");
+
+    g_health_values["ble_status"] = "disconnected";
+    check("[expr:[health:ble_status]==\"connected\"?\"#00ff00\":\"#ff0000\"]",
+          "#ff0000", "ble disconnected → red");
+
+    // Single-word MQTT text values
+    g_mqtt_values["device/status;state"] = "online";
+    check("[expr:[mqtt:device/status;state]==\"online\"?\"OK\":\"FAIL\"]",
+          "OK", "mqtt online → OK");
+
+    g_mqtt_values["device/status;state"] = "offline";
+    check("[expr:[mqtt:device/status;state]==\"online\"?\"OK\":\"FAIL\"]",
+          "FAIL", "mqtt offline → FAIL");
+
+    // Boolean-like text
+    g_mqtt_values["switch/lamp;state"] = "ON";
+    check("[expr:[mqtt:switch/lamp;state]==\"ON\"?1:0]",
+          "1", "ON → 1");
+
+    g_mqtt_values["switch/lamp;state"] = "OFF";
+    check("[expr:[mqtt:switch/lamp;state]==\"ON\"?1:0]",
+          "0", "OFF → 0");
+}
+
+static void test_auto_quoting_multi_word() {
+    printf("--- Auto-quoting: multi-word text values ---\n");
+    // Value with spaces — the motivating reason for auto-quoting
+    g_mqtt_values["device/status;state"] = "abc def";
+    check("[expr:[mqtt:device/status;state]==\"abc def\"?\"match\":\"no\"]",
+          "match", "space in value eq");
+
+    g_mqtt_values["device/status;state"] = "Living Room";
+    check("[expr:[mqtt:device/status;state]==\"Living Room\"?\"yes\":\"no\"]",
+          "yes", "two-word value eq");
+
+    g_mqtt_values["device/status;state"] = "Not Available";
+    check("[expr:[mqtt:device/status;state]!=\"Not Available\"?\"up\":\"down\"]",
+          "down", "multi-word neq false");
+
+    g_mqtt_values["device/status;state"] = "all good";
+    check("[expr:[mqtt:device/status;state]!=\"Not Available\"?\"up\":\"down\"]",
+          "up", "multi-word neq true");
+}
+
+static void test_auto_quoting_special_chars() {
+    printf("--- Auto-quoting: special characters in values ---\n");
+    // Hyphenated names (hostnames, UUIDs, etc.)
+    g_health_values["hostname"] = "macropad-123";
+    check("[expr:[health:hostname]==\"macropad-123\"?\"yes\":\"no\"]",
+          "yes", "hyphenated hostname eq");
+
+    // Value with dots (version strings, IPs)
+    g_mqtt_values["device/info;version"] = "v1.2.3";
+    check("[expr:[mqtt:device/info;version]==\"v1.2.3\"?\"current\":\"old\"]",
+          "current", "dotted version eq");
+
+    g_mqtt_values["device/info;ip"] = "192.168.1.100";
+    check("[expr:[mqtt:device/info;ip]==\"192.168.1.100\"?\"home\":\"away\"]",
+          "home", "IP address eq");
+
+    // Value with underscores
+    g_mqtt_values["device/info;name"] = "my_device_01";
+    check("[expr:[mqtt:device/info;name]==\"my_device_01\"?\"yes\":\"no\"]",
+          "yes", "underscore value eq");
+
+    // Mixed: hyphens + dots + underscores
+    g_mqtt_values["device/info;id"] = "esp32-s3_rev.2";
+    check("[expr:[mqtt:device/info;id]==\"esp32-s3_rev.2\"?\"yes\":\"no\"]",
+          "yes", "mixed special chars eq");
+}
+
+static void test_auto_quoting_preserves_numbers() {
+    printf("--- Auto-quoting: numeric values stay numeric ---\n");
+    // Integer values must NOT be quoted (would break arithmetic)
+    g_mqtt_values["sensor/temp;value"] = "42";
+    check("[expr:[mqtt:sensor/temp;value] + 1]", "43", "int stays numeric");
+
+    // Float values must NOT be quoted
+    g_mqtt_values["sensor/temp;value"] = "22.5";
+    check("[expr:[mqtt:sensor/temp;value] * 2]", "45", "float stays numeric");
+
+    // Negative numbers
+    g_mqtt_values["sensor/temp;value"] = "-5";
+    check("[expr:[mqtt:sensor/temp;value] + 10]", "5", "negative stays numeric");
+
+    // Leading-dot decimal
+    g_mqtt_values["sensor/temp;value"] = ".5";
+    check("[expr:[mqtt:sensor/temp;value] + .5]", "1", "dot-decimal stays numeric");
+
+    // Zero
+    g_mqtt_values["sensor/temp;value"] = "0";
+    check("[expr:[mqtt:sensor/temp;value] == 0 ? \"zero\" : \"nonzero\"]",
+          "zero", "zero stays numeric");
+}
+
+static void test_auto_quoting_both_bindings_text() {
+    printf("--- Auto-quoting: two text bindings compared ---\n");
+    // Both sides are text from bindings
+    g_mqtt_values["room/actual;state"]   = "on";
+    g_mqtt_values["room/expected;state"] = "on";
+    check("[expr:[mqtt:room/actual;state]==[mqtt:room/expected;state]?\"match\":\"mismatch\"]",
+          "match", "both text eq true");
+
+    g_mqtt_values["room/actual;state"]   = "on";
+    g_mqtt_values["room/expected;state"] = "off";
+    check("[expr:[mqtt:room/actual;state]==[mqtt:room/expected;state]?\"match\":\"mismatch\"]",
+          "mismatch", "both text eq false");
+
+    // Both sides multi-word
+    g_mqtt_values["room/actual;state"]   = "Living Room";
+    g_mqtt_values["room/expected;state"] = "Living Room";
+    check("[expr:[mqtt:room/actual;state]==[mqtt:room/expected;state]?\"same\":\"diff\"]",
+          "same", "both multi-word eq true");
+
+    g_mqtt_values["room/actual;state"]   = "Living Room";
+    g_mqtt_values["room/expected;state"] = "Bed Room";
+    check("[expr:[mqtt:room/actual;state]==[mqtt:room/expected;state]?\"same\":\"diff\"]",
+          "diff", "both multi-word eq false");
+}
+
+static void test_auto_quoting_empty_value() {
+    printf("--- Auto-quoting: empty string values ---\n");
+    // Empty resolved value
+    g_mqtt_values["device/status;state"] = "";
+    check("[expr:[mqtt:device/status;state]==\"\"?\"empty\":\"has data\"]",
+          "empty", "empty string eq");
+
+    g_mqtt_values["device/status;state"] = "something";
+    check("[expr:[mqtt:device/status;state]==\"\"?\"empty\":\"has data\"]",
+          "has data", "non-empty string neq");
+}
+
+static void test_auto_quoting_value_with_quotes() {
+    printf("--- Auto-quoting: values containing quote chars ---\n");
+    // Value that itself contains a double-quote character
+    // The auto-quoting must escape embedded quotes
+    g_mqtt_values["device/status;msg"] = "say \"hello\"";
+    check("[expr:[mqtt:device/status;msg]==\"say \\\"hello\\\"\"?\"yes\":\"no\"]",
+          "yes", "value with embedded quotes");
+}
+
+static void test_auto_quoting_ternary_result() {
+    printf("--- Auto-quoting: text value as ternary condition ---\n");
+    // Non-empty text is truthy? No — equality comparison is the normal pattern.
+    // Verify arithmetic on text fails gracefully, not silently.
+    g_health_values["ble_status"] = "connected";
+    // Plain text value by itself (not in comparison) shouldn't crash
+    // With auto-quoting it becomes "connected" which is a valid string result
+    check("[expr:[health:ble_status]]", "connected", "text value passthrough");
+}
+
+static void test_auto_quoting_mixed_numeric_and_text() {
+    printf("--- Auto-quoting: mixed numeric and text in one expression ---\n");
+    // Compare text binding, do arithmetic on numeric binding in same expression
+    g_mqtt_values["switch/lamp;state"] = "ON";
+    g_mqtt_values["sensor/power;watts"] = "150";
+    // This is a nested ternary: if lamp is ON, show watts, else show 0
+    check("[expr:[mqtt:switch/lamp;state]==\"ON\"?[mqtt:sensor/power;watts]:0]",
+          "150", "text check then numeric result");
+
+    g_mqtt_values["switch/lamp;state"] = "OFF";
+    check("[expr:[mqtt:switch/lamp;state]==\"ON\"?[mqtt:sensor/power;watts]:0]",
+          "0", "text check false → numeric 0");
+}
+
+static void test_auto_quoting_hyphen_not_subtraction() {
+    printf("--- Auto-quoting: hyphenated values don't trigger subtraction ---\n");
+    // "macropad-123" must be treated as one string, not "macropad" minus 123
+    g_health_values["hostname"] = "macropad-123";
+    check("[expr:[health:hostname]]", "macropad-123", "hyphenated passthrough");
+
+    // Even without spaces around the operator, the binding value must stay intact
+    g_mqtt_values["device/info;name"] = "esp32-s3-n16r8";
+    check("[expr:[mqtt:device/info;name]==\"esp32-s3-n16r8\"?\"yes\":\"no\"]",
+          "yes", "multi-hyphen value eq");
+}
+
 static void test_pipe_fallback() {
     printf("--- Pipe fallback ---\n");
 
@@ -382,6 +641,16 @@ int main() {
     test_multiple_expr_tokens();
     test_plain_bindings_unaffected();
     test_topic_collection();
+    test_auto_quoting_single_word();
+    test_auto_quoting_multi_word();
+    test_auto_quoting_special_chars();
+    test_auto_quoting_preserves_numbers();
+    test_auto_quoting_both_bindings_text();
+    test_auto_quoting_empty_value();
+    test_auto_quoting_value_with_quotes();
+    test_auto_quoting_ternary_result();
+    test_auto_quoting_mixed_numeric_and_text();
+    test_auto_quoting_hyphen_not_subtraction();
     test_pipe_fallback();
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);

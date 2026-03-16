@@ -12,6 +12,10 @@
 
 #include "board_config.h"
 
+#if HAS_BLE_HID
+#include "web_portal_ble.h"
+#endif
+
 void web_portal_register_routes(AsyncWebServer* server) {
 		auto handleCorsPreflight = [](AsyncWebServerRequest *request) {
 				web_portal_send_cors_preflight(request);
@@ -126,9 +130,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		);
 		registerOptions("/api/display/screen");
 
-		// Pad tile sizes (registered before /api/pad to avoid prefix match)
-		registerOptions("/api/pad/tile_sizes");
-		server->on("/api/pad/tile_sizes", HTTP_GET, handleGetTileSizes);
+		// Pad button sizes (registered before /api/pad to avoid prefix match)
+		registerOptions("/api/pad/button_sizes");
+		server->on("/api/pad/button_sizes", HTTP_GET, handleGetButtonSizes);
 
 		// Pad config API
 		registerOptions("/api/pad");
@@ -185,5 +189,14 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				handleOTAUpload
 		);
 		registerOptions("/api/update");
+
+#if HAS_BLE_HID
+		// BLE pairing endpoint
+		registerOptions("/api/ble/pairing/start");
+		server->on("/api/ble/pairing/start", HTTP_POST, [](AsyncWebServerRequest *request) {
+				if (!portal_auth_gate(request)) return;
+				handlePostBlePairingStart(request);
+		});
+#endif
 
 }

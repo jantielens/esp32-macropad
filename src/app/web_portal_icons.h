@@ -16,8 +16,8 @@ void handleDeletePageIcons(AsyncWebServerRequest *request);
 // GET /api/icons/installed — list installed icon IDs
 void handleGetInstalledIcons(AsyncWebServerRequest *request);
 
-// GET /api/pad/tile_sizes?cols=N&rows=N — return tile dimensions for layout
-void handleGetTileSizes(AsyncWebServerRequest *request);
+// GET /api/pad/button_sizes?cols=N&rows=N — return button dimensions for layout
+void handleGetButtonSizes(AsyncWebServerRequest *request);
 
 // Debug endpoints
 // GET /api/icons/files — list all files in /icons/ with full name + size

@@ -9,7 +9,6 @@
 #include "mqtt_wake.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
-#include "ble_advertiser.h"
 #include "power_config.h"
 #include "power_manager.h"
 #include "portal_idle.h"
@@ -33,6 +32,10 @@
 
 #if HAS_IMAGE_FETCH
 #include "image_fetch.h"
+#endif
+
+#if HAS_BLE_HID
+#include "ble_hid.h"
 #endif
 
 #include <esp_ota_ops.h>
@@ -245,22 +248,16 @@ void setup()
 	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
 	pad_config_init();
 
-	// Initialize icon store and preload icons for all pad pages
+	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
 	#endif
-
-	const PublishTransport transport = power_config_parse_publish_transport(&device_config);
-	const bool ble_only_always_on = (boot_mode == PowerMode::AlwaysOn) && (transport == PublishTransport::Ble) && (strlen(device_config.wifi_ssid) == 0);
 
 	// Start WiFi BEFORE initializing web server (critical for ESP32-C3)
 	#if HAS_DISPLAY
 	display_manager_set_splash_status("Connecting WiFi...");
 	#endif
 
-	if (ble_only_always_on) {
-		LOGW("Main", "BLE-only mode active (no WiFi SSID); portal unavailable unless forced into Config Mode");
-	} else {
 		if (boot_mode == PowerMode::Ap) {
 			LOGI("Main", "AP mode selected - starting AP mode");
 			web_portal_start_ap();
@@ -290,10 +287,19 @@ void setup()
 		portal_idle_init();
 		portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);
 		portal_idle_set_mode(power_manager_get_current_mode());
-	}
 
 	// Initialize sensors (optional adapters)
 	sensor_manager_init();
+
+	// BLE HID keyboard — guarded by ble_hid_init() which bails gracefully
+	// (init_error = true) if the NimBLE stack fails to allocate.
+	#if HAS_BLE_HID
+	if (device_config.ble_enabled) {
+		ble_hid_init(device_config.device_name, false);
+	} else {
+		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
+	}
+	#endif
 
 	#if HAS_MQTT
 	// Initialize MQTT manager (will only connect/publish when configured)
@@ -387,6 +393,12 @@ void loop()
 	touch_manager_loop();
 	#endif
 
+	#if HAS_BLE_HID
+	if (device_config.ble_enabled) {
+		ble_hid_loop();
+	}
+	#endif
+
 	// Handle web portal (DNS for captive portal)
 	web_portal_handle();
 
@@ -399,10 +411,6 @@ void loop()
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).
 	sensor_manager_loop();
 
-	#if HAS_BLE
-	const bool allow_ble_always_on = config_loaded && power_manager_get_current_mode() != PowerMode::DutyCycle;
-	ble_advertiser_loop(&device_config, allow_ble_always_on);
-	#endif
 
 
 	unsigned long current_ms = millis();

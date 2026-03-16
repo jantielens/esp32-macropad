@@ -10,7 +10,7 @@
 // ============================================================================
 // Pad Binding — [pad:name] scheme for the binding template engine
 // ============================================================================
-// Resolves page-level named bindings defined in pad config JSON:
+// Resolves pad-level named bindings defined in pad config JSON:
 //   "bindings": { "power": "[mqtt:solar/power;$.value]" }
 //
 // Usage in button fields:
@@ -28,14 +28,14 @@ extern "C" {
 // Register the "pad" binding scheme. Call once during setup().
 void pad_binding_init();
 
-// Set the active page context for resolution and topic collection.
+// Set the active pad context for resolution and topic collection.
 // Must be called before binding_template_resolve() or
 // binding_template_collect_topics() when [pad:] bindings may be present.
-// page may be NULL (clears context — [pad:] tokens resolve to "---").
-void pad_binding_set_page(const PadPageConfig* page);
+// pad may be NULL (clears context — [pad:] tokens resolve to "---").
+void pad_binding_set_page(const PadConfig* pad);
 
 // Lighter-weight alternative: set bindings directly (for PadScreen which caches
-// the bindings array but not the full PadPageConfig).
+// the bindings array but not the full PadConfig).
 // bindings may be NULL (clears context). count is ignored when bindings is NULL.
 void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count);
 
@@ -44,7 +44,7 @@ void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count);
 // Used by data_stream_rebuild() to pre-expand before storing in streams.
 // Returns true if any [pad:] token was expanded. out is always null-terminated.
 // Requires a page context (pass explicitly, does not use the global context).
-bool pad_binding_expand(const PadPageConfig* page, const char* templ,
+bool pad_binding_expand(const PadConfig* page, const char* templ,
                         char* out, size_t out_len);
 
 #ifdef __cplusplus

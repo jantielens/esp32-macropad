@@ -1,5 +1,6 @@
 #include "device_telemetry.h"
 
+#include "config_manager.h"
 #include "log_manager.h"
 #include "board_config.h"
 #include "fs_health.h"
@@ -22,6 +23,11 @@
 
 #if HAS_DISPLAY
 #include "display_manager.h"
+#endif
+
+#if HAS_BLE_HID
+#include "ble_hid.h"
+extern DeviceConfig device_config;
 #endif
 
 // Temperature sensor support (ESP32-C3, ESP32-S2, ESP32-S3, ESP32-C2, ESP32-C6, ESP32-H2)
@@ -338,6 +344,20 @@ void device_telemetry_fill_api(JsonDocument &doc) {
 		// in-progress window to reduce the chance of missing short spikes around
 		// rollovers without storing any time series.
 		fill_health_window_fields(doc);
+
+		// BLE HID state (API-only)
+		#if HAS_BLE_HID
+		doc["ble_state"] = device_config.ble_enabled ? ble_hid_state() : "disabled";
+		doc["ble_status"] = device_config.ble_enabled ? ble_hid_status() : "disabled";
+		if (device_config.ble_enabled && ble_hid_is_initialized()) {
+				doc["ble_name"] = ble_hid_name();
+				doc["ble_bonded"] = ble_hid_is_bonded();
+				doc["ble_encrypted"] = ble_hid_is_encrypted();
+				doc["ble_pairing"] = ble_hid_is_pairing();
+				doc["ble_peer_addr"] = ble_hid_peer_addr();
+				doc["ble_peer_id_addr"] = ble_hid_peer_id_addr();
+		}
+		#endif
 
 		// =====================================================================
 		// USER-EXTEND: Add your own sensors to the web "health" API (/api/health)

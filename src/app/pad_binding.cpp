@@ -18,7 +18,7 @@
 static const PadBinding* g_bindings = nullptr;
 static uint8_t g_binding_count = 0;
 
-void pad_binding_set_page(const PadPageConfig* page) {
+void pad_binding_set_page(const PadConfig* page) {
     if (page) {
         g_bindings = page->bindings;
         g_binding_count = page->binding_count;
@@ -148,7 +148,7 @@ static void pad_binding_collect(const char* params, void* user_data) {
 // Expand utility — text substitution of [pad:name] to underlying templates
 // ============================================================================
 
-bool pad_binding_expand(const PadPageConfig* page, const char* templ,
+bool pad_binding_expand(const PadConfig* page, const char* templ,
                         char* out, size_t out_len) {
     if (!templ || !out || out_len == 0) {
         if (out && out_len > 0) out[0] = '\0';

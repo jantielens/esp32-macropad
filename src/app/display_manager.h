@@ -26,10 +26,8 @@
 // ============================================================================
 // Screen Registry
 // ============================================================================
-// Maximum number of screens that can be registered for runtime navigation
-// 20 slots: base screens (info, test, fps, touch_test) + 8 pad pages + headroom
-// Only ~480 bytes total (24 bytes × 20), negligible overhead
-#define MAX_SCREENS 20
+// MAX_SCREENS is derived from MAX_PADS + MAX_NON_PAD_SCREENS in board_config.h
+// SCREEN_HISTORY_MAX is defined in board_config.h (default 8)
 
 // Struct for registering available screens dynamically
 struct ScreenInfo {
@@ -80,7 +78,6 @@ private:
 		Screen* pendingScreen;   // Deferred screen switch (processed in lvglTask)
 
 		// Screen history stack for multi-step back navigation
-		static constexpr size_t SCREEN_HISTORY_MAX = 8;
 		Screen* screenHistory[SCREEN_HISTORY_MAX];
 		size_t screenHistoryCount;
 		bool skipHistoryPush;    // Set by goBack() to avoid pushing when navigating back
@@ -104,8 +101,20 @@ private:
 		TouchTestScreen touchTestScreen;
 		#endif
 
-		// Pad screens (one per page, 0–7)
-		PadScreen padScreens[MAX_PAD_PAGES];
+		// Pad screens (heap-allocated, one per pad index 0..MAX_PADS-1)
+		PadScreen** padScreens;
+
+		// Heap-allocated string buffers for pad screen IDs and names
+		char** padIds;      // "pad_0", "pad_1", ... "pad_15"
+		char** padNames;    // "Pad 1", "Pad 2", ... "Pad 16"
+
+		// LRU pad cache: tracks which pads have arrays allocated.
+		// When a pad screen is shown, it's promoted to front.
+		// When the cache exceeds SCREEN_HISTORY_MAX entries, the oldest is evicted.
+		uint8_t* lruCache;          // Array of pad indices (most-recent-first)
+		uint8_t lruCount;           // Number of entries in LRU cache
+		void lruPromote(uint8_t padIndex);   // Move/add pad to front of LRU
+		void lruEvictIfNeeded();             // Evict oldest if over capacity
 
 		// Screen registry for runtime navigation (static allocation, no heap)
 		// screenCount tracks how many slots are actually used (currently 2: info, test)

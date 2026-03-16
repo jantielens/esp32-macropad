@@ -52,7 +52,7 @@ static int parse_page_param(AsyncWebServerRequest *request) {
     int page = val.toInt();
     // toInt() returns 0 for non-numeric; distinguish "0" from error
     if (page == 0 && val != "0") return -1;
-    if (page < 0 || page >= MAX_PAD_PAGES) return -1;
+    if (page < 0 || page >= MAX_PADS) return -1;
     return page;
 }
 
@@ -87,7 +87,7 @@ void handleGetPadConfig(AsyncWebServerRequest *request) {
 
     int page = parse_page_param(request);
     if (page < 0) {
-        web_portal_send_json_error(request, 400, "Missing or invalid page parameter (0-7)");
+        web_portal_send_json_error(request, 400, "Missing or invalid page parameter");
         return;
     }
 
@@ -119,7 +119,7 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
         // First chunk — parse page param, allocate buffer
         int page = parse_page_param(request);
         if (page < 0) {
-            web_portal_send_json_error(request, 400, "Missing or invalid page parameter (0-7)");
+            web_portal_send_json_error(request, 400, "Missing or invalid page parameter");
             return;
         }
 
@@ -217,7 +217,7 @@ void handleDeletePadConfig(AsyncWebServerRequest *request) {
 
     int page = parse_page_param(request);
     if (page < 0) {
-        web_portal_send_json_error(request, 400, "Missing or invalid page parameter (0-7)");
+        web_portal_send_json_error(request, 400, "Missing or invalid page parameter");
         return;
     }
 

@@ -55,7 +55,6 @@ Controls how the device operates:
 | Setting | Description |
 |---------|-------------|
 | **Operating Mode** | **Always-On** keeps all services running continuously. **Duty-Cycle** wakes periodically, publishes data, then goes back to sleep to save power |
-| **Transport Mode** | Choose which protocols publish telemetry: BLE, MQTT, or both |
 | **Cycle Interval** | How often the device wakes and publishes in duty-cycle mode (seconds) |
 | **Portal Idle Timeout** | Auto-sleep timeout when in config/AP mode (seconds, 0 = disabled) |
 | **WiFi Backoff Max** | Maximum delay between WiFi reconnection attempts (seconds) |
@@ -66,14 +65,58 @@ Controls how the device operates:
 |---------|-------------|
 | **MQTT Payload Scope** | What to include in MQTT publishes: sensor data only, diagnostics only, or everything |
 
-#### BLE Transport Settings
+### BLE Keyboard
 
-| Setting | Description |
+*Shown only on boards with BLE HID support (ESP32-P4 boards). Not available on ESP32-S3 boards due to internal RAM constraints.*
+
+The BLE Keyboard section lets you enable/disable the Bluetooth keyboard and manage pairing.
+
+| Element | Description |
 |---------|-------------|
-| **Burst Duration** | How long each BLE advertising burst lasts (ms) |
-| **Gap Duration** | Pause between bursts (ms) |
-| **Bursts** | Number of bursts per cycle (1–10) |
-| **Adv Interval** | BLE advertising interval within a burst (ms) |
+| **Enable BLE Keyboard** | Checkbox to enable or disable BLE. Disabled by default to save ~70 KB RAM. Requires a reboot to take effect |
+| **Status indicator** | Reflects the compact `ble_status`: disabled, ready, pairing, connected, or error |
+| **Name** | Shows the current BLE keyboard name (same as the configured device name) |
+| **Bonded / Encrypted badges** | Shown when a host is connected |
+| **Peer address** | The connected host's Bluetooth address |
+| **Pair New Device** | Clears the previous bond and opens a fresh 60-second pairing window — no reboot required |
+
+You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
+
+The BLE keyboard always advertises with the configured device name and the chip's stable hardware address, so the host always sees the same device.
+
+> **Re-pairing tip:** Before pairing a new host (or re-pairing the same host), remove the device from the old host's Bluetooth settings first. If you skip this step the old host may keep trying to reconnect with stale keys for a short while — this is normal BLE behavior and will eventually stop, but removing the device avoids the noise.
+
+#### BLE Signals
+
+The firmware exposes two BLE health signals for bindings and diagnostics:
+
+| Signal | Purpose | Values |
+|--------|---------|--------|
+| **`ble_status`** | Compact user-facing status | `disabled`, `ready`, `pairing`, `connected`, `error` |
+| **`ble_state`** | Detailed diagnostic status | `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, `error` |
+
+**`ble_status` values:**
+
+| Value | Meaning |
+|-------|---------|
+| `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ready` | BLE keyboard is enabled and waiting, but not currently pairing or in a secured active session |
+| `pairing` | BLE keyboard is in the new-device pairing window |
+| `connected` | A host is connected and the BLE HID session is encrypted and usable |
+| `error` | BLE initialization failed or the BLE stack entered a fault state |
+
+**`ble_state` values:**
+
+| Value | Meaning |
+|-------|---------|
+| `disabled` | BLE keyboard is turned off in runtime configuration |
+| `idle` | BLE stack is initialized but not advertising a stronger user-visible condition |
+| `advertising` | BLE is advertising without an owner claim yet |
+| `pairing` | BLE is in pairing mode and waiting for a new host |
+| `connecting` | A host connection exists, but the secure HID session is not fully established yet |
+| `claimed` | BLE has an owner on record and is advertising for that owner to reconnect |
+| `secured` | BLE has an encrypted active connection |
+| `error` | BLE initialization failed or the BLE stack entered a fault state |
 
 ### Display Settings
 
@@ -103,7 +146,7 @@ Protects your LCD from burn-in by turning off the backlight after a period of in
 
 *Available in Full mode only.*
 
-The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 8 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
+The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 16 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
 
 The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import). This is completely separate from the device config Save & Reboot footer on other pages.
 
@@ -206,6 +249,6 @@ After a reboot, the portal shows an automatic reconnection dialog. If it can't r
 - **Bookmark your device**: After setup, bookmark `http://<device-name>.local` for quick access
 - **Back up your config**: Use **Export Device Config** regularly — it saves everything into a single JSON file
 - **Clone devices**: Export from one device, import on another to duplicate your setup
-- **Copy/paste buttons**: The button editor has Copy and Paste buttons to quickly duplicate button settings across cells
+- **Copy/paste buttons**: The button editor has Copy and Paste buttons to quickly duplicate button settings across cells. Both keep the editor open so you can keep working, and column/row spans are preserved when space allows
 - **Binding templates**: Mix static text with live data — e.g., `Solar: [mqtt:home/solar;power;%.0f W]` shows "Solar: 3500 W"
 - **Security**: Enable HTTP Basic Auth on devices accessible from outside your home network

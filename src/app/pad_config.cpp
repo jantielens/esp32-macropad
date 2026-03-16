@@ -24,10 +24,10 @@ static uint32_t g_generation = 0;
 
 // In-RAM cache so the LVGL render task (PSRAM stack) never touches flash.
 // Flash reads require disabling cache, which is incompatible with PSRAM stacks.
-static PadPageConfig* g_cache[MAX_PAD_PAGES] = {};
+static PadConfig* g_cache[MAX_PADS] = {};
 
 // Forward declaration — defined after pad_config_init()
-static bool pad_config_load_from_flash(uint8_t page, PadPageConfig* out);
+static bool pad_config_load_from_flash(uint8_t page, PadConfig* out);
 
 // ============================================================================
 // Helpers
@@ -192,6 +192,7 @@ static void parse_action(JsonVariant v, ButtonAction* act, const char* legacy_sc
         strlcpy(act->screen_id, a["target"] | "", CONFIG_SCREEN_ID_MAX_LEN);
         strlcpy(act->mqtt_topic, a["topic"] | "", CONFIG_MQTT_TOPIC_MAX_LEN);
         strlcpy(act->mqtt_payload, a["payload"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
+        strlcpy(act->key_sequence, a["sequence"] | "", CONFIG_KEY_SEQ_MAX_LEN);
         return;
     }
 
@@ -308,16 +309,16 @@ bool pad_config_init() {
     // Pre-load all existing page configs into RAM cache.
     // This runs on the main task (internal stack) so flash access is safe.
     bool any_loaded = false;
-    for (uint8_t i = 0; i < MAX_PAD_PAGES; i++) {
+    for (uint8_t i = 0; i < MAX_PADS; i++) {
         char path[32];
         pad_config_path(i, path, sizeof(path));
         if (LittleFS.exists(path)) {
-            PadPageConfig* cfg = (PadPageConfig*)heap_caps_malloc(
-                sizeof(PadPageConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (!cfg) cfg = (PadPageConfig*)malloc(sizeof(PadPageConfig));
+            PadConfig* cfg = (PadConfig*)heap_caps_malloc(
+                sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
             if (cfg) {
                 // Temporarily call the flash-reading parse logic directly
-                memset(cfg, 0, sizeof(PadPageConfig));
+                memset(cfg, 0, sizeof(PadConfig));
                 if (pad_config_load_from_flash(i, cfg)) {
                     g_cache[i] = cfg;
                     any_loaded = true;
@@ -344,15 +345,15 @@ bool pad_config_init() {
 // Internal: read and parse page config from flash. Only call from a task
 // with an internal-RAM stack (main task, web server tasks). Never from the
 // LVGL render task whose stack may live in PSRAM.
-static bool pad_config_load_from_flash(uint8_t page, PadPageConfig* out) {
+static bool pad_config_load_from_flash(uint8_t page, PadConfig* out) {
     if (!out) return false;
-    memset(out, 0, sizeof(PadPageConfig));
+    memset(out, 0, sizeof(PadConfig));
 
     strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = 3;
     out->rows = 3;
 
-    if (page >= MAX_PAD_PAGES) return false;
+    if (page >= MAX_PADS) return false;
     if (!g_fs_mounted) return false;
 
     char path[32];
@@ -450,13 +451,13 @@ static bool pad_config_load_from_flash(uint8_t page, PadPageConfig* out) {
 // Update the in-RAM cache for a page (parse from flash).
 // Call from a task with internal-RAM stack (web server, main task).
 static void cache_update(uint8_t page) {
-    PadPageConfig* cfg = (PadPageConfig*)heap_caps_malloc(
-        sizeof(PadPageConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadPageConfig*)malloc(sizeof(PadPageConfig));
+    PadConfig* cfg = (PadConfig*)heap_caps_malloc(
+        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
     if (!cfg) return;
 
     if (pad_config_load_from_flash(page, cfg)) {
-        PadPageConfig* old = g_cache[page];
+        PadConfig* old = g_cache[page];
         g_cache[page] = cfg;
         free(old);
     } else {
@@ -467,19 +468,19 @@ static void cache_update(uint8_t page) {
     }
 }
 
-bool pad_config_load(uint8_t page, PadPageConfig* out) {
+bool pad_config_load(uint8_t page, PadConfig* out) {
     if (!out) return false;
-    memset(out, 0, sizeof(PadPageConfig));
+    memset(out, 0, sizeof(PadConfig));
 
     strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = 3;
     out->rows = 3;
 
-    if (page >= MAX_PAD_PAGES) return false;
+    if (page >= MAX_PADS) return false;
 
     // Serve from RAM cache — safe to call from any task (including PSRAM-stack LVGL task)
     if (g_cache[page]) {
-        memcpy(out, g_cache[page], sizeof(PadPageConfig));
+        memcpy(out, g_cache[page], sizeof(PadConfig));
         return true;
     }
 
@@ -488,7 +489,7 @@ bool pad_config_load(uint8_t page, PadPageConfig* out) {
 }
 
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
-    if (page >= MAX_PAD_PAGES) return false;
+    if (page >= MAX_PADS) return false;
     if (!g_fs_mounted) return false;
     if (!json || len == 0) return false;
 
@@ -523,7 +524,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
 }
 
 bool pad_config_delete(uint8_t page) {
-    if (page >= MAX_PAD_PAGES) return false;
+    if (page >= MAX_PADS) return false;
     if (!g_fs_mounted) return false;
 
     char path[32];
@@ -552,7 +553,7 @@ bool pad_config_delete(uint8_t page) {
 }
 
 bool pad_config_exists(uint8_t page) {
-    if (page >= MAX_PAD_PAGES) return false;
+    if (page >= MAX_PADS) return false;
     if (!g_fs_mounted) return false;
 
     char path[32];
@@ -562,7 +563,7 @@ bool pad_config_exists(uint8_t page) {
 
 char* pad_config_read_raw(uint8_t page, size_t* out_len) {
     if (out_len) *out_len = 0;
-    if (page >= MAX_PAD_PAGES) return nullptr;
+    if (page >= MAX_PADS) return nullptr;
     if (!g_fs_mounted) return nullptr;
 
     char path[32];

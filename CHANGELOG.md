@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.10.0] - 2026-03-16
+
+### Added
+- **WiFi health binding keys** — new `[health:wifi_connected]` (`ON`/`OFF`) and `[health:wifi_ssid]` (connected network name) binding keys for building WiFi status indicators directly on pad buttons
+- **BLE HID keyboard** — the macropad can now act as a Bluetooth keyboard. Assign a `key` action to any button to send keystrokes (single keys, modifier combos, media keys, or multi-step sequences) to a paired host. Assign a `ble_pair` action to clear bonds and open a fresh 60-second pairing window. Features:
+  - Key sequence DSL with text literals, modifier keys, consumer/media keys, and delays
+  - Single-owner pairing policy: one bonded host at a time, unbonded peers rejected outside the pairing window
+  - Runtime enable/disable toggle on the Home page (disabled by default, saves ~70 KB RAM when off; requires reboot)
+  - BLE state exposed in `/api/health` (`ble_status`, `ble_state`, `ble_name`, `ble_pairing`, `ble_bonded`, `ble_encrypted`, `ble_peer_addr`, `ble_peer_id_addr`)
+  - Health binding support: `[health:ble_status]`, `[health:ble_state]`, `[health:ble_name]`, `[health:ble_pairing]`, etc.
+  - New BLE Keyboard section on the Home page with connection status, peer details, and "Pair New Device" button
+  - New `POST /api/ble/pairing/start` endpoint for triggering pairing from the portal
+  - **ESP32-P4 only** — disabled on ESP32-S3 boards (`HAS_BLE_HID false`) due to insufficient internal RAM for NimBLE + WiFi + display concurrently
+  - Improved button editor wording: "Send BLE Keys", "Start BLE Pairing", "Keys to Send" with contextual hint when BLE actions are selected
+- **Sparkline current-value labels** — per-line labels that display resolved binding text in a right-side margin, tracking the Y position of the most recent data point. Supports up to 3 labels (one per line), full binding expressions, configurable label width (0 = 50px default), and greedy collision avoidance when labels overlap. Label color inherits the line color. Label-only redraws are throttled to 1 Hz to minimize CPU usage
+- **16-pad support with LRU memory management** — expanded from 8 to 16 configurable pads. Heavy per-pad arrays (bindings, tiles, color/number/state bindings) are now lazily allocated in PSRAM on first visit and freed via an LRU-8 eviction cache, keeping peak memory usage comparable to the previous 8-pad implementation. Key changes:
+  - `MAX_PADS` raised to 16 (overridable per board in `board_overrides.h`)
+  - `MAX_SCREENS` derived from `MAX_PADS + MAX_NON_PAD_SCREENS` (default 26)
+  - `SCREEN_HISTORY_MAX` controls both back-navigation depth and LRU cache size (default 8)
+  - `DATA_STREAM_MAX_STREAMS` raised to 64 for sparkline widget headroom
+  - Pad screen IDs and names generated dynamically (`pad_0`..`pad_15`, `Pad 1`..`Pad 16`)
+  - Web portal pad dropdown populated dynamically from `/api/info` `max_pads` field
+  - Device export/import loops use `max_pads` instead of hardcoded 8
+
+### Changed
+- **Zero-allocation health binding resolve** — WiFi SSID, IP address, and connection status are now cached in static buffers during the 2-second telemetry refresh instead of allocating Arduino `String` objects on every resolve call, eliminating heap fragmentation in the LVGL render loop
+- **Expanded health binding keys for system pad use** — added 14 new `[health:]` binding keys for building system-status pads with bar charts and labels. New keys fall into three categories:
+  - **Memory totals** (for bar chart `widget_bar_max`): `heap_total`, `heap_internal_total`, `psram_total` — read from `heap_caps_get_total_size()` cached once at init, zero runtime cost
+  - **Memory used** (for bar chart `data_binding`): `heap_internal_used`, `psram_used` — computed from `total − free` each refresh cycle
+  - **Static device info** (cached once at init): `chip`, `chip_rev`, `cores`, `cpu_freq`, `flash_size`, `firmware`, `board`, `mac`, `reset_reason` — zero ongoing overhead
+  - All new keys documented in the Binding Reference tooltip (System Info and Memory Totals sections) and user guides
+- **Bindable min/max values for all widgets** — bar chart, gauge, and sparkline min/max scale fields now accept binding expressions (e.g. `[health:psram_total]`) in addition to static numbers. This enables dynamic scaling for system-status pads where the maximum value depends on device hardware. Fields are resolved at render time using the existing `resolve_number()` infrastructure with negligible overhead. Sparkline auto-scale (empty = NAN) is preserved.
+- **Terminology consolidation** — standardized user-facing terminology across the entire project to a consistent hierarchy: **Screen** → **Pad** → **Button** → **Widget**. Retired "page" (as synonym for pad), "tile" (as synonym for button), and "cell" (in user-facing text). Key changes:
+  - Renamed `PadPageConfig` → `PadConfig` and `MAX_PAD_PAGES` → `MAX_PADS` throughout source code
+  - Renamed REST endpoint `/api/pad/tile_sizes` → `/api/pad/button_sizes` with JSON fields `button_w` / `button_h` (breaking API change)
+  - Updated web UI: "Button Type" → "Widget", "Normal Button" → "None", "Click a cell to edit its button" → "Click a button to edit it"
+  - Updated JS: `padTileSizesCache` → `padButtonSizesCache`, `padGetTileSizes` → `padGetButtonSizes`
+  - Updated user-facing docs (`pad-editor-guide.md`, `first-time-setup.md`, `README.md`) to use consistent terminology
+  - Added enforced **Terminology Conventions** section to `.github/copilot-instructions.md` with definitions, retired terms, and rules
+
+### Fixed
+- **GitHub firmware update crash on ESP32-P4 boards** ([#14](https://github.com/jantielens/esp32-macropad/issues/14)) — OTA updates via GitHub Pages crashed on ESP32-P4 boards due to two independent bugs:
+  1. The firmware update task used a PSRAM stack (`rtos_create_task_psram_stack`), but `Update.write()` triggers SPI flash writes that disable the SPI cache — making the PSRAM stack inaccessible and causing an assert in `cache_utils.c`. Fixed by forcing the task to use an internal RAM stack via `xTaskCreate()`.
+  2. Concurrent image fetching during OTA exhausted the SDIO WiFi driver's RX buffer pool (the ESP32-P4 uses an external ESP32-C6 for WiFi over SDIO). Fixed by suspending image fetch slots before starting the OTA download and restoring them on error.
+
+### Removed
+- **NimBLE / BTHome BLE advertising** — removed the entire BLE BTHome v2 advertising subsystem (`ble_advertiser.cpp/h`, `NimBLE-Arduino` library dependency, `HAS_BLE` compile flag, `PublishTransport` enum, BLE timing config fields, web portal Transport Mode selector and BLE Advertising settings). This simplifies the codebase ahead of the BLE HID keyboard feature. Affected 23 files across firmware, web portal, build system, and documentation.
+
+### Improved
+- **Stable BLE identity** — BLE pairing no longer rotates the device's identity address or appends an address suffix to the device name. The device always advertises with the same hardware address and the configured device name, matching how standard BLE HID keyboards work. This fixes issues with Windows caching stale BLE device entries after re-pairing.
+- **Quieter BLE re-pairing** — after triggering "Pair New Device", the old host (especially Windows) may keep reconnecting briefly with stale keys. These failed reconnection attempts are now logged at DEBUG level instead of WARN to avoid flooding the serial monitor. The old host eventually backs off, or the user removes the device from their Bluetooth settings before pairing again.
+- **Health binding reference in tooltip** — replaced the single-line key list with organized tables grouped by category (System, Memory, WiFi, BLE), each key with a brief description of its value/format. Added color-mapping examples for WiFi status (green/red via `wifi_connected`) and BLE status (5-state color map via `ble_status`)
+- **Pad editor Copy keeps dialog open** — the Copy button now saves the current button state and copies to clipboard without closing the editor, so you can continue editing or immediately paste elsewhere
+- **Pad editor Paste keeps dialog open** — pasting a button now re-opens the editor showing the pasted content, so you can review or tweak before closing
+- **Pad editor Paste preserves col/row span** — copied buttons now retain their column and row span values in the clipboard. On paste, spans are applied if they fit at the target position (within grid bounds and no overlap with existing buttons); otherwise they gracefully fall back to 1×1
+- **Pad editor Fill strips span** — "Fill pad with copied button" now strips col/row span values so every cell gets a clean 1×1 button
+- **Auto-quoting in expression bindings** — resolved binding text values (e.g. `connected`, `Living Room`) are now automatically quoted before expression evaluation in `[expr:]` bindings. Users can write `[expr:[health:ble_status]=="connected"?"#00ff00":"#ff0000"]` without needing to quote the inner binding. Handles spaces, hyphens, dots, and any special characters in resolved values. Numeric values pass through unquoted so arithmetic continues to work
+
+---
+
 ## [1.9.0] - 2026-03-13
 
 ### Changed

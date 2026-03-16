@@ -30,8 +30,8 @@
 // ---- Config struct (packed into WidgetConfig.data[]) ----
 
 struct BarChartConfig {
-    float    bar_max;              // Full-scale value (default 3.0)
-    float    bar_min;              // Minimum value (default 0.0)
+    char     bar_min[CONFIG_BINDABLE_SHORT_LEN];        // Minimum value (bindable, default "0")
+    char     bar_max[CONFIG_BINDABLE_SHORT_LEN];        // Full-scale value (bindable, default "3")
     char     bar_color[CONFIG_COLOR_MAX_LEN];            // Bar fill color (bindable, default "#4CAF50")
     char     bar_bg_color[CONFIG_BINDABLE_SHORT_LEN];    // Bar track background (default "#1A1A1A")
     uint8_t  bar_width_pct;       // Bar width as % of tile width (1-100, default 100)
@@ -47,6 +47,8 @@ struct BarChartState {
     lv_obj_t* bar_bg;    // Bar background rectangle
     lv_obj_t* bar_fill;  // Bar fill rectangle (grows from bottom)
     float     last_value; // Last numeric value (for skipping redundant updates)
+    float     cached_min; // Last resolved min (for detecting binding changes in tick)
+    float     cached_max; // Last resolved max (for detecting binding changes in tick)
     uint32_t  cached_bar_bg_color;  // Last resolved bar background color
     uint32_t  cached_bar_color;     // Last resolved bar fill color
 };
@@ -60,8 +62,8 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
     auto* cfg = reinterpret_cast<BarChartConfig*>(data);
     memset(cfg, 0, sizeof(BarChartConfig));
 
-    cfg->bar_max = btn["widget_bar_max"] | 3.0f;
-    cfg->bar_min = btn["widget_bar_min"] | 0.0f;
+    widget_parse_field(btn["widget_bar_min"],      cfg->bar_min,       sizeof(cfg->bar_min),       "0", false);
+    widget_parse_field(btn["widget_bar_max"],      cfg->bar_max,       sizeof(cfg->bar_max),       "3", false);
 
     widget_parse_field(btn["widget_bar_color"],     cfg->bar_color,     sizeof(cfg->bar_color),     "#4CAF50");
     widget_parse_field(btn["widget_bar_bg_color"],  cfg->bar_bg_color,  sizeof(cfg->bar_bg_color),  "#1A1A1A");
@@ -80,6 +82,8 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<BarChartState*>(state->data);
     memset(st, 0, sizeof(BarChartState));
     st->last_value = NAN;
+    st->cached_min = NAN;
+    st->cached_max = NAN;
     st->cached_bar_bg_color = COLOR_CACHE_INIT;
     st->cached_bar_color    = COLOR_CACHE_INIT;
 
@@ -187,10 +191,16 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (!isnan(st->last_value) && fabsf(value - st->last_value) < 0.001f) return;
     st->last_value = value;
 
+    // Resolve bindable min/max
+    float bar_max = resolve_number(cfg->bar_max, 3.0f);
+    float bar_min = resolve_number(cfg->bar_min, 0.0f);
+    st->cached_min = bar_min;
+    st->cached_max = bar_max;
+
     // Compute fill height
-    float range = cfg->bar_max - cfg->bar_min;
+    float range = bar_max - bar_min;
     if (range <= 0.0f) range = 1.0f;
-    float ratio = (fabsf(value) - cfg->bar_min) / range;
+    float ratio = (fabsf(value) - bar_min) / range;
     if (ratio < 0.0f) ratio = 0.0f;
     if (ratio > 1.0f) ratio = 1.0f;
 
@@ -222,6 +232,15 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* cfg = reinterpret_cast<const BarChartConfig*>(wcfg->data);
     auto* st = reinterpret_cast<BarChartState*>(state->data);
     if (!st->bar_fill || !st->bar_bg) return;
+
+    // Re-resolve bindable min/max; invalidate last_value so next update re-applies
+    float mn = resolve_number(cfg->bar_min, 0.0f);
+    float mx = resolve_number(cfg->bar_max, 3.0f);
+    if (mn != st->cached_min || mx != st->cached_max) {
+        st->cached_min = mn;
+        st->cached_max = mx;
+        st->last_value = NAN;
+    }
 
     lv_color_t clr;
     if (resolve_color_changed(cfg->bar_bg_color, 0x1A1A1A, &st->cached_bar_bg_color, &clr))
