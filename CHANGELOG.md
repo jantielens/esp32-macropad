@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **NimBLE / BTHome BLE advertising** — removed the entire BLE BTHome v2 advertising subsystem (`ble_advertiser.cpp/h`, `NimBLE-Arduino` library dependency, `HAS_BLE` compile flag, `PublishTransport` enum, BLE timing config fields, web portal Transport Mode selector and BLE Advertising settings). This simplifies the codebase ahead of the BLE HID keyboard feature. Affected 23 files across firmware, web portal, build system, and documentation.
 
 ### Improved
+- **Health binding reference in tooltip** — replaced the single-line key list with organized tables grouped by category (System, Memory, WiFi, BLE), each key with a brief description of its value/format. Added color-mapping examples for WiFi status (green/red via `wifi_connected`) and BLE status (5-state color map via `ble_status`)
 - **Pad editor Copy keeps dialog open** — the Copy button now saves the current button state and copies to clipboard without closing the editor, so you can continue editing or immediately paste elsewhere
 - **Pad editor Paste keeps dialog open** — pasting a button now re-opens the editor showing the pasted content, so you can review or tweak before closing
 - **Pad editor Paste preserves col/row span** — copied buttons now retain their column and row span values in the clipboard. On paste, spans are applied if they fit at the target position (within grid bounds and no overlap with existing buttons); otherwise they gracefully fall back to 1×1

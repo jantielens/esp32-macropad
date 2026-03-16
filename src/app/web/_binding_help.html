@@ -249,7 +249,45 @@
                     </div>
                     <pre class="binding-docs-signature"><code>[health:key;format]</code></pre>
                 </div>
-                <p class="binding-docs-note">Common keys: <code>cpu</code>, <code>rssi</code>, <code>uptime</code>, <code>heap_free</code>, <code>heap_min</code>, <code>heap_largest</code>, <code>heap_internal</code>, <code>psram_free</code>, <code>psram_min</code>, <code>psram_largest</code>, <code>wifi_connected</code>, <code>wifi_ssid</code>, <code>ip</code>, <code>hostname</code>, <code>ble_status</code>, <code>ble_state</code>, and <code>ble_name</code>.</p>
+
+                <p class="binding-docs-note" style="margin-bottom:4px"><strong>System</strong></p>
+                <dl class="binding-docs-spec">
+                    <div><dt>cpu</dt><dd>CPU usage — <code>0</code>–<code>100</code> (integer)</dd></div>
+                    <div><dt>uptime</dt><dd>Seconds since boot (integer)</dd></div>
+                </dl>
+
+                <p class="binding-docs-note" style="margin-bottom:4px"><strong>Memory</strong></p>
+                <dl class="binding-docs-spec">
+                    <div><dt>heap_free</dt><dd>Free heap bytes</dd></div>
+                    <div><dt>heap_min</dt><dd>Lowest free heap since boot</dd></div>
+                    <div><dt>heap_largest</dt><dd>Largest free heap block</dd></div>
+                    <div><dt>heap_internal</dt><dd>Free internal (non-PSRAM) heap</dd></div>
+                    <div><dt>psram_free</dt><dd>Free PSRAM bytes</dd></div>
+                    <div><dt>psram_min</dt><dd>Lowest free PSRAM since boot</dd></div>
+                    <div><dt>psram_largest</dt><dd>Largest free PSRAM block</dd></div>
+                </dl>
+
+                <p class="binding-docs-note" style="margin-bottom:4px"><strong>WiFi</strong></p>
+                <dl class="binding-docs-spec">
+                    <div><dt>wifi_connected</dt><dd><code>ON</code> / <code>OFF</code></dd></div>
+                    <div><dt>wifi_ssid</dt><dd>Connected network name (or <code>?</code>)</dd></div>
+                    <div><dt>rssi</dt><dd>Signal strength in dBm (integer)</dd></div>
+                    <div><dt>ip</dt><dd>Device IP address</dd></div>
+                    <div><dt>hostname</dt><dd>mDNS hostname</dd></div>
+                </dl>
+
+                <p class="binding-docs-note" style="margin-bottom:4px"><strong>BLE</strong> <small>(ESP32-P4 only)</small></p>
+                <dl class="binding-docs-spec">
+                    <div><dt>ble_status</dt><dd><code>disabled</code>, <code>ready</code>, <code>pairing</code>, <code>connected</code>, or <code>error</code></dd></div>
+                    <div><dt>ble_state</dt><dd>Detailed: <code>idle</code>, <code>advertising</code>, <code>pairing</code>, <code>connecting</code>, <code>claimed</code>, <code>secured</code>, …</dd></div>
+                    <div><dt>ble_name</dt><dd>Advertised BLE device name</dd></div>
+                    <div><dt>ble_pairing</dt><dd><code>ON</code> / <code>OFF</code> — pairing window open</dd></div>
+                    <div><dt>ble_bonded</dt><dd><code>ON</code> / <code>OFF</code> — has a bonded peer</dd></div>
+                    <div><dt>ble_encrypted</dt><dd><code>ON</code> / <code>OFF</code> — link encrypted</dd></div>
+                    <div><dt>ble_peer_addr</dt><dd>Connected peer address</dd></div>
+                    <div><dt>ble_peer_id_addr</dt><dd>Bonded peer identity address</dd></div>
+                </dl>
+
                 <div class="binding-example-grid">
                     <article class="binding-example">
                         <div class="binding-example-head">
@@ -269,27 +307,35 @@
                     </article>
                     <article class="binding-example">
                         <div class="binding-example-head">
-                            <span class="binding-example-title">WiFi status</span>
+                            <span class="binding-example-title">WiFi status label</span>
                             <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
                         </div>
                         <pre class="binding-example-code"><code>[health:wifi_ssid] ([health:rssi] dBm)</code></pre>
-                        <p>Show connected network name and signal strength. <code>wifi_connected</code> returns <code>ON</code>/<code>OFF</code>.</p>
+                        <p>Show connected network name and signal strength.</p>
                     </article>
                     <article class="binding-example">
                         <div class="binding-example-head">
-                            <span class="binding-example-title">Compact BLE status</span>
+                            <span class="binding-example-title">WiFi status color</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[health:wifi_connected]=="ON"?"#16a34a":"#dc2626"]</code></pre>
+                        <p>Use as a label or icon color — green when connected, red when not.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">BLE status</span>
                             <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
                         </div>
                         <pre class="binding-example-code"><code>[health:ble_status]</code></pre>
-                        <p>User-facing BLE states: <code>disabled</code>, <code>ready</code>, <code>pairing</code>, <code>connected</code>, or <code>error</code>.</p>
+                        <p>Compact user-facing BLE state.</p>
                     </article>
                     <article class="binding-example">
                         <div class="binding-example-head">
-                            <span class="binding-example-title">Detailed BLE state</span>
+                            <span class="binding-example-title">BLE status color</span>
                             <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
                         </div>
-                        <pre class="binding-example-code"><code>[health:ble_state]</code></pre>
-                        <p>Detailed BLE states: <code>disabled</code>, <code>idle</code>, <code>advertising</code>, <code>pairing</code>, <code>connecting</code>, <code>claimed</code>, <code>secured</code>, or <code>error</code>.</p>
+                        <pre class="binding-example-code"><code>[expr:[health:ble_status]=="connected"?"#16a34a":[health:ble_status]=="pairing"?"#f59e0b":[health:ble_status]=="ready"?"#3b82f6":[health:ble_status]=="error"?"#dc2626":"#64748b"]</code></pre>
+                        <p>Map BLE status to a color: green connected, amber pairing, blue ready, red error, gray disabled.</p>
                     </article>
                 </div>
             </section>
