@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Volume button action** — new `volume` action type sets, increases, or decreases device audio volume (±10% steps or absolute set). Volume changes persist to NVS.
 
 ### Fixed
+- **BLE auto-re-pair on stale bonds** — when Windows (or another host) drops its BLE bond after a firmware update (due to GATT database hash change), the ESP32 now detects that the reconnecting peer matches the previously bonded owner and automatically clears the stale bond and enters a 60-second re-pair window. Previously, the device would reject the now-unbonded host indefinitely, requiring manual pairing via the web portal. The owner's identity address is persisted in NVS for cross-reboot detection.
 - **Missing auth on icon install route** — restored `portal_auth_gate()` on `POST /api/icons/install`.
 - **Sparkline min/max labels overlapping current-value labels** — clamped min/max marker labels to the chart plot area so they no longer intrude into the right-side margin reserved for current-value line labels.
 - **Sparkline current dot disconnected from line** — changed the X-axis mapping to use `chart_w - 1` instead of `chart_w`, so the rightmost data point stays on the last pixel inside the clipped chart area. Fixes the visual gap between the line endpoint and the current-value dot, and prevents LVGL's rounded line cap from being clipped at the chart edge.

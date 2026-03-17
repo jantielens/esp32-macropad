@@ -44,6 +44,7 @@
 #if HAS_BLE_HID
 #define KEY_BLE_ENABLED    "ble_en"
 #define KEY_BLE_OWNER      "ble_owner"
+#define KEY_BLE_OWNER_ADDR "ble_oaddr"
 #endif
 #if HAS_DISPLAY
 #define KEY_SCREEN_SAVER_ENABLED "ss_en"
@@ -382,6 +383,28 @@ bool config_manager_set_ble_owner_claimed(bool claimed) {
 				return false;
 		}
 		const bool ok = preferences.putBool(KEY_BLE_OWNER, claimed);
+		preferences.end();
+		return ok;
+}
+
+bool config_manager_get_ble_owner_addr(char* out, size_t out_len) {
+		if (!out || out_len == 0) return false;
+		out[0] = '\0';
+		if (!preferences.begin(CONFIG_NAMESPACE, true)) {
+				LOGE("Config", "Failed to open NVS for BLE owner addr read");
+				return false;
+		}
+		preferences.getString(KEY_BLE_OWNER_ADDR, out, out_len);
+		preferences.end();
+		return out[0] != '\0';
+}
+
+bool config_manager_set_ble_owner_addr(const char* addr) {
+		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
+				LOGE("Config", "Failed to open NVS for BLE owner addr write");
+				return false;
+		}
+		const bool ok = preferences.putString(KEY_BLE_OWNER_ADDR, addr ? addr : "");
 		preferences.end();
 		return ok;
 }

@@ -214,6 +214,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_AUDIO**
   - src/app/action_dispatch.cpp
   - src/app/app.ino
+  - src/app/audio.cpp
+  - src/app/audio.h
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h

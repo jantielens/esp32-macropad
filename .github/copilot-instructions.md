@@ -67,7 +67,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume); used by both pad buttons and swipe gestures
   - `web_portal_swipe.cpp/h` - REST API for GET/POST `/api/swipe-actions`
 - **BLE HID Subsystem**: Bluetooth LE keyboard with key sequence DSL (compile-time gated by `HAS_BLE_HID`; disabled on ESP32-S3 boards due to internal RAM constraints; runtime-toggled via `ble_enabled` config, default disabled, saves ~70 KB internal RAM when off)
-  - `ble_hid.cpp/h` - Manual NimBLE HID GATT service, single-owner pairing policy (one bond, 60s timeout), stable hardware address, keyboard + consumer reports, peer metadata getters; `ble_hid_is_initialized()` used as runtime guard by other modules
+  - `ble_hid.cpp/h` - Manual NimBLE HID GATT service, single-owner pairing policy (one bond, 60s timeout), stable hardware address, keyboard + consumer reports, peer metadata getters, auto-re-pair for stale bonds (NVS-persisted owner address); `ble_hid_is_initialized()` used as runtime guard by other modules
   - `key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable, no ESP32 deps
   - `web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - **Audio Subsystem**: ES8311 codec + I2S tone generation with async FreeRTOS playback (compile-time gated by `HAS_AUDIO`)
@@ -245,7 +245,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/screen_saver_manager.cpp/h` - Screensaver state machine with fade, pixel shift, and wake-screen redirect
 - `src/app/mqtt_screen.cpp/h` - MQTT active-screen control (HA select entity, remote navigation + wake)
 - `src/app/mqtt_wake.cpp/h` - Binding-driven screensaver wakeup with idle-timer keep-alive (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
-- `src/app/ble_hid.cpp/h` - BLE HID keyboard with manual NimBLE GATT service, single-owner pairing, keyboard + consumer reports (compile-time gated by `HAS_BLE_HID`)
+- `src/app/ble_hid.cpp/h` - BLE HID keyboard with manual NimBLE GATT service, single-owner pairing, keyboard + consumer reports, auto-re-pair for stale bonds (compile-time gated by `HAS_BLE_HID`)
 - `src/app/key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable
 - `src/app/web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - `src/app/action_dispatch.cpp/h` - Shared action execution for buttons and swipe gestures (compile-time gated by `HAS_DISPLAY`)
