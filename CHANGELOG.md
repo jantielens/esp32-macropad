@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Missing auth on icon install route** — restored `portal_auth_gate()` on `POST /api/icons/install`.
+- **Sparkline min/max labels overlapping current-value labels** — clamped min/max marker labels to the chart plot area so they no longer intrude into the right-side margin reserved for current-value line labels.
+- **Sparkline current dot disconnected from line** — changed the X-axis mapping to use `chart_w - 1` instead of `chart_w`, so the rightmost data point stays on the last pixel inside the clipped chart area. Fixes the visual gap between the line endpoint and the current-value dot, and prevents LVGL's rounded line cap from being clipped at the chart edge.
 
 ## [1.10.0] - 2026-03-16
 

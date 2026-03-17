@@ -513,7 +513,9 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
     }
 
     // Step 3: Convert smoothed values to pixel coordinates
-    float x_step = (n > 1) ? (float)chart_w / (float)(n - 1) : 0.0f;
+    // Use (chart_w - 1) so the rightmost slot lands on the last pixel
+    // inside the clipped chart area (avoids line/dot disconnect at edge).
+    float x_step = (n > 1) ? (float)(chart_w - 1) / (float)(n - 1) : 0.0f;
     uint8_t x_offset = (snap->count < n) ? (n - snap->count) : 0;
 
     for (uint8_t vi = 0; vi < valid; vi++) {
@@ -756,8 +758,9 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 int16_t lw = (int16_t)lv_obj_get_width(st->lbl_max);
                 int16_t lh = (int16_t)lv_obj_get_height(st->lbl_max);
                 int16_t lx = ca_x + max_cx - lw / 2;
+                int16_t chart_right = ca_x + chart_w;
                 if (lx < 0) lx = 0;
-                if (lx + lw > tile_cw) lx = tile_cw - lw;
+                if (lx + lw > chart_right) lx = chart_right - lw;
                 lv_obj_set_pos(st->lbl_max, lx, ca_y + max_cy - max_r - lh - 1);
                 lv_obj_clear_flag(st->lbl_max, LV_OBJ_FLAG_HIDDEN);
             }
@@ -778,8 +781,9 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 lv_obj_update_layout(st->lbl_min);
                 int16_t lw = (int16_t)lv_obj_get_width(st->lbl_min);
                 int16_t lx = ca_x + min_cx - lw / 2;
+                int16_t chart_right_min = ca_x + chart_w;
                 if (lx < 0) lx = 0;
-                if (lx + lw > tile_cw) lx = tile_cw - lw;
+                if (lx + lw > chart_right_min) lx = chart_right_min - lw;
                 lv_obj_set_pos(st->lbl_min, lx, ca_y + min_cy + min_r + 1);
                 lv_obj_clear_flag(st->lbl_min, LV_OBJ_FLAG_HIDDEN);
             }
