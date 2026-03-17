@@ -839,6 +839,27 @@ Switch the active runtime screen (no persistence).
 
 ---
 
+### Swipe Actions API
+
+All swipe endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled.
+
+#### `GET /api/swipe-actions`
+
+Returns the current swipe action configuration.
+
+- **Response:** JSON object with `swipe_left`, `swipe_right`, `swipe_up`, `swipe_down` keys, each containing a `ButtonAction` object (`type`, `screen_id`, `mqtt_topic`, `mqtt_payload`, `key_sequence`).
+- Default: `swipe_right` has `type: "back"`, all others are empty.
+
+#### `POST /api/swipe-actions`
+
+Save swipe action configuration to LittleFS.
+
+- **Body:** JSON object with the same structure as the GET response.
+- **Response:** `{"success": true}` on success; JSON error on failure.
+- Actions are applied immediately without reboot.
+
+---
+
 ### Icon Store API
 
 All icon endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled.

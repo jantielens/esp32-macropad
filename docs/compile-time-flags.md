@@ -221,7 +221,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
   - src/app/health_binding.cpp
-  - src/app/screens/pad_screen_events.cpp
   - src/app/web_portal_ble.cpp
   - src/app/web_portal_ble.h
   - src/app/web_portal_config.cpp

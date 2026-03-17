@@ -156,8 +156,6 @@ private:
     // Event callbacks
     static void onTap(lv_event_t* e);
     static void onLongPress(lv_event_t* e);
-    // Touch navigation for screen switching
-    static void onSwipe(lv_event_t* e);
 
 public:
     static void tapFlashTimerCb(lv_timer_t* timer);

@@ -61,6 +61,11 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - HA discovery published via `ha_discovery_publish_screen_select_config()` with dynamic options list from screen registry
 - **MQTT Wake Subsystem**: Binding-driven screensaver wakeup (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
   - `mqtt_wake.cpp/h` - Resolves a user-configured binding expression each loop tick; wakes screensaver on OFF→ON edge; keeps screen awake while ON persists via throttled idle-timer reset (~1 s)
+- **Swipe Actions Subsystem**: Configurable swipe gestures with full ButtonAction parity (compile-time gated by `HAS_DISPLAY`)
+  - `swipe_config.cpp/h` - LittleFS-backed swipe action config (`/config/swipe_actions.json`) with RAM cache; 4 directions × ButtonAction
+  - `swipe_actions.cpp/h` - Shared LVGL gesture handler with 300ms debounce; registered on all screens
+  - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair); used by both pad buttons and swipe gestures
+  - `web_portal_swipe.cpp/h` - REST API for GET/POST `/api/swipe-actions`
 - **BLE HID Subsystem**: Bluetooth LE keyboard with key sequence DSL (compile-time gated by `HAS_BLE_HID`; disabled on ESP32-S3 boards due to internal RAM constraints; runtime-toggled via `ble_enabled` config, default disabled, saves ~70 KB internal RAM when off)
   - `ble_hid.cpp/h` - Manual NimBLE HID GATT service, single-owner pairing policy (one bond, 60s timeout), stable hardware address, keyboard + consumer reports, peer metadata getters; `ble_hid_is_initialized()` used as runtime guard by other modules
   - `key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable, no ESP32 deps
@@ -241,6 +246,10 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/ble_hid.cpp/h` - BLE HID keyboard with manual NimBLE GATT service, single-owner pairing, keyboard + consumer reports (compile-time gated by `HAS_BLE_HID`)
 - `src/app/key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable
 - `src/app/web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
+- `src/app/action_dispatch.cpp/h` - Shared action execution for buttons and swipe gestures (compile-time gated by `HAS_DISPLAY`)
+- `src/app/swipe_config.cpp/h` - LittleFS-backed swipe action configuration with RAM cache
+- `src/app/swipe_actions.cpp/h` - Shared LVGL gesture handler with debounce, registered on all screens
+- `src/app/web_portal_swipe.cpp/h` - Swipe actions REST API (GET/POST `/api/swipe-actions`)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface
@@ -283,6 +292,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web/firmware.html` - Firmware page (online update, manual upload, factory reset)
 - `src/app/web/portal.css` - Styles (gradients, animations, responsive grid)
 - `src/app/web/portal.js` - Client-side logic (multi-page support, API calls, health updates)
+- `src/app/web/portal_action_editor.js` - Shared action editor UI component for button and swipe action editing
 - `src/version.h` - Firmware version tracking
 
 ### Documentation

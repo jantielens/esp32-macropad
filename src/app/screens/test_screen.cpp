@@ -2,6 +2,7 @@
 #include "log_manager.h"
 #include "../board_config.h"
 #include "../display_manager.h"
+#include "../swipe_actions.h"
 
 TestScreen::TestScreen(DisplayManager* manager) 
 		: screen(nullptr), displayMgr(manager),
@@ -108,6 +109,9 @@ void TestScreen::create() {
 		// Add touch event handler - tap anywhere to go to InfoScreen
 		lv_obj_add_event_cb(screen, touchEventCallback, LV_EVENT_CLICKED, this);
 		lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+
+		// Swipe gesture actions (shared across all screens)
+		swipe_actions_register(screen);
 		
 		LOGI("TestScreen", "Create complete");
 }

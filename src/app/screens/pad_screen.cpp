@@ -3,6 +3,7 @@
 #include "../icon_store.h"
 #include "../log_manager.h"
 #include "../pad_config.h"
+#include "../swipe_actions.h"
 #include "../pad_layout.h"
 #if HAS_MQTT
 #include "../mqtt_manager.h"
@@ -144,9 +145,8 @@ void PadScreen::create() {
     lv_obj_set_style_border_width(container, 0, 0);
     lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Swipe gesture for page navigation
-    lv_obj_add_event_cb(screen, onSwipe, LV_EVENT_GESTURE, this);
-    lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+    // Swipe gesture actions (shared across all screens)
+    swipe_actions_register(screen);
 }
 
 void PadScreen::destroy() {

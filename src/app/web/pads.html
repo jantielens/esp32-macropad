@@ -217,85 +217,7 @@
                 <!-- Actions group (open by default) -->
                 <details class="editor-group" open>
                     <summary>Actions</summary>
-                    <div class="editor-group-body">
-                        <div class="form-group">
-                            <label for="pad-edit-action-type">Tap Action</label>
-                            <select id="pad-edit-action-type" onchange="padActionTypeChanged('tap')">
-                                <option value="">(none)</option>
-                                <option value="screen">Navigate to Screen</option>
-                                <option value="back">Navigate Back</option>
-                                <option value="mqtt">MQTT Publish</option>
-                                <option value="key">Send BLE Keys</option>
-                                <option value="ble_pair">Start BLE Pairing</option>
-                            </select>
-                            <small id="pad-edit-action-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>
-                        </div>
-                        <div id="pad-edit-action-screen-group" style="display:none;">
-                            <div class="form-group">
-                                <label for="pad-edit-action-target">Target Screen</label>
-                                <select id="pad-edit-action-target">
-                                    <option value="">(none)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="pad-edit-action-mqtt-group" style="display:none;">
-                            <div class="form-group">
-                                <label for="pad-edit-action-topic">MQTT Topic</label>
-                                <input type="text" id="pad-edit-action-topic" maxlength="127" placeholder="e.g. home/light/toggle">
-                            </div>
-                            <div class="form-group">
-                                <label for="pad-edit-action-payload">MQTT Payload</label>
-                                <input type="text" id="pad-edit-action-payload" maxlength="127" placeholder="e.g. ON">
-                            </div>
-                        </div>
-                        <div id="pad-edit-action-key-group" style="display:none;">
-                            <div class="form-group">
-                                <label for="pad-edit-action-sequence">Keys to Send</label>
-                                <input type="text" id="pad-edit-action-sequence" maxlength="255" placeholder='e.g. ctrl+c, "hello", 200ms'>
-                                <small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms</small>
-                            </div>
-                        </div>
-
-                        <hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">
-
-                        <div class="form-group">
-                            <label for="pad-edit-lp-action-type">Long-Press Action</label>
-                            <select id="pad-edit-lp-action-type" onchange="padActionTypeChanged('lp')">
-                                <option value="">(none)</option>
-                                <option value="screen">Navigate to Screen</option>
-                                <option value="back">Navigate Back</option>
-                                <option value="mqtt">MQTT Publish</option>
-                                <option value="key">Send BLE Keys</option>
-                                <option value="ble_pair">Start BLE Pairing</option>
-                            </select>
-                            <small id="pad-edit-lp-action-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>
-                        </div>
-                        <div id="pad-edit-lp-action-screen-group" style="display:none;">
-                            <div class="form-group">
-                                <label for="pad-edit-lp-action-target">Target Screen</label>
-                                <select id="pad-edit-lp-action-target">
-                                    <option value="">(none)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div id="pad-edit-lp-action-mqtt-group" style="display:none;">
-                            <div class="form-group">
-                                <label for="pad-edit-lp-action-topic">MQTT Topic</label>
-                                <input type="text" id="pad-edit-lp-action-topic" maxlength="127" placeholder="e.g. home/light/toggle">
-                            </div>
-                            <div class="form-group">
-                                <label for="pad-edit-lp-action-payload">MQTT Payload</label>
-                                <input type="text" id="pad-edit-lp-action-payload" maxlength="127" placeholder="e.g. OFF">
-                            </div>
-                        </div>
-                        <div id="pad-edit-lp-action-key-group" style="display:none;">
-                            <div class="form-group">
-                                <label for="pad-edit-lp-action-sequence">Keys to Send</label>
-                                <input type="text" id="pad-edit-lp-action-sequence" maxlength="255" placeholder='e.g. ctrl+c, "hello", 200ms'>
-                                <small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms</small>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="editor-group-body" id="pad-action-editors"></div>
                 </details>
 
                 <!-- Icon -->
@@ -462,6 +384,7 @@
     {{REBOOT_OVERLAY}}
 
     <script src="/portal_core.js"></script>
+    <script src="/portal_action_editor.js"></script>
     <script src="/portal_config.js"></script>
     <script src="/portal_firmware.js"></script>
     <script src="/portal_health.js"></script>

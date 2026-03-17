@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.11.0] - 2026-03-17
+
+### Added
+- **Configurable swipe actions** — swipe left, right, up, or down on any screen to trigger actions with full button parity (screen navigation, back, MQTT publish, BLE key sequence, BLE pair). Default: swipe right = back. Configure via the new Swipe Actions section on the Home page or the REST API (`GET/POST /api/swipe-actions`). Stored on LittleFS with 300ms debounce to prevent multi-fire.
+- **Shared action dispatch** — extracted button and swipe action execution into a shared `action_dispatch` module, eliminating code duplication between pad buttons and swipe gestures.
+- **Shared action editor UI** — extracted the action type/screen/MQTT/key editor into a reusable `portal_action_editor.js` component used by both the button editor dialog and the swipe actions form.
+
+### Fixed
+- **Missing auth on icon install route** — restored `portal_auth_gate()` on `POST /api/icons/install`.
+
 ## [1.10.0] - 2026-03-16
 
 ### Added

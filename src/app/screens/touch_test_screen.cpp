@@ -5,6 +5,7 @@
 #include "../board_config.h"
 #include "../log_manager.h"
 #include "../display_manager.h"
+#include "../swipe_actions.h"
 #include "../touch_manager.h"
 
 #include <stdlib.h>  // abs()
@@ -67,6 +68,9 @@ void TouchTestScreen::create() {
 		lv_obj_center(backLabel);
 
 		// Canvas is NOT allocated here — deferred to show() to save PSRAM.
+
+		// Swipe gesture actions (shared across all screens)
+		swipe_actions_register(screen);
 
 		LOGI("TouchTest", "Create complete (brush r=%d)", brushRadius);
 }

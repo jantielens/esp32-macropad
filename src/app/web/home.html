@@ -95,6 +95,18 @@
                 </div>
             </section>
 
+            <!-- Swipe Actions Section (hidden if no display/touch support) -->
+            <section class="section" id="swipe-actions-section" style="display:none;">
+                <h2>👆 Swipe Actions</h2>
+                <small style="display:block; margin-bottom:16px;">Configure what happens when you swipe in each direction. Works on all screens.</small>
+
+                <div id="swipe-editors"></div>
+
+                <div style="margin-top: 12px;">
+                    <button type="button" class="btn btn-primary" onclick="saveSwipeActions()">Save Swipe Actions</button>
+                </div>
+            </section>
+
             <!-- Operating Mode & Cadence -->
             <section class="section" id="power-settings-section">
                 <h2>⚡ Operating Mode & Cadence</h2>
@@ -210,6 +222,7 @@
     {{BINDING_HELP}}
 
     <script src="/portal_core.js"></script>
+    <script src="/portal_action_editor.js"></script>
     <script src="/portal_config.js"></script>
     <script src="/portal_firmware.js"></script>
     <script src="/portal_health.js"></script>

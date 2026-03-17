@@ -4,6 +4,7 @@
 #include "../device_telemetry.h"
 #include "../board_config.h"
 #include "../display_manager.h"
+#include "../swipe_actions.h"
 #include <WiFi.h>
 #include <esp_chip_info.h>
 
@@ -99,6 +100,9 @@ void InfoScreen::create() {
 		// Add touch event handler - tap anywhere to go to TestScreen
 		lv_obj_add_event_cb(screen, touchEventCallback, LV_EVENT_CLICKED, this);
 		lv_obj_add_flag(screen, LV_OBJ_FLAG_CLICKABLE);
+
+		// Swipe gesture actions (shared across all screens)
+		swipe_actions_register(screen);
 }
 
 void InfoScreen::destroy() {

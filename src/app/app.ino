@@ -28,6 +28,7 @@
 #include "time_binding.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
+#include "swipe_config.h"
 #endif
 
 #if HAS_IMAGE_FETCH
@@ -247,6 +248,9 @@ void setup()
 	#if HAS_DISPLAY
 	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
 	pad_config_init();
+
+	// Load swipe gesture actions from LittleFS (uses same filesystem)
+	swipe_config_init();
 
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
