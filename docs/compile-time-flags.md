@@ -213,6 +213,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/st7701_rgb_driver.cpp
   - src/app/drivers/tft_espi_driver.cpp
 - **HAS_BLE_HID**
+  - src/app/action_dispatch.cpp
   - src/app/app.ino
   - src/app/ble_hid.cpp
   - src/app/ble_hid.h
@@ -233,6 +234,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
 - **HAS_DISPLAY**
+  - src/app/action_dispatch.cpp
+  - src/app/action_dispatch.h
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
@@ -261,6 +264,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
+  - src/app/swipe_actions.cpp
+  - src/app/swipe_actions.h
+  - src/app/swipe_config.cpp
+  - src/app/swipe_config.h
   - src/app/time_binding.cpp
   - src/app/touch_manager.cpp
   - src/app/web_portal.cpp
@@ -273,6 +280,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp
+  - src/app/web_portal_swipe.cpp
+  - src/app/web_portal_swipe.h
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/gauge_widget.cpp
@@ -293,6 +302,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_tile_builder.cpp
   - src/app/web_portal_firmware.cpp
 - **HAS_MQTT**
+  - src/app/action_dispatch.cpp
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
