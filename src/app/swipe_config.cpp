@@ -28,6 +28,10 @@ static void parse_swipe_action(JsonVariant v, ButtonAction* act) {
     strlcpy(act->mqtt_topic,   a["topic"]    | "", CONFIG_MQTT_TOPIC_MAX_LEN);
     strlcpy(act->mqtt_payload, a["payload"]  | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
     strlcpy(act->key_sequence, a["sequence"] | "", CONFIG_KEY_SEQ_MAX_LEN);
+    strlcpy(act->beep_pattern, a["beep_pattern"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+    act->beep_volume = (uint8_t)(a["beep_volume"] | 0);
+    strlcpy(act->volume_mode, a["volume_mode"] | "", CONFIG_VOLUME_MODE_MAX_LEN);
+    act->volume_value = (uint8_t)(a["volume_value"] | 0);
 }
 
 static void apply_defaults(SwipeConfig* cfg) {

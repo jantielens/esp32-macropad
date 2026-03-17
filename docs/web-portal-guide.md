@@ -86,6 +86,16 @@ The BLE keyboard always advertises with the configured device name and the chip'
 
 > **Re-pairing tip:** Before pairing a new host (or re-pairing the same host), remove the device from the old host's Bluetooth settings first. If you skip this step the old host may keep trying to reconnect with stale keys for a short while — this is normal BLE behavior and will eventually stop, but removing the device avoids the noise.
 
+### Audio
+
+*Shown only on boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
+
+The Audio section lets you set the device volume for beep actions.
+
+| Element | Description |
+|---------|-------------|
+| **Volume** | Slider (0–100%) controlling the device audio volume. Used by beep actions unless overridden per-action. Persisted in NVS |
+
 #### BLE Signals
 
 The firmware exposes two BLE health signals for bindings and diagnostics:

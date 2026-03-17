@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Shared action dispatch** — extracted button and swipe action execution into a shared `action_dispatch` module, eliminating code duplication between pad buttons and swipe gestures.
 - **Shared action editor UI** — extracted the action type/screen/MQTT/key editor into a reusable `portal_action_editor.js` component used by both the button editor dialog and the swipe actions form.
 - **WiFi gateway ping liveness check** — the WiFi watchdog now pings the default gateway every 30 seconds to detect "ghost connected" states where `WiFi.status()` reports connected but the radio link is actually dead (common on ESP32-P4 with ESP-Hosted). After 3 consecutive ping failures (~90s), forces a WiFi disconnect and reconnect. Runs as a low-priority async task with zero impact on display rendering. Silent in the happy path — only logs on failure or recovery.
+- **Audio subsystem** (ESP32-P4 boards) — ES8311 codec + NS4150B amplifier over I2S with async FreeRTOS playback. New beep pattern DSL (`freq:dur` tones, bare `dur` silence gaps, space-delimited). Device-level volume control (0–100%, NVS-persisted) with slider on the Home page.
+- **Beep button action** — new `beep` action type plays a configurable beep pattern with optional per-action volume override.
+- **Volume button action** — new `volume` action type sets, increases, or decreases device audio volume (±10% steps or absolute set). Volume changes persist to NVS.
 
 ### Fixed
 - **Missing auth on icon install route** — restored `portal_auth_gate()` on `POST /api/icons/install`.

@@ -11,6 +11,11 @@
 #if HAS_BLE_HID
 #include "ble_hid.h"
 #endif
+#if HAS_AUDIO
+#include "audio.h"
+#include "config_manager.h"
+#include "web_portal_state.h"
+#endif
 
 #define TAG "Action"
 
@@ -63,6 +68,41 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         }
 #else
         LOGW(TAG, "%s ble_pair: not compiled", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
+#if HAS_AUDIO
+        LOGI(TAG, "%s beep: pattern='%s' vol=%s", label, act.beep_pattern,
+             act.beep_volume > 0 ? String(act.beep_volume).c_str() : "device");
+        audio_beep(act.beep_pattern, act.beep_volume);
+#else
+        LOGW(TAG, "%s beep: not compiled", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
+#if HAS_AUDIO
+        if (strcmp(act.volume_mode, "up") == 0) {
+            uint8_t v = audio_get_volume();
+            v = (v > 90) ? 100 : v + 10;
+            audio_set_volume(v);
+            LOGI(TAG, "%s volume up -> %u%%", label, v);
+        } else if (strcmp(act.volume_mode, "down") == 0) {
+            uint8_t v = audio_get_volume();
+            v = (v < 10) ? 0 : v - 10;
+            audio_set_volume(v);
+            LOGI(TAG, "%s volume down -> %u%%", label, v);
+        } else {
+            uint8_t v = act.volume_value;
+            if (v > 100) v = 100;
+            audio_set_volume(v);
+            LOGI(TAG, "%s volume set -> %u%%", label, v);
+        }
+        // Persist to NVS
+        DeviceConfig *cfg = web_portal_get_current_config();
+        if (cfg) {
+            cfg->audio_volume = audio_get_volume();
+            config_manager_save(cfg);
+        }
+#else
+        LOGW(TAG, "%s volume: not compiled", label);
 #endif
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);

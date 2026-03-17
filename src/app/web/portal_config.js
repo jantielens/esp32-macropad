@@ -281,6 +281,15 @@ async function loadConfig() {
             toggleBleContent();
         }
 
+        // Audio settings
+        if (config.audio_volume !== undefined) {
+            const vol = config.audio_volume;
+            setValueIfExists('audio_volume', vol);
+            setTextIfExists('audio_volume_value', vol);
+            const audioSection = document.getElementById('audio-section');
+            if (audioSection) audioSection.style.display = 'block';
+        }
+
         setValueIfExists('basic_auth_username', config.basic_auth_username);
         const authPwdField = document.getElementById('basic_auth_password');
         if (authPwdField) {
@@ -345,6 +354,7 @@ function extractFormFields(formData) {
                     'mqtt_publish_scope',
                     'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
                     'ble_enabled',
+                    'audio_volume',
                     'backlight_brightness',
                     'screen_saver_enabled', 'screen_saver_timeout_seconds', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms', 'screen_saver_wake_on_touch',
                     'screen_saver_wake_binding'];

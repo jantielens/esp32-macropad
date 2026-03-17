@@ -39,6 +39,12 @@
 #include "ble_hid.h"
 #endif
 
+#if HAS_AUDIO
+#include "audio.h"
+#endif
+
+#include "i2c_bus.h"
+
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
 
@@ -172,6 +178,8 @@ void setup()
 	#endif
 
 	#if HAS_TOUCH
+	// Initialize Wire bus mutex before touch and audio (both may share bus 0)
+	i2c_bus_init();
 	// Initialize touch after display is ready
 	touch_manager_init();
 	#endif
@@ -206,6 +214,13 @@ void setup()
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
 		device_config.magic = CONFIG_MAGIC;
 	}
+
+	// Initialize audio subsystem (must be after touch_manager_init since they
+	// share the I2C bus — Wire must already be started, and after config load
+	// so device_config.audio_volume is available).
+	#if HAS_AUDIO
+	audio_init(device_config.audio_volume);
+	#endif
 
 	const bool force_config_mode_burst = power_manager_should_force_config_mode();
 	if (force_config_mode_burst) {

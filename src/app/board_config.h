@@ -115,6 +115,48 @@
 // #endif
 
 // ============================================================================
+// Audio (ES8311 codec + I2S, optional)
+// ============================================================================
+#ifndef HAS_AUDIO
+#define HAS_AUDIO false
+#endif
+
+// NS4150B power amplifier enable pin (active high).
+#ifndef AUDIO_PA_PIN
+#define AUDIO_PA_PIN -1
+#endif
+
+// I2C address of the audio codec (e.g. ES8311 = 0x18).
+#ifndef AUDIO_CODEC_ADDR
+#define AUDIO_CODEC_ADDR 0x18
+#endif
+
+// I2S master clock pin.
+#ifndef AUDIO_I2S_MCLK
+#define AUDIO_I2S_MCLK -1
+#endif
+
+// I2S bit clock pin.
+#ifndef AUDIO_I2S_BCLK
+#define AUDIO_I2S_BCLK -1
+#endif
+
+// I2S data out pin (ESP32 TX → codec data input).
+#ifndef AUDIO_I2S_DOUT
+#define AUDIO_I2S_DOUT -1
+#endif
+
+// I2S word select / left-right clock pin.
+#ifndef AUDIO_I2S_LRCK
+#define AUDIO_I2S_LRCK -1
+#endif
+
+// I2S data in pin (ESP32 RX ← codec data output).
+#ifndef AUDIO_I2S_DIN
+#define AUDIO_I2S_DIN -1
+#endif
+
+// ============================================================================
 // User Button (optional)
 // ============================================================================
 #ifndef HAS_BUTTON

@@ -3,6 +3,17 @@
 #include "../board_config.h"
 #include "../log_manager.h"
 
+// When touch shares Wire bus 0 with other peripherals (e.g. ES8311 audio
+// codec), guard I2C transactions with the shared bus mutex.
+#if TOUCH_I2C_BUS == 0
+#include "../i2c_bus.h"
+#define GT911_I2C_LOCK()   i2c_bus_lock()
+#define GT911_I2C_UNLOCK() i2c_bus_unlock()
+#else
+#define GT911_I2C_LOCK()   ((void)0)
+#define GT911_I2C_UNLOCK() ((void)0)
+#endif
+
 // GT911 register addresses
 #define GT911_POINT_INFO  0x814E
 #define GT911_POINT_1     0x814F
@@ -81,6 +92,7 @@ void GT911_TouchDriver::init() {
 }
 
 void GT911_TouchDriver::gt911Read() {
+		GT911_I2C_LOCK();
 		uint8_t pointInfo = readReg(GT911_POINT_INFO);
 		uint8_t bufferStatus = (pointInfo >> 7) & 1;
 		uint8_t touches = pointInfo & 0x0F;
@@ -91,6 +103,7 @@ void GT911_TouchDriver::gt911Read() {
 		// The GT911 scans at ~60-140 Hz; the LVGL task can poll much faster,
 		// so empty reads are expected while the finger is still down.
 		if (bufferStatus == 0) {
+				GT911_I2C_UNLOCK();
 				return;
 		}
 
@@ -106,6 +119,7 @@ void GT911_TouchDriver::gt911Read() {
 
 		// Clear buffer status flag (must always be done after reading)
 		writeReg(GT911_POINT_INFO, 0);
+		GT911_I2C_UNLOCK();
 }
 
 bool GT911_TouchDriver::isTouched() {

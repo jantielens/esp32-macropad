@@ -53,6 +53,9 @@
 #define KEY_SCREEN_SAVER_WAKE_TOUCH "ss_wt"
 #define KEY_SCREEN_SAVER_WAKE_BINDING "ss_wb"
 #endif
+#if HAS_AUDIO
+#define KEY_AUDIO_VOLUME   "audio_vol"
+#endif
 #define KEY_MAGIC          "magic"
 
 static Preferences preferences;
@@ -231,6 +234,10 @@ bool config_manager_load(DeviceConfig *config) {
 		config->ble_enabled = preferences.getBool(KEY_BLE_ENABLED, false);
 		#endif
 
+		#if HAS_AUDIO
+		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, 70);
+		#endif
+
 		#if HAS_DISPLAY
 		// Load screen saver settings
 		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, false);
@@ -315,6 +322,10 @@ bool config_manager_save(const DeviceConfig *config) {
 
 		#if HAS_BLE_HID
 		preferences.putBool(KEY_BLE_ENABLED, config->ble_enabled);
+		#endif
+
+		#if HAS_AUDIO
+		preferences.putUChar(KEY_AUDIO_VOLUME, config->audio_volume);
 		#endif
 
 		#if HAS_DISPLAY
@@ -447,6 +458,10 @@ LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
 
 #if HAS_BLE_HID
 		LOGI("Config", "BLE Keyboard: %s", config->ble_enabled ? "enabled" : "disabled");
+#endif
+
+#if HAS_AUDIO
+		LOGI("Config", "Audio volume: %u%%", config->audio_volume);
 #endif
 
 #if HAS_DISPLAY

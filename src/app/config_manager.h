@@ -87,6 +87,10 @@ struct DeviceConfig {
 		bool ble_enabled;                        // default false
 #endif
 
+#if HAS_AUDIO
+		uint8_t audio_volume;                    // 0-100, default 70
+#endif
+
 #if HAS_DISPLAY
 		// Screen saver (burn-in prevention v1): backlight sleep on inactivity
 		bool screen_saver_enabled;               // default false

@@ -21,10 +21,11 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 132
+Total flags: 140
 
 ### Features (HAS_*)
 
+- **HAS_AUDIO** default: `false` — Audio (ES8311 codec + I2S, optional)
 - **HAS_BACKLIGHT** default: `false` — Enable backlight control (typically via PWM).
 - **HAS_BLE_HID** default: `true` — Enable BLE HID keyboard support.
 - **HAS_BUILTIN_LED** default: `false` — Enable built-in status LED support.
@@ -50,6 +51,7 @@ Total flags: 132
 
 ### Hardware (Pins)
 
+- **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin (active high).
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.
 - **LCD_B1_PIN** default: `(no default)` — RGB Blue 1 pin.
@@ -116,6 +118,12 @@ Total flags: 132
 
 ### Other
 
+- **AUDIO_CODEC_ADDR** default: `0x18` — I2C address of the audio codec (e.g. ES8311 = 0x18).
+- **AUDIO_I2S_BCLK** default: `-1` — I2S bit clock pin.
+- **AUDIO_I2S_DIN** default: `-1` — I2S data in pin (ESP32 RX ← codec data output).
+- **AUDIO_I2S_DOUT** default: `-1` — I2S data out pin (ESP32 TX → codec data input).
+- **AUDIO_I2S_LRCK** default: `-1` — I2S word select / left-right clock pin.
+- **AUDIO_I2S_MCLK** default: `-1` — I2S master clock pin.
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
@@ -179,13 +187,13 @@ Total flags: 132
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3248w535 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3636w518 | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc4880p433 | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc3636w518 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| jc4880p433 |  | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -203,6 +211,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 ## Usage Map (preprocessor only, generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:USAGE -->
+- **HAS_AUDIO**
+  - src/app/action_dispatch.cpp
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/web_portal_config.cpp
 - **HAS_BACKLIGHT**
   - src/app/app.ino
   - src/app/board_config.h
@@ -375,6 +390,20 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/touch_drivers.cpp
   - src/app/touch_manager.cpp
+- **AUDIO_CODEC_ADDR**
+  - src/app/board_config.h
+- **AUDIO_I2S_BCLK**
+  - src/app/board_config.h
+- **AUDIO_I2S_DIN**
+  - src/app/board_config.h
+- **AUDIO_I2S_DOUT**
+  - src/app/board_config.h
+- **AUDIO_I2S_LRCK**
+  - src/app/board_config.h
+- **AUDIO_I2S_MCLK**
+  - src/app/board_config.h
+- **AUDIO_PA_PIN**
+  - src/app/board_config.h
 - **BME280_I2C_ADDR**
   - src/app/board_config.h
 - **BUTTON_ACTIVE_LOW**
@@ -538,6 +567,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/gt911_touch_driver.cpp
 - **TOUCH_I2C_BUS**
   - src/app/board_config.h
+  - src/app/drivers/gt911_touch_driver.cpp
   - src/app/drivers/gt911_touch_driver.h
 - **TOUCH_I2C_SCL**
   - src/app/drivers/axs15231b_touch_driver.cpp

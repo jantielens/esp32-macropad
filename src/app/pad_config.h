@@ -25,6 +25,8 @@
 #define CONFIG_MQTT_TOPIC_MAX_LEN     128
 #define CONFIG_MQTT_PAYLOAD_MAX_LEN   128
 #define CONFIG_KEY_SEQ_MAX_LEN        256
+#define CONFIG_BEEP_PATTERN_MAX_LEN   128
+#define CONFIG_VOLUME_MODE_MAX_LEN     8
 #define CONFIG_ACTION_TYPE_MAX_LEN     16
 #define CONFIG_LAYOUT_NAME_MAX_LEN     16
 #define CONFIG_JSON_PATH_MAX_LEN       48
@@ -99,14 +101,20 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_BACK     "back"
 #define ACTION_TYPE_KEY      "key"
 #define ACTION_TYPE_BLE_PAIR "ble_pair"
+#define ACTION_TYPE_BEEP     "beep"
+#define ACTION_TYPE_VOLUME   "volume"
 
 // Typed action for tap or long-press
 struct ButtonAction {
-    char type[CONFIG_ACTION_TYPE_MAX_LEN];           // "screen", "mqtt", "key", "ble_pair", or "" (none)
+    char type[CONFIG_ACTION_TYPE_MAX_LEN];           // "screen", "mqtt", "key", "ble_pair", "beep", "volume", or "" (none)
     char screen_id[CONFIG_SCREEN_ID_MAX_LEN];        // type="screen": target screen
     char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];      // type="mqtt": publish topic
     char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // type="mqtt": publish payload
     char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // type="key": DSL key sequence
+    char beep_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];  // type="beep": "freq:dur freq:dur" (empty = default)
+    uint8_t beep_volume;                             // type="beep": 0 = use device volume, 1-100 = override
+    char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set", "up", or "down"
+    uint8_t volume_value;                            // type="volume": 0-100 (used with mode="set")
 };
 
 // LabelBinding removed — MQTT bindings are now inline in label text.

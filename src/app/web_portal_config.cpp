@@ -126,6 +126,10 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["ble_enabled"] = current_config->ble_enabled;
 				#endif
 
+				#if HAS_AUDIO
+				(*doc)["audio_volume"] = current_config->audio_volume;
+				#endif
+
 				#if HAS_DISPLAY
 				// Screen saver settings
 				(*doc)["screen_saver_enabled"] = current_config->screen_saver_enabled;
@@ -397,6 +401,19 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		#if HAS_BLE_HID
 		if (doc.containsKey("ble_enabled")) {
 				current_config->ble_enabled = parseBoolField(doc, "ble_enabled");
+		}
+		#endif
+
+		#if HAS_AUDIO
+		if (doc.containsKey("audio_volume")) {
+				uint8_t vol;
+				if (doc["audio_volume"].is<const char*>()) {
+						vol = (uint8_t)atoi(doc["audio_volume"] | "70");
+				} else {
+						vol = (uint8_t)(doc["audio_volume"] | 70);
+				}
+				if (vol > 100) vol = 100;
+				current_config->audio_volume = vol;
 		}
 		#endif
 
