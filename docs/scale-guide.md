@@ -16,6 +16,13 @@ The scale subsystem provides:
 - **Status feedback** — binding-driven status for taring/calibrating operations
 - **REST API** — tare, calibrate, and status endpoints for external tooling
 
+The device also includes **3 independent timers** — useful for tracking brew time, bloom phases, and pour intervals:
+
+- **Count-up and countdown modes** — stopwatch or countdown with overtime display
+- **Expire beep alerts** — configurable audio alert when a countdown reaches zero
+- **Adjustable on-the-fly** — add or subtract seconds mid-brew without stopping
+- **Auto-configured countdowns** — entering a pad automatically sets up timer presets from button configs
+
 All scale data is exposed through the `[scale:]` binding scheme, which means it works everywhere bindings are supported: labels, colors, widget data, conditional expressions, and more.
 
 ---
@@ -300,14 +307,80 @@ Calibrates with a known weight. The scale must be loaded with the specified weig
 
 ---
 
+## Timers
+
+The device includes 3 independent on-device timers — perfect for tracking brew time, bloom phase, and pour intervals. Timers support count-up (stopwatch) and countdown modes, with optional beep alerts when a countdown expires.
+
+### Timer Bindings
+
+The `[timer:]` binding scheme provides live timer values for labels, colors, and expressions.
+
+| Binding | Returns | Example |
+|---------|---------|---------|
+| `[timer:1]` | Elapsed/remaining in mm:ss | `4:05` |
+| `[timer:1;hh:mm:ss]` | Hours, minutes, seconds | `0:04:05` |
+| `[timer:1;mm:ss.d]` | With decisecond precision | `4:05.3` |
+| `[timer:1;ss]` | Total seconds | `245` |
+| `[timer:1_state]` | Timer state | `running`, `paused`, `stopped` |
+| `[timer:1_expired]` | Countdown crossed zero? | `ON` or `OFF` |
+| `[timer:1_mode]` | Timer direction | `up` or `down` |
+
+Countdown timers that run past zero show negative values (e.g., `-0:05`, `-1:23`) so you can see overtime at a glance.
+
+### Timer Actions
+
+Assign timer actions to pad buttons. The payload format is `N:command` or `N:command:arg`, where N is the timer number (1–3).
+
+| Command | Payload Example | Description |
+|---------|----------------|-------------|
+| **toggle** | `1:toggle` | Stopped → start, running → pause, paused → resume |
+| **start** | `1:start` | Start the timer |
+| **stop** | `1:stop` | Stop and reset to 0 (count-up) or the countdown preset |
+| **pause** | `1:pause` | Freeze at current value |
+| **resume** | `1:resume` | Continue from paused value |
+| **reset** | `1:reset` | Reset without changing running state |
+| **lap** | `1:lap` | Reset and start fresh (step timing) |
+| **countdown** | `1:countdown:240` | Set countdown duration (seconds) and switch to countdown mode |
+| **adjust** | `1:adjust:15` | Add/subtract seconds from countdown preset (e.g., +15, -10) |
+| **mode** | `1:mode:down` | Switch between `up` (stopwatch) and `down` (countdown) |
+
+### Timer Button Configuration
+
+In the pad editor, the timer action type provides additional settings:
+
+- **Default Countdown (seconds)** — When navigating to a pad, the first button referencing each timer automatically sets its countdown preset. Only applied when the timer is stopped at zero (fresh). This means entering a brewing pad auto-configures your timers.
+- **Expire Beep Pattern** — A beep DSL string (e.g., `1000:300 200 1000:300`) that plays when a countdown reaches zero. Fires exactly once per countdown cycle.
+- **Expire Beep Volume** — Optional volume override (0 = device volume, 1–100).
+
+### Using Timers with Scale Bindings
+
+Timers and scale bindings combine naturally in expressions:
+
+**Conditional color when bloom timer expires:**
+```
+[expr:[timer:1_expired]=="ON" ? "FF4444" : "333333"]
+```
+
+**Weight-per-second calculated from timer:**
+```
+[expr:[scale:weight] / max([timer:1;ss], 1);%.1f] g/s avg
+```
+
+**Dynamic label showing timer state:**
+```
+[expr:[timer:1_state]=="running" ? [timer:1;mm:ss] : "Tap to start"]
+```
+
+---
+
 ## Example: V60 Pour-Over Dashboard
 
-A practical 4×2 pad layout for V60 coffee brewing:
+A practical 4×2 pad layout for V60 coffee brewing with timers:
 
 | Col 1 | Col 2 | Col 3 | Col 4 |
 |-------|-------|-------|-------|
-| **Weight** | **Flow Rate** | **Tare** | **Calibrate** |
-| Weight sparkline | Flow sparkline | +10g | -10g |
+| **Weight** | **Flow Rate** | **Timer** | **Tare** |
+| Weight sparkline | Flow sparkline | **Start/Pause** | **+15s / -10s** |
 
 ### Button Configurations
 
@@ -321,15 +394,17 @@ A practical 4×2 pad layout for V60 coffee brewing:
 - Center label: `[scale:flow_rate;%.1f] g/s`
 - Background color: `[expr:threshold([scale:flow_rate],0,1a1a2e,1.5,1a3a1a,2.5,3a3a1a,3.5,3a1a1a)]`
 
-**Button (2,0) — Tare:**
+**Button (2,0) — Brew timer display:**
+- Top label: `Brew Time`
+- Center label: `[timer:1;mm:ss]`
+- Bottom label: `[expr:[timer:1_expired]=="ON"?"TIME'S UP":""]`
+- Background color: `[expr:[timer:1_expired]=="ON"?"3a1a1a":"1a1a2e"]`
+
+> Timer 1 is used as the overall brew timer. Set default countdown to 240 seconds (4 minutes) for a standard V60 pour. The expire beep alerts you when time is up — the timer keeps running into overtime so you can see how far past the target you are.
+
+**Button (3,0) — Tare:**
 - Center label: `[expr:[scale:status]=="taring"?"Taring...":"Tare"]`
 - Action: `scale` (Scale Tare)
-- Background color: `#16213e`
-
-**Button (3,0) — Calibrate:**
-- Center label: `[expr:[scale:status]=="calibrating"?"Cal...":"Calibrate"]`
-- Bottom label: `[scale:cal_weight] g`
-- Action: `scale_cal` (Scale Calibrate)
 - Background color: `#16213e`
 
 **Button (0,1) — Weight sparkline:**
@@ -345,13 +420,30 @@ A practical 4×2 pad layout for V60 coffee brewing:
 - Line color binding: `[expr:threshold([scale:flow_rate],0,808080,1.5,00FF00,2.5,FFAA00,3.5,FF0000)]`
 - Background color: `#0f0f23`
 
-**Button (2,1) — Cal weight +10:**
-- Center label: `+10`
-- Action: `scale_cal_weight`, payload: `10`
+**Button (2,1) — Start/Pause toggle:**
+- Center label: `[expr:[timer:1_state]=="running"?"Pause":[timer:1_state]=="paused"?"Resume":"Start"]`
+- Action: `timer`, payload: `1:toggle`
+- Default countdown: `240` (4 minutes)
+- Expire beep: `1000:300 200 1000:300 200 1000:500`
+- Background color: `[expr:[timer:1_state]=="running"?"1a3a1a":"16213e"]`
 
-**Button (3,1) — Cal weight -10:**
-- Center label: `-10`
-- Action: `scale_cal_weight`, payload: `-10`
+**Button (3,1) — Adjust countdown:**
+- Top label: `+15s`
+- Action (tap): `timer`, payload: `1:adjust:15`
+- Bottom label: `-10s`
+- Action (long-press): `timer`, payload: `1:adjust:-10`
+- Background color: `#16213e`
+
+### Brewing Workflow
+
+1. Place your V60 on the scale and tap **Tare** to zero it
+2. Add coffee grounds and tare again
+3. Tap **Start** — the 4-minute countdown begins
+4. Pour water — watch the weight, flow rate sparkline, and timer simultaneously
+5. When the timer expires, a beep sounds and the timer background turns red
+6. The timer continues into overtime (e.g., `-0:15`) so you see exactly how long past target
+
+> **Tip**: Use timer 2 as a bloom timer — add a separate button with `2:countdown:45` for a 45-second bloom phase, and use `[timer:2;mm:ss]` to display it. The **lap** command (`2:lap`) resets and restarts it for each pour phase.
 
 ---
 
@@ -377,6 +469,7 @@ Understanding the signal processing helps when tuning your UI:
 
 ## Tips & Best Practices
 
+### Scale
 - **Always tare before calibrating** — calibration measures the raw ADC difference between zero and the known weight
 - **Use a known, accurate weight** for calibration — kitchen scales or certified weights work well
 - **Flow rate is most useful during pours** — at rest it hovers near 0.0 g/s with minor noise
@@ -384,3 +477,12 @@ Understanding the signal processing helps when tuning your UI:
 - **Calibration persists across reboots** — you don't need to recalibrate after power cycles
 - **Use `[scale:available]` for conditional UI** — hide or gray out scale buttons when the sensor isn't connected
 - **The cal_weight defaults to 500g** at boot and is not persisted — set it from a pad button before calibrating
+
+### Timers
+- **Default countdown auto-configures** — entering a pad sets up timer countdowns from button configs, so you don't need a separate "set countdown" button
+- **Overtime is visible** — countdown timers keep running past zero and show negative values, so you always know how far over time you are
+- **Expire beep fires once** — the beep triggers on the zero-crossing edge, not repeatedly. Reset or adjust the timer to re-arm it
+- **Use `adjust` for on-the-fly changes** — add or subtract seconds mid-brew without stopping the timer
+- **Lap for pour phases** — the `lap` command resets and immediately restarts a timer, perfect for timing individual pour phases (bloom, first pour, second pour)
+- **3 timers = 3 purposes** — e.g., timer 1 for total brew time, timer 2 for bloom/phase timing, timer 3 for anything else
+- **Timers are runtime-only** — they don't persist across reboots; countdown presets are reapplied when you navigate to the pad
