@@ -10,15 +10,18 @@
 #define TAG "HX711"
 
 // ============================================================================
-// EMA filter parameters
+// Tuning knobs — adjust these to taste
 // ============================================================================
-static constexpr float EMA_ALPHA       = 0.3f;    // 30% new + 70% history
-static constexpr float JUMP_THRESHOLD  = 5.0f;    // grams — reset EMA on big change
 
-// ============================================================================
-// Flow rate computation
-// ============================================================================
-static constexpr uint32_t FLOW_WINDOW_MS = 1000;  // compute flow over 1-second window
+// Weight EMA filter
+static constexpr float    EMA_ALPHA          = 0.3f;   // 0→stable, 1→raw. 0.3 = 30% new + 70% history
+static constexpr float    JUMP_THRESHOLD     = 5.0f;   // grams — reset EMA instantly on big change
+
+// Flow rate sliding window (time-based — works at any sample rate)
+static constexpr size_t   FLOW_RING_CAPACITY = 80;     // ring buffer capacity (fits 1s@80SPS or 8s@10SPS)
+static constexpr uint32_t FLOW_WINDOW_MS     = 500;    // lookback window for derivative (ms)
+static constexpr uint32_t FLOW_UPDATE_MS     = 100;    // recalc interval (100ms → 10 Hz updates)
+static constexpr uint32_t FLOW_MIN_SPAN_MS   = 50;     // minimum span for valid derivative (ms)
 
 // ============================================================================
 // State
@@ -31,10 +34,13 @@ static bool  s_available   = false;
 static float s_weight_ema  = 0.0f;
 static bool  s_ema_primed  = false;
 
-// Flow rate state
-static float    s_prev_weight     = 0.0f;
-static uint32_t s_prev_weight_ms  = 0;
-static float    s_flow_rate       = 0.0f;   // g/s
+// Flow rate — sliding window ring buffer
+struct WeightSample { float weight; uint32_t ms; };
+static WeightSample s_flow_ring[FLOW_RING_CAPACITY];
+static size_t   s_ring_head     = 0;      // next write index
+static size_t   s_ring_count    = 0;      // samples currently stored
+static uint32_t s_flow_last_ms  = 0;      // last time we recalculated
+static float    s_flow_rate     = 0.0f;   // g/s
 
 // Calibration reference weight (runtime, not persisted)
 static float s_cal_weight = 500.0f;
@@ -74,18 +80,34 @@ static void poll_once() {
         }
     }
 
-    // Flow rate (weight derivative over 1s window)
+    // Push sample into ring buffer
     uint32_t now = millis();
-    uint32_t elapsed = now - s_prev_weight_ms;
-    if (elapsed >= FLOW_WINDOW_MS && s_prev_weight_ms > 0) {
-        float dw = s_weight_ema - s_prev_weight;
-        s_flow_rate = dw / ((float)elapsed / 1000.0f);
-        s_prev_weight    = s_weight_ema;
-        s_prev_weight_ms = now;
-    } else if (s_prev_weight_ms == 0) {
-        // First reading — seed
-        s_prev_weight    = s_weight_ema;
-        s_prev_weight_ms = now;
+    s_flow_ring[s_ring_head] = { s_weight_ema, now };
+    s_ring_head = (s_ring_head + 1) % FLOW_RING_CAPACITY;
+    if (s_ring_count < FLOW_RING_CAPACITY) s_ring_count++;
+
+    // Recalculate flow rate at FLOW_UPDATE_MS intervals
+    if (s_ring_count >= 2 && (now - s_flow_last_ms) >= FLOW_UPDATE_MS) {
+        s_flow_last_ms = now;
+        size_t newest_idx = (s_ring_head + FLOW_RING_CAPACITY - 1) % FLOW_RING_CAPACITY;
+        const WeightSample &newest = s_flow_ring[newest_idx];
+
+        // Find reference sample ~FLOW_WINDOW_MS ago (scan backward from newest)
+        uint32_t target_ms = now - FLOW_WINDOW_MS;
+        size_t ref_idx = (s_ring_head + FLOW_RING_CAPACITY - s_ring_count) % FLOW_RING_CAPACITY;
+        for (size_t i = 1; i < s_ring_count; i++) {
+            size_t idx = (s_ring_head + FLOW_RING_CAPACITY - 1 - i) % FLOW_RING_CAPACITY;
+            if (s_flow_ring[idx].ms <= target_ms) {
+                ref_idx = idx;
+                break;
+            }
+        }
+
+        const WeightSample &ref = s_flow_ring[ref_idx];
+        uint32_t span = newest.ms - ref.ms;
+        if (span >= FLOW_MIN_SPAN_MS) {
+            s_flow_rate = (newest.weight - ref.weight) / ((float)span / 1000.0f);
+        }
     }
 }
 
@@ -112,8 +134,9 @@ void hx711_tare() {
     s_weight_ema  = 0.0f;
     s_ema_primed  = false;
     s_flow_rate   = 0.0f;
-    s_prev_weight = 0.0f;
-    s_prev_weight_ms = 0;
+    s_ring_head   = 0;
+    s_ring_count  = 0;
+    s_flow_last_ms = 0;
     LOGI(TAG, "Tare done, offset=%ld", s_scale.get_offset());
 }
 

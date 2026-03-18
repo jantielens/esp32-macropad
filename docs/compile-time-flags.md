@@ -284,6 +284,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
   - src/app/pad_config.cpp
+  - src/app/scale_binding.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
@@ -375,8 +376,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/scale_binding.cpp
   - src/app/sensors.cpp
+  - src/app/sensors/hx711_sensor.cpp
+  - src/app/sensors/hx711_sensor.h
   - src/app/web_portal_routes.cpp
+  - src/app/web_portal_scale.cpp
+  - src/app/web_portal_scale.h
 - **HAS_SENSOR_LD2410_OUT**
   - src/app/board_config.h
   - src/app/sensors.cpp
