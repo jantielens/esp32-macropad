@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.11.0] - 2026-03-17
+## [1.11.0] - 2026-03-18
 
 ### Added
 - **Timer engine** — 3 independent timers with count-up (stopwatch) and countdown modes. Assign timer actions to buttons to toggle, start, stop, pause, resume, reset, or lap timers directly from the touch screen. Countdown timers display negative values (e.g., "-0:05") when running past zero.
