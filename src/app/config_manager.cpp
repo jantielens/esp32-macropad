@@ -57,6 +57,10 @@
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
 #endif
+#if HAS_SENSOR_HX711
+#define KEY_HX711_CAL      "hx711_cal"
+#define KEY_HX711_OFS      "hx711_ofs"
+#endif
 #define KEY_MAGIC          "magic"
 
 static Preferences preferences;
@@ -239,6 +243,13 @@ bool config_manager_load(DeviceConfig *config) {
 		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, 70);
 		#endif
 
+		#if HAS_SENSOR_HX711
+		preferences.getString(KEY_HX711_CAL, config->hx711_cal_factor, CONFIG_HX711_CAL_MAX_LEN);
+		if (strlen(config->hx711_cal_factor) == 0) strlcpy(config->hx711_cal_factor, "1.0", CONFIG_HX711_CAL_MAX_LEN);
+		preferences.getString(KEY_HX711_OFS, config->hx711_offset, CONFIG_HX711_CAL_MAX_LEN);
+		if (strlen(config->hx711_offset) == 0) strlcpy(config->hx711_offset, "0", CONFIG_HX711_CAL_MAX_LEN);
+		#endif
+
 		#if HAS_DISPLAY
 		// Load screen saver settings
 		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, false);
@@ -327,6 +338,11 @@ bool config_manager_save(const DeviceConfig *config) {
 
 		#if HAS_AUDIO
 		preferences.putUChar(KEY_AUDIO_VOLUME, config->audio_volume);
+		#endif
+
+		#if HAS_SENSOR_HX711
+		preferences.putString(KEY_HX711_CAL, config->hx711_cal_factor);
+		preferences.putString(KEY_HX711_OFS, config->hx711_offset);
 		#endif
 
 		#if HAS_DISPLAY

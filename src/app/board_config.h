@@ -197,6 +197,21 @@
 #define HAS_SENSOR_DUMMY false
 #endif
 
+// Enable HX711 load cell sensor (weight scale).
+#ifndef HAS_SENSOR_HX711
+#define HAS_SENSOR_HX711 false
+#endif
+
+// HX711 data out pin.
+#ifndef HX711_DOUT_PIN
+#define HX711_DOUT_PIN -1
+#endif
+
+// HX711 clock pin.
+#ifndef HX711_SCK_PIN
+#define HX711_SCK_PIN -1
+#endif
+
 // I2C pins for sensors. Use -1 to keep default Wire pins.
 #ifndef SENSOR_I2C_SDA
 #define SENSOR_I2C_SDA -1

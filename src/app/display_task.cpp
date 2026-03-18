@@ -129,7 +129,6 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				uint32_t delayMs = lv_timer_handler();
 				const uint32_t lv_timer_us = (uint32_t)(esp_timer_get_time() - lv_start_us);
 				
-#if HAS_MQTT
 				// Poll data stream registry (background ring buffers for
 				// history-based widgets, independent of active screen).
 				{
@@ -141,7 +140,6 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						}
 						data_stream_poll();
 				}
-#endif
 
 				// Update current screen (data refresh)
 				if (mgr->currentScreen) {

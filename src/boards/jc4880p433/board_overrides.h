@@ -86,4 +86,13 @@
 #define TOUCH_RST -1           // No hardware reset (NC per BSP)
 #define TOUCH_INT -1           // No interrupt pin (NC per BSP)
 
+// ============================================================================
+// HX711 Load Cell Sensor (Scale)
+// ============================================================================
+#define HAS_SENSOR_HX711 true
+// HX711 data out pin (GPIO 52 — no Ethernet on this board, pin near power header).
+#define HX711_DOUT_PIN 52
+// HX711 clock pin (GPIO 51 — adjacent to DOUT, near power header).
+#define HX711_SCK_PIN 51
+
 #endif // BOARD_OVERRIDES_JC4880P433_H

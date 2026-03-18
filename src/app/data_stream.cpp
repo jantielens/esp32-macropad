@@ -1,6 +1,6 @@
 #include "data_stream.h"
 
-#if HAS_DISPLAY && HAS_MQTT
+#if HAS_DISPLAY
 
 #include "binding_template.h"
 #include "log_manager.h"
@@ -302,4 +302,4 @@ bool data_stream_get(data_stream_handle_t handle, DataStreamSnapshot* out) {
     return true;
 }
 
-#endif // HAS_DISPLAY && HAS_MQTT
+#endif // HAS_DISPLAY

@@ -16,6 +16,9 @@
 #if HAS_BLE_HID
 #include "web_portal_ble.h"
 #endif
+#if HAS_SENSOR_HX711
+#include "web_portal_scale.h"
+#endif
 
 void web_portal_register_routes(AsyncWebServer* server) {
 		auto handleCorsPreflight = [](AsyncWebServerRequest *request) {
@@ -211,6 +214,29 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				if (!portal_auth_gate(request)) return;
 				handlePostBlePairingStart(request);
 		});
+#endif
+
+#if HAS_SENSOR_HX711
+		// Scale endpoints
+		registerOptions("/api/scale/tare");
+		server->on("/api/scale/tare", HTTP_POST, [](AsyncWebServerRequest *request) {
+				if (!portal_auth_gate(request)) return;
+				handlePostScaleTare(request);
+		});
+
+		registerOptions("/api/scale/calibrate");
+		server->on(
+				"/api/scale/calibrate",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostScaleCalibrate
+		);
+
+		registerOptions("/api/scale");
+		server->on("/api/scale", HTTP_GET, handleGetScaleStatus);
 #endif
 
 }

@@ -36,5 +36,8 @@ Adafruit Unified Sensor
 TFT_eSPI@2.5.43
 lvgl@9.5.0
 
+# Scale sensor
+HX711 Arduino Library@0.7.5
+
 # Display (Arduino_GFX for JC3248W535, JC3636W518, and other QSPI displays)
 GFX Library for Arduino@1.6.5

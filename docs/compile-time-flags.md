@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 140
+Total flags: 143
 
 ### Features (HAS_*)
 
@@ -35,6 +35,7 @@ Total flags: 140
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
 - **HAS_SENSOR_DUMMY** default: `false` — Enable dummy sensor adapter (synthetic values for testing).
+- **HAS_SENSOR_HX711** default: `false` — Enable HX711 load cell sensor (weight scale).
 - **HAS_SENSOR_LD2410_OUT** default: `false` — Enable LD2410 OUT pin presence sensor adapter.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 
@@ -53,6 +54,8 @@ Total flags: 140
 
 - **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin (active high).
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
+- **HX711_DOUT_PIN** default: `-1` — HX711 data out pin.
+- **HX711_SCK_PIN** default: `-1` — HX711 clock pin.
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.
 - **LCD_B1_PIN** default: `(no default)` — RGB Blue 1 pin.
 - **LCD_B2_PIN** default: `(no default)` — RGB Blue 2 pin.
@@ -187,13 +190,13 @@ Total flags: 140
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3636w518 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc4880p433 |  | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  | ✅ |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
+| jc3636w518 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
+| jc4880p433 |  | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  | ✅ |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -220,6 +223,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/ha_discovery.cpp
+  - src/app/mqtt_audio.cpp
+  - src/app/mqtt_audio.h
   - src/app/web_portal_config.cpp
 - **HAS_BACKLIGHT**
   - src/app/app.ino
@@ -324,15 +329,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
-  - src/app/data_stream.cpp
-  - src/app/data_stream.h
   - src/app/device_telemetry.cpp
-  - src/app/display_manager.cpp
-  - src/app/display_task.cpp
   - src/app/duty_cycle.cpp
   - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/ha_discovery.h
+  - src/app/mqtt_audio.cpp
+  - src/app/mqtt_audio.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
   - src/app/mqtt_screen.cpp
@@ -367,6 +370,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/sensors/dummy_sensor.h
+- **HAS_SENSOR_HX711**
+  - src/app/action_dispatch.cpp
+  - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/sensors.cpp
+  - src/app/web_portal_routes.cpp
 - **HAS_SENSOR_LD2410_OUT**
   - src/app/board_config.h
   - src/app/sensors.cpp
@@ -444,6 +454,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HEALTH_POLL_INTERVAL_MS**
   - src/app/board_config.h
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS**
+  - src/app/board_config.h
+- **HX711_DOUT_PIN**
+  - src/app/board_config.h
+- **HX711_SCK_PIN**
   - src/app/board_config.h
 - **LCD_BL_PIN**
   - src/app/drivers/arduino_gfx_driver.cpp

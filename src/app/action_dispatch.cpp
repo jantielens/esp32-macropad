@@ -16,6 +16,9 @@
 #include "config_manager.h"
 #include "web_portal_state.h"
 #endif
+#if HAS_SENSOR_HX711
+#include "sensors/hx711_sensor.h"
+#endif
 
 #define TAG "Action"
 
@@ -103,6 +106,44 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         }
 #else
         LOGW(TAG, "%s volume: not compiled", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_SCALE) == 0) {
+#if HAS_SENSOR_HX711
+        LOGI(TAG, "%s scale: tare (deferred)", label);
+        hx711_request_tare();
+#else
+        LOGW(TAG, "%s scale: not compiled", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_SCALE_CAL) == 0) {
+#if HAS_SENSOR_HX711
+        LOGI(TAG, "%s scale_cal: calibrate (deferred)", label);
+        hx711_request_calibrate();
+#else
+        LOGW(TAG, "%s scale_cal: not compiled", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_SCALE_CAL_WEIGHT) == 0) {
+#if HAS_SENSOR_HX711
+        float delta = strtof(act.mqtt_payload, nullptr);
+        if (delta != 0.0f) {
+            hx711_adjust_cal_weight(delta);
+            LOGI(TAG, "%s scale_cal_weight: delta=%.1f -> %.1f g", label, delta, hx711_get_cal_weight());
+        } else {
+            LOGW(TAG, "%s scale_cal_weight: invalid delta '%s'", label, act.mqtt_payload);
+        }
+#else
+        LOGW(TAG, "%s scale_cal_weight: not compiled", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_SCALE_CAL_SET) == 0) {
+#if HAS_SENSOR_HX711
+        float val = strtof(act.mqtt_payload, nullptr);
+        if (val >= 1.0f) {
+            hx711_set_cal_weight(val);
+            LOGI(TAG, "%s scale_cal_set: %.1f g", label, hx711_get_cal_weight());
+        } else {
+            LOGW(TAG, "%s scale_cal_set: invalid value '%s'", label, act.mqtt_payload);
+        }
+#else
+        LOGW(TAG, "%s scale_cal_set: not compiled", label);
 #endif
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);

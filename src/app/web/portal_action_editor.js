@@ -24,6 +24,10 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="ble_pair">Start BLE Pairing</option>';
     h += '<option value="beep">Play Beep</option>';
     h += '<option value="volume">Set Volume</option>';
+    h += '<option value="scale">Scale Tare</option>';
+    h += '<option value="scale_cal">Scale Calibrate</option>';
+    h += '<option value="scale_cal_weight">Scale Cal Weight &plusmn;</option>';
+    h += '<option value="scale_cal_set">Scale Cal Weight Set</option>';
     h += '</select>';
     if (opts.showBleHint) {
         h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
@@ -80,6 +84,20 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<label for="' + prefix + '-volume-value">Volume (%)</label>';
     h += '<input type="number" id="' + prefix + '-volume-value" min="0" max="100" placeholder="e.g. 50">';
     h += '</div></div>';
+    // Scale cal weight delta
+    h += '<div id="' + prefix + '-scale-cal-weight-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-scale-delta">Weight Change (g)</label>';
+    h += '<input type="number" id="' + prefix + '-scale-delta" step="0.1" placeholder="e.g. 10, -10, 0.5, -0.5">';
+    h += '<small>Grams to add or subtract from the calibration reference weight each tap.</small>';
+    h += '</div></div>';
+    // Scale cal weight set (absolute)
+    h += '<div id="' + prefix + '-scale-cal-set-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-scale-set-value">Calibration Weight (g)</label>';
+    h += '<input type="number" id="' + prefix + '-scale-set-value" min="1" step="0.1" placeholder="e.g. 251.5">';
+    h += '<small>Set the calibration reference weight to this value (grams).</small>';
+    h += '</div></div>';
     return h;
 }
 
@@ -94,12 +112,16 @@ function actionEditorTypeChanged(prefix) {
     var bleHint = document.getElementById(prefix + '-ble-hint');
     var beepGrp = document.getElementById(prefix + '-beep-group');
     var volGrp = document.getElementById(prefix + '-volume-group');
+    var scaleCwGrp = document.getElementById(prefix + '-scale-cal-weight-group');
+    var scaleSetGrp = document.getElementById(prefix + '-scale-cal-set-group');
     if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
     if (mqttGrp) mqttGrp.style.display = (type === 'mqtt') ? '' : 'none';
     if (keyGrp) keyGrp.style.display = (type === 'key') ? '' : 'none';
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
     if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
     if (volGrp) volGrp.style.display = (type === 'volume') ? '' : 'none';
+    if (scaleCwGrp) scaleCwGrp.style.display = (type === 'scale_cal_weight') ? '' : 'none';
+    if (scaleSetGrp) scaleSetGrp.style.display = (type === 'scale_cal_set') ? '' : 'none';
     // Show/hide volume value field depending on mode
     if (type === 'volume') {
         var modeEl = document.getElementById(prefix + '-volume-mode');
@@ -133,6 +155,10 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.volume_mode || 'set';
     el = document.getElementById(prefix + '-volume-value');
     if (el) el.value = (action.volume_value !== undefined && action.volume_value > 0) ? action.volume_value : '';
+    el = document.getElementById(prefix + '-scale-delta');
+    if (el) el.value = action.payload || '';
+    el = document.getElementById(prefix + '-scale-set-value');
+    if (el) el.value = action.payload || '';
     actionEditorTypeChanged(prefix);
 }
 
@@ -170,6 +196,14 @@ function actionEditorBuild(prefix) {
             var vv = document.getElementById(prefix + '-volume-value');
             if (vv && vv.value !== '') act.volume_value = parseInt(vv.value, 10);
         }
+    }
+    if (type === 'scale_cal_weight') {
+        var sd = document.getElementById(prefix + '-scale-delta');
+        if (sd && sd.value !== '') act.payload = sd.value.trim();
+    }
+    if (type === 'scale_cal_set') {
+        var sv = document.getElementById(prefix + '-scale-set-value');
+        if (sv && sv.value !== '') act.payload = sv.value.trim();
     }
     return act;
 }

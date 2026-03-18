@@ -27,7 +27,7 @@
 #define CONFIG_KEY_SEQ_MAX_LEN        256
 #define CONFIG_BEEP_PATTERN_MAX_LEN   128
 #define CONFIG_VOLUME_MODE_MAX_LEN     8
-#define CONFIG_ACTION_TYPE_MAX_LEN     16
+#define CONFIG_ACTION_TYPE_MAX_LEN     20
 #define CONFIG_LAYOUT_NAME_MAX_LEN     16
 #define CONFIG_JSON_PATH_MAX_LEN       48
 #define CONFIG_FORMAT_MAX_LEN          24
@@ -103,6 +103,10 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_BLE_PAIR "ble_pair"
 #define ACTION_TYPE_BEEP     "beep"
 #define ACTION_TYPE_VOLUME   "volume"
+#define ACTION_TYPE_SCALE    "scale"
+#define ACTION_TYPE_SCALE_CAL "scale_cal"
+#define ACTION_TYPE_SCALE_CAL_WEIGHT "scale_cal_weight"
+#define ACTION_TYPE_SCALE_CAL_SET   "scale_cal_set"
 
 // Typed action for tap or long-press
 struct ButtonAction {

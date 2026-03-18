@@ -389,9 +389,7 @@ void DisplayManager::init() {
 		
 		LOGI("Display", "Manager init start");
 
-#if HAS_MQTT
 		data_stream_init();
-#endif
 		
 		// Create all screens
 		splashScreen.create();

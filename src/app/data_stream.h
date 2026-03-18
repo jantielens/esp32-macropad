@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_DISPLAY && HAS_MQTT
+#if HAS_DISPLAY
 
 #include <stdint.h>
 #include <stddef.h>
@@ -66,4 +66,4 @@ data_stream_handle_t data_stream_find(const char* binding,
 // Returns false if handle is invalid or stream has no data.
 bool data_stream_get(data_stream_handle_t handle, DataStreamSnapshot* out);
 
-#endif // HAS_DISPLAY && HAS_MQTT
+#endif // HAS_DISPLAY
