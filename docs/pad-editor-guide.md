@@ -199,6 +199,7 @@ Each button has two action slots — one for **tap** and one for **long-press** 
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
 | **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
 | **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
+| **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
 
 **Example setup for a smart light:**
 - **Tap action**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -240,6 +241,35 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 - `ctrl+a 200ms ctrl+c` — select all, wait 200ms, then copy
 
 > **Tip**: Assign `ble_pair` to a dedicated button so you can pair a new host device directly from the macropad's touch screen.
+
+### Timer Actions
+
+The **Timer** action type controls one of 3 independent on-device timers. Timers support count-up (stopwatch) and countdown modes. Use `[timer:N]` bindings on labels to display the timer value (see [Timer Binding](#timer-binding)).
+
+When you select a Timer action, a dropdown groups all actions by timer:
+
+| Action | Description |
+|--------|-------------|
+| **Toggle** | Stopped → start, running → pause, paused → resume |
+| **Start** | Start the timer |
+| **Stop** | Stop and reset to 0 (count-up) or the countdown preset (countdown) |
+| **Pause** | Freeze the timer at its current value |
+| **Resume** | Continue from the paused value |
+| **Reset** | Reset to 0 or preset without changing the running state |
+| **Lap** | Reset the timer and start fresh (useful for step timing) |
+| **Adjust Countdown Time** | Add or subtract seconds from the countdown preset (e.g., +15 or -10). Only affects countdown-mode timers |
+| **Set Countdown** | Set the countdown duration in seconds for this timer |
+| **Set Mode** | Switch between count-up and countdown mode |
+
+**Additional timer settings** appear depending on the selected action:
+
+- **Default Countdown (seconds)** — when navigating to a pad, the first button referencing each timer automatically configures its countdown preset. Only applied when the timer is stopped at zero (fresh). This lets you pre-configure timers just by entering a pad.
+- **Expire Beep Pattern** — a beep pattern DSL string (e.g., `1000:300 200 1000:300`) that plays when a countdown timer reaches zero. Edge-triggered: fires exactly once per countdown cycle.
+- **Expire Beep Volume** — optional volume override (0 = device volume, 1–100).
+
+**Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
+
+> **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Set the default countdown to 240 seconds for a 4-minute pour.
 
 ### Audio Feedback
 
@@ -698,6 +728,49 @@ A precision timer with milliseconds:
 
 ```
 [time:%H:%M:%S.%ms]                                    → 14:30:05.123
+```
+
+### Timer Binding
+
+**Syntax:** `[timer:N]`, `[timer:N;format]`, `[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]`
+
+Displays the value or state of one of the 3 on-device timers. Timer N is 1, 2, or 3.
+
+**Formats:**
+
+| Format | Result | Example |
+|--------|--------|---------|
+| `mm:ss` (default) | Minutes and seconds | `4:05` or `-0:12` |
+| `hh:mm:ss` | Hours, minutes, seconds | `1:02:30` |
+| `ss` | Total seconds | `245` |
+| `mm:ss.d` | With deciseconds | `4:05.3` |
+
+**State keys:**
+
+| Key | Returns | Values |
+|-----|---------|--------|
+| `N_state` | Timer state | `running`, `paused`, `stopped` |
+| `N_expired` | Countdown expired? | `ON`, `OFF` |
+| `N_mode` | Timer direction | `up`, `down` |
+
+Countdown timers that run past zero show negative values (e.g., `-0:05`).
+
+**Examples:**
+
+```
+[timer:1]                    → 4:05       (default mm:ss)
+[timer:1;hh:mm:ss]           → 0:04:05
+[timer:2;mm:ss.d]            → 3:22.7     (with deciseconds)
+[timer:1;ss]                 → 245         (total seconds)
+[timer:1_state]              → running
+[timer:1_expired]            → OFF
+[timer:1_mode]               → down
+```
+
+Use `[timer:N_expired]` in expression bindings for conditional colors or text:
+
+```
+[expr:[timer:1_expired]=="ON" ? "#FF0000" : "#333333"]
 ```
 
 ### Expression Binding

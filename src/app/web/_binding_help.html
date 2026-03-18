@@ -19,6 +19,7 @@
                 <a href="#binding-docs-time" onclick="showBindingHelp('time'); return false;">Time</a>
                 <a href="#binding-docs-expr" onclick="showBindingHelp('expr'); return false;">Expr</a>
                 <a href="#binding-docs-pad" onclick="showBindingHelp('pad'); return false;">Pad</a>
+                <a href="#binding-docs-timer" onclick="showBindingHelp('timer'); return false;">Timer</a>
                 <a href="#binding-docs-widget" onclick="showBindingHelp('widget'); return false;">Widgets</a>
             </div>
         </div>
@@ -468,6 +469,61 @@
                         </div>
                         <pre class="binding-example-code"><code>[expr:[pad:power] > 3000 ? "High" : "Low"]</code></pre>
                         <p>Good for status text or state logic based on reused inputs.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-timer" class="binding-docs-section" data-binding-section="timer">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Timer bindings</h4>
+                        <p>Display the value or state of one of 3 on-device timers (count-up or countdown).</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[timer:N;format]</code></pre>
+                </div>
+                <dl class="binding-docs-spec">
+                    <div><dt>N</dt><dd>Timer number: <code>1</code>, <code>2</code>, or <code>3</code></dd></div>
+                    <div><dt>mm:ss</dt><dd>Default format &mdash; <code>4:05</code></dd></div>
+                    <div><dt>hh:mm:ss</dt><dd>Hours included &mdash; <code>0:04:05</code></dd></div>
+                    <div><dt>ss</dt><dd>Total seconds &mdash; <code>245</code></dd></div>
+                    <div><dt>mm:ss.d</dt><dd>With deciseconds &mdash; <code>4:05.3</code></dd></div>
+                    <div><dt>N_state</dt><dd><code>running</code>, <code>paused</code>, or <code>stopped</code></dd></div>
+                    <div><dt>N_expired</dt><dd><code>ON</code> or <code>OFF</code> (countdown only)</dd></div>
+                    <div><dt>N_mode</dt><dd><code>up</code> or <code>down</code></dd></div>
+                </dl>
+                <p class="binding-docs-note">Countdown timers that run past zero display negative values (e.g., <code>-0:05</code>). Assign timer actions to buttons to control timers from the touch screen.</p>
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Default timer display</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[timer:1]</code></pre>
+                        <p>Show timer 1 in mm:ss format.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Decisecond precision</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[timer:1;mm:ss.d]</code></pre>
+                        <p>Timer with tenth-of-a-second precision.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Timer state</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[timer:1_state]</code></pre>
+                        <p>Returns <code>running</code>, <code>paused</code>, or <code>stopped</code>.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Expiry alert color</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[timer:1_expired]=="ON" ? "#FF0000" : "#333333"]</code></pre>
+                        <p>Turn a button red when a countdown timer has expired.</p>
                     </article>
                 </div>
             </section>

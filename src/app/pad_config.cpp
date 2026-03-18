@@ -197,6 +197,13 @@ static void parse_action(JsonVariant v, ButtonAction* act, const char* legacy_sc
         act->beep_volume = (uint8_t)(a["beep_volume"] | 0);
         strlcpy(act->volume_mode, a["volume_mode"] | "", CONFIG_VOLUME_MODE_MAX_LEN);
         act->volume_value = (uint8_t)(a["volume_value"] | 0);
+        // Timer: "timer_command" from web → reuse mqtt_payload for storage
+        if (strcmp(act->type, ACTION_TYPE_TIMER) == 0 && a.containsKey("timer_command")) {
+            strlcpy(act->mqtt_payload, a["timer_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
+        }
+        act->timer_countdown = (uint32_t)(a["timer_countdown"] | 0);
+        strlcpy(act->timer_expire_beep, a["timer_expire_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+        act->timer_expire_volume = (uint8_t)(a["timer_expire_volume"] | 0);
         return;
     }
 

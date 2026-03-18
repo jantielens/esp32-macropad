@@ -18,12 +18,21 @@ static void action_to_json(JsonObject obj, const ButtonAction& act) {
     obj["type"] = act.type;
     if (act.screen_id[0])    obj["target"]   = act.screen_id;
     if (act.mqtt_topic[0])   obj["topic"]    = act.mqtt_topic;
-    if (act.mqtt_payload[0]) obj["payload"]  = act.mqtt_payload;
+    if (act.mqtt_payload[0]) {
+        if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
+            obj["timer_command"] = act.mqtt_payload;
+        } else {
+            obj["payload"] = act.mqtt_payload;
+        }
+    }
     if (act.key_sequence[0]) obj["sequence"] = act.key_sequence;
     if (act.beep_pattern[0])  obj["beep_pattern"]  = act.beep_pattern;
     if (act.beep_volume > 0)  obj["beep_volume"]   = act.beep_volume;
     if (act.volume_mode[0])   obj["volume_mode"]   = act.volume_mode;
     if (act.volume_value > 0) obj["volume_value"]  = act.volume_value;
+    if (act.timer_countdown > 0) obj["timer_countdown"] = act.timer_countdown;
+    if (act.timer_expire_beep[0]) obj["timer_expire_beep"] = act.timer_expire_beep;
+    if (act.timer_expire_volume > 0) obj["timer_expire_volume"] = act.timer_expire_volume;
 }
 
 void handleGetSwipeActions(AsyncWebServerRequest *request) {

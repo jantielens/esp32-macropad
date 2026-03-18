@@ -17,6 +17,8 @@
 #include "web_portal_state.h"
 #endif
 
+#include "timer_engine.h"
+
 #define TAG "Action"
 
 void action_dispatch(const ButtonAction& act, const char* label) {
@@ -104,6 +106,50 @@ void action_dispatch(const ButtonAction& act, const char* label) {
 #else
         LOGW(TAG, "%s volume: not compiled", label);
 #endif
+    } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
+        // Payload format: "N:command" or "N:command:arg"
+        // e.g. "1:toggle", "2:start", "1:countdown:300", "1:mode:down"
+        const char* p = act.mqtt_payload;
+        if (p && p[0] >= '1' && p[0] <= '0' + TIMER_COUNT && p[1] == ':') {
+            uint8_t tid = p[0] - '0';
+            const char* cmd = p + 2;
+
+            // Always (re)apply expire beep config from button config
+            if (act.timer_expire_beep[0]) {
+                timer_set_expire_beep(tid, act.timer_expire_beep, act.timer_expire_volume);
+            }
+
+            if (strcmp(cmd, "start") == 0) {
+                timer_start(tid);
+            } else if (strcmp(cmd, "stop") == 0) {
+                timer_stop(tid);
+            } else if (strcmp(cmd, "toggle") == 0) {
+                timer_toggle(tid);
+            } else if (strcmp(cmd, "pause") == 0) {
+                timer_pause(tid);
+            } else if (strcmp(cmd, "resume") == 0) {
+                timer_resume(tid);
+            } else if (strcmp(cmd, "reset") == 0) {
+                timer_reset(tid);
+            } else if (strcmp(cmd, "lap") == 0) {
+                timer_lap(tid);
+            } else if (strncmp(cmd, "countdown:", 10) == 0) {
+                uint32_t secs = (uint32_t)atoi(cmd + 10);
+                timer_set_countdown(tid, secs);
+                timer_set_mode(tid, TIMER_MODE_DOWN);
+            } else if (strncmp(cmd, "adjust:", 7) == 0) {
+                int32_t delta = (int32_t)atoi(cmd + 7);
+                timer_adjust(tid, delta);
+            } else if (strncmp(cmd, "mode:", 5) == 0) {
+                TimerMode m = (strcmp(cmd + 5, "down") == 0) ? TIMER_MODE_DOWN : TIMER_MODE_UP;
+                timer_set_mode(tid, m);
+            } else {
+                LOGW(TAG, "%s timer: unknown cmd '%s'", label, cmd);
+            }
+            LOGI(TAG, "%s timer: %c:%s", label, p[0], cmd);
+        } else {
+            LOGW(TAG, "%s timer: bad payload '%s'", label, p ? p : "(null)");
+        }
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
     }

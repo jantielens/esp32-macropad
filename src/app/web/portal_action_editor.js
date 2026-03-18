@@ -24,6 +24,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="ble_pair">Start BLE Pairing</option>';
     h += '<option value="beep">Play Beep</option>';
     h += '<option value="volume">Set Volume</option>';
+    h += '<option value="timer">Timer Control</option>';
     h += '</select>';
     if (opts.showBleHint) {
         h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
@@ -80,6 +81,59 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<label for="' + prefix + '-volume-value">Volume (%)</label>';
     h += '<input type="number" id="' + prefix + '-volume-value" min="0" max="100" placeholder="e.g. 50">';
     h += '</div></div>';
+    // Timer — structured dropdowns
+    h += '<div id="' + prefix + '-timer-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-timer-action">Timer Action</label>';
+    h += '<select id="' + prefix + '-timer-action" onchange="actionEditorTimerChanged(\'' + prefix + '\')">';
+    for (var t = 1; t <= 3; t++) {
+        h += '<optgroup label="Timer ' + t + '">';
+        h += '<option value="' + t + ':toggle">Toggle</option>';
+        h += '<option value="' + t + ':start">Start</option>';
+        h += '<option value="' + t + ':stop">Stop</option>';
+        h += '<option value="' + t + ':pause">Pause</option>';
+        h += '<option value="' + t + ':resume">Resume</option>';
+        h += '<option value="' + t + ':reset">Reset</option>';
+        h += '<option value="' + t + ':lap">Lap</option>';
+        h += '<option value="' + t + ':adjust">Adjust Countdown Time</option>';
+        h += '<option value="' + t + ':countdown">Set Countdown</option>';
+        h += '<option value="' + t + ':mode">Set Mode</option>';
+        h += '</optgroup>';
+    }
+    h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-cd-group" style="display:none;">';
+    h += '<label for="' + prefix + '-timer-cd-sec">Countdown (seconds)</label>';
+    h += '<input type="number" id="' + prefix + '-timer-cd-sec" min="1" max="86400" placeholder="e.g. 300">';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-adjust-group" style="display:none;">';
+    h += '<label for="' + prefix + '-timer-adjust-sec">Adjust (seconds)</label>';
+    h += '<input type="number" id="' + prefix + '-timer-adjust-sec" min="-86400" max="86400" placeholder="e.g. 15 or -10">';
+    h += '<small>Positive adds time, negative subtracts. Applied to the countdown preset.</small>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-mode-group" style="display:none;">';
+    h += '<label for="' + prefix + '-timer-mode-val">Mode</label>';
+    h += '<select id="' + prefix + '-timer-mode-val">';
+    h += '<option value="up">Count Up</option>';
+    h += '<option value="down">Count Down</option>';
+    h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-default-cd-group" style="display:none;">';
+    h += '<label for="' + prefix + '-timer-default-cd">Default Countdown (seconds)</label>';
+    h += '<input type="number" id="' + prefix + '-timer-default-cd" min="0" max="86400" placeholder="e.g. 300">';
+    h += '<small>When navigating to this pad, if the timer is stopped and fresh, auto-configure it as a countdown with this duration. Leave empty or 0 to skip.</small>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-expire-beep-group" style="display:none;">';
+    h += '<label for="' + prefix + '-timer-expire-beep">Expire Beep Pattern</label>';
+    h += '<input type="text" id="' + prefix + '-timer-expire-beep" maxlength="127" placeholder="e.g. 1000:300 200 1000:300 200 1000:300">';
+    h += '<small>Beep pattern to play when the countdown reaches zero. Same DSL as Beep action: <b>freq:dur</b> = tone, bare <b>dur</b> = silence gap (ms).</small>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-expire-vol-group" style="display:none;">';
+    h += '<label for="' + prefix + '-timer-expire-vol">Expire Beep Volume (%)</label>';
+    h += '<input type="number" id="' + prefix + '-timer-expire-vol" min="0" max="100" placeholder="(use device volume)">';
+    h += '<small>Optional volume override for the expire beep. If empty, uses the device volume.</small>';
+    h += '</div>';
+    h += '</div>';
     return h;
 }
 
@@ -100,12 +154,38 @@ function actionEditorTypeChanged(prefix) {
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
     if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
     if (volGrp) volGrp.style.display = (type === 'volume') ? '' : 'none';
+    var timerGrp = document.getElementById(prefix + '-timer-group');
+    if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
+    if (type === 'timer') actionEditorTimerChanged(prefix);
     // Show/hide volume value field depending on mode
     if (type === 'volume') {
         var modeEl = document.getElementById(prefix + '-volume-mode');
         var valGrp = document.getElementById(prefix + '-volume-value-group');
         if (modeEl && valGrp) valGrp.style.display = (modeEl.value === 'set') ? '' : 'none';
     }
+}
+
+// Show/hide timer sub-fields based on the timer action dropdown.
+function actionEditorTimerChanged(prefix) {
+    var sel = document.getElementById(prefix + '-timer-action');
+    if (!sel) return;
+    var val = sel.value; // e.g. "1:countdown", "2:mode", "1:toggle"
+    var parts = val.split(':');
+    var cmd = parts[1] || '';
+    var cdGrp = document.getElementById(prefix + '-timer-cd-group');
+    var adjustGrp = document.getElementById(prefix + '-timer-adjust-group');
+    var modeGrp = document.getElementById(prefix + '-timer-mode-group');
+    var defCdGrp = document.getElementById(prefix + '-timer-default-cd-group');
+    var expBeepGrp = document.getElementById(prefix + '-timer-expire-beep-group');
+    var expVolGrp = document.getElementById(prefix + '-timer-expire-vol-group');
+    if (cdGrp) cdGrp.style.display = (cmd === 'countdown') ? '' : 'none';
+    if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
+    if (modeGrp) modeGrp.style.display = (cmd === 'mode') ? '' : 'none';
+    // Show default countdown and expire beep for actions that start/toggle a timer
+    var showDefCd = (cmd === 'toggle' || cmd === 'start');
+    if (defCdGrp) defCdGrp.style.display = showDefCd ? '' : 'none';
+    if (expBeepGrp) expBeepGrp.style.display = showDefCd ? '' : 'none';
+    if (expVolGrp) expVolGrp.style.display = showDefCd ? '' : 'none';
 }
 
 // Load an action object { type, target, topic, payload, sequence } into the form.
@@ -133,6 +213,40 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.volume_mode || 'set';
     el = document.getElementById(prefix + '-volume-value');
     if (el) el.value = (action.volume_value !== undefined && action.volume_value > 0) ? action.volume_value : '';
+    // Timer: parse DSL string "N:command[:arg]" into structured fields
+    if (action.timer_command) {
+        var tc = action.timer_command;
+        var m = tc.match(/^(\d):(\w+)(?::(.+))?$/);
+        if (m) {
+            var tid = m[1], cmd = m[2], arg = m[3] || '';
+            el = document.getElementById(prefix + '-timer-action');
+            if (el) {
+                el.value = tid + ':' + cmd;
+                if (el.selectedIndex < 0) el.value = '1:toggle';
+            }
+            if (cmd === 'countdown') {
+                el = document.getElementById(prefix + '-timer-cd-sec');
+                if (el) el.value = arg;
+            } else if (cmd === 'adjust') {
+                el = document.getElementById(prefix + '-timer-adjust-sec');
+                if (el) el.value = arg;
+            } else if (cmd === 'mode') {
+                el = document.getElementById(prefix + '-timer-mode-val');
+                if (el) el.value = arg || 'up';
+            }
+        }
+    } else {
+        el = document.getElementById(prefix + '-timer-action');
+        if (el) el.value = '1:toggle';
+    }
+    // Timer default countdown
+    el = document.getElementById(prefix + '-timer-default-cd');
+    if (el) el.value = (action.timer_countdown > 0) ? action.timer_countdown : '';
+    // Timer expire beep
+    el = document.getElementById(prefix + '-timer-expire-beep');
+    if (el) el.value = action.timer_expire_beep || '';
+    el = document.getElementById(prefix + '-timer-expire-vol');
+    if (el) el.value = (action.timer_expire_volume > 0) ? action.timer_expire_volume : '';
     actionEditorTypeChanged(prefix);
 }
 
@@ -169,6 +283,39 @@ function actionEditorBuild(prefix) {
         if (vm && vm.value === 'set') {
             var vv = document.getElementById(prefix + '-volume-value');
             if (vv && vv.value !== '') act.volume_value = parseInt(vv.value, 10);
+        }
+    }
+    if (type === 'timer') {
+        var sel = document.getElementById(prefix + '-timer-action');
+        if (sel) {
+            var val = sel.value; // e.g. "1:toggle", "2:countdown"
+            var parts = val.split(':');
+            var cmd = parts[1] || '';
+            if (cmd === 'countdown') {
+                var cdSec = document.getElementById(prefix + '-timer-cd-sec');
+                var sec = cdSec ? parseInt(cdSec.value, 10) : 0;
+                if (sec > 0) val = val + ':' + sec;
+            } else if (cmd === 'adjust') {
+                var adjSec = document.getElementById(prefix + '-timer-adjust-sec');
+                var adj = adjSec ? parseInt(adjSec.value, 10) : 0;
+                if (adj !== 0 && !isNaN(adj)) val = val + ':' + adj;
+            } else if (cmd === 'mode') {
+                var modeVal = document.getElementById(prefix + '-timer-mode-val');
+                val = val + ':' + (modeVal ? modeVal.value : 'up');
+            }
+            act.timer_command = val;
+        }
+        var defCd = document.getElementById(prefix + '-timer-default-cd');
+        if (defCd && defCd.value !== '' && parseInt(defCd.value, 10) > 0) {
+            act.timer_countdown = parseInt(defCd.value, 10);
+        }
+        var expBeep = document.getElementById(prefix + '-timer-expire-beep');
+        if (expBeep && (expBeep.value || '').trim()) {
+            act.timer_expire_beep = expBeep.value.trim();
+        }
+        var expVol = document.getElementById(prefix + '-timer-expire-vol');
+        if (expVol && expVol.value !== '' && parseInt(expVol.value, 10) > 0) {
+            act.timer_expire_volume = parseInt(expVol.value, 10);
         }
     }
     return act;

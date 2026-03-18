@@ -25,7 +25,8 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 ### Connectivity & Smart Home
 - **MQTT with Home Assistant Discovery** — auto-registers as an HA device, no YAML needed
 - **Live data bindings** — display MQTT topics, device health, or date/time directly on buttons
-- **Button actions** — tap or long-press to publish MQTT messages, navigate screens, or send BLE keystrokes
+- **Button actions** — tap or long-press to publish MQTT messages, navigate screens, send BLE keystrokes, or control timers
+- **On-device timers** — 3 independent count-up/countdown timers with live display bindings, countdown expiry beep, and quick-adjust buttons
 - **Toggle state** — buttons reflect on/off state from MQTT topics
 - **Remote screen control** — switch pads from Home Assistant
 - **Remote audio control** — trigger beeps, play siren tones, and adjust volume from HA automations
