@@ -426,8 +426,9 @@ void audio_init(uint8_t initial_volume) {
     es8311_apply_volume(current_volume);
 
     // Create command queue and audio task
+    // Priority 5: above LVGL (4) to avoid I2S DMA underruns during heavy rendering
     audio_queue = xQueueCreate(AUDIO_QUEUE_DEPTH, sizeof(AudioCommand));
-    xTaskCreatePinnedToCore(audio_task, "audio", 4096, NULL, 2, &audio_task_handle, 1);
+    xTaskCreatePinnedToCore(audio_task, "audio", 4096, NULL, 5, &audio_task_handle, 1);
 
     audio_initialized = true;
     LOGI(TAG, "Audio ready (volume=%u%%, PA always-on)", current_volume);
