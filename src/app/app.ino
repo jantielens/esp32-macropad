@@ -28,6 +28,7 @@
 #include "pad_binding.h"
 #include "scale_binding.h"
 #include "time_binding.h"
+#include "timer_binding.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "swipe_config.h"
@@ -339,6 +340,7 @@ void setup()
 	expr_binding_init();
 	pad_binding_init();
 	scale_binding_init();
+	timer_binding_init();
 	#endif
 
 	last_heartbeat_ms = millis();

@@ -16,6 +16,10 @@
 #include "screen_saver_manager.h"
 #endif
 
+#if HAS_AUDIO
+#include "audio.h"
+#endif
+
 #include <ArduinoJson.h>
 #include <WiFi.h>
 
@@ -128,6 +132,8 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				#if HAS_AUDIO
 				(*doc)["audio_volume"] = current_config->audio_volume;
+				(*doc)["tap_beep"] = current_config->tap_beep;
+				(*doc)["lp_beep"] = current_config->lp_beep;
 				#endif
 
 				#if HAS_DISPLAY
@@ -414,6 +420,13 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 				if (vol > 100) vol = 100;
 				current_config->audio_volume = vol;
+				audio_set_volume(vol);
+		}
+		if (doc.containsKey("tap_beep")) {
+				strlcpy(current_config->tap_beep, doc["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+		}
+		if (doc.containsKey("lp_beep")) {
+				strlcpy(current_config->lp_beep, doc["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
 		}
 		#endif
 

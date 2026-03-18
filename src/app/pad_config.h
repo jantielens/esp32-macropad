@@ -107,6 +107,7 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_SCALE_CAL "scale_cal"
 #define ACTION_TYPE_SCALE_CAL_WEIGHT "scale_cal_weight"
 #define ACTION_TYPE_SCALE_CAL_SET   "scale_cal_set"
+#define ACTION_TYPE_TIMER    "timer"
 
 // Typed action for tap or long-press
 struct ButtonAction {
@@ -119,6 +120,9 @@ struct ButtonAction {
     uint8_t beep_volume;                             // type="beep": 0 = use device volume, 1-100 = override
     char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set", "up", or "down"
     uint8_t volume_value;                            // type="volume": 0-100 (used with mode="set")
+    uint32_t timer_countdown;                        // type="timer": default countdown in seconds (0 = none)
+    char timer_expire_beep[CONFIG_BEEP_PATTERN_MAX_LEN]; // type="timer": beep pattern on countdown expiry
+    uint8_t timer_expire_volume;                      // type="timer": 0 = device vol, 1-100 = override
 };
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
@@ -166,6 +170,10 @@ struct ScreenButtonConfig {
     // Typed actions
     ButtonAction action;     // tap action
     ButtonAction lp_action;  // long-press action
+
+    // Audio feedback overrides (empty = use device default, "none" = suppress)
+    char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
+    char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
 
     // Background image (fetched from URL, displayed as tile background)
     char bg_image_url[CONFIG_BG_IMAGE_URL_MAX_LEN];       // empty = no image

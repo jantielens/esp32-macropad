@@ -125,6 +125,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_BACKLIGHT ? "true" : "false");
 		response->print(",\"display_blank_on_save\":");
 		response->print(DISPLAY_BLANK_ON_SAVE ? "true" : "false");
+		response->print(",\"has_audio\":");
+		response->print(HAS_AUDIO ? "true" : "false");
 
 		#if HAS_DISPLAY
 				// Display screen information

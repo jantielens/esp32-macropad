@@ -376,6 +376,11 @@ function padInit() {
                 section.style.display = 'block';
                 const padFooter = document.getElementById('pad-floating-footer');
                 if (padFooter) padFooter.style.display = '';
+                // Show audio feedback section in button editor if device has audio
+                if (deviceInfoCache.has_audio === true) {
+                    var audioSec = document.getElementById('pad-edit-audio-section');
+                    if (audioSec) audioSec.style.display = '';
+                }
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
                 padLoadPage(0);
@@ -914,6 +919,12 @@ function padDialogOpen(col, row) {
     // Long-press action
     actionEditorLoad('pad-edit-lp-action', btn.lp_action);
 
+    // Audio feedback overrides
+    document.getElementById('pad-edit-tap-beep').value = btn.tap_beep || '';
+    document.getElementById('pad-edit-lp-beep').value = btn.lp_beep || '';
+    var audioSec = document.getElementById('pad-edit-audio-section');
+    if (audioSec) audioSec.open = !!(btn.tap_beep || btn.lp_beep);
+
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
     document.getElementById('pad-edit-bg-image-user').value = btn.bg_image_user || '';
@@ -1088,6 +1099,12 @@ function padDialogOk(keepOpen) {
     // Long-press action
     const lpAct = actionEditorBuild('pad-edit-lp-action');
     if (lpAct.type) btn.lp_action = lpAct;
+
+    // Audio feedback overrides
+    var tapBeep = document.getElementById('pad-edit-tap-beep').value.trim();
+    if (tapBeep) { btn.tap_beep = tapBeep; } else { delete btn.tap_beep; }
+    var lpBeep = document.getElementById('pad-edit-lp-beep').value.trim();
+    if (lpBeep) { btn.lp_beep = lpBeep; } else { delete btn.lp_beep; }
 
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();

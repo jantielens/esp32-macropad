@@ -241,5 +241,6 @@ actions:
 
 - **Re-trigger**: Sending `siren.turn_on` while the siren is already playing replaces the current tone immediately.
 - **Beep interrupts siren**: Pressing a beep button while the siren is playing stops the siren and plays the one-shot beep instead.
-- **Volume override vs device volume**: The `volume_level` parameter on `siren.turn_on` is a temporary override (0.0–1.0). The `number.set_value` on the Volume entity changes the persistent device volume for all future playback.
+- **Volume override vs device volume**: The `volume_level` parameter on `siren.turn_on` is a temporary override (0.0–1.0). The `number.set_value` on the Volume entity changes the persistent device volume for all future playback. Volume changes from HA are immediately reflected in the web portal and vice versa.
 - **Duration**: When specified, the siren automatically stops after the given number of seconds and publishes an OFF state. Without a duration, the siren loops indefinitely until explicitly turned off.
+- **Touch feedback audio cues**: The device also supports configurable beep patterns for button tap and long-press events, configured in the web portal's Home page Audio section (not via HA entities). These use the same beep pattern DSL and respect the HA-controllable device volume. See the [Web Portal Guide](web-portal-guide.md#audio) and [Pad Editor Guide](pad-editor-guide.md#audio-feedback) for details.

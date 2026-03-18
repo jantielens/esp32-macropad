@@ -223,7 +223,21 @@
                     <label for="audio_volume">Volume: <span id="audio_volume_value">70</span>%</label>
                     <input type="range" id="audio_volume" name="audio_volume" min="0" max="100" step="5" value="70"
                            oninput="document.getElementById('audio_volume_value').textContent=this.value">
-                    <small>Device audio volume (0–100%). Used for beep actions.</small>
+                    <small>Device audio volume (0–100%). Used for beep actions and touch feedback.</small>
+                </div>
+
+                <small style="display:block; margin-bottom:12px; color:#86868b;">Beep patterns use <code>freq:duration</code> pairs (Hz:ms). Separate multiple tones with spaces. A bare number is a silent gap in ms.<br>Examples: <code>800:80</code> (single tap), <code>600:40 40 600:40</code> (double chirp), <code>1000:30 30 1200:30</code> (rising two-tone).</small>
+
+                <div class="form-group">
+                    <label for="tap_beep">Tap Beep</label>
+                    <input type="text" id="tap_beep" name="tap_beep" maxlength="127" placeholder="e.g. 800:80">
+                    <small>Beep pattern on button tap. Leave empty for no sound. Overridable per button.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="lp_beep">Long-Press Beep</label>
+                    <input type="text" id="lp_beep" name="lp_beep" maxlength="127" placeholder="e.g. 600:40 40 600:40">
+                    <small>Beep pattern on long-press. Leave empty for no sound. Overridable per button.</small>
                 </div>
             </section>
 

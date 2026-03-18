@@ -5,6 +5,7 @@
 #include "../pad_config.h"
 #include "../swipe_actions.h"
 #include "../pad_layout.h"
+#include "../timer_engine.h"
 #if HAS_MQTT
 #include "../mqtt_manager.h"
 #include "../mqtt_sub_store.h"

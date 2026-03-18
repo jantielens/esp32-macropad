@@ -220,6 +220,22 @@
                     <div class="editor-group-body" id="pad-action-editors"></div>
                 </details>
 
+                <!-- Audio Feedback (hidden if audio not available) -->
+                <details class="editor-group" id="pad-edit-audio-section" style="display:none;">
+                    <summary>Audio Feedback</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Override the device-level beep pattern for this button. Leave empty to use the device default, enter <code>none</code> to silence.<br>Format: <code>freq:duration</code> pairs (Hz:ms), space-separated. Bare number = silent gap. E.g. <code>800:80</code>, <code>600:40 40 600:40</code>.</small>
+                        <div class="form-group">
+                            <label for="pad-edit-tap-beep">Tap Beep</label>
+                            <input type="text" id="pad-edit-tap-beep" maxlength="127" placeholder="device default">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-lp-beep">Long-Press Beep</label>
+                            <input type="text" id="pad-edit-lp-beep" maxlength="127" placeholder="device default">
+                        </div>
+                    </div>
+                </details>
+
                 <!-- Icon -->
                 <details class="editor-group" id="pad-edit-icon-section">
                     <summary>Icon</summary>

@@ -225,6 +225,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
+  - src/app/screens/pad_screen_events.cpp
+  - src/app/swipe_actions.cpp
+  - src/app/timer_engine.cpp
   - src/app/web_portal_config.cpp
 - **HAS_BACKLIGHT**
   - src/app/app.ino
@@ -293,6 +296,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/swipe_config.cpp
   - src/app/swipe_config.h
   - src/app/time_binding.cpp
+  - src/app/timer_binding.cpp
+  - src/app/timer_engine.cpp
   - src/app/touch_manager.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
