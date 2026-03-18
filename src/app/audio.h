@@ -25,4 +25,15 @@ uint8_t audio_get_volume();
 //                  0 = use current device volume.
 void audio_beep(const char* pattern, uint8_t volume_override);
 
+// Start looping a beep pattern until audio_stop() is called.
+// The pattern should include a trailing silence gap to control repeat cadence.
+// volume_override: same semantics as audio_beep().
+void audio_play_loop(const char* pattern, uint8_t volume_override);
+
+// Stop any currently playing or looping audio. Flushes the queue.
+void audio_stop();
+
+// Returns true if a pattern is currently playing (one-shot or loop).
+bool audio_is_playing();
+
 #endif // HAS_AUDIO

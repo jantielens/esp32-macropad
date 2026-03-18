@@ -96,6 +96,8 @@ The Audio section lets you set the device volume for beep actions.
 |---------|-------------|
 | **Volume** | Slider (0–100%) controlling the device audio volume. Used by beep actions unless overridden per-action. Persisted in NVS |
 
+When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
+
 #### BLE Signals
 
 The firmware exposes two BLE health signals for bindings and diagnostics:

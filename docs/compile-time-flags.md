@@ -219,6 +219,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/ha_discovery.cpp
   - src/app/web_portal_config.cpp
 - **HAS_BACKLIGHT**
   - src/app/app.ino

@@ -11,6 +11,9 @@
 #include "../version.h" // FIRMWARE_VERSION
 #include <ArduinoJson.h>
 
+// Forward declaration — used by all entity publish helpers.
+static void fill_device_block(JsonDocument &doc, MqttManager &mqtt);
+
 void ha_discovery_publish_health(MqttManager &mqtt) {
 		// Notes:
 		// - Single JSON publish model: all entities share the same stat_t.
@@ -63,6 +66,11 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 		#if HAS_DISPLAY
 		ha_discovery_publish_button_event_config(mqtt);
 		ha_discovery_publish_screen_select_config(mqtt);
+		#endif
+
+		// Audio entities (siren, volume, beep buttons)
+		#if HAS_AUDIO
+		ha_discovery_publish_audio_entities(mqtt);
 		#endif
 }
 
@@ -132,13 +140,7 @@ bool ha_discovery_publish_binary_sensor_config(
 				doc["dev_cla"] = device_class;
 		}
 
-		// Device block (kept minimal)
-		JsonObject dev = doc["dev"].to<JsonObject>();
-		JsonArray ids = dev["ids"].to<JsonArray>();
-		ids.add(mqtt.sanitizedName());
-		dev["name"] = mqtt.friendlyName();
-		dev["mdl"] = PROJECT_DISPLAY_NAME;
-		dev["sw"] = FIRMWARE_VERSION;
+		fill_device_block(doc, mqtt);
 
 		if (doc.overflowed()) {
 				return false;
@@ -222,13 +224,7 @@ bool ha_discovery_publish_sensor_config(
 				doc["stat_cla"] = state_class;
 		}
 
-		// Device block (kept minimal)
-		JsonObject dev = doc["dev"].to<JsonObject>();
-		JsonArray ids = dev["ids"].to<JsonArray>();
-		ids.add(mqtt.sanitizedName());
-		dev["name"] = mqtt.friendlyName();
-		dev["mdl"] = PROJECT_DISPLAY_NAME;
-		dev["sw"] = FIRMWARE_VERSION;
+		fill_device_block(doc, mqtt);
 
 		if (doc.overflowed()) {
 				// Payload too large for this StaticJsonDocument size.
@@ -266,12 +262,7 @@ bool ha_discovery_publish_button_event_config(MqttManager &mqtt) {
 		doc["pl_avail"] = "online";
 		doc["pl_not_avail"] = "offline";
 
-		JsonObject dev = doc["dev"].to<JsonObject>();
-		JsonArray ids = dev["ids"].to<JsonArray>();
-		ids.add(mqtt.sanitizedName());
-		dev["name"] = mqtt.friendlyName();
-		dev["mdl"] = PROJECT_DISPLAY_NAME;
-		dev["sw"] = FIRMWARE_VERSION;
+		fill_device_block(doc, mqtt);
 
 		if (doc.overflowed()) {
 				return false;
@@ -314,12 +305,7 @@ bool ha_discovery_publish_screen_select_config(MqttManager &mqtt) {
 		doc["pl_avail"] = "online";
 		doc["pl_not_avail"] = "offline";
 
-		JsonObject dev = doc["dev"].to<JsonObject>();
-		JsonArray ids = dev["ids"].to<JsonArray>();
-		ids.add(mqtt.sanitizedName());
-		dev["name"] = mqtt.friendlyName();
-		dev["mdl"] = PROJECT_DISPLAY_NAME;
-		dev["sw"] = FIRMWARE_VERSION;
+		fill_device_block(doc, mqtt);
 
 		if (doc.overflowed()) return false;
 
@@ -327,6 +313,159 @@ bool ha_discovery_publish_screen_select_config(MqttManager &mqtt) {
 #else
 		return false;
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// Audio entities: siren + volume number + beep buttons
+// ---------------------------------------------------------------------------
+
+// Helper: fill the common device block used by all entities.
+static void fill_device_block(JsonDocument &doc, MqttManager &mqtt) {
+		JsonObject dev = doc["dev"].to<JsonObject>();
+		JsonArray ids = dev["ids"].to<JsonArray>();
+		ids.add(mqtt.sanitizedName());
+		dev["name"] = mqtt.friendlyName();
+		dev["mdl"] = PROJECT_DISPLAY_NAME;
+		dev["sw"] = FIRMWARE_VERSION;
+}
+
+static bool publish_siren_config(MqttManager &mqtt) {
+		char topic[160];
+		snprintf(topic, sizeof(topic), "homeassistant/siren/%s/siren/config", mqtt.sanitizedName());
+
+		StaticJsonDocument<1024> doc;
+		doc["~"] = mqtt.baseTopic();
+		doc["name"] = "Siren";
+
+		char ha_oid[96];
+		snprintf(ha_oid, sizeof(ha_oid), "%s_siren", mqtt.sanitizedName());
+		doc["object_id"] = ha_oid;
+		doc["uniq_id"] = ha_oid;
+
+		doc["cmd_t"] = "~/audio/siren/set";
+		doc["stat_t"] = "~/audio/siren/state";
+
+		// Optimistic false — we publish state after processing.
+		doc["optimistic"] = false;
+
+		// Support turn_on parameters: tone, volume_level, duration
+		// NOTE: available_tones is required — without it HA's siren
+		// platform strips the tone parameter from the MQTT payload entirely.
+		// "custom" maps to the pattern stored in the companion text entity.
+		doc["support_volume_set"] = true;
+		doc["support_duration"]  = true;
+
+		JsonArray tones = doc["available_tones"].to<JsonArray>();
+		tones.add("default");
+		tones.add("alert");
+		tones.add("doorbell");
+		tones.add("warning");
+		tones.add("custom");
+
+		doc["avty_t"] = "~/availability";
+		doc["pl_avail"] = "online";
+		doc["pl_not_avail"] = "offline";
+
+		fill_device_block(doc, mqtt);
+		if (doc.overflowed()) return false;
+		return mqtt.publishJson(topic, doc, true);
+}
+
+static bool publish_volume_number_config(MqttManager &mqtt) {
+		char topic[160];
+		snprintf(topic, sizeof(topic), "homeassistant/number/%s/volume/config", mqtt.sanitizedName());
+
+		StaticJsonDocument<768> doc;
+		doc["~"] = mqtt.baseTopic();
+		doc["name"] = "Volume";
+
+		char ha_oid[96];
+		snprintf(ha_oid, sizeof(ha_oid), "%s_volume", mqtt.sanitizedName());
+		doc["object_id"] = ha_oid;
+		doc["uniq_id"] = ha_oid;
+
+		doc["cmd_t"] = "~/audio/volume/set";
+		doc["stat_t"] = "~/audio/volume/state";
+
+		doc["min"] = 0;
+		doc["max"] = 100;
+		doc["step"] = 1;
+		doc["unit_of_meas"] = "%";
+		doc["ic"] = "mdi:volume-high";
+
+		doc["avty_t"] = "~/availability";
+		doc["pl_avail"] = "online";
+		doc["pl_not_avail"] = "offline";
+
+		fill_device_block(doc, mqtt);
+		if (doc.overflowed()) return false;
+		return mqtt.publishJson(topic, doc, true);
+}
+
+static bool publish_beep_button_config(MqttManager &mqtt, const char *object_id_suffix, const char *name, const char *cmd_topic_suffix) {
+		char topic[160];
+		snprintf(topic, sizeof(topic), "homeassistant/button/%s/%s/config", mqtt.sanitizedName(), object_id_suffix);
+
+		StaticJsonDocument<768> doc;
+		doc["~"] = mqtt.baseTopic();
+		doc["name"] = name;
+
+		char ha_oid[96];
+		snprintf(ha_oid, sizeof(ha_oid), "%s_%s", mqtt.sanitizedName(), object_id_suffix);
+		doc["object_id"] = ha_oid;
+		doc["uniq_id"] = ha_oid;
+
+		char cmd_t[80];
+		snprintf(cmd_t, sizeof(cmd_t), "~/%s", cmd_topic_suffix);
+		doc["cmd_t"] = cmd_t;
+
+		doc["ic"] = "mdi:bell-ring";
+
+		doc["avty_t"] = "~/availability";
+		doc["pl_avail"] = "online";
+		doc["pl_not_avail"] = "offline";
+
+		fill_device_block(doc, mqtt);
+		if (doc.overflowed()) return false;
+		return mqtt.publishJson(topic, doc, true);
+}
+
+static bool publish_custom_tone_text_config(MqttManager &mqtt) {
+		char topic[160];
+		snprintf(topic, sizeof(topic), "homeassistant/text/%s/custom_tone/config", mqtt.sanitizedName());
+
+		StaticJsonDocument<768> doc;
+		doc["~"] = mqtt.baseTopic();
+		doc["name"] = "Custom Tone";
+
+		char ha_oid[96];
+		snprintf(ha_oid, sizeof(ha_oid), "%s_custom_tone", mqtt.sanitizedName());
+		doc["object_id"] = ha_oid;
+		doc["uniq_id"] = ha_oid;
+
+		doc["cmd_t"] = "~/audio/custom_tone/set";
+		doc["stat_t"] = "~/audio/custom_tone/state";
+		doc["max"] = 127;
+		doc["ic"] = "mdi:music-note";
+
+		doc["avty_t"] = "~/availability";
+		doc["pl_avail"] = "online";
+		doc["pl_not_avail"] = "offline";
+
+		fill_device_block(doc, mqtt);
+		if (doc.overflowed()) return false;
+		return mqtt.publishJson(topic, doc, true);
+}
+
+bool ha_discovery_publish_audio_entities(MqttManager &mqtt) {
+		bool ok = true;
+		ok &= publish_siren_config(mqtt);
+		ok &= publish_volume_number_config(mqtt);
+		ok &= publish_custom_tone_text_config(mqtt);
+		ok &= publish_beep_button_config(mqtt, "beep",        "Beep",        "audio/beep");
+		ok &= publish_beep_button_config(mqtt, "beep_double", "Beep Double", "audio/beep_double");
+		ok &= publish_beep_button_config(mqtt, "beep_triple", "Beep Triple", "audio/beep_triple");
+		return ok;
 }
 
 #endif // HAS_MQTT

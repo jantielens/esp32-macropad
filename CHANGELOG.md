@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audio subsystem** (ESP32-P4 boards) — ES8311 codec + NS4150B amplifier over I2S with async FreeRTOS playback. New beep pattern DSL (`freq:dur` tones, bare `dur` silence gaps, space-delimited). Device-level volume control (0–100%, NVS-persisted) with slider on the Home page.
 - **Beep button action** — new `beep` action type plays a configurable beep pattern with optional per-action volume override.
 - **Volume button action** — new `volume` action type sets, increases, or decreases device audio volume (±10% steps or absolute set). Volume changes persist to NVS.
+- **Home Assistant audio integration** — the device speaker is controllable from Home Assistant via auto-discovered MQTT entities (no YAML needed):
+  - **Siren** entity — looping tone with preset selection (default, alert, doorbell, warning, custom), volume override, and optional auto-stop duration
+  - **Volume** number entity — set device volume (0–100%), persisted across reboots
+  - **Custom Tone** text entity — define a beep pattern DSL string, then play it via the siren with `tone: "custom"`
+  - **Beep / Beep Double / Beep Triple** button entities — one-shot beep triggers
+  - See [Home Assistant Integration Guide](docs/ha-integration-guide.md) for usage examples and automation recipes
 
 ### Fixed
 - **BLE auto-re-pair on stale bonds** — when Windows (or another host) drops its BLE bond after a firmware update (due to GATT database hash change), the ESP32 now detects that the reconnecting peer matches the previously bonded owner and automatically clears the stale bond and enters a 60-second re-pair window. Previously, the device would reject the now-unbonded host indefinitely, requiring manual pairing via the web portal. The owner's identity address is persisted in NVS for cross-reboot detection.

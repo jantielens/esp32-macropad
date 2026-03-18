@@ -77,10 +77,18 @@ static const uint8_t COEFF_DAC_OSR   = 0x10;
 struct AudioCommand {
     char pattern[AUDIO_PATTERN_MAX_LEN];
     uint8_t volume_override; // 0 = use current
+    bool loop;               // true = repeat until stop
 };
 
 static QueueHandle_t audio_queue = NULL;
 static TaskHandle_t audio_task_handle = NULL;
+// Cross-task flags: written by audio_enqueue()/audio_stop() (caller task),
+// read/written by audio_task (FreeRTOS task).  volatile provides visibility;
+// no mutex needed because the only race (g_playing read in audio_enqueue vs
+// g_playing write in audio_task) is benign — a spurious g_stop_requested=true
+// when nothing is playing is harmlessly cleared on the next queue receive.
+static volatile bool g_stop_requested = false;
+static volatile bool g_playing = false;
 
 // ---------------------------------------------------------------------------
 // ES8311 I2C helpers (Wire bus 0, protected by i2c_bus mutex)
@@ -290,6 +298,7 @@ static void play_pattern(const char* pattern) {
     char* saveptr = NULL;
     char* tok = strtok_r(buf, " ", &saveptr);
     while (tok) {
+        if (g_stop_requested) return;
         char* colon = strchr(tok, ':');
         if (colon) {
             *colon = '\0';
@@ -317,21 +326,29 @@ static void audio_task(void* param) {
 
     for (;;) {
         if (xQueueReceive(audio_queue, &cmd, portMAX_DELAY) == pdTRUE) {
-            // Always re-apply volume before playback (I2C bus mutex
-            // ensures no contention with GT911 touch on shared Wire bus).
+            g_stop_requested = false;
+            g_playing = true;
+
             uint8_t play_vol = current_volume;
             if (cmd.volume_override > 0 && cmd.volume_override <= 100) {
                 play_vol = cmd.volume_override;
             }
-            LOGD(TAG, "Play: vol=%u%% (override=%u, device=%u)", play_vol, cmd.volume_override, current_volume);
+            LOGD(TAG, "Play: vol=%u%% (override=%u, device=%u) loop=%d", play_vol, cmd.volume_override, current_volume, cmd.loop);
             es8311_apply_volume(play_vol);
 
-            play_pattern(cmd.pattern);
+            if (cmd.loop) {
+                while (!g_stop_requested) {
+                    play_pattern(cmd.pattern);
+                }
+            } else {
+                play_pattern(cmd.pattern);
+            }
 
             // Restore device volume if overridden
             if (cmd.volume_override > 0 && cmd.volume_override <= 100) {
                 es8311_apply_volume(current_volume);
             }
+            g_playing = false;
         }
     }
 }
@@ -429,11 +446,20 @@ uint8_t audio_get_volume() {
     return current_volume;
 }
 
-void audio_beep(const char* pattern, uint8_t volume_override) {
+static void audio_enqueue(const char* pattern, uint8_t volume_override, bool loop) {
     if (!audio_initialized) {
         LOGW(TAG, "Audio not initialized");
         return;
     }
+
+    // If starting a new command, stop any current loop first
+    if (g_playing) {
+        g_stop_requested = true;
+    }
+
+    // Flush queue
+    AudioCommand discard;
+    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) {}
 
     AudioCommand cmd;
     memset(&cmd, 0, sizeof(cmd));
@@ -441,15 +467,30 @@ void audio_beep(const char* pattern, uint8_t volume_override) {
         strlcpy(cmd.pattern, pattern, AUDIO_PATTERN_MAX_LEN);
     }
     cmd.volume_override = volume_override;
+    cmd.loop = loop;
 
-    // Drop oldest if queue full (non-blocking send)
-    if (xQueueSend(audio_queue, &cmd, 0) != pdTRUE) {
-        // Queue full — drop front, then send
-        AudioCommand discard;
-        xQueueReceive(audio_queue, &discard, 0);
-        xQueueSend(audio_queue, &cmd, 0);
-        LOGD(TAG, "Queue full, dropped oldest beep");
-    }
+    xQueueSend(audio_queue, &cmd, portMAX_DELAY);
+}
+
+void audio_beep(const char* pattern, uint8_t volume_override) {
+    audio_enqueue(pattern, volume_override, false);
+}
+
+void audio_play_loop(const char* pattern, uint8_t volume_override) {
+    audio_enqueue(pattern, volume_override, true);
+}
+
+void audio_stop() {
+    if (!audio_initialized) return;
+    g_stop_requested = true;
+    // Flush queued commands
+    AudioCommand discard;
+    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) {}
+    LOGD(TAG, "Stop requested");
+}
+
+bool audio_is_playing() {
+    return g_playing;
 }
 
 #endif // HAS_AUDIO

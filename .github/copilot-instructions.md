@@ -71,7 +71,10 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable, no ESP32 deps
   - `web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - **Audio Subsystem**: ES8311 codec + I2S tone generation with async FreeRTOS playback (compile-time gated by `HAS_AUDIO`)
-  - `audio.cpp/h` - ES8311 I2C driver, I2S TX channel, beep pattern DSL parser (`freq:dur` tones, bare `dur` gaps), volume control (0-100, NVS-persisted), background playback task with queue
+  - `audio.cpp/h` - ES8311 I2C driver, I2S TX channel, beep pattern DSL parser (`freq:dur` tones, bare `dur` gaps), volume control (0-100, NVS-persisted), background playback task with queue, loop/stop support for siren use
+- **MQTT Audio Control**: Exposes audio as HA siren + volume + beep entities (compile-time gated by `HAS_AUDIO && HAS_MQTT`)
+  - `mqtt_audio.cpp/h` - Siren ON/OFF with loop/duration/tone selection, volume control, 3 beep buttons, custom tone text entity; cross-task pending vars with portMUX spinlock
+  - HA discovery published via `ha_discovery_publish_audio_entities()` with siren, number, text, and button entity types
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers
@@ -249,7 +252,8 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable
 - `src/app/web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - `src/app/action_dispatch.cpp/h` - Shared action execution for buttons and swipe gestures (compile-time gated by `HAS_DISPLAY`)
-- `src/app/audio.cpp/h` - Audio subsystem: ES8311 codec, I2S tone generation, beep pattern DSL, volume control (compile-time gated by `HAS_AUDIO`)
+- `src/app/audio.cpp/h` - Audio subsystem: ES8311 codec, I2S tone generation, beep pattern DSL, volume control, loop/stop (compile-time gated by `HAS_AUDIO`)
+- `src/app/mqtt_audio.cpp/h` - MQTT audio control: siren, volume, beep buttons, custom tone text entity (compile-time gated by `HAS_AUDIO && HAS_MQTT`)
 - `src/app/swipe_config.cpp/h` - LittleFS-backed swipe action configuration with RAM cache
 - `src/app/swipe_actions.cpp/h` - Shared LVGL gesture handler with debounce, registered on all screens
 - `src/app/web_portal_swipe.cpp/h` - Swipe actions REST API (GET/POST `/api/swipe-actions`)
