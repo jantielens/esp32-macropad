@@ -10,12 +10,70 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <lwip/netif.h>
+#include "ping/ping_sock.h"
 
 // WiFi retry settings
 static constexpr unsigned long WIFI_BACKOFF_BASE = 3000; // 3 seconds base
 static constexpr unsigned long WIFI_CHECK_INTERVAL_MS = 10000; // 10 seconds
+static constexpr unsigned long WIFI_PING_INTERVAL_MS  = 30000; // 30 seconds between pings
+static constexpr int          WIFI_PING_FAIL_THRESHOLD = 3;    // consecutive failures before reconnect
 
 static unsigned long g_last_wifi_check_ms = 0;
+
+// --- Gateway ping liveness check ---
+static unsigned long g_last_ping_ms = 0;
+static int           g_ping_fail_count = 0;
+static volatile bool g_ping_in_flight = false;
+static volatile bool g_ping_got_reply = false;
+
+static void ping_on_success(esp_ping_handle_t hdl, void *args) {
+		(void)hdl; (void)args;
+		g_ping_got_reply = true;
+}
+
+static void ping_on_timeout(esp_ping_handle_t hdl, void *args) {
+		(void)hdl; (void)args;
+		// g_ping_got_reply stays false
+}
+
+static void ping_on_end(esp_ping_handle_t hdl, void *args) {
+		(void)args;
+		esp_ping_delete_session(hdl);
+		g_ping_in_flight = false;
+}
+
+static void wifi_ping_start(IPAddress gateway) {
+		if (g_ping_in_flight) return;
+		if (gateway == IPAddress(0, 0, 0, 0)) return;
+
+		esp_ping_config_t cfg = ESP_PING_DEFAULT_CONFIG();
+		cfg.count = 1;
+		cfg.timeout_ms = 2000;
+		cfg.interval_ms = 0;
+		cfg.data_size = 32;
+		cfg.task_stack_size = 2048;
+		cfg.task_prio = 1;  // lowest priority — never starve LVGL
+
+		ip_addr_t target = {};
+		IP_ADDR4(&target, gateway[0], gateway[1], gateway[2], gateway[3]);
+		cfg.target_addr = target;
+
+		esp_ping_callbacks_t cbs = {};
+		cbs.on_ping_success = ping_on_success;
+		cbs.on_ping_timeout = ping_on_timeout;
+		cbs.on_ping_end     = ping_on_end;
+
+		esp_ping_handle_t hdl = nullptr;
+		g_ping_got_reply = false;
+		g_ping_in_flight = true;
+
+		esp_err_t err = esp_ping_new_session(&cfg, &cbs, &hdl);
+		if (err != ESP_OK) {
+				g_ping_in_flight = false;
+				return;
+		}
+		esp_ping_start(hdl);
+}
 
 RTC_DATA_ATTR static uint8_t g_cached_bssid[6] = {0};
 RTC_DATA_ATTR static uint8_t g_cached_channel = 0;
@@ -374,15 +432,57 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 
 		const unsigned long now = millis();
 		if (now - g_last_wifi_check_ms < WIFI_CHECK_INTERVAL_MS) return;
+		g_last_wifi_check_ms = now;
 
-		if (WiFi.status() != WL_CONNECTED && strlen(config->wifi_ssid) > 0) {
-				LOGW("WIFI", "Watchdog: connection lost - attempting reconnect");
+		if (strlen(config->wifi_ssid) == 0) return;
+
+		// --- Tier 0: WiFi stack reports disconnected ---
+		if (WiFi.status() != WL_CONNECTED) {
+				g_ping_fail_count = 0;
+				LOGW("WiFi", "Watchdog: connection lost - attempting reconnect");
 				if (wifi_manager_connect(config, false)) {
 						power_manager_note_wifi_success();
 						wifi_manager_start_mdns(config);
 						device_telemetry_cache_rssi();
 				}
+				return;
 		}
 
-		g_last_wifi_check_ms = now;
+		// --- Gateway ping liveness (catches "WiFi says connected but link is dead") ---
+		// Collect result from previous ping (if any)
+		if (!g_ping_in_flight && g_last_ping_ms > 0) {
+				if (g_ping_got_reply) {
+						if (g_ping_fail_count > 0) {
+								LOGI("WiFi", "Ping OK — link recovered after %d failure(s)", g_ping_fail_count);
+						}
+						g_ping_fail_count = 0;
+				} else {
+						g_ping_fail_count++;
+						LOGW("WiFi", "Ping failed (%d/%d)", g_ping_fail_count, WIFI_PING_FAIL_THRESHOLD);
+
+						if (g_ping_fail_count >= WIFI_PING_FAIL_THRESHOLD) {
+								LOGW("WiFi", "Watchdog: link dead (WiFi reported connected) — forcing reconnect");
+								g_ping_fail_count = 0;
+								g_last_ping_ms = 0;
+								WiFi.disconnect(false);
+								delay(200);
+								if (wifi_manager_connect(config, false)) {
+										power_manager_note_wifi_success();
+										wifi_manager_start_mdns(config);
+										device_telemetry_cache_rssi();
+										LOGI("WiFi", "Reconnected after link-dead detection");
+								}
+								return;
+						}
+				}
+		}
+
+		// Launch a new ping every WIFI_PING_INTERVAL_MS
+		if (!g_ping_in_flight && (now - g_last_ping_ms >= WIFI_PING_INTERVAL_MS)) {
+				IPAddress gw = WiFi.gatewayIP();
+				if (gw != IPAddress(0, 0, 0, 0)) {
+						wifi_ping_start(gw);
+						g_last_ping_ms = now;
+				}
+		}
 }

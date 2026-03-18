@@ -152,6 +152,14 @@ static char ble_name_str[40] = {};
 static volatile bool peer_bonded = false;
 static volatile bool peer_encrypted = false;
 
+// Persisted owner identity address for auto-re-pair detection.
+// When a previously-bonded host drops its bond (e.g. after firmware update
+// causing a GATT database hash change on Windows), the ESP32 still holds a
+// stale bond.  The host reconnects without encryption, and we detect the
+// address match to automatically clear the stale bond and allow re-pairing.
+static char owner_id_addr_str[18] = {};
+static volatile bool auto_repair_attempted = false;
+
 static bool start_advertising() {
     if (!hid_service_ready) return false;
     BLEDevice::startAdvertising();
@@ -169,6 +177,7 @@ static void clear_peer_metadata() {
     peer_id_addr_str[0] = '\0';
     peer_bonded = false;
     peer_encrypted = false;
+    auto_repair_attempted = false;
 }
 
 static int hid_access(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt* ctxt, void* arg);
@@ -390,7 +399,31 @@ class HidSecurityCallbacks : public BLESecurityCallbacks {
             pairing_mode = false;
             pairing_deadline = 0;
             owner_claimed = true;
+            auto_repair_attempted = false;
             config_manager_set_ble_owner_claimed(true);
+            // Persist the bonded peer's identity address for auto-re-pair
+            strlcpy(owner_id_addr_str, peer_id_addr_str, sizeof(owner_id_addr_str));
+            config_manager_set_ble_owner_addr(owner_id_addr_str);
+            return;
+        }
+
+        // Not encrypted — check for stale-bond auto-re-pair opportunity.
+        // When the host (e.g. Windows) drops its bond after a firmware update
+        // (GATT database hash changed), it reconnects without encryption.
+        // If the peer's address matches our stored owner, clear the stale bond
+        // and allow re-pairing — once per connection cycle to avoid loops.
+        if (!pairing_mode && owner_claimed && !auto_repair_attempted
+            && owner_id_addr_str[0] != '\0'
+            && strcmp(peer_id_addr_str, owner_id_addr_str) == 0) {
+            LOGI(TAG, "Stale bond detected for owner %s — clearing bonds and allowing re-pair", peer_id_addr_str);
+            auto_repair_attempted = true;
+            ble_gap_terminate(desc->conn_handle, BLE_ERR_AUTH_FAIL);
+            // Clear our stale bond so the next connection can pair fresh
+            ble_store_clear();
+            owner_claimed = false;
+            config_manager_set_ble_owner_claimed(false);
+            pairing_mode = true;
+            pairing_deadline = millis() + PAIRING_TIMEOUT_MS;
             return;
         }
 
@@ -445,6 +478,10 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
     peer_bonded = false;
     clear_peer_metadata();
     owner_claimed = config_manager_get_ble_owner_claimed();
+    config_manager_get_ble_owner_addr(owner_id_addr_str, sizeof(owner_id_addr_str));
+    if (owner_id_addr_str[0]) {
+        LOGI(TAG, "Stored owner addr: %s", owner_id_addr_str);
+    }
 
     const char* name = (device_name && device_name[0]) ? device_name : "BLE Keyboard";
     strlcpy(ble_name_str, name, sizeof(ble_name_str));
@@ -523,11 +560,13 @@ void ble_hid_start_pairing() {
         advertising_active = false;
     }
 
-    // 3. Clear bonds and owner claim
+    // 3. Clear bonds, owner claim, and stored owner address
     clear_all_bonds();
     clear_peer_metadata();
     owner_claimed = false;
+    owner_id_addr_str[0] = '\0';
     config_manager_set_ble_owner_claimed(false);
+    config_manager_set_ble_owner_addr("");
 
     // 4. Enter pairing mode with fresh 60-second window
     connected = false;

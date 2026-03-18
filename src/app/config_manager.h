@@ -39,6 +39,11 @@
 // Screen saver MQTT wake binding
 #define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
 
+// Audio feedback beep pattern (may also be defined in pad_config.h)
+#ifndef CONFIG_BEEP_PATTERN_MAX_LEN
+#define CONFIG_BEEP_PATTERN_MAX_LEN 128
+#endif
+
 // Web portal Basic Auth (STA/full mode only)
 #define CONFIG_BASIC_AUTH_USERNAME_MAX_LEN 32
 #define CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN 64
@@ -87,6 +92,12 @@ struct DeviceConfig {
 		bool ble_enabled;                        // default false
 #endif
 
+#if HAS_AUDIO
+		uint8_t audio_volume;                    // 0-100, default 70
+		char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];   // Beep DSL on tap (empty = disabled)
+		char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];    // Beep DSL on long-press (empty = disabled)
+#endif
+
 #if HAS_DISPLAY
 		// Screen saver (burn-in prevention v1): backlight sleep on inactivity
 		bool screen_saver_enabled;               // default false
@@ -117,6 +128,8 @@ String config_manager_get_default_device_name();      // Get default device name
 #if HAS_BLE_HID
 bool config_manager_get_ble_owner_claimed();            // Persistent "device has an owner" flag
 bool config_manager_set_ble_owner_claimed(bool claimed);
+bool config_manager_get_ble_owner_addr(char* out, size_t out_len); // Stored owner identity address
+bool config_manager_set_ble_owner_addr(const char* addr);
 #endif
 
 #endif // CONFIG_MANAGER_H

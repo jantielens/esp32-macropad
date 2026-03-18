@@ -19,5 +19,6 @@ void handleHealthJS(AsyncWebServerRequest *request);
 void handlePadColorsJS(AsyncWebServerRequest *request);
 void handlePadIOJS(AsyncWebServerRequest *request);
 void handlePadEditorJS(AsyncWebServerRequest *request);
+void handleActionEditorJS(AsyncWebServerRequest *request);
 
 #endif // WEB_PORTAL_PAGES_H

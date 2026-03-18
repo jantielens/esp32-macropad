@@ -44,6 +44,7 @@
 #if HAS_BLE_HID
 #define KEY_BLE_ENABLED    "ble_en"
 #define KEY_BLE_OWNER      "ble_owner"
+#define KEY_BLE_OWNER_ADDR "ble_oaddr"
 #endif
 #if HAS_DISPLAY
 #define KEY_SCREEN_SAVER_ENABLED "ss_en"
@@ -52,6 +53,11 @@
 #define KEY_SCREEN_SAVER_FADE_IN "ss_fi"
 #define KEY_SCREEN_SAVER_WAKE_TOUCH "ss_wt"
 #define KEY_SCREEN_SAVER_WAKE_BINDING "ss_wb"
+#endif
+#if HAS_AUDIO
+#define KEY_AUDIO_VOLUME   "audio_vol"
+#define KEY_TAP_BEEP       "tap_beep"
+#define KEY_LP_BEEP        "lp_beep"
 #endif
 #define KEY_MAGIC          "magic"
 
@@ -231,6 +237,12 @@ bool config_manager_load(DeviceConfig *config) {
 		config->ble_enabled = preferences.getBool(KEY_BLE_ENABLED, false);
 		#endif
 
+		#if HAS_AUDIO
+		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, 70);
+		preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
+		preferences.getString(KEY_LP_BEEP, config->lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
+		#endif
+
 		#if HAS_DISPLAY
 		// Load screen saver settings
 		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, false);
@@ -317,6 +329,12 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putBool(KEY_BLE_ENABLED, config->ble_enabled);
 		#endif
 
+		#if HAS_AUDIO
+		preferences.putUChar(KEY_AUDIO_VOLUME, config->audio_volume);
+		preferences.putString(KEY_TAP_BEEP, config->tap_beep);
+		preferences.putString(KEY_LP_BEEP, config->lp_beep);
+		#endif
+
 		#if HAS_DISPLAY
 		// Save screen saver settings
 		preferences.putBool(KEY_SCREEN_SAVER_ENABLED, config->screen_saver_enabled);
@@ -371,6 +389,28 @@ bool config_manager_set_ble_owner_claimed(bool claimed) {
 				return false;
 		}
 		const bool ok = preferences.putBool(KEY_BLE_OWNER, claimed);
+		preferences.end();
+		return ok;
+}
+
+bool config_manager_get_ble_owner_addr(char* out, size_t out_len) {
+		if (!out || out_len == 0) return false;
+		out[0] = '\0';
+		if (!preferences.begin(CONFIG_NAMESPACE, true)) {
+				LOGE("Config", "Failed to open NVS for BLE owner addr read");
+				return false;
+		}
+		preferences.getString(KEY_BLE_OWNER_ADDR, out, out_len);
+		preferences.end();
+		return out[0] != '\0';
+}
+
+bool config_manager_set_ble_owner_addr(const char* addr) {
+		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
+				LOGE("Config", "Failed to open NVS for BLE owner addr write");
+				return false;
+		}
+		const bool ok = preferences.putString(KEY_BLE_OWNER_ADDR, addr ? addr : "");
 		preferences.end();
 		return ok;
 }
@@ -447,6 +487,12 @@ LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
 
 #if HAS_BLE_HID
 		LOGI("Config", "BLE Keyboard: %s", config->ble_enabled ? "enabled" : "disabled");
+#endif
+
+#if HAS_AUDIO
+		LOGI("Config", "Audio volume: %u%%", config->audio_volume);
+		if (config->tap_beep[0]) LOGI("Config", "Tap beep: %s", config->tap_beep);
+		if (config->lp_beep[0]) LOGI("Config", "LP beep: %s", config->lp_beep);
 #endif
 
 #if HAS_DISPLAY

@@ -86,6 +86,24 @@ The BLE keyboard always advertises with the configured device name and the chip'
 
 > **Re-pairing tip:** Before pairing a new host (or re-pairing the same host), remove the device from the old host's Bluetooth settings first. If you skip this step the old host may keep trying to reconnect with stale keys for a short while — this is normal BLE behavior and will eventually stop, but removing the device avoids the noise.
 
+### Audio
+
+*Shown only on boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
+
+The Audio section controls device volume and optional touch-feedback beep patterns.
+
+| Element | Description |
+|---------|-------------|
+| **Volume** | Slider (0–100%) controlling the device audio volume. Used by beep actions, audio cues, and siren playback. Persisted in NVS. Also controllable from Home Assistant. |
+| **Tap Beep** | Beep pattern played on every button tap that has an action configured. Leave empty for no sound. Uses the beep pattern DSL (see below). |
+| **Long-Press Beep** | Beep pattern played on every button long-press that has a long-press action configured. Leave empty for no sound. |
+
+**Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
+
+Buttons with no action configured are completely inert — no visual tap flash and no audio cue. If the action itself is a beep action, the cue is suppressed to avoid a double-beep. Individual buttons can override or suppress the device-level pattern in the button editor's Audio Feedback section (enter `none` to silence a specific button). Swipe gestures also use the device-level tap beep.
+
+When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
+
 #### BLE Signals
 
 The firmware exposes two BLE health signals for bindings and diagnostics:

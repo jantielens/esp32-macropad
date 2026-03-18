@@ -193,6 +193,17 @@ static void parse_action(JsonVariant v, ButtonAction* act, const char* legacy_sc
         strlcpy(act->mqtt_topic, a["topic"] | "", CONFIG_MQTT_TOPIC_MAX_LEN);
         strlcpy(act->mqtt_payload, a["payload"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
         strlcpy(act->key_sequence, a["sequence"] | "", CONFIG_KEY_SEQ_MAX_LEN);
+        strlcpy(act->beep_pattern, a["beep_pattern"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+        act->beep_volume = (uint8_t)(a["beep_volume"] | 0);
+        strlcpy(act->volume_mode, a["volume_mode"] | "", CONFIG_VOLUME_MODE_MAX_LEN);
+        act->volume_value = (uint8_t)(a["volume_value"] | 0);
+        // Timer: "timer_command" from web → reuse mqtt_payload for storage
+        if (strcmp(act->type, ACTION_TYPE_TIMER) == 0 && a.containsKey("timer_command")) {
+            strlcpy(act->mqtt_payload, a["timer_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
+        }
+        act->timer_countdown = (uint32_t)(a["timer_countdown"] | 0);
+        strlcpy(act->timer_expire_beep, a["timer_expire_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+        act->timer_expire_volume = (uint8_t)(a["timer_expire_volume"] | 0);
         return;
     }
 
@@ -239,6 +250,10 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     // Typed actions (with legacy flat key fallback)
     parse_action(obj["action"], &btn->action, "action_screen", obj);
     parse_action(obj["lp_action"], &btn->lp_action, "lp_action_screen", obj);
+
+    // Audio feedback overrides (empty = device default, "none" = suppress)
+    strlcpy(btn->tap_beep, obj["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+    strlcpy(btn->lp_beep, obj["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
 
     // Background image fields
     strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);

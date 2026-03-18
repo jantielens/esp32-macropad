@@ -10,6 +10,7 @@
 #include "data_stream.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
+#include "timer_engine.h"
 
 #include <esp_timer.h>
 
@@ -128,6 +129,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				const uint64_t lv_start_us = esp_timer_get_time();
 				uint32_t delayMs = lv_timer_handler();
 				const uint32_t lv_timer_us = (uint32_t)(esp_timer_get_time() - lv_start_us);
+
+				// Check countdown timer expiry (fire beep on edge)
+				timer_engine_tick();
 				
 #if HAS_MQTT
 				// Poll data stream registry (background ring buffers for

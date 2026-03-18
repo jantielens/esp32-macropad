@@ -7,6 +7,7 @@
 #include "mqtt_sub_store.h"
 #include "mqtt_screen.h"
 #include "mqtt_wake.h"
+#include "mqtt_audio.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
 #include "power_config.h"
@@ -26,8 +27,10 @@
 #include "icon_store.h"
 #include "pad_binding.h"
 #include "time_binding.h"
+#include "timer_binding.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
+#include "swipe_config.h"
 #endif
 
 #if HAS_IMAGE_FETCH
@@ -37,6 +40,12 @@
 #if HAS_BLE_HID
 #include "ble_hid.h"
 #endif
+
+#if HAS_AUDIO
+#include "audio.h"
+#endif
+
+#include "i2c_bus.h"
 
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
@@ -171,6 +180,8 @@ void setup()
 	#endif
 
 	#if HAS_TOUCH
+	// Initialize Wire bus mutex before touch and audio (both may share bus 0)
+	i2c_bus_init();
 	// Initialize touch after display is ready
 	touch_manager_init();
 	#endif
@@ -205,6 +216,13 @@ void setup()
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
 		device_config.magic = CONFIG_MAGIC;
 	}
+
+	// Initialize audio subsystem (must be after touch_manager_init since they
+	// share the I2C bus — Wire must already be started, and after config load
+	// so device_config.audio_volume is available).
+	#if HAS_AUDIO
+	audio_init(device_config.audio_volume);
+	#endif
 
 	const bool force_config_mode_burst = power_manager_should_force_config_mode();
 	if (force_config_mode_burst) {
@@ -247,6 +265,9 @@ void setup()
 	#if HAS_DISPLAY
 	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
 	pad_config_init();
+
+	// Load swipe gesture actions from LittleFS (uses same filesystem)
+	swipe_config_init();
 
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
@@ -309,6 +330,7 @@ void setup()
 	mqtt_sub_store_init();
 	mqtt_screen_init();
 	mqtt_wake_init(&device_config);
+	mqtt_audio_init();
 	#endif
 
 	#if HAS_DISPLAY
@@ -316,6 +338,7 @@ void setup()
 	time_binding_init();
 	expr_binding_init();
 	pad_binding_init();
+	timer_binding_init();
 	#endif
 
 	last_heartbeat_ms = millis();
@@ -406,6 +429,7 @@ void loop()
 	mqtt_manager.loop();
 	mqtt_screen_loop();
 	mqtt_wake_loop();
+	mqtt_audio_loop();
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.11.0] - 2026-03-18
+
+### Added
+- **Timer engine** — 3 independent timers with count-up (stopwatch) and countdown modes. Assign timer actions to buttons to toggle, start, stop, pause, resume, reset, or lap timers directly from the touch screen. Countdown timers display negative values (e.g., "-0:05") when running past zero.
+- **Timer binding scheme** — display timer values on any button label using `[timer:N]` bindings. Supports multiple formats (`mm:ss`, `hh:mm:ss`, `ss`, `mm:ss.d`) and state queries (`[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]`).
+- **Timer countdown presets** — configure a default countdown duration per button. When navigating to a pad, the first button referencing each timer automatically sets its countdown preset (only when the timer is fresh/stopped at zero).
+- **Timer expiry beep** — configure a beep pattern and optional volume override that plays when a countdown timer reaches zero. Edge-triggered to fire exactly once per countdown cycle.
+- **Timer adjust countdown** — new `Adjust Countdown Time` action adds or subtracts seconds from a running countdown preset. Useful for "+15s" / "-10s" quick-adjust buttons.
+- **Configurable swipe actions** — swipe left, right, up, or down on any screen to trigger actions with full button parity (screen navigation, back, MQTT publish, BLE key sequence, BLE pair). Default: swipe right = back. Configure via the new Swipe Actions section on the Home page or the REST API (`GET/POST /api/swipe-actions`). Stored on LittleFS with 300ms debounce to prevent multi-fire.
+- **Shared action dispatch** — extracted button and swipe action execution into a shared `action_dispatch` module, eliminating code duplication between pad buttons and swipe gestures.
+- **Shared action editor UI** — extracted the action type/screen/MQTT/key editor into a reusable `portal_action_editor.js` component used by both the button editor dialog and the swipe actions form.
+- **WiFi gateway ping liveness check** — the WiFi watchdog now pings the default gateway every 30 seconds to detect "ghost connected" states where `WiFi.status()` reports connected but the radio link is actually dead (common on ESP32-P4 with ESP-Hosted). After 3 consecutive ping failures (~90s), forces a WiFi disconnect and reconnect. Runs as a low-priority async task with zero impact on display rendering. Silent in the happy path — only logs on failure or recovery.
+- **Audio subsystem** (ESP32-P4 boards) — ES8311 codec + NS4150B amplifier over I2S with async FreeRTOS playback. New beep pattern DSL (`freq:dur` tones, bare `dur` silence gaps, space-delimited). Device-level volume control (0–100%, NVS-persisted) with slider on the Home page.
+- **Beep button action** — new `beep` action type plays a configurable beep pattern with optional per-action volume override.
+- **Volume button action** — new `volume` action type sets, increases, or decreases device audio volume (±10% steps or absolute set). Volume changes persist to NVS.
+- **Configurable audio cues** — device-level tap and long-press beep patterns that play automatically when a button with an action is pressed. Configured in the Home page Audio section using the beep pattern DSL (e.g. `800:80` for a quick tap click, `600:40 40 600:40` for a double-chirp on long-press). Buttons with no action configured are completely inert — no visual tap flash and no audio cue. Per-button overrides in the button editor's Audio Feedback section let you customize or suppress (enter `none`) the sound for individual buttons. Swipe gestures also use the device-level tap beep. Beep actions are auto-suppressed to avoid double-beep.
+- **Home Assistant audio integration** — the device speaker is controllable from Home Assistant via auto-discovered MQTT entities (no YAML needed):
+  - **Siren** entity — looping tone with preset selection (default, alert, doorbell, warning, custom), volume override, and optional auto-stop duration
+  - **Volume** number entity — set device volume (0–100%), persisted across reboots
+  - **Custom Tone** text entity — define a beep pattern DSL string, then play it via the siren with `tone: "custom"`
+  - **Beep / Beep Double / Beep Triple** button entities — one-shot beep triggers
+  - See [Home Assistant Integration Guide](docs/ha-integration-guide.md) for usage examples and automation recipes
+
+### Fixed
+- **BLE auto-re-pair on stale bonds** — when Windows (or another host) drops its BLE bond after a firmware update (due to GATT database hash change), the ESP32 now detects that the reconnecting peer matches the previously bonded owner and automatically clears the stale bond and enters a 60-second re-pair window. Previously, the device would reject the now-unbonded host indefinitely, requiring manual pairing via the web portal. The owner's identity address is persisted in NVS for cross-reboot detection.
+- **Missing auth on icon install route** — restored `portal_auth_gate()` on `POST /api/icons/install`.
+- **Sparkline min/max labels overlapping current-value labels** — clamped min/max marker labels to the chart plot area so they no longer intrude into the right-side margin reserved for current-value line labels.
+- **Sparkline current dot disconnected from line** — changed the X-axis mapping to use `chart_w - 1` instead of `chart_w`, so the rightmost data point stays on the last pixel inside the clipped chart area. Fixes the visual gap between the line endpoint and the current-value dot, and prevents LVGL's rounded line cap from being clipped at the chart edge.
+
 ## [1.10.0] - 2026-03-16
 
 ### Added

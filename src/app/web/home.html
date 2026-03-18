@@ -95,6 +95,18 @@
                 </div>
             </section>
 
+            <!-- Swipe Actions Section (hidden if no display/touch support) -->
+            <section class="section" id="swipe-actions-section" style="display:none;">
+                <h2>👆 Swipe Actions</h2>
+                <small style="display:block; margin-bottom:16px;">Configure what happens when you swipe in each direction. Works on all screens.</small>
+
+                <div id="swipe-editors"></div>
+
+                <div style="margin-top: 12px;">
+                    <button type="button" class="btn btn-primary" onclick="saveSwipeActions()">Save Swipe Actions</button>
+                </div>
+            </section>
+
             <!-- Operating Mode & Cadence -->
             <section class="section" id="power-settings-section">
                 <h2>⚡ Operating Mode & Cadence</h2>
@@ -203,6 +215,32 @@
                 </div>
             </section>
 
+            <!-- Audio Section (hidden if audio not available) -->
+            <section class="section" id="audio-section" style="display:none;">
+                <h2>🔊 Audio</h2>
+
+                <div class="form-group">
+                    <label for="audio_volume">Volume: <span id="audio_volume_value">70</span>%</label>
+                    <input type="range" id="audio_volume" name="audio_volume" min="0" max="100" step="5" value="70"
+                           oninput="document.getElementById('audio_volume_value').textContent=this.value">
+                    <small>Device audio volume (0–100%). Used for beep actions and touch feedback.</small>
+                </div>
+
+                <small style="display:block; margin-bottom:12px; color:#86868b;">Beep patterns use <code>freq:duration</code> pairs (Hz:ms). Separate multiple tones with spaces. A bare number is a silent gap in ms.<br>Examples: <code>800:80</code> (single tap), <code>600:40 40 600:40</code> (double chirp), <code>1000:30 30 1200:30</code> (rising two-tone).</small>
+
+                <div class="form-group">
+                    <label for="tap_beep">Tap Beep</label>
+                    <input type="text" id="tap_beep" name="tap_beep" maxlength="127" placeholder="e.g. 800:80">
+                    <small>Beep pattern on button tap. Leave empty for no sound. Overridable per button.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="lp_beep">Long-Press Beep</label>
+                    <input type="text" id="lp_beep" name="lp_beep" maxlength="127" placeholder="e.g. 600:40 40 600:40">
+                    <small>Beep pattern on long-press. Leave empty for no sound. Overridable per button.</small>
+                </div>
+            </section>
+
             {{FOOTER}}
         </form>
     </div>
@@ -210,6 +248,7 @@
     {{BINDING_HELP}}
 
     <script src="/portal_core.js"></script>
+    <script src="/portal_action_editor.js"></script>
     <script src="/portal_config.js"></script>
     <script src="/portal_firmware.js"></script>
     <script src="/portal_health.js"></script>

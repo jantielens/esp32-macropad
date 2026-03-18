@@ -256,6 +256,8 @@ void PadScreen::buildTiles() {
         tile.row = bcfg.row;
         memcpy(&tile.action, &bcfg.action, sizeof(ButtonAction));
         memcpy(&tile.lp_action, &bcfg.lp_action, sizeof(ButtonAction));
+        memcpy(tile.tap_beep, bcfg.tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
+        memcpy(tile.lp_beep, bcfg.lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 
         // Create MQTT-bound center label early so widgets can position it
 #if HAS_MQTT
@@ -435,6 +437,38 @@ void PadScreen::buildTiles() {
         colorBindingCount++;
     }
 #endif
+
+    // Apply timer countdown defaults for buttons with timer_countdown > 0.
+    // Only configure countdown if the timer is stopped and fresh (0 elapsed).
+    // Expire beep config is always applied (it's config, not state).
+    {
+        bool applied[TIMER_COUNT] = {};
+        for (uint8_t i = 0; i < cfg->button_count && i < MAX_PAD_BUTTONS; i++) {
+            const ButtonAction* acts[] = { &cfg->buttons[i].action, &cfg->buttons[i].lp_action };
+            for (int a = 0; a < 2; a++) {
+                const ButtonAction& act = *acts[a];
+                if (strcmp(act.type, ACTION_TYPE_TIMER) != 0) continue;
+                // Extract timer ID from mqtt_payload DSL (first char is '1'-'3')
+                if (act.mqtt_payload[0] < '1' || act.mqtt_payload[0] > '0' + TIMER_COUNT) continue;
+                uint8_t tid = act.mqtt_payload[0] - '0';
+
+                // Always apply expire beep config (overwrite is fine, last button wins)
+                if (act.timer_expire_beep[0]) {
+                    timer_set_expire_beep(tid, act.timer_expire_beep, act.timer_expire_volume);
+                }
+
+                // Apply countdown default only if timer is fresh
+                if (act.timer_countdown == 0) continue;
+                if (applied[tid - 1]) continue; // first button wins
+                applied[tid - 1] = true;
+                if (timer_get_state(tid) == TIMER_STOPPED && timer_get_ms(tid) == 0) {
+                    timer_set_countdown(tid, act.timer_countdown);
+                    timer_set_mode(tid, TIMER_MODE_DOWN);
+                    LOGI(TAG, "Page %u: timer %u default countdown %us", pageIndex, tid, (unsigned)act.timer_countdown);
+                }
+            }
+        }
+    }
 
     free(cfg);
     tilesBuilt = true;

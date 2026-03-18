@@ -1,0 +1,77 @@
+#include "web_portal_swipe.h"
+
+#if HAS_DISPLAY
+
+#include "board_config.h"
+#include "log_manager.h"
+#include "swipe_config.h"
+#include "web_portal_auth.h"
+#include "web_portal_cors.h"
+
+#include <ArduinoJson.h>
+
+#define TAG "SwipeAPI"
+
+// Serialize a ButtonAction into a JSON object
+static void action_to_json(JsonObject obj, const ButtonAction& act) {
+    if (!act.type[0]) return;  // empty action → empty object
+    obj["type"] = act.type;
+    if (act.screen_id[0])    obj["target"]   = act.screen_id;
+    if (act.mqtt_topic[0])   obj["topic"]    = act.mqtt_topic;
+    if (act.mqtt_payload[0]) {
+        if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
+            obj["timer_command"] = act.mqtt_payload;
+        } else {
+            obj["payload"] = act.mqtt_payload;
+        }
+    }
+    if (act.key_sequence[0]) obj["sequence"] = act.key_sequence;
+    if (act.beep_pattern[0])  obj["beep_pattern"]  = act.beep_pattern;
+    if (act.beep_volume > 0)  obj["beep_volume"]   = act.beep_volume;
+    if (act.volume_mode[0])   obj["volume_mode"]   = act.volume_mode;
+    if (act.volume_value > 0) obj["volume_value"]  = act.volume_value;
+    if (act.timer_countdown > 0) obj["timer_countdown"] = act.timer_countdown;
+    if (act.timer_expire_beep[0]) obj["timer_expire_beep"] = act.timer_expire_beep;
+    if (act.timer_expire_volume > 0) obj["timer_expire_volume"] = act.timer_expire_volume;
+}
+
+void handleGetSwipeActions(AsyncWebServerRequest *request) {
+    const SwipeConfig* cfg = swipe_config_get();
+
+    StaticJsonDocument<1024> doc;
+    JsonObject left  = doc.createNestedObject("swipe_left");
+    JsonObject right = doc.createNestedObject("swipe_right");
+    JsonObject up    = doc.createNestedObject("swipe_up");
+    JsonObject down  = doc.createNestedObject("swipe_down");
+
+    action_to_json(left,  cfg->swipe_left);
+    action_to_json(right, cfg->swipe_right);
+    action_to_json(up,    cfg->swipe_up);
+    action_to_json(down,  cfg->swipe_down);
+
+    String output;
+    serializeJson(doc, output);
+    request->send(200, "application/json", output);
+}
+
+void handlePostSwipeActions(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    if (!portal_auth_gate(request)) return;
+
+    // Only handle final chunk (small payload, arrives in one piece)
+    if (index + len < total) return;
+
+    if (total > 4096) {
+        request->send(413, "application/json", "{\"error\":\"payload too large\"}");
+        return;
+    }
+
+    // Save raw JSON directly (same pattern as pad config)
+    bool ok = swipe_config_save_raw(data, total);
+    if (ok) {
+        request->send(200, "application/json", "{\"ok\":true}");
+    } else {
+        request->send(500, "application/json", "{\"error\":\"save failed\"}");
+    }
+}
+
+#endif // HAS_DISPLAY

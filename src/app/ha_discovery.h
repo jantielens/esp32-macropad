@@ -50,6 +50,9 @@ bool ha_discovery_publish_button_event_config(MqttManager &mqtt);
 // Publish HA select entity discovery for active screen control.
 bool ha_discovery_publish_screen_select_config(MqttManager &mqtt);
 
+// Publish HA audio entities (siren, volume number, beep buttons).
+bool ha_discovery_publish_audio_entities(MqttManager &mqtt);
+
 #endif // HAS_MQTT
 
 #endif // HA_DISCOVERY_H

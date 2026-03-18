@@ -277,6 +277,15 @@ function padInit() {
     const section = document.getElementById('pad-config-section');
     if (!section) return;
 
+    // Generate action editor HTML from shared module
+    const aeContainer = document.getElementById('pad-action-editors');
+    if (aeContainer) {
+        aeContainer.innerHTML =
+            actionEditorHTML('pad-edit-action', 'Tap Action', { showBleHint: true, showKeyHelp: true }) +
+            '<hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">' +
+            actionEditorHTML('pad-edit-lp-action', 'Long-Press Action', { showBleHint: true, showKeyHelp: true });
+    }
+
     document.getElementById('pad-page-select').addEventListener('change', (e) => {
         const newPage = parseInt(e.target.value);
         if (padDirty) {
@@ -367,6 +376,11 @@ function padInit() {
                 section.style.display = 'block';
                 const padFooter = document.getElementById('pad-floating-footer');
                 if (padFooter) padFooter.style.display = '';
+                // Show audio feedback section in button editor if device has audio
+                if (deviceInfoCache.has_audio === true) {
+                    var audioSec = document.getElementById('pad-edit-audio-section');
+                    if (audioSec) audioSec.style.display = '';
+                }
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
                 padLoadPage(0);
@@ -396,18 +410,10 @@ function padPopulatePadDropdown() {
 }
 
 function padPopulateScreenDropdown() {
-    const ids = ['pad-edit-action-target', 'pad-edit-lp-action-target'];
-    ids.forEach(id => {
-        const sel = document.getElementById(id);
-        if (!sel || !deviceInfoCache || !deviceInfoCache.available_screens) return;
-        while (sel.options.length > 1) sel.remove(1);
-        deviceInfoCache.available_screens.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = s.name;
-            sel.appendChild(opt);
-        });
-    });
+    actionEditorPopulateScreens(
+        ['pad-edit-action', 'pad-edit-lp-action'],
+        deviceInfoCache ? deviceInfoCache.available_screens : null
+    );
     // Populate wake-screen dropdown (keep first "(stay on this screen)" option)
     const wakeSel = document.getElementById('pad-wake-screen');
     if (wakeSel && deviceInfoCache && deviceInfoCache.available_screens) {
@@ -422,12 +428,8 @@ function padPopulateScreenDropdown() {
 }
 
 function padActionTypeChanged(prefix) {
-    const pfx = (prefix === 'lp') ? 'lp-action' : 'action';
-    const type = document.getElementById('pad-edit-' + pfx + '-type').value;
-    document.getElementById('pad-edit-' + pfx + '-screen-group').style.display = (type === 'screen') ? '' : 'none';
-    document.getElementById('pad-edit-' + pfx + '-mqtt-group').style.display = (type === 'mqtt') ? '' : 'none';
-    document.getElementById('pad-edit-' + pfx + '-key-group').style.display = (type === 'key') ? '' : 'none';
-    document.getElementById('pad-edit-' + pfx + '-ble-hint').style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
+    const pfx = 'pad-edit-' + ((prefix === 'lp') ? 'lp-action' : 'action');
+    actionEditorTypeChanged(pfx);
 }
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline'];
@@ -912,26 +914,16 @@ function padDialogOpen(col, row) {
     }
 
     // Tap action
-    const tapAct = btn.action || {};
-    document.getElementById('pad-edit-action-type').value = tapAct.type || '';
-    document.getElementById('pad-edit-action-target').value = tapAct.target || '';
-    if (document.getElementById('pad-edit-action-target').selectedIndex < 0)
-        document.getElementById('pad-edit-action-target').value = '';
-    document.getElementById('pad-edit-action-topic').value = tapAct.topic || '';
-    document.getElementById('pad-edit-action-payload').value = tapAct.payload || '';
-    document.getElementById('pad-edit-action-sequence').value = tapAct.sequence || '';
-    padActionTypeChanged('tap');
+    actionEditorLoad('pad-edit-action', btn.action);
 
     // Long-press action
-    const lpAct = btn.lp_action || {};
-    document.getElementById('pad-edit-lp-action-type').value = lpAct.type || '';
-    document.getElementById('pad-edit-lp-action-target').value = lpAct.target || '';
-    if (document.getElementById('pad-edit-lp-action-target').selectedIndex < 0)
-        document.getElementById('pad-edit-lp-action-target').value = '';
-    document.getElementById('pad-edit-lp-action-topic').value = lpAct.topic || '';
-    document.getElementById('pad-edit-lp-action-payload').value = lpAct.payload || '';
-    document.getElementById('pad-edit-lp-action-sequence').value = lpAct.sequence || '';
-    padActionTypeChanged('lp');
+    actionEditorLoad('pad-edit-lp-action', btn.lp_action);
+
+    // Audio feedback overrides
+    document.getElementById('pad-edit-tap-beep').value = btn.tap_beep || '';
+    document.getElementById('pad-edit-lp-beep').value = btn.lp_beep || '';
+    var audioSec = document.getElementById('pad-edit-audio-section');
+    if (audioSec) audioSec.open = !!(btn.tap_beep || btn.lp_beep);
 
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
@@ -1101,30 +1093,18 @@ function padDialogOk(keepOpen) {
     if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
 
     // Tap action
-    const tapType = document.getElementById('pad-edit-action-type').value;
-    if (tapType) {
-        const act = { type: tapType };
-        if (tapType === 'screen') act.target = document.getElementById('pad-edit-action-target').value;
-        if (tapType === 'mqtt') {
-            act.topic = document.getElementById('pad-edit-action-topic').value.trim();
-            act.payload = document.getElementById('pad-edit-action-payload').value.trim();
-        }
-        if (tapType === 'key') act.sequence = document.getElementById('pad-edit-action-sequence').value.trim();
-        btn.action = act;
-    }
+    const tapAct = actionEditorBuild('pad-edit-action');
+    if (tapAct.type) btn.action = tapAct;
 
     // Long-press action
-    const lpType = document.getElementById('pad-edit-lp-action-type').value;
-    if (lpType) {
-        const act = { type: lpType };
-        if (lpType === 'screen') act.target = document.getElementById('pad-edit-lp-action-target').value;
-        if (lpType === 'mqtt') {
-            act.topic = document.getElementById('pad-edit-lp-action-topic').value.trim();
-            act.payload = document.getElementById('pad-edit-lp-action-payload').value.trim();
-        }
-        if (lpType === 'key') act.sequence = document.getElementById('pad-edit-lp-action-sequence').value.trim();
-        btn.lp_action = act;
-    }
+    const lpAct = actionEditorBuild('pad-edit-lp-action');
+    if (lpAct.type) btn.lp_action = lpAct;
+
+    // Audio feedback overrides
+    var tapBeep = document.getElementById('pad-edit-tap-beep').value.trim();
+    if (tapBeep) { btn.tap_beep = tapBeep; } else { delete btn.tap_beep; }
+    var lpBeep = document.getElementById('pad-edit-lp-beep').value.trim();
+    if (lpBeep) { btn.lp_beep = lpBeep; } else { delete btn.lp_beep; }
 
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();

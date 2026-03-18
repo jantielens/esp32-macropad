@@ -82,6 +82,8 @@ struct ButtonTile {
     uint8_t row;              // Grid row (for HA event)
     ButtonAction action;      // Tap action
     ButtonAction lp_action;   // Long-press action
+    char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];  // Per-button tap beep override
+    char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];   // Per-button long-press beep override
     // Widget runtime state (non-null widget_type = this tile is a widget)
     const WidgetType* widget_type;
     WidgetConfig widget_cfg;   // Copy of config (needed for update calls)
@@ -156,8 +158,6 @@ private:
     // Event callbacks
     static void onTap(lv_event_t* e);
     static void onLongPress(lv_event_t* e);
-    // Touch navigation for screen switching
-    static void onSwipe(lv_event_t* e);
 
 public:
     static void tapFlashTimerCb(lv_timer_t* timer);

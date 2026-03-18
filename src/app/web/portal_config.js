@@ -122,6 +122,19 @@ async function loadVersion() {
             screenGroup.style.display = 'none';
         }
 
+        // Show swipe actions section if device has display (touch)
+        const swipeSection = document.getElementById('swipe-actions-section');
+        if (swipeSection) {
+            if (version.has_display === true) {
+                swipeSection.style.display = 'block';
+                swipeInitEditors();
+                actionEditorPopulateScreens(SWIPE_DIRECTIONS, version.available_screens);
+                loadSwipeActions();
+            } else {
+                swipeSection.style.display = 'none';
+            }
+        }
+
         document.getElementById('firmware-version').textContent = `Firmware v${version.version}`;
         document.getElementById('chip-info').textContent = 
             `${version.chip_model} rev ${version.chip_revision}`;
@@ -268,6 +281,17 @@ async function loadConfig() {
             toggleBleContent();
         }
 
+        // Audio settings
+        if (config.audio_volume !== undefined) {
+            const vol = config.audio_volume;
+            setValueIfExists('audio_volume', vol);
+            setTextIfExists('audio_volume_value', vol);
+            setValueIfExists('tap_beep', config.tap_beep);
+            setValueIfExists('lp_beep', config.lp_beep);
+            const audioSection = document.getElementById('audio-section');
+            if (audioSection) audioSection.style.display = 'block';
+        }
+
         setValueIfExists('basic_auth_username', config.basic_auth_username);
         const authPwdField = document.getElementById('basic_auth_password');
         if (authPwdField) {
@@ -332,6 +356,7 @@ function extractFormFields(formData) {
                     'mqtt_publish_scope',
                     'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
                     'ble_enabled',
+                    'audio_volume', 'tap_beep', 'lp_beep',
                     'backlight_brightness',
                     'screen_saver_enabled', 'screen_saver_timeout_seconds', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms', 'screen_saver_wake_on_touch',
                     'screen_saver_wake_binding'];
@@ -659,5 +684,64 @@ async function handleScreenChange(event) {
         showMessage('Error switching screen: ' + error.message, 'error');
         // Revert dropdown to previous value
         loadVersion(); // Refresh to get current screen
+    }
+}
+
+// ============================================================================
+// Swipe Actions (uses shared portal_action_editor.js)
+// ============================================================================
+
+const SWIPE_DIRECTIONS = ['swipe-left', 'swipe-right', 'swipe-up', 'swipe-down'];
+const SWIPE_LABELS = { 'swipe-right': 'Swipe Right', 'swipe-left': 'Swipe Left', 'swipe-up': 'Swipe Up', 'swipe-down': 'Swipe Down' };
+
+function swipeInitEditors() {
+    var container = document.getElementById('swipe-editors');
+    if (!container) return;
+    var html = '';
+    SWIPE_DIRECTIONS.forEach(function(dir) {
+        html += '<details class="editor-group" id="' + dir + '-group">';
+        html += '<summary>' + SWIPE_LABELS[dir] + '</summary>';
+        html += '<div class="editor-group-body">';
+        html += actionEditorHTML(dir);
+        html += '</div></details>';
+    });
+    container.innerHTML = html;
+}
+
+async function loadSwipeActions() {
+    try {
+        const response = await fetch('/api/swipe-actions');
+        if (!response.ok) return;
+        const data = await response.json();
+        actionEditorLoad('swipe-left', data.swipe_left);
+        actionEditorLoad('swipe-right', data.swipe_right);
+        actionEditorLoad('swipe-up', data.swipe_up);
+        actionEditorLoad('swipe-down', data.swipe_down);
+    } catch (err) {
+        console.error('Failed to load swipe actions:', err);
+    }
+}
+
+async function saveSwipeActions() {
+    const payload = {
+        swipe_left: actionEditorBuild('swipe-left'),
+        swipe_right: actionEditorBuild('swipe-right'),
+        swipe_up: actionEditorBuild('swipe-up'),
+        swipe_down: actionEditorBuild('swipe-down')
+    };
+    try {
+        const response = await fetch('/api/swipe-actions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (response.ok) {
+            showMessage('Swipe actions saved', 'success');
+        } else {
+            showMessage('Failed to save swipe actions', 'error');
+        }
+    } catch (err) {
+        console.error('Error saving swipe actions:', err);
+        showMessage('Error saving swipe actions: ' + err.message, 'error');
     }
 }

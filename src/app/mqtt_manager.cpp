@@ -8,6 +8,7 @@
 #include "device_telemetry.h"
 #include "mqtt_sub_store.h"
 #include "mqtt_screen.h"
+#include "mqtt_audio.h"
 #include "power_manager.h"
 #include "power_config.h"
 #include "log_manager.h"
@@ -146,6 +147,7 @@ bool MqttManager::subscribe(const char *topic) {
 void MqttManager::installCallback() {
 		_client.setCallback([](char* topic, uint8_t* payload, unsigned int length) {
 				mqtt_screen_on_message(topic, payload, length);
+				mqtt_audio_on_message(topic, payload, length);
 				mqtt_sub_store_set(topic, payload, length);
 		});
 }
@@ -260,6 +262,9 @@ void MqttManager::onConnected(bool publish_availability) {
 
 		// Screen control subscribe + initial state publish.
 		mqtt_screen_on_connected();
+
+		// Audio control subscribe + initial state publish.
+		mqtt_audio_on_connected();
 
 		// Publish a single retained state after connect so HA entities have values,
 		// even when periodic publishing is disabled (interval = 0).
