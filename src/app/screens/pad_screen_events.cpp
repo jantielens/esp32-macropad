@@ -69,18 +69,18 @@ void PadScreen::onTap(lv_event_t* e) {
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
-    // Tap flash
-    do_tap_flash(tile);
-
-    // Audio cue (skip if no action configured, or if action is already a beep)
+    // Visual and audio cues only when an action is configured
+    if (tile->action.type[0]) {
+        do_tap_flash(tile);
 #if HAS_AUDIO
-    if (tile->action.type[0] && strcmp(tile->action.type, ACTION_TYPE_BEEP) != 0) {
-        const char* pattern = tile->tap_beep[0] ? tile->tap_beep : device_config.tap_beep;
-        if (pattern[0] && strcmp(pattern, "none") != 0) {
-            audio_beep(pattern, 0);
+        if (strcmp(tile->action.type, ACTION_TYPE_BEEP) != 0) {
+            const char* pattern = tile->tap_beep[0] ? tile->tap_beep : device_config.tap_beep;
+            if (pattern[0] && strcmp(pattern, "none") != 0) {
+                audio_beep(pattern, 0);
+            }
         }
-    }
 #endif
+    }
 
     action_dispatch(tile->action, "Tap");
 
@@ -96,18 +96,18 @@ void PadScreen::onLongPress(lv_event_t* e) {
     // Suppress long-press that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
-    // Tap flash
-    do_tap_flash(tile);
-
-    // Audio cue (skip if no action configured, or if action is already a beep)
+    // Visual and audio cues only when an action is configured
+    if (tile->lp_action.type[0]) {
+        do_tap_flash(tile);
 #if HAS_AUDIO
-    if (tile->lp_action.type[0] && strcmp(tile->lp_action.type, ACTION_TYPE_BEEP) != 0) {
-        const char* pattern = tile->lp_beep[0] ? tile->lp_beep : device_config.lp_beep;
-        if (pattern[0] && strcmp(pattern, "none") != 0) {
-            audio_beep(pattern, 0);
+        if (strcmp(tile->lp_action.type, ACTION_TYPE_BEEP) != 0) {
+            const char* pattern = tile->lp_beep[0] ? tile->lp_beep : device_config.lp_beep;
+            if (pattern[0] && strcmp(pattern, "none") != 0) {
+                audio_beep(pattern, 0);
+            }
         }
-    }
 #endif
+    }
 
     action_dispatch(tile->lp_action, "LP");
 

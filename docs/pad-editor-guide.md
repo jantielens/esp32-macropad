@@ -261,7 +261,7 @@ The **Audio Feedback** section in the button editor lets you override the device
 | `1000:30 30 1200:30` | Rising two-tone |
 
 **Behavior notes:**
-- Audio cues only play when the button has a corresponding action configured — a button with no tap action won't beep on tap, a button with no long-press action won't beep on long-press.
+- Buttons with no action configured are completely inert — no visual tap flash and no audio cue. A button with no tap action won't flash or beep on tap; a button with no long-press action won't flash or beep on long-press.
 - If the action itself is a **Play Beep** action, the audio cue is automatically suppressed to avoid a double-beep.
 - Swipe gestures use the device-level tap beep (no per-swipe overrides).
 
