@@ -241,6 +241,30 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 > **Tip**: Assign `ble_pair` to a dedicated button so you can pair a new host device directly from the macropad's touch screen.
 
+### Audio Feedback
+
+*Shown only on boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
+
+The **Audio Feedback** section in the button editor lets you override the device-level beep patterns for individual buttons.
+
+| Field | Description |
+|-------|-------------|
+| **Tap Beep** | Beep pattern for this button's tap. Leave empty to use the device default (configured on the Home page). Enter `none` to silence this button. |
+| **Long-Press Beep** | Beep pattern for this button's long-press. Same override rules. |
+
+**Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz:ms). A bare number is a silent gap.
+
+| Pattern | Sound |
+|---------|-------|
+| `800:80` | Quick tap click |
+| `600:40 40 600:40` | Double chirp |
+| `1000:30 30 1200:30` | Rising two-tone |
+
+**Behavior notes:**
+- Audio cues only play when the button has a corresponding action configured — a button with no tap action won't beep on tap, a button with no long-press action won't beep on long-press.
+- If the action itself is a **Play Beep** action, the audio cue is automatically suppressed to avoid a double-beep.
+- Swipe gestures use the device-level tap beep (no per-swipe overrides).
+
 ---
 
 ## Widgets

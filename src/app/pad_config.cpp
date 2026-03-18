@@ -244,6 +244,10 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     parse_action(obj["action"], &btn->action, "action_screen", obj);
     parse_action(obj["lp_action"], &btn->lp_action, "lp_action_screen", obj);
 
+    // Audio feedback overrides (empty = device default, "none" = suppress)
+    strlcpy(btn->tap_beep, obj["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+    strlcpy(btn->lp_beep, obj["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+
     // Background image fields
     strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);
     strlcpy(btn->bg_image_user, obj["bg_image_user"] | "", CONFIG_BG_IMAGE_USER_MAX_LEN);

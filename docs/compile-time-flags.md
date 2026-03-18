@@ -220,6 +220,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/ha_discovery.cpp
+  - src/app/mqtt_audio.cpp
+  - src/app/mqtt_audio.h
+  - src/app/screens/pad_screen_events.cpp
+  - src/app/swipe_actions.cpp
   - src/app/web_portal_config.cpp
 - **HAS_BACKLIGHT**
   - src/app/app.ino
@@ -333,6 +337,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/ha_discovery.h
+  - src/app/mqtt_audio.cpp
+  - src/app/mqtt_audio.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
   - src/app/mqtt_screen.cpp

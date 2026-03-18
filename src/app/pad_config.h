@@ -163,6 +163,10 @@ struct ScreenButtonConfig {
     ButtonAction action;     // tap action
     ButtonAction lp_action;  // long-press action
 
+    // Audio feedback overrides (empty = use device default, "none" = suppress)
+    char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
+    char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
+
     // Background image (fetched from URL, displayed as tile background)
     char bg_image_url[CONFIG_BG_IMAGE_URL_MAX_LEN];       // empty = no image
     char bg_image_user[CONFIG_BG_IMAGE_USER_MAX_LEN];     // HTTP Basic Auth user

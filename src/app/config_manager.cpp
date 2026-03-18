@@ -56,6 +56,8 @@
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
+#define KEY_TAP_BEEP       "tap_beep"
+#define KEY_LP_BEEP        "lp_beep"
 #endif
 #define KEY_MAGIC          "magic"
 
@@ -237,6 +239,8 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_AUDIO
 		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, 70);
+		preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
+		preferences.getString(KEY_LP_BEEP, config->lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 		#endif
 
 		#if HAS_DISPLAY
@@ -327,6 +331,8 @@ bool config_manager_save(const DeviceConfig *config) {
 
 		#if HAS_AUDIO
 		preferences.putUChar(KEY_AUDIO_VOLUME, config->audio_volume);
+		preferences.putString(KEY_TAP_BEEP, config->tap_beep);
+		preferences.putString(KEY_LP_BEEP, config->lp_beep);
 		#endif
 
 		#if HAS_DISPLAY
@@ -485,6 +491,8 @@ LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
 
 #if HAS_AUDIO
 		LOGI("Config", "Audio volume: %u%%", config->audio_volume);
+		if (config->tap_beep[0]) LOGI("Config", "Tap beep: %s", config->tap_beep);
+		if (config->lp_beep[0]) LOGI("Config", "LP beep: %s", config->lp_beep);
 #endif
 
 #if HAS_DISPLAY

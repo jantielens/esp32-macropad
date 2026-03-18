@@ -413,6 +413,7 @@ Returns comprehensive device information.
   "mdns_name": "esp32-1234.local",
   "hostname": "esp32-1234",
   "has_display": true,
+  "has_audio": true,
   "display_coord_width": 480,
   "display_coord_height": 480,
   "available_screens": [
@@ -582,13 +583,18 @@ Returns current device configuration (passwords excluded).
   "screen_saver_fade_out_ms": 800,
   "screen_saver_fade_in_ms": 400,
   "screen_saver_wake_on_touch": true,
-  "screen_saver_wake_binding": ""
+  "screen_saver_wake_binding": "",
+
+  "audio_volume": 70,
+  "tap_beep": "",
+  "lp_beep": ""
 }
 ```
 
 **Notes:**
 - Some fields are build-time gated.
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
+  - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
 
 #### `POST /api/config`
@@ -624,7 +630,11 @@ Save new configuration. Device reboots after successful save.
   "screen_saver_fade_out_ms": 800,
   "screen_saver_fade_in_ms": 400,
   "screen_saver_wake_on_touch": true,
-  "screen_saver_wake_binding": "[mqtt:devices/node/presence/state]"
+  "screen_saver_wake_binding": "[mqtt:devices/node/presence/state]",
+
+  "audio_volume": 70,
+  "tap_beep": "800:80",
+  "lp_beep": "600:40 40 600:40"
 }
 ```
 

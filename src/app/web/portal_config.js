@@ -286,6 +286,8 @@ async function loadConfig() {
             const vol = config.audio_volume;
             setValueIfExists('audio_volume', vol);
             setTextIfExists('audio_volume_value', vol);
+            setValueIfExists('tap_beep', config.tap_beep);
+            setValueIfExists('lp_beep', config.lp_beep);
             const audioSection = document.getElementById('audio-section');
             if (audioSection) audioSection.style.display = 'block';
         }
@@ -354,7 +356,7 @@ function extractFormFields(formData) {
                     'mqtt_publish_scope',
                     'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
                     'ble_enabled',
-                    'audio_volume',
+                    'audio_volume', 'tap_beep', 'lp_beep',
                     'backlight_brightness',
                     'screen_saver_enabled', 'screen_saver_timeout_seconds', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms', 'screen_saver_wake_on_touch',
                     'screen_saver_wake_binding'];

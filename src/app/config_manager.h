@@ -39,6 +39,11 @@
 // Screen saver MQTT wake binding
 #define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
 
+// Audio feedback beep pattern (may also be defined in pad_config.h)
+#ifndef CONFIG_BEEP_PATTERN_MAX_LEN
+#define CONFIG_BEEP_PATTERN_MAX_LEN 128
+#endif
+
 // Web portal Basic Auth (STA/full mode only)
 #define CONFIG_BASIC_AUTH_USERNAME_MAX_LEN 32
 #define CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN 64
@@ -89,6 +94,8 @@ struct DeviceConfig {
 
 #if HAS_AUDIO
 		uint8_t audio_volume;                    // 0-100, default 70
+		char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];   // Beep DSL on tap (empty = disabled)
+		char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];    // Beep DSL on long-press (empty = disabled)
 #endif
 
 #if HAS_DISPLAY

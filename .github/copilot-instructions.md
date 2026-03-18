@@ -72,6 +72,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - **Audio Subsystem**: ES8311 codec + I2S tone generation with async FreeRTOS playback (compile-time gated by `HAS_AUDIO`)
   - `audio.cpp/h` - ES8311 I2C driver, I2S TX channel, beep pattern DSL parser (`freq:dur` tones, bare `dur` gaps), volume control (0-100, NVS-persisted), background playback task with queue, loop/stop support for siren use
+  - Configurable touch-feedback audio cues: device-level `tap_beep`/`lp_beep` patterns in DeviceConfig, per-button overrides in ScreenButtonConfig/ButtonTile (`"none"` to suppress), auto-suppressed when action is beep, only fires when action is configured
 - **MQTT Audio Control**: Exposes audio as HA siren + volume + beep entities (compile-time gated by `HAS_AUDIO && HAS_MQTT`)
   - `mqtt_audio.cpp/h` - Siren ON/OFF with loop/duration/tone selection, volume control, 3 beep buttons, custom tone text entity; cross-task pending vars with portMUX spinlock
   - HA discovery published via `ha_discovery_publish_audio_entities()` with siren, number, text, and button entity types

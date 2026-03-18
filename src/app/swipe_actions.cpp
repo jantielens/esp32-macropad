@@ -5,6 +5,11 @@
 #include "action_dispatch.h"
 #include "log_manager.h"
 #include "swipe_config.h"
+#if HAS_AUDIO
+#include "audio.h"
+#include "config_manager.h"
+extern DeviceConfig device_config;
+#endif
 
 #define TAG "Swipe"
 
@@ -38,6 +43,17 @@ static void on_gesture(lv_event_t* e) {
     if (!act || !act->type[0]) return;
 
     s_last_swipe_ms = now;
+
+    // Audio cue — use device tap_beep for swipes (skip if action is beep)
+#if HAS_AUDIO
+    if (strcmp(act->type, ACTION_TYPE_BEEP) != 0) {
+        const char* pattern = device_config.tap_beep;
+        if (pattern[0] && strcmp(pattern, "none") != 0) {
+            audio_beep(pattern, 0);
+        }
+    }
+#endif
+
     action_dispatch(*act, dir_label);
 
     // Suppress further touch events from this gesture (prevents multi-fire
