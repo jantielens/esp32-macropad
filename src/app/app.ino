@@ -27,6 +27,8 @@
 #include "icon_store.h"
 #include "pad_binding.h"
 #include "scale_binding.h"
+#include "brew_binding.h"
+#include "brew_manager.h"
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "pad_config.h"
@@ -340,6 +342,8 @@ void setup()
 	expr_binding_init();
 	pad_binding_init();
 	scale_binding_init();
+	brew_manager_init();
+	brew_binding_init();
 	timer_binding_init();
 	#endif
 

@@ -5,6 +5,9 @@
 #include "log_manager.h"
 #include "config_manager.h"
 #include "sensor_manager.h"
+#if HAS_DISPLAY
+#include "brew_manager.h"
+#endif
 #include <HX711.h>
 
 #define TAG "HX711"
@@ -268,6 +271,11 @@ static void hx711_loop_cb() {
     }
 
     poll_once();
+
+#if HAS_DISPLAY
+    // Tick the brew state machine after each weight sample
+    brew_tick();
+#endif
 
     // Deferred NVS persist — runs on main task (internal RAM stack, flash-safe)
     if (s_persist_requested && s_available) {

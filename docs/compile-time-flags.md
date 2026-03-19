@@ -291,6 +291,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
+  - src/app/sensors/hx711_sensor.cpp
   - src/app/swipe_actions.cpp
   - src/app/swipe_actions.h
   - src/app/swipe_config.cpp

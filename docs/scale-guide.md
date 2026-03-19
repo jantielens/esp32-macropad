@@ -1,6 +1,6 @@
 # Scale Guide
 
-This guide covers the HX711 load cell scale integration — bindings, actions, calibration workflow, and REST API. It's aimed at users building rich touch-screen UIs (pad dashboards) for a scale application on an ESP32 Macropad device.
+This guide covers the HX711 load cell scale integration — bindings, actions, calibration workflow, guided brew mode, and REST API. It's aimed at users building rich touch-screen UIs (pad dashboards) for a scale application on an ESP32 Macropad device.
 
 > **Prerequisite**: The scale requires an HX711 load cell amplifier connected to two GPIO pins and `HAS_SENSOR_HX711` enabled in the board overrides. See the hardware setup section below.
 
@@ -13,6 +13,7 @@ The scale subsystem provides:
 - **Real-time weight** — EMA-smoothed readings at ~80 Hz, displayed via bindings
 - **Flow rate** — weight derivative computed over a 1-second window (grams per second)
 - **On-device calibration** — tare and calibrate directly from pad buttons
+- **Guided brew mode** — auto-tare and auto-start timer on first pour (brew manager)
 - **Status feedback** — binding-driven status for taring/calibrating operations
 - **REST API** — tare, calibrate, and status endpoints for external tooling
 
@@ -23,7 +24,7 @@ The device also includes **3 independent timers** — useful for tracking brew t
 - **Adjustable on-the-fly** — add or subtract seconds mid-brew without stopping
 - **Auto-configured countdowns** — entering a pad automatically sets up timer presets from button configs
 
-All scale data is exposed through the `[scale:]` binding scheme, which means it works everywhere bindings are supported: labels, colors, widget data, conditional expressions, and more.
+All scale data is exposed through the `[scale:]` binding scheme, and the guided brew workflow through `[brew:]`. Both work everywhere bindings are supported: labels, colors, widget data, conditional expressions, and more.
 
 ---
 
@@ -373,39 +374,142 @@ Timers and scale bindings combine naturally in expressions:
 
 ---
 
+## Brew Manager (Guided Brew Mode)
+
+The brew manager adds a simple guided brew workflow on top of the raw scale and timer features. It provides a 4-state state machine with **auto-start** — tap a button to arm the brew, and the timer starts automatically when you begin pouring.
+
+### How It Works
+
+1. **Start** — Tares the scale and enters the **Ready** state (armed, waiting for pour)
+2. **Auto-start** — When weight exceeds 2 g above tare, the timer starts automatically and the state moves to **Brewing**
+3. **Stop** — Freezes the timer and enters **Done** (manual tap)
+4. **Reset** — Clears everything back to **Idle**
+
+The brew manager owns its own internal timer (independent of the 3 general-purpose timers), so you can still use timer 1–3 for bloom phases or other purposes alongside a guided brew.
+
+### Brew Bindings
+
+The `[brew:]` binding scheme provides live brew workflow data. Syntax:
+
+```
+[brew:key]
+[brew:key;format]
+```
+
+| Key | Type | Default Format | Description |
+|-----|------|---------------|-------------|
+| `weight` | float | `%.1f` | Current weight (same as `[scale:weight]`, included for convenience) |
+| `flow_rate` | float | `%.1f` | Current flow rate (same as `[scale:flow_rate]`) |
+| `timer` | time | `mm:ss` | Brew elapsed time (0 when idle/ready, frozen when done) |
+| `phase` | string | — | Current phase: `Idle`, `Ready`, `Brewing`, or `Done` |
+| `active` | string | — | `1` if Ready or Brewing, `0` otherwise |
+
+#### Timer Format Options
+
+The `[brew:timer]` key supports the same format options as regular timers:
+
+| Format | Example | Description |
+|--------|---------|-------------|
+| `mm:ss` | `4:05` | Minutes and seconds (default) |
+| `hh:mm:ss` | `0:04:05` | Hours, minutes, seconds |
+| `ss` | `245` | Total seconds |
+| `mm:ss.d` | `4:05.3` | With decisecond precision |
+
+#### Binding Examples
+
+**Brew timer with decisecond precision:**
+```
+[brew:timer;mm:ss.d]
+```
+→ `4:05.3`
+
+**Phase-aware button label:**
+```
+[expr:[brew:phase]=="Idle"?"Start Brew":[brew:phase]=="Ready"?"Waiting...":[brew:phase]=="Brewing"?"Stop":"Reset"]
+```
+
+**Background color that tracks brew state:**
+```
+[expr:[brew:active]=="1"?"1a3a1a":"1a1a2e"]
+```
+
+**Conditional flow rate — only show during active brew:**
+```
+[expr:[brew:active]=="1"?[brew:flow_rate;%.1f]:"--.-"] g/s
+```
+
+### Brew Actions
+
+Assign brew actions to pad buttons in the pad editor. The action type is `brew` and the payload selects the command.
+
+| Payload | Description |
+|---------|-------------|
+| `start` | Tare scale, arm auto-start (default if no payload) |
+| `stop` | Freeze timer, enter Done |
+| `reset` | Clear all state, return to Idle |
+
+### Brew Pad Example
+
+A simple brew control layout — three dedicated buttons plus display labels:
+
+| Button | Action | Payload | Labels |
+|--------|--------|---------|--------|
+| Start | `brew` | `start` | Center: `[expr:[brew:phase]=="Idle"?"Start Brew":"Waiting..."]` |
+| Stop | `brew` | `stop` | Center: `Stop` |
+| Reset | `brew` | `reset` | Center: `Reset` |
+| Timer | — | — | Top: `Brew Time`, Center: `[brew:timer;mm:ss.d]` |
+| Weight | — | — | Top: `Weight`, Center: `[brew:weight;%.1f] g` |
+| Flow | — | — | Top: `Flow`, Center: `[brew:flow_rate;%.1f] g/s` |
+| Phase | — | — | Center: `[brew:phase]` |
+
+### Brew vs. Manual Timer
+
+| Feature | Brew Manager | Manual Timer |
+|---------|-------------|--------------|
+| Auto-start on pour | Yes (2 g threshold) | No |
+| Auto-tare on start | Yes | No |
+| Independent slots | 1 brew session | 3 timers |
+| Countdown mode | No (count-up only) | Yes |
+| Expire beep | No | Yes |
+| Phase awareness | Yes (Idle/Ready/Brewing/Done) | No |
+
+Use the brew manager for the overall brew workflow (start → pour → done), and use manual timers alongside it for things like bloom countdowns.
+
+---
+
 ## Example: V60 Pour-Over Dashboard
 
-A practical 4×2 pad layout for V60 coffee brewing with timers:
+A practical 4×2 pad layout for V60 coffee brewing with the brew manager and a bloom timer:
 
 | Col 1 | Col 2 | Col 3 | Col 4 |
 |-------|-------|-------|-------|
-| **Weight** | **Flow Rate** | **Timer** | **Tare** |
-| Weight sparkline | Flow sparkline | **Start/Pause** | **+15s / -10s** |
+| **Weight** | **Flow Rate** | **Brew Timer** | **Tare / Start** |
+| Weight sparkline | Flow sparkline | **Bloom Timer** | **Stop / Reset** |
 
 ### Button Configurations
 
 **Button (0,0) — Weight display:**
 - Top label: `Weight`
-- Center label: `[scale:weight;%.1f] g`
+- Center label: `[brew:weight;%.1f] g`
 - Background color: `#1a1a2e`
 
 **Button (1,0) — Flow rate with color:**
 - Top label: `Flow`
-- Center label: `[scale:flow_rate;%.1f] g/s`
+- Center label: `[brew:flow_rate;%.1f] g/s`
 - Background color: `[expr:threshold([scale:flow_rate],0,1a1a2e,1.5,1a3a1a,2.5,3a3a1a,3.5,3a1a1a)]`
 
 **Button (2,0) — Brew timer display:**
-- Top label: `Brew Time`
-- Center label: `[timer:1;mm:ss]`
-- Bottom label: `[expr:[timer:1_expired]=="ON"?"TIME'S UP":""]`
-- Background color: `[expr:[timer:1_expired]=="ON"?"3a1a1a":"1a1a2e"]`
+- Top label: `Brew`
+- Center label: `[brew:timer;mm:ss.d]`
+- Bottom label: `[brew:phase]`
+- Background color: `[expr:[brew:active]=="1"?"1a3a1a":"1a1a2e"]`
 
-> Timer 1 is used as the overall brew timer. Set default countdown to 240 seconds (4 minutes) for a standard V60 pour. The expire beep alerts you when time is up — the timer keeps running into overtime so you can see how far past the target you are.
+**Button (3,0) — Start brew (tare + arm):**
+- Center label: `[expr:[brew:phase]=="Idle"?"Start Brew":[brew:phase]=="Ready"?"Waiting...":[brew:phase]=="Brewing"?"Brewing...":"Done"]`
+- Action: `brew`, payload: `start`
+- Background color: `[expr:[brew:phase]=="Ready"?"2a2a1a":"16213e"]`
 
-**Button (3,0) — Tare:**
-- Center label: `[expr:[scale:status]=="taring"?"Taring...":"Tare"]`
-- Action: `scale` (Scale Tare)
-- Background color: `#16213e`
+> The brew manager auto-tares and auto-starts the timer when weight exceeds 2 g. No need for separate tare and start buttons.
 
 **Button (0,1) — Weight sparkline:**
 - Widget type: `sparkline`
@@ -420,30 +524,32 @@ A practical 4×2 pad layout for V60 coffee brewing with timers:
 - Line color binding: `[expr:threshold([scale:flow_rate],0,808080,1.5,00FF00,2.5,FFAA00,3.5,FF0000)]`
 - Background color: `#0f0f23`
 
-**Button (2,1) — Start/Pause toggle:**
-- Center label: `[expr:[timer:1_state]=="running"?"Pause":[timer:1_state]=="paused"?"Resume":"Start"]`
+**Button (2,1) — Bloom timer (manual countdown):**
+- Center label: `Bloom [timer:1;mm:ss]`
 - Action: `timer`, payload: `1:toggle`
-- Default countdown: `240` (4 minutes)
-- Expire beep: `1000:300 200 1000:300 200 1000:500`
-- Background color: `[expr:[timer:1_state]=="running"?"1a3a1a":"16213e"]`
+- Default countdown: `45` (45-second bloom)
+- Expire beep: `800:200 100 800:200`
+- Background color: `[expr:[timer:1_expired]=="ON"?"3a1a1a":"16213e"]`
 
-**Button (3,1) — Adjust countdown:**
-- Top label: `+15s`
-- Action (tap): `timer`, payload: `1:adjust:15`
-- Bottom label: `-10s`
-- Action (long-press): `timer`, payload: `1:adjust:-10`
+> Use timer 1 as a standalone bloom countdown alongside the brew manager's auto-timed overall brew.
+
+**Button (3,1) — Stop / Reset:**
+- Top label: `Stop`
+- Action (tap): `brew`, payload: `stop`
+- Bottom label: `Reset`
+- Action (long-press): `brew`, payload: `reset`
 - Background color: `#16213e`
 
 ### Brewing Workflow
 
-1. Place your V60 on the scale and tap **Tare** to zero it
-2. Add coffee grounds and tare again
-3. Tap **Start** — the 4-minute countdown begins
-4. Pour water — watch the weight, flow rate sparkline, and timer simultaneously
-5. When the timer expires, a beep sounds and the timer background turns red
-6. The timer continues into overtime (e.g., `-0:15`) so you see exactly how long past target
+1. Tap **Start Brew** — the scale tares and the button shows "Waiting..."
+2. Start pouring — when weight exceeds 2 g, the brew timer starts automatically
+3. Pour water — watch the weight, flow rate sparkline, and brew timer simultaneously
+4. Tap **Bloom Timer** to track your 45-second bloom phase separately
+5. When done, tap **Stop** to freeze the brew timer
+6. Long-press **Reset** to clear everything for the next brew
 
-> **Tip**: Use timer 2 as a bloom timer — add a separate button with `2:countdown:45` for a 45-second bloom phase, and use `[timer:2;mm:ss]` to display it. The **lap** command (`2:lap`) resets and restarts it for each pour phase.
+> **Tip**: The brew manager handles tare + timer start in one tap. You still have all 3 manual timers available — use one for bloom countdowns, another for pour phases, etc.
 
 ---
 

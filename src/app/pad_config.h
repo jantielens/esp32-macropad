@@ -108,6 +108,7 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_SCALE_CAL_WEIGHT "scale_cal_weight"
 #define ACTION_TYPE_SCALE_CAL_SET   "scale_cal_set"
 #define ACTION_TYPE_TIMER    "timer"
+#define ACTION_TYPE_BREW     "brew"
 
 // Typed action for tap or long-press
 struct ButtonAction {

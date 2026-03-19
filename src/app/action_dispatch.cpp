@@ -18,6 +18,7 @@
 #endif
 #if HAS_SENSOR_HX711
 #include "sensors/hx711_sensor.h"
+#include "brew_manager.h"
 #endif
 
 #include "timer_engine.h"
@@ -191,6 +192,25 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         } else {
             LOGW(TAG, "%s timer: bad payload '%s'", label, p ? p : "(null)");
         }
+    } else if (strcmp(act.type, ACTION_TYPE_BREW) == 0) {
+#if HAS_SENSOR_HX711
+        const char* cmd = act.mqtt_payload;
+        if (!cmd || !cmd[0]) cmd = "start";
+        if (strcmp(cmd, "start") == 0) {
+            LOGI(TAG, "%s brew: start", label);
+            brew_start();
+        } else if (strcmp(cmd, "stop") == 0) {
+            LOGI(TAG, "%s brew: stop", label);
+            brew_stop();
+        } else if (strcmp(cmd, "reset") == 0) {
+            LOGI(TAG, "%s brew: reset", label);
+            brew_reset();
+        } else {
+            LOGW(TAG, "%s brew: unknown cmd '%s'", label, cmd);
+        }
+#else
+        LOGW(TAG, "%s brew: not compiled", label);
+#endif
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
     }

@@ -29,6 +29,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="scale_cal_weight">Scale Cal Weight &plusmn;</option>';
     h += '<option value="scale_cal_set">Scale Cal Weight Set</option>';
     h += '<option value="timer">Timer Control</option>';
+    h += '<option value="brew">Brew Control</option>';
     h += '</select>';
     if (opts.showBleHint) {
         h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
@@ -98,6 +99,16 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<label for="' + prefix + '-scale-set-value">Calibration Weight (g)</label>';
     h += '<input type="number" id="' + prefix + '-scale-set-value" min="1" step="0.1" placeholder="e.g. 251.5">';
     h += '<small>Set the calibration reference weight to this value (grams).</small>';
+    h += '</div></div>';
+    // Brew — simple command dropdown
+    h += '<div id="' + prefix + '-brew-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-brew-cmd">Brew Command</label>';
+    h += '<select id="' + prefix + '-brew-cmd">';
+    h += '<option value="start">Start (tare + arm auto-start)</option>';
+    h += '<option value="stop">Stop (freeze timer)</option>';
+    h += '<option value="reset">Reset (clear all state)</option>';
+    h += '</select>';
     h += '</div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
@@ -176,6 +187,8 @@ function actionEditorTypeChanged(prefix) {
     if (volGrp) volGrp.style.display = (type === 'volume') ? '' : 'none';
     if (scaleCwGrp) scaleCwGrp.style.display = (type === 'scale_cal_weight') ? '' : 'none';
     if (scaleSetGrp) scaleSetGrp.style.display = (type === 'scale_cal_set') ? '' : 'none';
+    var brewGrp = document.getElementById(prefix + '-brew-group');
+    if (brewGrp) brewGrp.style.display = (type === 'brew') ? '' : 'none';
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     if (type === 'timer') actionEditorTimerChanged(prefix);
@@ -239,6 +252,9 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.payload || '';
     el = document.getElementById(prefix + '-scale-set-value');
     if (el) el.value = action.payload || '';
+    // Brew command
+    el = document.getElementById(prefix + '-brew-cmd');
+    if (el) el.value = action.payload || 'start';
     // Timer: parse DSL string "N:command[:arg]" into structured fields
     if (action.timer_command) {
         var tc = action.timer_command;
@@ -318,6 +334,10 @@ function actionEditorBuild(prefix) {
     if (type === 'scale_cal_set') {
         var sv = document.getElementById(prefix + '-scale-set-value');
         if (sv && sv.value !== '') act.payload = sv.value.trim();
+    }
+    if (type === 'brew') {
+        var bc = document.getElementById(prefix + '-brew-cmd');
+        if (bc) act.payload = bc.value || 'start';
     }
     if (type === 'timer') {
         var sel = document.getElementById(prefix + '-timer-action');

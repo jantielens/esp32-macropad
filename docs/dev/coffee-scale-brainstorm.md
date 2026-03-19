@@ -1,6 +1,6 @@
 # Smart Coffee / V60 Scale — Architecture Brainstorm
 
-> **Status**: Brainstorm / Pre-design (March 2026)
+> **Status**: V1 brew_manager implemented (March 2026)
 > **Base**: ESP32 Macropad codebase
 > **Prerequisite**: HX711 POC validated on headless ESP32 (see `sample/hx711-scale-poc.md`)
 
@@ -54,6 +54,26 @@ A smart V60 pour-over scale with rich touchscreen UI: real-time weight display, 
 | `ACTION_TYPE_BREW` | New action type in `action_dispatch.cpp` | ~20 lines |
 | `brew_storage.cpp/h` | LittleFS brew history + recipe templates | ~200 lines |
 | Board overrides | `board_overrides.h` for scale-specific board | ~30 lines |
+
+### Implementation Status (V1 — Free Pour with Auto-Start)
+
+**Implemented:**
+- `brew_manager.cpp/h` — Minimal state machine: IDLE → READY → BREWING → DONE
+  - Auto-start: timer begins when weight exceeds 2g threshold after tare
+  - Own `millis()`-based timer (independent of timer_engine)
+  - `brew_start()` / `brew_stop()` / `brew_reset()` / `brew_tick()` API
+- `brew_binding.cpp/h` — `[brew:]` scheme with keys: `weight`, `flow_rate`, `timer`, `phase`, `active`
+- `ACTION_TYPE_BREW` in `pad_config.h` + `action_dispatch.cpp` — payloads: `start`, `stop`, `reset`
+- `brew_tick()` wired into `hx711_loop_cb()` after each `poll_once()` sample
+- Compile gate: `HAS_DISPLAY && HAS_SENSOR_HX711`
+
+**Not yet implemented (future layers):**
+- `brew_guide_widget.cpp` — Widget rendering brew instructions + timer + progress
+- `brew_storage.cpp/h` — LittleFS brew history + recipe templates
+- Phased recipes (dose → bloom → pour → drawdown)
+- Auto-stop / lift-to-stop detection
+- Ratio calculator
+- Pour rate guidance bands
 
 ### Minor Changes to Existing Code
 
@@ -185,6 +205,77 @@ The hosting button's tap action would typically be `brew:next` (advance step).
 ```
 
 Stored on LittleFS as `/config/brew_recipe_N.json`. Selectable via web portal or a pad button.
+
+## High-End Coffee Scale Feature Survey
+
+Research into what premium scales (Acaia Lunar/Pearl, Decent Scale, Felicita Arc/Incline, Timemore Black Mirror Plus, Hiroia Jimmy) offer beyond basic weight + timer.
+
+### Brew Workflow & Guidance
+
+| Feature | Description | Relevance |
+|---|---|---|
+| **Auto-start timer** | Timer begins when scale detects first pour (weight increase after tare) | High — eliminates a manual step |
+| **Auto-stop / drawdown detection** | Timer stops or marks phase complete when flow rate drops to ~0 for N seconds | High — hands-free brew completion |
+| **Multi-recipe storage** | Save/recall named recipes with dose, ratio, and phase targets | High — already planned in recipe template format |
+| **Ratio calculator** | Enter dose weight, auto-compute total water target (e.g., 16g × 15 = 240g) | High — simple math, big UX win |
+| **Phase-by-phase guided pour targets** | Show "pour to Xg" with countdown per phase | High — core of the guided brew workflow |
+
+### Real-Time Pour Analytics
+
+| Feature | Description | Relevance |
+|---|---|---|
+| **Flow rate visualization** | Real-time g/s display | Already implemented (`[scale:flow_rate]`) |
+| **Pour rate guidance bands** | Show ideal flow rate zone (e.g., 3–5 g/s shaded on sparkline), alert if too fast/slow | Medium — sparkline reference lines could support this |
+| **Cumulative pour curve** | Weight-over-time graph showing actual vs. ideal pour profile | Medium — sparkline with `[brew:weight]` data binding |
+| **Phase-level stats** | Per-phase pour time, total water poured, avg flow rate | Medium — useful for brew history/review |
+| **Target weight countdown** | Show "Xg remaining" instead of or alongside absolute weight | High — simple binding: `[expr:[brew:target]-[brew:weight];%.0f]` |
+| **Color-coded flow rate** | Green = ideal, yellow = too slow, red = too fast | Medium — sparkline bindable line colors could do this |
+
+### Espresso-Specific (Future Expansion)
+
+| Feature | Description | Relevance |
+|---|---|---|
+| **First-drip detection** | Detect when espresso first hits the cup (weight spike after tare) | Low — V60 focus first |
+| **Extraction yield calculator** | TDS input + dose + yield → extraction percentage | Low — niche, requires refractometer |
+| **Shot profiling** | Weight vs. time curve for espresso extraction analysis | Low — sparkline could visualize this later |
+
+### Connectivity & Data
+
+| Feature | Description | Relevance |
+|---|---|---|
+| **BLE scale protocol** | Expose weight/flow via BLE GATT (Acaia protocol); apps like Decent DE1 or Gaggiuino read scale data | Low — nice-to-have, not MVP |
+| **Brew history with stats** | Date, recipe, dose, total time, total water, avg flow rate per phase | High — planned via `brew_storage.cpp` on LittleFS |
+| **Cloud sync / export** | CSV or API export of brew logs | Low — REST API `/api/brew/history` could serve this later |
+| **Espresso machine integration** | Decent DE1, Gaggiuino read scale data for profiling | Low — future BLE work |
+
+### Hardware / UX Polish
+
+| Feature | Description | Relevance |
+|---|---|---|
+| **Weighing vs. brewing modes** | "Weighing" mode (stable reading, no timer) vs. "brewing" mode (timer + flow rate active) | High — Dashboard pad vs. Brew pad achieves this |
+| **Responsive tare** | Fast tare (<0.5s) with visual confirmation | High — already have non-blocking tare + beep feedback |
+| **Auto-off / sleep** | Power save after inactivity | Already implemented (screensaver subsystem) |
+| **Predictive stabilization** | Faster display convergence by predicting final weight from rate of change | Medium — could enhance EMA filter |
+| **Water retention estimation** | Estimate water retained in coffee bed (total poured − yield in cup) | Low — interesting stat for brew history |
+
+### Display Enhancements
+
+| Feature | Description | Relevance |
+|---|---|---|
+| **Dual weight + timer display** | Large simultaneous weight and timer (Acaia Pearl style) | High — pad layout with label style DSL handles this |
+| **Phase progress arc/bar** | Visual progress toward current phase target | High — gauge or bar chart widget with `[brew:progress]` |
+| **Phase indicator dots** | Small dots showing current position in brew phases | Medium — planned for brew guide widget |
+
+### Highest-Impact Features for V1
+
+Based on the existing building blocks, these deliver the most value with least effort:
+
+1. **Auto-start/stop timer** — timer starts on first pour detection, marks drawdown complete when flow → 0
+2. **Ratio calculator** — enter beans weight, auto-fill water targets in recipe
+3. **Target countdown** — "42g remaining" label (trivial with expr binding)
+4. **Pour rate guidance bands** — colored zones on sparkline showing ideal flow rate
+5. **Per-phase stats** — log timing and flow per phase for brew history
+6. **Color-coded flow rate** — sparkline bindable line colors driven by flow rate vs. target range
 
 ## Open Questions
 
