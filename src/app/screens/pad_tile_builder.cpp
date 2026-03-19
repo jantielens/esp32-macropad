@@ -254,8 +254,10 @@ void PadScreen::buildTiles() {
         tile.page = pageIndex;
         tile.col = bcfg.col;
         tile.row = bcfg.row;
-        memcpy(&tile.action, &bcfg.action, sizeof(ButtonAction));
-        memcpy(&tile.lp_action, &bcfg.lp_action, sizeof(ButtonAction));
+        tile.action_count = bcfg.action_count;
+        memcpy(tile.actions, bcfg.actions, bcfg.action_count * sizeof(ButtonAction));
+        tile.lp_action_count = bcfg.lp_action_count;
+        memcpy(tile.lp_actions, bcfg.lp_actions, bcfg.lp_action_count * sizeof(ButtonAction));
         memcpy(tile.tap_beep, bcfg.tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
         memcpy(tile.lp_beep, bcfg.lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 
@@ -444,9 +446,16 @@ void PadScreen::buildTiles() {
     {
         bool applied[TIMER_COUNT] = {};
         for (uint8_t i = 0; i < cfg->button_count && i < MAX_PAD_BUTTONS; i++) {
-            const ButtonAction* acts[] = { &cfg->buttons[i].action, &cfg->buttons[i].lp_action };
-            for (int a = 0; a < 2; a++) {
-                const ButtonAction& act = *acts[a];
+            // Scan all tap and long-press actions for timer defaults
+            const ScreenButtonConfig& b = cfg->buttons[i];
+            const ButtonAction* all_acts[MAX_BUTTON_ACTIONS * 2];
+            uint8_t total = 0;
+            for (uint8_t a = 0; a < b.action_count && a < MAX_BUTTON_ACTIONS; a++)
+                all_acts[total++] = &b.actions[a];
+            for (uint8_t a = 0; a < b.lp_action_count && a < MAX_BUTTON_ACTIONS; a++)
+                all_acts[total++] = &b.lp_actions[a];
+            for (uint8_t a = 0; a < total; a++) {
+                const ButtonAction& act = *all_acts[a];
                 if (strcmp(act.type, ACTION_TYPE_TIMER) != 0) continue;
                 // Extract timer ID from mqtt_payload DSL (first char is '1'-'3')
                 if (act.mqtt_payload[0] < '1' || act.mqtt_payload[0] > '0' + TIMER_COUNT) continue;

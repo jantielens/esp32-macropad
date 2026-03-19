@@ -110,6 +110,9 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_TIMER    "timer"
 #define ACTION_TYPE_BREW     "brew"
 
+// Maximum number of sequential actions per tap or long-press
+#define MAX_BUTTON_ACTIONS   3
+
 // Typed action for tap or long-press
 struct ButtonAction {
     char type[CONFIG_ACTION_TYPE_MAX_LEN];           // "screen", "mqtt", "key", "ble_pair", "beep", "volume", or "" (none)
@@ -168,9 +171,11 @@ struct ScreenButtonConfig {
     char border_width[CONFIG_BINDABLE_SHORT_LEN]; // default "0" — static or binding
     char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // default "8" — static or binding
 
-    // Typed actions
-    ButtonAction action;     // tap action
-    ButtonAction lp_action;  // long-press action
+    // Typed actions (up to MAX_BUTTON_ACTIONS sequential actions per gesture)
+    ButtonAction actions[MAX_BUTTON_ACTIONS];      // tap actions (executed sequentially)
+    uint8_t action_count;                          // number of tap actions (0-3)
+    ButtonAction lp_actions[MAX_BUTTON_ACTIONS];   // long-press actions (executed sequentially)
+    uint8_t lp_action_count;                       // number of long-press actions (0-3)
 
     // Audio feedback overrides (empty = use device default, "none" = suppress)
     char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];

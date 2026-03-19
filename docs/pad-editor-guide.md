@@ -185,7 +185,9 @@ Any button can display an image fetched from a URL, rendered as the button backg
 
 ### Actions (Tap and Long-Press)
 
-Each button has two action slots — one for **tap** and one for **long-press** (triggered after holding ~500ms).
+Each button supports up to **3 sequential actions** per gesture — one for **tap** and one for **long-press** (triggered after holding ~500ms). Actions execute in order: for example, action 1 publishes an MQTT message, action 2 plays a beep, and action 3 navigates to another screen.
+
+By default, only the first action slot is shown. Click **"+ Add tap action"** or **"+ Add long-press action"** to reveal additional slots. Use the **"× Remove"** link to hide a slot and clear its action.
 
 **Action types:**
 
@@ -202,7 +204,8 @@ Each button has two action slots — one for **tap** and one for **long-press** 
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
 
 **Example setup for a smart light:**
-- **Tap action**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
+- **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
+- **Tap action 2**: Play Beep → `1000:100` (confirmation chirp)
 - **Long-press action**: Navigate to screen → `pad_3` (a dedicated lighting pad with brightness controls)
 
 **Example setup for navigation:**
@@ -291,8 +294,9 @@ The **Audio Feedback** section in the button editor lets you override the device
 | `1000:30 30 1200:30` | Rising two-tone |
 
 **Behavior notes:**
-- Buttons with no action configured are completely inert — no visual tap flash and no audio cue. A button with no tap action won't flash or beep on tap; a button with no long-press action won't flash or beep on long-press.
-- If the action itself is a **Play Beep** action, the audio cue is automatically suppressed to avoid a double-beep.
+- Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
+- If any action in the sequence is a **Play Beep** action, the audio cue is automatically suppressed to avoid a double-beep.
+- When multiple actions are configured and one of them navigates to a different screen, any subsequent actions in the sequence still execute safely. The last navigation wins (the user sees the final target screen).
 - Swipe gestures use the device-level tap beep (no per-swipe overrides).
 
 ---

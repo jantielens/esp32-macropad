@@ -3,6 +3,8 @@
 
 // ===== PAD CONFIGURATION =====
 
+const MAX_ACTIONS = 3; // Must match MAX_BUTTON_ACTIONS in pad_config.h
+
 const padState = {
     page: 0,
     rawJson: null,   // Original GET response (for merge-on-save)
@@ -277,13 +279,33 @@ function padInit() {
     const section = document.getElementById('pad-config-section');
     if (!section) return;
 
-    // Generate action editor HTML from shared module
+    // Generate action editor HTML from shared module — up to 3 sequential actions per gesture.
+    // Slots 2 and 3 start hidden (progressive disclosure via "+ Add" link).
     const aeContainer = document.getElementById('pad-action-editors');
     if (aeContainer) {
-        aeContainer.innerHTML =
-            actionEditorHTML('pad-edit-action', 'Tap Action', { showBleHint: true, showKeyHelp: true }) +
+        var tapHtml = '';
+        var lpHtml = '';
+        var aeOpts = { showBleHint: true, showKeyHelp: true };
+        for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+            var tapPfx = 'pad-edit-action-' + ai;
+            var lpPfx = 'pad-edit-lp-action-' + ai;
+            var tapLabel = ai === 0 ? 'Tap Action' : 'Tap Action ' + (ai + 1);
+            var lpLabel = ai === 0 ? 'Long-Press Action' : 'Long-Press Action ' + (ai + 1);
+            var hidden = ai > 0 ? ' style="display:none"' : '';
+            tapHtml += '<div id="' + tapPfx + '-wrap"' + hidden + '>';
+            if (ai > 0) tapHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><span></span><a class="action-remove-link" onclick="padRemoveAction(\'tap\',' + ai + ')">&times; Remove</a></div>';
+            tapHtml += actionEditorHTML(tapPfx, tapLabel, aeOpts);
+            tapHtml += '</div>';
+            lpHtml += '<div id="' + lpPfx + '-wrap"' + hidden + '>';
+            if (ai > 0) lpHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><span></span><a class="action-remove-link" onclick="padRemoveAction(\'lp\',' + ai + ')">&times; Remove</a></div>';
+            lpHtml += actionEditorHTML(lpPfx, lpLabel, aeOpts);
+            lpHtml += '</div>';
+        }
+        tapHtml += '<a id="pad-add-tap-action" class="action-add-link" onclick="padAddAction(\'tap\')">+ Add tap action</a>';
+        lpHtml += '<a id="pad-add-lp-action" class="action-add-link" onclick="padAddAction(\'lp\')">+ Add long-press action</a>';
+        aeContainer.innerHTML = tapHtml +
             '<hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">' +
-            actionEditorHTML('pad-edit-lp-action', 'Long-Press Action', { showBleHint: true, showKeyHelp: true });
+            lpHtml;
     }
 
     document.getElementById('pad-page-select').addEventListener('change', (e) => {
@@ -410,8 +432,13 @@ function padPopulatePadDropdown() {
 }
 
 function padPopulateScreenDropdown() {
+    var prefixes = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        prefixes.push('pad-edit-action-' + i);
+        prefixes.push('pad-edit-lp-action-' + i);
+    }
     actionEditorPopulateScreens(
-        ['pad-edit-action', 'pad-edit-lp-action'],
+        prefixes,
         deviceInfoCache ? deviceInfoCache.available_screens : null
     );
     // Populate wake-screen dropdown (keep first "(stay on this screen)" option)
@@ -428,8 +455,48 @@ function padPopulateScreenDropdown() {
 }
 
 function padActionTypeChanged(prefix) {
-    const pfx = 'pad-edit-' + ((prefix === 'lp') ? 'lp-action' : 'action');
+    // prefix may be 'lp' or 'tap' from legacy callers — map to first slot
+    const pfx = 'pad-edit-' + ((prefix === 'lp') ? 'lp-action-0' : 'action-0');
     actionEditorTypeChanged(pfx);
+}
+
+// Show the next hidden action slot for tap or lp
+function padAddAction(gesture) {
+    var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
+    for (var i = 1; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById(pfx + i + '-wrap');
+        if (wrap && wrap.style.display === 'none') {
+            wrap.style.display = '';
+            padMarkDirty();
+            break;
+        }
+    }
+    padUpdateAddLink(gesture);
+}
+
+// Remove (hide + clear) an action slot
+function padRemoveAction(gesture, index) {
+    var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
+    var wrap = document.getElementById(pfx + index + '-wrap');
+    if (wrap) {
+        wrap.style.display = 'none';
+        actionEditorLoad(pfx + index, null);
+    }
+    padMarkDirty();
+    padUpdateAddLink(gesture);
+}
+
+// Show/hide the "+ Add" link based on how many slots are visible
+function padUpdateAddLink(gesture) {
+    var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
+    var linkId = (gesture === 'lp') ? 'pad-add-lp-action' : 'pad-add-tap-action';
+    var visibleCount = 0;
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById(pfx + i + '-wrap');
+        if (wrap && wrap.style.display !== 'none') visibleCount++;
+    }
+    var link = document.getElementById(linkId);
+    if (link) link.style.display = (visibleCount >= 3) ? 'none' : '';
 }
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline'];
@@ -913,11 +980,27 @@ function padDialogOpen(col, row) {
         rsSel.appendChild(o);
     }
 
-    // Tap action
-    actionEditorLoad('pad-edit-action', btn.action);
+    // Tap actions (array of up to 3)
+    var tapActions = btn.actions || [];
+    // Legacy single-action fallback
+    if (!tapActions.length && btn.action && btn.action.type) tapActions = [btn.action];
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        actionEditorLoad('pad-edit-action-' + ai, tapActions[ai] || null);
+        var wrap = document.getElementById('pad-edit-action-' + ai + '-wrap');
+        if (wrap) wrap.style.display = (ai === 0 || (tapActions[ai] && tapActions[ai].type)) ? '' : 'none';
+    }
+    padUpdateAddLink('tap');
 
-    // Long-press action
-    actionEditorLoad('pad-edit-lp-action', btn.lp_action);
+    // Long-press actions (array of up to 3)
+    var lpActions = btn.lp_actions || [];
+    // Legacy single-action fallback
+    if (!lpActions.length && btn.lp_action && btn.lp_action.type) lpActions = [btn.lp_action];
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        actionEditorLoad('pad-edit-lp-action-' + ai, lpActions[ai] || null);
+        var wrap = document.getElementById('pad-edit-lp-action-' + ai + '-wrap');
+        if (wrap) wrap.style.display = (ai === 0 || (lpActions[ai] && lpActions[ai].type)) ? '' : 'none';
+    }
+    padUpdateAddLink('lp');
 
     // Audio feedback overrides
     document.getElementById('pad-edit-tap-beep').value = btn.tap_beep || '';
@@ -1092,13 +1175,21 @@ function padDialogOk(keepOpen) {
     const uiOffset = document.getElementById('pad-edit-ui-offset').value.trim();
     if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
 
-    // Tap action
-    const tapAct = actionEditorBuild('pad-edit-action');
-    if (tapAct.type) btn.action = tapAct;
+    // Tap actions (array)
+    var tapArr = [];
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        var a = actionEditorBuild('pad-edit-action-' + ai);
+        if (a.type) tapArr.push(a);
+    }
+    if (tapArr.length) btn.actions = tapArr;
 
-    // Long-press action
-    const lpAct = actionEditorBuild('pad-edit-lp-action');
-    if (lpAct.type) btn.lp_action = lpAct;
+    // Long-press actions (array)
+    var lpArr = [];
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        var a = actionEditorBuild('pad-edit-lp-action-' + ai);
+        if (a.type) lpArr.push(a);
+    }
+    if (lpArr.length) btn.lp_actions = lpArr;
 
     // Audio feedback overrides
     var tapBeep = document.getElementById('pad-edit-tap-beep').value.trim();

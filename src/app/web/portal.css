@@ -1166,6 +1166,22 @@ footer {
     margin-top: 16px;
 }
 
+.action-add-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: #007aff;
+    cursor: pointer;
+    font-size: 13px;
+}
+.action-add-link:hover { text-decoration: underline; }
+
+.action-remove-link {
+    color: #ff3b30;
+    cursor: pointer;
+    font-size: 13px;
+}
+.action-remove-link:hover { text-decoration: underline; }
+
 .pad-empty-state {
     text-align: center;
     color: #8e8e93;

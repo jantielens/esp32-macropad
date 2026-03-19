@@ -17,6 +17,24 @@ extern DeviceConfig device_config;
 // #included before this file in screens.cpp.
 
 // ============================================================================
+// Action helpers
+// ============================================================================
+
+// Returns true if at least one action in the list has a non-empty type.
+static bool has_any_action(const ButtonAction* acts, uint8_t count) {
+    for (uint8_t i = 0; i < count; i++)
+        if (acts[i].type[0]) return true;
+    return false;
+}
+
+// Returns true if any action in the list is a beep action.
+static bool has_beep_action(const ButtonAction* acts, uint8_t count) {
+    for (uint8_t i = 0; i < count; i++)
+        if (strcmp(acts[i].type, ACTION_TYPE_BEEP) == 0) return true;
+    return false;
+}
+
+// ============================================================================
 // Event Handlers
 // ============================================================================
 
@@ -69,11 +87,17 @@ void PadScreen::onTap(lv_event_t* e) {
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
-    // Visual and audio cues only when an action is configured
-    if (tile->action.type[0]) {
+    // Copy actions to local storage before dispatch — a screen nav action
+    // may destroy this tile's owning PadScreen (LRU eviction).
+    const uint8_t count = tile->action_count;
+    ButtonAction local[MAX_BUTTON_ACTIONS];
+    memcpy(local, tile->actions, count * sizeof(ButtonAction));
+
+    // Visual and audio cues only when at least one action is configured
+    if (has_any_action(local, count)) {
         do_tap_flash(tile);
 #if HAS_AUDIO
-        if (strcmp(tile->action.type, ACTION_TYPE_BEEP) != 0) {
+        if (!has_beep_action(local, count)) {
             const char* pattern = tile->tap_beep[0] ? tile->tap_beep : device_config.tap_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) {
                 audio_beep(pattern, 0);
@@ -82,7 +106,9 @@ void PadScreen::onTap(lv_event_t* e) {
 #endif
     }
 
-    action_dispatch(tile->action, "Tap");
+    for (uint8_t i = 0; i < count; i++) {
+        action_dispatch(local[i], "Tap");
+    }
 
 #if HAS_MQTT
     publish_button_event(tile, "press");
@@ -96,11 +122,17 @@ void PadScreen::onLongPress(lv_event_t* e) {
     // Suppress long-press that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
-    // Visual and audio cues only when an action is configured
-    if (tile->lp_action.type[0]) {
+    // Copy actions to local storage before dispatch — a screen nav action
+    // may destroy this tile's owning PadScreen (LRU eviction).
+    const uint8_t count = tile->lp_action_count;
+    ButtonAction local[MAX_BUTTON_ACTIONS];
+    memcpy(local, tile->lp_actions, count * sizeof(ButtonAction));
+
+    // Visual and audio cues only when at least one action is configured
+    if (has_any_action(local, count)) {
         do_tap_flash(tile);
 #if HAS_AUDIO
-        if (strcmp(tile->lp_action.type, ACTION_TYPE_BEEP) != 0) {
+        if (!has_beep_action(local, count)) {
             const char* pattern = tile->lp_beep[0] ? tile->lp_beep : device_config.lp_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) {
                 audio_beep(pattern, 0);
@@ -109,7 +141,9 @@ void PadScreen::onLongPress(lv_event_t* e) {
 #endif
     }
 
-    action_dispatch(tile->lp_action, "LP");
+    for (uint8_t i = 0; i < count; i++) {
+        action_dispatch(local[i], "LP");
+    }
 
 #if HAS_MQTT
     publish_button_event(tile, "hold");

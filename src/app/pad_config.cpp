@@ -247,9 +247,43 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     parse_bindable_field(obj["border_width"], btn->border_width, CONFIG_BINDABLE_SHORT_LEN, "0", false);
     parse_bindable_field(obj["corner_radius"], btn->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "8", false);
 
-    // Typed actions (with legacy flat key fallback)
-    parse_action(obj["action"], &btn->action, "action_screen", obj);
-    parse_action(obj["lp_action"], &btn->lp_action, "lp_action_screen", obj);
+    // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
+    // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "beep", ... } ]
+    btn->action_count = 0;
+    btn->lp_action_count = 0;
+    memset(btn->actions, 0, sizeof(btn->actions));
+    memset(btn->lp_actions, 0, sizeof(btn->lp_actions));
+
+    {
+        JsonVariant v = obj["actions"];
+        if (v.is<JsonArray>()) {
+            JsonArray arr = v.as<JsonArray>();
+            for (size_t i = 0; i < arr.size() && btn->action_count < MAX_BUTTON_ACTIONS; i++) {
+                parse_action(arr[i], &btn->actions[btn->action_count], nullptr, obj);
+                if (btn->actions[btn->action_count].type[0]) btn->action_count++;
+            }
+        } else {
+            // Legacy: try singular "action" key (old single-object format)
+            JsonVariant legacy = v.isNull() ? obj["action"].as<JsonVariant>() : v;
+            parse_action(legacy, &btn->actions[0], "action_screen", obj);
+            if (btn->actions[0].type[0]) btn->action_count = 1;
+        }
+    }
+    {
+        JsonVariant v = obj["lp_actions"];
+        if (v.is<JsonArray>()) {
+            JsonArray arr = v.as<JsonArray>();
+            for (size_t i = 0; i < arr.size() && btn->lp_action_count < MAX_BUTTON_ACTIONS; i++) {
+                parse_action(arr[i], &btn->lp_actions[btn->lp_action_count], nullptr, obj);
+                if (btn->lp_actions[btn->lp_action_count].type[0]) btn->lp_action_count++;
+            }
+        } else {
+            // Legacy: try singular "lp_action" key (old single-object format)
+            JsonVariant legacy = v.isNull() ? obj["lp_action"].as<JsonVariant>() : v;
+            parse_action(legacy, &btn->lp_actions[0], "lp_action_screen", obj);
+            if (btn->lp_actions[0].type[0]) btn->lp_action_count = 1;
+        }
+    }
 
     // Audio feedback overrides (empty = device default, "none" = suppress)
     strlcpy(btn->tap_beep, obj["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
