@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.12.0] - 2026-03-19
+
+### Added
+- **Multi-action buttons** — each button now supports up to 3 sequential actions per tap and per long-press (previously limited to 1). Actions execute in order: e.g., MQTT publish → play beep → navigate to screen. Useful for combined workflows like tare-then-start-brew, or publish-then-navigate. The pad editor shows only the first action by default; use the "+ Add tap/long-press action" link to reveal additional slots.
+- **Local-copy safety for action dispatch** — actions are copied to stack-local storage before execution, preventing a use-after-free if an earlier action in the sequence triggers a screen navigation that destroys the current pad screen.
+- **Audio cue helpers** — unified `has_any_action()` and `has_beep_action()` helpers for cleaner audio feedback logic with multi-action sequences.
+
+### Changed
+- **JSON format**: Button actions are now stored as arrays (`"actions": [...]` / `"lp_actions": [...]`). The firmware transparently reads the old single-object format (`"action": {...}` / `"lp_action": {...}`) for backward compatibility with existing configs on the device.
+
 ## [1.11.0] - 2026-03-18
 
 ### Added
