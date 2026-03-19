@@ -18,7 +18,7 @@ const API_VERSION = '/api/info'; // Used for connection polling
 
 let selectedFile = null;
 let portalMode = 'full'; // 'core' or 'full'
-let currentPage = 'home'; // Current page: 'home', 'network', or 'firmware'
+let currentPage = 'home'; // Current page: 'home', 'brews', 'pad', 'network', or 'firmware'
 
 let deviceInfoCache = null;
 
@@ -62,6 +62,8 @@ function initNavigation() {
     
     if (path === '/' || path === '/home.html') {
         currentPage = 'home';
+    } else if (path === '/brews.html') {
+        currentPage = 'brews';
     } else if (path === '/pads.html') {
         currentPage = 'pad';
     } else if (path === '/network.html') {

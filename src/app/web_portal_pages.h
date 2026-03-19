@@ -5,6 +5,7 @@
 
 void handleRoot(AsyncWebServerRequest *request);
 void handleHome(AsyncWebServerRequest *request);
+void handleBrews(AsyncWebServerRequest *request);
 void handlePad(AsyncWebServerRequest *request);
 void handleNetwork(AsyncWebServerRequest *request);
 void handleFirmware(AsyncWebServerRequest *request);
@@ -20,5 +21,6 @@ void handlePadColorsJS(AsyncWebServerRequest *request);
 void handlePadIOJS(AsyncWebServerRequest *request);
 void handlePadEditorJS(AsyncWebServerRequest *request);
 void handleActionEditorJS(AsyncWebServerRequest *request);
+void handleBrewsJS(AsyncWebServerRequest *request);
 
 #endif // WEB_PORTAL_PAGES_H

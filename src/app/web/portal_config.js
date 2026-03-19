@@ -24,7 +24,7 @@ async function loadMode() {
         
         // Hide Home and Firmware navigation buttons in AP mode (core mode)
         if (portalMode === 'core') {
-            document.querySelectorAll('.nav-tab[data-page="home"], .nav-tab[data-page="pad"], .nav-tab[data-page="firmware"]').forEach(tab => {
+            document.querySelectorAll('.nav-tab[data-page="home"], .nav-tab[data-page="brews"], .nav-tab[data-page="pad"], .nav-tab[data-page="firmware"]').forEach(tab => {
                 tab.style.display = 'none';
             });
             

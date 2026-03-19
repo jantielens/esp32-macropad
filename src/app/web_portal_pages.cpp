@@ -68,6 +68,24 @@ void handleHome(AsyncWebServerRequest *request) {
 		request->send(response);
 }
 
+void handleBrews(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+
+		if (web_portal_is_ap_mode_active()) {
+				request->redirect("/network.html");
+				return;
+		}
+
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"text/html",
+				brews_html_gz,
+				brews_html_gz_len,
+				"no-store"
+		);
+		request->send(response);
+}
+
 void handlePad(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 
@@ -223,6 +241,17 @@ void handleActionEditorJS(AsyncWebServerRequest *request) {
 				"application/javascript",
 				portal_action_editor_js_gz,
 				portal_action_editor_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+
+void handleBrewsJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_brews_js_gz,
+				portal_brews_js_gz_len,
 				"public, max-age=600"
 		);
 		request->send(response);

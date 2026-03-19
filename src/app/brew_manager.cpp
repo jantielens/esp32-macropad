@@ -1,11 +1,13 @@
 #include "brew_manager.h"
 
-#if HAS_DISPLAY && HAS_SENSOR_HX711
+#if HAS_SENSOR_HX711
 
+#include "brew_log.h"
 #include "sensors/hx711_sensor.h"
 #include "log_manager.h"
 
 #include <Arduino.h>
+#include <esp_heap_caps.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -19,6 +21,19 @@ static BrewPhase s_phase       = BREW_IDLE;
 static uint32_t  s_start_ms    = 0;    // millis() when brewing started
 static uint32_t  s_elapsed_ms  = 0;    // frozen elapsed when stopped
 
+// Series recording (PSRAM)
+static BrewSample* s_series    = nullptr;
+static uint16_t    s_series_count = 0;
+static uint32_t    s_last_sample_ms = 0;  // millis() of last 1 Hz sample
+
+// Deferred save — brew_stop() runs on the LVGL task whose stack lives in
+// PSRAM.  Flash I/O (LittleFS + NVS) disables the cache, making a PSRAM
+// stack inaccessible and triggering an assert.  We set a flag here and
+// perform the actual save in brew_tick(), which runs on the main Arduino
+// loop task (internal-RAM stack, flash-safe).
+static bool        s_save_pending = false;
+static float       s_save_weight  = 0;
+
 // ============================================================================
 // Control API
 // ============================================================================
@@ -28,7 +43,20 @@ void brew_start() {
     hx711_request_tare();
     s_elapsed_ms = 0;
     s_start_ms   = 0;
-    s_phase      = BREW_READY;
+    s_series_count = 0;
+    s_last_sample_ms = 0;
+
+    // Allocate series buffer in PSRAM
+    if (!s_series) {
+        s_series = (BrewSample*)heap_caps_malloc(
+            BREW_SERIES_MAX_SAMPLES * sizeof(BrewSample),
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!s_series) {
+            LOGW(TAG, "PSRAM alloc failed for series buffer");
+        }
+    }
+
+    s_phase = BREW_READY;
 }
 
 void brew_stop() {
@@ -37,8 +65,13 @@ void brew_stop() {
         s_phase = BREW_DONE;
         LOGI(TAG, "Stop: elapsed=%lu ms, weight=%.1f g",
              (unsigned long)s_elapsed_ms, hx711_get_weight());
+
+        // Defer save to brew_tick() (runs on main loop task with internal-RAM stack)
+        s_save_weight  = hx711_get_weight();
+        s_save_pending = true;
     } else if (s_phase == BREW_READY) {
         s_phase = BREW_DONE;
+        brew_free_series();
         LOGI(TAG, "Stop: cancelled from READY");
     }
 }
@@ -47,6 +80,7 @@ void brew_reset() {
     s_phase      = BREW_IDLE;
     s_elapsed_ms = 0;
     s_start_ms   = 0;
+    brew_free_series();
     LOGI(TAG, "Reset");
 }
 
@@ -54,14 +88,41 @@ void brew_reset() {
 // Tick — called every sensor poll cycle
 // ============================================================================
 
-void brew_tick() {
-    if (s_phase != BREW_READY) return;
+static void record_sample() {
+    if (!s_series || s_series_count >= BREW_SERIES_MAX_SAMPLES) return;
+    s_series[s_series_count].weight = hx711_get_weight();
+    s_series[s_series_count].flow   = hx711_get_flow_rate();
+    s_series_count++;
+}
 
-    float w = hx711_get_weight();
-    if (w >= BREW_AUTO_START_THRESHOLD_G) {
-        s_start_ms = millis();
-        s_phase    = BREW_BREWING;
-        LOGI(TAG, "Auto-start: weight=%.1f g", w);
+void brew_tick() {
+    // Deferred save — runs on main task (internal RAM stack, flash-safe)
+    if (s_save_pending) {
+        s_save_pending = false;
+        brew_log_save(s_elapsed_ms, s_save_weight, s_series, s_series_count);
+        brew_free_series();
+        LOGI(TAG, "Brew saved to flash");
+    }
+
+    if (s_phase == BREW_READY) {
+        float w = hx711_get_weight();
+        if (w >= BREW_AUTO_START_THRESHOLD_G) {
+            s_start_ms = millis();
+            s_last_sample_ms = s_start_ms;
+            s_series_count = 0;
+            record_sample();  // first sample at t=0
+            s_phase = BREW_BREWING;
+            LOGI(TAG, "Auto-start: weight=%.1f g", w);
+        }
+        return;
+    }
+
+    if (s_phase == BREW_BREWING) {
+        uint32_t now = millis();
+        if (now - s_last_sample_ms >= 1000) {
+            s_last_sample_ms += 1000;
+            record_sample();
+        }
     }
 }
 
@@ -104,6 +165,18 @@ bool brew_is_active() {
 }
 
 // ============================================================================
+// Series access
+// ============================================================================
+
+void brew_free_series() {
+    if (s_series) {
+        heap_caps_free(s_series);
+        s_series = nullptr;
+    }
+    s_series_count = 0;
+}
+
+// ============================================================================
 // Timer formatting (same logic as timer_engine, self-contained)
 // ============================================================================
 
@@ -135,7 +208,9 @@ void brew_manager_init() {
     s_phase      = BREW_IDLE;
     s_elapsed_ms = 0;
     s_start_ms   = 0;
+    s_series     = nullptr;
+    s_series_count = 0;
     LOGI(TAG, "Init");
 }
 
-#endif // HAS_DISPLAY && HAS_SENSOR_HX711
+#endif // HAS_SENSOR_HX711

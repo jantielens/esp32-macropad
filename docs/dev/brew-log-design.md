@@ -1,10 +1,27 @@
 # Brew Log Design
 
-> Status: Design — not yet implemented
+> Status: Approved — ready for implementation
 
 ## Goal
 
 Automatically log every completed brew to on-device storage. Users view brew history and per-brew charts via the web portal. No manual steps — brews are recorded transparently when the brew manager transitions to DONE.
+
+## Key Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Compile-time gate | `HAS_SENSOR_HX711` | Brew logging is a scale feature, not display-dependent |
+| Brews tab visibility | Always present in HTML | Simplest approach; all boards get the tab |
+| Chart.js source | CDN (`cdn.jsdelivr.net`) | Zero firmware size impact; graceful offline fallback |
+| Brew cap | 200, hardcoded | No user warning; auto-evict oldest silently |
+| Export All | Sequential `GET /api/brews/:id` | KISS; client assembles array |
+| Timestamp (`ts`) | Epoch seconds; `0` if NTP not synced | UI shows "Unknown date" for `ts == 0` |
+| `avg_flow` / `peak_flow` | Computed from `series` data in `brew_log_save()` | No running stats in `brew_manager`; single source of truth |
+| Series buffer | PSRAM; allocated at `brew_start()`, freed after save | ~4.8 KB; not held during IDLE |
+| NVS brew counter | `uint16_t` via `Preferences` | Simplest mechanism; max 65535, more than enough with 200-file cap |
+| `format` field in `fields[]` | Keep | Drives UI rendering; multiple fields can share the same format |
+| Single JS file | `portal_brews.js` (includes chart logic) | KISS; split later if needed |
+| Feature flag in `/api/info` | Not yet | May add `has_brews` later |
 
 ## Design Principles
 
@@ -154,6 +171,7 @@ Future sensor data (pressure, temperature) can be added as additional arrays wit
 - **Start**: Recording begins at auto-start (weight > 2 g), not at the moment the user taps "Start"
 - **End**: Recording stops when `brew_stop()` is called
 - **Storage cost**: ~10 bytes per sample (two floats as JSON). A 4-minute brew ≈ 240 samples ≈ 4–5 KB including metadata.
+- **Timestamp**: Uses NTP-synced epoch seconds. If NTP has not synced yet, `ts` is written as `0`. The UI renders `0` as "Unknown date".
 
 ## Storage
 
@@ -161,7 +179,7 @@ Future sensor data (pressure, temperature) can be added as additional arrays wit
 
 - Individual JSON files at `/brews/NNNN.json` (zero-padded 4-digit ID)
 - Matches existing patterns: `/config/pad_N.json`, `/icons/*.png`
-- Next ID tracked in NVS (survives reboots, independent of filesystem)
+- Next ID tracked in NVS as `uint16_t` via `Preferences` (survives reboots, independent of filesystem)
 - The numeric ID is derived from the filename — not stored inside the file
 
 ### Capacity
@@ -252,15 +270,14 @@ New **Brews** tab in the nav bar (`brews.html`).
 
 ### brew_manager.cpp
 
-- Add `s_peak_flow` tracking — update `max()` in `brew_tick()` during BREWING
-- Add 1 Hz series recording — ring buffer in PSRAM, sampled each second during BREWING
-- On `brew_stop()`: call `brew_log_save()` with finalized data
-- Expose `brew_get_peak_flow()` for the `[brew:]` binding
+- Add 1 Hz series recording — PSRAM ring buffer allocated at `brew_start()`, sampled each second during BREWING, freed after `brew_log_save()` completes
+- On `brew_stop()`: call `brew_log_save()` with finalized series data
+- `brew_log_save()` computes `peak_flow` and `avg_flow` from the recorded `series.flow[]` array (no running stats needed in brew_manager)
 
 ### brew_manager.h
 
-- Add `brew_get_peak_flow()` to query API
 - Add `BREW_SERIES_MAX_SAMPLES` constant (e.g. 600 = 10-minute max brew)
+- Expose series buffer pointer + sample count for `brew_log_save()` to consume
 
 ### New Files
 
@@ -269,15 +286,17 @@ New **Brews** tab in the nav bar (`brews.html`).
 | `brew_log.cpp/h` | LittleFS I/O: save, load, list, delete, stats, auto-eviction |
 | `web_portal_brews.cpp/h` | REST API endpoints for brew CRUD |
 | `web/brews.html` | Brew history page (list + detail views) |
+| `web/portal_brews.js` | Brew list/detail/chart logic (single file, includes Chart.js rendering) |
 
 ### Existing File Edits
 
 | File | Change |
 |------|--------|
-| `brew_binding.cpp` | Add `peak_flow` key to resolver |
-| `web_portal.cpp` | Register brew API routes |
-| `web/_nav.html` | Add Brews tab |
-| `portal.js` | Brews page logic (list, detail, charts, delete) |
+| `brew_binding.cpp` | Add `peak_flow` key to resolver (reads from last-saved brew log) |
+| `web_portal_routes.cpp` | Register brew API routes |
+| `web/_nav.html` | Add Brews tab (always visible, second position after Home) |
+| `portal_core.js` | Add `brews` to page detection logic |
+| `portal_config.js` | Hide Brews tab in Core/AP mode |
 
 ## Forward Compatibility Summary
 

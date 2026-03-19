@@ -1,7 +1,7 @@
 # Brew Log UI/UX Design
 
-> Status: Design — not yet implemented
-> Related: [brew-log-design.md](brew-log-design.md) (data format, storage, REST API)
+> Status: Approved — ready for implementation
+> Related: [brew-log-design.md](brew-log-design.md) (data format, storage, REST API, key decisions)
 
 ## Principles
 
@@ -233,10 +233,9 @@ Not implemented in V1 (no phases in free pour brews). The UI code simply skips t
 | File | Est. Lines | Purpose |
 |------|-----------|---------|
 | `brews.html` | ~100 | Page structure: list skeleton, detail skeleton, templates |
-| `portal_brews.js` | ~350 | List/detail logic: API calls, card rendering, stats computation, export/import |
-| `portal_brew_chart.js` | ~200 | Chart.js wrapper: createWeightChart(), createFlowChart(), linked cursors |
+| `portal_brews.js` | ~550 | All brew logic: API calls, card rendering, stats, export/import, Chart.js weight + flow charts, linked cursors |
 | Additions to `portal.css` | ~150 | Brew cards, stats banner, chart containers, responsive layout |
-| Addition to `_nav.html` | ~1 | Brews nav tab |
+| Addition to `_nav.html` | ~1 | Brews nav tab (second position: Home \| **Brews** \| Pads \| Network \| Firmware) |
 
 **Total**: ~800 lines of new code. No firmware size increase for Chart.js (CDN-hosted).
 

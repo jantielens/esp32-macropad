@@ -28,6 +28,7 @@
 #include "pad_binding.h"
 #include "scale_binding.h"
 #include "brew_binding.h"
+#include "brew_log.h"
 #include "brew_manager.h"
 #include "time_binding.h"
 #include "timer_binding.h"
@@ -275,6 +276,11 @@ void setup()
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
+	#endif
+
+	// Initialize brew log (LittleFS must be mounted)
+	#if HAS_SENSOR_HX711
+	brew_log_init();
 	#endif
 
 	// Start WiFi BEFORE initializing web server (critical for ESP32-C3)

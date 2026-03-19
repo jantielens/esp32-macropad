@@ -1816,3 +1816,237 @@ input[type="text"].label-style-input {
         cursor: default;
     }
 }
+
+/* ============================================================================
+   Brew Log Styles
+   ============================================================================ */
+
+/* Stats Banner */
+.brew-stats {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.brew-stat-box {
+    flex: 1;
+    min-width: 80px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 16px 12px;
+    text-align: center;
+    color: #fff;
+}
+
+.brew-stat-value {
+    display: block;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.brew-stat-label {
+    display: block;
+    font-size: 11px;
+    opacity: 0.85;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Action Bar */
+.brew-action-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.brew-action-bar .btn,
+.brew-detail-actions .btn {
+    width: auto;
+}
+
+/* Brew Cards */
+.brew-card {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: box-shadow 0.2s, transform 0.15s;
+    animation: brewCardIn 0.3s ease-out both;
+}
+
+.brew-card:hover {
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    transform: translateY(-1px);
+}
+
+.brew-card:focus {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
+
+@keyframes brewCardIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.brew-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 12px;
+}
+
+.brew-card-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: #1d1d1f;
+}
+
+.brew-card-date {
+    font-size: 12px;
+    color: #86868b;
+}
+
+.brew-card-stats {
+    display: flex;
+    gap: 20px;
+}
+
+.brew-card-stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.brew-card-stat-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1d1d1f;
+}
+
+.brew-card-stat-label {
+    font-size: 11px;
+    color: #86868b;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.brew-card-delete {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+    padding: 4px;
+}
+
+.brew-card-delete:hover {
+    opacity: 1;
+}
+
+/* Empty State */
+.brew-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #86868b;
+    font-size: 15px;
+}
+
+/* Detail View */
+.brew-back-btn {
+    margin-bottom: 16px;
+}
+
+.brew-detail-date {
+    font-size: 13px;
+    color: #86868b;
+    margin-bottom: 16px;
+}
+
+.brew-fields-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+}
+
+.brew-field {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.brew-field-label {
+    font-size: 11px;
+    color: #86868b;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+}
+
+.brew-field-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1d1d1f;
+}
+
+/* Charts */
+.brew-chart-container {
+    position: relative;
+    width: 100%;
+}
+
+.brew-chart-fallback {
+    text-align: center;
+    padding: 40px 20px;
+    color: #86868b;
+    font-size: 14px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+/* Detail Actions */
+.brew-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+/* Responsive: 2-column card grid on wider screens */
+@media (min-width: 600px) {
+    #brew-cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+    .brew-card {
+        margin-bottom: 0;
+    }
+}
+
+@media (max-width: 599px) {
+    .brew-stats {
+        gap: 8px;
+    }
+    .brew-stat-box {
+        padding: 12px 8px;
+    }
+    .brew-stat-value {
+        font-size: 18px;
+    }
+    .brew-card-stats {
+        gap: 12px;
+    }
+}

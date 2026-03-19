@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+{{HEADER}}
+<body>
+    <div class="container">
+        {{NAV}}
+
+        <!-- List View -->
+        <div id="brew-list-view">
+            <!-- Stats Banner -->
+            <div class="brew-stats" id="brew-stats">
+                <div class="brew-stat-box">
+                    <span class="brew-stat-value" id="stat-count">--</span>
+                    <span class="brew-stat-label">brews</span>
+                </div>
+                <div class="brew-stat-box">
+                    <span class="brew-stat-value" id="stat-avg-time">--</span>
+                    <span class="brew-stat-label">avg time</span>
+                </div>
+                <div class="brew-stat-box">
+                    <span class="brew-stat-value" id="stat-avg-weight">--</span>
+                    <span class="brew-stat-label">avg wt</span>
+                </div>
+                <div class="brew-stat-box">
+                    <span class="brew-stat-value" id="stat-avg-flow">--</span>
+                    <span class="brew-stat-label">avg flow</span>
+                </div>
+            </div>
+
+            <!-- Action Bar -->
+            <div class="brew-action-bar">
+                <button type="button" class="btn btn-secondary" id="brew-export-all-btn">Export All</button>
+                <button type="button" class="btn btn-secondary" id="brew-import-btn">Import</button>
+                <input type="file" accept=".json" id="brew-import-file" style="display:none;">
+                <button type="button" class="btn btn-danger" id="brew-clear-all-btn">Clear All</button>
+            </div>
+
+            <!-- Brew Cards Container -->
+            <div id="brew-cards"></div>
+
+            <!-- Empty State -->
+            <div id="brew-empty" class="brew-empty" style="display:none;">
+                <p>☕ No brews yet — start your first brew from the device!</p>
+            </div>
+        </div>
+
+        <!-- Detail View -->
+        <div id="brew-detail-view" style="display:none;">
+            <button type="button" class="btn btn-secondary brew-back-btn" id="brew-back-btn">← Back</button>
+
+            <div class="section">
+                <h2 id="brew-detail-name">Brew</h2>
+                <div class="brew-detail-date" id="brew-detail-date"></div>
+
+                <!-- Fields Grid -->
+                <div class="brew-fields-grid" id="brew-detail-fields"></div>
+            </div>
+
+            <!-- Weight Chart -->
+            <div class="section">
+                <h2>Weight</h2>
+                <div class="brew-chart-container">
+                    <canvas id="brew-weight-chart"></canvas>
+                    <div class="brew-chart-fallback" id="brew-weight-fallback" style="display:none;">
+                        Charts require internet connection for first load
+                    </div>
+                </div>
+            </div>
+
+            <!-- Flow Rate Chart -->
+            <div class="section">
+                <h2>Flow Rate</h2>
+                <div class="brew-chart-container">
+                    <canvas id="brew-flow-chart"></canvas>
+                    <div class="brew-chart-fallback" id="brew-flow-fallback" style="display:none;">
+                        Charts require internet connection for first load
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detail Actions -->
+            <div class="brew-detail-actions">
+                <button type="button" class="btn btn-secondary" id="brew-export-one-btn">Export</button>
+                <button type="button" class="btn btn-danger" id="brew-delete-one-btn">Delete</button>
+            </div>
+        </div>
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="/portal_core.js"></script>
+    <script src="/portal_config.js"></script>
+    <script src="/portal_health.js"></script>
+    <script src="/portal_brews.js"></script>
+</body>
+</html>

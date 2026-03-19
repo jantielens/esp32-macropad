@@ -4,6 +4,7 @@
 #if HAS_DISPLAY && HAS_SENSOR_HX711
 
 #include "binding_template.h"
+#include "brew_log.h"
 #include "brew_manager.h"
 #include "log_manager.h"
 
@@ -62,6 +63,11 @@ static bool lookup_value(const char* key, const char* fmt,
     }
     if (strcmp(key, "active") == 0) {
         strlcpy(out, brew_is_active() ? "1" : "0", out_len);
+        return true;
+    }
+    if (strcmp(key, "peak_flow") == 0) {
+        const char* f = fmt[0] ? fmt : "%.2f";
+        snprintf(out, out_len, f, brew_log_last_peak_flow());
         return true;
     }
     return false;

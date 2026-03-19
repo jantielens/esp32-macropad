@@ -1,6 +1,6 @@
 # Scale Guide
 
-This guide covers the HX711 load cell scale integration — bindings, actions, calibration workflow, guided brew mode, and REST API. It's aimed at users building rich touch-screen UIs (pad dashboards) for a scale application on an ESP32 Macropad device.
+This guide covers the HX711 load cell scale integration — bindings, actions, calibration workflow, guided brew mode, brew history logging, and REST API. It's aimed at users building rich touch-screen UIs (pad dashboards) for a scale application on an ESP32 Macropad device.
 
 > **Prerequisite**: The scale requires an HX711 load cell amplifier connected to two GPIO pins and `HAS_SENSOR_HX711` enabled in the board overrides. See the hardware setup section below.
 
@@ -14,6 +14,7 @@ The scale subsystem provides:
 - **Flow rate** — weight derivative computed over a 1-second window (grams per second)
 - **On-device calibration** — tare and calibrate directly from pad buttons
 - **Guided brew mode** — auto-tare and auto-start timer on first pour (brew manager)
+- **Brew history** — every brew is automatically saved with time-series data, viewable in the web portal with interactive charts
 - **Status feedback** — binding-driven status for taring/calibrating operations
 - **REST API** — tare, calibrate, and status endpoints for external tooling
 
@@ -403,6 +404,7 @@ The `[brew:]` binding scheme provides live brew workflow data. Syntax:
 | `timer` | time | `mm:ss` | Brew elapsed time (0 when idle/ready, frozen when done) |
 | `phase` | string | — | Current phase: `Idle`, `Ready`, `Brewing`, or `Done` |
 | `active` | string | — | `1` if Ready or Brewing, `0` otherwise |
+| `peak_flow` | float | `%.2f` | Peak flow rate from the most recent saved brew (g/s). Returns `0` until the first brew is saved. |
 
 #### Timer Format Options
 
@@ -474,6 +476,118 @@ A simple brew control layout — three dedicated buttons plus display labels:
 | Phase awareness | Yes (Idle/Ready/Brewing/Done) | No |
 
 Use the brew manager for the overall brew workflow (start → pour → done), and use manual timers alongside it for things like bloom countdowns.
+
+---
+
+## Brew Log (Brew History)
+
+Every completed brew is automatically saved to the device's flash storage with full time-series data. You can review past brews, view interactive charts, and export/import brew data — all from the web portal's **Brews** page.
+
+### How It Works
+
+When you **stop** a brew, the brew manager automatically:
+
+1. **Records the series** — weight and flow rate sampled at 1 Hz throughout the brew (up to 10 minutes / 600 samples)
+2. **Computes summary stats** — peak flow, average flow (excluding noise below 0.3 g/s), final weight, and duration
+3. **Saves to flash** — a JSON file is written to LittleFS with all fields and the full time-series
+4. **Timestamps the brew** — uses NTP time if available, otherwise stores 0 (shown as "Unknown date" in the UI)
+
+The device stores up to **200 brews**. When the limit is reached, the oldest brew is automatically evicted to make room for new ones.
+
+> **Note**: The series buffer (~4.8 KB) is allocated in PSRAM when brewing starts and freed after saving, so it doesn't consume memory when idle.
+
+### Web Portal — Brews Page
+
+The **Brews** tab in the web portal provides a full brew history interface:
+
+**List view:**
+- **Stats banner** — total brew count, average time, average weight, and average flow across all brews
+- **Brew cards** — each brew shows its name, date, duration, weight, and peak flow at a glance
+- **Delete individual brews** — tap the trash icon on any card
+
+**Detail view** (tap a brew card):
+- **Summary fields** — duration, weight, peak flow, average flow
+- **Weight chart** — interactive Chart.js line chart showing weight over time (blue gradient fill)
+- **Flow rate chart** — line chart with segment coloring by flow zone:
+  - Gray: < 1.5 g/s (idle/dripping)
+  - Green: 1.5–2.5 g/s (target zone)
+  - Orange: 2.5–3.5 g/s (fast)
+  - Red: > 3.5 g/s (too fast)
+- **Export** — download the brew as a JSON file
+- **Delete** — remove the brew from the device
+
+**Bulk actions:**
+- **Export All** — downloads every brew sequentially into a single JSON array
+- **Import** — upload a previously exported JSON file to restore brews on a new device or after a factory reset
+- **Clear All** — delete all brew history
+
+> **Tip**: Charts require an internet connection on first load (Chart.js is loaded from CDN). Once cached by your browser, they work offline.
+
+### Brew Report Format
+
+Each brew is stored as a self-contained JSON file. This is also the format used for export/import:
+
+```json
+{
+  "v": 1,
+  "fields": [
+    { "key": "name", "label": "Brew", "value": "Free Pour", "format": "text" },
+    { "key": "ts", "label": "Date", "value": 1742400000, "format": "datetime" },
+    { "key": "duration", "label": "Duration", "value": 56813, "unit": "ms", "format": "duration" },
+    { "key": "weight", "label": "Weight", "value": 250.3, "unit": "g", "format": "number" },
+    { "key": "peak_flow", "label": "Peak Flow", "value": 3.45, "unit": "g/s", "format": "number" },
+    { "key": "avg_flow", "label": "Avg Flow", "value": 2.12, "unit": "g/s", "format": "number" }
+  ],
+  "series": {
+    "interval_ms": 1000,
+    "weight": [0.0, 2.1, 8.5, 18.2, ...],
+    "flow": [0.00, 2.10, 6.40, 9.70, ...]
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `v` | Schema version (currently 1) |
+| `fields` | Array of summary fields, each with key, label, value, optional unit, and format type |
+| `series.interval_ms` | Time between samples (1000 ms = 1 Hz) |
+| `series.weight` | Weight in grams at each sample point |
+| `series.flow` | Flow rate in g/s at each sample point |
+
+### Brew Log REST API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/brews` | List all brews (newest first, summary fields only) |
+| `GET` | `/api/brews?id=N` | Get a single brew with full series data |
+| `DELETE` | `/api/brews?id=N` | Delete a specific brew |
+| `DELETE` | `/api/brews` | Delete all brews |
+| `POST` | `/api/brews/import` | Import brews from JSON (single object or array) |
+
+**List response:**
+```json
+{
+  "brews": [
+    { "id": 42, "v": 1, "fields": [...] },
+    { "id": 41, "v": 1, "fields": [...] }
+  ],
+  "count": 42,
+  "max": 200
+}
+```
+
+**Import request** — POST a single brew object or an array of brew objects (same format as export, without `id`).
+
+### Peak Flow Binding
+
+The `[brew:peak_flow]` binding returns the peak flow rate from the most recently saved brew. This is useful for showing "last brew" stats on your pad dashboard even after a reset:
+
+```
+Peak: [brew:peak_flow] g/s
+```
+→ `Peak: 3.45 g/s`
+
+> **Note**: This value is in-memory only and resets to 0 on device reboot. It updates each time a brew is saved.
 
 ---
 

@@ -18,6 +18,7 @@
 #endif
 #if HAS_SENSOR_HX711
 #include "web_portal_scale.h"
+#include "web_portal_brews.h"
 #endif
 
 void web_portal_register_routes(AsyncWebServer* server) {
@@ -32,6 +33,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Page routes
 		server->on("/", HTTP_GET, handleRoot);
 		server->on("/home.html", HTTP_GET, handleHome);
+		server->on("/brews.html", HTTP_GET, handleBrews);
 		server->on("/pads.html", HTTP_GET, handlePad);
 		server->on("/network.html", HTTP_GET, handleNetwork);
 		server->on("/firmware.html", HTTP_GET, handleFirmware);
@@ -49,6 +51,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/portal_pad_io.js", HTTP_GET, handlePadIOJS);
 		server->on("/portal_pad_editor.js", HTTP_GET, handlePadEditorJS);
 		server->on("/portal_action_editor.js", HTTP_GET, handleActionEditorJS);
+		server->on("/portal_brews.js", HTTP_GET, handleBrewsJS);
 
 		// API endpoints
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
@@ -237,6 +240,25 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		registerOptions("/api/scale");
 		server->on("/api/scale", HTTP_GET, handleGetScaleStatus);
+
+		// Brew log endpoints
+		registerOptions("/api/brews/import");
+		server->on(
+				"/api/brews/import",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostBrewImport
+		);
+
+		registerOptions("/api/brews");
+		server->on("/api/brews", HTTP_GET, handleGetBrews);
+		server->on("/api/brews", HTTP_DELETE, [](AsyncWebServerRequest *request) {
+				if (!portal_auth_gate(request)) return;
+				handleDeleteBrew(request);
+		});
 #endif
 
 }

@@ -264,6 +264,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_dispatch.h
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/brew_binding.cpp
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/data_stream.cpp
@@ -379,7 +380,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/dummy_sensor.h
 - **HAS_SENSOR_HX711**
   - src/app/action_dispatch.cpp
+  - src/app/app.ino
   - src/app/board_config.h
+  - src/app/brew_binding.cpp
+  - src/app/brew_manager.cpp
+  - src/app/brew_manager.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/scale_binding.cpp

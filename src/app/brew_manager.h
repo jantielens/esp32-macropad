@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_DISPLAY && HAS_SENSOR_HX711
+#if HAS_SENSOR_HX711
 
 #include <stdint.h>
 #include <stddef.h>
@@ -19,6 +19,10 @@
 //
 // The brew manager owns its own timer (raw millis()), independent of
 // timer_engine. Exposes state via getter functions for the [brew:] binding.
+//
+// Series recording: 1 Hz ring buffer in PSRAM captures weight + flow
+// during BREWING. Buffer is allocated at brew_start(), consumed by
+// brew_log_save() on stop, and freed after save.
 
 // Brew phases
 enum BrewPhase : uint8_t {
@@ -30,6 +34,15 @@ enum BrewPhase : uint8_t {
 
 // Auto-start weight threshold in grams above tare
 #define BREW_AUTO_START_THRESHOLD_G  2.0f
+
+// Maximum series samples (1 Hz recording, 600 = 10 minutes)
+#define BREW_SERIES_MAX_SAMPLES  600
+
+// One time-series sample (weight + flow at a given second)
+struct BrewSample {
+    float weight;
+    float flow;
+};
 
 // ---- Control API (called from action_dispatch) ----
 
@@ -60,8 +73,13 @@ bool        brew_is_active();            // true if READY or BREWING
 // Returns number of chars written (excl NUL).
 int brew_format_timer(const char* fmt, char* out, size_t out_len);
 
+// ---- Series access ----
+
+// Free the series buffer (called after brew_log_save completes).
+void brew_free_series();
+
 // ---- Init ----
 
 void brew_manager_init();
 
-#endif // HAS_DISPLAY && HAS_SENSOR_HX711
+#endif // HAS_SENSOR_HX711
