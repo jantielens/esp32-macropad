@@ -196,7 +196,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
 | jc3636w518 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
-| jc4880p433 |  | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  | ✅ |  | ✅ |
+| jc4880p433 | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  | ✅ |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)

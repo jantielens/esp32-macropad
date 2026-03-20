@@ -1060,6 +1060,11 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-ticks').value = (btn.widget_gauge_ticks !== undefined) ? btn.widget_gauge_ticks : 5;
     document.getElementById('pad-edit-gauge-needle-width').value = (btn.widget_gauge_needle_width !== undefined) ? btn.widget_gauge_needle_width : 2;
     document.getElementById('pad-edit-gauge-tick-width').value = (btn.widget_gauge_tick_width !== undefined) ? btn.widget_gauge_tick_width : 1;
+    document.getElementById('pad-edit-gauge-marker-value').value = btn.widget_gauge_marker_value || '';
+    document.getElementById('pad-edit-gauge-marker-zone-deg').value = (btn.widget_gauge_marker_zone_deg !== undefined) ? btn.widget_gauge_marker_zone_deg : 0;
+    document.getElementById('pad-edit-gauge-marker-tick-width').value = (btn.widget_gauge_marker_tick_width !== undefined) ? btn.widget_gauge_marker_tick_width : 2;
+    padSetBindableColor('pad-edit-gauge-marker-tick-color', btn.widget_gauge_marker_tick_color, '#FFFFFF');
+    padSetBindableColor('pad-edit-gauge-marker-zone-color', btn.widget_gauge_marker_zone_color, '#FF5722');
 
     // Sparkline widget fields
     document.getElementById('pad-edit-sparkline-data-binding').value = btn.widget_data_binding || '';
@@ -1268,6 +1273,13 @@ function padDialogOk(keepOpen) {
             btn.widget_gauge_needle_width = (isNaN(gNeedleW) || gNeedleW < 0) ? 2 : (gNeedleW > 10) ? 10 : gNeedleW;
             const gTickW = parseInt(document.getElementById('pad-edit-gauge-tick-width').value);
             btn.widget_gauge_tick_width = (isNaN(gTickW) || gTickW < 1) ? 1 : (gTickW > 5) ? 5 : gTickW;
+            btn.widget_gauge_marker_value = document.getElementById('pad-edit-gauge-marker-value').value.trim();
+            const gMZoneDeg = parseInt(document.getElementById('pad-edit-gauge-marker-zone-deg').value);
+            btn.widget_gauge_marker_zone_deg = (isNaN(gMZoneDeg) || gMZoneDeg < 0) ? 0 : (gMZoneDeg > 90) ? 90 : gMZoneDeg;
+            const gMTickW = parseInt(document.getElementById('pad-edit-gauge-marker-tick-width').value);
+            btn.widget_gauge_marker_tick_width = (isNaN(gMTickW) || gMTickW < 0) ? 2 : (gMTickW > 5) ? 5 : gMTickW;
+            btn.widget_gauge_marker_tick_color = padGetBindableColor('pad-edit-gauge-marker-tick-color');
+            btn.widget_gauge_marker_zone_color = padGetBindableColor('pad-edit-gauge-marker-zone-color');
         }
         if (wtype === 'sparkline') {
             const sDataBinding = document.getElementById('pad-edit-sparkline-data-binding').value.trim();

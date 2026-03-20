@@ -95,4 +95,17 @@
 // HX711 clock pin (GPIO 51 — adjacent to DOUT, near power header).
 #define HX711_SCK_PIN 51
 
+// ============================================================================
+// Audio (ES8311 codec over I2S, I2C control on shared bus 0)
+// Pin mapping from BSP: https://github.com/csvke/esp32_p4_jc4880p433c_bsp
+// ============================================================================
+#define HAS_AUDIO true
+#define AUDIO_I2S_MCLK   13    // ES8311 MCLK (master clock)
+#define AUDIO_I2S_BCLK   12    // ES8311 SCLK (bit clock)
+#define AUDIO_I2S_LRCK   10    // ES8311 LRCK (word select)
+#define AUDIO_I2S_DOUT    9    // ESP32 TX → ES8311 DSDIN (codec DAC input)
+#define AUDIO_I2S_DIN    -1    // Not used (mic path on GPIO 48)
+#define AUDIO_PA_PIN     11    // Power amplifier enable (active high)
+#define AUDIO_CODEC_ADDR 0x18  // ES8311 I2C address (shared Wire bus 0)
+
 #endif // BOARD_OVERRIDES_JC4880P433_H

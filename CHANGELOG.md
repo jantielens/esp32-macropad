@@ -8,9 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.12.0] - 2026-03-19
 
 ### Added
+- **Audio support for JC4880P433** — enabled ES8311 codec + power amplifier on the GUITION JC4880P433 board. Pin mapping sourced from the [community BSP](https://github.com/csvke/esp32_p4_jc4880p433c_bsp): MCLK=GPIO13, BCLK=GPIO12, LRCK=GPIO10, DOUT=GPIO9, PA enable=GPIO11. All existing audio features (beep patterns, tap/long-press cues, MQTT siren/volume, timer expiry beep) now work on this board.
 - **Multi-action buttons** — each button now supports up to 3 sequential actions per tap and per long-press (previously limited to 1). Actions execute in order: e.g., MQTT publish → play beep → navigate to screen. Useful for combined workflows like tare-then-start-brew, or publish-then-navigate. The pad editor shows only the first action by default; use the "+ Add tap/long-press action" link to reveal additional slots.
 - **Hero label typography controls** — label style overrides now support a larger built-in font size `font:48` for big, high-emphasis button labels (for measurements, status headlines, and other hero text use cases).
 - **Label style `font_upscale`** — new optional runtime scale modifier for label text (`font_upscale:1.0` to `font_upscale:2.0`). Works with both automatic scale-tier fonts and explicit `font:<size>` overrides, enabling combinations like `font:36;font_upscale:1.4`.
+- **Gauge target zone & markers** — gauges now support a bindable target value with visual markers across all active rings. Configure a target value (e.g., setpoint from MQTT), and the gauge draws a tick mark at that position plus an optional colored zone centered on it. The target zone angle specifies the total zone width in degrees (divided by 2 for ± rendering). Both the marker color and zone color support binding expressions for dynamic theming. Boundary ticks at the zone edges help delineate the target range. Useful for thermostat setpoints, power budget targets, or any "desired value" overlay.
 
 ### Changed
 - **JSON format**: Button actions are now stored as arrays (`"actions": [...]` / `"lp_actions": [...]`). The firmware transparently reads the old single-object format (`"action": {...}` / `"lp_action": {...}`) for backward compatibility with existing configs on the device.
