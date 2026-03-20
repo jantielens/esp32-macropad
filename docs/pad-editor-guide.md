@@ -80,7 +80,8 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 | Property | Values | What it does |
 |----------|--------|-------------|
-| `font` | `12`, `14`, `18`, `24`, `32`, `36` | Override the automatic font size |
+| `font` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
+| `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Scale the current font size at runtime for hero text |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
 | `y` | `-999` to `999` | Shift the label up (negative) or down (positive) in pixels |
@@ -89,15 +90,16 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 Combine them with semicolons:
 
-```
-font:36;align:left;mode:dot
+``` 
+font:48;align:left;mode:dot
 ```
 
-This renders a large left-aligned label that shows "..." when the text is too long.
+This renders a hero-sized left-aligned label that shows "..." when the text is too long.
 
 A few more examples:
 
 - `font:14;color:#FF0` — small yellow text
+- `font:36;font_upscale:1.4` — extra-large hero text (combined scale)
 - `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
 - `font:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)

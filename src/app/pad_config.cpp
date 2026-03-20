@@ -41,8 +41,9 @@ static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
 // Label Style DSL parser
 // ============================================================================
 // Format: "key:value;key:value;..."
-// Keys: font (12/14/18/24/32/36), align (left/center/right),
-//        x/y (int offset), mode (clip/scroll/dot/wrap), color (#RRGGBB)
+// Keys: font (12/14/18/24/32/36/48), font_upscale (1.0..2.0),
+//        align (left/center/right), x/y (int offset),
+//        mode (clip/scroll/dot/wrap), color (#RRGGBB)
 void label_style_parse(const char* dsl, LabelStyle* out) {
     memset(out, 0, sizeof(LabelStyle));
     if (!dsl || !dsl[0]) return;
@@ -64,8 +65,18 @@ void label_style_parse(const char* dsl, LabelStyle* out) {
 
             if (strcmp(key, "font") == 0) {
                 int sz = atoi(val);
-                if (sz == 12 || sz == 14 || sz == 18 || sz == 24 || sz == 32 || sz == 36) {
+                if (sz == 12 || sz == 14 || sz == 18 || sz == 24 || sz == 32 || sz == 36 || sz == 48) {
                     out->font_size = (uint8_t)sz;
+                }
+            } else if (strcmp(key, "font_upscale") == 0) {
+                char* end = nullptr;
+                double f = strtod(val, &end);
+                if (end != val) {
+                    if (f < 1.0) f = 1.0;
+                    if (f > 2.0) f = 2.0;
+                    // Store using LVGL transform scale units where 256 == 1.0x.
+                    out->font_upscale = (uint16_t)(f * 256.0 + 0.5);
+                    if (out->font_upscale <= 256) out->font_upscale = 0;
                 }
             } else if (strcmp(key, "align") == 0) {
                 if (strcmp(val, "left") == 0)        out->align = LABEL_ALIGN_LEFT;

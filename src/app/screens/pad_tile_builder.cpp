@@ -173,6 +173,7 @@ void PadScreen::buildTiles() {
             lv_obj_set_width(lbl_top, r.w - 8);
             pad_apply_long_mode(lbl_top, bcfg.style_top);
             lv_label_set_text(lbl_top, bcfg.label_top);
+            pad_apply_font_upscale(lbl_top, bcfg.style_top, PAD_LABEL_ANCHOR_TOP);
             lv_obj_align(lbl_top, LV_ALIGN_TOP_MID,
                          ui_ofs_x + bcfg.style_top.x_offset,
                          bcfg.style_top.y_offset + ui_ofs_y);
@@ -189,6 +190,7 @@ void PadScreen::buildTiles() {
             lv_obj_set_width(lbl_center, r.w - 8);
             pad_apply_long_mode(lbl_center, bcfg.style_center);
             lv_label_set_text(lbl_center, bcfg.label_center);
+            pad_apply_font_upscale(lbl_center, bcfg.style_center, PAD_LABEL_ANCHOR_CENTER);
             lv_obj_align(lbl_center, LV_ALIGN_CENTER,
                          ui_ofs_x + bcfg.style_center.x_offset,
                          bcfg.style_center.y_offset + ui_ofs_y);
@@ -237,6 +239,7 @@ void PadScreen::buildTiles() {
             lv_obj_set_width(lbl_bottom, r.w - 8);
             pad_apply_long_mode(lbl_bottom, bcfg.style_bottom);
             lv_label_set_text(lbl_bottom, bcfg.label_bottom);
+            pad_apply_font_upscale(lbl_bottom, bcfg.style_bottom, PAD_LABEL_ANCHOR_BOTTOM);
             lv_obj_align(lbl_bottom, LV_ALIGN_BOTTOM_MID,
                          ui_ofs_x + bcfg.style_bottom.x_offset,
                          bcfg.style_bottom.y_offset + ui_ofs_y);
@@ -270,6 +273,7 @@ void PadScreen::buildTiles() {
             lv_obj_set_width(tile.label_center, r.w - 8);
             pad_apply_long_mode(tile.label_center, bcfg.style_center);
             lv_label_set_text(tile.label_center, "");
+            pad_apply_font_upscale(tile.label_center, bcfg.style_center, PAD_LABEL_ANCHOR_CENTER);
             lv_obj_align(tile.label_center, LV_ALIGN_CENTER,
                          ui_ofs_x + bcfg.style_center.x_offset,
                          bcfg.style_center.y_offset + ui_ofs_y);
@@ -302,7 +306,9 @@ void PadScreen::buildTiles() {
 
 #if HAS_MQTT
         // Register template-based label bindings for labels containing [scheme:...]
-        auto addTemplateBinding = [this](lv_obj_t* lbl, const char* label_text) {
+        auto addTemplateBinding = [this](lv_obj_t* lbl, const char* label_text,
+                                         const LabelStyle& style,
+                                         PadLabelAnchorY anchorY) {
             if (!lbl || !label_text || !label_text[0]) return;
             if (!binding_template_has_bindings(label_text)) return;
             if (bindingCount >= MAX_BINDINGS) return;
@@ -310,14 +316,17 @@ void PadScreen::buildTiles() {
             rb.label = lbl;
             strlcpy(rb.templ, label_text, sizeof(rb.templ));
             rb.last[0] = '\0';
+            rb.style = style;
+            rb.anchorY = (uint8_t)anchorY;
             rb.active = true;
             bindingCount++;
             // Show placeholder until first resolve
             lv_label_set_text(lbl, "---");
+            pad_apply_font_upscale(lbl, style, anchorY);
         };
-        addTemplateBinding(tile.label_top, bcfg.label_top);
-        addTemplateBinding(tile.label_center, bcfg.label_center);
-        addTemplateBinding(tile.label_bottom, bcfg.label_bottom);
+        addTemplateBinding(tile.label_top, bcfg.label_top, bcfg.style_top, PAD_LABEL_ANCHOR_TOP);
+        addTemplateBinding(tile.label_center, bcfg.label_center, bcfg.style_center, PAD_LABEL_ANCHOR_CENTER);
+        addTemplateBinding(tile.label_bottom, bcfg.label_bottom, bcfg.style_bottom, PAD_LABEL_ANCHOR_BOTTOM);
 
         // Register color bindings for binding-based colors
         auto addColorBinding = [this](uint8_t ti, const char* templ, uint32_t def, uint8_t target) {

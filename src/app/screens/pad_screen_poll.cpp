@@ -27,6 +27,7 @@ void PadScreen::pollMqttBindings() {
         if (strcmp(resolved, rb.last) == 0) continue;
         strlcpy(rb.last, resolved, sizeof(rb.last));
         lv_label_set_text(rb.label, resolved);
+        pad_apply_font_upscale(rb.label, rb.style, (PadLabelAnchorY)rb.anchorY);
     }
 
     // Update widget tiles from their data binding template(s)
