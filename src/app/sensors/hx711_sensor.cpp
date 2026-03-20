@@ -53,6 +53,7 @@ static volatile bool s_persist_requested = false;
 
 // Deferred operation flags (set from LVGL task, consumed on main task)
 static volatile bool s_tare_requested      = false;
+static volatile bool s_tare_persist        = true;
 static volatile bool s_calibrate_requested = false;
 
 // Status tracking
@@ -198,6 +199,13 @@ void hx711_request_persist() {
 
 void hx711_request_tare() {
     s_tare_requested = true;
+    s_tare_persist   = true;
+    s_status = SCALE_TARING;
+}
+
+void hx711_request_tare_no_persist() {
+    s_tare_requested = true;
+    s_tare_persist   = false;
     s_status = SCALE_TARING;
 }
 
@@ -252,8 +260,10 @@ static void hx711_loop_cb() {
     // Deferred tare — runs on main task (internal RAM stack, no LVGL blocking)
     if (s_tare_requested && s_available) {
         s_tare_requested = false;
+        bool persist = s_tare_persist;
+        s_tare_persist = true;  // reset default
         hx711_tare();
-        s_persist_requested = true;  // persist new offset
+        if (persist) s_persist_requested = true;
         s_status = SCALE_IDLE;
     }
 

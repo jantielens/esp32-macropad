@@ -17,52 +17,87 @@
 //
 // Meta-phases:
 //   BREW_IDLE   — no template loaded
-//   BREW_ACTIVE — template running; brew_get_phase_name() returns the current
+//   BREW_ACTIVE — template running; brew_get_stage_name() returns the current
 //                 stage name (e.g. "Dosing", "Ready", "Brewing")
 //   BREW_DONE   — brew finished, timer frozen, report saved
 //
 // Stage types control how a stage advances:
 //   STAGE_MANUAL      — user calls brew_next() to advance
 //   STAGE_AUTO_WEIGHT — auto-advances when weight ≥ auto_threshold
-//   STAGE_RECORDING   — like AUTO_WEIGHT but also records weight/flow series
-//                       (only one RECORDING stage per template, must be last)
+//   STAGE_AUTO_TIME   — auto-advances after auto_time_ms elapsed in this stage
 //
-// Side effects (on_enter / on_exit) are named enums, not function pointers,
-// so they can be serialized to/from JSON for future config-driven templates.
+// Side effects (on_enter / on_exit) are bitmasks — multiple effects can fire
+// on a single transition.  Effects are serializable as strings for future
+// config-driven templates.
+//
+// Recording: the series buffer is allocated when the brew timer starts
+// (first pour detected on any AUTO_WEIGHT stage).  From that point onward,
+// 1 Hz weight+flow samples are captured regardless of stage type.  A marker
+// is emitted automatically whenever a stage transition occurs while the timer
+// is running.
 
 // ---- Stage behaviour ----
 
 enum BrewStageType : uint8_t {
     STAGE_MANUAL      = 0,
     STAGE_AUTO_WEIGHT = 1,
-    STAGE_RECORDING   = 2,
+    STAGE_AUTO_TIME   = 2,  // auto-advance after auto_time_ms
 };
 
-// Named side effects — serializable as strings for future JSON templates.
-// "none"=0, "tare"=1, "capture_dose"=2
-enum BrewSideEffect : uint8_t {
-    EFFECT_NONE         = 0,
-    EFFECT_TARE         = 1,
-    EFFECT_CAPTURE_DOSE = 2,
+// Side-effect bitmask flags — combine with bitwise OR.
+// Example: EFFECT_TARE | EFFECT_BEEP
+#define EFFECT_NONE            0x00
+#define EFFECT_TARE            0x01  // tare the scale
+#define EFFECT_CAPTURE_DOSE    0x02  // capture weight → built-in "dose" slot (legacy)
+#define EFFECT_BEEP            0x04  // play a short audio cue
+#define EFFECT_CAPTURE_WEIGHT  0x08  // capture weight → named capture slot (uses capture_key/label/unit)
+#define EFFECT_MARKER          0x10  // emit a named marker into the series timeline
+
+typedef uint8_t BrewEffects;  // bitmask of EFFECT_* flags
+
+// Maximum named capture slots per brew
+#define BREW_CAPTURE_MAX   8
+// Maximum markers per brew
+#define BREW_MARKER_MAX    16
+
+struct BrewCapture {
+    char  key[16];    // field key in brew log, e.g. "bloom_water"
+    char  label[24];  // display label, e.g. "Bloom Water"
+    char  unit[8];    // unit string, e.g. "g"
+    float value;
+};
+
+struct BrewMarker {
+    uint16_t sample_index;  // index into series (seconds since timer start)
+    char     label[24];     // marker label, e.g. "Bloom wait"
 };
 
 struct BrewStage {
-    char           name[24];         // display name shown via [brew:phase]
+    char           name[24];         // display name shown via [brew:stage]
     char           instruction[128]; // user-facing guidance shown via [brew:instruction]
     char           next_label[48];   // label for the advance button on this stage
     BrewStageType  type;
-    BrewSideEffect on_enter;         // side effect fired when entering stage
-    BrewSideEffect on_exit;          // side effect fired when leaving stage (brew_next)
-    float          auto_threshold;   // g above tare; used by AUTO_WEIGHT and RECORDING
+    BrewEffects    on_enter;         // bitmask fired when entering stage
+    BrewEffects    on_exit;          // bitmask fired when leaving stage
+    float          auto_threshold;   // g above tare; used by AUTO_WEIGHT
+    float          target_weight;    // guidance target weight for this stage (0 = none)
+    float          target_flow_rate; // guidance flow rate target g/s (0 = none)
+    uint32_t       auto_time_ms;     // duration for AUTO_TIME stages (0 = unused)
+    // Fields used when EFFECT_CAPTURE_WEIGHT is set (in on_enter or on_exit):
+    char           capture_key[16];  // key for named capture, e.g. "bloom_water"
+    char           capture_label[24];// display label, e.g. "Bloom Water"
+    char           capture_unit[8];  // unit string, e.g. "g"
 };
 
 struct BrewTemplate {
-    char             name[24];       // machine name: "v60", "free_pour"
+    char             name[24];        // machine name: "v60", "rao_v60"
+    char             display_name[48];// human-friendly name for UI
+    char             description[128];// template description / help text
     char             start_label[48]; // advance button label when Idle (before starting)
     char             done_label[48];  // advance button label when Done (restart prompt)
     const BrewStage* stages;
     uint8_t          stage_count;
-    bool             is_dynamic;     // true = heap-allocated; freed on brew_reset/unregister
+    bool             is_dynamic;      // true = heap-allocated; freed on brew_reset/unregister
 };
 
 // ---- Meta-phase ----
@@ -96,8 +131,8 @@ void brew_next();
 // Smart single-button advance — does the right thing at every state:
 //   Idle   → brew_start(template_name)
 //   Manual → brew_next()
-//   Recording → brew_stop()
-//   Auto-weight → no-op (auto-starts on pour)
+//   Timer running → brew_stop()
+//   Auto-weight / Auto-time → no-op (auto-advances)
 //   Done   → brew_reset() + brew_start(same template)
 void brew_advance(const char* template_name = nullptr);
 
@@ -114,20 +149,29 @@ void brew_tick();
 
 // ---- Query API (called from brew_binding resolver) ----
 
-BrewPhase   brew_get_phase();
 // Returns stage name when ACTIVE, "Idle" or "Done" otherwise.
-const char* brew_get_phase_name();
+const char* brew_get_stage_name();
 uint32_t    brew_get_timer_ms();         // elapsed ms (0 when idle/not yet brewing)
 float       brew_get_weight();           // current weight from HX711
 float       brew_get_flow_rate();        // current flow rate from HX711
 bool        brew_is_active();            // true if BREW_ACTIVE
 const char* brew_get_template_name();    // active template name, or "" when idle
 float       brew_get_dose_weight();      // captured dose weight (0 if not captured)
-float       brew_get_water_weight();     // water poured: live during RECORDING, frozen after Done (0 otherwise)
+float       brew_get_water_weight();     // water poured: live while timer running, frozen after Done (0 otherwise)
+float       brew_get_stage_weight_target();     // current stage target weight (0 if none)
+float       brew_get_stage_weight_remaining();  // max(0, target - weight) grams left
+float       brew_get_stage_flow_target();        // current stage target flow rate g/s (0 if none)
+uint32_t    brew_get_stage_time_target_ms();     // current stage auto_time_ms (0 if not AUTO_TIME)
+uint32_t    brew_get_stage_time_remaining_ms(); // remaining ms for AUTO_TIME stage (0 otherwise)
+uint32_t    brew_get_stage_time_current_ms();   // ms since current stage entered (0 when idle)
+const char* brew_get_display_name();     // template display_name (falls back to name)
 // Current stage instruction text, or "" when Idle/Done. Use [brew:instruction|fallback].
 const char* brew_get_instruction();
 // Label for the single advance button — changes with each stage.
 const char* brew_get_next_label();
+// Access captured data points (for brew_binding)
+uint8_t     brew_get_capture_count();
+const BrewCapture* brew_get_capture(uint8_t index);
 // Pre-prime the idle label so [brew:next_label] shows the template's
 // start_label before the first tap. Call from action_dispatch when handling
 // advance:<name> — even before the brew starts.

@@ -38,71 +38,112 @@ static void parse_brew_params(const char* params,
 }
 
 // ============================================================================
+// Format helpers — reduce repetition in lookup_value()
+// ============================================================================
+
+static bool format_float(const char* fmt, const char* default_fmt,
+                         float value, char* out, size_t out_len) {
+    snprintf(out, out_len, fmt[0] ? fmt : default_fmt, value);
+    return true;
+}
+
+static bool format_uint(const char* fmt, const char* default_fmt,
+                        unsigned value, char* out, size_t out_len) {
+    snprintf(out, out_len, fmt[0] ? fmt : default_fmt, value);
+    return true;
+}
+
+// ============================================================================
 // Key→value lookup
 // ============================================================================
 
 static bool lookup_value(const char* key, const char* fmt,
                          char* out, size_t out_len) {
-    if (strcmp(key, "weight") == 0) {
-        const char* f = fmt[0] ? fmt : "%.1f";
-        snprintf(out, out_len, f, brew_get_weight());
-        return true;
-    }
-    if (strcmp(key, "flow_rate") == 0) {
-        const char* f = fmt[0] ? fmt : "%.1f";
-        snprintf(out, out_len, f, brew_get_flow_rate());
-        return true;
-    }
+    if (strcmp(key, "weight") == 0)
+        return format_float(fmt, "%.1f", brew_get_weight(), out, out_len);
+    if (strcmp(key, "flow_rate") == 0)
+        return format_float(fmt, "%.1f", brew_get_flow_rate(), out, out_len);
     if (strcmp(key, "timer") == 0) {
         brew_format_timer(fmt, out, out_len);
         return true;
     }
-    if (strcmp(key, "phase") == 0) {
-        strlcpy(out, brew_get_phase_name(), out_len);
+    if (strcmp(key, "stage") == 0) {
+        strlcpy(out, brew_get_stage_name(), out_len);
         return true;
     }
     if (strcmp(key, "active") == 0) {
         strlcpy(out, brew_is_active() ? "1" : "0", out_len);
         return true;
     }
-    if (strcmp(key, "peak_flow") == 0) {
-        const char* f = fmt[0] ? fmt : "%.2f";
-        snprintf(out, out_len, f, brew_log_last_peak_flow());
-        return true;
-    }
+    if (strcmp(key, "peak_flow") == 0)
+        return format_float(fmt, "%.2f", brew_log_last_peak_flow(), out, out_len);
     if (strcmp(key, "template") == 0) {
         const char* name = brew_get_template_name();
         strlcpy(out, name[0] ? name : "Idle", out_len);
         return true;
     }
-    if (strcmp(key, "dose") == 0) {
-        const char* f = fmt[0] ? fmt : "%.1f";
-        snprintf(out, out_len, f, brew_get_dose_weight());
-        return true;
-    }
-    if (strcmp(key, "water") == 0) {
-        const char* f = fmt[0] ? fmt : "%.1f";
-        snprintf(out, out_len, f, brew_get_water_weight());
-        return true;
-    }
+    if (strcmp(key, "dose") == 0)
+        return format_float(fmt, "%.1f", brew_get_dose_weight(), out, out_len);
+    if (strcmp(key, "water") == 0)
+        return format_float(fmt, "%.1f", brew_get_water_weight(), out, out_len);
     if (strcmp(key, "ratio") == 0) {
         float dose = brew_get_dose_weight();
         if (dose <= 0.0f) {
             strlcpy(out, "---", out_len);
             return true;
         }
-        const char* f = fmt[0] ? fmt : "%.1f";
-        snprintf(out, out_len, f, brew_get_water_weight() / dose);
-        return true;
+        return format_float(fmt, "%.1f", brew_get_water_weight() / dose, out, out_len);
     }
     if (strcmp(key, "instruction") == 0) {
         const char* instr = brew_get_instruction();
         if (!instr[0]) return false;  // empty → binding returns fallback via pipe
-        strlcpy(out, instr, out_len);
+        // Instruction text may contain inner bindings like [brew:stage_weight_target],
+        // so resolve them before returning.
+        binding_template_resolve(instr, out, out_len);
         return true;
     }
     if (strcmp(key, "next_label") == 0) {
         strlcpy(out, brew_get_next_label(), out_len);
+        return true;
+    }
+    // ---- stage_weight_* ----
+    if (strcmp(key, "stage_weight_target") == 0)
+        return format_float(fmt, "%.0f", brew_get_stage_weight_target(), out, out_len);
+    if (strcmp(key, "stage_weight_current") == 0)
+        return format_float(fmt, "%.1f", brew_get_weight(), out, out_len);
+    if (strcmp(key, "stage_weight_remaining") == 0)
+        return format_float(fmt, "%.0f", brew_get_stage_weight_remaining(), out, out_len);
+    if (strcmp(key, "stage_weight_pct") == 0) {
+        float target = brew_get_stage_weight_target();
+        float pct = (target > 0.0f) ? (brew_get_weight() / target * 100.0f) : 0.0f;
+        return format_float(fmt, "%.0f", pct, out, out_len);
+    }
+    // ---- stage_time_* ----
+    if (strcmp(key, "stage_time_target") == 0)
+        return format_uint(fmt, "%u", (unsigned)(brew_get_stage_time_target_ms() / 1000), out, out_len);
+    if (strcmp(key, "stage_time_current") == 0)
+        return format_uint(fmt, "%u", (unsigned)(brew_get_stage_time_current_ms() / 1000), out, out_len);
+    if (strcmp(key, "stage_time_remaining") == 0)
+        return format_uint(fmt, "%u", (unsigned)(brew_get_stage_time_remaining_ms() / 1000), out, out_len);
+    if (strcmp(key, "stage_time_pct") == 0) {
+        uint32_t target_ms = brew_get_stage_time_target_ms();
+        float pct = (target_ms > 0) ? ((float)brew_get_stage_time_current_ms() / (float)target_ms * 100.0f) : 0.0f;
+        return format_float(fmt, "%.0f", pct, out, out_len);
+    }
+    // ---- stage_flow_* ----
+    if (strcmp(key, "stage_flow_target") == 0)
+        return format_float(fmt, "%.1f", brew_get_stage_flow_target(), out, out_len);
+    if (strcmp(key, "stage_flow_current") == 0)
+        return format_float(fmt, "%.1f", brew_get_flow_rate(), out, out_len);
+    if (strcmp(key, "stage_flow_pct") == 0) {
+        float target = brew_get_stage_flow_target();
+        float pct = (target > 0.0f) ? (brew_get_flow_rate() / target * 100.0f) : 0.0f;
+        return format_float(fmt, "%.0f", pct, out, out_len);
+    }
+    if (strcmp(key, "display_name") == 0) {
+        const char* dn = brew_get_display_name();
+        if (!dn[0]) return false;
+        strlcpy(out, dn, out_len);
         return true;
     }
     return false;

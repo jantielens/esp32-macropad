@@ -220,6 +220,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/audio.cpp
   - src/app/audio.h
   - src/app/board_config.h
+  - src/app/brew_manager.cpp
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/ha_discovery.cpp
@@ -387,6 +388,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/brew_log.h
   - src/app/brew_manager.cpp
   - src/app/brew_manager.h
+  - src/app/brew_templates.cpp
+  - src/app/brew_templates.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/scale_binding.cpp

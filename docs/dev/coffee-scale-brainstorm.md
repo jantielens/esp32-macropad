@@ -228,7 +228,7 @@ Research into what premium scales (Acaia Lunar/Pearl, Decent Scale, Felicita Arc
 | **Pour rate guidance bands** | Show ideal flow rate zone (e.g., 3–5 g/s shaded on sparkline), alert if too fast/slow | Medium — sparkline reference lines could support this |
 | **Cumulative pour curve** | Weight-over-time graph showing actual vs. ideal pour profile | Medium — sparkline with `[brew:weight]` data binding |
 | **Phase-level stats** | Per-phase pour time, total water poured, avg flow rate | Medium — useful for brew history/review |
-| **Target weight countdown** | Show "Xg remaining" instead of or alongside absolute weight | High — simple binding: `[expr:[brew:target]-[brew:weight];%.0f]` |
+| **Target weight countdown** | Show "Xg remaining" instead of or alongside absolute weight | High — built-in: `[brew:stage_weight_remaining]` or `[expr:[brew:stage_weight_target]-[brew:weight];%.0f]` |
 | **Color-coded flow rate** | Green = ideal, yellow = too slow, red = too fast | Medium — sparkline bindable line colors could do this |
 
 ### Espresso-Specific (Future Expansion)

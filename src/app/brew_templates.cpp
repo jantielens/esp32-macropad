@@ -54,17 +54,47 @@ void brew_templates_clear_dynamic() {
 // ============================================================================
 // Built-in: free_pour
 // ============================================================================
-// Two stages: Ready (auto-start on weight) → Brewing (recording).
-// Tare fires on entering Ready.
+// Two stages: Ready (auto-start on weight) → Brewing (manual stop).
+// Tare fires on entering Ready. Recording starts automatically when pour is
+// detected and continues until the user taps Done.
 
 static const BrewStage s_free_pour_stages[] = {
-    //  name        instruction                                              next_label  type               on_enter    on_exit      threshold
-    { "Ready",   "Place your cup on the scale and start pouring when ready", "Armed",   STAGE_AUTO_WEIGHT, EFFECT_TARE, EFFECT_NONE, 2.0f },
-    { "Brewing", "Pouring - Tap Done when brew is finished",                 "Done",    STAGE_RECORDING,   EFFECT_NONE, EFFECT_NONE, 0.0f },
+    {
+        "Ready",                                                       // name
+        "Place your cup on the scale and start pouring when ready",     // instruction
+        "Armed",                                                       // next_label
+        STAGE_AUTO_WEIGHT,                                              // type
+        EFFECT_TARE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        2.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+    {
+        "Brewing",                                                      // name
+        "Pouring - Tap Done when brew is finished",                     // instruction
+        "Done",                                                         // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_NONE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        0.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
 };
 
 static const BrewTemplate s_free_pour_template = {
     "free_pour",
+    "Free Pour",         // display_name
+    "",                  // description
     "Start brew",        // start_label (Idle)
     "Start brew again",  // done_label  (Done)
     s_free_pour_stages,
@@ -75,26 +105,215 @@ static const BrewTemplate s_free_pour_template = {
 // ============================================================================
 // Built-in: v60
 // ============================================================================
-// Four stages:
-//   Dosing   — user weighs beans; brew_next() captures dose and moves to Prep cup
-//   Prep cup — user grinds and preps; brew_next() tares and moves to Ready
-//   Ready    — armed; auto-advances when first water pour exceeds threshold
-//   Brewing  — timer running; brew_stop() ends and saves
+// Five stages:
+//   Place cup — user places empty dosing cup on scale; tare fires at start
+//   Dosing    — tares on enter (zeroes out cup); on_exit captures dose
+//   Prep cup  — user grinds and preps; brew_next() tares and moves to Ready
+//   Ready     — armed; auto-advances when first water pour exceeds threshold
+//               (this starts the timer + recording)
+//   Brewing   — recording continues; user taps Done to finish
 
 static const BrewStage s_v60_stages[] = {
-    //  name        instruction                                                             next_label   type               on_enter    on_exit              threshold
-    { "Dosing",   "Weigh your beans on the scale, then tap Next to log the dose",          "Next",      STAGE_MANUAL,      EFFECT_NONE, EFFECT_CAPTURE_DOSE, 0.0f },
-    { "Prep cup", "Remove beans and grind them. Prep cup and V60 on scale, tap Next to arm", "Next",    STAGE_MANUAL,      EFFECT_NONE, EFFECT_NONE,         0.0f },
-    { "Ready",    "Start pouring when ready",                                              "Armed",     STAGE_AUTO_WEIGHT, EFFECT_TARE, EFFECT_NONE,         2.0f },
-    { "Brewing",  "Pouring - Tap Done when brew is finished",                              "Done",      STAGE_RECORDING,   EFFECT_NONE, EFFECT_NONE,         0.0f },
+    {
+        "Place cup",                                                    // name
+        "Place your empty dosing cup on the scale, then tap Weigh beans", // instruction
+        "Weigh beans",                                                  // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_NONE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        0.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+    {
+        "Dosing",                                                       // name
+        "Add beans to the cup, then tap Log dose when done",            // instruction
+        "Log dose",                                                     // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_TARE,                                                    // on_enter
+        EFFECT_CAPTURE_DOSE,                                            // on_exit
+        0.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+    {
+        "Prep cup",                                                     // name
+        "Remove beans and grind them. Prep cup and V60 on scale, tap Next to arm", // instruction
+        "Next",                                                         // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_NONE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        0.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+    {
+        "Ready",                                                        // name
+        "Start pouring when ready",                                     // instruction
+        "Armed",                                                        // next_label
+        STAGE_AUTO_WEIGHT,                                              // type
+        EFFECT_TARE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        2.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+    {
+        "Brewing",                                                      // name
+        "Pouring - Tap Done when brew is finished",                     // instruction
+        "Done",                                                         // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_NONE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        0.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
 };
 
 static const BrewTemplate s_v60_template = {
     "v60",
-    "Start V60",        // start_label (Idle)
-    "Start V60 again",  // done_label  (Done)
+    "V60 Pour-Over",     // display_name
+    "",                  // description
+    "Start V60",         // start_label (Idle)
+    "Start V60 again",   // done_label  (Done)
     s_v60_stages,
-    4,
+    5,
+    false,
+};
+
+// ============================================================================
+// Built-in: rao_v60
+// ============================================================================
+// Six stages exercising all new building blocks:
+//   Place cup — user places empty dosing cup on scale; tare fires at start
+//   Dose beans — tares on enter (zeroes out cup); captures dose weight on exit
+//   Prep      — manual, tares on enter
+//   Arm pour  — auto_weight, tares, starts timer+recording on first pour
+//   Bloom     — auto_time 45s, beep on enter, captures bloom water on exit, target flow 6 g/s
+//   Main pour — manual, beep on enter, target 250g, target flow 5 g/s, user taps Done
+
+static const BrewStage s_rao_v60_stages[] = {
+    {
+        "Place cup",                                                    // name
+        "Place your empty dosing cup on the scale, then tap Tare scale", // instruction
+        "Tare scale",                                                   // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_NONE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        0.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+    {
+        "Dose beans",                                                   // name
+        "Add beans to the cup, tap Log dose when done",                 // instruction
+        "Log dose",                                                     // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_TARE,                                                    // on_enter
+        EFFECT_CAPTURE_DOSE,                                            // on_exit
+        0.0f,                                                           // auto_threshold
+        16.0f,                                                          // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+    {
+        "Prep",                                                         // name
+        "Grind beans, rinse filter, place cup + V60 on scale. Tap Ready to arm", // instruction
+        "Ready",                                                        // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_TARE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        0.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+    {
+        "Arm pour",                                                     // name
+        "Start pouring when ready",                                     // instruction
+        "Armed",                                                        // next_label
+        STAGE_AUTO_WEIGHT,                                              // type
+        EFFECT_TARE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        2.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight (no target; Bloom owns the pour target)
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+    {
+        "Bloom",                                                        // name
+        "Pour to [brew:stage_weight_target]g, then swirl gently. [brew:stage_time_remaining]s remaining", // instruction
+        "Blooming...",                                                  // next_label
+        STAGE_AUTO_TIME,                                                // type
+        EFFECT_BEEP,                                                    // on_enter
+        EFFECT_CAPTURE_WEIGHT,                                          // on_exit
+        0.0f,                                                           // auto_threshold
+        60.0f,                                                          // target_weight
+        6.0f,                                                           // target_flow_rate
+        45000,                                                          // auto_time_ms
+        "bloom_water",                                                  // capture_key
+        "Bloom Water",                                                  // capture_label
+        "g"                                                             // capture_unit
+    },
+    {
+        "Main pour",                                                    // name
+        "Pour steadily in circles to [brew:stage_weight_target]g, tap Done when finished", // instruction
+        "Done",                                                         // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_BEEP,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        0.0f,                                                           // auto_threshold
+        250.0f,                                                         // target_weight
+        5.0f,                                                           // target_flow_rate
+        0,                                                              // auto_time_ms
+        "",                                                             // capture_key
+        "",                                                             // capture_label
+        ""                                                              // capture_unit
+    },
+};
+
+static const BrewTemplate s_rao_v60_template = {
+    "rao_v60",
+    "James Rao V60",                                     // display_name
+    "Single-pour V60 with bloom stage and 5:00 target",  // description
+    "Start Rao V60",     // start_label (Idle)
+    "Brew again",        // done_label  (Done)
+    s_rao_v60_stages,
+    6,
     false,
 };
 
@@ -105,6 +324,7 @@ static const BrewTemplate s_v60_template = {
 void brew_templates_init() {
     brew_template_register(&s_free_pour_template);
     brew_template_register(&s_v60_template);
+    brew_template_register(&s_rao_v60_template);
     LOGI(TAG, "Registered %u built-in templates", (unsigned)s_registry_count);
 }
 

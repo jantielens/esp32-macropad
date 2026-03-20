@@ -105,6 +105,10 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div class="form-group">';
     h += '<label for="' + prefix + '-brew-cmd">Brew Command</label>';
     h += '<select id="' + prefix + '-brew-cmd">';
+    h += '<optgroup label="Rao V60">';
+    h += '<option value="advance:rao_v60">Rao V60 — Advance (single button, recommended)</option>';
+    h += '<option value="start:rao_v60">Rao V60 — Start only (multi-button layouts)</option>';
+    h += '</optgroup>';
     h += '<optgroup label="V60">';
     h += '<option value="advance:v60">V60 — Advance (single button, recommended)</option>';
     h += '<option value="start:v60">V60 — Start only (multi-button layouts)</option>';

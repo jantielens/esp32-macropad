@@ -198,6 +198,7 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         if (!cmd || !cmd[0]) cmd = "start";
         if (strncmp(cmd, "advance:", 8) == 0) {
             const char* tpl = cmd + 8;
+            brew_hint_template(tpl);  // pre-prime [brew:next_label] before first tap
             LOGI(TAG, "%s brew: advance template='%s'", label, tpl);
             brew_advance(tpl);
         } else if (strcmp(cmd, "advance") == 0) {

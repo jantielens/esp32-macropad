@@ -23,6 +23,11 @@ void hx711_tare();
 // Request deferred tare (non-blocking, runs on main loop next cycle).
 void hx711_request_tare();
 
+// Request deferred tare without persisting to NVS.  Use this for temporary
+// tares (e.g. during brew operations) to avoid flash writes that can crash
+// the USB-CDC ISR when its PSRAM-resident TX buffer becomes inaccessible.
+void hx711_request_tare_no_persist();
+
 // Request deferred calibration using current cal_weight (non-blocking).
 void hx711_request_calibrate();
 

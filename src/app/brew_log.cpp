@@ -83,7 +83,9 @@ void brew_log_init() {
 
 uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
                        const char* template_name, float dose_weight,
-                       const BrewSample* series, uint16_t sample_count) {
+                       const BrewSample* series, uint16_t sample_count,
+                       const BrewMarker* markers, uint8_t marker_count,
+                       const BrewCapture* captures, uint8_t capture_count) {
     // Evict if at capacity
     if (brew_log_count() >= BREW_LOG_MAX_BREWS) {
         evict_oldest();
@@ -124,7 +126,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
     }
 
     // Write JSON manually for memory efficiency (series can be large)
-    f.print("{\"v\":1,\"fields\":[");
+    f.print("{\"v\":2,\"fields\":[");
     if (template_name && template_name[0]) {
         f.printf("{\"key\":\"template\",\"label\":\"Template\",\"value\":\"%s\",\"format\":\"text\"},", template_name);
     } else {
@@ -144,7 +146,31 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
         f.printf(",{\"key\":\"ratio\",\"label\":\"Ratio\",\"value\":%.1f,\"format\":\"number\"}", ratio);
     }
 
-    f.print("],\"series\":{\"interval_ms\":1000,\"weight\":[");
+    // Write named captures as additional fields
+    for (uint8_t i = 0; i < capture_count; i++) {
+        const BrewCapture& c = captures[i];
+        if (c.unit[0]) {
+            f.printf(",{\"key\":\"%s\",\"label\":\"%s\",\"value\":%.1f,\"unit\":\"%s\",\"format\":\"number\"}",
+                     c.key, c.label, c.value, c.unit);
+        } else {
+            f.printf(",{\"key\":\"%s\",\"label\":\"%s\",\"value\":%.1f,\"format\":\"number\"}",
+                     c.key, c.label, c.value);
+        }
+    }
+
+    f.print("],");
+
+    // Write markers
+    f.print("\"markers\":[");
+    for (uint8_t i = 0; i < marker_count; i++) {
+        if (i > 0) f.print(',');
+        f.printf("{\"t\":%u,\"label\":\"%s\"}",
+                 (unsigned)markers[i].sample_index, markers[i].label);
+    }
+    f.print("],");
+
+    // Write series
+    f.print("\"series\":{\"interval_ms\":1000,\"weight\":[");
 
     for (uint16_t i = 0; i < sample_count; i++) {
         if (i > 0) f.print(',');

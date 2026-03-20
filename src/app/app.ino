@@ -349,9 +349,11 @@ void setup()
 	expr_binding_init();
 	pad_binding_init();
 	scale_binding_init();
+	#if HAS_SENSOR_HX711
 	brew_templates_init();
 	brew_manager_init();
 	brew_binding_init();
+	#endif
 	timer_binding_init();
 	#endif
 
