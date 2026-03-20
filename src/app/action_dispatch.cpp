@@ -196,9 +196,23 @@ void action_dispatch(const ButtonAction& act, const char* label) {
 #if HAS_SENSOR_HX711
         const char* cmd = act.mqtt_payload;
         if (!cmd || !cmd[0]) cmd = "start";
-        if (strcmp(cmd, "start") == 0) {
+        if (strncmp(cmd, "advance:", 8) == 0) {
+            const char* tpl = cmd + 8;
+            LOGI(TAG, "%s brew: advance template='%s'", label, tpl);
+            brew_advance(tpl);
+        } else if (strcmp(cmd, "advance") == 0) {
+            LOGI(TAG, "%s brew: advance", label);
+            brew_advance(nullptr);
+        } else if (strncmp(cmd, "start:", 6) == 0) {
+            const char* tpl = cmd + 6;
+            LOGI(TAG, "%s brew: start template='%s'", label, tpl);
+            brew_start(tpl);
+        } else if (strcmp(cmd, "start") == 0) {
             LOGI(TAG, "%s brew: start", label);
-            brew_start();
+            brew_start(nullptr);
+        } else if (strcmp(cmd, "next") == 0) {
+            LOGI(TAG, "%s brew: next", label);
+            brew_next();
         } else if (strcmp(cmd, "stop") == 0) {
             LOGI(TAG, "%s brew: stop", label);
             brew_stop();

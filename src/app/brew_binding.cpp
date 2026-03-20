@@ -70,6 +70,41 @@ static bool lookup_value(const char* key, const char* fmt,
         snprintf(out, out_len, f, brew_log_last_peak_flow());
         return true;
     }
+    if (strcmp(key, "template") == 0) {
+        const char* name = brew_get_template_name();
+        strlcpy(out, name[0] ? name : "Idle", out_len);
+        return true;
+    }
+    if (strcmp(key, "dose") == 0) {
+        const char* f = fmt[0] ? fmt : "%.1f";
+        snprintf(out, out_len, f, brew_get_dose_weight());
+        return true;
+    }
+    if (strcmp(key, "water") == 0) {
+        const char* f = fmt[0] ? fmt : "%.1f";
+        snprintf(out, out_len, f, brew_get_water_weight());
+        return true;
+    }
+    if (strcmp(key, "ratio") == 0) {
+        float dose = brew_get_dose_weight();
+        if (dose <= 0.0f) {
+            strlcpy(out, "---", out_len);
+            return true;
+        }
+        const char* f = fmt[0] ? fmt : "%.1f";
+        snprintf(out, out_len, f, brew_get_water_weight() / dose);
+        return true;
+    }
+    if (strcmp(key, "instruction") == 0) {
+        const char* instr = brew_get_instruction();
+        if (!instr[0]) return false;  // empty → binding returns fallback via pipe
+        strlcpy(out, instr, out_len);
+        return true;
+    }
+    if (strcmp(key, "next_label") == 0) {
+        strlcpy(out, brew_get_next_label(), out_len);
+        return true;
+    }
     return false;
 }
 

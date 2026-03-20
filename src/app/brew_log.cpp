@@ -82,6 +82,7 @@ void brew_log_init() {
 // ============================================================================
 
 uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
+                       const char* template_name, float dose_weight,
                        const BrewSample* series, uint16_t sample_count) {
     // Evict if at capacity
     if (brew_log_count() >= BREW_LOG_MAX_BREWS) {
@@ -124,14 +125,24 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
 
     // Write JSON manually for memory efficiency (series can be large)
     f.print("{\"v\":1,\"fields\":[");
-    f.print("{\"key\":\"name\",\"label\":\"Brew\",\"value\":\"Free Pour\",\"format\":\"text\"},");
+    if (template_name && template_name[0]) {
+        f.printf("{\"key\":\"template\",\"label\":\"Template\",\"value\":\"%s\",\"format\":\"text\"},", template_name);
+    } else {
+        f.print("{\"key\":\"template\",\"label\":\"Template\",\"value\":\"free_pour\",\"format\":\"text\"},");
+    }
     f.printf("{\"key\":\"ts\",\"label\":\"Date\",\"value\":%lu,\"format\":\"datetime\"},", (unsigned long)ts);
     f.printf("{\"key\":\"duration\",\"label\":\"Duration\",\"value\":%lu,\"unit\":\"ms\",\"format\":\"duration\"},", (unsigned long)elapsed_ms);
 
     // Use integer part check for cleaner output
-    f.printf("{\"key\":\"weight\",\"label\":\"Weight\",\"value\":%.1f,\"unit\":\"g\",\"format\":\"number\"},", final_weight);
+    f.printf("{\"key\":\"water\",\"label\":\"Water\",\"value\":%.1f,\"unit\":\"g\",\"format\":\"number\"},", final_weight);
     f.printf("{\"key\":\"peak_flow\",\"label\":\"Peak Flow\",\"value\":%.2f,\"unit\":\"g/s\",\"format\":\"number\"},", peak_flow);
     f.printf("{\"key\":\"avg_flow\",\"label\":\"Avg Flow\",\"value\":%.2f,\"unit\":\"g/s\",\"format\":\"number\"}", avg_flow);
+
+    if (dose_weight > 0.0f) {
+        f.printf(",{\"key\":\"dose\",\"label\":\"Dose\",\"value\":%.1f,\"unit\":\"g\",\"format\":\"number\"}", dose_weight);
+        float ratio = final_weight / dose_weight;
+        f.printf(",{\"key\":\"ratio\",\"label\":\"Ratio\",\"value\":%.1f,\"format\":\"number\"}", ratio);
+    }
 
     f.print("],\"series\":{\"interval_ms\":1000,\"weight\":[");
 
@@ -156,8 +167,9 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
     // Update fs health
     fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
 
-    LOGI(TAG, "Saved brew %u: %.1fg in %lums, %u samples, peak=%.2f avg=%.2f g/s",
-         (unsigned)id, final_weight, (unsigned long)elapsed_ms,
+    LOGI(TAG, "Saved brew %u [%s]: %.1fg in %lums, %u samples, peak=%.2f avg=%.2f g/s",
+         (unsigned)id, template_name ? template_name : "free_pour",
+         final_weight, (unsigned long)elapsed_ms,
          (unsigned)sample_count, peak_flow, avg_flow);
 
     return id;

@@ -377,16 +377,65 @@ Timers and scale bindings combine naturally in expressions:
 
 ## Brew Manager (Guided Brew Mode)
 
-The brew manager adds a simple guided brew workflow on top of the raw scale and timer features. It provides a 4-state state machine with **auto-start** — tap a button to arm the brew, and the timer starts automatically when you begin pouring.
+The brew manager adds a guided brew workflow on top of the raw scale and timer features. It is **template-driven**: a brew template defines the ordered stages a brew moves through, and the manager is agnostic to whether a template is a built-in or a future config-driven one loaded from the filesystem.
+
+Two built-in templates ship out of the box: **free_pour** and **v60**.
 
 ### How It Works
 
-1. **Start** — Tares the scale and enters the **Ready** state (armed, waiting for pour)
-2. **Auto-start** — When weight exceeds 2 g above tare, the timer starts automatically and the state moves to **Brewing**
-3. **Stop** — Freezes the timer and enters **Done** (manual tap)
-4. **Reset** — Clears everything back to **Idle**
+The brew manager operates in three meta-phases:
 
-The brew manager owns its own internal timer (independent of the 3 general-purpose timers), so you can still use timer 1–3 for bloom phases or other purposes alongside a guided brew.
+| Phase | Meaning |
+|-------|---------|
+| **Idle** | No brew in progress |
+| **Active** | Template running; the current stage name is shown by `[brew:phase]` |
+| **Done** | Brew finished, timer frozen, report saved |
+
+Within **Active**, a stage can be:
+
+| Stage type | How it advances |
+|------------|----------------|
+| **Manual** | User taps a button with `brew` / `next` payload |
+| **Auto-weight** | Automatically advances when weight exceeds the stage threshold |
+| **Recording** | Like Auto-weight but also records the weight/flow series (always the final stage) |
+
+### Built-in Templates
+
+#### free_pour (default)
+
+The original two-stage workflow — tap Start, wait for pour, stop.
+
+| # | Stage | Type | Side effect | Threshold |
+|---|-------|------|-------------|-----------|
+| 0 | Ready | Auto-weight | Tare on enter | 2 g |
+| 1 | Brewing | Recording | — | — |
+
+1. **Start** — scale auto-tares, state moves to **Ready**
+2. **Auto-start** — weight exceeds 2 g → timer starts, state moves to **Brewing**
+3. **Stop** — freezes timer, saves report
+4. **Reset** — back to **Idle**
+
+#### v60
+
+A four-stage workflow that captures the bean dose before grinding.
+
+| # | Stage | Type | Side effect | Threshold |
+|---|-------|------|-------------|-----------|
+| 0 | Dosing | Manual | — | — |
+| 1 | Prep cup | Manual | — | — |
+| 2 | Ready | Auto-weight | Tare on enter | 2 g |
+| 3 | Brewing | Recording | — | — |
+
+1. **Start V60** (`brew`/`start:v60` or `advance:v60`) — scale auto-tares; enters **Dosing**
+2. Measure beans; `[brew:weight]` shows the dose live
+3. **Next** (`brew`/`next`) — captures current weight as the dose; enters **Prep cup**
+4. Grind beans, place cup + V60 on scale; do whatever prep is needed
+5. **Next** (`brew`/`next`) — tares scale (cup + V60 become the new zero); enters **Ready**
+6. **Auto-start** — first water exceeds 2 g → timer starts, enters **Brewing**
+7. **Stop** (`brew`/`stop`) — freezes timer, saves report (includes dose weight)
+8. **Reset** (`brew`/`reset`) — back to **Idle** for next brew
+
+> The dose weight is saved in the brew report and visible in the web portal's brew history.
 
 ### Brew Bindings
 
@@ -401,9 +450,15 @@ The `[brew:]` binding scheme provides live brew workflow data. Syntax:
 |-----|------|---------------|-------------|
 | `weight` | float | `%.1f` | Current weight (same as `[scale:weight]`, included for convenience) |
 | `flow_rate` | float | `%.1f` | Current flow rate (same as `[scale:flow_rate]`) |
-| `timer` | time | `mm:ss` | Brew elapsed time (0 when idle/ready, frozen when done) |
-| `phase` | string | — | Current phase: `Idle`, `Ready`, `Brewing`, or `Done` |
-| `active` | string | — | `1` if Ready or Brewing, `0` otherwise |
+| `timer` | time | `mm:ss` | Brew elapsed time (0 before first pour, frozen when done) |
+| `phase` | string | — | Current stage name: `Idle`, `Dosing`, `Prep cup`, `Ready`, `Brewing`, `Done`, … |
+| `active` | string | — | `1` if a template is running (ACTIVE phase), `0` otherwise |
+| `template` | string | — | Active template name: `v60`, `free_pour`, or empty when idle |
+| `dose` | float | `%.1f` | Captured dose weight (g); 0 until dose is captured via `brew:next` on Dosing stage |
+| `water` | float | `%.1f` | Water poured (g): live during brewing (scale was tared with vessel), frozen after Done |
+| `ratio` | float | `%.1f` | Brew ratio (water ÷ dose); `---` when no dose captured |
+| `instruction` | string | — | Current stage instruction text (empty when Idle/Done — use pipe fallback: `[brew:instruction\|tap Start to begin]`) |
+| `next_label` | string | — | Advance button label for the current state — changes as brew progresses (e.g. `Start V60` → `Next` → `Next` → `Armed` → `Done` → `Start V60 again`) |
 | `peak_flow` | float | `%.2f` | Peak flow rate from the most recent saved brew (g/s). Returns `0` until the first brew is saved. |
 
 #### Timer Format Options
@@ -425,9 +480,9 @@ The `[brew:timer]` key supports the same format options as regular timers:
 ```
 → `4:05.3`
 
-**Phase-aware button label:**
+**Phase-aware button label (v60) — note: prefer `[brew:next_label]` with advance action instead:**
 ```
-[expr:[brew:phase]=="Idle"?"Start Brew":[brew:phase]=="Ready"?"Waiting...":[brew:phase]=="Brewing"?"Stop":"Reset"]
+[expr:[brew:phase]=="Idle"?"Start V60":[brew:phase]=="Dosing"?"Next":[brew:phase]=="Prep cup"?"Next":[brew:phase]=="Ready"?"Armed":[brew:phase]=="Brewing"?"Done":"Start V60 again"]
 ```
 
 **Background color that tracks brew state:**
@@ -440,23 +495,58 @@ The `[brew:timer]` key supports the same format options as regular timers:
 [expr:[brew:active]=="1"?[brew:flow_rate;%.1f]:"--.-"] g/s
 ```
 
+**Show captured dose:**
+```
+Dose: [brew:dose;%.1f] g
+```
+
+**Show water poured (live during brew, frozen after):**
+```
+Water: [brew:water;%.1f] g
+```
+
+**Show brew ratio (water ÷ dose):**
+```
+Ratio: 1:[brew:ratio;%.1f]
+```
+→ `Ratio: 1:15.6` (only meaningful for V60 where a dose is captured; shows `---` for free pour)
+
+**Show active template name:**
+```
+[brew:template]
+```
+→ `v60` or `free_pour` while active, empty when idle
+
+**Combined dose + water + ratio summary label:**
+```
+[brew:dose;%.1f]g / [brew:water;%.1f]g (1:[brew:ratio;%.1f])
+```
+
 ### Brew Actions
 
 Assign brew actions to pad buttons in the pad editor. The action type is `brew` and the payload selects the command.
 
 | Payload | Description |
 |---------|-------------|
-| `start` | Tare scale, arm auto-start (default if no payload) |
-| `stop` | Freeze timer, enter Done |
+| `advance:v60` | **Smart advance for V60** — start on Idle, next on Manual, stop on Recording, restart on Done; recommended for single-button pads |
+| `advance:free_pour` | **Smart advance for free pour** — same as above for free pour template |
+| `advance:<name>` | Smart advance for any registered template |
+| `start` | Start with the default template (`free_pour`); **automatically tares scale** |
+| `start:v60` | Start with the V60 template |
+| `start:<name>` | Start with any registered template by name |
+| `next` | Advance the current **Manual** stage to the next stage |
+| `stop` | Freeze timer, enter Done, save report |
 | `reset` | Clear all state, return to Idle |
 
-### Brew Pad Example
+> **Tip**: Use `advance:<name>` as your primary button. Its label changes at every stage via `[brew:next_label]`, so one button replaces Start + Next + Stop. Add a long-press **Reset** as an escape hatch.
 
-A simple brew control layout — three dedicated buttons plus display labels:
+### Brew Pad Examples
+
+#### Free Pour (simple)
 
 | Button | Action | Payload | Labels |
 |--------|--------|---------|--------|
-| Start | `brew` | `start` | Center: `[expr:[brew:phase]=="Idle"?"Start Brew":"Waiting..."]` |
+| Start | `brew` | `start` | Center: `[expr:[brew:phase]=="Idle"?"Start":"Armed"]` |
 | Stop | `brew` | `stop` | Center: `Stop` |
 | Reset | `brew` | `reset` | Center: `Reset` |
 | Timer | — | — | Top: `Brew Time`, Center: `[brew:timer;mm:ss.d]` |
@@ -464,18 +554,60 @@ A simple brew control layout — three dedicated buttons plus display labels:
 | Flow | — | — | Top: `Flow`, Center: `[brew:flow_rate;%.1f] g/s` |
 | Phase | — | — | Center: `[brew:phase]` |
 
+#### V60 (single-button — recommended)
+
+One **Advance** button handles the full brew. Its label tracks the current state automatically via `[brew:next_label]`.
+
+| Button | Action | Payload | Labels |
+|--------|--------|---------|--------|
+| **Advance** | `brew` | `advance:v60` | Center: `[brew:next_label]` |
+| Reset | `brew` | `reset` | Center: `Reset` (long-press for abort) |
+| Instruction | — | — | Center: `[brew:instruction\|Tap Advance to begin]` |
+| Dose | — | — | Top: `Dose`, Center: `[brew:dose;%.1f] g` |
+| Timer | — | — | Top: `Brew`, Center: `[brew:timer;mm:ss.d]` |
+| Weight | — | — | Top: `Weight`, Center: `[brew:weight;%.1f] g` |
+
+Label progression on the Advance button:
+
+| State | `[brew:next_label]` |
+|-------|---------------------|
+| Idle | `Start V60` |
+| Dosing | `Next` |
+| Prep cup | `Next` |
+| Ready | `Armed` |
+| Brewing | `Done` |
+| Done | `Start V60 again` |
+
+> The **Ready** row shows "Armed" because the timer auto-starts on first pour — the user does not tap anything at that point.
+
+#### V60 (multi-button — explicit control)
+
+| Button | Actions | Payload(s) | Labels |
+|--------|---------|------------|--------|
+| Start V60 | `brew` | `start:v60` | Center: `Start V60` |
+| Next | `brew` | `next` | Center: `[brew:next_label]` |
+| Stop | `brew` | `stop` | Center: `Stop` |
+| Reset | `brew` | `reset` | Center: `Reset` |
+| Dose | — | — | Top: `Dose`, Center: `[brew:dose;%.1f] g` |
+| Timer | — | — | Top: `Brew`, Center: `[brew:timer;mm:ss.d]` |
+| Weight | — | — | Top: `Weight`, Center: `[brew:weight;%.1f] g` |
+
+> The **Next** button advances through Dosing → Prep cup → Ready. Once in Ready the manager auto-starts on first pour.
+
 ### Brew vs. Manual Timer
 
 | Feature | Brew Manager | Manual Timer |
 |---------|-------------|--------------|
 | Auto-start on pour | Yes (2 g threshold) | No |
-| Auto-tare on start | Yes | No |
+| Auto-tare on start | Yes (always, at `brew_start()`) | No |
+| Auto-tare on arm | Yes (additionally at Ready stage entry) | No |
 | Independent slots | 1 brew session | 3 timers |
 | Countdown mode | No (count-up only) | Yes |
 | Expire beep | No | Yes |
-| Phase awareness | Yes (Idle/Ready/Brewing/Done) | No |
+| Phase awareness | Yes (template stage names) | No |
+| Multi-stage guidance | Yes (templates) | No |
 
-Use the brew manager for the overall brew workflow (start → pour → done), and use manual timers alongside it for things like bloom countdowns.
+Use the brew manager for the overall brew workflow, and use manual timers alongside it for things like bloom countdowns.
 
 ---
 
@@ -531,12 +663,14 @@ Each brew is stored as a self-contained JSON file. This is also the format used 
 {
   "v": 1,
   "fields": [
-    { "key": "name", "label": "Brew", "value": "Free Pour", "format": "text" },
+    { "key": "template", "label": "Template", "value": "v60", "format": "text" },
     { "key": "ts", "label": "Date", "value": 1742400000, "format": "datetime" },
     { "key": "duration", "label": "Duration", "value": 56813, "unit": "ms", "format": "duration" },
-    { "key": "weight", "label": "Weight", "value": 250.3, "unit": "g", "format": "number" },
+    { "key": "water", "label": "Water", "value": 250.3, "unit": "g", "format": "number" },
     { "key": "peak_flow", "label": "Peak Flow", "value": 3.45, "unit": "g/s", "format": "number" },
-    { "key": "avg_flow", "label": "Avg Flow", "value": 2.12, "unit": "g/s", "format": "number" }
+    { "key": "avg_flow", "label": "Avg Flow", "value": 2.12, "unit": "g/s", "format": "number" },
+    { "key": "dose", "label": "Dose", "value": 16.2, "unit": "g", "format": "number" },
+    { "key": "ratio", "label": "Ratio", "value": 15.5, "format": "number" }
   ],
   "series": {
     "interval_ms": 1000,
@@ -550,6 +684,8 @@ Each brew is stored as a self-contained JSON file. This is also the format used 
 |-------|-------------|
 | `v` | Schema version (currently 1) |
 | `fields` | Array of summary fields, each with key, label, value, optional unit, and format type |
+| `template` | Template name used for this brew (`v60`, `free_pour`, …) |
+| `dose` | Bean dose weight in grams — only present when captured via the V60 template (or any template with a `capture_dose` stage exit effect) |
 | `series.interval_ms` | Time between samples (1000 ms = 1 Hz) |
 | `series.weight` | Weight in grams at each sample point |
 | `series.flow` | Flow rate in g/s at each sample point |
@@ -593,18 +729,18 @@ Peak: [brew:peak_flow] g/s
 
 ## Example: V60 Pour-Over Dashboard
 
-A practical 4×2 pad layout for V60 coffee brewing with the brew manager and a bloom timer:
+A practical 4×2 pad layout for V60 coffee brewing using the V60 template, with a bloom timer:
 
 | Col 1 | Col 2 | Col 3 | Col 4 |
 |-------|-------|-------|-------|
-| **Weight** | **Flow Rate** | **Brew Timer** | **Tare / Start** |
+| **Weight / Dose** | **Flow Rate** | **Brew Timer** | **Start V60 / Next** |
 | Weight sparkline | Flow sparkline | **Bloom Timer** | **Stop / Reset** |
 
 ### Button Configurations
 
-**Button (0,0) — Weight display:**
-- Top label: `Weight`
-- Center label: `[brew:weight;%.1f] g`
+**Button (0,0) — Weight display (shows dose when captured):**
+- Top label: `[expr:[brew:dose]>"0"?"Dose":"Weight"]`
+- Center label: `[expr:[brew:dose]>"0"?[brew:dose;%.1f]:[brew:weight;%.1f]] g`
 - Background color: `#1a1a2e`
 
 **Button (1,0) — Flow rate with color:**
@@ -618,12 +754,11 @@ A practical 4×2 pad layout for V60 coffee brewing with the brew manager and a b
 - Bottom label: `[brew:phase]`
 - Background color: `[expr:[brew:active]=="1"?"1a3a1a":"1a1a2e"]`
 
-**Button (3,0) — Start brew (tare + arm):**
-- Center label: `[expr:[brew:phase]=="Idle"?"Start Brew":[brew:phase]=="Ready"?"Waiting...":[brew:phase]=="Brewing"?"Brewing...":"Done"]`
-- Action: `brew`, payload: `start`
-- Background color: `[expr:[brew:phase]=="Ready"?"2a2a1a":"16213e"]`
-
-> The brew manager auto-tares and auto-starts the timer when weight exceeds 2 g. No need for separate tare and start buttons.
+**Button (3,0) — Start V60:**
+- Center label: `Start V60`
+- Action: `brew`, payload: `start:v60`
+- Background color: `#16213e`
+- *(Scale auto-tares when brew starts — no extra tare action needed)*
 
 **Button (0,1) — Weight sparkline:**
 - Widget type: `sparkline`
@@ -647,23 +782,28 @@ A practical 4×2 pad layout for V60 coffee brewing with the brew manager and a b
 
 > Use timer 1 as a standalone bloom countdown alongside the brew manager's auto-timed overall brew.
 
-**Button (3,1) — Stop / Reset:**
-- Top label: `Stop`
-- Action (tap): `brew`, payload: `stop`
-- Bottom label: `Reset`
-- Action (long-press): `brew`, payload: `reset`
-- Background color: `#16213e`
+**Button (3,1) — Next / Stop / Reset:**
+- Top label: `[brew:phase]`
+- Action (tap): `brew`, payload: `next` *(advances Dosing → Prep cup → Ready; no-op during Brewing)*
+- Bottom label: `Stop / Reset`
+- Action (long-press): `brew`, payload: `stop`
+
+> Add a separate long-press action for `reset` or put it on a dedicated button.
 
 ### Brewing Workflow
 
-1. Tap **Start Brew** — the scale tares and the button shows "Waiting..."
-2. Start pouring — when weight exceeds 2 g, the brew timer starts automatically
-3. Pour water — watch the weight, flow rate sparkline, and brew timer simultaneously
-4. Tap **Bloom Timer** to track your 45-second bloom phase separately
-5. When done, tap **Stop** to freeze the brew timer
-6. Long-press **Reset** to clear everything for the next brew
+1. **Tap Start V60** — scale auto-tares to zero; phase shows **Dosing**
+2. **Place beans on scale** — read live weight via `[brew:weight]`; around 16 g for a standard V60
+3. **Tap Next** — dose (e.g. 16.2 g) is captured; phase shows **Prep cup**
+4. **Remove beans, grind them** — scale can show anything during this phase, it doesn't matter
+5. **Place cup + V60 + filter on scale** — prep the filter as usual, put ground coffee in
+6. **Tap Next** — scale tares (cup + V60 become new zero); phase shows **Ready**
+7. **Start pouring** — when weight exceeds 2 g, brew timer starts automatically; phase shows **Brewing**
+8. Pour water, watch weight and flow rate sparklines; optionally tap **Bloom Timer** (timer 1) for the bloom phase
+9. **Long-press Stop** when done — brew timer freezes; report saved to history (includes dose)
+10. Check the **Brews** tab in the web portal to review the session
 
-> **Tip**: The brew manager handles tare + timer start in one tap. You still have all 3 manual timers available — use one for bloom countdowns, another for pour phases, etc.
+> **Tip**: The brew manager owns its own timer. You still have all 3 manual timers free — use timer 1 for bloom, timer 2 for pour phases, etc.
 
 ---
 

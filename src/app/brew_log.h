@@ -26,9 +26,12 @@ extern "C" {
 void brew_log_init();
 
 // Save a completed brew. Computes peak_flow and avg_flow from the series.
+// template_name is written as the "template" field (e.g. "v60", "free_pour").
+// dose_weight is written as the "dose" field when > 0 (omitted otherwise).
 // Returns the assigned brew ID, or 0 on failure.
 // Caller should call brew_free_series() after this returns.
 uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
+                       const char* template_name, float dose_weight,
                        const BrewSample* series, uint16_t sample_count);
 
 // Count brews on disk.

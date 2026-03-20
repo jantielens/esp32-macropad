@@ -67,7 +67,7 @@ function brewUpdateStats(brews) {
 
     for (const brew of brews) {
         const dur = brewFindField(brew.fields, 'duration');
-        const wt = brewFindField(brew.fields, 'weight');
+        const wt = brewFindField(brew.fields, 'water');
         const fl = brewFindField(brew.fields, 'avg_flow');
         if (dur) { totalDur += dur.value; durCount++; }
         if (wt) { totalWeight += wt.value; weightCount++; }
@@ -106,10 +106,10 @@ function brewRenderCards(brews) {
     container.innerHTML = '';
 
     brews.forEach((brew, idx) => {
-        const name = brewFindField(brew.fields, 'name');
+        const name = brewFindField(brew.fields, 'template');
         const ts = brewFindField(brew.fields, 'ts');
         const dur = brewFindField(brew.fields, 'duration');
-        const wt = brewFindField(brew.fields, 'weight');
+        const wt = brewFindField(brew.fields, 'water');
         const pf = brewFindField(brew.fields, 'peak_flow');
 
         const card = document.createElement('div');
@@ -131,7 +131,7 @@ function brewRenderCards(brews) {
                 </div>
                 <div class="brew-card-stat">
                     <span class="brew-card-stat-value">${wt ? brewFormatField(wt) : '--'}</span>
-                    <span class="brew-card-stat-label">Weight</span>
+                    <span class="brew-card-stat-label">Water</span>
                 </div>
                 <div class="brew-card-stat">
                     <span class="brew-card-stat-value">${pf ? brewFormatField(pf) : '--'}</span>
@@ -190,16 +190,16 @@ async function brewShowDetail(id) {
         brewDetailData = await resp.json();
 
         // Populate fields
-        const name = brewFindField(brewDetailData.fields, 'name');
+        const name = brewFindField(brewDetailData.fields, 'template');
         const ts = brewFindField(brewDetailData.fields, 'ts');
         document.getElementById('brew-detail-name').textContent = '☕ ' + (name ? name.value : 'Brew');
         document.getElementById('brew-detail-date').textContent = ts ? brewFormatField(ts) : '';
 
-        // Fields grid (skip name and ts)
+        // Fields grid (skip template and ts — shown in header)
         const fieldsEl = document.getElementById('brew-detail-fields');
         fieldsEl.innerHTML = '';
         for (const field of brewDetailData.fields) {
-            if (field.key === 'name' || field.key === 'ts') continue;
+            if (field.key === 'template' || field.key === 'ts') continue;
             const div = document.createElement('div');
             div.className = 'brew-field';
             div.innerHTML = `<span class="brew-field-label">${field.label}</span>

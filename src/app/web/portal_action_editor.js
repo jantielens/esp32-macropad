@@ -100,15 +100,26 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<input type="number" id="' + prefix + '-scale-set-value" min="1" step="0.1" placeholder="e.g. 251.5">';
     h += '<small>Set the calibration reference weight to this value (grams).</small>';
     h += '</div></div>';
-    // Brew — simple command dropdown
+    // Brew — command dropdown
     h += '<div id="' + prefix + '-brew-group" style="display:none;">';
     h += '<div class="form-group">';
     h += '<label for="' + prefix + '-brew-cmd">Brew Command</label>';
     h += '<select id="' + prefix + '-brew-cmd">';
-    h += '<option value="start">Start (tare + arm auto-start)</option>';
-    h += '<option value="stop">Stop (freeze timer)</option>';
-    h += '<option value="reset">Reset (clear all state)</option>';
+    h += '<optgroup label="V60">';
+    h += '<option value="advance:v60">V60 — Advance (single button, recommended)</option>';
+    h += '<option value="start:v60">V60 — Start only (multi-button layouts)</option>';
+    h += '</optgroup>';
+    h += '<optgroup label="Free Pour">';
+    h += '<option value="advance:free_pour">Free Pour — Advance (single button, recommended)</option>';
+    h += '<option value="start">Free Pour — Start only (multi-button layouts)</option>';
+    h += '</optgroup>';
+    h += '<optgroup label="Any Template">';
+    h += '<option value="next">Next — advance manual stage</option>';
+    h += '<option value="stop">Stop — freeze timer &amp; save</option>';
+    h += '<option value="reset">Reset — clear all state</option>';
+    h += '</optgroup>';
     h += '</select>';
+    h += '<small>Use <strong>Advance</strong> for a single button that handles the full cycle. Pair the label with <code>[brew:next_label]</code>. Add a long-press <strong>Reset</strong> as an abort button.</small>';
     h += '</div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
