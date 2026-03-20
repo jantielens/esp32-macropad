@@ -454,12 +454,6 @@ function padPopulateScreenDropdown() {
     }
 }
 
-function padActionTypeChanged(prefix) {
-    // prefix may be 'lp' or 'tap' from legacy callers — map to first slot
-    const pfx = 'pad-edit-' + ((prefix === 'lp') ? 'lp-action-0' : 'action-0');
-    actionEditorTypeChanged(pfx);
-}
-
 // Show the next hidden action slot for tap or lp
 function padAddAction(gesture) {
     var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';

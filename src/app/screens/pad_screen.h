@@ -26,6 +26,8 @@ struct RuntimeLabelBinding {
     lv_obj_t* label;                                  // LVGL label to update
     char templ[CONFIG_LABEL_MAX_LEN];                 // Original label text (template)
     char last[BINDING_TEMPLATE_MAX_LEN];              // Last rendered result (skip if unchanged)
+    LabelStyle style;                                 // Style used for alignment/font scaling
+    uint8_t anchorY;                                  // PadLabelAnchorY
     bool active;
 };
 

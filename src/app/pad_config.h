@@ -65,7 +65,7 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
 // ============================================================================
-// DSL format: "font:24;align:right;y:-3;mode:scroll;color:#FF0000"
+// DSL format: "font:24;font_upscale:1.4;align:right;y:-3;mode:scroll;color:#FF0000"
 // All fields default to 0 which means "use default behavior".
 
 // Text alignment values
@@ -82,7 +82,8 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define LABEL_MODE_WRAP      4
 
 struct LabelStyle {
-    uint8_t font_size;     // 0 = auto (from scale tier), 12/14/18/24/32/36
+    uint8_t font_size;     // 0 = auto (from scale tier), 12/14/18/24/32/36/48
+    uint16_t font_upscale; // 0 = 1.0x (disabled), else LVGL transform scale (256 = 1.0x)
     int16_t x_offset;      // pixel nudge from default anchor (-999..+999)
     int16_t y_offset;      // pixel nudge from default anchor (-999..+999)
     uint8_t align;         // LABEL_ALIGN_* (0 = default/center)
