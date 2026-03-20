@@ -366,12 +366,17 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Track Color** | Color of the unfilled arc background. Supports binding expressions for dynamic color |
 | **Needle Color** | Color of the needle line. Supports binding expressions for dynamic color |
 | **Tick Color** | Color of the tick marks. Supports binding expressions for dynamic color |
+| **Target Value** | Bindable value on the scale that positions a target marker and optional zone across all active rings. Empty = no target. For example `[mqtt:hvac/setpoint;temperature]` |
+| **Target Zone Angle** | Total zone width in degrees centered on the target value (0 = no zone, max 90). The zone is rendered as a semi-transparent overlay on all rings |
+| **Target Tick Width** | Tick line width at the target value position (0 = no tick, 1–5 px). Boundary ticks at the zone edges use the same width |
+| **Target Marker Color** | Color of the target value tick and zone boundary ticks. Supports binding expressions |
+| **Target Zone Color** | Color of the zone overlay arc. Supports binding expressions |
 
 Each ring has its own arc color field, so rings can be independently colored or threshold-driven. Use `[expr:threshold(...)]` in any arc color field for value-based coloring — the color picker's built-in **Generate Color by Threshold** helper makes this easy.
 
 The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
 
-**Multi-ring gauges** — fill in slots 2, 3, and 4 to add up to four concentric rings (Apple Health ring style). All active rings share the same min/max, arc degrees, and start angle, but each slot has its own arc color and optional start label. The needle is shown on the outermost active gauge ring only; tick marks are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
+**Multi-ring gauges** — fill in slots 2, 3, and 4 to add up to four concentric rings (Apple Health ring style). All active rings share the same min/max, arc degrees, and start angle, but each slot has its own arc color and optional start label. The needle is shown on the outermost active gauge ring only; tick marks and target markers are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
 
 **Dual binding gauges** — enable Dual Binding Pair 1 and/or Pair 2 to collapse slot pairs into shared rings. In a dual pair, the first slot fills from zero toward the positive direction and the second slot fills from zero toward the negative direction. If the partner binding is empty or invalid, it is treated as `0`. Pair 1 also drives the needle using the signed difference `slot1 - slot2`.
 
@@ -395,6 +400,14 @@ This visualization shows system balance at a glance: the outer combined ring con
 - Data binding: `[time:%S]`, Min: 0, Max: 60
 - Arc Degrees: 359, Start Angle: 270 (12 o'clock)
 - Tick Marks: 12, Center label: `[time:%H:%M]`
+
+**Thermostat setpoint example** (temperature gauge with target zone):
+- Data binding: `[mqtt:hvac/current_temp;temperature]`, Min: 15, Max: 30
+- Arc Degrees: 270, Start Angle: 135
+- Target Value: `[mqtt:hvac/setpoint;temperature]`
+- Target Zone Angle: 4 (±2° around setpoint)
+- Target Tick Width: 2, Target Marker Color: `#FFFFFF`, Target Zone Color: `#FF5722`
+- Center label: `[mqtt:hvac/current_temp;temperature;%.1f]°`
 
 ### Sparkline
 

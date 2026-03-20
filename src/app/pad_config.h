@@ -60,7 +60,7 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define CONFIG_BINDABLE_SHORT_LEN       64
 #define CONFIG_WIDGET_TYPE_MAX_LEN     16
 #define MAX_WIDGET_BINDINGS             4
-#define WIDGET_CONFIG_MAX_BYTES      1536
+#define WIDGET_CONFIG_MAX_BYTES      1600
 
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
