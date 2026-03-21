@@ -627,6 +627,59 @@ function brewTargetFlowAnnotations(phases, templateInfo) {
     return annotations;
 }
 
+// Compute ideal weight curve from template targets + markers.
+// Walks stages in marker order, builds 1-sample-per-second weight ramp/plateau.
+// Returns number[] aligned with series length, or null if insufficient data.
+function brewComputeIdealCurve(series, markers, templateInfo) {
+    if (!series || !series.weight || series.weight.length === 0) return null;
+    const targets = (templateInfo && templateInfo.targets) || {};
+    if (!markers || markers.length === 0 || Object.keys(targets).length === 0) return null;
+
+    const totalSamples = series.weight.length;
+    const curve = new Array(totalSamples);
+    let t = 0;          // current sample index
+    let w = 0;          // current ideal weight
+
+    for (let i = 0; i < markers.length; i++) {
+        const label = markers[i].label;
+        const tgt = targets[label];
+        if (!tgt || tgt.weight == null) { continue; }
+
+        const targetWeight = tgt.weight;
+        const flowRate = tgt.flow_rate || 0;
+        const timeS = tgt.time_s || 0;
+
+        if (flowRate > 0) {
+            // Ramp: pour at flow_rate until target weight
+            const pourDuration = Math.ceil((targetWeight - w) / flowRate);
+            const pourEnd = Math.min(t + pourDuration, totalSamples);
+            const startW = w;
+            for (; t < pourEnd; t++) {
+                w = startW + (t - (pourEnd - pourDuration)) * flowRate;
+                curve[t] = Math.min(w, targetWeight);
+            }
+            w = targetWeight;
+        }
+
+        if (timeS > 0) {
+            // Plateau: hold at current weight until time_s elapsed from marker
+            const markerT = markers[i].t || 0;
+            const plateauEnd = Math.min(markerT + timeS, totalSamples);
+            for (; t < plateauEnd; t++) {
+                curve[t] = w;
+            }
+        }
+    }
+
+    // Pad remaining samples at final weight (drawdown / hold)
+    for (; t < totalSamples; t++) {
+        curve[t] = w;
+    }
+
+    // Only return if we managed to compute something meaningful
+    return w > 0 ? curve : null;
+}
+
 // Render per-stage flow stats table: avg flow vs target for each active phase
 function brewRenderPhaseFlowStats(series, markers, templateInfo) {
     const el = document.getElementById('brew-phase-flow-stats');
@@ -710,6 +763,9 @@ function brewCreateCharts(series, markers, templateInfo) {
     const comboAnnotations = Object.assign({}, markerAnns, swirlAnns, targetFlowAnns);
     const basicAnnotations = Object.assign({}, markerAnns, swirlAnns);
 
+    // Compute ideal weight curve from template targets
+    const idealCurve = brewComputeIdealCurve(series, markers, templateInfo);
+
     // Compute nice tick step in seconds
     const totalDurSec = parseFloat(labels[labels.length - 1]) || 1;
     const niceSteps = [5, 10, 15, 20, 30, 60, 120];
@@ -754,6 +810,18 @@ function brewCreateCharts(series, markers, templateInfo) {
                     borderWidth: 2,
                     yAxisID: 'y'
                 },
+                ...(idealCurve ? [{
+                    label: 'Target (g)',
+                    data: idealCurve,
+                    borderColor: 'rgba(102, 126, 234, 0.35)',
+                    borderDash: [2, 3],
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 0,
+                    pointHitRadius: 0,
+                    borderWidth: 1.5,
+                    yAxisID: 'y'
+                }] : []),
                 {
                     label: 'Flow (g/s)',
                     data: flowDisplay,
@@ -783,8 +851,11 @@ function brewCreateCharts(series, markers, templateInfo) {
                     callbacks: {
                         title: (items) => items[0].label + 's',
                         label: (item) => {
-                            if (item.datasetIndex === 0)
+                            const ds = item.dataset;
+                            if (ds.label === 'Weight (g)')
                                 return 'Weight: ' + item.parsed.y.toFixed(1) + ' g';
+                            if (ds.label === 'Target (g)')
+                                return 'Target: ' + item.parsed.y.toFixed(1) + ' g';
                             const realVal = flowRaw[item.dataIndex];
                             if (realVal == null || isNaN(flowDisplay[item.dataIndex])) return null;
                             return 'Flow: ' + realVal.toFixed(2) + ' g/s';
@@ -849,17 +920,30 @@ function brewCreateCharts(series, markers, templateInfo) {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [{
-                label: 'Weight (g)',
-                data: series.weight,
-                borderColor: '#667eea',
-                backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                fill: true,
-                tension: 0.3,
-                pointRadius: 0,
-                pointHitRadius: 10,
-                borderWidth: 2
-            }]
+            datasets: [
+                {
+                    label: 'Weight (g)',
+                    data: series.weight,
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    pointHitRadius: 10,
+                    borderWidth: 2
+                },
+                ...(idealCurve ? [{
+                    label: 'Target (g)',
+                    data: idealCurve,
+                    borderColor: 'rgba(102, 126, 234, 0.35)',
+                    borderDash: [2, 3],
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 0,
+                    pointHitRadius: 0,
+                    borderWidth: 1.5
+                }] : [])
+            ]
         },
         options: {
             responsive: true,
@@ -942,6 +1026,10 @@ function brewCreateCharts(series, markers, templateInfo) {
             }
         }
     });
+
+    // Show/hide ideal curve legend entry
+    const idealLegendEl = document.getElementById('brew-legend-ideal');
+    if (idealLegendEl) idealLegendEl.style.display = idealCurve ? '' : 'none';
 }
 
 // ============================================================================
