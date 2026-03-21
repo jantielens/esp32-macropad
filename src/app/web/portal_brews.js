@@ -1071,11 +1071,7 @@ async function brewClearAll() {
 // ============================================================================
 
 function brewExportOne(brew) {
-    // Strip the id (not stored in file)
-    const exportData = { v: brew.v, fields: brew.fields };
-    if (brew.markers && brew.markers.length > 0) exportData.markers = brew.markers;
-    if (brew.template_info) exportData.template_info = brew.template_info;
-    exportData.series = brew.series;
+    const { id, ...exportData } = brew;
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1101,10 +1097,7 @@ async function brewExportAll() {
             const resp = await fetch(API_BREWS + '?id=' + brew.id);
             if (resp.ok) {
                 const data = await resp.json();
-                const item = { v: data.v, fields: data.fields };
-                if (data.markers && data.markers.length > 0) item.markers = data.markers;
-                if (data.template_info) item.template_info = data.template_info;
-                item.series = data.series;
+                const { id, ...item } = data;
                 allBrews.push(item);
             }
         }
