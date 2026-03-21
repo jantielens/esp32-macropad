@@ -61,10 +61,10 @@ static float s_save_weight  = 0.0f;
 // Side effect dispatcher (bitmask)
 // ============================================================================
 
-static void emit_marker(const char* label) {
+static void emit_marker(const char* label, uint16_t sample_idx) {
     if (s_marker_count >= BREW_MARKER_MAX) return;
     BrewMarker& m = s_markers[s_marker_count++];
-    m.sample_index = s_series_count > 0 ? s_series_count - 1 : 0;
+    m.sample_index = sample_idx;
     strlcpy(m.label, label, sizeof(m.label));
     LOGD(TAG, "Marker[%u]: t=%u '%s'", (unsigned)(s_marker_count - 1),
          (unsigned)m.sample_index, label);
@@ -97,7 +97,7 @@ static void dispatch_effects(BrewEffects effects, const BrewStage* stage) {
     }
     if (effects & EFFECT_MARKER) {
         if (s_timer_running) {
-            emit_marker(stage->name);
+            emit_marker(stage->name, s_series_count > 0 ? s_series_count - 1 : 0);
         }
     }
 #if HAS_AUDIO
@@ -136,11 +136,10 @@ static void enter_stage(uint8_t index) {
     LOGI(TAG, "Enter stage[%u] '%s'", (unsigned)index, stage->name);
 
     // Auto-emit marker on stage transitions while timer is running.
-    // NOTE: At AUTO_WEIGHT transitions, brew_tick() emits a marker for the
-    // trigger stage just before calling enter_stage(), so two markers may
-    // land at the same sample_index with different labels.  This is expected.
+    // Use s_series_count (not -1) so the marker lands at the FIRST sample
+    // of the new stage rather than the last sample of the previous one.
     if (s_timer_running) {
-        emit_marker(stage->name);
+        emit_marker(stage->name, s_series_count);
     }
 
     dispatch_effects(stage->on_enter, stage);
@@ -301,7 +300,7 @@ void brew_tick() {
             ensure_series_buffer();
             s_series_count   = 0;
             record_sample();  // first sample at t=0
-            emit_marker(stage->name);  // opening marker
+            emit_marker(stage->name, s_series_count > 0 ? s_series_count - 1 : 0);  // opening marker
 
             LOGI(TAG, "Auto-start: weight=%.1f g", w);
 
