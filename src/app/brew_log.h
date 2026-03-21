@@ -25,7 +25,7 @@ extern "C" {
 // Initialize brew log (creates /brews/ dir if needed).
 void brew_log_init();
 
-// Save a completed brew. Computes peak_flow and avg_flow from the series.
+// Save a completed brew.
 // template_name is written as the "template" field (e.g. "v60", "free_pour").
 // dose_weight is written as the "dose" field when > 0 (omitted otherwise).
 // markers and captures are written as additional JSON arrays/fields.
@@ -39,9 +39,6 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
 
 // Count brews on disk.
 uint16_t brew_log_count();
-
-// Get the most recent peak_flow value (from last saved brew). Returns 0 if none.
-float brew_log_last_peak_flow();
 
 // Import a raw brew JSON blob (from export). Assigns a new ID, writes to LittleFS.
 // Returns the assigned brew ID, or 0 on failure.

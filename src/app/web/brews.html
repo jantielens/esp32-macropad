@@ -21,10 +21,6 @@
                     <span class="brew-stat-value" id="stat-avg-weight">--</span>
                     <span class="brew-stat-label">avg water</span>
                 </div>
-                <div class="brew-stat-box">
-                    <span class="brew-stat-value" id="stat-avg-flow">--</span>
-                    <span class="brew-stat-label">avg flow</span>
-                </div>
             </div>
 
             <!-- Action Bar -->
@@ -54,26 +50,62 @@
 
                 <!-- Fields Grid -->
                 <div class="brew-fields-grid" id="brew-detail-fields"></div>
+
+                <!-- Derived Metrics (computed client-side from series) -->
+                <div class="brew-derived-row" id="brew-derived-metrics" style="display:none;"></div>
+            </div>
+
+            <!-- Combined Chart + Phases -->
+            <div class="section" id="brew-chart-section">
+                <h2>Weight &amp; Flow</h2>
+                <div class="brew-chart-container">
+                    <canvas id="brew-combo-chart"></canvas>
+                    <div class="brew-chart-fallback" id="brew-combo-fallback" style="display:none;">
+                        Charts require internet connection for first load
+                    </div>
+                </div>
+                <div class="brew-combo-legend">
+                    <div class="brew-combo-legend-row">
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#667eea;"></span>Weight</span>
+                    </div>
+                    <div class="brew-combo-legend-row">
+                        <span class="brew-combo-legend-label">Flow:</span>
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#9E9E9E;"></span>&lt;1.5 idle</span>
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#66BB6A;"></span>1.5–3 slow</span>
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#FFA726;"></span>3–5 medium</span>
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#EF5350;"></span>&gt;5 fast</span>
+                    </div>
+                </div>
             </div>
 
             <!-- Weight Chart -->
-            <div class="section">
-                <h2>Weight</h2>
-                <div class="brew-chart-container">
-                    <canvas id="brew-weight-chart"></canvas>
-                    <div class="brew-chart-fallback" id="brew-weight-fallback" style="display:none;">
-                        Charts require internet connection for first load
+            <div class="section brew-chart-collapsible">
+                <h2 class="brew-chart-toggle" id="brew-weight-toggle">Weight <span class="brew-toggle-icon">▸</span></h2>
+                <div class="brew-chart-body" id="brew-weight-body" style="display:none;">
+                    <div class="brew-chart-container">
+                        <canvas id="brew-weight-chart"></canvas>
+                        <div class="brew-chart-fallback" id="brew-weight-fallback" style="display:none;">
+                            Charts require internet connection for first load
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Flow Rate Chart -->
-            <div class="section">
-                <h2>Flow Rate</h2>
-                <div class="brew-chart-container">
-                    <canvas id="brew-flow-chart"></canvas>
-                    <div class="brew-chart-fallback" id="brew-flow-fallback" style="display:none;">
-                        Charts require internet connection for first load
+            <div class="section brew-chart-collapsible">
+                <h2 class="brew-chart-toggle" id="brew-flow-toggle">Flow Rate <span class="brew-toggle-icon">▸</span></h2>
+                <div class="brew-chart-body" id="brew-flow-body" style="display:none;">
+                    <div class="brew-chart-container">
+                        <canvas id="brew-flow-chart"></canvas>
+                        <div class="brew-chart-fallback" id="brew-flow-fallback" style="display:none;">
+                            Charts require internet connection for first load
+                        </div>
+                    </div>
+                    <div class="brew-flow-legend">
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#9E9E9E;"></span>&lt;1.5 idle</span>
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#66BB6A;"></span>1.5–3 slow</span>
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#FFA726;"></span>3–5 medium</span>
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#EF5350;"></span>&gt;5 fast</span>
                     </div>
                 </div>
             </div>
@@ -89,6 +121,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
     <script src="/portal_core.js"></script>
     <script src="/portal_config.js"></script>
     <script src="/portal_health.js"></script>

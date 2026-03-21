@@ -16,7 +16,6 @@
 #define BREW_LOG_NVS_KEY_NEXT   "next_id"
 
 static Preferences s_prefs;
-static float s_last_peak_flow = 0.0f;
 
 // ============================================================================
 // Helpers
@@ -95,24 +94,6 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
     char path[32];
     brew_log_path(id, path, sizeof(path));
 
-    // Compute peak_flow and avg_flow from series.
-    // Threshold filters out scale noise (±0.1–0.2 g/s jitter at rest).
-    static constexpr float kFlowThreshold = 0.3f;  // g/s
-    float peak_flow = 0.0f;
-    float flow_sum = 0.0f;
-    uint16_t flow_count = 0;
-    for (uint16_t i = 0; i < sample_count; i++) {
-        float f = series[i].flow;
-        if (f > peak_flow) peak_flow = f;
-        if (f > kFlowThreshold) {
-            flow_sum += f;
-            flow_count++;
-        }
-    }
-    float avg_flow = (flow_count > 0) ? (flow_sum / flow_count) : 0.0f;
-
-    s_last_peak_flow = peak_flow;
-
     // Get timestamp (epoch seconds, 0 if NTP not synced)
     time_t now = 0;
     time(&now);
@@ -136,9 +117,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
     f.printf("{\"key\":\"duration\",\"label\":\"Duration\",\"value\":%lu,\"unit\":\"ms\",\"format\":\"duration\"},", (unsigned long)elapsed_ms);
 
     // Use integer part check for cleaner output
-    f.printf("{\"key\":\"water\",\"label\":\"Water\",\"value\":%.1f,\"unit\":\"g\",\"format\":\"number\"},", final_weight);
-    f.printf("{\"key\":\"peak_flow\",\"label\":\"Peak Flow\",\"value\":%.2f,\"unit\":\"g/s\",\"format\":\"number\"},", peak_flow);
-    f.printf("{\"key\":\"avg_flow\",\"label\":\"Avg Flow\",\"value\":%.2f,\"unit\":\"g/s\",\"format\":\"number\"}", avg_flow);
+    f.printf("{\"key\":\"water\",\"label\":\"Water\",\"value\":%.1f,\"unit\":\"g\",\"format\":\"number\"}", final_weight);
 
     if (dose_weight > 0.0f) {
         f.printf(",{\"key\":\"dose\",\"label\":\"Dose\",\"value\":%.1f,\"unit\":\"g\",\"format\":\"number\"}", dose_weight);
@@ -193,10 +172,10 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
     // Update fs health
     fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
 
-    LOGI(TAG, "Saved brew %u [%s]: %.1fg in %lums, %u samples, peak=%.2f avg=%.2f g/s",
+    LOGI(TAG, "Saved brew %u [%s]: %.1fg in %lums, %u samples",
          (unsigned)id, template_name ? template_name : "free_pour",
          final_weight, (unsigned long)elapsed_ms,
-         (unsigned)sample_count, peak_flow, avg_flow);
+         (unsigned)sample_count);
 
     return id;
 }
@@ -216,14 +195,6 @@ uint16_t brew_log_count() {
         f = dir.openNextFile();
     }
     return count;
-}
-
-// ============================================================================
-// Last peak flow
-// ============================================================================
-
-float brew_log_last_peak_flow() {
-    return s_last_peak_flow;
 }
 
 // ============================================================================

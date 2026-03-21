@@ -2066,3 +2066,78 @@ input[type="text"].label-style-input {
         gap: 12px;
     }
 }
+
+/* Derived Metrics Row */
+.brew-derived-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.brew-field-derived {
+    border-left: 3px solid #667eea;
+}
+
+/* Collapsible chart sections */
+.brew-chart-toggle {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.brew-toggle-icon {
+    font-size: 14px;
+    color: #86868b;
+    transition: transform 0.15s;
+}
+
+/* Flow Rate Legend */
+.brew-combo-legend {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #555;
+}
+
+.brew-combo-legend-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    align-items: center;
+}
+
+.brew-combo-legend-row + .brew-combo-legend-row {
+    margin-top: 3px;
+}
+
+.brew-combo-legend-label {
+    font-weight: 500;
+    color: #666;
+}
+
+.brew-flow-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #555;
+}
+
+.brew-flow-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.brew-legend-line {
+    width: 16px;
+    height: 3px;
+    border-radius: 1px;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+
