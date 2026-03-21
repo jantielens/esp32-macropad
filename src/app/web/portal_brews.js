@@ -215,13 +215,14 @@ function brewAnalyseFlow(flow) {
         spikeThreshold = Math.max(p90 * 2, 10);
     }
 
-    // Step 3: mark spike indices (expand ±1 to catch ramp in/out)
+    // Step 3: mark spike indices (expand ±2 to catch ramp-in and settle tail)
     const spikeSet = new Set();
     for (let i = 0; i < flow.length; i++) {
         if (Math.abs(flow[i]) > spikeThreshold) {
-            if (i > 0) spikeSet.add(i - 1);
-            spikeSet.add(i);
-            if (i < flow.length - 1) spikeSet.add(i + 1);
+            for (let d = -2; d <= 2; d++) {
+                const j = i + d;
+                if (j >= 0 && j < flow.length) spikeSet.add(j);
+            }
         }
     }
 
