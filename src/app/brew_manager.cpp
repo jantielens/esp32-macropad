@@ -276,7 +276,7 @@ void brew_tick() {
     if (s_save_pending) {
         s_save_pending = false;
         brew_log_save(s_elapsed_ms, s_save_weight,
-                      s_template ? s_template->name : "free_pour",
+                      s_template,
                       s_dose_weight,
                       s_series, s_series_count,
                       s_markers, s_marker_count,

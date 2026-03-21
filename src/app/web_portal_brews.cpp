@@ -85,8 +85,8 @@ void handleGetBrews(AsyncWebServerRequest* request) {
         buf[sz] = '\0';
         bf.close();
 
-        // Parse just to extract fields
-        StaticJsonDocument<2048> doc;
+        // Parse just to extract fields + template_info
+        StaticJsonDocument<4096> doc;
         DeserializationError err = deserializeJson(doc, buf, sz);
         free(buf);
         if (err) continue;
@@ -97,6 +97,11 @@ void handleGetBrews(AsyncWebServerRequest* request) {
                          doc["v"] | 1);
         // Serialize just the fields array
         serializeJson(doc["fields"], *response);
+        // Include template_info if present (for display_name in list view)
+        if (doc.containsKey("template_info")) {
+            response->print(",\"template_info\":");
+            serializeJson(doc["template_info"], *response);
+        }
         response->print('}');
     }
 

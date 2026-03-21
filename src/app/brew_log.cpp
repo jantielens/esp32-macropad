@@ -21,6 +21,17 @@ static Preferences s_prefs;
 // Helpers
 // ============================================================================
 
+// Write a JSON-safe string to file (escapes \ and ").
+static void write_json_string(File& f, const char* s) {
+    f.print('"');
+    while (*s) {
+        if (*s == '"' || *s == '\\') f.print('\\');
+        f.print(*s);
+        s++;
+    }
+    f.print('"');
+}
+
 static void brew_log_path(uint16_t id, char* buf, size_t len) {
     snprintf(buf, len, "%s/%04u.json", BREW_LOG_DIR, (unsigned)id);
 }
@@ -81,10 +92,11 @@ void brew_log_init() {
 // ============================================================================
 
 uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
-                       const char* template_name, float dose_weight,
+                       const BrewTemplate* tmpl, float dose_weight,
                        const BrewSample* series, uint16_t sample_count,
                        const BrewMarker* markers, uint8_t marker_count,
                        const BrewCapture* captures, uint8_t capture_count) {
+    const char* template_name = tmpl ? tmpl->name : "free_pour";
     // Evict if at capacity
     if (brew_log_count() >= BREW_LOG_MAX_BREWS) {
         evict_oldest();
@@ -163,7 +175,96 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
         f.printf("%.2f", series[i].flow);
     }
 
-    f.print("]}}");
+    f.print("]}");
+
+    // Write template snapshot (targets, display name, description)
+    if (tmpl) {
+        f.print(",\"template_info\":{\"display_name\":");
+        write_json_string(f, tmpl->display_name);
+        if (tmpl->description[0]) {
+            f.print(",\"description\":");
+            write_json_string(f, tmpl->description);
+        }
+        // Write per-stage targets (only stages with non-zero targets)
+        bool has_targets = false;
+        for (uint8_t i = 0; i < tmpl->stage_count; i++) {
+            const BrewStage& st = tmpl->stages[i];
+            if (st.target_weight > 0 || st.target_flow_rate > 0 || st.auto_time_ms > 0) {
+                has_targets = true;
+                break;
+            }
+        }
+        if (has_targets) {
+            f.print(",\"targets\":{");
+            bool first = true;
+            for (uint8_t i = 0; i < tmpl->stage_count; i++) {
+                const BrewStage& st = tmpl->stages[i];
+                if (st.target_weight <= 0 && st.target_flow_rate <= 0 && st.auto_time_ms == 0) continue;
+                if (!first) f.print(',');
+                first = false;
+                write_json_string(f, st.name);
+                f.print(":{");
+                bool first_f = true;
+                if (st.target_weight > 0) {
+                    f.printf("\"weight\":%.1f", st.target_weight);
+                    first_f = false;
+                }
+                if (st.target_flow_rate > 0) {
+                    if (!first_f) f.print(',');
+                    f.printf("\"flow_rate\":%.1f", st.target_flow_rate);
+                    first_f = false;
+                }
+                if (st.auto_time_ms > 0) {
+                    if (!first_f) f.print(',');
+                    f.printf("\"time_s\":%u", (unsigned)(st.auto_time_ms / 1000));
+                    first_f = false;
+                }
+                if (st.capture_key[0]) {
+                    if (!first_f) f.print(',');
+                    f.print("\"capture_key\":");
+                    write_json_string(f, st.capture_key);
+                }
+                f.print('}');
+            }
+            f.print('}');  // close targets
+        }
+
+        // Write field_targets: flat map from field key → target weight.
+        // Makes it trivial for the UI to show "actual vs target" per field.
+        {
+            f.print(",\"field_targets\":{");
+            bool ft_first = true;
+            float water_target = 0;
+            for (uint8_t i = 0; i < tmpl->stage_count; i++) {
+                const BrewStage& st = tmpl->stages[i];
+                if (st.target_weight <= 0) continue;
+                // Dose stage (legacy EFFECT_CAPTURE_DOSE)
+                if (st.on_exit & EFFECT_CAPTURE_DOSE) {
+                    if (!ft_first) f.print(',');
+                    ft_first = false;
+                    f.printf("\"dose\":%.1f", st.target_weight);
+                }
+                // Named capture stages (EFFECT_CAPTURE_WEIGHT with capture_key)
+                if ((st.on_exit & EFFECT_CAPTURE_WEIGHT) && st.capture_key[0]) {
+                    if (!ft_first) f.print(',');
+                    ft_first = false;
+                    write_json_string(f, st.capture_key);
+                    f.printf(":%.1f", st.target_weight);
+                }
+                // Track highest weight target as the total water target
+                if (st.target_weight > water_target) water_target = st.target_weight;
+            }
+            if (water_target > 0) {
+                if (!ft_first) f.print(',');
+                f.printf("\"water\":%.1f", water_target);
+            }
+            f.print('}');
+        }
+
+        f.print('}');  // close template_info
+    }
+
+    f.print("}");
     f.close();
 
     // Advance NVS counter

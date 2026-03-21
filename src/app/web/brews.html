@@ -53,6 +53,9 @@
 
                 <!-- Derived Metrics (computed client-side from series) -->
                 <div class="brew-derived-row" id="brew-derived-metrics" style="display:none;"></div>
+
+                <!-- Per-stage Flow Stats (target vs actual) -->
+                <div id="brew-phase-flow-stats" style="display:none;"></div>
             </div>
 
             <!-- Combined Chart + Phases -->
@@ -66,7 +69,8 @@
                 </div>
                 <div class="brew-combo-legend">
                     <div class="brew-combo-legend-row">
-                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#667eea;"></span>Weight</span>
+                        <span class="brew-combo-legend-label">Weight:</span>
+                        <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#667eea;"></span>cumulative (g)</span>
                     </div>
                     <div class="brew-combo-legend-row">
                         <span class="brew-combo-legend-label">Flow:</span>

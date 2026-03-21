@@ -105,6 +105,8 @@ function brewRenderCards(brews) {
 
     brews.forEach((brew, idx) => {
         const name = brewFindField(brew.fields, 'template');
+        const ti = brew.template_info;
+        const displayName = (ti && ti.display_name) ? ti.display_name : (name ? name.value : 'Brew');
         const ts = brewFindField(brew.fields, 'ts');
         const dur = brewFindField(brew.fields, 'duration');
         const wt = brewFindField(brew.fields, 'water');
@@ -114,11 +116,11 @@ function brewRenderCards(brews) {
         card.style.animationDelay = (idx * 0.05) + 's';
         card.setAttribute('tabindex', '0');
         card.setAttribute('role', 'button');
-        card.setAttribute('aria-label', `View brew: ${name ? name.value : 'Brew'}`);
+        card.setAttribute('aria-label', `View brew: ${displayName}`);
 
         card.innerHTML = `
             <div class="brew-card-header">
-                <span class="brew-card-name">☕ ${name ? name.value : 'Brew'}</span>
+                <span class="brew-card-name">☕ ${displayName}</span>
                 <span class="brew-card-date">${ts ? brewFormatField(ts) : ''}</span>
             </div>
             <div class="brew-card-stats">
@@ -178,6 +180,13 @@ async function brewLoadList() {
 // disturbance. Shared by spike detection and phase computation.
 const BREW_FLOW_HARD_CEILING = 15;
 
+// Minimum flow (g/s) to count as active pour.
+const BREW_POUR_THRESHOLD = 0.5;
+
+// Tolerance for comparing actual vs target values.
+const BREW_FIELD_TARGET_TOLERANCE = 0.05;  // 5% for weight fields
+const BREW_FLOW_TARGET_TOLERANCE  = 0.15;  // 15% for flow rates (inherently noisier)
+
 // Analyse flow data: detect swirl spikes, compute a clean Y-axis ceiling,
 // and produce a display-ready array with spikes replaced by NaN.
 // Swirl = cup lifted off scale then returned — produces physically impossible
@@ -228,7 +237,10 @@ function brewAnalyseFlow(flow) {
 }
 
 // Detect phases from markers + flow data.
-// Returns array of { label, startIdx, endIdx, avgFlow, isActive }.
+// Returns array of { label, startIdx, endIdx, avgFlow, pourAvgFlow, isActive }.
+// avgFlow: average over entire phase (for isActive detection).
+// pourAvgFlow: average only during active pour (|flow| >= 0.5 g/s), excludes
+//   idle/drawdown time within a phase — better comparison against target flow.
 function brewComputePhases(series, markers) {
     if (!markers || markers.length === 0) return [];
     const totalSamples = series.weight.length;
@@ -243,16 +255,22 @@ function brewComputePhases(series, markers) {
         const end = (i + 1 < points.length) ? points[i + 1].t : totalSamples;
         // Compute avg flow in this segment
         let flowSum = 0, flowCount = 0;
+        let pourSum = 0, pourCount = 0;
         for (let j = start; j < end && j < series.flow.length; j++) {
             const af = Math.abs(series.flow[j]);
-            if (af < BREW_FLOW_HARD_CEILING) { flowSum += af; flowCount++; }
+            if (af < BREW_FLOW_HARD_CEILING) {
+                flowSum += af; flowCount++;
+                if (af >= BREW_POUR_THRESHOLD) { pourSum += af; pourCount++; }
+            }
         }
         const avgFlow = flowCount > 0 ? flowSum / flowCount : 0;
+        const pourAvgFlow = pourCount > 0 ? pourSum / pourCount : 0;
         phases.push({
             label: points[i].label,
             startIdx: start,
             endIdx: end,
             avgFlow: avgFlow,
+            pourAvgFlow: pourAvgFlow,
             isActive: avgFlow >= flowThreshold
         });
     }
@@ -268,7 +286,6 @@ function brewComputeDerivedMetrics(series, fields) {
     const flow = series.flow;
     const intervalSec = (series.interval_ms || 1000) / 1000;
     const { spikeSet } = brewAnalyseFlow(flow);
-    const pourThreshold = 0.5; // g/s min to count as active pour
 
     // Active pour time: seconds where flow > threshold and not a spike
     let activeSamples = 0;
@@ -276,7 +293,7 @@ function brewComputeDerivedMetrics(series, fields) {
     for (let i = 0; i < flow.length; i++) {
         if (spikeSet.has(i)) continue;
         const af = Math.abs(flow[i]);
-        if (af >= pourThreshold) {
+        if (af >= BREW_POUR_THRESHOLD) {
             activeSamples++;
             activeFlows.push(af);
         }
@@ -304,7 +321,7 @@ function brewComputeDerivedMetrics(series, fields) {
     for (let i = flow.length - 1; i >= 0; i--) {
         if (spikeSet.has(i)) continue;
         const af = Math.abs(flow[i]);
-        if (af >= pourThreshold) { lastActiveIdx = i; break; }
+        if (af >= BREW_POUR_THRESHOLD) { lastActiveIdx = i; break; }
     }
     if (lastActiveIdx >= 0 && lastActiveIdx < flow.length - 2) {
         const drawdownSec = (flow.length - 1 - lastActiveIdx) * intervalSec;
@@ -380,7 +397,9 @@ async function brewShowDetail(id) {
         // Populate fields
         const name = brewFindField(brewDetailData.fields, 'template');
         const ts = brewFindField(brewDetailData.fields, 'ts');
-        document.getElementById('brew-detail-name').textContent = '☕ ' + (name ? name.value : 'Brew');
+        const ti = brewDetailData.template_info;
+        const displayName = (ti && ti.display_name) ? ti.display_name : (name ? name.value : 'Brew');
+        document.getElementById('brew-detail-name').textContent = '☕ ' + displayName;
         document.getElementById('brew-detail-date').textContent = ts ? brewFormatField(ts) : '';
 
         // Fields grid (skip template and ts — shown in header)
@@ -393,13 +412,23 @@ async function brewShowDetail(id) {
             ratio: 'Brew ratio: total water / coffee dose.',
             bloom_water: 'Water added during the bloom phase.'
         };
+        const ft = (ti && ti.field_targets) || {};
         for (const field of brewDetailData.fields) {
             if (field.key === 'template' || field.key === 'ts') continue;
             const div = document.createElement('div');
             div.className = 'brew-field';
             if (fieldTooltips[field.key]) div.title = fieldTooltips[field.key];
+            let valHtml = brewFormatField(field);
+            // Show target annotation when a field_target exists for this key
+            if (ft[field.key] != null && typeof field.value === 'number') {
+                const target = ft[field.key];
+                const delta = field.value - target;
+                const sign = delta >= 0 ? '+' : '';
+                const cls = Math.abs(delta) <= target * BREW_FIELD_TARGET_TOLERANCE ? 'brew-target-ok' : 'brew-target-miss';
+                valHtml += ` <span class="brew-target ${cls}" title="Target: ${target}${field.unit || 'g'}">(${sign}${delta.toFixed(1)})</span>`;
+            }
             div.innerHTML = `<span class="brew-field-label">${field.label}</span>
-                             <span class="brew-field-value">${brewFormatField(field)}</span>`;
+                             <span class="brew-field-value">${valHtml}</span>`;
             fieldsEl.appendChild(div);
         }
 
@@ -407,8 +436,11 @@ async function brewShowDetail(id) {
         const derivedMetrics = brewComputeDerivedMetrics(brewDetailData.series, brewDetailData.fields);
         brewRenderDerivedMetrics(derivedMetrics);
 
+        // Per-stage flow stats (target vs actual)
+        brewRenderPhaseFlowStats(brewDetailData.series, brewDetailData.markers, ti);
+
         // Charts (phase strip is rendered inside the chart by brewPhaseStripPlugin)
-        brewCreateCharts(brewDetailData.series, brewDetailData.markers);
+        brewCreateCharts(brewDetailData.series, brewDetailData.markers, ti);
 
         // Wire collapsible chart toggles
         brewInitToggles();
@@ -564,11 +596,80 @@ function brewMarkerAnnotations(markers) {
     return annotations;
 }
 
+// Build dashed horizontal reference-line annotations for per-phase target flow rates.
+// Each active phase whose template target includes a flow_rate gets a line on the y1 axis.
+function brewTargetFlowAnnotations(phases, templateInfo) {
+    if (!phases || phases.length === 0) return {};
+    const targets = (templateInfo && templateInfo.targets) || {};
+    if (Object.keys(targets).length === 0) return {};
+
+    const annotations = {};
+    let colorIdx = 0;
+    for (const phase of phases) {
+        if (!phase.isActive) continue;
+        const ci = colorIdx++;
+        const tgt = targets[phase.label];
+        if (!tgt || !tgt.flow_rate) continue;
+        const color = PHASE_COLORS[ci % PHASE_COLORS.length];
+        annotations['flowTarget' + ci] = {
+            type: 'line',
+            yMin: tgt.flow_rate,
+            yMax: tgt.flow_rate,
+            yScaleID: 'y1',
+            xMin: phase.startIdx,
+            xMax: phase.endIdx - 1,
+            borderColor: color + 'AA',
+            borderWidth: 1.5,
+            borderDash: [6, 4]
+        };
+    }
+    return annotations;
+}
+
+// Render per-stage flow stats table: avg flow vs target for each active phase
+function brewRenderPhaseFlowStats(series, markers, templateInfo) {
+    const el = document.getElementById('brew-phase-flow-stats');
+    if (!el) return;
+    const targets = (templateInfo && templateInfo.targets) || {};
+    if (Object.keys(targets).length === 0 || !series || !series.flow) {
+        el.style.display = 'none';
+        return;
+    }
+    const phases = brewComputePhases(series, markers).filter(p => p.isActive);
+    // Only show if at least one active phase has a flow_rate target
+    const hasAny = phases.some(p => targets[p.label] && targets[p.label].flow_rate > 0);
+    if (!hasAny) { el.style.display = 'none'; return; }
+
+    el.style.display = '';
+    let html = '<div class="brew-phase-stats-label">Flow by Stage</div><div class="brew-phase-stats-grid">';
+    let colorIdx = 0;
+    for (const phase of phases) {
+        const color = PHASE_COLORS[colorIdx++ % PHASE_COLORS.length];
+        const tgt = targets[phase.label];
+        const targetFlow = tgt && tgt.flow_rate ? tgt.flow_rate : null;
+        const displayFlow = phase.pourAvgFlow;
+        let deltaHtml = '';
+        if (targetFlow) {
+            const delta = displayFlow - targetFlow;
+            const sign = delta >= 0 ? '+' : '';
+            const cls = Math.abs(delta) <= targetFlow * BREW_FLOW_TARGET_TOLERANCE ? 'brew-target-ok' : 'brew-target-miss';
+            deltaHtml = ` <span class="brew-target ${cls}">(${sign}${delta.toFixed(1)})</span>`;
+        }
+        html += '<div class="brew-phase-stat" style="border-left-color:' + color + '">' +
+            '<span class="brew-field-label">' + phase.label + '</span>' +
+            '<span class="brew-field-value">' + displayFlow.toFixed(1) + ' g/s' + deltaHtml + '</span>' +
+            (targetFlow ? '<span class="brew-phase-stat-target">target ' + targetFlow.toFixed(1) + ' g/s</span>' : '') +
+            '</div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+}
+
 // ============================================================================
 // Charts (Chart.js)
 // ============================================================================
 
-function brewCreateCharts(series, markers) {
+function brewCreateCharts(series, markers, templateInfo) {
     if (weightChart) { weightChart.destroy(); weightChart = null; }
     if (flowChart) { flowChart.destroy(); flowChart = null; }
     if (comboChart) { comboChart.destroy(); comboChart = null; }
@@ -598,11 +699,15 @@ function brewCreateCharts(series, markers) {
     const { flowDisplay, flowCeiling, spikeSet } = brewAnalyseFlow(flowRaw);
     const markerAnns = brewMarkerAnnotations(markers);
     const swirlAnns = brewSwirlAnnotations(spikeSet);
-    const annotations = Object.assign({}, markerAnns, swirlAnns);
 
     // Compute phases for in-chart strip
     const phases = brewComputePhases(series, markers)
         .filter(p => p.endIdx > p.startIdx);
+
+    // Build target flow rate reference lines per phase
+    const targetFlowAnns = brewTargetFlowAnnotations(phases, templateInfo);
+    const comboAnnotations = Object.assign({}, markerAnns, swirlAnns, targetFlowAnns);
+    const basicAnnotations = Object.assign({}, markerAnns, swirlAnns);
 
     // Compute nice tick step in seconds
     const totalDurSec = parseFloat(labels[labels.length - 1]) || 1;
@@ -685,7 +790,7 @@ function brewCreateCharts(series, markers) {
                         }
                     }
                 },
-                annotation: { annotations: annotations, clip: false },
+                annotation: { annotations: comboAnnotations, clip: false },
                 brewPhaseStrip: { phases: phases, palette: PHASE_COLORS }
             },
             scales: {
@@ -768,7 +873,7 @@ function brewCreateCharts(series, markers) {
                         label: (item) => item.parsed.y.toFixed(1) + ' g'
                     }
                 },
-                annotation: { annotations: annotations }
+                annotation: { annotations: basicAnnotations }
             },
             scales: {
                 x: {
@@ -821,7 +926,7 @@ function brewCreateCharts(series, markers) {
                         }
                     }
                 },
-                annotation: { annotations: annotations }
+                annotation: { annotations: basicAnnotations }
             },
             scales: {
                 x: {
@@ -880,6 +985,7 @@ function brewExportOne(brew) {
     // Strip the id (not stored in file)
     const exportData = { v: brew.v, fields: brew.fields };
     if (brew.markers && brew.markers.length > 0) exportData.markers = brew.markers;
+    if (brew.template_info) exportData.template_info = brew.template_info;
     exportData.series = brew.series;
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -906,7 +1012,11 @@ async function brewExportAll() {
             const resp = await fetch(API_BREWS + '?id=' + brew.id);
             if (resp.ok) {
                 const data = await resp.json();
-                allBrews.push({ v: data.v, fields: data.fields, series: data.series });
+                const item = { v: data.v, fields: data.fields };
+                if (data.markers && data.markers.length > 0) item.markers = data.markers;
+                if (data.template_info) item.template_info = data.template_info;
+                item.series = data.series;
+                allBrews.push(item);
             }
         }
 

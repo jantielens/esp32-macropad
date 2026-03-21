@@ -2017,6 +2017,14 @@ input[type="text"].label-style-input {
     color: #1d1d1f;
 }
 
+.brew-target {
+    font-size: 12px;
+    font-weight: 500;
+    margin-left: 4px;
+}
+.brew-target-ok { color: #43a047; }
+.brew-target-miss { color: #e53935; }
+
 /* Charts */
 .brew-chart-container {
     position: relative;
@@ -2077,6 +2085,40 @@ input[type="text"].label-style-input {
 
 .brew-field-derived {
     border-left: 3px solid #667eea;
+}
+
+/* Per-stage flow stats */
+.brew-phase-stats-label {
+    font-size: 11px;
+    color: #86868b;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 8px;
+}
+
+.brew-phase-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+}
+
+.brew-phase-stat {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 3px solid #667eea;
+}
+
+.brew-phase-stat-target {
+    font-size: 11px;
+    color: #86868b;
+    margin-top: 2px;
+}
+
+#brew-phase-flow-stats {
+    margin-top: 12px;
 }
 
 /* Collapsible chart sections */
