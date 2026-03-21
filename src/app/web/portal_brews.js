@@ -285,15 +285,18 @@ function brewComputeDerivedMetrics(series, fields) {
     if (activePourSec > 0) {
         const m = Math.floor(activePourSec / 60);
         const s = Math.round(activePourSec % 60);
-        metrics.push({ label: 'Active Pour', value: m + ':' + String(s).padStart(2, '0') });
+        metrics.push({ label: 'Active Pour', value: m + ':' + String(s).padStart(2, '0'),
+            tooltip: 'Total time where flow rate exceeds 0.5 g/s (excluding swirl spikes).' });
     }
 
     // Peak and avg flow (spike-filtered, above pour threshold)
     if (activeFlows.length > 0) {
         const peakFlow = Math.max(...activeFlows);
         const avgFlow = activeFlows.reduce((a, b) => a + b, 0) / activeFlows.length;
-        metrics.push({ label: 'Peak Flow', value: peakFlow.toFixed(1) + ' g/s' });
-        metrics.push({ label: 'Avg Flow', value: avgFlow.toFixed(1) + ' g/s' });
+        metrics.push({ label: 'Peak Flow', value: peakFlow.toFixed(1) + ' g/s',
+            tooltip: 'Highest instantaneous flow rate during active pour (spike-filtered).' });
+        metrics.push({ label: 'Avg Flow', value: avgFlow.toFixed(1) + ' g/s',
+            tooltip: 'Mean flow rate during active pour (spike-filtered).' });
     }
 
     // Drawdown time: from last active pour sample to end of recording
@@ -307,14 +310,16 @@ function brewComputeDerivedMetrics(series, fields) {
         const drawdownSec = (flow.length - 1 - lastActiveIdx) * intervalSec;
         const m = Math.floor(drawdownSec / 60);
         const s = Math.round(drawdownSec % 60);
-        metrics.push({ label: 'Drawdown', value: m + ':' + String(s).padStart(2, '0') });
+        metrics.push({ label: 'Drawdown', value: m + ':' + String(s).padStart(2, '0'),
+            tooltip: 'Time from last active pour to end of recording (bed draining).' });
     }
 
     // Bloom ratio: bloom_water / dose
     const dose = brewFindField(fields, 'dose');
     const bloom = brewFindField(fields, 'bloom_water');
     if (dose && bloom && dose.value > 0) {
-        metrics.push({ label: 'Bloom Ratio', value: (bloom.value / dose.value).toFixed(1) + 'x' });
+        metrics.push({ label: 'Bloom Ratio', value: (bloom.value / dose.value).toFixed(1) + 'x',
+            tooltip: 'Bloom water divided by coffee dose. Typical range: 2x–3x.' });
     }
 
     // Flow consistency: std deviation of active flow rates
@@ -322,7 +327,8 @@ function brewComputeDerivedMetrics(series, fields) {
         const mean = activeFlows.reduce((a, b) => a + b, 0) / activeFlows.length;
         const variance = activeFlows.reduce((a, v) => a + (v - mean) * (v - mean), 0) / activeFlows.length;
         const stdev = Math.sqrt(variance);
-        metrics.push({ label: 'Flow σ', value: stdev.toFixed(2) + ' g/s' });
+        metrics.push({ label: 'Flow σ', value: stdev.toFixed(2) + ' g/s',
+            tooltip: 'Standard deviation of active flow rates. Lower = more consistent pour.' });
     }
 
     return metrics;
@@ -352,6 +358,7 @@ function brewRenderDerivedMetrics(metrics) {
     for (const m of metrics) {
         const div = document.createElement('div');
         div.className = 'brew-field brew-field-derived';
+        if (m.tooltip) div.title = m.tooltip;
         div.innerHTML = '<span class="brew-field-label">' + m.label + '</span>' +
                         '<span class="brew-field-value">' + m.value + '</span>';
         el.appendChild(div);
@@ -379,10 +386,18 @@ async function brewShowDetail(id) {
         // Fields grid (skip template and ts — shown in header)
         const fieldsEl = document.getElementById('brew-detail-fields');
         fieldsEl.innerHTML = '';
+        const fieldTooltips = {
+            duration: 'Total brew time from first pour to end of recording.',
+            water: 'Total water weight at end of brew.',
+            dose: 'Dry coffee dose used for the brew.',
+            ratio: 'Brew ratio: total water / coffee dose.',
+            bloom_water: 'Water added during the bloom phase.'
+        };
         for (const field of brewDetailData.fields) {
             if (field.key === 'template' || field.key === 'ts') continue;
             const div = document.createElement('div');
             div.className = 'brew-field';
+            if (fieldTooltips[field.key]) div.title = fieldTooltips[field.key];
             div.innerHTML = `<span class="brew-field-label">${field.label}</span>
                              <span class="brew-field-value">${brewFormatField(field)}</span>`;
             fieldsEl.appendChild(div);
@@ -595,6 +610,25 @@ function brewCreateCharts(series, markers) {
     let tickStepSec = 120;
     for (const s of niceSteps) { if (totalDurSec / s <= 14) { tickStepSec = s; break; } }
 
+    // Align weight & flow Y-axis grid lines.
+    // Pick a nice round step for each axis, then equalise interval count
+    // so both axes share the same grid rows.
+    function niceStep(maxVal, targetIntervals) {
+        const rough = maxVal / targetIntervals;
+        const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+        const norm = rough / mag;
+        if (norm <= 1) return 1 * mag;
+        if (norm <= 2) return 2 * mag;
+        if (norm <= 5) return 5 * mag;
+        return 10 * mag;
+    }
+    const weightMax = Math.max(...series.weight) || 1;
+    const wStep = niceStep(weightMax, 6);
+    const fStep = niceStep(flowCeiling, 6);
+    const intervals = Math.max(Math.ceil(weightMax / wStep), Math.ceil(flowCeiling / fStep));
+    const alignedWeightMax = intervals * wStep;
+    const alignedFlowMax = intervals * fStep;
+
     // ---- Combined Chart (hero) ----
     const comboCtx = document.getElementById('brew-combo-chart').getContext('2d');
     comboChart = new Chart(comboCtx, {
@@ -686,14 +720,17 @@ function brewCreateCharts(series, markers) {
                     type: 'linear',
                     position: 'left',
                     title: { display: true, text: 'Weight (g)' },
-                    beginAtZero: true
+                    min: 0,
+                    max: alignedWeightMax,
+                    ticks: { stepSize: wStep }
                 },
                 y1: {
                     type: 'linear',
                     position: 'right',
                     title: { display: true, text: 'Flow (g/s)' },
                     min: 0,
-                    max: flowCeiling,
+                    max: alignedFlowMax,
+                    ticks: { stepSize: fStep },
                     grid: { drawOnChartArea: false }
                 }
             }
