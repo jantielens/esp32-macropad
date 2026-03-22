@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "name": "beep_pattern_test",
+  "display_name": "Beep Pattern Test",
+  "stages": [
+    {
+      "name": "Default beep",
+      "type": "manual",
+      "on_enter": ["beep"]
+    },
+    {
+      "name": "Custom beep",
+      "type": "manual",
+      "on_enter": ["beep"],
+      "beep_pattern": "1000:30 30 1200:30"
+    },
+    {
+      "name": "No beep effect",
+      "type": "manual",
+      "beep_pattern": "800:100"
+    }
+  ]
+}

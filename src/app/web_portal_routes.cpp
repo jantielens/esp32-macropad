@@ -272,6 +272,11 @@ void web_portal_register_routes(AsyncWebServer* server) {
 			HTTP_POST,
 			[](AsyncWebServerRequest *request) {
 					if (!portal_auth_gate(request)) return;
+					// Clean up accumulation buffer if body handler didn't consume it
+					if (request->_tempObject) {
+							delete[] (char*)request->_tempObject;
+							request->_tempObject = nullptr;
+					}
 			},
 			NULL,
 			handlePostBrewTemplate

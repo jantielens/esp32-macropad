@@ -1,0 +1,99 @@
+{
+  "v": 1,
+  "name": "v60_multi_pour",
+  "display_name": "V60 Multi-Pour",
+  "description": "Classic Hario V60 recipe: bloom + two structured pours. 16g coffee, 250g water (1:15.6 ratio).",
+  "start_label": "Start V60",
+  "done_label": "Brew Again",
+  "stages": [
+    {
+      "name": "Place Cup",
+      "instruction": "Place your empty dosing cup on the scale",
+      "next_label": "Tare Scale",
+      "type": "manual"
+    },
+    {
+      "name": "Dose Beans",
+      "instruction": "Add 16g of whole beans to the cup",
+      "next_label": "Log Dose",
+      "type": "manual",
+      "on_enter": ["tare"],
+      "on_exit": ["capture_dose"],
+      "target_weight": 16
+    },
+    {
+      "name": "Prep",
+      "instruction": "Grind beans, rinse filter, place V60 + server on scale",
+      "next_label": "Ready",
+      "type": "manual",
+      "on_enter": ["tare"]
+    },
+    {
+      "name": "Arm Pour",
+      "instruction": "Start pouring when ready — brew starts automatically",
+      "next_label": "",
+      "type": "auto_weight",
+      "auto_threshold": 3,
+      "on_enter": ["tare"]
+    },
+    {
+      "name": "Bloom",
+      "instruction": "Pour gently in circles to 50g, then wait",
+      "next_label": "",
+      "type": "auto_time",
+      "auto_time_s": 45,
+      "target_weight": 50,
+      "target_flow_rate": 5.0,
+      "on_enter": ["beep", "marker"],
+      "on_exit": ["capture_weight"],
+      "beep_pattern": "1200:500",
+      "countdown_beep": "800:200 800 800:200 800",
+      "countdown_done_beep": "800:1000",
+      "weight_cue_g": 5,
+      "weight_cue_times": 2,
+      "weight_cue_beep": "1500:200",
+      "weight_done_beep": "1500:1000",
+      "capture": {
+        "key": "bloom_water",
+        "label": "Bloom Water",
+        "unit": "g"
+      }
+    },
+    {
+      "name": "Pour 1",
+      "instruction": "Slow, steady circles to 150g",
+      "next_label": "",
+      "type": "auto_time",
+      "auto_time_s": 45,
+      "target_weight": 150,
+      "target_flow_rate": 5.0,
+      "on_enter": ["marker"],
+      "countdown_beep": "800:200 800 800:200 800",
+      "countdown_done_beep": "800:1000",
+      "weight_cue_g": 5,
+      "weight_cue_times": 2,
+      "weight_cue_beep": "1500:200",
+      "weight_done_beep": "1500:1000"
+    },
+    {
+      "name": "Final Pour",
+      "instruction": "Pour to 250g — slow and steady",
+      "next_label": "Done",
+      "type": "manual",
+      "target_weight": 250,
+      "target_flow_rate": 5.0,
+      "on_enter": ["marker"],
+      "on_exit": ["beep", "capture_weight"],
+      "beep_pattern": "1200:100 80 1200:100 80 1200:300",
+      "weight_cue_g": 5,
+      "weight_cue_times": 2,
+      "weight_cue_beep": "1500:200",
+      "weight_done_beep": "1500:1000",
+      "capture": {
+        "key": "total_water",
+        "label": "Total Water",
+        "unit": "g"
+      }
+    }
+  ]
+}

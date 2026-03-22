@@ -57,8 +57,8 @@ void handleGetSwipeActions(AsyncWebServerRequest *request) {
 void handlePostSwipeActions(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
 
-    // Only handle final chunk (small payload, arrives in one piece)
-    if (index + len < total) return;
+    // Only handle complete single-chunk requests
+    if (index != 0 || index + len != total) return;
 
     if (total > 4096) {
         request->send(413, "application/json", "{\"error\":\"payload too large\"}");
@@ -66,7 +66,7 @@ void handlePostSwipeActions(AsyncWebServerRequest *request, uint8_t *data, size_
     }
 
     // Save raw JSON directly (same pattern as pad config)
-    bool ok = swipe_config_save_raw(data, total);
+    bool ok = swipe_config_save_raw(data, len);
     if (ok) {
         request->send(200, "application/json", "{\"ok\":true}");
     } else {

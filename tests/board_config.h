@@ -10,6 +10,7 @@
 #define HAS_MQTT         true
 #define HAS_BLE_HID      true
 #define HAS_SENSOR_HX711 true
+#define HAS_AUDIO        true
 
 // strlcpy is available on ESP32 (newlib) but not glibc — declare for host tests
 #include <stddef.h>

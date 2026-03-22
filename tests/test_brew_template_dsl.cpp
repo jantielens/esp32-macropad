@@ -289,8 +289,131 @@ TEST(parse_all_effects) {
     ASSERT_STREQ(stages[0].capture_key, "test_cap");
     ASSERT_STREQ(stages[0].capture_label, "Test Capture");
     ASSERT_STREQ(stages[0].capture_unit, "ml");
+    ASSERT_STREQ(stages[0].beep_pattern, "600:40 40 600:40");
 
     free_template(tmpl, stages);
+}
+
+// ===========================================================================
+// Parse: beep_pattern (custom audio cue per stage)
+// ===========================================================================
+
+TEST(parse_beep_pattern) {
+    BrewTemplate* tmpl; BrewStage* stages;
+    parse_fixture("beep_pattern.json", &tmpl, &stages);
+
+    ASSERT_EQ(tmpl->stage_count, (uint8_t)3);
+
+    // Stage 0: beep effect but no custom pattern → empty (uses default)
+    ASSERT_EQ(stages[0].on_enter, EFFECT_BEEP);
+    ASSERT_STREQ(stages[0].beep_pattern, "");
+
+    // Stage 1: beep effect with custom pattern
+    ASSERT_EQ(stages[1].on_enter, EFFECT_BEEP);
+    ASSERT_STREQ(stages[1].beep_pattern, "1000:30 30 1200:30");
+
+    // Stage 2: pattern set but no beep effect (pattern stored, ignored at runtime)
+    ASSERT_EQ(stages[2].on_enter, EFFECT_NONE);
+    ASSERT_STREQ(stages[2].beep_pattern, "800:100");
+
+    free_template(tmpl, stages);
+}
+
+// ===========================================================================
+// Parse: countdown_beep field
+// ===========================================================================
+
+TEST(parse_countdown_beep) {
+    BrewTemplate* tmpl; BrewStage* stages;
+    parse_fixture("countdown.json", &tmpl, &stages);
+
+    ASSERT_EQ(tmpl->stage_count, (uint8_t)3);
+
+    // Stage 0: auto_time with countdown_beep
+    ASSERT_EQ((int)stages[0].type, (int)STAGE_AUTO_TIME);
+    ASSERT_EQ(stages[0].auto_time_ms, (uint32_t)45000);
+    ASSERT_STREQ(stages[0].countdown_beep, "800:200 300 800:200 300 800:500");
+    ASSERT_STREQ(stages[0].countdown_done_beep, "800:1000");
+
+    // Stage 1: auto_time without countdown_beep
+    ASSERT_EQ((int)stages[1].type, (int)STAGE_AUTO_TIME);
+    ASSERT_STREQ(stages[1].countdown_beep, "");
+    ASSERT_STREQ(stages[1].countdown_done_beep, "");
+
+    // Stage 2: manual with countdown_beep (stored but ignored at runtime)
+    ASSERT_EQ((int)stages[2].type, (int)STAGE_MANUAL);
+    ASSERT_STREQ(stages[2].countdown_beep, "1000:100");
+    ASSERT_STREQ(stages[2].countdown_done_beep, "1000:500");
+
+    free_template(tmpl, stages);
+}
+
+TEST(parse_weight_cue) {
+    BrewTemplate* tmpl; BrewStage* stages;
+    parse_fixture("weight_cue.json", &tmpl, &stages);
+
+    ASSERT_EQ(tmpl->stage_count, (uint8_t)3);
+
+    // Stage 0: full weight cue with times and beep pattern
+    ASSERT_FLOAT_EQ(stages[0].weight_cue_g, 10.0f);
+    ASSERT_EQ(stages[0].weight_cue_times, (uint8_t)3);
+    ASSERT_STREQ(stages[0].weight_cue_beep, "800:100 100 800:100");
+    ASSERT_FLOAT_EQ(stages[0].target_weight, 200.0f);
+    ASSERT_STREQ(stages[0].weight_done_beep, "1500:1000");
+
+    // Stage 1: simple cue (times defaults to 1, no custom beep)
+    ASSERT_FLOAT_EQ(stages[1].weight_cue_g, 15.0f);
+    ASSERT_EQ(stages[1].weight_cue_times, (uint8_t)1);
+    ASSERT_STREQ(stages[1].weight_cue_beep, "");
+    ASSERT_STREQ(stages[1].weight_done_beep, "");
+
+    // Stage 2: cue without target weight (stored but ignored at runtime)
+    ASSERT_FLOAT_EQ(stages[2].weight_cue_g, 10.0f);
+    ASSERT_FLOAT_EQ(stages[2].target_weight, 0.0f);
+    ASSERT_STREQ(stages[2].weight_cue_beep, "600:200");
+    ASSERT_STREQ(stages[2].weight_done_beep, "");
+
+    free_template(tmpl, stages);
+}
+
+// ===========================================================================
+// Beep duration calculator
+// ===========================================================================
+
+TEST(beep_duration_null) {
+    ASSERT_EQ(brew_dsl_beep_duration_ms(nullptr), (uint32_t)0);
+}
+
+TEST(beep_duration_empty) {
+    ASSERT_EQ(brew_dsl_beep_duration_ms(""), (uint32_t)0);
+}
+
+TEST(beep_duration_single_tone) {
+    ASSERT_EQ(brew_dsl_beep_duration_ms("1000:200"), (uint32_t)200);
+}
+
+TEST(beep_duration_single_gap) {
+    ASSERT_EQ(brew_dsl_beep_duration_ms("150"), (uint32_t)150);
+}
+
+TEST(beep_duration_tone_gap_tone) {
+    // 200 + 100 + 200 = 500
+    ASSERT_EQ(brew_dsl_beep_duration_ms("1000:200 100 1000:200"), (uint32_t)500);
+}
+
+TEST(beep_duration_countdown_pattern) {
+    // 200 + 300 + 200 + 300 + 500 = 1500
+    ASSERT_EQ(brew_dsl_beep_duration_ms("800:200 300 800:200 300 800:500"), (uint32_t)1500);
+}
+
+TEST(beep_duration_rising_alert) {
+    // 100 + 50 + 100 + 50 + 100 = 400
+    ASSERT_EQ(brew_dsl_beep_duration_ms("800:100 50 1000:100 50 1200:100"), (uint32_t)400);
+}
+
+TEST(beep_duration_ignores_zero) {
+    // "0" → 0 duration (not in range 1..10000)
+    ASSERT_EQ(brew_dsl_beep_duration_ms("0:0 0"), (uint32_t)0);
 }
 
 // ===========================================================================
@@ -311,6 +434,13 @@ TEST(parse_defaults) {
     ASSERT_STREQ(stages[0].capture_key, "");
     ASSERT_STREQ(stages[0].capture_label, "");
     ASSERT_STREQ(stages[0].capture_unit, "");
+    ASSERT_STREQ(stages[0].beep_pattern, "");
+    ASSERT_STREQ(stages[0].countdown_beep, "");
+    ASSERT_STREQ(stages[0].countdown_done_beep, "");
+    ASSERT_FLOAT_EQ(stages[0].weight_cue_g, 0.0f);
+    ASSERT_EQ(stages[0].weight_cue_times, (uint8_t)1);
+    ASSERT_STREQ(stages[0].weight_cue_beep, "");
+    ASSERT_STREQ(stages[0].weight_done_beep, "");
 
     // Stage 1: auto_weight with threshold
     ASSERT_EQ((int)stages[1].type, (int)STAGE_AUTO_WEIGHT);
@@ -546,6 +676,13 @@ TEST(roundtrip_rao_v60) {
         ASSERT_STREQ(a.capture_key, b.capture_key);
         ASSERT_STREQ(a.capture_label, b.capture_label);
         ASSERT_STREQ(a.capture_unit, b.capture_unit);
+        ASSERT_STREQ(a.beep_pattern, b.beep_pattern);
+        ASSERT_STREQ(a.countdown_beep, b.countdown_beep);
+        ASSERT_STREQ(a.countdown_done_beep, b.countdown_done_beep);
+        ASSERT_FLOAT_EQ(a.weight_cue_g, b.weight_cue_g);
+        ASSERT_EQ(a.weight_cue_times, b.weight_cue_times);
+        ASSERT_STREQ(a.weight_cue_beep, b.weight_cue_beep);
+        ASSERT_STREQ(a.weight_done_beep, b.weight_done_beep);
     }
 
     free_template(tmpl1, stages1);
@@ -628,6 +765,9 @@ int main() {
     RUN(parse_free_pour);
     RUN(parse_rao_v60);
     RUN(parse_all_effects);
+    RUN(parse_beep_pattern);
+    RUN(parse_countdown_beep);
+    RUN(parse_weight_cue);
     RUN(parse_defaults);
     RUN(parse_forward_compat);
     RUN(parse_truncation);
@@ -647,6 +787,16 @@ int main() {
     RUN(roundtrip_rao_v60);
     RUN(roundtrip_minimal);
     RUN(serialize_buffer_too_small);
+
+    printf("\n-- Beep duration calculator --\n");
+    RUN(beep_duration_null);
+    RUN(beep_duration_empty);
+    RUN(beep_duration_single_tone);
+    RUN(beep_duration_single_gap);
+    RUN(beep_duration_tone_gap_tone);
+    RUN(beep_duration_countdown_pattern);
+    RUN(beep_duration_rising_alert);
+    RUN(beep_duration_ignores_zero);
 
     printf("\n%d/%d tests passed\n", g_passed, g_tests);
     return (g_passed == g_tests) ? 0 : 1;

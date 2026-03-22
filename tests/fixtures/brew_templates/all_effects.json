@@ -10,6 +10,7 @@
       "type": "manual",
       "on_enter": ["tare", "beep", "marker"],
       "on_exit": ["capture_dose", "capture_weight", "beep"],
+      "beep_pattern": "600:40 40 600:40",
       "capture": {
         "key": "test_cap",
         "label": "Test Capture",

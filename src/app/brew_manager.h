@@ -83,6 +83,20 @@ struct BrewStage {
     float          target_weight;    // guidance target weight for this stage (0 = none)
     float          target_flow_rate; // guidance flow rate target g/s (0 = none)
     uint32_t       auto_time_ms;     // duration for AUTO_TIME stages (0 = unused)
+    // Custom beep pattern (audio DSL, e.g. "600:40 40 600:40"); empty = default beep
+    char           beep_pattern[48];
+    // Countdown beep pattern (audio DSL) played before auto_time stage ends;
+    // pattern duration is calculated and aligned to end exactly at stage expiry.
+    char           countdown_beep[48];
+    // Countdown done beep — played once when auto_time countdown reaches zero.
+    char           countdown_done_beep[48];
+    // Weight proximity cue: beep when within weight_cue_g of target_weight.
+    // weight_cue_times > 1 fires evenly-spaced cues at N×g, (N-1)×g, … 1×g.
+    float          weight_cue_g;     // gram interval (0 = disabled)
+    uint8_t        weight_cue_times; // number of cues (default 1)
+    char           weight_cue_beep[48]; // beep pattern DSL (empty = default beep)
+    // Weight done beep — played once when weight >= target_weight.
+    char           weight_done_beep[48];
     // Fields used when EFFECT_CAPTURE_WEIGHT is set (in on_enter or on_exit):
     char           capture_key[16];  // key for named capture, e.g. "bloom_water"
     char           capture_label[24];// display label, e.g. "Bloom Water"

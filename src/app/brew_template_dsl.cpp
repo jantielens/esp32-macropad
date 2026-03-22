@@ -228,6 +228,23 @@ int brew_dsl_parse(const char* json, size_t json_len,
         uint32_t time_s = sobj["auto_time_s"] | (uint32_t)0;
         s.auto_time_ms = time_s * 1000;
 
+        // Beep pattern (optional, empty string = default beep)
+        safe_copy(s.beep_pattern, sizeof(s.beep_pattern), sobj["beep_pattern"] | "");
+
+        // Countdown beep pattern (optional, auto_time stages only)
+        safe_copy(s.countdown_beep, sizeof(s.countdown_beep), sobj["countdown_beep"] | "");
+
+        // Countdown done beep (optional, auto_time stages only)
+        safe_copy(s.countdown_done_beep, sizeof(s.countdown_done_beep), sobj["countdown_done_beep"] | "");
+
+        // Weight proximity cue
+        s.weight_cue_g     = sobj["weight_cue_g"] | 0.0f;
+        s.weight_cue_times = sobj["weight_cue_times"] | (uint8_t)1;
+        safe_copy(s.weight_cue_beep, sizeof(s.weight_cue_beep), sobj["weight_cue_beep"] | "");
+
+        // Weight done beep (optional)
+        safe_copy(s.weight_done_beep, sizeof(s.weight_done_beep), sobj["weight_done_beep"] | "");
+
         // Capture object
         JsonObjectConst cap = sobj["capture"].as<JsonObjectConst>();
         if (!cap.isNull()) {
@@ -296,6 +313,19 @@ int brew_dsl_serialize(const BrewTemplate* tmpl, char* buf, size_t buf_len) {
         if (s.target_flow_rate != 0.0f) sobj["target_flow_rate"] = s.target_flow_rate;
         if (s.auto_time_ms != 0)       sobj["auto_time_s"]     = s.auto_time_ms / 1000;
 
+        // Beep pattern (only emit if non-empty)
+        if (s.beep_pattern[0]) sobj["beep_pattern"] = s.beep_pattern;
+        if (s.countdown_beep[0]) sobj["countdown_beep"] = s.countdown_beep;
+        if (s.countdown_done_beep[0]) sobj["countdown_done_beep"] = s.countdown_done_beep;
+
+        // Weight proximity cue (only emit if cue_g is non-zero)
+        if (s.weight_cue_g != 0.0f) {
+            sobj["weight_cue_g"] = s.weight_cue_g;
+            if (s.weight_cue_times != 1) sobj["weight_cue_times"] = s.weight_cue_times;
+            if (s.weight_cue_beep[0])    sobj["weight_cue_beep"]  = s.weight_cue_beep;
+        }
+        if (s.weight_done_beep[0]) sobj["weight_done_beep"] = s.weight_done_beep;
+
         // Capture (only emit if key is non-empty)
         if (s.capture_key[0]) {
             JsonObject cap = sobj["capture"].to<JsonObject>();
@@ -308,4 +338,37 @@ int brew_dsl_serialize(const BrewTemplate* tmpl, char* buf, size_t buf_len) {
     size_t written = serializeJson(doc, buf, buf_len);
     if (written == 0 || written >= buf_len) return -1;
     return (int)written;
+}
+
+// ---------------------------------------------------------------------------
+// Beep pattern duration calculator
+// ---------------------------------------------------------------------------
+// Mirrors the audio DSL parsing logic (space-delimited "freq:dur" tones and
+// bare "dur" gaps) but only sums durations without playing anything.
+// Pure C — no ESP32 dependencies, host-testable.
+
+uint32_t brew_dsl_beep_duration_ms(const char* pattern) {
+    if (!pattern || !pattern[0]) return 0;
+
+    uint32_t total = 0;
+    // Work on a local copy since strtok_r is destructive
+    char buf[128];
+    strlcpy(buf, pattern, sizeof(buf));
+
+    char* saveptr = nullptr;
+    char* tok = strtok_r(buf, " ", &saveptr);
+    while (tok) {
+        char* colon = strchr(tok, ':');
+        if (colon) {
+            // "freq:dur" — only the duration matters
+            uint16_t dur = (uint16_t)atoi(colon + 1);
+            if (dur > 0 && dur <= 10000) total += dur;
+        } else {
+            // bare "dur" — silence gap
+            uint16_t dur = (uint16_t)atoi(tok);
+            if (dur > 0 && dur <= 10000) total += dur;
+        }
+        tok = strtok_r(nullptr, " ", &saveptr);
+    }
+    return total;
 }

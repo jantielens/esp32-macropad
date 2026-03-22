@@ -1356,6 +1356,16 @@ function brewTmplRenderStages(stages) {
         if (s.auto_time_s) pillsHtml += '<span class="brew-tmpl-pill">' + s.auto_time_s + 's duration</span>';
         if (s.auto_threshold) pillsHtml += '<span class="brew-tmpl-pill">trigger &gt;' + s.auto_threshold + 'g</span>';
         if (s.capture) pillsHtml += '<span class="brew-tmpl-pill">' + (s.capture.label || s.capture.key) + ' (' + (s.capture.unit || 'g') + ')</span>';
+        if (s.beep_pattern) pillsHtml += '<span class="brew-tmpl-pill">\uD83D\uDD0A ' + s.beep_pattern + '</span>';
+        if (s.countdown_beep) pillsHtml += '<span class="brew-tmpl-pill">\u23F0 ' + s.countdown_beep + '</span>';
+        if (s.countdown_done_beep) pillsHtml += '<span class="brew-tmpl-pill">\u23F0\u2714 ' + s.countdown_done_beep + '</span>';
+        if (s.weight_cue_g) {
+          let cueLabel = '\u2696\uFE0F ' + s.weight_cue_g + 'g';
+          if (s.weight_cue_times && s.weight_cue_times > 1) cueLabel += ' \u00D7' + s.weight_cue_times;
+          if (s.weight_cue_beep) cueLabel += ' ' + s.weight_cue_beep;
+          pillsHtml += '<span class="brew-tmpl-pill">' + cueLabel + '</span>';
+        }
+        if (s.weight_done_beep) pillsHtml += '<span class="brew-tmpl-pill">\u2696\u2714 ' + s.weight_done_beep + '</span>';
 
         // Enter/exit effects
         let effectsHtml = '';

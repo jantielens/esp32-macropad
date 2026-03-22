@@ -97,6 +97,13 @@ static const BrewStage s_free_pour_stages[] = {
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -112,6 +119,13 @@ static const BrewStage s_free_pour_stages[] = {
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -152,6 +166,13 @@ static const BrewStage s_v60_stages[] = {
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -167,6 +188,13 @@ static const BrewStage s_v60_stages[] = {
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -182,6 +210,13 @@ static const BrewStage s_v60_stages[] = {
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -197,6 +232,13 @@ static const BrewStage s_v60_stages[] = {
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -212,6 +254,13 @@ static const BrewStage s_v60_stages[] = {
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -252,6 +301,13 @@ static const BrewStage s_rao_v60_stages[] = {
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -267,6 +323,13 @@ static const BrewStage s_rao_v60_stages[] = {
         16.0f,                                                          // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -282,6 +345,13 @@ static const BrewStage s_rao_v60_stages[] = {
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -297,6 +367,13 @@ static const BrewStage s_rao_v60_stages[] = {
         0.0f,                                                           // target_weight (no target; Bloom owns the pour target)
         0.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit
@@ -312,6 +389,13 @@ static const BrewStage s_rao_v60_stages[] = {
         60.0f,                                                          // target_weight
         6.0f,                                                           // target_flow_rate
         45000,                                                          // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "bloom_water",                                                  // capture_key
         "Bloom Water",                                                  // capture_label
         "g"                                                             // capture_unit
@@ -327,6 +411,13 @@ static const BrewStage s_rao_v60_stages[] = {
         250.0f,                                                         // target_weight
         5.0f,                                                           // target_flow_rate
         0,                                                              // auto_time_ms
+        "",                                                             // beep_pattern
+        "",                                                             // countdown_beep
+        "",                                                             // countdown_done_beep
+        0.0f,                                                           // weight_cue_g
+        1,                                                              // weight_cue_times
+        "",                                                             // weight_cue_beep
+        "",                                                             // weight_done_beep
         "",                                                             // capture_key
         "",                                                             // capture_label
         ""                                                              // capture_unit

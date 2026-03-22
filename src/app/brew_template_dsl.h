@@ -66,3 +66,10 @@ int brew_dsl_parse(const char* json, size_t json_len,
 // Serialize a BrewTemplate (including its stages) to JSON.
 // Returns the number of bytes written (excluding null terminator), or -1 on error.
 int brew_dsl_serialize(const BrewTemplate* tmpl, char* buf, size_t buf_len);
+
+// ---- Beep pattern duration calculator (host-testable) ----
+
+// Calculate the total duration in milliseconds of a beep pattern DSL string.
+// Pattern format: space-delimited tokens of "freq:dur" (tone) or "dur" (gap).
+// Returns 0 for null/empty input.
+uint32_t brew_dsl_beep_duration_ms(const char* pattern);

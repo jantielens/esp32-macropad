@@ -388,6 +388,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/brew_log.h
   - src/app/brew_manager.cpp
   - src/app/brew_manager.h
+  - src/app/brew_template_loader.cpp
+  - src/app/brew_template_loader.h
   - src/app/brew_templates.cpp
   - src/app/brew_templates.h
   - src/app/config_manager.cpp
@@ -396,6 +398,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors.cpp
   - src/app/sensors/hx711_sensor.cpp
   - src/app/sensors/hx711_sensor.h
+  - src/app/web_portal_brew_templates.cpp
+  - src/app/web_portal_brew_templates.h
   - src/app/web_portal_brews.cpp
   - src/app/web_portal_brews.h
   - src/app/web_portal_routes.cpp

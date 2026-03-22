@@ -4,6 +4,7 @@
 
 #include "brew_log.h"
 #include "brew_templates.h"
+#include "brew_template_dsl.h"
 #include "sensors/hx711_sensor.h"
 #include "log_manager.h"
 
@@ -35,6 +36,15 @@ static float                s_dose_weight   = 0.0f;
 
 // Per-stage entry time for STAGE_AUTO_TIME
 static uint32_t             s_stage_enter_ms = 0;
+
+// Countdown beep: precomputed trigger time and one-shot guard
+static uint32_t             s_countdown_trigger_ms = 0;  // elapsed-in-stage trigger point
+static bool                 s_countdown_fired      = false;
+static bool                 s_countdown_done_fired = false;  // fire-once for countdown_done_beep
+
+// Weight proximity cue: counts how many cues have fired this stage
+static uint8_t              s_weight_cue_count     = 0;
+static bool                 s_weight_done_fired    = false;  // fire-once for weight_done_beep
 
 // Series recording (PSRAM)
 static BrewSample* s_series         = nullptr;
@@ -97,13 +107,14 @@ static void dispatch_effects(BrewEffects effects, const BrewStage* stage) {
     }
     if (effects & EFFECT_MARKER) {
         if (s_timer_running) {
-            emit_marker(stage->name, s_series_count > 0 ? s_series_count - 1 : 0);
+            emit_marker(stage->name, s_series_count);
         }
     }
 #if HAS_AUDIO
     if (effects & EFFECT_BEEP) {
-        audio_beep(nullptr, 0);  // default beep
-        LOGD(TAG, "Effect: beep");
+        const char* pattern = (stage && stage->beep_pattern[0]) ? stage->beep_pattern : nullptr;
+        audio_beep(pattern, 0);
+        LOGD(TAG, "Effect: beep%s%s", pattern ? " pattern=" : "", pattern ? pattern : "");
     }
 #endif
 }
@@ -135,10 +146,28 @@ static void enter_stage(uint8_t index) {
     s_stage_enter_ms = millis();
     LOGI(TAG, "Enter stage[%u] '%s'", (unsigned)index, stage->name);
 
-    // Auto-emit marker on stage transitions while timer is running.
-    // Use s_series_count (not -1) so the marker lands at the FIRST sample
-    // of the new stage rather than the last sample of the previous one.
-    if (s_timer_running) {
+    // Precompute countdown beep trigger for auto_time stages
+    s_countdown_fired = false;
+    s_countdown_done_fired = false;
+    s_countdown_trigger_ms = 0;
+    s_weight_cue_count = 0;
+    s_weight_done_fired = false;
+#if HAS_AUDIO
+    if (stage->type == STAGE_AUTO_TIME && stage->auto_time_ms > 0
+        && stage->countdown_beep[0]) {
+        uint32_t pattern_dur = brew_dsl_beep_duration_ms(stage->countdown_beep);
+        if (pattern_dur > 0 && pattern_dur < stage->auto_time_ms) {
+            s_countdown_trigger_ms = stage->auto_time_ms - pattern_dur;
+            LOGD(TAG, "Countdown beep at %lu ms (pattern %lu ms)",
+                 (unsigned long)s_countdown_trigger_ms, (unsigned long)pattern_dur);
+        }
+    }
+#endif
+
+    // Auto-emit marker on stage transitions while timer is running,
+    // unless the stage already has an explicit MARKER effect in on_enter
+    // (which would create a duplicate).
+    if (s_timer_running && !(stage->on_enter & EFFECT_MARKER)) {
         emit_marker(stage->name, s_series_count);
     }
 
@@ -299,26 +328,45 @@ void brew_tick() {
             s_timer_running  = true;
             ensure_series_buffer();
             s_series_count   = 0;
-            record_sample();  // first sample at t=0
-            emit_marker(stage->name, s_series_count > 0 ? s_series_count - 1 : 0);  // opening marker
 
             LOGI(TAG, "Auto-start: weight=%.1f g", w);
 
-            // Advance to next stage
+            // Advance to next stage (before first sample so markers
+            // from on_enter effects land at index 0)
             uint8_t next_index = s_stage_index + 1;
             if (next_index < s_template->stage_count) {
                 enter_stage(next_index);
                 stage = current_stage();  // refresh after advance
             }
+
+            record_sample();  // first sample at t=0
         }
     }
 
     // --- AUTO_TIME: advance after duration elapsed ---
     if (stage && stage->type == STAGE_AUTO_TIME && stage->auto_time_ms > 0) {
         uint32_t elapsed_in_stage = millis() - s_stage_enter_ms;
+
+#if HAS_AUDIO
+        // Fire countdown beep pattern aligned to end at stage expiry
+        if (!s_countdown_fired && s_countdown_trigger_ms > 0
+            && elapsed_in_stage >= s_countdown_trigger_ms) {
+            s_countdown_fired = true;
+            audio_beep(stage->countdown_beep, 0);
+            LOGD(TAG, "Countdown beep fired at %lu ms", (unsigned long)elapsed_in_stage);
+        }
+#endif
+
         if (elapsed_in_stage >= stage->auto_time_ms) {
             LOGI(TAG, "Auto-time: %lu ms elapsed in '%s'",
                  (unsigned long)elapsed_in_stage, stage->name);
+#if HAS_AUDIO
+            if (!s_countdown_done_fired && stage->countdown_done_beep[0]) {
+                s_countdown_done_fired = true;
+                audio_beep(stage->countdown_done_beep, 0);
+                LOGD(TAG, "Countdown done beep fired");
+            }
+#endif
             dispatch_effects(stage->on_exit, stage);
             uint8_t next_index = s_stage_index + 1;
             if (next_index < s_template->stage_count) {
@@ -326,6 +374,11 @@ void brew_tick() {
             } else {
                 brew_stop();
             }
+            // Return immediately — the local `stage` pointer is now stale.
+            // Without this, weight cue/done checks below would run against
+            // the OLD stage's target_weight, spuriously firing and poisoning
+            // s_weight_done_fired for the new stage.
+            return;
         }
     }
 
@@ -337,6 +390,32 @@ void brew_tick() {
             record_sample();
         }
     }
+
+#if HAS_AUDIO
+    // --- Weight proximity cue ---
+    if (stage && stage->weight_cue_g > 0.0f && stage->target_weight > 0.0f
+        && s_weight_cue_count < stage->weight_cue_times) {
+        float next_threshold_g = stage->weight_cue_g * (stage->weight_cue_times - s_weight_cue_count);
+        float remaining = stage->target_weight - hx711_get_weight();
+        if (remaining <= next_threshold_g && remaining > 0.0f) {
+            s_weight_cue_count++;
+            const char* pattern = stage->weight_cue_beep[0] ? stage->weight_cue_beep : nullptr;
+            audio_beep(pattern, 0);
+            LOGD(TAG, "Weight cue %u/%u at %.1f g remaining",
+                 (unsigned)s_weight_cue_count, (unsigned)stage->weight_cue_times, remaining);
+        }
+    }
+    // --- Weight done beep: fire once when weight reaches target ---
+    if (stage && stage->weight_done_beep[0] && stage->target_weight > 0.0f
+        && !s_weight_done_fired) {
+        float w = hx711_get_weight();
+        if (w >= stage->target_weight) {
+            s_weight_done_fired = true;
+            audio_beep(stage->weight_done_beep, 0);
+            LOGD(TAG, "Weight done beep at %.1f g (target %.1f)", w, stage->target_weight);
+        }
+    }
+#endif
 }
 
 // ============================================================================

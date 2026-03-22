@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "name": "countdown_test",
+  "display_name": "Countdown Beep Test",
+  "stages": [
+    {
+      "name": "Timed with countdown",
+      "type": "auto_time",
+      "auto_time_s": 45,
+      "countdown_beep": "800:200 300 800:200 300 800:500",
+      "countdown_done_beep": "800:1000"
+    },
+    {
+      "name": "Timed no countdown",
+      "type": "auto_time",
+      "auto_time_s": 30
+    },
+    {
+      "name": "Manual with countdown ignored",
+      "type": "manual",
+      "countdown_beep": "1000:100",
+      "countdown_done_beep": "1000:500"
+    }
+  ]
+}

@@ -97,6 +97,22 @@ else
     echo "=== Running unit tests: brew_template_dsl ==="
     ./tests/bin/test_brew_template_dsl
     echo
+
+    echo "=== Building integration tests: brew_manager ==="
+    g++ -std=c++17 -Wall -Wextra -Werror \
+        -include tests/log_manager.h -include tests/board_config.h \
+        -I tests -I src/app \
+        -I "$ARDUINOJSON_INC" \
+        tests/test_brew_manager.cpp \
+        src/app/brew_manager.cpp \
+        src/app/brew_templates.cpp \
+        src/app/brew_template_dsl.cpp \
+        tests/stubs.cpp \
+        -o tests/bin/test_brew_manager -lm
+
+    echo "=== Running integration tests: brew_manager ==="
+    ./tests/bin/test_brew_manager
+    echo
 fi
 
 echo "=== All tests passed ==="

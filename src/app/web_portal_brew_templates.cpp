@@ -66,7 +66,7 @@ void handleGetBrewTemplate(AsyncWebServerRequest* request) {
     }
 
     // Serialize to JSON via brew_dsl_serialize
-    char buf[2048];
+    char buf[4096];
     int len = brew_dsl_serialize(t, buf, sizeof(buf));
     if (len < 0) {
         web_portal_send_json_error(request, 500, "Serialization failed");
@@ -84,22 +84,33 @@ void handlePostBrewTemplate(AsyncWebServerRequest* request, uint8_t* data,
                             size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
 
-    // Only handle final chunk (templates are small, arrive in one piece)
-    if (index + len < total) return;
-
     if (total > 8192) {
         web_portal_send_json_error(request, 413, "Template too large (max 8KB)");
         return;
     }
 
-    // Null-terminate for parsing
-    char* json = new (std::nothrow) char[total + 1];
-    if (!json) {
-        web_portal_send_json_error(request, 503, "Out of memory");
-        return;
+    // Allocate accumulation buffer on first chunk
+    if (index == 0) {
+        char* buf = new (std::nothrow) char[total + 1];
+        if (!buf) {
+            web_portal_send_json_error(request, 503, "Out of memory");
+            return;
+        }
+        request->_tempObject = buf;
     }
-    memcpy(json, data, total);
-    json[total] = '\0';
+
+    // Accumulate this chunk
+    char* buf = (char*)request->_tempObject;
+    if (!buf) return;  // allocation failed on first chunk
+    memcpy(buf + index, data, len);
+
+    // Not all data received yet
+    if (index + len < total) return;
+
+    // Final chunk — null-terminate and process
+    buf[total] = '\0';
+    char* json = buf;
+    request->_tempObject = nullptr;  // we own the pointer now
 
     // Validate by parsing
     BrewTemplate* tmpl = nullptr;

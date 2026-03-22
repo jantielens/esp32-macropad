@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "name": "weight_cue_test",
+  "display_name": "Weight Cue Test",
+  "stages": [
+    {
+      "name": "Pour",
+      "instruction": "Pour with weight cue",
+      "type": "manual",
+      "target_weight": 200,
+      "weight_cue_g": 10,
+      "weight_cue_times": 3,
+      "weight_cue_beep": "800:100 100 800:100",
+      "weight_done_beep": "1500:1000"
+    },
+    {
+      "name": "Simple cue",
+      "instruction": "Single cue with default beep",
+      "type": "manual",
+      "target_weight": 150,
+      "weight_cue_g": 15
+    },
+    {
+      "name": "No target",
+      "instruction": "Cue without target weight (ignored at runtime)",
+      "type": "manual",
+      "weight_cue_g": 10,
+      "weight_cue_beep": "600:200"
+    }
+  ]
+}
