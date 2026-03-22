@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "name": "minimal",
+  "display_name": "Minimal Test",
+  "stages": [
+    {
+      "name": "Brew",
+      "instruction": "Tap Done when finished",
+      "next_label": "Done",
+      "type": "manual"
+    }
+  ]
+}

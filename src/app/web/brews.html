@@ -122,6 +122,44 @@
             </div>
         </div>
 
+        <!-- Brew Templates List -->
+        <details class="section" id="brew-tmpl-section">
+            <summary class="brew-tmpl-summary">☕ Brew Templates <span id="brew-tmpl-count"></span></summary>
+            <div class="brew-tmpl-body">
+                <div id="brew-tmpl-cards"></div>
+                <div class="brew-tmpl-actions">
+                    <button type="button" class="btn btn-secondary" id="brew-tmpl-upload-btn">Upload Template</button>
+                    <input type="file" accept=".json" id="brew-tmpl-upload-file" style="display:none;">
+                </div>
+            </div>
+        </details>
+
+        <!-- Brew Template Detail View -->
+        <div id="brew-tmpl-detail-view" style="display:none;">
+            <button type="button" class="btn btn-secondary brew-back-btn" id="brew-tmpl-back-btn">← Back to Templates</button>
+
+            <div class="section">
+                <div class="brew-tmpl-detail-header">
+                    <h2 id="brew-tmpl-detail-name">Template</h2>
+                    <span id="brew-tmpl-detail-badge" class="brew-tmpl-badge"></span>
+                </div>
+                <div class="brew-tmpl-detail-desc" id="brew-tmpl-detail-desc"></div>
+                <div class="brew-tmpl-detail-meta" id="brew-tmpl-detail-meta"></div>
+            </div>
+
+            <div class="section">
+                <h2>Stages</h2>
+                <div class="brew-tmpl-timeline" id="brew-tmpl-stages"></div>
+            </div>
+
+            <details class="section">
+                <summary class="brew-tmpl-summary">Raw JSON</summary>
+                <pre class="brew-tmpl-json" id="brew-tmpl-detail-json"></pre>
+            </details>
+
+            <div class="brew-tmpl-detail-actions" id="brew-tmpl-detail-actions"></div>
+        </div>
+
         </div>
     </div>
 

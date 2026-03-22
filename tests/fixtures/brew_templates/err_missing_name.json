@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "display_name": "No Name",
+  "stages": [
+    {
+      "name": "S1",
+      "instruction": "...",
+      "next_label": "Go",
+      "type": "manual"
+    }
+  ]
+}

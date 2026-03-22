@@ -3,6 +3,7 @@
 #if HAS_SENSOR_HX711
 
 #include "log_manager.h"
+#include "brew_template_loader.h"
 #include <string.h>
 
 #define TAG "BrewTpl"
@@ -18,6 +19,18 @@ static uint8_t              s_registry_count = 0;
 
 void brew_template_register(const BrewTemplate* t) {
     if (!t) return;
+    // Replace existing entry with same name (dynamic→new, built-in→override)
+    for (uint8_t i = 0; i < s_registry_count; i++) {
+        if (strcmp(s_registry[i]->name, t->name) == 0) {
+            if (s_registry[i]->is_dynamic) {
+                delete[] s_registry[i]->stages;
+                delete s_registry[i];
+            }
+            s_registry[i] = t;
+            LOGD(TAG, "Replaced template '%s' (%u stages)", t->name, (unsigned)t->stage_count);
+            return;
+        }
+    }
     if (s_registry_count >= BREW_TEMPLATE_REGISTRY_MAX) {
         LOGW(TAG, "Registry full, cannot register '%s'", t->name);
         return;
@@ -31,8 +44,22 @@ const BrewTemplate* brew_template_find(const char* name) {
     for (uint8_t i = 0; i < s_registry_count; i++) {
         if (strcmp(s_registry[i]->name, name) == 0) return s_registry[i];
     }
-    LOGW(TAG, "Template '%s' not found", name);
+    // Fall back to free_pour (guaranteed to exist as built-in)
+    if (strcmp(name, "free_pour") != 0) {
+        LOGW(TAG, "Template '%s' not found, falling back to free_pour", name);
+        return brew_template_find("free_pour");
+    }
+    LOGE(TAG, "free_pour template missing from registry!");
     return nullptr;
+}
+
+uint8_t brew_template_count() {
+    return s_registry_count;
+}
+
+const BrewTemplate* brew_template_get(uint8_t index) {
+    if (index >= s_registry_count) return nullptr;
+    return s_registry[index];
 }
 
 void brew_templates_clear_dynamic() {
@@ -326,6 +353,9 @@ void brew_templates_init() {
     brew_template_register(&s_v60_template);
     brew_template_register(&s_rao_v60_template);
     LOGI(TAG, "Registered %u built-in templates", (unsigned)s_registry_count);
+
+    // Load dynamic templates from LittleFS (may override built-ins)
+    brew_template_loader_load();
 }
 
 #endif // HAS_SENSOR_HX711

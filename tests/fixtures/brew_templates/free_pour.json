@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "name": "free_pour",
+  "display_name": "Free Pour",
+  "start_label": "Start brew",
+  "done_label": "Start brew again",
+  "stages": [
+    {
+      "name": "Ready",
+      "instruction": "Place your cup on the scale and start pouring when ready",
+      "next_label": "Armed",
+      "type": "auto_weight",
+      "on_enter": ["tare"],
+      "auto_threshold": 2.0
+    },
+    {
+      "name": "Brewing",
+      "instruction": "Pouring - Tap Done when brew is finished",
+      "next_label": "Done",
+      "type": "manual"
+    }
+  ]
+}

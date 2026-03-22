@@ -1,0 +1,65 @@
+{
+  "v": 1,
+  "name": "rao_v60",
+  "display_name": "James Rao V60",
+  "description": "Single-pour V60 with bloom stage and 5:00 target",
+  "start_label": "Start Rao V60",
+  "done_label": "Brew again",
+  "stages": [
+    {
+      "name": "Place cup",
+      "instruction": "Place your empty dosing cup on the scale, then tap Tare scale",
+      "next_label": "Tare scale",
+      "type": "manual"
+    },
+    {
+      "name": "Dose beans",
+      "instruction": "Add beans to the cup, tap Log dose when done",
+      "next_label": "Log dose",
+      "type": "manual",
+      "on_enter": ["tare"],
+      "on_exit": ["capture_dose"],
+      "target_weight": 16.0
+    },
+    {
+      "name": "Prep",
+      "instruction": "Grind beans, rinse filter, place cup + V60 on scale. Tap Ready to arm",
+      "next_label": "Ready",
+      "type": "manual",
+      "on_enter": ["tare"]
+    },
+    {
+      "name": "Arm pour",
+      "instruction": "Start pouring when ready",
+      "next_label": "Armed",
+      "type": "auto_weight",
+      "on_enter": ["tare"],
+      "auto_threshold": 2.0
+    },
+    {
+      "name": "Bloom",
+      "instruction": "Pour to [brew:stage_weight_target]g, then swirl gently. [brew:stage_time_remaining]s remaining",
+      "next_label": "Blooming...",
+      "type": "auto_time",
+      "auto_time_s": 45,
+      "on_enter": ["beep"],
+      "on_exit": ["capture_weight"],
+      "target_weight": 60.0,
+      "target_flow_rate": 6.0,
+      "capture": {
+        "key": "bloom_water",
+        "label": "Bloom Water",
+        "unit": "g"
+      }
+    },
+    {
+      "name": "Main pour",
+      "instruction": "Pour steadily in circles to [brew:stage_weight_target]g, tap Done when finished",
+      "next_label": "Done",
+      "type": "manual",
+      "on_enter": ["beep"],
+      "target_weight": 250.0,
+      "target_flow_rate": 5.0
+    }
+  ]
+}

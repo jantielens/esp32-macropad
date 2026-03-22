@@ -1,0 +1,27 @@
+{
+  "v": 1,
+  "name": "defaults_test",
+  "display_name": "Defaults Test",
+  "stages": [
+    {
+      "name": "Only required",
+      "instruction": "Just required fields here",
+      "next_label": "Go",
+      "type": "manual"
+    },
+    {
+      "name": "Auto weight",
+      "instruction": "Threshold only",
+      "next_label": "Waiting",
+      "type": "auto_weight",
+      "auto_threshold": 3.5
+    },
+    {
+      "name": "Auto time",
+      "instruction": "Timer only",
+      "next_label": "Timing",
+      "type": "auto_time",
+      "auto_time_s": 30
+    }
+  ]
+}

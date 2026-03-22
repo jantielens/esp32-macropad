@@ -100,28 +100,12 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<input type="number" id="' + prefix + '-scale-set-value" min="1" step="0.1" placeholder="e.g. 251.5">';
     h += '<small>Set the calibration reference weight to this value (grams).</small>';
     h += '</div></div>';
-    // Brew — command dropdown
+    // Brew — command dropdown (populated dynamically from /api/brew-templates)
     h += '<div id="' + prefix + '-brew-group" style="display:none;">';
     h += '<div class="form-group">';
     h += '<label for="' + prefix + '-brew-cmd">Brew Command</label>';
     h += '<select id="' + prefix + '-brew-cmd">';
-    h += '<optgroup label="Rao V60">';
-    h += '<option value="advance:rao_v60">Rao V60 — Advance (single button, recommended)</option>';
-    h += '<option value="start:rao_v60">Rao V60 — Start only (multi-button layouts)</option>';
-    h += '</optgroup>';
-    h += '<optgroup label="V60">';
-    h += '<option value="advance:v60">V60 — Advance (single button, recommended)</option>';
-    h += '<option value="start:v60">V60 — Start only (multi-button layouts)</option>';
-    h += '</optgroup>';
-    h += '<optgroup label="Free Pour">';
-    h += '<option value="advance:free_pour">Free Pour — Advance (single button, recommended)</option>';
-    h += '<option value="start">Free Pour — Start only (multi-button layouts)</option>';
-    h += '</optgroup>';
-    h += '<optgroup label="Any Template">';
-    h += '<option value="next">Next — advance manual stage</option>';
-    h += '<option value="stop">Stop — freeze timer &amp; save</option>';
-    h += '<option value="reset">Reset — clear all state</option>';
-    h += '</optgroup>';
+    h += '<option value="">Loading templates...</option>';
     h += '</select>';
     h += '<small>Use <strong>Advance</strong> for a single button that handles the full cycle. Pair the label with <code>[brew:next_label]</code>. Add a long-press <strong>Reset</strong> as an abort button.</small>';
     h += '</div></div>';
@@ -204,6 +188,7 @@ function actionEditorTypeChanged(prefix) {
     if (scaleSetGrp) scaleSetGrp.style.display = (type === 'scale_cal_set') ? '' : 'none';
     var brewGrp = document.getElementById(prefix + '-brew-group');
     if (brewGrp) brewGrp.style.display = (type === 'brew') ? '' : 'none';
+    if (type === 'brew') _actionEditorPopulateBrewCmd(prefix, 'advance:free_pour');
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     if (type === 'timer') actionEditorTimerChanged(prefix);
@@ -267,9 +252,9 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.payload || '';
     el = document.getElementById(prefix + '-scale-set-value');
     if (el) el.value = action.payload || '';
-    // Brew command
+    // Brew command — populate dropdown dynamically, then set value
     el = document.getElementById(prefix + '-brew-cmd');
-    if (el) el.value = action.payload || 'start';
+    if (el) _actionEditorPopulateBrewCmd(prefix, action.payload || 'start');
     // Timer: parse DSL string "N:command[:arg]" into structured fields
     if (action.timer_command) {
         var tc = action.timer_command;
@@ -405,5 +390,53 @@ function actionEditorPopulateScreens(prefixes, screens) {
             opt.textContent = s.name;
             sel.appendChild(opt);
         });
+    });
+}
+
+// ---- Dynamic brew template dropdown ----
+
+var _brewTemplatesCache = null;
+
+function _actionEditorFetchBrewTemplates(callback) {
+    if (_brewTemplatesCache) { callback(_brewTemplatesCache); return; }
+    fetch('/api/brew-templates')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(data) {
+            _brewTemplatesCache = Array.isArray(data) ? data : [];
+            callback(_brewTemplatesCache);
+        })
+        .catch(function() { callback([]); });
+}
+
+function _actionEditorBuildBrewOptions(templates) {
+    var h = '';
+    templates.forEach(function(t) {
+        h += '<optgroup label="' + (t.display_name || t.name) + '">';
+        h += '<option value="advance:' + t.name + '">' + (t.display_name || t.name) + ' \u2014 Advance (single button, recommended)</option>';
+        h += '<option value="start:' + t.name + '">' + (t.display_name || t.name) + ' \u2014 Start only (multi-button layouts)</option>';
+        h += '</optgroup>';
+    });
+    h += '<optgroup label="Any Template">';
+    h += '<option value="next">Next \u2014 advance manual stage</option>';
+    h += '<option value="stop">Stop \u2014 freeze timer &amp; save</option>';
+    h += '<option value="reset">Reset \u2014 clear all state</option>';
+    h += '</optgroup>';
+    return h;
+}
+
+function _actionEditorPopulateBrewCmd(prefix, selectedValue) {
+    var sel = document.getElementById(prefix + '-brew-cmd');
+    if (!sel) return;
+    _actionEditorFetchBrewTemplates(function(templates) {
+        sel.innerHTML = _actionEditorBuildBrewOptions(templates);
+        sel.value = selectedValue;
+        // If the saved value isn't in the list (template deleted), add it as-is
+        if (sel.value !== selectedValue) {
+            var opt = document.createElement('option');
+            opt.value = selectedValue;
+            opt.textContent = selectedValue + ' (unknown template)';
+            sel.insertBefore(opt, sel.firstChild);
+            sel.value = selectedValue;
+        }
     });
 }

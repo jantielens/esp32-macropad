@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "name": "future_fields",
+  "display_name": "Future Fields",
+  "icon": "coffee.png",
+  "color": "#FF5500",
+  "category": "espresso",
+  "stages": [
+    {
+      "name": "Brew",
+      "instruction": "Pour",
+      "next_label": "Done",
+      "type": "manual",
+      "on_enter": ["tare", "start_pump", "future_effect"],
+      "target_temperature": 93.5,
+      "pressure_profile": "ramp_up"
+    }
+  ]
+}

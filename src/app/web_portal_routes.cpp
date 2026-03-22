@@ -19,6 +19,7 @@
 #if HAS_SENSOR_HX711
 #include "web_portal_scale.h"
 #include "web_portal_brews.h"
+#include "web_portal_brew_templates.h"
 #endif
 
 void web_portal_register_routes(AsyncWebServer* server) {
@@ -259,6 +260,23 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				if (!portal_auth_gate(request)) return;
 				handleDeleteBrew(request);
 		});
+
+	// Brew template endpoints
+	registerOptions("/api/brew-templates/get");
+	server->on("/api/brew-templates/get", HTTP_GET, handleGetBrewTemplate);
+
+	registerOptions("/api/brew-templates");
+	server->on("/api/brew-templates", HTTP_GET, handleGetBrewTemplates);
+	server->on(
+			"/api/brew-templates",
+			HTTP_POST,
+			[](AsyncWebServerRequest *request) {
+					if (!portal_auth_gate(request)) return;
+			},
+			NULL,
+			handlePostBrewTemplate
+	);
+	server->on("/api/brew-templates", HTTP_DELETE, handleDeleteBrewTemplate);
 #endif
 
 }

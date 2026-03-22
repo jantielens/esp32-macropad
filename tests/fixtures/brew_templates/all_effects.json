@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "name": "all_effects",
+  "display_name": "All Effects Test",
+  "stages": [
+    {
+      "name": "Stage 1",
+      "instruction": "Test all effects combined",
+      "next_label": "Next",
+      "type": "manual",
+      "on_enter": ["tare", "beep", "marker"],
+      "on_exit": ["capture_dose", "capture_weight", "beep"],
+      "capture": {
+        "key": "test_cap",
+        "label": "Test Capture",
+        "unit": "ml"
+      }
+    }
+  ]
+}

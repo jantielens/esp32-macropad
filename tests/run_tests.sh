@@ -69,4 +69,34 @@ echo "=== Running unit tests: key_sequence ==="
 ./tests/bin/test_key_sequence
 echo
 
+# ---------------------------------------------------------------------------
+# Locate ArduinoJson headers (installed by setup.sh into ~/Arduino/libraries)
+# ---------------------------------------------------------------------------
+ARDUINOJSON_INC=""
+for candidate in \
+    "$HOME/Arduino/libraries/ArduinoJson/src" \
+    "$HOME/Arduino/libraries/ArduinoJson"; do
+    if [ -f "$candidate/ArduinoJson.h" ]; then
+        ARDUINOJSON_INC="$candidate"
+        break
+    fi
+done
+if [ -z "$ARDUINOJSON_INC" ]; then
+    echo "WARNING: ArduinoJson headers not found — skipping brew_template_dsl tests"
+else
+    echo "=== Building unit tests: brew_template_dsl ==="
+    g++ -std=c++17 -Wall -Wextra -Werror \
+        -include tests/log_manager.h -include tests/board_config.h \
+        -I src/app \
+        -I "$ARDUINOJSON_INC" \
+        tests/test_brew_template_dsl.cpp \
+        src/app/brew_template_dsl.cpp \
+        tests/stubs.cpp \
+        -o tests/bin/test_brew_template_dsl
+
+    echo "=== Running unit tests: brew_template_dsl ==="
+    ./tests/bin/test_brew_template_dsl
+    echo
+fi
+
 echo "=== All tests passed ==="

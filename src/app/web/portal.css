@@ -2182,4 +2182,298 @@ input[type="text"].label-style-input {
     vertical-align: middle;
 }
 
+/* Brew Templates Section */
+.brew-tmpl-summary {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1d1d1f;
+    cursor: pointer;
+    user-select: none;
+    list-style: revert;
+}
+
+.brew-tmpl-summary span {
+    font-weight: 400;
+    font-size: 13px;
+    color: #86868b;
+}
+
+.brew-tmpl-body {
+    margin-top: 16px;
+}
+
+.brew-tmpl-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border: 1px solid #e5e5e5;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    background: #fff;
+    animation: brewCardIn 0.3s ease-out both;
+}
+
+.brew-tmpl-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.brew-tmpl-card-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1d1d1f;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.brew-tmpl-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.brew-tmpl-badge-builtin {
+    background: #e8eaf6;
+    color: #5c6bc0;
+}
+
+.brew-tmpl-badge-custom {
+    background: #e8f5e9;
+    color: #43a047;
+}
+
+.brew-tmpl-card-desc {
+    font-size: 12px;
+    color: #86868b;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.brew-tmpl-card-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: 12px;
+    flex-shrink: 0;
+}
+
+.brew-tmpl-card-actions button {
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+    padding: 4px 6px;
+    border-radius: 6px;
+}
+
+.brew-tmpl-card-actions button:hover {
+    opacity: 1;
+    background: #f5f5f7;
+}
+
+.brew-tmpl-actions {
+    margin-top: 12px;
+}
+
+.brew-tmpl-actions .btn {
+    width: auto;
+}
+
+/* Template Detail View */
+.brew-tmpl-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.brew-tmpl-detail-header h2 {
+    margin: 0;
+}
+
+.brew-tmpl-detail-desc {
+    color: #86868b;
+    font-size: 14px;
+    margin-top: 6px;
+}
+
+.brew-tmpl-detail-meta {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: #86868b;
+}
+
+/* Stage Timeline */
+.brew-tmpl-timeline {
+    position: relative;
+    padding-left: 40px;
+}
+
+.brew-tmpl-timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 16px;
+    bottom: 16px;
+    width: 2px;
+    background: #d2d2d7;
+    border-radius: 1px;
+}
+
+.brew-tmpl-stage:last-child::after {
+    content: '';
+    position: absolute;
+    left: -26px;
+    top: 44px;
+    bottom: -1px;
+    width: 4px;
+    background: #fff;
+    z-index: 1;
+}
+
+.brew-tmpl-stage {
+    position: relative;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 1px solid #e5e5e5;
+    animation: brewCardIn 0.3s ease-out both;
+}
+
+.brew-tmpl-stage-num {
+    position: absolute;
+    left: -40px;
+    top: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #667eea;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+
+.brew-tmpl-stage-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.brew-tmpl-stage-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1d1d1f;
+}
+
+.brew-tmpl-type-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 2px 7px;
+    border-radius: 4px;
+}
+
+.brew-tmpl-type-manual {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.brew-tmpl-type-auto_weight {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.brew-tmpl-type-auto_time {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.brew-tmpl-stage-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+
+.brew-tmpl-pill {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #e8eaf6;
+    color: #3949ab;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.brew-tmpl-effect-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #f3e5f5;
+    color: #7b1fa2;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.brew-tmpl-stage-instruction {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #86868b;
+    font-style: italic;
+    line-height: 1.4;
+}
+
+.brew-tmpl-stage-btn-label {
+    margin-top: 4px;
+    text-align: right;
+    font-size: 11px;
+    color: #667eea;
+    font-weight: 600;
+}
+
+/* Raw JSON block */
+.brew-tmpl-json {
+    background: #1d1d1f;
+    color: #e0e0e0;
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 16px;
+    border-radius: 10px;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 12px 0 0 0;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Detail Actions */
+.brew-tmpl-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+.brew-tmpl-detail-actions .btn {
+    width: auto;
+}
+
 

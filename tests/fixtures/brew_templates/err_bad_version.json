@@ -1,0 +1,13 @@
+{
+  "v": 99,
+  "name": "future",
+  "display_name": "Future Version",
+  "stages": [
+    {
+      "name": "S1",
+      "instruction": "...",
+      "next_label": "Go",
+      "type": "manual"
+    }
+  ]
+}

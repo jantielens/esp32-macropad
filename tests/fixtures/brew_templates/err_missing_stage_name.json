@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "name": "missing_stage_name",
+  "display_name": "Missing Stage Name",
+  "stages": [
+    {
+      "instruction": "No name field",
+      "next_label": "Go",
+      "type": "manual"
+    }
+  ]
+}

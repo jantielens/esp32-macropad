@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "name": "bad_type",
+  "display_name": "Bad Stage Type",
+  "stages": [
+    {
+      "name": "S1",
+      "instruction": "...",
+      "next_label": "Go",
+      "type": "quantum_entanglement"
+    }
+  ]
+}

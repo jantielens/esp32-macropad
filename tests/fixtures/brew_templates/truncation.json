@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "name": "this_name_is_way_too_long_for_the_24_char_buffer",
+  "display_name": "This display name is intentionally very long to test that it gets truncated properly at the 48-char boundary without overflow",
+  "description": "This description is also intentionally very long to verify the truncation logic for the 128-character description buffer field which should handle graceful truncation without any buffer overflow issues at all ever in any circumstance whatsoever",
+  "start_label": "This start label is way too long for the 48-char field and should be truncated",
+  "done_label": "This done label is also way too long for the 48-char field and should be truncated",
+  "stages": [
+    {
+      "name": "A very long stage name!!",
+      "instruction": "This instruction text is very very very long and will test the 128-character instruction buffer limit to make sure our parser truncates gracefully and does not overflow",
+      "next_label": "This next_label is intentionally too long for the 48-char buffer limit",
+      "type": "manual",
+      "capture": {
+        "key": "a_very_long_key!",
+        "label": "A Capture Label Too Long",
+        "unit": "milliliters"
+      }
+    }
+  ]
+}

@@ -6,9 +6,10 @@
 #ifndef BOARD_CONFIG_H
 #define BOARD_CONFIG_H
 
-#define HAS_DISPLAY true
-#define HAS_MQTT    true
-#define HAS_BLE_HID true
+#define HAS_DISPLAY      true
+#define HAS_MQTT         true
+#define HAS_BLE_HID      true
+#define HAS_SENSOR_HX711 true
 
 // strlcpy is available on ESP32 (newlib) but not glibc — declare for host tests
 #include <stddef.h>
