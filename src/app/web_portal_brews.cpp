@@ -239,10 +239,6 @@ void handleDeleteAllBrews(AsyncWebServerRequest* request) {
 // POST /api/brews/import — import brew(s) from JSON
 // ============================================================================
 
-// Static buffer for accumulating body
-static uint8_t* s_import_buf = nullptr;
-static size_t   s_import_total = 0;
-
 void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
                           size_t len, size_t index, size_t total) {
     // Limit import size (200 brews × ~5KB = ~1MB max)
@@ -253,28 +249,28 @@ void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
             web_portal_send_json_error(request, 413, "Import too large (max 1MB)");
             return;
         }
-        s_import_buf = (uint8_t*)malloc(total + 1);
-        if (!s_import_buf) {
+        uint8_t* buf = (uint8_t*)malloc(total + 1);
+        if (!buf) {
             web_portal_send_json_error(request, 503, "Out of memory");
             return;
         }
-        s_import_total = total;
+        request->_tempObject = buf;
     }
 
-    if (!s_import_buf) return;
-
-    memcpy(s_import_buf + index, data, len);
+    uint8_t* buf = (uint8_t*)request->_tempObject;
+    if (!buf) return;  // allocation failed on first chunk
+    memcpy(buf + index, data, len);
 
     // Last chunk?
     if (index + len >= total) {
-        s_import_buf[total] = '\0';
+        buf[total] = '\0';
+        request->_tempObject = nullptr;  // we own the pointer now
 
         // Parse — could be single object or array
         // Use DynamicJsonDocument since import can be large
         DynamicJsonDocument doc(total + 256);
-        DeserializationError err = deserializeJson(doc, (const char*)s_import_buf, total);
-        free(s_import_buf);
-        s_import_buf = nullptr;
+        DeserializationError err = deserializeJson(doc, (const char*)buf, total);
+        free(buf);
 
         if (err) {
             web_portal_send_json_error(request, 400, "Invalid JSON");

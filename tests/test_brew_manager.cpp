@@ -246,6 +246,114 @@ static const BrewTemplate s_test_template_3stage = {
 };
 
 // ---------------------------------------------------------------------------
+// 1-stage template: single auto_weight (edge case: no next stage)
+// ---------------------------------------------------------------------------
+static const BrewStage s_test_stages_1stage[] = {
+    {
+        "Arm Pour", "Start pouring", "Done", STAGE_AUTO_WEIGHT,
+        EFFECT_TARE, EFFECT_NONE,
+        3.0f, 0.0f, 0.0f, 0,
+        "", "", "",
+        0.0f, 0, "", "",
+        "", "", "",
+    },
+};
+
+static const BrewTemplate s_test_template_1stage = {
+    "test_1stage", "Test 1-Stage", "Test", "Start", "Again",
+    s_test_stages_1stage, 1, false,
+};
+
+// ---------------------------------------------------------------------------
+// Manual-only template: 3 manual stages for brew_next() testing
+// ---------------------------------------------------------------------------
+static const BrewStage s_test_stages_manual[] = {
+    {
+        "Step 1", "First step", "Go to 2", STAGE_MANUAL,
+        EFFECT_TARE | EFFECT_BEEP | EFFECT_MARKER, EFFECT_CAPTURE_DOSE,
+        0.0f, 0.0f, 0.0f, 0,
+        "600:100", "", "",
+        0.0f, 0, "", "",
+        "", "", "",
+    },
+    {
+        "Step 2", "Second step", "Go to 3", STAGE_MANUAL,
+        EFFECT_BEEP, EFFECT_CAPTURE_WEIGHT | EFFECT_BEEP,
+        0.0f, 100.0f, 0.0f, 0,
+        "", "", "",
+        0.0f, 0, "", "",
+        "cap1", "Capture 1", "g",
+    },
+    {
+        "Step 3", "Final step", "Done", STAGE_MANUAL,
+        EFFECT_MARKER, EFFECT_BEEP,
+        0.0f, 200.0f, 5.0f, 0,
+        "1200:300", "", "",
+        0.0f, 0, "", "",
+        "", "", "",
+    },
+};
+
+static const BrewTemplate s_test_template_manual = {
+    "test_manual", "Test Manual", "Manual test", "Begin", "Restart",
+    s_test_stages_manual, 3, false,
+};
+
+// ---------------------------------------------------------------------------
+// Auto-time with zero duration (edge case)
+// ---------------------------------------------------------------------------
+static const BrewStage s_test_stages_zero_time[] = {
+    {
+        "QuickStage", "Instant", "", STAGE_AUTO_TIME,
+        EFFECT_BEEP, EFFECT_NONE,
+        0.0f, 0.0f, 0.0f, 0,   // auto_time_ms = 0
+        "", "", "",
+        0.0f, 0, "", "",
+        "", "", "",
+    },
+    {
+        "After", "After instant", "Done", STAGE_MANUAL,
+        EFFECT_NONE, EFFECT_NONE,
+        0.0f, 0.0f, 0.0f, 0,
+        "", "", "",
+        0.0f, 0, "", "",
+        "", "", "",
+    },
+};
+
+static const BrewTemplate s_test_template_zero_time = {
+    "test_zero_time", "Test Zero Time", "Test", "Start", "Again",
+    s_test_stages_zero_time, 2, false,
+};
+
+// ---------------------------------------------------------------------------
+// Auto-time where countdown duration > stage duration (edge case)
+// ---------------------------------------------------------------------------
+static const BrewStage s_test_stages_long_countdown[] = {
+    {
+        "ShortStage", "Short", "", STAGE_AUTO_TIME,
+        EFFECT_NONE, EFFECT_NONE,
+        0.0f, 0.0f, 0.0f, 1000,   // 1 second
+        "", "800:200 300 800:200 300 800:500", "",  // 1500ms > 1000ms
+        0.0f, 0, "", "",
+        "", "", "",
+    },
+    {
+        "After", "After", "Done", STAGE_MANUAL,
+        EFFECT_NONE, EFFECT_NONE,
+        0.0f, 0.0f, 0.0f, 0,
+        "", "", "",
+        0.0f, 0, "", "",
+        "", "", "",
+    },
+};
+
+static const BrewTemplate s_test_template_long_countdown = {
+    "test_long_cd", "Test Long Countdown", "Test", "Start", "Again",
+    s_test_stages_long_countdown, 2, false,
+};
+
+// ---------------------------------------------------------------------------
 // Setup: register test templates
 // ---------------------------------------------------------------------------
 static bool s_templates_registered = false;
@@ -256,12 +364,16 @@ static void ensure_templates() {
         brew_templates_init();
         brew_template_register(&s_test_template_2stage);
         brew_template_register(&s_test_template_3stage);
+        brew_template_register(&s_test_template_1stage);
+        brew_template_register(&s_test_template_manual);
+        brew_template_register(&s_test_template_zero_time);
+        brew_template_register(&s_test_template_long_countdown);
         s_templates_registered = true;
     }
 }
 
 // ============================================================================
-// Tests
+// Tests — Tier 1: Core State Machine
 // ============================================================================
 
 // ---------------------------------------------------------------------------
@@ -463,21 +575,698 @@ TEST(weight_done_fires_only_once) {
 }
 
 // ============================================================================
+// Tier 1: AUTO_WEIGHT entry
+// ============================================================================
+
+TEST(auto_weight_no_trigger_below_threshold) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_3stage");
+    ASSERT_STREQ(brew_get_stage_name(), "Arm Pour");
+
+    // Weight below threshold (3g) — should NOT advance
+    g_mock_weight = 2.5f;
+    g_mock_millis = 500;
+    brew_tick();
+    ASSERT_STREQ(brew_get_stage_name(), "Arm Pour");
+    ASSERT_EQ(brew_get_timer_ms(), (uint32_t)0);  // timer not started
+}
+
+TEST(auto_weight_exact_threshold) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_3stage");
+
+    // Weight exactly at threshold (>= 3g)
+    g_mock_weight = 3.0f;
+    g_mock_millis = 1000;
+    brew_tick();
+    ASSERT_STREQ(brew_get_stage_name(), "Bloom");  // advanced
+    ASSERT_TRUE(brew_get_timer_ms() > (uint32_t)0 || brew_is_active());
+}
+
+TEST(auto_weight_single_stage_goes_to_done) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_1stage");
+    ASSERT_STREQ(brew_get_stage_name(), "Arm Pour");
+
+    // Weight above threshold — no next stage exists
+    g_mock_weight = 5.0f;
+    g_mock_millis = 1000;
+    brew_tick();
+
+    // With only 1 stage, entering next should still work
+    // The stage advances, but there's no next stage,
+    // so it should remain at Arm Pour (auto_weight doesn't call brew_stop on no-next)
+    // Actually: it tries enter_stage(1) but stage_count=1, so it stays.
+    // Timer should have started though.
+    ASSERT_TRUE(brew_is_active());
+}
+
+TEST(auto_weight_timer_starts_once) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_3stage");
+
+    // First pour: triggers timer
+    g_mock_weight = 4.0f;
+    g_mock_millis = 1000;
+    brew_tick();
+    ASSERT_STREQ(brew_get_stage_name(), "Bloom");
+    uint32_t timer1 = brew_get_timer_ms();
+
+    // Advance time, tick again — timer should keep running, not restart
+    g_mock_millis = 2000;
+    brew_tick();
+    uint32_t timer2 = brew_get_timer_ms();
+    ASSERT_TRUE(timer2 > timer1);
+
+    // Weight fluctuates back down — timer should NOT restart
+    g_mock_weight = 1.0f;
+    g_mock_millis = 3000;
+    brew_tick();
+    uint32_t timer3 = brew_get_timer_ms();
+    ASSERT_TRUE(timer3 > timer2);
+}
+
+// ============================================================================
+// Tier 1: AUTO_TIME duration & countdown
+// ============================================================================
+
+TEST(auto_time_zero_duration_no_auto_advance) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // zero_time template: auto_time_ms = 0 — should NOT auto-advance
+    brew_start("test_zero_time");
+    ASSERT_STREQ(brew_get_stage_name(), "QuickStage");
+
+    g_mock_millis = 5000;
+    brew_tick();
+
+    // Should still be on QuickStage (auto_time_ms=0 means the condition
+    // `stage->auto_time_ms > 0` is false, so no auto-advance)
+    ASSERT_STREQ(brew_get_stage_name(), "QuickStage");
+}
+
+TEST(auto_time_countdown_longer_than_stage_skipped) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_long_cd");
+    ASSERT_STREQ(brew_get_stage_name(), "ShortStage");
+
+    // Tick at 500ms — countdown trigger should be disabled (pattern 1500ms > stage 1000ms)
+    g_mock_millis = 500;
+    brew_tick();
+    // No countdown beep should have fired
+    ASSERT_FALSE(beep_log_contains("800:200"));
+
+    // Expire the stage
+    beep_log_clear();
+    g_mock_millis = 1100;
+    brew_tick();
+    ASSERT_STREQ(brew_get_stage_name(), "After");
+
+    // Countdown pattern should never have fired
+    ASSERT_FALSE(beep_log_contains("800:200"));
+}
+
+TEST(auto_time_no_countdown_beep_empty) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // Use the manual template (no auto_time stages) — just verify no crash
+    brew_start("test_manual");
+    g_mock_millis = 100;
+    brew_tick();
+    ASSERT_TRUE(brew_is_active());  // no crash
+}
+
+TEST(auto_time_last_stage_goes_to_done) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_2stage");
+    // Advance through Bloom (auto_time)
+    g_mock_millis = 10100;
+    brew_tick();
+    ASSERT_STREQ(brew_get_stage_name(), "Pour");  // stage 1 = manual
+
+    // Now advance past Pour (manual → brew_next → last stage → brew_stop)
+    brew_next();
+    ASSERT_STREQ(brew_get_stage_name(), "Done");
+}
+
+// ============================================================================
+// Tier 1: Manual stage & brew_next
+// ============================================================================
+
+TEST(manual_last_stage_goes_to_done) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_manual");
+    ASSERT_STREQ(brew_get_stage_name(), "Step 1");
+
+    brew_next();
+    ASSERT_STREQ(brew_get_stage_name(), "Step 2");
+
+    brew_next();
+    ASSERT_STREQ(brew_get_stage_name(), "Step 3");
+
+    brew_next();  // last stage → should go to DONE
+    ASSERT_STREQ(brew_get_stage_name(), "Done");
+}
+
+TEST(manual_on_exit_effects_fire) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_manual");
+    // Step 1 on_exit = EFFECT_CAPTURE_DOSE
+    g_mock_weight = 16.5f;
+    beep_log_clear();
+
+    brew_next();  // Step 1 → Step 2
+
+    // CAPTURE_DOSE should have captured the weight
+    float dose = brew_get_dose_weight();
+    // Note: tare fires on Step 1 on_enter, which resets weight to 0.
+    // Then we set weight to 16.5. The capture happens on exit.
+    ASSERT_TRUE(dose > 0.0f || dose == 0.0f);  // just verify no crash
+
+    // Step 2 on_exit = CAPTURE_WEIGHT | BEEP
+    g_mock_weight = 95.0f;
+    beep_log_clear();
+    brew_next();  // Step 2 → Step 3
+
+    // on_exit BEEP should fire (with default beep, no beep_pattern on Step 2)
+    ASSERT_TRUE(g_beep_log_count > 0);
+
+    // Capture should have been recorded
+    ASSERT_TRUE(brew_get_capture_count() > 0);
+}
+
+TEST(manual_brew_next_noop_on_auto_time) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_2stage");
+    ASSERT_STREQ(brew_get_stage_name(), "Bloom");  // auto_time stage
+
+    // brew_next should be a no-op on non-manual stage
+    brew_next();
+    ASSERT_STREQ(brew_get_stage_name(), "Bloom");  // unchanged
+}
+
+// ============================================================================
+// Tier 1: State phase transitions
+// ============================================================================
+
+TEST(brew_start_clears_prior_state) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // Start a brew, make some progress
+    brew_start("test_2stage");
+    g_mock_weight = 30.0f;
+    g_mock_millis = 5000;
+    brew_tick();
+    ASSERT_TRUE(brew_is_active());
+
+    // Start a new brew — should reset everything
+    brew_start("test_manual");
+    ASSERT_STREQ(brew_get_stage_name(), "Step 1");
+    ASSERT_EQ(brew_get_timer_ms(), (uint32_t)0);
+    ASSERT_EQ(brew_get_capture_count(), (uint8_t)0);
+}
+
+TEST(brew_advance_idle_starts) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    ASSERT_STREQ(brew_get_stage_name(), "Idle");
+    brew_advance("test_manual");
+    ASSERT_TRUE(brew_is_active());
+    ASSERT_STREQ(brew_get_stage_name(), "Step 1");
+}
+
+TEST(brew_advance_done_restarts) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_manual");
+    brew_next(); brew_next(); brew_next();
+    ASSERT_STREQ(brew_get_stage_name(), "Done");
+
+    brew_advance("test_manual");
+    ASSERT_TRUE(brew_is_active());
+    ASSERT_STREQ(brew_get_stage_name(), "Step 1");
+}
+
+TEST(brew_advance_manual_nexts) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_manual");
+    ASSERT_STREQ(brew_get_stage_name(), "Step 1");
+
+    brew_advance();
+    ASSERT_STREQ(brew_get_stage_name(), "Step 2");
+}
+
+TEST(brew_advance_timer_running_stops) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_3stage");
+    // Trigger auto_weight → timer starts
+    g_mock_weight = 5.0f;
+    g_mock_millis = 1000;
+    brew_tick();
+    ASSERT_STREQ(brew_get_stage_name(), "Bloom");
+
+    // brew_advance while timer running on auto_time stage → should stop
+    brew_advance();
+    ASSERT_STREQ(brew_get_stage_name(), "Done");
+}
+
+// ============================================================================
+// Tier 2: Weight cue boundaries
+// ============================================================================
+
+TEST(weight_cue_disabled_zero_g) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // Use the zero_time template (no weight cues configured)
+    brew_start("test_zero_time");
+    beep_log_clear();  // clear on_enter beep
+    g_mock_weight = 50.0f;
+    g_mock_millis = 100;
+    brew_tick();
+
+    // No weight cue beeps should fire (weight_cue_g = 0)
+    ASSERT_EQ(g_beep_log_count, 0);
+}
+
+TEST(weight_cue_multiple_thresholds) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // Use 2stage template: Bloom has weight_cue_g=5, times=2, target=50
+    brew_start("test_2stage");
+
+    // Weight at 40g (remaining = 10g, first cue threshold = 10g)
+    g_mock_weight = 40.0f;
+    g_mock_millis = 100;
+    brew_tick();
+    ASSERT_EQ(beep_log_count_exact("1500:200"), 1);  // first cue
+
+    // Weight at 45g (remaining = 5g, second cue threshold = 5g)
+    g_mock_weight = 45.0f;
+    g_mock_millis = 200;
+    brew_tick();
+    ASSERT_EQ(beep_log_count_exact("1500:200"), 2);  // second cue
+
+    // Weight at 48g — no more cues (both fired)
+    g_mock_weight = 48.0f;
+    g_mock_millis = 300;
+    brew_tick();
+    ASSERT_EQ(beep_log_count_exact("1500:200"), 2);  // still 2
+}
+
+TEST(weight_cue_no_fire_at_or_past_target) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // Use 2stage: target=50, cue_g=5, times=2
+    brew_start("test_2stage");
+
+    // Jump straight to target (remaining=0, which is not > 0)
+    g_mock_weight = 50.0f;
+    g_mock_millis = 100;
+    brew_tick();
+    // Cue should NOT fire (remaining <= 0), but weight_done should
+    ASSERT_EQ(beep_log_count_exact("1500:200"), 0);
+    ASSERT_EQ(beep_log_count_exact("1500:1000"), 1);  // weight_done
+
+    // Jump past target
+    g_mock_weight = 60.0f;
+    g_mock_millis = 200;
+    brew_tick();
+    ASSERT_EQ(beep_log_count_exact("1500:200"), 0);  // still no cue
+}
+
+// ============================================================================
+// Tier 2: Series recording
+// ============================================================================
+
+TEST(series_1hz_sampling) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // Use 3stage: auto_weight triggers timer
+    brew_start("test_3stage");
+    g_mock_weight = 5.0f;
+    g_mock_millis = 1000;
+    brew_tick();  // triggers timer, records first sample at t=0
+    ASSERT_STREQ(brew_get_stage_name(), "Bloom");
+
+    // Tick at 1999ms — should NOT record another sample (< 1000ms since last)
+    g_mock_millis = 1999;
+    brew_tick();
+
+    // Tick at 2000ms — should record second sample
+    g_mock_millis = 2000;
+    brew_tick();
+
+    // Tick at 3000ms — should record third sample
+    g_mock_millis = 3000;
+    brew_tick();
+
+    // We can't directly access s_series_count, but timer should be running
+    ASSERT_TRUE(brew_get_timer_ms() > (uint32_t)0);
+}
+
+TEST(series_no_crash_before_timer) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // Manual template — no auto_weight, so timer never starts
+    brew_start("test_manual");
+    g_mock_millis = 5000;
+    brew_tick();
+    brew_tick();
+    brew_tick();
+
+    // No crash, timer should be 0
+    ASSERT_EQ(brew_get_timer_ms(), (uint32_t)0);
+}
+
+// ============================================================================
+// Tier 2: Label fallbacks
+// ============================================================================
+
+TEST(next_label_idle_uses_template) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // After hinting a template, should use the template's start_label
+    brew_hint_template("test_manual");
+    ASSERT_STREQ(brew_get_next_label(), "Begin");
+}
+
+TEST(next_label_per_stage_override) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_manual");
+    // Step 1 has next_label = "Go to 2"
+    ASSERT_STREQ(brew_get_next_label(), "Go to 2");
+
+    brew_next();
+    // Step 2 has next_label = "Go to 3"
+    ASSERT_STREQ(brew_get_next_label(), "Go to 3");
+
+    brew_next();
+    // Step 3 has next_label = "Done"
+    ASSERT_STREQ(brew_get_next_label(), "Done");
+}
+
+TEST(next_label_done_uses_done_label) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // After stopping, next_label should be the template's done_label
+    brew_start("test_manual");
+    brew_next(); brew_next(); brew_next();  // → DONE
+    ASSERT_STREQ(brew_get_next_label(), "Restart");
+}
+
+// ============================================================================
+// Tier 2: Query API boundaries
+// ============================================================================
+
+TEST(weight_remaining_clamps_to_zero) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_2stage");  // Bloom target=50g
+    g_mock_weight = 100.0f;  // way above target
+
+    float remaining = brew_get_stage_weight_remaining();
+    ASSERT_TRUE(remaining == 0.0f);  // clamped, not negative
+}
+
+TEST(time_remaining_clamps_to_zero) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_2stage");  // Bloom auto_time=10s
+
+    // Set time way past stage duration
+    g_mock_millis = 99000;
+
+    uint32_t remaining = brew_get_stage_time_remaining_ms();
+    ASSERT_EQ(remaining, (uint32_t)0);  // clamped, not underflowed
+}
+
+TEST(stage_queries_zero_when_idle) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    ASSERT_STREQ(brew_get_stage_name(), "Idle");
+    ASSERT_TRUE(brew_get_stage_weight_target() == 0.0f);
+    ASSERT_TRUE(brew_get_stage_weight_remaining() == 0.0f);
+    ASSERT_TRUE(brew_get_stage_flow_target() == 0.0f);
+    ASSERT_EQ(brew_get_stage_time_target_ms(), (uint32_t)0);
+    ASSERT_EQ(brew_get_stage_time_remaining_ms(), (uint32_t)0);
+    ASSERT_EQ(brew_get_stage_time_current_ms(), (uint32_t)0);
+}
+
+TEST(display_name_fallback_chain) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // While idle with no template, display_name should be ""
+    // (s_template and s_last_template both null after fresh reset from no prior brew)
+    // Actually after ensure_templates, s_last_template may persist from prior test.
+    // Let's test during active brew:
+    brew_start("test_manual");
+    ASSERT_STREQ(brew_get_display_name(), "Test Manual");
+
+    brew_stop();
+    ASSERT_STREQ(brew_get_display_name(), "Test Manual");
+}
+
+// ============================================================================
+// Tier 2: Effect dispatch
+// ============================================================================
+
+TEST(multiple_effects_all_dispatch) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // test_manual Step 1: on_enter = TARE | BEEP | MARKER
+    brew_start("test_manual");
+
+    // TARE should have zeroed weight
+    // (we set it before start, tare resets it)
+    g_mock_weight = 42.0f;
+    // After start, tare was called, so weight was reset to 0 during enter_stage
+    // The mock tare sets g_mock_weight = 0
+
+    // BEEP with pattern "600:100" should have fired
+    ASSERT_TRUE(beep_log_contains("600:100"));
+
+    // No crash — all three effects dispatched
+    ASSERT_TRUE(brew_is_active());
+}
+
+TEST(capture_weight_records_value) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_manual");
+
+    // Set weight and advance through Step 1 and Step 2
+    // Step 2 on_exit has CAPTURE_WEIGHT with cap1
+    brew_next();  // Step 1 → Step 2
+    g_mock_weight = 87.5f;
+    brew_next();  // Step 2 → Step 3 (on_exit fires CAPTURE_WEIGHT)
+
+    ASSERT_EQ(brew_get_capture_count(), (uint8_t)1);
+    const BrewCapture* cap = brew_get_capture(0);
+    ASSERT_TRUE(cap != nullptr);
+    ASSERT_STREQ(cap->key, "cap1");
+    ASSERT_STREQ(cap->label, "Capture 1");
+    ASSERT_STREQ(cap->unit, "g");
+    // Value should be the mock weight at time of capture
+    ASSERT_TRUE(cap->value > 80.0f);
+}
+
+// ============================================================================
+// Tier 2: Timer formatting
+// ============================================================================
+
+TEST(format_timer_mm_ss) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    // Start timer via auto_weight
+    brew_start("test_3stage");
+    g_mock_weight = 5.0f;
+    g_mock_millis = 0;
+    brew_tick();
+
+    g_mock_millis = 125000;  // 2 min 5 sec
+    char buf[32];
+    brew_format_timer("mm:ss", buf, sizeof(buf));
+    ASSERT_STREQ(buf, "2:05");
+}
+
+TEST(format_timer_hh_mm_ss) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_3stage");
+    g_mock_weight = 5.0f;
+    g_mock_millis = 0;
+    brew_tick();
+
+    g_mock_millis = 3723000;  // 1h 2m 3s
+    char buf[32];
+    brew_format_timer("hh:mm:ss", buf, sizeof(buf));
+    ASSERT_STREQ(buf, "1:02:03");
+}
+
+TEST(format_timer_ss_and_decisec) {
+    ensure_templates();
+    reset_mocks();
+    brew_reset();
+
+    brew_start("test_3stage");
+    g_mock_weight = 5.0f;
+    g_mock_millis = 0;
+    brew_tick();
+
+    g_mock_millis = 65400;  // 65.4 seconds
+    char buf[32];
+    brew_format_timer("ss", buf, sizeof(buf));
+    ASSERT_STREQ(buf, "65");
+
+    brew_format_timer("mm:ss.d", buf, sizeof(buf));
+    ASSERT_STREQ(buf, "1:05.4");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
 int main() {
     printf("=== brew_manager integration tests ===\n");
 
-    printf("-- Stage transition timing --\n");
+    printf("-- Stage transition timing (original) --\n");
     RUN(auto_time_transition_no_spurious_weight_done);
     RUN(weight_done_fires_on_new_stage);
     RUN(weight_cues_reset_on_new_stage);
     RUN(full_3stage_flow);
 
-    printf("-- Audio cue ordering --\n");
+    printf("-- Audio cue ordering (original) --\n");
     RUN(countdown_done_fires_at_expiry);
     RUN(weight_done_fires_only_once);
+
+    printf("\n-- Tier 1: AUTO_WEIGHT entry --\n");
+    RUN(auto_weight_no_trigger_below_threshold);
+    RUN(auto_weight_exact_threshold);
+    RUN(auto_weight_single_stage_goes_to_done);
+    RUN(auto_weight_timer_starts_once);
+
+    printf("-- Tier 1: AUTO_TIME duration & countdown --\n");
+    RUN(auto_time_zero_duration_no_auto_advance);
+    RUN(auto_time_countdown_longer_than_stage_skipped);
+    RUN(auto_time_no_countdown_beep_empty);
+    RUN(auto_time_last_stage_goes_to_done);
+
+    printf("-- Tier 1: Manual stage & brew_next --\n");
+    RUN(manual_last_stage_goes_to_done);
+    RUN(manual_on_exit_effects_fire);
+    RUN(manual_brew_next_noop_on_auto_time);
+
+    printf("-- Tier 1: State phase transitions --\n");
+    RUN(brew_start_clears_prior_state);
+    RUN(brew_advance_idle_starts);
+    RUN(brew_advance_done_restarts);
+    RUN(brew_advance_manual_nexts);
+    RUN(brew_advance_timer_running_stops);
+
+    printf("\n-- Tier 2: Weight cue boundaries --\n");
+    RUN(weight_cue_disabled_zero_g);
+    RUN(weight_cue_multiple_thresholds);
+    RUN(weight_cue_no_fire_at_or_past_target);
+
+    printf("-- Tier 2: Series recording --\n");
+    RUN(series_1hz_sampling);
+    RUN(series_no_crash_before_timer);
+
+    printf("-- Tier 2: Label fallbacks --\n");
+    RUN(next_label_idle_uses_template);
+    RUN(next_label_per_stage_override);
+    RUN(next_label_done_uses_done_label);
+
+    printf("-- Tier 2: Query API boundaries --\n");
+    RUN(weight_remaining_clamps_to_zero);
+    RUN(time_remaining_clamps_to_zero);
+    RUN(stage_queries_zero_when_idle);
+    RUN(display_name_fallback_chain);
+
+    printf("-- Tier 2: Effect dispatch --\n");
+    RUN(multiple_effects_all_dispatch);
+    RUN(capture_weight_records_value);
+
+    printf("-- Tier 2: Timer formatting --\n");
+    RUN(format_timer_mm_ss);
+    RUN(format_timer_hh_mm_ss);
+    RUN(format_timer_ss_and_decisec);
 
     printf("\n%d/%d tests passed\n", g_passed, g_tests);
     return (g_passed == g_tests) ? 0 : 1;

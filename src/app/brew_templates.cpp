@@ -12,7 +12,7 @@
 // Registry
 // ============================================================================
 
-#define BREW_TEMPLATE_REGISTRY_MAX  8
+#define BREW_TEMPLATE_REGISTRY_MAX  16
 
 static const BrewTemplate* s_registry[BREW_TEMPLATE_REGISTRY_MAX];
 static uint8_t              s_registry_count = 0;

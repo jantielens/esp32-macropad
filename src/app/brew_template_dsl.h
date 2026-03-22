@@ -31,6 +31,7 @@
 #define BREW_DSL_ERR_STAGE_TYPE     -5   // unknown stage type string
 #define BREW_DSL_ERR_STAGE_NAME     -6   // stage missing "name"
 #define BREW_DSL_ERR_ALLOC          -7   // heap allocation failed
+#define BREW_DSL_ERR_TOO_MANY     -8   // more stages than BREW_DSL_MAX_STAGES
 
 // Maximum number of stages per template
 #define BREW_DSL_MAX_STAGES  16

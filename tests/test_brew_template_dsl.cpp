@@ -631,6 +631,27 @@ TEST(err_empty_json) {
     ASSERT_NULL(tmpl);
 }
 
+TEST(err_too_many_stages) {
+    // Build JSON with BREW_DSL_MAX_STAGES + 1 stages
+    char buf[4096];
+    int pos = snprintf(buf, sizeof(buf),
+        "{\"v\":1,\"name\":\"overflow\",\"stages\":[");
+    for (int i = 0; i <= BREW_DSL_MAX_STAGES; i++) {
+        if (i > 0) buf[pos++] = ',';
+        pos += snprintf(buf + pos, sizeof(buf) - pos,
+            "{\"name\":\"s\",\"type\":\"pour\"}");
+    }
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "]}");
+
+    BrewTemplate* tmpl = nullptr;
+    BrewStage* stg = nullptr;
+    char err[128] = {};
+    int rc = brew_dsl_parse(buf, strlen(buf), &tmpl, &stg, err, sizeof(err));
+    ASSERT_EQ(rc, BREW_DSL_ERR_TOO_MANY);
+    ASSERT_NULL(tmpl);
+    ASSERT_TRUE(strstr(err, "too many stages") != nullptr);
+}
+
 // ===========================================================================
 // Serialization round-trip: parse → serialize → parse → compare
 // ===========================================================================
@@ -782,6 +803,7 @@ int main() {
     RUN(err_missing_stage_name);
     RUN(err_null_json);
     RUN(err_empty_json);
+    RUN(err_too_many_stages);
 
     printf("\n-- Serialization round-trip --\n");
     RUN(roundtrip_rao_v60);

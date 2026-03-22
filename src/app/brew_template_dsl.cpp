@@ -149,7 +149,10 @@ int brew_dsl_parse(const char* json, size_t json_len,
 
     int stage_count = (int)stages_arr.size();
     if (stage_count > BREW_DSL_MAX_STAGES) {
-        stage_count = BREW_DSL_MAX_STAGES;
+        char msg[64];
+        snprintf(msg, sizeof(msg), "too many stages (%d, max %d)", stage_count, BREW_DSL_MAX_STAGES);
+        set_err(err_buf, err_buf_len, msg);
+        return BREW_DSL_ERR_TOO_MANY;
     }
 
     // Validate all stages before allocating
