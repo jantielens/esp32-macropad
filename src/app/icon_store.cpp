@@ -153,9 +153,11 @@ static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
 }
 
 // Load an icon PNG from LittleFS, decode, and cache.
-static bool load_from_fs(const char* id, IconKind kind) {
+// If cache_key is provided, the icon is cached under that key instead of fs_id.
+static bool load_from_fs(const char* fs_id, IconKind kind,
+                         const char* cache_key = nullptr) {
     char path[64];
-    snprintf(path, sizeof(path), "/icons/%s.png", id);
+    snprintf(path, sizeof(path), "/icons/%s.png", fs_id);
 
     if (!LittleFS.exists(path)) return false;
 
@@ -165,7 +167,7 @@ static bool load_from_fs(const char* id, IconKind kind) {
     size_t file_size = f.size();
     if (file_size < 8 || file_size > ICON_MAX_PNG_SIZE) {
         f.close();
-        LOGW(TAG, "Invalid file size for '%s': %u", id, (unsigned)file_size);
+        LOGW(TAG, "Invalid file size for '%s': %u", fs_id, (unsigned)file_size);
         return false;
     }
 
@@ -177,7 +179,7 @@ static bool load_from_fs(const char* id, IconKind kind) {
     if (!buf) buf = (uint8_t*)malloc(file_size);
     if (!buf) {
         f.close();
-        LOGE(TAG, "OOM reading '%s' (%u bytes)", id, (unsigned)file_size);
+        LOGE(TAG, "OOM reading '%s' (%u bytes)", fs_id, (unsigned)file_size);
         return false;
     }
 
@@ -186,27 +188,29 @@ static bool load_from_fs(const char* id, IconKind kind) {
 
     if (read != file_size) {
         free(buf);
-        LOGW(TAG, "Short read for '%s': %u/%u", id, (unsigned)read, (unsigned)file_size);
+        LOGW(TAG, "Short read for '%s': %u/%u", fs_id, (unsigned)read, (unsigned)file_size);
         return false;
     }
 
     if (!validate_png(buf, file_size)) {
         free(buf);
-        LOGW(TAG, "Invalid PNG in '%s'", id);
+        LOGW(TAG, "Invalid PNG in '%s'", fs_id);
         return false;
     }
 
     // Decode PNG → LVGL draw buffer
-    lv_draw_buf_t* draw_buf = decode_png(buf, file_size, id);
+    lv_draw_buf_t* draw_buf = decode_png(buf, file_size, fs_id);
     free(buf);
 
     if (!draw_buf) return false;
 
-    LOGI(TAG, "Decoded '%s': %ux%u stride=%u cf=%u",
-         id, draw_buf->header.w, draw_buf->header.h,
-         draw_buf->header.stride, draw_buf->header.cf);
+    const char* key = cache_key ? cache_key : fs_id;
+    LOGI(TAG, "Decoded '%s': %ux%u stride=%u cf=%u%s",
+         fs_id, draw_buf->header.w, draw_buf->header.h,
+         draw_buf->header.stride, draw_buf->header.cf,
+         cache_key ? " (alias)" : "");
 
-    return cache_entry_buf(id, kind, draw_buf);
+    return cache_entry_buf(key, kind, draw_buf);
 }
 
 // ============================================================================
@@ -282,6 +286,34 @@ bool icon_store_lookup(const char* id, IconRef* out) {
     return true;
 }
 
+// Preload icons for a single pad (with template fallback).
+static uint16_t preload_pad_icons(uint8_t page, PadConfig* cfg) {
+    uint16_t loaded = 0;
+    for (uint8_t i = 0; i < cfg->button_count; i++) {
+        if (!cfg->buttons[i].icon_id[0]) continue;
+
+        char key[CONFIG_ICON_ID_MAX_LEN];
+        icon_store_build_key(page, cfg->buttons[i].col,
+                             cfg->buttons[i].row, key, sizeof(key));
+
+        if (find_entry(key) >= 0) continue;  // Already cached
+        IconKind kind = kind_from_icon_id(cfg->buttons[i].icon_id);
+        if (load_from_fs(key, kind)) { loaded++; continue; }
+
+        // Fallback: if this pad uses a template, try loading icon from
+        // the template pad's position (icon files live under original key)
+        if (cfg->template_pad >= 0 && cfg->template_pad != (int8_t)page) {
+            char tpl_key[CONFIG_ICON_ID_MAX_LEN];
+            icon_store_build_key((uint8_t)cfg->template_pad,
+                                 cfg->buttons[i].col,
+                                 cfg->buttons[i].row,
+                                 tpl_key, sizeof(tpl_key));
+            if (load_from_fs(tpl_key, kind, key)) loaded++;
+        }
+    }
+    return loaded;
+}
+
 void icon_store_preload_pad_pages() {
     uint16_t loaded = 0;
 
@@ -297,23 +329,34 @@ void icon_store_preload_pad_pages() {
             continue;
         }
 
-        for (uint8_t i = 0; i < cfg->button_count; i++) {
-            if (!cfg->buttons[i].icon_id[0]) continue;
-
-            char key[CONFIG_ICON_ID_MAX_LEN];
-            icon_store_build_key(page, cfg->buttons[i].col,
-                                 cfg->buttons[i].row, key, sizeof(key));
-
-            if (find_entry(key) >= 0) continue;  // Already cached
-            IconKind kind = kind_from_icon_id(cfg->buttons[i].icon_id);
-            if (load_from_fs(key, kind)) loaded++;
-        }
-
+        loaded += preload_pad_icons(page, cfg);
         free(cfg);
     }
 
     LOGI(TAG, "Preload complete: %u icons loaded, %u total cached",
          loaded, g_count);
+}
+
+void icon_store_preload_pad(uint8_t page) {
+    if (page >= MAX_PADS) return;
+
+    PadConfig* cfg = (PadConfig*)heap_caps_malloc(
+        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
+    if (!cfg) return;
+
+    memset(cfg, 0, sizeof(PadConfig));
+    if (!pad_config_load(page, cfg)) {
+        free(cfg);
+        return;
+    }
+
+    uint16_t loaded = preload_pad_icons(page, cfg);
+    free(cfg);
+
+    if (loaded > 0) {
+        LOGI(TAG, "Preload pad %u: %u icons loaded", page, loaded);
+    }
 }
 
 void icon_store_delete_page_icons(uint8_t page) {

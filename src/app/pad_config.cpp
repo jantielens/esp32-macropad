@@ -2,6 +2,7 @@
 
 #include "board_config.h"
 #include "fs_health.h"
+#include "icon_store.h"
 #include "log_manager.h"
 #if HAS_DISPLAY
 #include "widgets/widget.h"
@@ -27,7 +28,8 @@ static uint32_t g_generation = 0;
 static PadConfig* g_cache[MAX_PADS] = {};
 
 // Forward declaration — defined after pad_config_init()
-static bool pad_config_load_from_flash(uint8_t page, PadConfig* out);
+static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
+                                       bool skip_template = false);
 
 // ============================================================================
 // Helpers
@@ -228,7 +230,13 @@ static void parse_action(JsonVariant v, ButtonAction* act, const char* legacy_sc
     }
 }
 
-static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
+// Helper: resolve a fallback default string from ButtonDefaults (if non-empty),
+// otherwise use the hardcoded default.
+static const char* btn_default(const char* pad_default, const char* hardcoded) {
+    return (pad_default && pad_default[0]) ? pad_default : hardcoded;
+}
+
+static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDefaults* defs) {
     init_button_defaults(btn);
 
     btn->col = obj["col"] | (uint8_t)0;
@@ -243,20 +251,32 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     strlcpy(btn->label_center, obj["label_center"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->label_bottom, obj["label_bottom"] | "", CONFIG_LABEL_MAX_LEN);
 
-    // Per-label style overrides (DSL strings, e.g. "font:24;align:right")
-    label_style_parse(obj["label_top_style"] | "", &btn->style_top);
-    label_style_parse(obj["label_center_style"] | "", &btn->style_center);
-    label_style_parse(obj["label_bottom_style"] | "", &btn->style_bottom);
+    // Per-label style overrides: button JSON → pad button_defaults → empty (auto)
+    const char* dsl_top = obj["label_top_style"] | "";
+    const char* dsl_ctr = obj["label_center_style"] | "";
+    const char* dsl_bot = obj["label_bottom_style"] | "";
+    if (!dsl_top[0] && defs) dsl_top = defs->label_top_style;
+    if (!dsl_ctr[0] && defs) dsl_ctr = defs->label_center_style;
+    if (!dsl_bot[0] && defs) dsl_bot = defs->label_bottom_style;
+    label_style_parse(dsl_top, &btn->style_top);
+    label_style_parse(dsl_ctr, &btn->style_center);
+    label_style_parse(dsl_bot, &btn->style_bottom);
 
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
     parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 
-    parse_bindable_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN, "#333333");
-    parse_bindable_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN, "#FFFFFF");
-    parse_bindable_field(obj["border_color"], btn->border_color, CONFIG_COLOR_MAX_LEN, "#000000");
-    parse_bindable_field(obj["border_width"], btn->border_width, CONFIG_BINDABLE_SHORT_LEN, "0", false);
-    parse_bindable_field(obj["corner_radius"], btn->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "8", false);
+    // Appearance fields: button JSON → pad button_defaults → hardcoded default
+    parse_bindable_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->bg_color : nullptr, "#333333"));
+    parse_bindable_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->fg_color : nullptr, "#FFFFFF"));
+    parse_bindable_field(obj["border_color"], btn->border_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->border_color : nullptr, "#000000"));
+    parse_bindable_field(obj["border_width"], btn->border_width, CONFIG_BINDABLE_SHORT_LEN,
+                         btn_default(defs ? defs->border_width : nullptr, "0"), false);
+    parse_bindable_field(obj["corner_radius"], btn->corner_radius, CONFIG_BINDABLE_SHORT_LEN,
+                         btn_default(defs ? defs->corner_radius : nullptr, "8"), false);
 
     // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
     // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "beep", ... } ]
@@ -296,9 +316,13 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
         }
     }
 
-    // Audio feedback overrides (empty = device default, "none" = suppress)
-    strlcpy(btn->tap_beep, obj["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
-    strlcpy(btn->lp_beep, obj["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+    // Audio feedback overrides: button JSON → pad button_defaults → empty (device default)
+    const char* tb = obj["tap_beep"] | "";
+    const char* lb = obj["lp_beep"] | "";
+    if (!tb[0] && defs && defs->tap_beep[0]) tb = defs->tap_beep;
+    if (!lb[0] && defs && defs->lp_beep[0]) lb = defs->lp_beep;
+    strlcpy(btn->tap_beep, tb, CONFIG_BEEP_PATTERN_MAX_LEN);
+    strlcpy(btn->lp_beep, lb, CONFIG_BEEP_PATTERN_MAX_LEN);
 
     // Background image fields
     strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);
@@ -405,14 +429,110 @@ bool pad_config_init() {
 // Internal: read and parse page config from flash. Only call from a task
 // with an internal-RAM stack (main task, web server tasks). Never from the
 // LVGL render task whose stack may live in PSRAM.
-static bool pad_config_load_from_flash(uint8_t page, PadConfig* out) {
+
+// Merge buttons from a template pad into empty grid positions.
+// Target pad's own buttons always win on col/row conflict.
+static void merge_template_buttons(uint8_t page, PadConfig* out) {
+    int8_t tpl = out->template_pad;
+    if (tpl < 0 || tpl >= MAX_PADS || tpl == (int8_t)page) return;
+
+    PadConfig* tpl_cfg = (PadConfig*)heap_caps_malloc(
+        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!tpl_cfg) tpl_cfg = (PadConfig*)malloc(sizeof(PadConfig));
+    if (!tpl_cfg) return;
+
+    // Load template pad with skip_template=true to prevent chaining
+    if (!pad_config_load_from_flash((uint8_t)tpl, tpl_cfg, true)) {
+        free(tpl_cfg);
+        return;
+    }
+
+    // Build occupancy set for target pad's own buttons
+    bool occupied[MAX_GRID_COLS][MAX_GRID_ROWS] = {};
+    for (uint8_t i = 0; i < out->button_count; i++) {
+        const ScreenButtonConfig& b = out->buttons[i];
+        uint8_t cs = b.col_span ? b.col_span : 1;
+        uint8_t rs = b.row_span ? b.row_span : 1;
+        for (uint8_t dc = 0; dc < cs; dc++) {
+            for (uint8_t dr = 0; dr < rs; dr++) {
+                uint8_t c = b.col + dc, r = b.row + dr;
+                if (c < MAX_GRID_COLS && r < MAX_GRID_ROWS)
+                    occupied[c][r] = true;
+            }
+        }
+    }
+
+    // Merge template buttons into empty positions
+    uint8_t merged = 0;
+    for (uint8_t i = 0; i < tpl_cfg->button_count; i++) {
+        if (out->button_count >= MAX_PAD_BUTTONS) break;
+        const ScreenButtonConfig& tb = tpl_cfg->buttons[i];
+        // Skip template buttons outside target grid
+        if (tb.col >= out->cols || tb.row >= out->rows) continue;
+        // Check all cells the template button would occupy
+        uint8_t cs = tb.col_span ? tb.col_span : 1;
+        uint8_t rs = tb.row_span ? tb.row_span : 1;
+        bool conflict = false;
+        for (uint8_t dc = 0; dc < cs && !conflict; dc++) {
+            for (uint8_t dr = 0; dr < rs && !conflict; dr++) {
+                uint8_t c = tb.col + dc, r = tb.row + dr;
+                if (c >= out->cols || r >= out->rows || occupied[c][r])
+                    conflict = true;
+            }
+        }
+        if (conflict) continue;
+        // Copy template button and mark cells occupied
+        memcpy(&out->buttons[out->button_count], &tb, sizeof(ScreenButtonConfig));
+        out->button_count++;
+        merged++;
+        for (uint8_t dc = 0; dc < cs; dc++) {
+            for (uint8_t dr = 0; dr < rs; dr++) {
+                uint8_t c = tb.col + dc, r = tb.row + dr;
+                if (c < MAX_GRID_COLS && r < MAX_GRID_ROWS)
+                    occupied[c][r] = true;
+            }
+        }
+    }
+
+    // Merge template bindings (target wins on name collision)
+    for (uint8_t i = 0; i < tpl_cfg->binding_count; i++) {
+        if (out->binding_count >= PAD_MAX_BINDINGS) break;
+        const PadBinding& tb = tpl_cfg->bindings[i];
+        bool exists = false;
+        for (uint8_t j = 0; j < out->binding_count; j++) {
+            if (strcmp(out->bindings[j].name, tb.name) == 0) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            memcpy(&out->bindings[out->binding_count], &tb, sizeof(PadBinding));
+            out->binding_count++;
+        }
+    }
+
+    // Merge button_defaults if target has none and template has some
+    if (!out->has_button_defaults && tpl_cfg->has_button_defaults) {
+        memcpy(&out->button_defaults, &tpl_cfg->button_defaults, sizeof(ButtonDefaults));
+        out->has_button_defaults = true;
+    }
+
+    if (merged > 0) {
+        LOGI(TAG, "Page %u: merged %u buttons from template pad %d", page, merged, tpl);
+    }
+
+    free(tpl_cfg);
+}
+
+static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
+                                       bool skip_template) {
     if (!out) return false;
     memset(out, 0, sizeof(PadConfig));
 
     strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = 3;
     out->rows = 3;
-
+    out->template_pad = -1;
     if (page >= MAX_PADS) return false;
     if (!g_fs_mounted) return false;
 
@@ -463,6 +583,8 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out) {
     out->rows = doc["rows"] | (uint8_t)3;
     strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
     parse_bindable_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN, "#000000");
+    out->template_pad = doc["template_pad"] | (int8_t)-1;
+    if (out->template_pad >= MAX_PADS) out->template_pad = -1;
 
     // Parse named page-level bindings: { "bindings": { "name": "template", ... } }
     out->binding_count = 0;
@@ -495,12 +617,39 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out) {
     if (out->rows < 1) out->rows = 1;
     if (out->rows > MAX_GRID_ROWS) out->rows = MAX_GRID_ROWS;
 
+    // Parse pad-level button defaults (optional)
+    memset(&out->button_defaults, 0, sizeof(ButtonDefaults));
+    out->has_button_defaults = false;
+    JsonObject bd = doc["button_defaults"];
+    if (!bd.isNull()) {
+        out->has_button_defaults = true;
+        ButtonDefaults* d = &out->button_defaults;
+        parse_bindable_field(bd["bg_color"], d->bg_color, CONFIG_COLOR_MAX_LEN, "");
+        parse_bindable_field(bd["fg_color"], d->fg_color, CONFIG_COLOR_MAX_LEN, "");
+        parse_bindable_field(bd["border_color"], d->border_color, CONFIG_COLOR_MAX_LEN, "");
+        parse_bindable_field(bd["border_width"], d->border_width, CONFIG_BINDABLE_SHORT_LEN, "", false);
+        parse_bindable_field(bd["corner_radius"], d->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "", false);
+        strlcpy(d->label_top_style, bd["label_top_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
+        strlcpy(d->label_center_style, bd["label_center_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
+        strlcpy(d->label_bottom_style, bd["label_bottom_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
+        strlcpy(d->tap_beep, bd["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+        strlcpy(d->lp_beep, bd["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+        LOGD(TAG, "Page %u: button_defaults loaded", page);
+    }
+
+    const ButtonDefaults* defs = out->has_button_defaults ? &out->button_defaults : nullptr;
+
     JsonArray buttons = doc["buttons"];
     out->button_count = 0;
     for (JsonObject btn_obj : buttons) {
         if (out->button_count >= MAX_PAD_BUTTONS) break;
-        parse_button(btn_obj, &out->buttons[out->button_count]);
+        parse_button(btn_obj, &out->buttons[out->button_count], defs);
         out->button_count++;
+    }
+
+    // Merge template pad buttons into empty grid positions
+    if (!skip_template) {
+        merge_template_buttons(page, out);
     }
 
     LOGI(TAG, "Page %u loaded: layout=%s cols=%u rows=%u buttons=%u",
@@ -535,6 +684,7 @@ bool pad_config_load(uint8_t page, PadConfig* out) {
     strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = 3;
     out->rows = 3;
+    out->template_pad = -1;
 
     if (page >= MAX_PADS) return false;
 
@@ -574,6 +724,19 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
     // always reads fresh data when it detects the new generation.
     cache_update(page);
 
+    // Preload icons for this pad (picks up template button icons that
+    // aren't yet in the PSRAM icon cache, e.g. after template_pad change).
+    icon_store_preload_pad(page);
+
+    // Also refresh any pad that references this page as its template_pad
+    for (uint8_t i = 0; i < MAX_PADS; i++) {
+        if (i == page) continue;
+        if (g_cache[i] && g_cache[i]->template_pad == (int8_t)page) {
+            cache_update(i);
+            icon_store_preload_pad(i);
+        }
+    }
+
     g_generation++;
 
     // Update fs_health stats
@@ -603,6 +766,14 @@ bool pad_config_delete(uint8_t page) {
     // Clear RAM cache before bumping generation (same ordering rationale as save)
     free(g_cache[page]);
     g_cache[page] = nullptr;
+
+    // Refresh any pad that referenced this page as its template_pad
+    for (uint8_t i = 0; i < MAX_PADS; i++) {
+        if (i == page) continue;
+        if (g_cache[i] && g_cache[i]->template_pad == (int8_t)page) {
+            cache_update(i);
+        }
+    }
 
     g_generation++;
 

@@ -168,6 +168,8 @@ The Pads page is the heart of ESP32 Macropad — this is where you design your t
 
 The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import). This is completely separate from the device config Save & Reboot footer on other pages.
 
+The **Button Defaults** section lets you set pad-wide default colors, borders, label styles, and beep patterns that all buttons inherit automatically — saving you from repeating the same appearance settings on every button. Per-button overrides still take precedence.
+
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.

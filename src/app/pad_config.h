@@ -204,6 +204,23 @@ struct PadBinding {
     char value[CONFIG_LABEL_MAX_LEN];         // binding template, e.g. "[mqtt:solar/power;$.value]"
 };
 
+// Pad-level button defaults — fields that cascade to all buttons on this pad
+// when the per-button JSON field is missing/null. Uses same field types as
+// ScreenButtonConfig so the cascade is a simple string copy.
+// A field is "set" when its string is non-empty.
+struct ButtonDefaults {
+    char bg_color[CONFIG_COLOR_MAX_LEN];          // e.g. "#1a1a2e"
+    char fg_color[CONFIG_COLOR_MAX_LEN];          // e.g. "#e0e0ff"
+    char border_color[CONFIG_COLOR_MAX_LEN];      // e.g. "#333366"
+    char border_width[CONFIG_BINDABLE_SHORT_LEN]; // e.g. "1"
+    char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // e.g. "16"
+    char label_top_style[CONFIG_LABEL_STYLE_MAX_LEN];
+    char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
+    char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];
+    char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
+    char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
+};
+
 // Per-pad config
 struct PadConfig {
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
@@ -211,6 +228,15 @@ struct PadConfig {
     uint8_t rows;                            // 1-8 (grid mode only)
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
+
+    // Template pad: inherit buttons from another pad into empty grid positions.
+    // -1 = none (default). 0..MAX_PADS-1 = source pad index.
+    // Merge is read-only (template buttons are never written to this pad's JSON).
+    int8_t template_pad;
+
+    // Pad-level button defaults (cascade to buttons missing these fields)
+    ButtonDefaults button_defaults;
+    bool has_button_defaults;                    // true if "button_defaults" object was present in JSON
 
     // Named pad-level bindings for [pad:name] references
     uint8_t binding_count;
