@@ -45,6 +45,18 @@ The cascade order is: **Button field → Pad button defaults → Firmware hardco
 
 When editing a button, fields that match the pad default show their inherited value normally. If you change a field to a custom value, a small **↩** reset link appears next to the field label — click it to revert to the pad default.
 
+### Template Pad
+
+The **Template Pad** dropdown (below Background Color) lets you inherit buttons from another pad. When you select a template pad:
+
+- Buttons from the template pad fill **empty** grid positions on the current pad. Your own buttons always take priority — the template only fills gaps.
+- Template buttons appear as **ghost overlays** in the editor (semi-transparent with a dashed outline) so you can see what will be inherited.
+- The template pad's **bindings** and **button defaults** are also merged in (your pad's own settings win on any conflict).
+- **No chaining** — if the template pad itself references another template, that second-level reference is ignored. This prevents circular dependencies and keeps behavior predictable.
+- The merge is **read-only** — template buttons are never written into your pad's JSON file. They're merged in-memory each time the pad loads.
+
+> **Use case**: Put navigation buttons (Home, Settings, Back) on a "nav" pad. Then set that as the template for your other pads — the nav buttons automatically appear in empty positions without copying them one by one.
+
 ---
 
 ## The Button Editor

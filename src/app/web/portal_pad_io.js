@@ -146,6 +146,7 @@ function padCopyPad() {
         buttons: padState.buttons.map(b => Object.assign({}, b)),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
         buttonDefaults: Object.assign({}, padState.buttonDefaults),
+        templatePad: padState.templatePad,
     };
     document.getElementById('pad-paste-btn').disabled = false;
     showMessage('Pad ' + (padState.page + 1) + ' copied', 'success');
@@ -171,7 +172,12 @@ function padPastePad() {
     // Paste button defaults
     padLoadButtonDefaults(padState.padClipboard.buttonDefaults || {});
 
-    padRenderGrid();
+    // Paste template pad (clear if it would reference self)
+    padState.templatePad = (padState.padClipboard.templatePad !== undefined &&
+        padState.padClipboard.templatePad !== padState.page) ? padState.padClipboard.templatePad : -1;
+    padPopulateTemplateDropdown(padState.page);
+    padLoadTemplateButtons().then(() => padRenderGrid());
+
     padMarkDirty();
     showMessage('Pad pasted (unsaved)', 'success');
 }
@@ -205,6 +211,9 @@ function padExportPad() {
     var btnDefs = padState.buttonDefaults;
     if (btnDefs && Object.keys(btnDefs).length > 0) {
         payload.button_defaults = btnDefs;
+    }
+    if (padState.templatePad >= 0) {
+        payload.template_pad = padState.templatePad;
     }
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -248,6 +257,12 @@ async function padImportPad(evt) {
 
         // Load button defaults from imported pad
         padLoadButtonDefaults(json.button_defaults || {});
+
+        // Load template pad (clear if it would reference self)
+        padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null &&
+            json.template_pad !== padState.page) ? json.template_pad : -1;
+        padPopulateTemplateDropdown(padState.page);
+        await padLoadTemplateButtons();
 
         padRenderGrid();
         padMarkDirty();

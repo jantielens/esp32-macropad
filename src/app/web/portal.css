@@ -1076,6 +1076,12 @@ footer {
     background: rgba(255,255,255,0.04);
 }
 
+.pad-cell-ghost {
+    opacity: 0.35;
+    outline: 2px dashed rgba(255,255,255,0.35);
+    outline-offset: -2px;
+}
+
 .pad-cell-btn {
     border: none;
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);

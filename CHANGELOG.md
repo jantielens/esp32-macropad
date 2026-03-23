@@ -5,9 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
 ## [1.12.0] - 2026-03-19
 
 ### Added
+- **Template pads** — set any pad as a "template" for another pad. Buttons from the template pad automatically appear in empty grid positions, shown as ghost overlays in the editor. Template buttons, bindings, and button defaults are merged at load time (target pad always wins on conflict). No chaining — a template pad's own template reference is ignored. Configure via the new **Template Pad** dropdown on the Pads page.
 - **Pad-level button defaults** — set default background, text, and border colors, border width, corner radius, label styles, and beep patterns once per pad. All buttons on the pad inherit these defaults automatically, saving you from repeating the same appearance settings on every button. Per-button overrides still take precedence. Configure in the new **Button Defaults** collapsible section on the Pads page, between Background Color and Pad Bindings.
 - **Reset to default** — when a button has a custom color or border override, a small ↩ link appears next to the field label in the button editor. Click it to revert to the pad default.
 - **Audio support for JC4880P433** — enabled ES8311 codec + power amplifier on the GUITION JC4880P433 board. Pin mapping sourced from the [community BSP](https://github.com/csvke/esp32_p4_jc4880p433c_bsp): MCLK=GPIO13, BCLK=GPIO12, LRCK=GPIO10, DOUT=GPIO9, PA enable=GPIO11. All existing audio features (beep patterns, tap/long-press cues, MQTT siren/volume, timer expiry beep) now work on this board.

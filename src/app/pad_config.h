@@ -224,6 +224,11 @@ struct PadConfig {
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
 
+    // Template pad: inherit buttons from another pad into empty grid positions.
+    // -1 = none (default). 0..MAX_PADS-1 = source pad index.
+    // Merge is read-only (template buttons are never written to this pad's JSON).
+    int8_t template_pad;
+
     // Pad-level button defaults (cascade to buttons missing these fields)
     ButtonDefaults button_defaults;
     bool has_button_defaults;                    // true if "button_defaults" object was present in JSON

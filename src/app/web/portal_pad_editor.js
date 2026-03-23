@@ -18,6 +18,8 @@ const padState = {
     bindings: [],        // Page-level named bindings [{name, value}]
     colorCache: {},      // page → hex[] — colors from visited pads
     buttonDefaults: {},  // Pad-level button defaults (appearance fields that cascade to buttons)
+    templatePad: -1,     // Template pad index (-1 = none)
+    templateButtons: [], // Buttons loaded from template pad (for ghost rendering)
 };
 
 let padDirty = false;
@@ -76,6 +78,72 @@ function padIconIdToType(iconId) {
     if (iconId.startsWith('emoji_')) return { type: 'emoji', value: iconId.substring(6) };
     if (iconId.startsWith('mi_')) return { type: 'mi', value: iconId.substring(3) };
     return { type: '', value: '' };
+}
+
+// Shared cell content renderer for normal and ghost buttons.
+// Sets colors, border, labels, icon, and bg-image placeholder on the cell div.
+function padRenderCellContent(cell, btn) {
+    const bg = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'));
+    const fg = padColorToHex(btn.fg_color, padGetEffectiveDefault('fg_color'));
+    cell.style.background = bg;
+    cell.style.color = fg;
+    const borderColor = padColorToHex(btn.border_color, padGetEffectiveDefault('border_color'));
+    const borderWidth = (btn.border_width !== undefined) ? btn.border_width : padGetEffectiveDefault('border_width');
+    const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : padGetEffectiveDefault('corner_radius');
+    cell.style.border = borderWidth + 'px solid ' + borderColor;
+    cell.style.borderRadius = cornerRadius + 'px';
+    const hasTop = !!btn.label_top;
+    const hasBottom = !!btn.label_bottom;
+    if (hasTop || hasBottom) cell.style.justifyContent = 'space-between';
+    if (hasTop) {
+        const el = document.createElement('div');
+        el.className = 'pad-cell-label-top';
+        el.textContent = padSimplifyBindings(btn.label_top);
+        cell.appendChild(el);
+    } else if (hasBottom) {
+        cell.appendChild(document.createElement('div'));
+    }
+    if (btn.bg_image_url) {
+        const img = document.createElement('div');
+        img.className = 'pad-cell-image-placeholder';
+        img.textContent = '\u{1F5BC}';
+        cell.appendChild(img);
+    }
+    if (btn.icon_id) {
+        const iconParsed = padIconIdToType(btn.icon_id);
+        if (iconParsed.type === 'emoji') {
+            const el = document.createElement('div');
+            el.className = 'pad-cell-icon';
+            el.textContent = iconParsed.value;
+            cell.appendChild(el);
+        } else if (iconParsed.type === 'mi') {
+            padEnsureMaterialSymbols();
+            const el = document.createElement('span');
+            el.className = 'material-symbols-outlined pad-cell-icon';
+            el.textContent = iconParsed.value;
+            el.style.color = fg;
+            cell.appendChild(el);
+        }
+    } else if (!btn.bg_image_url) {
+        const centerText = btn.label_center || '\u2022';
+        const elc = document.createElement('div');
+        elc.className = 'pad-cell-label-center';
+        elc.textContent = padSimplifyBindings(centerText);
+        cell.appendChild(elc);
+    } else if (btn.label_center) {
+        const elc = document.createElement('div');
+        elc.className = 'pad-cell-label-center';
+        elc.textContent = padSimplifyBindings(btn.label_center);
+        cell.appendChild(elc);
+    }
+    if (hasBottom) {
+        const el = document.createElement('div');
+        el.className = 'pad-cell-label-bottom';
+        el.textContent = padSimplifyBindings(btn.label_bottom);
+        cell.appendChild(el);
+    } else if (hasTop) {
+        cell.appendChild(document.createElement('div'));
+    }
 }
 
 function padBuildIconId() {
@@ -331,6 +399,12 @@ function padInit() {
         padMarkDirty();
         padRenderGrid();
     });
+    document.getElementById('pad-template-pad').addEventListener('change', async (e) => {
+        padState.templatePad = parseInt(e.target.value);
+        padMarkDirty();
+        await padLoadTemplateButtons();
+        padRenderGrid();
+    });
 
     document.getElementById('pad-save-btn').addEventListener('click', padSavePage);
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
@@ -438,6 +512,43 @@ function padPopulatePadDropdown() {
     }
 }
 
+// Populate the template pad dropdown, excluding the current page
+function padPopulateTemplateDropdown(currentPage) {
+    const sel = document.getElementById('pad-template-pad');
+    if (!sel) return;
+    const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
+    sel.innerHTML = '';
+    const noneOpt = document.createElement('option');
+    noneOpt.value = -1;
+    noneOpt.textContent = '(none)';
+    sel.appendChild(noneOpt);
+    const screens = (deviceInfoCache && deviceInfoCache.available_screens) || [];
+    for (let i = 0; i < maxPads; i++) {
+        if (i === currentPage) continue;
+        const opt = document.createElement('option');
+        opt.value = i;
+        // Try to find a friendly name from available_screens
+        const scr = screens.find(s => s.id === 'pad_' + i);
+        opt.textContent = scr ? scr.name : 'Pad ' + (i + 1);
+        sel.appendChild(opt);
+    }
+    sel.value = padState.templatePad;
+}
+
+// Load template buttons asynchronously for ghost rendering
+async function padLoadTemplateButtons() {
+    padState.templateButtons = [];
+    if (padState.templatePad < 0) return;
+    try {
+        const resp = await fetch('/api/pad?page=' + padState.templatePad);
+        if (!resp.ok) return;
+        const json = await resp.json();
+        padState.templateButtons = (json.buttons && Array.isArray(json.buttons)) ? json.buttons : [];
+    } catch (e) {
+        // Silently ignore — template just won't show ghosts
+    }
+}
+
 function padPopulateScreenDropdown() {
     var prefixes = [];
     for (var i = 0; i < MAX_ACTIONS; i++) {
@@ -516,6 +627,8 @@ async function padLoadPage(page) {
     padState.buttons = [];
     padState.bindings = [];
     padState.buttonDefaults = {};
+    padState.templatePad = -1;
+    padState.templateButtons = [];
     padClearDirty();
 
     try {
@@ -532,8 +645,11 @@ async function padLoadPage(page) {
             padSetBindableColor('pad-edit-page-bg-color', '#000000');
             padState.bindings = [];
             padState.buttonDefaults = {};
+            padState.templatePad = -1;
+            padState.templateButtons = [];
             padRenderBindings();
             padLoadButtonDefaults({});
+            padPopulateTemplateDropdown(page);
             padCacheColors(page, [], '#000000');
             padRenderGrid();
             return;
@@ -559,6 +675,11 @@ async function padLoadPage(page) {
         // Load pad-level button defaults
         padState.buttonDefaults = json.button_defaults || {};
         padLoadButtonDefaults(padState.buttonDefaults);
+
+        // Load template pad setting
+        padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null) ? json.template_pad : -1;
+        padPopulateTemplateDropdown(page);
+        await padLoadTemplateButtons();
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -595,6 +716,29 @@ function padIsCellOccupied(col, row) {
         }
     }
     return null;
+}
+
+// Find a template button whose origin is at (col, row)
+function padFindTemplateButton(col, row) {
+    return padState.templateButtons.find(b => b.col === col && b.row === row) || null;
+}
+
+// Check whether a template button can be placed (mirrors backend merge_template_buttons occupancy check).
+// Returns false when any span cell is out of bounds or occupied by the target pad's own buttons.
+function padCanPlaceTemplateButton(tplBtn) {
+    const cols = padState.cols, rows = padState.rows;
+    const cs = tplBtn.col_span || 1, rs = tplBtn.row_span || 1;
+    for (let dc = 0; dc < cs; dc++) {
+        for (let dr = 0; dr < rs; dr++) {
+            const c = tplBtn.col + dc, r = tplBtn.row + dr;
+            if (c >= cols || r >= rows) return false;
+            if (padState.buttons.some(b => {
+                const bcs = b.col_span || 1, brs = b.row_span || 1;
+                return c >= b.col && c < b.col + bcs && r >= b.row && r < b.row + brs;
+            })) return false;
+        }
+    }
+    return true;
 }
 
 function padRenderGrid() {
@@ -652,78 +796,7 @@ function padRenderGrid() {
                 if (cs > 1) cell.style.gridColumn = 'span ' + cs;
                 if (rs > 1) cell.style.gridRow = 'span ' + rs;
 
-                const bg = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'));
-                const fg = padColorToHex(btn.fg_color, padGetEffectiveDefault('fg_color'));
-                cell.style.background = bg;
-                cell.style.color = fg;
-
-
-
-                const borderColor = padColorToHex(btn.border_color, padGetEffectiveDefault('border_color'));
-                const borderWidth = (btn.border_width !== undefined) ? btn.border_width : padGetEffectiveDefault('border_width');
-                const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : padGetEffectiveDefault('corner_radius');
-                cell.style.border = borderWidth + 'px solid ' + borderColor;
-                cell.style.borderRadius = cornerRadius + 'px';
-
-                // Spread labels to edges when top or bottom labels are present
-                const hasTop = !!btn.label_top;
-                const hasBottom = !!btn.label_bottom;
-                if (hasTop || hasBottom) {
-                    cell.style.justifyContent = 'space-between';
-                }
-
-                if (hasTop) {
-                    const el = document.createElement('div');
-                    el.className = 'pad-cell-label-top';
-                    el.textContent = padSimplifyBindings(btn.label_top);
-                    cell.appendChild(el);
-                } else if (hasBottom) {
-                    // Spacer so center content stays centered with space-between
-                    cell.appendChild(document.createElement('div'));
-                }
-                // Background image placeholder (absolute-positioned behind content)
-                if (btn.bg_image_url) {
-                    const img = document.createElement('div');
-                    img.className = 'pad-cell-image-placeholder';
-                    img.textContent = '\u{1F5BC}';
-                    cell.appendChild(img);
-                }
-                if (btn.icon_id) {
-                    const iconParsed = padIconIdToType(btn.icon_id);
-                    if (iconParsed.type === 'emoji') {
-                        const el = document.createElement('div');
-                        el.className = 'pad-cell-icon';
-                        el.textContent = iconParsed.value;
-                        cell.appendChild(el);
-                    } else if (iconParsed.type === 'mi') {
-                        padEnsureMaterialSymbols();
-                        const el = document.createElement('span');
-                        el.className = 'material-symbols-outlined pad-cell-icon';
-                        el.textContent = iconParsed.value;
-                        el.style.color = fg;
-                        cell.appendChild(el);
-                    }
-                } else if (!btn.bg_image_url) {
-                    const centerText = btn.label_center || '•';
-                    const elc = document.createElement('div');
-                    elc.className = 'pad-cell-label-center';
-                    elc.textContent = padSimplifyBindings(centerText);
-                    cell.appendChild(elc);
-                } else if (btn.label_center) {
-                    const elc = document.createElement('div');
-                    elc.className = 'pad-cell-label-center';
-                    elc.textContent = padSimplifyBindings(btn.label_center);
-                    cell.appendChild(elc);
-                }
-                if (hasBottom) {
-                    const el = document.createElement('div');
-                    el.className = 'pad-cell-label-bottom';
-                    el.textContent = padSimplifyBindings(btn.label_bottom);
-                    cell.appendChild(el);
-                } else if (hasTop) {
-                    // Spacer so center content stays centered with space-between
-                    cell.appendChild(document.createElement('div'));
-                }
+                padRenderCellContent(cell, btn);
 
                 // Widget indicator
                 if (btn.widget_type === 'bar_chart') {
@@ -747,8 +820,27 @@ function padRenderGrid() {
 
                 cell.addEventListener('click', () => padDialogOpen(c, r));
             } else {
-                cell.classList.add('pad-cell-empty');
-                cell.textContent = '+';
+                // Check if a template button occupies this position
+                const tplBtn = padFindTemplateButton(c, r);
+                if (tplBtn && padCanPlaceTemplateButton(tplBtn)) {
+                    cell.classList.add('pad-cell-btn', 'pad-cell-ghost');
+                    const cs = Math.min(tplBtn.col_span || 1, cols - c);
+                    const rs = Math.min(tplBtn.row_span || 1, rows - r);
+                    if (cs > 1) cell.style.gridColumn = 'span ' + cs;
+                    if (rs > 1) cell.style.gridRow = 'span ' + rs;
+                    padRenderCellContent(cell, tplBtn);
+                    // Mark cells covered by this template button's span
+                    for (let dc = 0; dc < cs; dc++) {
+                        for (let dr = 0; dr < rs; dr++) {
+                            if (dc === 0 && dr === 0) continue;
+                            covered.add((c + dc) + ',' + (r + dr));
+                        }
+                    }
+                    cell.title = 'Inherited from template pad';
+                } else {
+                    cell.classList.add('pad-cell-empty');
+                    cell.textContent = '+';
+                }
                 cell.addEventListener('click', () => padDialogOpen(c, r));
             }
 
@@ -1576,6 +1668,14 @@ async function padSavePage() {
         payload.button_defaults = btnDefs;
     } else {
         delete payload.button_defaults;
+    }
+
+    // Template pad
+    var tpl = parseInt(document.getElementById('pad-template-pad').value);
+    if (tpl >= 0) {
+        payload.template_pad = tpl;
+    } else {
+        delete payload.template_pad;
     }
 
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));
