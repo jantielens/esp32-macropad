@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Gauge target zone & markers** — gauges now support a bindable target value with visual markers across all active rings. Configure a target value (e.g., setpoint from MQTT), and the gauge draws a tick mark at that position plus an optional colored zone centered on it. The target zone angle specifies the total zone width in degrees (divided by 2 for ± rendering). Both the marker color and zone color support binding expressions for dynamic theming. Boundary ticks at the zone edges help delineate the target range. Useful for thermostat setpoints, power budget targets, or any "desired value" overlay.
 
 ### Changed
+- **Faster boot sequence** — reduced time-to-first-screen by ~6 seconds on ESP32-P4 boards. WiFi hardware initialization (SDIO link to C6 co-processor) now starts before display and config init, overlapping the ~2–5 s link bring-up with other work. Reduced post-Serial settle delay from 1000 ms to 100 ms. Splash screen IP/status display shortened from 2500 ms to 500 ms and the separate "Ready!" delay removed entirely. MQTT discovery now runs during the splash phase rather than adding to it.
 - **JSON format**: Button actions are now stored as arrays (`"actions": [...]` / `"lp_actions": [...]`). The firmware transparently reads the old single-object format (`"action": {...}` / `"lp_action": {...}`) for backward compatibility with existing configs on the device.
 
 ## [1.11.0] - 2026-03-18
