@@ -1356,6 +1356,11 @@ footer {
     user-select: none; letter-spacing: -0.5px; cursor: pointer;
 }
 .fx-hint:hover { color: rgba(0,113,227,0.85); }
+.reset-hint {
+    display: none; font-size: 11px; margin-left: 2px; vertical-align: baseline;
+    color: rgba(255,59,48,0.6); cursor: pointer; user-select: none;
+}
+.reset-hint:hover { color: rgba(255,59,48,0.9); }
 
 /* Page bindings list */
 .pad-binding-row {

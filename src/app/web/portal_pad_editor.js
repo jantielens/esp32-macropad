@@ -17,6 +17,7 @@ const padState = {
     padClipboard: null,  // Copied pad settings { cols, rows, buttons, name }
     bindings: [],        // Page-level named bindings [{name, value}]
     colorCache: {},      // page → hex[] — colors from visited pads
+    buttonDefaults: {},  // Pad-level button defaults (appearance fields that cascade to buttons)
 };
 
 let padDirty = false;
@@ -357,6 +358,12 @@ function padInit() {
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
     document.getElementById('pad-edit-cancel').addEventListener('click', padDialogClose);
 
+    // Wire appearance field input listeners for reset-hint visibility (once)
+    PAD_APPEARANCE_FIELDS.forEach(function(f) {
+        var el = document.getElementById(f.input);
+        if (el) el.addEventListener('input', padUpdateResetHints);
+    });
+
     // Pad-level actions
     document.getElementById('pad-fill-btn').addEventListener('click', padFillWithClipboard);
     document.getElementById('pad-copy-btn').addEventListener('click', padCopyPad);
@@ -508,6 +515,7 @@ async function padLoadPage(page) {
     padState.rawJson = null;
     padState.buttons = [];
     padState.bindings = [];
+    padState.buttonDefaults = {};
     padClearDirty();
 
     try {
@@ -523,7 +531,9 @@ async function padLoadPage(page) {
             padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
             padSetBindableColor('pad-edit-page-bg-color', '#000000');
             padState.bindings = [];
+            padState.buttonDefaults = {};
             padRenderBindings();
+            padLoadButtonDefaults({});
             padCacheColors(page, [], '#000000');
             padRenderGrid();
             return;
@@ -545,6 +555,10 @@ async function padLoadPage(page) {
         // Load pad bindings
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
+
+        // Load pad-level button defaults
+        padState.buttonDefaults = json.button_defaults || {};
+        padLoadButtonDefaults(padState.buttonDefaults);
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -638,16 +652,16 @@ function padRenderGrid() {
                 if (cs > 1) cell.style.gridColumn = 'span ' + cs;
                 if (rs > 1) cell.style.gridRow = 'span ' + rs;
 
-                const bg = padColorToHex(btn.bg_color, '#333333');
-                const fg = padColorToHex(btn.fg_color, '#ffffff');
+                const bg = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'));
+                const fg = padColorToHex(btn.fg_color, padGetEffectiveDefault('fg_color'));
                 cell.style.background = bg;
                 cell.style.color = fg;
 
 
 
-                const borderColor = padColorToHex(btn.border_color, '#000000');
-                const borderWidth = (btn.border_width !== undefined) ? btn.border_width : 1;
-                const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
+                const borderColor = padColorToHex(btn.border_color, padGetEffectiveDefault('border_color'));
+                const borderWidth = (btn.border_width !== undefined) ? btn.border_width : padGetEffectiveDefault('border_width');
+                const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : padGetEffectiveDefault('corner_radius');
                 cell.style.border = borderWidth + 'px solid ' + borderColor;
                 cell.style.borderRadius = cornerRadius + 'px';
 
@@ -800,6 +814,132 @@ function syncLabelStyleVisibility(slot) {
     btn.classList.toggle('active', hasValue);
 }
 
+// --- Button Defaults helpers ---
+
+// Firmware hardcoded defaults (must match init_button_defaults in pad_config.cpp)
+const PAD_FIRMWARE_DEFAULTS = {
+    bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000',
+    border_width: '0', corner_radius: '8',
+};
+
+function padLoadButtonDefaults(defs) {
+    padState.buttonDefaults = defs || {};
+    // Init bindable color controls
+    ['pad-def-bg-color-wrap', 'pad-def-fg-color-wrap', 'pad-def-border-color-wrap'].forEach(id => {
+        var el = document.getElementById(id);
+        if (el) padInitBindableColor(el);
+    });
+    padSetBindableColor('pad-def-bg-color', defs.bg_color || '', '');
+    padSetBindableColor('pad-def-fg-color', defs.fg_color || '', '');
+    padSetBindableColor('pad-def-border-color', defs.border_color || '', '');
+    document.getElementById('pad-def-border-width').value = defs.border_width || '';
+    document.getElementById('pad-def-corner-radius').value = defs.corner_radius || '';
+    document.getElementById('pad-def-label-top-style').value = defs.label_top_style || '';
+    document.getElementById('pad-def-label-center-style').value = defs.label_center_style || '';
+    document.getElementById('pad-def-label-bottom-style').value = defs.label_bottom_style || '';
+    document.getElementById('pad-def-tap-beep').value = defs.tap_beep || '';
+    document.getElementById('pad-def-lp-beep').value = defs.lp_beep || '';
+
+    // Auto-open section if any default is set
+    var hasAny = defs.bg_color || defs.fg_color || defs.border_color ||
+                 defs.border_width || defs.corner_radius ||
+                 defs.label_top_style || defs.label_center_style || defs.label_bottom_style ||
+                 defs.tap_beep || defs.lp_beep;
+    document.getElementById('pad-btn-defaults-section').open = !!hasAny;
+
+    // Show audio row only if device has audio
+    var audioRow = document.getElementById('pad-def-audio-row');
+    if (audioRow) audioRow.style.display = (deviceInfoCache && deviceInfoCache.has_audio) ? '' : 'none';
+
+    // Wire change listeners for dirty tracking
+    ['pad-def-border-width', 'pad-def-corner-radius',
+     'pad-def-label-top-style', 'pad-def-label-center-style', 'pad-def-label-bottom-style',
+     'pad-def-tap-beep', 'pad-def-lp-beep'].forEach(id => {
+        var el = document.getElementById(id);
+        if (el && !el._defWired) {
+            el._defWired = true;
+            el.addEventListener('input', padMarkDirty);
+        }
+    });
+    // Wire bindable color change listeners
+    ['pad-def-bg-color', 'pad-def-fg-color', 'pad-def-border-color'].forEach(id => {
+        var el = document.getElementById(id);
+        if (el && !el._defWired) {
+            el._defWired = true;
+            el.addEventListener('input', padMarkDirty);
+        }
+    });
+}
+
+function padCollectButtonDefaults() {
+    var d = {};
+    var bgc = padGetBindableColor('pad-def-bg-color');
+    var fgc = padGetBindableColor('pad-def-fg-color');
+    var bdc = padGetBindableColor('pad-def-border-color');
+    if (bgc) d.bg_color = bgc;
+    if (fgc) d.fg_color = fgc;
+    if (bdc) d.border_color = bdc;
+    var bw = document.getElementById('pad-def-border-width').value.trim();
+    if (bw) d.border_width = bw;
+    var cr = document.getElementById('pad-def-corner-radius').value.trim();
+    if (cr) d.corner_radius = cr;
+    var lts = document.getElementById('pad-def-label-top-style').value.trim();
+    if (lts) d.label_top_style = lts;
+    var lcs = document.getElementById('pad-def-label-center-style').value.trim();
+    if (lcs) d.label_center_style = lcs;
+    var lbs = document.getElementById('pad-def-label-bottom-style').value.trim();
+    if (lbs) d.label_bottom_style = lbs;
+    var tb = document.getElementById('pad-def-tap-beep').value.trim();
+    if (tb) d.tap_beep = tb;
+    var lb = document.getElementById('pad-def-lp-beep').value.trim();
+    if (lb) d.lp_beep = lb;
+    // Also update padState for dialog placeholder usage
+    padState.buttonDefaults = d;
+    return d;
+}
+
+// Get the effective default for a button appearance field (pad default → firmware default)
+function padGetEffectiveDefault(field) {
+    var d = padState.buttonDefaults || {};
+    if (d[field]) return d[field];
+    return PAD_FIRMWARE_DEFAULTS[field] || '';
+}
+
+// Reset a button appearance field to the effective default and update the reset hint
+function padResetAppearance(inputId, defaultKey) {
+    var eff = padGetEffectiveDefault(defaultKey);
+    var el = document.getElementById(inputId);
+    if (!el) return;
+    // Color fields use the bindable-color component
+    if (el.classList.contains('bc-input')) {
+        padSetBindableColor(inputId, eff);
+    } else {
+        el.value = eff;
+    }
+    padUpdateResetHints();
+}
+
+// Mapping of input IDs → default key names for appearance fields
+var PAD_APPEARANCE_FIELDS = [
+    { input: 'pad-edit-bg-color', key: 'bg_color', isColor: true },
+    { input: 'pad-edit-fg-color', key: 'fg_color', isColor: true },
+    { input: 'pad-edit-border-color', key: 'border_color', isColor: true },
+    { input: 'pad-edit-border-width', key: 'border_width', isColor: false },
+    { input: 'pad-edit-corner-radius', key: 'corner_radius', isColor: false }
+];
+
+// Show/hide reset hints based on whether each field differs from its effective default
+function padUpdateResetHints() {
+    PAD_APPEARANCE_FIELDS.forEach(function(f) {
+        var el = document.getElementById(f.input);
+        var resetEl = document.getElementById(f.input + '-reset');
+        if (!el || !resetEl) return;
+        var val = el.value.trim().toLowerCase();
+        var eff = (padGetEffectiveDefault(f.key) || '').toLowerCase();
+        resetEl.style.display = (val && val !== eff) ? 'inline' : 'none';
+    });
+}
+
 // --- Pad Bindings helpers ---
 
 function padRenderBindings() {
@@ -914,6 +1054,9 @@ function padDialogOpen(col, row) {
     // Refresh target screen dropdowns so pad names are current
     padPopulateScreenDropdown();
 
+    // Snapshot current button defaults from the pad-level UI before opening dialog
+    padCollectButtonDefaults();
+
     const btn = padFindButton(col, row) || {};
 
     document.getElementById('pad-edit-title').textContent =
@@ -925,6 +1068,10 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-label-top-style').value = btn.label_top_style || '';
     document.getElementById('pad-edit-label-center-style').value = btn.label_center_style || '';
     document.getElementById('pad-edit-label-bottom-style').value = btn.label_bottom_style || '';
+    // Set label style placeholders from pad defaults
+    document.getElementById('pad-edit-label-top-style').placeholder = padState.buttonDefaults.label_top_style || 'font:24;align:left;mode:dot';
+    document.getElementById('pad-edit-label-center-style').placeholder = padState.buttonDefaults.label_center_style || 'font:24;align:left;mode:dot';
+    document.getElementById('pad-edit-label-bottom-style').placeholder = padState.buttonDefaults.label_bottom_style || 'font:24;align:left;mode:dot';
     ['top', 'center', 'bottom'].forEach(syncLabelStyleVisibility);
 
     // Wire and init monospace toggle for mixed-binding label inputs
@@ -942,17 +1089,30 @@ function padDialogOpen(col, row) {
     // Initialize bindable color components and set values
     document.querySelectorAll('.pad-edit-modal .bindable-color').forEach(padInitBindableColor);
 
-    padSetBindableColor('pad-edit-bg-color', btn.bg_color || '#333333');
-    padSetBindableColor('pad-edit-fg-color', btn.fg_color || '#ffffff');
-    padSetBindableColor('pad-edit-border-color', btn.border_color || '#000000');
+    // Use pad defaults as fallback when button has no explicit color
+    var effBg = padGetEffectiveDefault('bg_color');
+    var effFg = padGetEffectiveDefault('fg_color');
+    var effBorder = padGetEffectiveDefault('border_color');
+    padSetBindableColor('pad-edit-bg-color', btn.bg_color || effBg);
+    padSetBindableColor('pad-edit-fg-color', btn.fg_color || effFg);
+    padSetBindableColor('pad-edit-border-color', btn.border_color || effBorder);
 
-    // Auto-open colors section if any color has a binding
-    document.getElementById('pad-edit-colors-section').open =
-        padIsBinding(btn.bg_color) || padIsBinding(btn.fg_color) || padIsBinding(btn.border_color);
+    // Auto-open colors section if any color has a binding or custom override
+    var hasColorOverride = btn.bg_color || btn.fg_color || btn.border_color ||
+        (btn.border_width !== undefined) || (btn.corner_radius !== undefined);
+    document.getElementById('pad-edit-colors-section').open = !!hasColorOverride;
 
-    document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 0;
-    document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
+    var effBw = padGetEffectiveDefault('border_width');
+    var effCr = padGetEffectiveDefault('corner_radius');
+    document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : effBw;
+    document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : effCr;
+    // Set placeholders to show what the pad default is
+    document.getElementById('pad-edit-border-width').placeholder = effBw;
+    document.getElementById('pad-edit-corner-radius').placeholder = effCr;
     document.getElementById('pad-edit-ui-offset').value = btn.ui_offset || '';
+
+    // Update reset-hint visibility for appearance fields
+    padUpdateResetHints();
 
     // Populate col_span / row_span dropdowns based on available space
     const maxCs = padState.cols - col;
@@ -999,6 +1159,11 @@ function padDialogOpen(col, row) {
     // Audio feedback overrides
     document.getElementById('pad-edit-tap-beep').value = btn.tap_beep || '';
     document.getElementById('pad-edit-lp-beep').value = btn.lp_beep || '';
+    // Set beep placeholders from pad defaults
+    var defTapBeep = padState.buttonDefaults.tap_beep || '';
+    var defLpBeep = padState.buttonDefaults.lp_beep || '';
+    document.getElementById('pad-edit-tap-beep').placeholder = defTapBeep || 'device default';
+    document.getElementById('pad-edit-lp-beep').placeholder = defLpBeep || 'device default';
     var audioSec = document.getElementById('pad-edit-audio-section');
     if (audioSec) audioSec.open = !!(btn.tap_beep || btn.lp_beep);
 
@@ -1163,14 +1328,21 @@ function padDialogOk(keepOpen) {
     if (lcs) btn.label_center_style = lcs;
     if (lbs) btn.label_bottom_style = lbs;
 
-    btn.bg_color = padGetBindableColor('pad-edit-bg-color') || '#333333';
-    btn.fg_color = padGetBindableColor('pad-edit-fg-color') || '#ffffff';
-    btn.border_color = padGetBindableColor('pad-edit-border-color') || '#000000';
+    // Only store appearance values that differ from the effective pad default,
+    // so that changing pad-level button defaults propagates to existing buttons.
+    var _bg = padGetBindableColor('pad-edit-bg-color');
+    if (_bg && _bg !== padGetEffectiveDefault('bg_color')) btn.bg_color = _bg;
+    var _fg = padGetBindableColor('pad-edit-fg-color');
+    if (_fg && _fg !== padGetEffectiveDefault('fg_color')) btn.fg_color = _fg;
+    var _bc = padGetBindableColor('pad-edit-border-color');
+    if (_bc && _bc !== padGetEffectiveDefault('border_color')) btn.border_color = _bc;
 
     const bw = document.getElementById('pad-edit-border-width').value.trim();
-    btn.border_width = bw || '0';
+    var effBw = padGetEffectiveDefault('border_width');
+    if (bw && bw !== effBw) btn.border_width = bw;
     const cr = document.getElementById('pad-edit-corner-radius').value.trim();
-    btn.corner_radius = cr || '8';
+    var effCr = padGetEffectiveDefault('corner_radius');
+    if (cr && cr !== effCr) btn.corner_radius = cr;
     const uiOffset = document.getElementById('pad-edit-ui-offset').value.trim();
     if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
 
@@ -1396,6 +1568,14 @@ async function padSavePage() {
         else delete payload.bindings;
     } else {
         delete payload.bindings;
+    }
+
+    // Button defaults
+    var btnDefs = padCollectButtonDefaults();
+    if (btnDefs && Object.keys(btnDefs).length > 0) {
+        payload.button_defaults = btnDefs;
+    } else {
+        delete payload.button_defaults;
     }
 
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));

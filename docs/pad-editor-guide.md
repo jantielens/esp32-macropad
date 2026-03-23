@@ -22,6 +22,29 @@ At the top of the pad editor, you configure the pad itself:
 
 > **Example**: A home energy dashboard might use a 4×2 grid named "Energy" with a dark background (`#111111`) — four columns for solar, grid, battery, and net power, with two rows for the bar chart and its label.
 
+### Button Defaults
+
+The **Button Defaults** section (collapsible, below Background Color) lets you set pad-wide default values for button appearance. Any button that doesn't have an explicit override inherits from these defaults.
+
+**Available defaults:**
+
+| Setting | Description |
+|---------|-------------|
+| **Background color** | Default button fill color |
+| **Text color** | Default label/icon color |
+| **Border color** | Default button outline color |
+| **Border width** | Default border thickness (px) |
+| **Corner radius** | Default button corner rounding (px) |
+| **Label top/center/bottom style** | Default label style DSL (e.g., `font:24;align:left`) |
+| **Tap beep** | Default tap audio feedback pattern |
+| **Long-press beep** | Default long-press audio feedback pattern |
+
+The cascade order is: **Button field → Pad button defaults → Firmware hardcoded default**. If a button has no explicit color set, the pad default is used. If no pad default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius).
+
+> **Tip**: Set your pad defaults first, then add buttons. Changing a pad default immediately updates all buttons that don't have a custom override — both in the editor preview and on the device.
+
+When editing a button, fields that match the pad default show their inherited value normally. If you change a field to a custom value, a small **↩** reset link appears next to the field label — click it to revert to the pad default.
+
 ---
 
 ## The Button Editor
@@ -132,7 +155,7 @@ Each color field accepts either a static `#hex` value or a binding expression fo
 
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
-**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons.
+**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the pad-level [Button Defaults](#button-defaults). If you set a custom value, a **↩** reset link appears next to the label — click it to revert to the inherited default.
 
 **UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
 

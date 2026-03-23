@@ -135,6 +135,8 @@ function padFillWithClipboard() {
 // --- Pad clipboard (copy/paste entire pad) ---
 
 function padCopyPad() {
+    // Snapshot current button defaults from UI
+    padCollectButtonDefaults();
     padState.padClipboard = {
         cols: padState.cols,
         rows: padState.rows,
@@ -143,6 +145,7 @@ function padCopyPad() {
         bg_color: padGetBindableColor('pad-edit-page-bg-color') || '#000000',
         buttons: padState.buttons.map(b => Object.assign({}, b)),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
+        buttonDefaults: Object.assign({}, padState.buttonDefaults),
     };
     document.getElementById('pad-paste-btn').disabled = false;
     showMessage('Pad ' + (padState.page + 1) + ' copied', 'success');
@@ -165,6 +168,9 @@ function padPastePad() {
     padState.bindings = padState.padClipboard.bindings ? padState.padClipboard.bindings.map(b => Object.assign({}, b)) : [];
     padRenderBindings();
 
+    // Paste button defaults
+    padLoadButtonDefaults(padState.padClipboard.buttonDefaults || {});
+
     padRenderGrid();
     padMarkDirty();
     showMessage('Pad pasted (unsaved)', 'success');
@@ -173,6 +179,7 @@ function padPastePad() {
 // --- Export/import single pad ---
 
 function padExportPad() {
+    padCollectButtonDefaults();
     const payload = {
         layout: 'grid',
         cols: padState.cols,
@@ -194,6 +201,10 @@ function padExportPad() {
     if (padState.bindings && padState.bindings.length > 0) {
         var bd = padBindingsToDict(padState.bindings);
         if (bd) payload.bindings = bd;
+    }
+    var btnDefs = padState.buttonDefaults;
+    if (btnDefs && Object.keys(btnDefs).length > 0) {
+        payload.button_defaults = btnDefs;
     }
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -234,6 +245,9 @@ async function padImportPad(evt) {
 
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
+
+        // Load button defaults from imported pad
+        padLoadButtonDefaults(json.button_defaults || {});
 
         padRenderGrid();
         padMarkDirty();

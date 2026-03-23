@@ -228,7 +228,13 @@ static void parse_action(JsonVariant v, ButtonAction* act, const char* legacy_sc
     }
 }
 
-static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
+// Helper: resolve a fallback default string from ButtonDefaults (if non-empty),
+// otherwise use the hardcoded default.
+static const char* btn_default(const char* pad_default, const char* hardcoded) {
+    return (pad_default && pad_default[0]) ? pad_default : hardcoded;
+}
+
+static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDefaults* defs) {
     init_button_defaults(btn);
 
     btn->col = obj["col"] | (uint8_t)0;
@@ -243,20 +249,32 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
     strlcpy(btn->label_center, obj["label_center"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->label_bottom, obj["label_bottom"] | "", CONFIG_LABEL_MAX_LEN);
 
-    // Per-label style overrides (DSL strings, e.g. "font:24;align:right")
-    label_style_parse(obj["label_top_style"] | "", &btn->style_top);
-    label_style_parse(obj["label_center_style"] | "", &btn->style_center);
-    label_style_parse(obj["label_bottom_style"] | "", &btn->style_bottom);
+    // Per-label style overrides: button JSON → pad button_defaults → empty (auto)
+    const char* dsl_top = obj["label_top_style"] | "";
+    const char* dsl_ctr = obj["label_center_style"] | "";
+    const char* dsl_bot = obj["label_bottom_style"] | "";
+    if (!dsl_top[0] && defs) dsl_top = defs->label_top_style;
+    if (!dsl_ctr[0] && defs) dsl_ctr = defs->label_center_style;
+    if (!dsl_bot[0] && defs) dsl_bot = defs->label_bottom_style;
+    label_style_parse(dsl_top, &btn->style_top);
+    label_style_parse(dsl_ctr, &btn->style_center);
+    label_style_parse(dsl_bot, &btn->style_bottom);
 
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
     parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 
-    parse_bindable_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN, "#333333");
-    parse_bindable_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN, "#FFFFFF");
-    parse_bindable_field(obj["border_color"], btn->border_color, CONFIG_COLOR_MAX_LEN, "#000000");
-    parse_bindable_field(obj["border_width"], btn->border_width, CONFIG_BINDABLE_SHORT_LEN, "0", false);
-    parse_bindable_field(obj["corner_radius"], btn->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "8", false);
+    // Appearance fields: button JSON → pad button_defaults → hardcoded default
+    parse_bindable_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->bg_color : nullptr, "#333333"));
+    parse_bindable_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->fg_color : nullptr, "#FFFFFF"));
+    parse_bindable_field(obj["border_color"], btn->border_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(defs ? defs->border_color : nullptr, "#000000"));
+    parse_bindable_field(obj["border_width"], btn->border_width, CONFIG_BINDABLE_SHORT_LEN,
+                         btn_default(defs ? defs->border_width : nullptr, "0"), false);
+    parse_bindable_field(obj["corner_radius"], btn->corner_radius, CONFIG_BINDABLE_SHORT_LEN,
+                         btn_default(defs ? defs->corner_radius : nullptr, "8"), false);
 
     // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
     // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "beep", ... } ]
@@ -296,9 +314,13 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn) {
         }
     }
 
-    // Audio feedback overrides (empty = device default, "none" = suppress)
-    strlcpy(btn->tap_beep, obj["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
-    strlcpy(btn->lp_beep, obj["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+    // Audio feedback overrides: button JSON → pad button_defaults → empty (device default)
+    const char* tb = obj["tap_beep"] | "";
+    const char* lb = obj["lp_beep"] | "";
+    if (!tb[0] && defs && defs->tap_beep[0]) tb = defs->tap_beep;
+    if (!lb[0] && defs && defs->lp_beep[0]) lb = defs->lp_beep;
+    strlcpy(btn->tap_beep, tb, CONFIG_BEEP_PATTERN_MAX_LEN);
+    strlcpy(btn->lp_beep, lb, CONFIG_BEEP_PATTERN_MAX_LEN);
 
     // Background image fields
     strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);
@@ -495,11 +517,33 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out) {
     if (out->rows < 1) out->rows = 1;
     if (out->rows > MAX_GRID_ROWS) out->rows = MAX_GRID_ROWS;
 
+    // Parse pad-level button defaults (optional)
+    memset(&out->button_defaults, 0, sizeof(ButtonDefaults));
+    out->has_button_defaults = false;
+    JsonObject bd = doc["button_defaults"];
+    if (!bd.isNull()) {
+        out->has_button_defaults = true;
+        ButtonDefaults* d = &out->button_defaults;
+        parse_bindable_field(bd["bg_color"], d->bg_color, CONFIG_COLOR_MAX_LEN, "");
+        parse_bindable_field(bd["fg_color"], d->fg_color, CONFIG_COLOR_MAX_LEN, "");
+        parse_bindable_field(bd["border_color"], d->border_color, CONFIG_COLOR_MAX_LEN, "");
+        parse_bindable_field(bd["border_width"], d->border_width, CONFIG_BINDABLE_SHORT_LEN, "", false);
+        parse_bindable_field(bd["corner_radius"], d->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "", false);
+        strlcpy(d->label_top_style, bd["label_top_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
+        strlcpy(d->label_center_style, bd["label_center_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
+        strlcpy(d->label_bottom_style, bd["label_bottom_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
+        strlcpy(d->tap_beep, bd["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+        strlcpy(d->lp_beep, bd["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+        LOGD(TAG, "Page %u: button_defaults loaded", page);
+    }
+
+    const ButtonDefaults* defs = out->has_button_defaults ? &out->button_defaults : nullptr;
+
     JsonArray buttons = doc["buttons"];
     out->button_count = 0;
     for (JsonObject btn_obj : buttons) {
         if (out->button_count >= MAX_PAD_BUTTONS) break;
-        parse_button(btn_obj, &out->buttons[out->button_count]);
+        parse_button(btn_obj, &out->buttons[out->button_count], defs);
         out->button_count++;
     }
 

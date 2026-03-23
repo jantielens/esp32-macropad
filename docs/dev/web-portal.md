@@ -218,6 +218,7 @@ Real-time device health monitoring integrated as a header badge with expandable 
   - **Pad selection & naming**: Dropdown for Pad 1–8 with optional custom names (max 31 chars)
   - **Grid preview**: Click any cell to open the button editor dialog
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Actions, Icon, Image Background, Appearance, State)
+  - **Button Defaults**: Collapsible section for pad-wide default appearance (colors, border, radius, label styles, beep patterns). Buttons inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
   - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 8 pad configs), Clear Pad
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 8 pad pages to a single JSON file; import overwrites settings and reboots
