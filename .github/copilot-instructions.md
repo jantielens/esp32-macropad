@@ -69,6 +69,9 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `swipe_actions.cpp/h` - Shared LVGL gesture handler with 300ms debounce; registered on all screens
   - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, timer control); used by both pad buttons and swipe gestures
   - `web_portal_swipe.cpp/h` - REST API for GET/POST `/api/swipe-actions`
+- **Button Defaults Subsystem**: Device-wide default appearance for buttons (compile-time gated by `HAS_DISPLAY`)
+  - `button_defaults.cpp/h` - LittleFS-backed device-level button defaults (`/config/button_defaults.json`) with RAM cache; 8 fields (colors, border, radius, label styles); rebuilds all pad caches on load/save
+  - `web_portal_button_defaults.cpp/h` - REST API for GET/POST `/api/button-defaults`
 - **BLE HID Subsystem**: Bluetooth LE keyboard with key sequence DSL (compile-time gated by `HAS_BLE_HID`; disabled on ESP32-S3 boards due to internal RAM constraints; runtime-toggled via `ble_enabled` config, default disabled, saves ~70 KB internal RAM when off)
   - `ble_hid.cpp/h` - Manual NimBLE HID GATT service, single-owner pairing policy (one bond, 60s timeout), stable hardware address, keyboard + consumer reports, peer metadata getters, auto-re-pair for stale bonds (NVS-persisted owner address); `ble_hid_is_initialized()` used as runtime guard by other modules
   - `key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable, no ESP32 deps
@@ -263,6 +266,8 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/swipe_config.cpp/h` - LittleFS-backed swipe action configuration with RAM cache
 - `src/app/swipe_actions.cpp/h` - Shared LVGL gesture handler with debounce, registered on all screens
 - `src/app/web_portal_swipe.cpp/h` - Swipe actions REST API (GET/POST `/api/swipe-actions`)
+- `src/app/button_defaults.cpp/h` - LittleFS-backed device-level button defaults with RAM cache
+- `src/app/web_portal_button_defaults.cpp/h` - Button defaults REST API (GET/POST `/api/button-defaults`)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface
@@ -281,7 +286,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `timer`); `ScreenButtonConfig` holds `actions[MAX_BUTTON_ACTIONS]` / `lp_actions[MAX_BUTTON_ACTIONS]` arrays with counts for multi-action sequential dispatch; JSON parser supports both new array format (`"actions": [...]`) and legacy single-object format (`"action": {...}`); `ButtonDefaults` struct for pad-level appearance cascade (colors, border, radius, label styles, beep patterns) — per-button fields fall through to pad defaults, then to firmware hardcoded defaults; `template_pad` field (int8_t, -1=none) for inheriting buttons from another pad into empty grid positions at load time (no chaining, target wins on conflict)
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `timer`); `ScreenButtonConfig` holds `actions[MAX_BUTTON_ACTIONS]` / `lp_actions[MAX_BUTTON_ACTIONS]` arrays with counts for multi-action sequential dispatch; JSON parser supports both new array format (`"actions": [...]`) and legacy single-object format (`"action": {...}`); `ButtonDefaults` struct for device-level appearance cascade (colors, border, radius, label styles) — per-button fields fall through to device defaults, then to firmware hardcoded defaults; `template_pad` field (int8_t, -1=none) for inheriting buttons from another pad into empty grid positions at load time (no chaining, target wins on conflict)
 - `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`, `pad_apply_font_upscale()`, `PadLabelAnchorY`)
 - `src/app/screens/pad_screen.cpp/h` - Pad screen with LVGL button tiles, label rendering (uses label style resolvers), icon/widget layout, binding updates, and image fetch integration
 - `src/app/screens/splash_screen.cpp/h` - Boot splash with animated spinner

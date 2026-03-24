@@ -17,7 +17,7 @@ const padState = {
     padClipboard: null,  // Copied pad settings { cols, rows, buttons, name }
     bindings: [],        // Page-level named bindings [{name, value}]
     colorCache: {},      // page → hex[] — colors from visited pads
-    buttonDefaults: {},  // Pad-level button defaults (appearance fields that cascade to buttons)
+    buttonDefaults: {},  // Device-level button defaults (loaded from /api/button-defaults)
     templatePad: -1,     // Template pad index (-1 = none)
     templateButtons: [], // Buttons loaded from template pad (for ghost rendering)
 };
@@ -410,6 +410,7 @@ function padInit() {
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
     document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
     document.getElementById('pad-binding-add').addEventListener('click', padAddBinding);
+    document.getElementById('btn-defaults-save-btn').addEventListener('click', padSaveButtonDefaults);
 
     // More menu toggle
     const moreBtn = document.getElementById('pad-more-btn');
@@ -479,6 +480,9 @@ function padInit() {
                 section.style.display = 'block';
                 const padFooter = document.getElementById('pad-floating-footer');
                 if (padFooter) padFooter.style.display = '';
+                // Show button defaults section
+                var btnDefSec = document.getElementById('btn-defaults-section');
+                if (btnDefSec) btnDefSec.style.display = 'block';
                 // Show audio feedback section in button editor if device has audio
                 if (deviceInfoCache.has_audio === true) {
                     var audioSec = document.getElementById('pad-edit-audio-section');
@@ -486,6 +490,7 @@ function padInit() {
                 }
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
+                padLoadButtonDefaultsFromDevice();
                 padLoadPage(0);
                 padRefreshDropdownLabels();
             } else {
@@ -626,7 +631,6 @@ async function padLoadPage(page) {
     padState.rawJson = null;
     padState.buttons = [];
     padState.bindings = [];
-    padState.buttonDefaults = {};
     padState.templatePad = -1;
     padState.templateButtons = [];
     padClearDirty();
@@ -644,11 +648,9 @@ async function padLoadPage(page) {
             padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
             padSetBindableColor('pad-edit-page-bg-color', '#000000');
             padState.bindings = [];
-            padState.buttonDefaults = {};
             padState.templatePad = -1;
             padState.templateButtons = [];
             padRenderBindings();
-            padLoadButtonDefaults({});
             padPopulateTemplateDropdown(page);
             padCacheColors(page, [], '#000000');
             padRenderGrid();
@@ -671,10 +673,6 @@ async function padLoadPage(page) {
         // Load pad bindings
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
-
-        // Load pad-level button defaults
-        padState.buttonDefaults = json.button_defaults || {};
-        padLoadButtonDefaults(padState.buttonDefaults);
 
         // Load template pad setting
         padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null) ? json.template_pad : -1;
@@ -914,6 +912,23 @@ const PAD_FIRMWARE_DEFAULTS = {
     border_width: '0', corner_radius: '8',
 };
 
+// Load device-level button defaults from the REST API
+async function padLoadButtonDefaultsFromDevice() {
+    try {
+        const resp = await fetch('/api/button-defaults');
+        if (resp.ok) {
+            const defs = await resp.json();
+            padState.buttonDefaults = defs || {};
+        } else {
+            padState.buttonDefaults = {};
+        }
+    } catch (e) {
+        console.error('Failed to load button defaults:', e);
+        padState.buttonDefaults = {};
+    }
+    padLoadButtonDefaults(padState.buttonDefaults);
+}
+
 function padLoadButtonDefaults(defs) {
     padState.buttonDefaults = defs || {};
     // Init bindable color controls
@@ -921,46 +936,15 @@ function padLoadButtonDefaults(defs) {
         var el = document.getElementById(id);
         if (el) padInitBindableColor(el);
     });
-    padSetBindableColor('pad-def-bg-color', defs.bg_color || '', '');
-    padSetBindableColor('pad-def-fg-color', defs.fg_color || '', '');
-    padSetBindableColor('pad-def-border-color', defs.border_color || '', '');
+    padSetBindableColor('pad-def-bg-color', defs.bg_color || '', PAD_FIRMWARE_DEFAULTS.bg_color);
+    padSetBindableColor('pad-def-fg-color', defs.fg_color || '', PAD_FIRMWARE_DEFAULTS.fg_color);
+    padSetBindableColor('pad-def-border-color', defs.border_color || '', PAD_FIRMWARE_DEFAULTS.border_color);
     document.getElementById('pad-def-border-width').value = defs.border_width || '';
     document.getElementById('pad-def-corner-radius').value = defs.corner_radius || '';
     document.getElementById('pad-def-label-top-style').value = defs.label_top_style || '';
     document.getElementById('pad-def-label-center-style').value = defs.label_center_style || '';
     document.getElementById('pad-def-label-bottom-style').value = defs.label_bottom_style || '';
-    document.getElementById('pad-def-tap-beep').value = defs.tap_beep || '';
-    document.getElementById('pad-def-lp-beep').value = defs.lp_beep || '';
 
-    // Auto-open section if any default is set
-    var hasAny = defs.bg_color || defs.fg_color || defs.border_color ||
-                 defs.border_width || defs.corner_radius ||
-                 defs.label_top_style || defs.label_center_style || defs.label_bottom_style ||
-                 defs.tap_beep || defs.lp_beep;
-    document.getElementById('pad-btn-defaults-section').open = !!hasAny;
-
-    // Show audio row only if device has audio
-    var audioRow = document.getElementById('pad-def-audio-row');
-    if (audioRow) audioRow.style.display = (deviceInfoCache && deviceInfoCache.has_audio) ? '' : 'none';
-
-    // Wire change listeners for dirty tracking
-    ['pad-def-border-width', 'pad-def-corner-radius',
-     'pad-def-label-top-style', 'pad-def-label-center-style', 'pad-def-label-bottom-style',
-     'pad-def-tap-beep', 'pad-def-lp-beep'].forEach(id => {
-        var el = document.getElementById(id);
-        if (el && !el._defWired) {
-            el._defWired = true;
-            el.addEventListener('input', padMarkDirty);
-        }
-    });
-    // Wire bindable color change listeners
-    ['pad-def-bg-color', 'pad-def-fg-color', 'pad-def-border-color'].forEach(id => {
-        var el = document.getElementById(id);
-        if (el && !el._defWired) {
-            el._defWired = true;
-            el.addEventListener('input', padMarkDirty);
-        }
-    });
 }
 
 function padCollectButtonDefaults() {
@@ -981,13 +965,31 @@ function padCollectButtonDefaults() {
     if (lcs) d.label_center_style = lcs;
     var lbs = document.getElementById('pad-def-label-bottom-style').value.trim();
     if (lbs) d.label_bottom_style = lbs;
-    var tb = document.getElementById('pad-def-tap-beep').value.trim();
-    if (tb) d.tap_beep = tb;
-    var lb = document.getElementById('pad-def-lp-beep').value.trim();
-    if (lb) d.lp_beep = lb;
-    // Also update padState for dialog placeholder usage
-    padState.buttonDefaults = d;
+
     return d;
+}
+
+// Save device-level button defaults to /api/button-defaults
+async function padSaveButtonDefaults() {
+    var d = padCollectButtonDefaults();
+    try {
+        var resp = await fetch('/api/button-defaults', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(d),
+        });
+        if (!resp.ok) {
+            var err = await resp.json().catch(function() { return {}; });
+            throw new Error(err.error || 'HTTP ' + resp.status);
+        }
+        padState.buttonDefaults = d;
+        showMessage('Button defaults saved', 'success');
+        // Re-render current pad grid to reflect updated defaults
+        padRenderGrid();
+    } catch (err) {
+        console.error('padSaveButtonDefaults error:', err);
+        showMessage('Save failed: ' + err.message, 'error');
+    }
 }
 
 // Get the effective default for a button appearance field (pad default → firmware default)
@@ -1146,8 +1148,8 @@ function padDialogOpen(col, row) {
     // Refresh target screen dropdowns so pad names are current
     padPopulateScreenDropdown();
 
-    // Snapshot current button defaults from the pad-level UI before opening dialog
-    padCollectButtonDefaults();
+    // Sync device-level button defaults from the DOM into padState so placeholders are current
+    padState.buttonDefaults = padCollectButtonDefaults();
 
     const btn = padFindButton(col, row) || {};
 
@@ -1251,11 +1253,8 @@ function padDialogOpen(col, row) {
     // Audio feedback overrides
     document.getElementById('pad-edit-tap-beep').value = btn.tap_beep || '';
     document.getElementById('pad-edit-lp-beep').value = btn.lp_beep || '';
-    // Set beep placeholders from pad defaults
-    var defTapBeep = padState.buttonDefaults.tap_beep || '';
-    var defLpBeep = padState.buttonDefaults.lp_beep || '';
-    document.getElementById('pad-edit-tap-beep').placeholder = defTapBeep || 'device default';
-    document.getElementById('pad-edit-lp-beep').placeholder = defLpBeep || 'device default';
+    document.getElementById('pad-edit-tap-beep').placeholder = 'device default';
+    document.getElementById('pad-edit-lp-beep').placeholder = 'device default';
     var audioSec = document.getElementById('pad-edit-audio-section');
     if (audioSec) audioSec.open = !!(btn.tap_beep || btn.lp_beep);
 
@@ -1420,8 +1419,8 @@ function padDialogOk(keepOpen) {
     if (lcs) btn.label_center_style = lcs;
     if (lbs) btn.label_bottom_style = lbs;
 
-    // Only store appearance values that differ from the effective pad default,
-    // so that changing pad-level button defaults propagates to existing buttons.
+    // Only store appearance values that differ from the effective device default,
+    // so that changing device-level button defaults propagates to existing buttons.
     var _bg = padGetBindableColor('pad-edit-bg-color');
     if (_bg && _bg !== padGetEffectiveDefault('bg_color')) btn.bg_color = _bg;
     var _fg = padGetBindableColor('pad-edit-fg-color');
@@ -1648,6 +1647,9 @@ async function padSavePage() {
     }
     delete payload.bg_color_default;
 
+    // Strip legacy pad-level button_defaults (now device-level)
+    delete payload.button_defaults;
+
     // Pad bindings → dict (skip entries with invalid names)
     if (padState.bindings && padState.bindings.length > 0) {
         var badNames = padState.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
@@ -1660,14 +1662,6 @@ async function padSavePage() {
         else delete payload.bindings;
     } else {
         delete payload.bindings;
-    }
-
-    // Button defaults
-    var btnDefs = padCollectButtonDefaults();
-    if (btnDefs && Object.keys(btnDefs).length > 0) {
-        payload.button_defaults = btnDefs;
-    } else {
-        delete payload.button_defaults;
     }
 
     // Template pad

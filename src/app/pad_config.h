@@ -199,7 +199,7 @@ struct PadBinding {
     char value[CONFIG_LABEL_MAX_LEN];         // binding template, e.g. "[mqtt:solar/power;$.value]"
 };
 
-// Pad-level button defaults — fields that cascade to all buttons on this pad
+// Device-level button defaults — fields that cascade to all buttons on the device
 // when the per-button JSON field is missing/null. Uses same field types as
 // ScreenButtonConfig so the cascade is a simple string copy.
 // A field is "set" when its string is non-empty.
@@ -212,8 +212,6 @@ struct ButtonDefaults {
     char label_top_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];
-    char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
-    char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
 };
 
 // Per-pad config
@@ -228,10 +226,6 @@ struct PadConfig {
     // -1 = none (default). 0..MAX_PADS-1 = source pad index.
     // Merge is read-only (template buttons are never written to this pad's JSON).
     int8_t template_pad;
-
-    // Pad-level button defaults (cascade to buttons missing these fields)
-    ButtonDefaults button_defaults;
-    bool has_button_defaults;                    // true if "button_defaults" object was present in JSON
 
     // Named pad-level bindings for [pad:name] references
     uint8_t binding_count;
@@ -265,6 +259,10 @@ bool pad_config_exists(uint8_t page);
 // Read raw JSON from LittleFS. Caller must free() the returned buffer.
 // Returns NULL on failure. *out_len is set to the file size.
 char* pad_config_read_raw(uint8_t page, size_t* out_len);
+
+// Rebuild all in-RAM pad config caches from flash. Call when a shared
+// dependency (e.g. device-level button defaults) changes.
+void pad_config_rebuild_all_caches();
 
 // Generation counter — incremented on every save/delete. PadScreen uses this
 // to detect config changes and rebuild tiles.
