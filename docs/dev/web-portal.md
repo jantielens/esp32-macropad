@@ -218,8 +218,8 @@ Real-time device health monitoring integrated as a header badge with expandable 
   - **Pad selection & naming**: Dropdown for Pad 1–8 with optional custom names (max 31 chars)
   - **Grid preview**: Click any cell to open the button editor dialog
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Actions, Icon, Image Background, Appearance, State)
-  - **Button Defaults**: Collapsible section for pad-wide default appearance (colors, border, radius, label styles, beep patterns). Buttons inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields
-  - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings and button defaults (target wins on conflict, no chaining)
+  - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
+  - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
   - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 8 pad configs), Clear Pad
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 8 pad pages to a single JSON file; import overwrites settings and reboots
@@ -587,7 +587,7 @@ Returns current device configuration (passwords excluded).
   "screen_saver_wake_on_touch": true,
   "screen_saver_wake_binding": "",
 
-  "audio_volume": 70,
+  "audio_volume": 50,
   "tap_beep": "",
   "lp_beep": ""
 }
@@ -634,7 +634,7 @@ Save new configuration. Device reboots after successful save.
   "screen_saver_wake_on_touch": true,
   "screen_saver_wake_binding": "[mqtt:devices/node/presence/state]",
 
-  "audio_volume": 70,
+  "audio_volume": 50,
   "tap_beep": "800:80",
   "lp_beep": "600:40 40 600:40"
 }
@@ -869,6 +869,27 @@ Save swipe action configuration to LittleFS.
 - **Body:** JSON object with the same structure as the GET response.
 - **Response:** `{"success": true}` on success; JSON error on failure.
 - Actions are applied immediately without reboot.
+
+---
+
+### Button Defaults API
+
+All button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Button defaults are stored on LittleFS at `/config/button_defaults.json`.
+
+#### `GET /api/button-defaults`
+
+Returns the current device-level button defaults.
+
+- **Response:** JSON object with only the fields that have been explicitly set. Possible fields: `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `label_top_style`, `label_center_style`, `label_bottom_style`.
+- Default (no file saved): empty JSON object `{}`.
+
+#### `POST /api/button-defaults`
+
+Save device-level button defaults to LittleFS.
+
+- **Body:** JSON object with any subset of the fields listed above.
+- **Response:** `{"ok": true}` on success; JSON error on failure.
+- All pad caches are rebuilt immediately so changes take effect without reboot.
 
 ---
 

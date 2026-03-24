@@ -24,7 +24,7 @@ At the top of the pad editor, you configure the pad itself:
 
 ### Button Defaults
 
-The **Button Defaults** section (collapsible, below Background Color) lets you set pad-wide default values for button appearance. Any button that doesn't have an explicit override inherits from these defaults.
+The **Button Defaults** section (collapsible, at the bottom of the Pads page) lets you set device-wide default values for button appearance. Any button on any pad that doesn't have an explicit override inherits from these defaults.
 
 **Available defaults:**
 
@@ -36,14 +36,12 @@ The **Button Defaults** section (collapsible, below Background Color) lets you s
 | **Border width** | Default border thickness (px) |
 | **Corner radius** | Default button corner rounding (px) |
 | **Label top/center/bottom style** | Default label style DSL (e.g., `font:24;align:left`) |
-| **Tap beep** | Default tap audio feedback pattern |
-| **Long-press beep** | Default long-press audio feedback pattern |
 
-The cascade order is: **Button field → Pad button defaults → Firmware hardcoded default**. If a button has no explicit color set, the pad default is used. If no pad default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius).
+The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius).
 
-> **Tip**: Set your pad defaults first, then add buttons. Changing a pad default immediately updates all buttons that don't have a custom override — both in the editor preview and on the device.
+> **Tip**: Set your button defaults first, then add buttons. Changing a default immediately updates all buttons that don't have a custom override — both in the editor preview and on the device.
 
-When editing a button, fields that match the pad default show their inherited value normally. If you change a field to a custom value, a small **↩** reset link appears next to the field label — click it to revert to the pad default.
+When editing a button, fields that match the device default show their inherited value normally. If you change a field to a custom value, a small **↩** reset link appears next to the field label — click it to revert to the device default.
 
 ### Template Pad
 
@@ -51,7 +49,7 @@ The **Template Pad** dropdown (below Background Color) lets you inherit buttons 
 
 - Buttons from the template pad fill **empty** grid positions on the current pad. Your own buttons always take priority — the template only fills gaps.
 - Template buttons appear as **ghost overlays** in the editor (semi-transparent with a dashed outline) so you can see what will be inherited.
-- The template pad's **bindings** and **button defaults** are also merged in (your pad's own settings win on any conflict).
+- The template pad's **bindings** are also merged in (your pad's own settings win on any conflict).
 - **No chaining** — if the template pad itself references another template, that second-level reference is ignored. This prevents circular dependencies and keeps behavior predictable.
 - The merge is **read-only** — template buttons are never written into your pad's JSON file. They're merged in-memory each time the pad loads.
 
@@ -167,7 +165,7 @@ Each color field accepts either a static `#hex` value or a binding expression fo
 
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
-**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the pad-level [Button Defaults](#button-defaults). If you set a custom value, a **↩** reset link appears next to the label — click it to revert to the inherited default.
+**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the device-level [Button Defaults](#button-defaults). If you set a custom value, a **↩** reset link appears next to the label — click it to revert to the inherited default.
 
 **UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
 

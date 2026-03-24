@@ -208,10 +208,6 @@ function padExportPad() {
         var bd = padBindingsToDict(padState.bindings);
         if (bd) payload.bindings = bd;
     }
-    var btnDefs = padState.buttonDefaults;
-    if (btnDefs && Object.keys(btnDefs).length > 0) {
-        payload.button_defaults = btnDefs;
-    }
     if (padState.templatePad >= 0) {
         payload.template_pad = padState.templatePad;
     }
@@ -254,9 +250,6 @@ async function padImportPad(evt) {
 
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
-
-        // Load button defaults from imported pad
-        padLoadButtonDefaults(json.button_defaults || {});
 
         // Load template pad (clear if it would reference self)
         padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null &&
@@ -310,10 +303,18 @@ async function deviceExportConfig() {
             }
         }
 
+        // Fetch device-level button defaults
+        let buttonDefaults = {};
+        try {
+            const bdResp = await fetch('/api/button-defaults');
+            if (bdResp.ok) buttonDefaults = await bdResp.json();
+        } catch (e) {}
+
         const exportData = {
             _format: DEVICE_CONFIG_FORMAT,
             _version: DEVICE_CONFIG_VERSION,
             config: config,
+            button_defaults: buttonDefaults,
             pads: pads,
         };
 
@@ -357,7 +358,16 @@ async function deviceImportConfig(evt) {
             if (!resp.ok) throw new Error('Config import failed: HTTP ' + resp.status);
         }
 
-        // Step 2: Import all pad configs (save each to trigger icon rendering)
+        // Step 2: Import device-level button defaults
+        if (data.button_defaults && typeof data.button_defaults === 'object') {
+            await fetch('/api/button-defaults', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data.button_defaults),
+            }).catch(() => {});
+        }
+
+        // Step 3: Import all pad configs (save each to trigger icon rendering)
         if (Array.isArray(data.pads)) {
             const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
             for (let i = 0; i < data.pads.length && i < maxPads; i++) {

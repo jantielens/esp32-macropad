@@ -36,6 +36,7 @@
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "swipe_config.h"
+#include "button_defaults.h"
 #endif
 
 #if HAS_IMAGE_FETCH
@@ -278,6 +279,9 @@ void setup()
 
 	// Load swipe gesture actions from LittleFS (uses same filesystem)
 	swipe_config_init();
+
+	// Load device-level button defaults from LittleFS
+	button_defaults_init();
 
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();

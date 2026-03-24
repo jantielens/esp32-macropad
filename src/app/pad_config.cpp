@@ -1,6 +1,7 @@
 #include "pad_config.h"
 
 #include "board_config.h"
+#include "button_defaults.h"
 #include "fs_health.h"
 #include "icon_store.h"
 #include "log_manager.h"
@@ -251,7 +252,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     strlcpy(btn->label_center, obj["label_center"] | "", CONFIG_LABEL_MAX_LEN);
     strlcpy(btn->label_bottom, obj["label_bottom"] | "", CONFIG_LABEL_MAX_LEN);
 
-    // Per-label style overrides: button JSON → pad button_defaults → empty (auto)
+    // Per-label style overrides: button JSON → device button_defaults → empty (auto)
     const char* dsl_top = obj["label_top_style"] | "";
     const char* dsl_ctr = obj["label_center_style"] | "";
     const char* dsl_bot = obj["label_bottom_style"] | "";
@@ -266,7 +267,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
     parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 
-    // Appearance fields: button JSON → pad button_defaults → hardcoded default
+    // Appearance fields: button JSON → device button_defaults → hardcoded default
     parse_bindable_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN,
                          btn_default(defs ? defs->bg_color : nullptr, "#333333"));
     parse_bindable_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN,
@@ -316,13 +317,9 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         }
     }
 
-    // Audio feedback overrides: button JSON → pad button_defaults → empty (device default)
-    const char* tb = obj["tap_beep"] | "";
-    const char* lb = obj["lp_beep"] | "";
-    if (!tb[0] && defs && defs->tap_beep[0]) tb = defs->tap_beep;
-    if (!lb[0] && defs && defs->lp_beep[0]) lb = defs->lp_beep;
-    strlcpy(btn->tap_beep, tb, CONFIG_BEEP_PATTERN_MAX_LEN);
-    strlcpy(btn->lp_beep, lb, CONFIG_BEEP_PATTERN_MAX_LEN);
+    // Audio feedback overrides: button JSON → empty (device default in DeviceConfig)
+    strlcpy(btn->tap_beep, obj["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+    strlcpy(btn->lp_beep, obj["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
 
     // Background image fields
     strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);
@@ -511,12 +508,6 @@ static void merge_template_buttons(uint8_t page, PadConfig* out) {
         }
     }
 
-    // Merge button_defaults if target has none and template has some
-    if (!out->has_button_defaults && tpl_cfg->has_button_defaults) {
-        memcpy(&out->button_defaults, &tpl_cfg->button_defaults, sizeof(ButtonDefaults));
-        out->has_button_defaults = true;
-    }
-
     if (merged > 0) {
         LOGI(TAG, "Page %u: merged %u buttons from template pad %d", page, merged, tpl);
     }
@@ -617,27 +608,8 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     if (out->rows < 1) out->rows = 1;
     if (out->rows > MAX_GRID_ROWS) out->rows = MAX_GRID_ROWS;
 
-    // Parse pad-level button defaults (optional)
-    memset(&out->button_defaults, 0, sizeof(ButtonDefaults));
-    out->has_button_defaults = false;
-    JsonObject bd = doc["button_defaults"];
-    if (!bd.isNull()) {
-        out->has_button_defaults = true;
-        ButtonDefaults* d = &out->button_defaults;
-        parse_bindable_field(bd["bg_color"], d->bg_color, CONFIG_COLOR_MAX_LEN, "");
-        parse_bindable_field(bd["fg_color"], d->fg_color, CONFIG_COLOR_MAX_LEN, "");
-        parse_bindable_field(bd["border_color"], d->border_color, CONFIG_COLOR_MAX_LEN, "");
-        parse_bindable_field(bd["border_width"], d->border_width, CONFIG_BINDABLE_SHORT_LEN, "", false);
-        parse_bindable_field(bd["corner_radius"], d->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "", false);
-        strlcpy(d->label_top_style, bd["label_top_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
-        strlcpy(d->label_center_style, bd["label_center_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
-        strlcpy(d->label_bottom_style, bd["label_bottom_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
-        strlcpy(d->tap_beep, bd["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
-        strlcpy(d->lp_beep, bd["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
-        LOGD(TAG, "Page %u: button_defaults loaded", page);
-    }
-
-    const ButtonDefaults* defs = out->has_button_defaults ? &out->button_defaults : nullptr;
+    // Use device-level button defaults for cascading to buttons
+    const ButtonDefaults* defs = button_defaults_get();
 
     JsonArray buttons = doc["buttons"];
     out->button_count = 0;
@@ -675,6 +647,15 @@ static void cache_update(uint8_t page) {
         free(g_cache[page]);
         g_cache[page] = nullptr;
     }
+}
+
+void pad_config_rebuild_all_caches() {
+    if (!g_fs_mounted) return;
+    for (uint8_t i = 0; i < MAX_PADS; i++) {
+        if (g_cache[i]) cache_update(i);
+    }
+    g_generation++;
+    LOGI(TAG, "Rebuilt all pad caches");
 }
 
 bool pad_config_load(uint8_t page, PadConfig* out) {
