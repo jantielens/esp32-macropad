@@ -69,6 +69,7 @@ struct GaugeConfig {
     char     marker_zone_color[CONFIG_BINDABLE_SHORT_LEN]; // Zone color (bindable, default "#FF5722")
     uint8_t  marker_zone_deg;        // Zone total angle in degrees (0 = no zone, max 90; halved for ± rendering)
     uint8_t  marker_tick_width;      // Tick line width px (0 = no tick, default 2)
+    uint16_t anim_ms;                // Transition duration in ms (0 = instant, default 300)
 };
 
 static_assert(sizeof(GaugeConfig) <= WIDGET_CONFIG_MAX_BYTES,
@@ -129,6 +130,8 @@ struct GaugeState {
     uint32_t  cached_marker_tick_color; // Marker tick color cache
     uint32_t  cached_marker_zone_color; // Marker zone color cache
     uint8_t   marker_ring_count;   // Number of rings with marker objects
+    bool      has_received_data;   // True after first value received (snap on first)
+    int32_t   needle_cdeg;         // Current needle angle in centidegrees (for animation from-value)
 };
 
 static_assert(sizeof(GaugeState) <= WIDGET_STATE_MAX_BYTES,
@@ -439,6 +442,9 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     cfg->marker_zone_deg = (mzd > 90) ? 90 : mzd;
     uint8_t mtw = btn["widget_gauge_marker_tick_width"] | (uint8_t)2;
     cfg->marker_tick_width = (mtw > 5) ? 5 : mtw;
+
+    int ams = btn["widget_anim_ms"] | 300;
+    cfg->anim_ms = (uint16_t)clamp_val(ams, 0, 5000);
 }
 
 static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
@@ -470,6 +476,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->cached_marker_tick_color = COLOR_CACHE_INIT;
     st->cached_marker_zone_color = COLOR_CACHE_INIT;
     st->marker_ring_count = 0;
+    st->has_received_data = false;
+    st->needle_cdeg = (int32_t)roundf((float)cfg->start_angle * 100.0f);
     memset(st->marker_ticks, 0, sizeof(st->marker_ticks));
     memset(st->marker_zones, 0, sizeof(st->marker_zones));
     memset(st->zone_ticks_lo, 0, sizeof(st->zone_ticks_lo));
@@ -827,13 +835,39 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 }
 
-// ---- Helper: update a single arc ring ----
+// ---- Arc animation callback (normal mode: fill from 0) ----
+static void gauge_arc_anim_cb(void* var, int32_t value) {
+    lv_obj_t* arc = (lv_obj_t*)var;
+    lv_arc_set_angles(arc, 0, value);
+}
+
+// ---- Arc animation callback (zero-centered mode) ----
+// The zero_angle is stored as the arc's user_data (cast to intptr_t).
+static void gauge_arc_anim_zc_cb(void* var, int32_t value) {
+    lv_obj_t* arc = (lv_obj_t*)var;
+    int32_t zero_angle = (int32_t)(intptr_t)lv_obj_get_user_data(arc);
+    int32_t a_start = (value < zero_angle) ? value : zero_angle;
+    int32_t a_end   = (value > zero_angle) ? value : zero_angle;
+    lv_arc_set_angles(arc, a_start, a_end);
+}
+
+// ---- Needle animation callback ----
+// var = GaugeState*, value = absolute angle in centidegrees
+static void gauge_needle_anim_cb(void* var, int32_t value) {
+    auto* st = reinterpret_cast<GaugeState*>(var);
+    if (!st->needle || !st->n_pts) return;
+    st->needle_cdeg = value;
+    float a_rad = (float)value / 100.0f * (float)M_PI / 180.0f;
+    gauge_set_needle(st->needle, st->n_pts, st->cx, st->cy, st->needle_len, a_rad);
+}
+
+// ---- Helper: update a single arc ring (with optional animation) ----
 static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
                                float min_val, float max_val,
                                float value, float* last_value,
                                const char* color_field, uint32_t color_default,
                                uint32_t* color_cache, lv_obj_t* start_label,
-                               bool force_zero_centered = false) {
+                               bool force_zero_centered, bool animate) {
     if (!arc) return;
 
     // Skip redundant updates
@@ -854,14 +888,49 @@ static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
         if (zero_ratio > 1.0f) zero_ratio = 1.0f;
         float zero_angle = zero_ratio * (float)cfg->arc_degrees;
         float val_angle  = ratio * (float)cfg->arc_degrees;
-        int32_t a_start = (int32_t)roundf(fminf(zero_angle, val_angle));
-        int32_t a_end   = (int32_t)roundf(fmaxf(zero_angle, val_angle));
-        lv_arc_set_angles(arc, a_start, a_end);
+        int32_t zero_angle_int = (int32_t)roundf(zero_angle);
+        int32_t val_angle_int  = (int32_t)roundf(val_angle);
+
+        if (animate) {
+            // Determine current fill angle from arc state.
+            // In zc mode one edge is always pinned to zero_angle;
+            // the fill point is whichever edge is NOT at zero_angle.
+            int32_t arc_start = (int32_t)lv_arc_get_angle_start(arc);
+            int32_t arc_end   = (int32_t)lv_arc_get_angle_end(arc);
+            int32_t cur_angle = (arc_end == zero_angle_int) ? arc_start : arc_end;
+            // Store zero_angle in arc user_data for the callback
+            lv_obj_set_user_data(arc, (void*)(intptr_t)zero_angle_int);
+            lv_anim_t a;
+            lv_anim_init(&a);
+            lv_anim_set_var(&a, arc);
+            lv_anim_set_values(&a, cur_angle, val_angle_int);
+            lv_anim_set_duration(&a, cfg->anim_ms);
+            lv_anim_set_exec_cb(&a, gauge_arc_anim_zc_cb);
+            lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+            lv_anim_start(&a);
+        } else {
+            int32_t a_start = (val_angle_int < zero_angle_int) ? val_angle_int : zero_angle_int;
+            int32_t a_end   = (val_angle_int > zero_angle_int) ? val_angle_int : zero_angle_int;
+            lv_arc_set_angles(arc, a_start, a_end);
+        }
     } else {
         // Normal: fill from start edge
         float fill_angle = ratio * (float)cfg->arc_degrees;
         int32_t fill_angle_int = (int32_t)roundf(fill_angle);
-        lv_arc_set_angles(arc, 0, fill_angle_int);
+
+        if (animate) {
+            int32_t cur_angle = (int32_t)lv_arc_get_angle_end(arc);
+            lv_anim_t a;
+            lv_anim_init(&a);
+            lv_anim_set_var(&a, arc);
+            lv_anim_set_values(&a, cur_angle, fill_angle_int);
+            lv_anim_set_duration(&a, cfg->anim_ms);
+            lv_anim_set_exec_cb(&a, gauge_arc_anim_cb);
+            lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+            lv_anim_start(&a);
+        } else {
+            lv_arc_set_angles(arc, 0, fill_angle_int);
+        }
     }
 
     // Apply indicator color (uses shared cache with tick)
@@ -878,6 +947,10 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<GaugeState*>(state->data);
 
     if (!st->arc_bg) return;
+
+    // Determine if we should animate (skip on first data arrival)
+    bool animate = st->has_received_data && cfg->anim_ms > 0;
+    st->has_received_data = true;
 
     // Resolve bindable min/max once per update
     float min_val = resolve_number(cfg->min_value, 0.0f);
@@ -919,7 +992,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (ok0) {
         gauge_update_ring(st->arc_bg, cfg, min_val, max_val, v0, &st->last_value, cfg->arc_color, 0x4CAF50,
                           &st->cached_arc1, st->start_label_1,
-                          st->dual_pair_1_active);
+                          st->dual_pair_1_active, animate);
     }
 
     // Dual pair 1: slot 2 is the negative direction on the same ring.
@@ -927,12 +1000,12 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         float neg_mag = ok1 ? v1 : 0.0f;
         if (neg_mag < 0.0f) neg_mag = 0.0f;
         gauge_update_ring(st->arc_dual_1_neg, cfg, min_val, max_val, -neg_mag, &st->last_value_neg_1,
-                          cfg->arc_color_2, 0x2196F3, &st->cached_arc_neg1, nullptr, true);
+                          cfg->arc_color_2, 0x2196F3, &st->cached_arc_neg1, nullptr, true, animate);
     } else if (st->arc_ring2) {
         // Non-dual: slot 2 is its own ring.
         if (ok1) {
             gauge_update_ring(st->arc_ring2, cfg, min_val, max_val, v1, &st->last_value_2, cfg->arc_color_2, 0x2196F3,
-                              &st->cached_arc2, st->start_label_2);
+                              &st->cached_arc2, st->start_label_2, false, animate);
         }
     }
 
@@ -942,7 +1015,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
             if (ok2) {
                 gauge_update_ring(st->arc_ring2, cfg, min_val, max_val, v2, &st->last_value_2, cfg->arc_color_3, 0x9C27B0,
                                   &st->cached_arc3, st->start_label_2,
-                                  st->dual_pair_2_active);
+                                  st->dual_pair_2_active, animate);
             }
         }
     } else {
@@ -950,7 +1023,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
             if (ok2) {
                 gauge_update_ring(st->arc_ring3, cfg, min_val, max_val, v2, &st->last_value_3, cfg->arc_color_3, 0x9C27B0,
                                   &st->cached_arc3, st->start_label_3,
-                                  st->dual_pair_2_active);
+                                  st->dual_pair_2_active, animate);
             }
         }
     }
@@ -960,19 +1033,19 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         float neg_mag = ok3 ? v3 : 0.0f;
         if (neg_mag < 0.0f) neg_mag = 0.0f;
         gauge_update_ring(st->arc_dual_2_neg, cfg, min_val, max_val, -neg_mag, &st->last_value_neg_2,
-                          cfg->arc_color_4, 0xFF9800, &st->cached_arc_neg2, nullptr, true);
+                          cfg->arc_color_4, 0xFF9800, &st->cached_arc_neg2, nullptr, true, animate);
     } else if (st->dual_pair_1_active) {
         if (st->arc_ring3) {
             if (ok3) {
                 gauge_update_ring(st->arc_ring3, cfg, min_val, max_val, v3, &st->last_value_3, cfg->arc_color_4, 0xFF9800,
-                                  &st->cached_arc4, st->start_label_3);
+                                  &st->cached_arc4, st->start_label_3, false, animate);
             }
         }
     } else {
         if (st->arc_ring4) {
             if (ok3) {
                 gauge_update_ring(st->arc_ring4, cfg, min_val, max_val, v3, &st->last_value_4, cfg->arc_color_4, 0xFF9800,
-                                  &st->cached_arc4, st->start_label_4);
+                                  &st->cached_arc4, st->start_label_4, false, animate);
             }
         }
     }
@@ -993,9 +1066,20 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         float ratio = (needle_value - min_val) / range;
         if (ratio < 0.0f) ratio = 0.0f;
         if (ratio > 1.0f) ratio = 1.0f;
-        int32_t fill_angle_int = (int32_t)roundf(ratio * (float)cfg->arc_degrees);
-        float a_rad = ((float)cfg->start_angle + (float)fill_angle_int) * (float)M_PI / 180.0f;
-        gauge_set_needle(st->needle, st->n_pts, st->cx, st->cy, st->needle_len, a_rad);
+        int32_t target_cdeg = (int32_t)roundf(((float)cfg->start_angle + ratio * (float)cfg->arc_degrees) * 100.0f);
+
+        if (animate) {
+            lv_anim_t a;
+            lv_anim_init(&a);
+            lv_anim_set_var(&a, st);
+            lv_anim_set_values(&a, st->needle_cdeg, target_cdeg);
+            lv_anim_set_duration(&a, cfg->anim_ms);
+            lv_anim_set_exec_cb(&a, gauge_needle_anim_cb);
+            lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+            lv_anim_start(&a);
+        } else {
+            gauge_needle_anim_cb(st, target_cdeg);
+        }
     }
 
 }
@@ -1208,6 +1292,8 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
 
 static void gauge_destroy(WidgetState* state) {
     auto* st = reinterpret_cast<GaugeState*>(state->data);
+    // Null LVGL pointers so in-flight animation callbacks bail out
+    st->needle = nullptr;
     // Free heap-allocated needle points
     if (st->n_pts) {
         lv_free(st->n_pts);

@@ -36,6 +36,7 @@ struct BarChartConfig {
     char     bar_bg_color[CONFIG_BINDABLE_SHORT_LEN];    // Bar track background (default "#1A1A1A")
     uint8_t  bar_width_pct;       // Bar width as % of tile width (1-100, default 100)
     bool     horizontal;          // true = horizontal bar (grows left→right)
+    uint16_t anim_ms;             // Transition duration in ms (0 = instant, default 300)
 };
 
 static_assert(sizeof(BarChartConfig) <= WIDGET_CONFIG_MAX_BYTES,
@@ -51,6 +52,8 @@ struct BarChartState {
     float     cached_max; // Last resolved max (for detecting binding changes in tick)
     uint32_t  cached_bar_bg_color;  // Last resolved bar background color
     uint32_t  cached_bar_color;     // Last resolved bar fill color
+    bool      has_received_data;    // True after first value received (snap on first)
+    bool      horizontal;           // Cached orientation for anim callback
 };
 
 static_assert(sizeof(BarChartState) <= WIDGET_STATE_MAX_BYTES,
@@ -72,6 +75,9 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
 
     const char* orient = btn["widget_orientation"] | "";
     cfg->horizontal = (orient[0] == 'h' || orient[0] == 'H');
+
+    int ams = btn["widget_anim_ms"] | 300;
+    cfg->anim_ms = (uint16_t)clamp_val(ams, 0, 5000);
 }
 
 static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
@@ -173,6 +179,21 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     st->bar_bg = bar_bg;
     st->bar_fill = bar_fill;
+    st->has_received_data = false;
+    st->horizontal = cfg->horizontal;
+}
+
+// ---- Animation exec callback for bar fill dimension ----
+static void bar_chart_anim_cb(void* var, int32_t value) {
+    auto* st = reinterpret_cast<BarChartState*>(var);
+    if (!st->bar_fill) return;
+    if (st->horizontal) {
+        lv_obj_set_width(st->bar_fill, value);
+        lv_obj_align(st->bar_fill, LV_ALIGN_LEFT_MID, 0, 0);
+    } else {
+        lv_obj_set_height(st->bar_fill, value);
+        lv_obj_align(st->bar_fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+    }
 }
 
 static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
@@ -197,25 +218,36 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->cached_min = bar_min;
     st->cached_max = bar_max;
 
-    // Compute fill height
+    // Compute fill ratio
     float range = bar_max - bar_min;
     if (range <= 0.0f) range = 1.0f;
     float ratio = (fabsf(value) - bar_min) / range;
     if (ratio < 0.0f) ratio = 0.0f;
     if (ratio > 1.0f) ratio = 1.0f;
 
-    if (cfg->horizontal) {
-        int16_t bar_total_w = lv_obj_get_width(st->bar_bg);
-        int16_t fill_w = (int16_t)(ratio * bar_total_w);
-        if (fill_w == 0 && fabsf(value) > 0.001f) fill_w = 1;
-        lv_obj_set_width(st->bar_fill, fill_w);
-        lv_obj_align(st->bar_fill, LV_ALIGN_LEFT_MID, 0, 0);
+    int16_t bar_total = cfg->horizontal ? lv_obj_get_width(st->bar_bg) : lv_obj_get_height(st->bar_bg);
+    int16_t target_px = (int16_t)(ratio * bar_total);
+    if (target_px == 0 && fabsf(value) > 0.001f) target_px = 1;
+
+    // Current visual dimension (animation start point)
+    int16_t cur_px = cfg->horizontal
+        ? (int16_t)lv_obj_get_width(st->bar_fill)
+        : (int16_t)lv_obj_get_height(st->bar_fill);
+
+    bool should_animate = st->has_received_data && cfg->anim_ms > 0 && cur_px != target_px;
+    st->has_received_data = true;
+
+    if (should_animate) {
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, st);
+        lv_anim_set_values(&a, cur_px, target_px);
+        lv_anim_set_duration(&a, cfg->anim_ms);
+        lv_anim_set_exec_cb(&a, bar_chart_anim_cb);
+        lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+        lv_anim_start(&a);
     } else {
-        int16_t bar_total_h = lv_obj_get_height(st->bar_bg);
-        int16_t fill_h = (int16_t)(ratio * bar_total_h);
-        if (fill_h == 0 && fabsf(value) > 0.001f) fill_h = 1;
-        lv_obj_set_height(st->bar_fill, fill_h);
-        lv_obj_align(st->bar_fill, LV_ALIGN_BOTTOM_MID, 0, 0);
+        bar_chart_anim_cb(st, target_px);
     }
 
     // Apply bar fill color (uses shared cache with tick)

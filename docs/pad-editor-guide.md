@@ -354,6 +354,7 @@ The bar chart widget draws a vertical or horizontal bar that fills based on a nu
 | **Bar color** | The fill color of the bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
 | **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
+| **Animation (ms)** | Duration of the ease-out transition when the bar value changes (0–5000 ms). Default: 300. Set to 0 for instant updates (no animation). The first value after screen load always snaps immediately |
 
 **Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: pick your zone colors, set breakpoints, and the expression auto-generates as you type. For a solar panel with a 5 kW max:
 
@@ -404,6 +405,7 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Target Tick Width** | Tick line width at the target value position (0 = no tick, 1–5 px). Boundary ticks at the zone edges use the same width |
 | **Target Marker Color** | Color of the target value tick and zone boundary ticks. Supports binding expressions |
 | **Target Zone Color** | Color of the zone overlay arc. Supports binding expressions |
+| **Animation (ms)** | Duration of the ease-out transition when arc and needle values change (0–5000 ms). Default: 300. Set to 0 for instant updates (no animation). Applies to all rings and the needle. The first value after screen load always snaps immediately |
 
 Each ring has its own arc color field, so rings can be independently colored or threshold-driven. Use `[expr:threshold(...)]` in any arc color field for value-based coloring — the color picker's built-in **Generate Color by Threshold** helper makes this easy.
 
