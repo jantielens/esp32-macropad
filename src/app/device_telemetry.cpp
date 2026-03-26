@@ -5,6 +5,7 @@
 #include "board_config.h"
 #include "fs_health.h"
 #include "sensors/sensor_manager.h"
+#include "image_fetch.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -378,6 +379,21 @@ void device_telemetry_fill_api(JsonDocument &doc) {
 		// Sensor framework (optional adapters)
 		JsonObject sensors = doc["sensors"].to<JsonObject>();
 		sensor_manager_append_api(sensors);
+
+		// Image fetch drop counters (active slots only)
+		#if HAS_IMAGE_FETCH
+		{
+				JsonObject img = doc["image_fetch"].to<JsonObject>();
+				for (int i = 0; i < IMAGE_SLOT_MAX; i++) {
+						uint32_t drops = image_fetch_get_drops((image_slot_t)i);
+						if (drops > 0) {
+								char key[16];
+								snprintf(key, sizeof(key), "slot_%d_drops", i);
+								img[key] = drops;
+						}
+				}
+		}
+		#endif
 }
 
 void device_telemetry_fill_mqtt_scoped(JsonDocument &doc, MqttPublishScope scope) {
