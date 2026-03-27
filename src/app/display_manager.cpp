@@ -26,6 +26,8 @@
 #include "drivers/st7703_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7701_DSI
 #include "drivers/st7701_dsi_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
+#include "drivers/jd9165_dsi_driver.h"
 #endif
 
 #include <SPI.h>
@@ -67,6 +69,8 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		driver = new ST7703_DSI_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7701_DSI
 		driver = new ST7701_DSI_Driver();
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
+		driver = new JD9165_DSI_Driver();
 		#else
 		#error "No display driver selected or unknown driver type"
 		#endif
