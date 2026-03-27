@@ -1057,10 +1057,13 @@ function padRenderBindings() {
             this.title = ok ? '' : 'Must start with a letter; only letters, digits, and underscores allowed';
             padMarkDirty();
         });
-        row.querySelector('.pad-binding-value').addEventListener('input', function() {
+        var valueInput = row.querySelector('.pad-binding-value');
+        valueInput.addEventListener('input', function() {
             padState.bindings[idx].value = this.value;
             padMarkDirty();
+            if (this.classList.contains('binding-error')) bindingClearError(this);
         });
+        if (typeof bindingAttachValidation === 'function') bindingAttachValidation(valueInput);
         row.querySelector('.pad-binding-del').addEventListener('click', function() {
             padState.bindings.splice(idx, 1);
             padRenderBindings();
@@ -1287,6 +1290,7 @@ function padDialogOpen(col, row) {
     padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, '#1A1A1A');
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
     document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
+    document.getElementById('pad-edit-widget-bar-anim-ms').value = (btn.widget_anim_ms !== undefined) ? btn.widget_anim_ms : 300;
 
     // Gauge widget fields
     document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
@@ -1305,6 +1309,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-dual-binding-pair-1').checked = (btn.widget_gauge_dual_binding_pair_1 !== undefined) ? btn.widget_gauge_dual_binding_pair_1 : false;
     document.getElementById('pad-edit-gauge-dual-binding-pair-2').checked = (btn.widget_gauge_dual_binding_pair_2 !== undefined) ? btn.widget_gauge_dual_binding_pair_2 : false;
     document.getElementById('pad-edit-gauge-show-needle').checked = (btn.widget_gauge_show_needle !== undefined) ? btn.widget_gauge_show_needle : true;
+    document.getElementById('pad-edit-gauge-anim-ms').value = (btn.widget_anim_ms !== undefined) ? btn.widget_anim_ms : 300;
     padSetBindableColor('pad-edit-gauge-arc-color', btn.widget_arc_color, '#4CAF50');
     padSetBindableColor('pad-edit-gauge-arc-color-2', btn.widget_arc_color_2, '#2196F3');
     padSetBindableColor('pad-edit-gauge-arc-color-3', btn.widget_arc_color_3, '#9C27B0');
@@ -1496,6 +1501,8 @@ function padDialogOk(keepOpen) {
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
             const orient = document.getElementById('pad-edit-widget-orientation').value;
             if (orient === 'horizontal') btn.widget_orientation = 'horizontal';
+            const barAnimMs = parseInt(document.getElementById('pad-edit-widget-bar-anim-ms').value);
+            btn.widget_anim_ms = (isNaN(barAnimMs) || barAnimMs < 0) ? 300 : (barAnimMs > 5000) ? 5000 : barAnimMs;
         }
         if (wtype === 'gauge') {
             const gDataBinding = document.getElementById('pad-edit-gauge-data-binding').value.trim();
@@ -1543,6 +1550,8 @@ function padDialogOk(keepOpen) {
             btn.widget_gauge_marker_tick_width = (isNaN(gMTickW) || gMTickW < 0) ? 2 : (gMTickW > 5) ? 5 : gMTickW;
             btn.widget_gauge_marker_tick_color = padGetBindableColor('pad-edit-gauge-marker-tick-color');
             btn.widget_gauge_marker_zone_color = padGetBindableColor('pad-edit-gauge-marker-zone-color');
+            const gaugeAnimMs = parseInt(document.getElementById('pad-edit-gauge-anim-ms').value);
+            btn.widget_anim_ms = (isNaN(gaugeAnimMs) || gaugeAnimMs < 0) ? 300 : (gaugeAnimMs > 5000) ? 5000 : gaugeAnimMs;
         }
         if (wtype === 'sparkline') {
             const sDataBinding = document.getElementById('pad-edit-sparkline-data-binding').value.trim();
@@ -1612,6 +1621,15 @@ function padDialogOk(keepOpen) {
     const btnState = document.getElementById('pad-edit-btn-state').value.trim();
     if (btnState) btn.btn_state = btnState;
 
+    // Validate all binding fields before accepting
+    if (typeof bindingValidateDialog === 'function') {
+        var bvResult = bindingValidateDialog();
+        if (!bvResult.valid) {
+            showMessage(bvResult.count + ' binding error' + (bvResult.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
+    }
+
     padState.buttons.push(btn);
     padMarkDirty();
     if (!keepOpen) padDialogClose();
@@ -1662,6 +1680,24 @@ async function padSavePage() {
         else delete payload.bindings;
     } else {
         delete payload.bindings;
+    }
+
+    // Validate pad-level binding values before save
+    if (typeof bindingValidatePadBindings === 'function') {
+        var bvPad = bindingValidatePadBindings();
+        if (!bvPad.valid) {
+            showMessage(bvPad.count + ' pad binding error' + (bvPad.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
+    }
+
+    // Validate button defaults binding fields
+    if (typeof bindingValidateDefaults === 'function') {
+        var bvDef = bindingValidateDefaults();
+        if (!bvDef.valid) {
+            showMessage(bvDef.count + ' button defaults error' + (bvDef.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
     }
 
     // Template pad
@@ -1839,6 +1875,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize health widget
     initHealthWidget();
+
+    // Initialize binding validator on static inputs (all pages)
+    if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 
     // Initialize pad configuration UI
     padInit();

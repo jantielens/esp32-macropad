@@ -266,6 +266,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/brew_binding.cpp
+  - src/app/button_defaults.cpp
+  - src/app/button_defaults.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/data_stream.cpp
@@ -303,6 +305,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/timer_engine.cpp
   - src/app/touch_manager.cpp
   - src/app/web_portal.cpp
+  - src/app/web_portal_button_defaults.cpp
+  - src/app/web_portal_button_defaults.h
   - src/app/web_portal_config.cpp
   - src/app/web_portal_device_api.cpp
   - src/app/web_portal_display.cpp
@@ -323,6 +327,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/device_telemetry.cpp
   - src/app/image_decoder.cpp
   - src/app/image_decoder.h
   - src/app/image_fetch.cpp

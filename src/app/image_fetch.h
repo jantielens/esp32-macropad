@@ -91,4 +91,10 @@ const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16
 // Clears the new_frame flag.
 void image_fetch_ack_frame(image_slot_t slot);
 
+// Get the cumulative count of frames silently dropped for this slot.
+// A drop occurs when the fetch task writes a new frame before LVGL has
+// acknowledged the previous one.  Non-zero counts indicate the fetch
+// interval is faster than the LVGL render loop can consume.
+uint32_t image_fetch_get_drops(image_slot_t slot);
+
 #endif // HAS_IMAGE_FETCH

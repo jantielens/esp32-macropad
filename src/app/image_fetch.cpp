@@ -46,6 +46,7 @@ struct ImageSlot {
 
     volatile bool new_frame;   // Set by fetch task, cleared by ack
     bool paused;               // Per-slot pause (hidden page)
+    uint32_t frame_drops;      // Frames overwritten before LVGL ack'd the previous one
 };
 
 // ============================================================================
@@ -383,6 +384,10 @@ static void fetch_task(void* param) {
             uint16_t* old_front = s.front_buf;
             s.front_buf = s.back_buf;
             s.back_buf = old_front;
+            if (s.new_frame) {
+                s.frame_drops++;
+                LOGD(TAG, "Slot %d: frame drop (pending ack, total=%lu)", next, (unsigned long)s.frame_drops);
+            }
             s.new_frame = true;
             s.last_fetch_ms = (uint32_t)millis();
             s.fetched_once = true;
@@ -576,6 +581,11 @@ const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16
 void image_fetch_ack_frame(image_slot_t slot) {
     if (slot < 0 || slot >= IMAGE_SLOT_MAX) return;
     g_slots[slot].new_frame = false;
+}
+
+uint32_t image_fetch_get_drops(image_slot_t slot) {
+    if (slot < 0 || slot >= IMAGE_SLOT_MAX) return 0;
+    return g_slots[slot].frame_drops;
 }
 
 #endif // HAS_IMAGE_FETCH

@@ -33,8 +33,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Widget Subsystem**: Extensible widget type system for specialized button visualizations (compile-time gated by `HAS_DISPLAY`)
   - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI, tick, getStreamParams function pointers)
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
-  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color and bindable min/max scale, binding-driven)
-  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, bindable min/max scale, up to 4 slots with optional dual-binding pairs, binding-driven)
+  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color and bindable min/max scale, configurable animation transitions, binding-driven)
+  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, bindable min/max scale, configurable animation transitions, up to 4 slots with optional dual-binding pairs, binding-driven)
   - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale or bindable min/max, time-windowed display, bindable line colors, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry, per-marker min/max dots with labels, current-value dot, up to 3 reference lines)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Data Stream Registry**: Background data collection for history-based widgets (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
@@ -311,6 +311,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web/portal.css` - Styles (gradients, animations, responsive grid)
 - `src/app/web/portal.js` - Client-side logic (multi-page support, API calls, health updates)
 - `src/app/web/portal_action_editor.js` - Shared action editor UI component for button and swipe action editing
+- `src/app/web/portal_binding_validator.js` - Client-side binding syntax validator with scheme registry (live validation, format checking, expression syntax)
 - `src/version.h` - Firmware version tracking
 
 ### Documentation
