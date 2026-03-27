@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 143
+Total flags: 150
 
 ### Features (HAS_*)
 
@@ -41,7 +41,7 @@ Total flags: 143
 
 ### Selectors (*_DRIVER)
 
-- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
+- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
 ### Hardware (Geometry)
@@ -52,7 +52,7 @@ Total flags: 143
 
 ### Hardware (Pins)
 
-- **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin (active high).
+- **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin.
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
 - **HX711_DOUT_PIN** default: `-1` — HX711 data out pin.
 - **HX711_SCK_PIN** default: `-1` — HX711 clock pin.
@@ -103,6 +103,7 @@ Total flags: 143
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
+- **JD9165_DSI_DPI_CLK_HZ** default: `51200000L` — DPI pixel clock in Hz.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
@@ -127,6 +128,7 @@ Total flags: 143
 - **AUDIO_I2S_DOUT** default: `-1` — I2S data out pin (ESP32 TX → codec data input).
 - **AUDIO_I2S_LRCK** default: `-1` — I2S word select / left-right clock pin.
 - **AUDIO_I2S_MCLK** default: `-1` — I2S master clock pin.
+- **AUDIO_PA_ACTIVE_LOW** default: `false` — Some boards route the PA enable through an inverting transistor.
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
@@ -139,6 +141,13 @@ Total flags: 143
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
+- **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
+- **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
+- **JD9165_DSI_HSYNC_PULSE_WIDTH** default: `24` — HSYNC pulse width in pixel clocks.
+- **JD9165_DSI_LANE_BIT_RATE** default: `550` — MIPI-DSI lane bit rate in Mbps.
+- **JD9165_DSI_VSYNC_BACK_PORCH** default: `21` — VSYNC back porch in lines.
+- **JD9165_DSI_VSYNC_FRONT_PORCH** default: `12` — VSYNC front porch in lines.
+- **JD9165_DSI_VSYNC_PULSE_WIDTH** default: `2` — VSYNC pulse width in lines.
 - **LCD_HSYNC_BACK_PORCH** default: `(no default)` — HSYNC back porch.
 - **LCD_HSYNC_FRONT_PORCH** default: `(no default)` — HSYNC front porch.
 - **LCD_HSYNC_POLARITY** default: `(no default)` — HSYNC polarity (1 = active high).
@@ -150,6 +159,7 @@ Total flags: 143
 - **LCD_VSYNC_PULSE_WIDTH** default: `(no default)` — VSYNC pulse width.
 - **LD2410_OUT_DEBOUNCE_MS** default: `50` — Debounce for LD2410 OUT edge changes (ms).
 - **LED_ACTIVE_HIGH** default: `true` — LED polarity: true if HIGH turns the LED on.
+- **LVGL_DRAW_BUF_COUNT** default: `1` — is being flushed (useful with async DMA2D or PPA rotation pipelines).
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
 - **LVGL_TASK_PRIORITY** default: `4` — Default 4 matches ESP-IDF BSP convention; keeps rendering above WiFi (pri 2-3).
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
@@ -197,6 +207,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
 | jc4880p433 | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  | ✅ |  | ✅ |
+| jc1060p470c | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -209,6 +220,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)
@@ -448,6 +460,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **AUDIO_I2S_MCLK**
   - src/app/board_config.h
+- **AUDIO_PA_ACTIVE_LOW**
+  - src/app/board_config.h
 - **AUDIO_PA_PIN**
   - src/app/board_config.h
 - **BME280_I2C_ADDR**
@@ -492,6 +506,22 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HX711_SCK_PIN**
   - src/app/board_config.h
+- **JD9165_DSI_DPI_CLK_HZ**
+  - src/app/board_config.h
+- **JD9165_DSI_HSYNC_BACK_PORCH**
+  - src/app/board_config.h
+- **JD9165_DSI_HSYNC_FRONT_PORCH**
+  - src/app/board_config.h
+- **JD9165_DSI_HSYNC_PULSE_WIDTH**
+  - src/app/board_config.h
+- **JD9165_DSI_LANE_BIT_RATE**
+  - src/app/board_config.h
+- **JD9165_DSI_VSYNC_BACK_PORCH**
+  - src/app/board_config.h
+- **JD9165_DSI_VSYNC_FRONT_PORCH**
+  - src/app/board_config.h
+- **JD9165_DSI_VSYNC_PULSE_WIDTH**
+  - src/app/board_config.h
 - **LCD_BL_PIN**
   - src/app/drivers/arduino_gfx_driver.cpp
   - src/app/drivers/arduino_gfx_st77916_driver.cpp
@@ -522,6 +552,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LVGL_BUFFER_SIZE**
   - src/app/board_config.h
+- **LVGL_DRAW_BUF_COUNT**
+  - src/app/board_config.h
+  - src/app/display_manager.cpp
 - **LVGL_REFR_PERIOD_MS**
   - src/app/display_manager.cpp
 - **LVGL_TASK_CORE**

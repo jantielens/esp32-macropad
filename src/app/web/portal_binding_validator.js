@@ -492,6 +492,24 @@ function validateBinding(value, opts) {
 // ─── Inline error display ────────────────────────────────────────
 
 /**
+ * Find the block-level container to hold the error message for a given input.
+ * Returns { container, anchor } where the error span is appended after anchor
+ * inside container. When anchor is null the span is appended as last child.
+ */
+function _bvErrorTarget(input) {
+    var anchor = input.closest('.bindable-color') ||
+                 input.closest('.binding-input-wrap') ||
+                 input.closest('.label-style-wrap') ||
+                 input;
+    // Prefer the nearest block-level .form-group so the error never becomes
+    // a flex sibling in a horizontal row.
+    var fg = anchor.closest('.form-group');
+    if (fg) return { container: fg, anchor: null };
+    // Fallback: insert after the anchor in its parent (works when parent is block)
+    return { container: anchor.parentNode, anchor: anchor };
+}
+
+/**
  * Show a binding error message below an input element.
  */
 function bindingShowError(input, message) {
@@ -500,12 +518,16 @@ function bindingShowError(input, message) {
     var span = document.createElement('span');
     span.className = 'binding-error-msg';
     span.textContent = message;
-    // Insert right after the input (or after its parent wrapper if wrapped)
-    var anchor = input.closest('.bindable-color') ||
-                 input.closest('.binding-input-wrap') ||
-                 input.closest('.label-style-wrap') ||
-                 input;
-    anchor.parentNode.insertBefore(span, anchor.nextSibling);
+    // Tag with input id so clearError can find the right span when
+    // multiple binding inputs share the same .form-group container.
+    var uid = input.id || input.name || '';
+    if (uid) span.dataset.bvFor = uid;
+    var t = _bvErrorTarget(input);
+    if (t.anchor) {
+        t.container.insertBefore(span, t.anchor.nextSibling);
+    } else {
+        t.container.appendChild(span);
+    }
 }
 
 /**
@@ -513,14 +535,12 @@ function bindingShowError(input, message) {
  */
 function bindingClearError(input) {
     input.classList.remove('binding-error');
-    var anchor = input.closest('.bindable-color') ||
-                 input.closest('.binding-input-wrap') ||
-                 input.closest('.label-style-wrap') ||
-                 input;
-    var next = anchor.nextSibling;
-    if (next && next.classList && next.classList.contains('binding-error-msg')) {
-        next.remove();
-    }
+    var t = _bvErrorTarget(input);
+    var uid = input.id || input.name || '';
+    var msg = uid
+        ? t.container.querySelector(':scope > .binding-error-msg[data-bv-for="' + uid + '"]')
+        : t.container.querySelector(':scope > .binding-error-msg');
+    if (msg) msg.remove();
 }
 
 /**
@@ -592,6 +612,10 @@ var _BV_SPARK_COLOR = [
 var _BV_SPARK_NUM = ['pad-edit-sparkline-min', 'pad-edit-sparkline-max'];
 var _BV_BAR_COLOR = ['pad-edit-widget-bar-color', 'pad-edit-widget-bar-bg-color'];
 var _BV_BAR_NUM = ['pad-edit-widget-bar-min', 'pad-edit-widget-bar-max'];
+var _BV_GAUGE_LABEL = [
+    'pad-edit-gauge-start-label', 'pad-edit-gauge-start-label-2',
+    'pad-edit-gauge-start-label-3', 'pad-edit-gauge-start-label-4'
+];
 
 function _bvAttach(ids, opts) {
     for (var i = 0; i < ids.length; i++) {
@@ -631,6 +655,9 @@ function bindingInitStaticInputs() {
     _bvAttach(_BV_SPARK_DATA, { isWidgetBinding: true });
     _bvAttach(_BV_SPARK_COLOR);
     _bvAttach(_BV_SPARK_NUM, { isWidgetBinding: true });
+    _bvAttach(_BV_BAR_COLOR);
+    _bvAttach(_BV_BAR_NUM, { isWidgetBinding: true });
+    _bvAttach(_BV_GAUGE_LABEL);
 
     var wakeEl = document.getElementById('screen_saver_wake_binding');
     if (wakeEl) bindingAttachValidation(wakeEl);
@@ -655,6 +682,7 @@ function bindingValidateDialog() {
         count += _bvCount(_BV_GAUGE_DATA, { isWidgetBinding: true }, true);
         count += _bvCount(_BV_GAUGE_COLOR, null, true);
         count += _bvCount(_BV_GAUGE_NUM, { isWidgetBinding: true }, true);
+        count += _bvCount(_BV_GAUGE_LABEL, null, true);
     }
     if (activeType === 'sparkline') {
         count += _bvCount(_BV_SPARK_DATA, { isWidgetBinding: true }, true);

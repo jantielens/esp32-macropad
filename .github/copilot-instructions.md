@@ -21,7 +21,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `touch_manager.cpp/h` - Touch input registration and calibration
   - `display_drivers.cpp` - Sketch-root “translation unit” that conditionally includes exactly one selected display driver `.cpp`
   - `touch_drivers.cpp` - Sketch-root “translation unit” that conditionally includes exactly one selected touch driver `.cpp`
-  - `drivers/` - Driver implementations (TFT_eSPI, Arduino_GFX, ST77916, ST7701_RGB, MIPI-DSI base, ST7703_DSI, ST7701_DSI, XPT2046, AXS15231B, CST816S, GT911)
+  - `drivers/` - Driver implementations (TFT_eSPI, Arduino_GFX, ST77916, ST7701_RGB, MIPI-DSI base, ST7703_DSI, ST7701_DSI, JD9165_DSI, XPT2046, AXS15231B, CST816S, GT911)
   - `screens/` - Screen base class and implementations (splash, info, test, touch test)
   - Conditional compilation: Only selected drivers are compiled via `display_drivers.cpp` / `touch_drivers.cpp` (Arduino doesn’t auto-compile subdir `.cpp`)
 - **Image Fetch Subsystem**: Background HTTP(S) image download, decode, and scaling (compile-time gated by `HAS_IMAGE_FETCH`)
@@ -103,6 +103,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `["jc3636w518"]` → `build/jc3636w518/` (ESP32-S3, 16MB + OPI PSRAM)
   - `["esp32-p4-lcd4b"]` → `build/esp32-p4-lcd4b/` (ESP32-P4 Waveshare, 720×720 MIPI-DSI + GT911 touch, 32MB + 32MB PSRAM)
   - `["jc4880p433"]` → `build/jc4880p433/` (ESP32-P4 GUITION, 480×800 MIPI-DSI ST7701 + GT911 touch, 16MB + 32MB PSRAM)
+  - `["jc1060p470c"]` → `build/jc1060p470c/` (ESP32-P4 GUITION, 1024×600 MIPI-DSI JD9165 + GT911 touch, 16MB + 32MB PSRAM, portrait via PPA rotation)
 
 ## Critical Developer Workflows
 
@@ -280,6 +281,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/arduino_gfx_st77916_driver.cpp/h` - Arduino_GFX ST77916 QSPI display driver (JC3636W518)
 - `src/app/drivers/st7703_dsi_driver.cpp/h` - ST7703 MIPI-DSI display subclass (Waveshare ESP32-P4-WIFI6-Touch-LCD-4B)
 - `src/app/drivers/st7701_dsi_driver.cpp/h` - ST7701 MIPI-DSI display subclass (GUITION JC4880P433)
+- `src/app/drivers/jd9165_dsi_driver.cpp/h` - JD9165 MIPI-DSI display subclass (GUITION JC1060P470C)
 - `src/app/drivers/mipi_dsi_driver.cpp/h` - Shared MIPI-DSI base class with DMA2D async flush (ESP32-P4)
 - `src/app/drivers/axs15231b_touch_driver.cpp/h` - AXS15231B touch backend wrapper
 - `src/app/drivers/axs15231b/vendor/AXS15231B_touch.cpp/h` - Vendored AXS15231B touch implementation (driver-scoped vendor code)

@@ -123,6 +123,11 @@ function padColorPopoverCreate() {
     });
     // Generator: auto-generate on source changes
     pop.querySelector('#cp-gen-source').addEventListener('input', padThresholdGenerate);
+    // Attach binding validation to popover inputs that accept binding syntax
+    if (typeof bindingAttachValidation === 'function') {
+        bindingAttachValidation(pop.querySelector('#cp-input'));
+        bindingAttachValidation(pop.querySelector('#cp-gen-source'));
+    }
     _cpPopover = { pop: pop, bd: bd, target: null, anchor: null };
     return _cpPopover;
 }
@@ -164,8 +169,14 @@ function padColorPopoverOpen(swatch, input) {
     cp.pop.querySelectorAll('.color-popover-swatch').forEach(function(sw) {
         sw.classList.toggle('active', (sw.dataset.hex || sw.title || '').toUpperCase() === cur);
     });
-    // Set input to current value
-    cp.pop.querySelector('#cp-input').value = input.value.trim();
+    // Set input to current value and clear stale validation errors
+    var cpInput = cp.pop.querySelector('#cp-input');
+    cpInput.value = input.value.trim();
+    if (typeof bindingClearError === 'function') {
+        bindingClearError(cpInput);
+        var cpGen = cp.pop.querySelector('#cp-gen-source');
+        if (cpGen) bindingClearError(cpGen);
+    }
     cp.bd.style.display = 'block';
     cp.pop.style.display = 'block';
     padColorPopoverReposition();
