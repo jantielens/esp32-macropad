@@ -103,7 +103,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `["jc3636w518"]` → `build/jc3636w518/` (ESP32-S3, 16MB + OPI PSRAM)
   - `["esp32-p4-lcd4b"]` → `build/esp32-p4-lcd4b/` (ESP32-P4 Waveshare, 720×720 MIPI-DSI + GT911 touch, 32MB + 32MB PSRAM)
   - `["jc4880p433"]` → `build/jc4880p433/` (ESP32-P4 GUITION, 480×800 MIPI-DSI ST7701 + GT911 touch, 16MB + 32MB PSRAM)
-  - `["jc1060p470c"]` → `build/jc1060p470c/` (ESP32-P4 GUITION, 1024×600 MIPI-DSI JD9165 + GT911 touch, 16MB + 32MB PSRAM)
+  - `["jc1060p470c"]` → `build/jc1060p470c/` (ESP32-P4 GUITION, 1024×600 MIPI-DSI JD9165 + GT911 touch, 16MB + 32MB PSRAM, portrait via PPA rotation)
 
 ## Critical Developer Workflows
 

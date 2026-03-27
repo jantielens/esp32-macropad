@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 149
+Total flags: 150
 
 ### Features (HAS_*)
 
@@ -156,6 +156,7 @@ Total flags: 149
 - **LCD_VSYNC_PULSE_WIDTH** default: `(no default)` — VSYNC pulse width.
 - **LD2410_OUT_DEBOUNCE_MS** default: `50` — Debounce for LD2410 OUT edge changes (ms).
 - **LED_ACTIVE_HIGH** default: `true` — LED polarity: true if HIGH turns the LED on.
+- **LVGL_DRAW_BUF_COUNT** default: `1` — is being flushed (useful with async DMA2D or PPA rotation pipelines).
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
 - **LVGL_TASK_PRIORITY** default: `4` — Default 4 matches ESP-IDF BSP convention; keeps rendering above WiFi (pri 2-3).
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
@@ -518,6 +519,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LVGL_BUFFER_SIZE**
   - src/app/board_config.h
+- **LVGL_DRAW_BUF_COUNT**
+  - src/app/board_config.h
+  - src/app/display_manager.cpp
 - **LVGL_REFR_PERIOD_MS**
   - src/app/display_manager.cpp
 - **LVGL_TASK_CORE**

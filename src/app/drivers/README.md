@@ -32,7 +32,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | esp32-4848S040 | ST7701_RGB | ST7701 | SPI | 480×480 | 0 | GT911 |  |
 | esp32-p4-lcd4b | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
 | esp32c3-withsensors | ? | ? | ? | ?×? | ? | ? |  |
-| jc1060p470c | JD9165_DSI | JD9165 | DSI | 1024×600 | 0 | GT911 |  |
+| jc1060p470c | JD9165_DSI | JD9165 | DSI | 1024×600 | 1 | GT911 |  |
 | jc3248w535 | ARDUINO_GFX | AXS15231B | QSPI | 320×480 | 1 | AXS15231B |  |
 | jc3636w518 | ARDUINO_GFX_ST77916 | ST77916 | QSPI | 360×360 | 0 | CST816S |  |
 | jc4880p433 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |

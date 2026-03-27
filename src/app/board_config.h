@@ -493,6 +493,13 @@
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 10)  // 10 lines buffer
 #endif
 
+// Number of LVGL draw buffers (1 = single, 2 = double-buffered).
+// Double-buffering lets LVGL render the next frame while the previous one
+// is being flushed (useful with async DMA2D or PPA rotation pipelines).
+#ifndef LVGL_DRAW_BUF_COUNT
+#define LVGL_DRAW_BUF_COUNT 1
+#endif
+
 // LVGL tick period in milliseconds.
 #ifndef LVGL_TICK_PERIOD_MS
 #define LVGL_TICK_PERIOD_MS 5

@@ -37,11 +37,12 @@
 // ============================================================================
 #define DISPLAY_WIDTH 1024
 #define DISPLAY_HEIGHT 600
-#define DISPLAY_ROTATION 0
+#define DISPLAY_ROTATION 1    // Portrait: 90° CW software rotation in flush path
 
 // LVGL draw buffer: PSRAM is fine — DMA2D handles the copy to the framebuffer.
 #define LVGL_BUFFER_PREFER_INTERNAL false
-#define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 60)
+#define LVGL_BUFFER_SIZE (DISPLAY_HEIGHT * 120) // portrait logical width × 120 rows
+#define LVGL_DRAW_BUF_COUNT 2                   // double-buffer: overlap render + flush
 
 // LVGL refresh period — 15 ms (~66 fps target).
 #define LVGL_REFR_PERIOD_MS 15
