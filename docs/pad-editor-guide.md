@@ -508,6 +508,29 @@ Binding templates are the engine behind live data on your buttons. They follow a
 
 Static text before, after, or between tokens is preserved. If a binding can't resolve (topic not received yet, invalid path), it shows `---` as a placeholder. Errors show `ERR:reason`.
 
+### Binding Validation
+
+The pad editor and Home page validate binding syntax **in real time** as you type. Any field that accepts a binding expression (labels, colors, data bindings, widget parameters, MQTT topics, wake binding, etc.) is checked automatically.
+
+**What gets validated:**
+
+- **Bracket balance** — unclosed `[` or extra `]` characters
+- **Scheme names** — unknown schemes are flagged, with a "did you mean?" suggestion for typos (e.g., `mqt` → `mqtt`)
+- **Parameter counts** — too many or too few semicolon-delimited parameters for the scheme
+- **Known keys** — health binding keys (e.g., `cpu`, `heap_free`, `rssi`) and timer parameters (e.g., `1`, `2_state`, `3_expired`) are checked against the valid set
+- **Format strings** — printf-style format specifiers like `%.0f`, `%d`, `%s` are validated for correct syntax
+- **Expression syntax** — `[expr:]` bodies are checked for operator/operand sequencing errors (e.g., `[expr:1 +]` or `[expr:* 2]`)
+- **Nested bindings** — bindings inside `[expr:]` are recursively validated (e.g., a typo in `[expr:[mqt:topic] * 2]` is caught)
+
+**How it works:**
+
+- Validation runs on a **400 ms debounce** while you type, so errors appear almost immediately without interrupting your typing flow
+- Validation also runs **immediately on blur** (when you click or tab away from a field)
+- Errors appear as a **red border** and a **red message below the field** describing the problem
+- **Saving is blocked** while any field has a validation error — the save button shows which fields need attention
+
+> **Tip:** Validation is purely syntactic — it checks that your binding is well-formed, not that the MQTT topic exists or that the data path returns a value. Runtime resolution issues still show `---` or `ERR:` on the device.
+
 ### Pipe Fallback
 
 **Syntax:** `[scheme:params|fallback]`

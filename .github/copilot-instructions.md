@@ -311,6 +311,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web/portal.css` - Styles (gradients, animations, responsive grid)
 - `src/app/web/portal.js` - Client-side logic (multi-page support, API calls, health updates)
 - `src/app/web/portal_action_editor.js` - Shared action editor UI component for button and swipe action editing
+- `src/app/web/portal_binding_validator.js` - Client-side binding syntax validator with scheme registry (live validation, format checking, expression syntax)
 - `src/version.h` - Firmware version tracking
 
 ### Documentation

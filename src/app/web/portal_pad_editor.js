@@ -1057,10 +1057,13 @@ function padRenderBindings() {
             this.title = ok ? '' : 'Must start with a letter; only letters, digits, and underscores allowed';
             padMarkDirty();
         });
-        row.querySelector('.pad-binding-value').addEventListener('input', function() {
+        var valueInput = row.querySelector('.pad-binding-value');
+        valueInput.addEventListener('input', function() {
             padState.bindings[idx].value = this.value;
             padMarkDirty();
+            if (this.classList.contains('binding-error')) bindingClearError(this);
         });
+        if (typeof bindingAttachValidation === 'function') bindingAttachValidation(valueInput);
         row.querySelector('.pad-binding-del').addEventListener('click', function() {
             padState.bindings.splice(idx, 1);
             padRenderBindings();
@@ -1618,6 +1621,15 @@ function padDialogOk(keepOpen) {
     const btnState = document.getElementById('pad-edit-btn-state').value.trim();
     if (btnState) btn.btn_state = btnState;
 
+    // Validate all binding fields before accepting
+    if (typeof bindingValidateDialog === 'function') {
+        var bvResult = bindingValidateDialog();
+        if (!bvResult.valid) {
+            showMessage(bvResult.count + ' binding error' + (bvResult.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
+    }
+
     padState.buttons.push(btn);
     padMarkDirty();
     if (!keepOpen) padDialogClose();
@@ -1668,6 +1680,24 @@ async function padSavePage() {
         else delete payload.bindings;
     } else {
         delete payload.bindings;
+    }
+
+    // Validate pad-level binding values before save
+    if (typeof bindingValidatePadBindings === 'function') {
+        var bvPad = bindingValidatePadBindings();
+        if (!bvPad.valid) {
+            showMessage(bvPad.count + ' pad binding error' + (bvPad.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
+    }
+
+    // Validate button defaults binding fields
+    if (typeof bindingValidateDefaults === 'function') {
+        var bvDef = bindingValidateDefaults();
+        if (!bvDef.valid) {
+            showMessage(bvDef.count + ' button defaults error' + (bvDef.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
     }
 
     // Template pad
@@ -1845,6 +1875,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize health widget
     initHealthWidget();
+
+    // Initialize binding validator on static inputs (all pages)
+    if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 
     // Initialize pad configuration UI
     padInit();
