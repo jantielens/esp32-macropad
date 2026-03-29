@@ -549,6 +549,18 @@ If the build fails:
 - Check library dependencies in `arduino-libraries.txt`
 - Verify Arduino code syntax and ESP32 compatibility
 
+## Documentation Diagramming Guidelines
+
+- **All diagrams in documentation must use Mermaid syntax.** Do not use ASCII art for diagrams.
+- Insert Mermaid diagrams as fenced code blocks using ` ```mermaid `.
+- Mermaid diagrams render in-place on GitHub (GitHub-flavored Markdown supports Mermaid natively).
+- Use the diagram type that best fits the content:
+  - `graph TD` / `flowchart TD` — architecture layers, data flows, decision trees
+  - `classDiagram` — class or driver inheritance hierarchies
+  - `sequenceDiagram` — task interaction, timing, async flows
+  - `graph LR` — directory/file trees, left-to-right hierarchies
+- Always verify that your Mermaid syntax is valid before committing (use the [Mermaid Live Editor](https://mermaid.live) if needed).
+
 ## Display/Touch Driver Conventions (v1)
 
 - **Single source of defaults**: default `DISPLAY_DRIVER` / `TOUCH_DRIVER` live in `src/app/board_config.h`.

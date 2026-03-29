@@ -28,12 +28,14 @@ which abstracts all DSI panel initialization, backlight, and touch behind a
 
 All implementations share the same fundamental architecture:
 
-```
-LVGL partial render buffer (PSRAM or internal SRAM)
-  → flush callback → esp_lcd_panel_draw_bitmap()
-    → DMA2D hardware copies pixels to DPI framebuffer (async)
-      → on_color_trans_done callback → lv_display_flush_ready()
-        → DSI peripheral DMA reads from PSRAM framebuffer → panel
+```mermaid
+graph TD
+    A["LVGL partial render buffer<br/>(PSRAM or internal SRAM)"]
+    B["flush callback<br/>esp_lcd_panel_draw_bitmap()"]
+    C["DMA2D copies pixels to DPI framebuffer<br/>(async, hardware)"]
+    D["on_color_trans_done callback<br/>lv_display_flush_ready()"]
+    E["DSI peripheral DMA reads<br/>PSRAM framebuffer → panel"]
+    A --> B --> C --> D --> E
 ```
 
 **Our driver** (`st7703_dsi_driver.cpp` — direct ESP-IDF, bypassing Arduino_GFX):
