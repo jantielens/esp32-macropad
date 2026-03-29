@@ -33,63 +33,21 @@ The display and touch subsystem is built on four main pillars:
 
 ## Architecture Layers
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Application Code (app.ino)                                 │
-│  - Minimal interaction with display/touch                    │
-│  - display_manager_init(), touch_manager_init()            │
-│  - display_manager_show_info()                             │
-└──────────────────────────────────────────────────────────────┘
-                        ↓
-        ┌───────────────┴───────────────┐
-        ↓                               ↓
-┌──────────────────┐          ┌──────────────────┐
-│ DisplayManager   │          │ TouchManager     │
-│ - Hardware       │          │ - Hardware       │
-│ - LVGL display   │          │ - LVGL input     │
-│ - Screens        │          │ - Callbacks      │
-│ - Navigation     │          └──────────────────┘
-│ - Rendering task │
-└──────────────────┘
-        ↓                               ↓
-┌──────────────────┐          ┌──────────────────┐
-│ DisplayDriver    │          │ TouchDriver      │
-│ (HAL Interface)  │          │ (HAL Interface)  │
-└──────────────────┘          └──────────────────┘
-        ↓                               ↓
-┌──────────────────┐          ┌──────────────────┐
-│ TFT_eSPI_Driver  │          │ XPT2046_Driver   │
-│ Arduino_GFX_Drv  │          │ AXS15231B_Touch  │
-│ Arduino_GFX_Drv  │          │ CST816S_Driver   │
-│ ST7701_RGB_Driver│          │ GT911_Driver     │
-│ MipiDsiDriver    │          │                  │
-│  ├ ST7703_DSI    │          │                  │
-│  ├ ST7701_DSI    │          │                  │
-│  └ JD9165_DSI    │          │                  │
-└──────────────────┘          └──────────────────┘
-        ↓                               ↓
-┌──────────────────┐          ┌──────────────────┐
-│ TFT_eSPI library │          │ XPT2046 library  │
-│ Arduino_GFX lib  │          │ Wire.h (I2C)     │
-│                  │          │ Vendored drivers │
-└──────────────────┘          └──────────────────┘
-```
-│  (Base Class)    │          │  HAL Interface   │
-│                  │          │                  │
-│  - SplashScreen  │          │ - TFT_eSPI_Driver│
-│  - InfoScreen    │          │ - LovyanGFX (fut)│
-│  - TestScreen    │          │ - Custom drivers │
-└──────────────────┘          └──────────────────┘
-        ↓                               ↓
-┌─────────────────────────────────────────────────────┐
-│  LVGL 9.5                                           │
-│  - Widget rendering                                 │
-│  - Themes, fonts, animations                       │
-└─────────────────────────────────────────────────────┘
-                        ↓
-┌─────────────────────────────────────────────────────┐
-│  Hardware (SPI, Display Panel)                      │
-└─────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    App["**Application Code** (app.ino)<br/>display_manager_init()<br/>touch_manager_init()<br/>display_manager_show_info()"]
+    App --> DM["**DisplayManager**<br/>Hardware · LVGL display<br/>Screens · Navigation<br/>Rendering task"]
+    App --> TM["**TouchManager**<br/>Hardware · LVGL input<br/>Callbacks"]
+    DM --> Screens["**Screen Base Class**<br/>SplashScreen · InfoScreen<br/>TestScreen · Custom screens"]
+    DM --> DD["**DisplayDriver**<br/>(HAL Interface)"]
+    TM --> TD["**TouchDriver**<br/>(HAL Interface)"]
+    DD --> DImpl["TFT_eSPI_Driver<br/>Arduino_GFX_Drv<br/>ST7701_RGB_Driver<br/>MipiDsiDriver<br/>(ST7703 / ST7701 / JD9165 DSI subclasses)"]
+    TD --> TImpl["XPT2046_Driver<br/>AXS15231B_Touch<br/>CST816S_Driver<br/>GT911_Driver"]
+    DImpl --> Lib1["TFT_eSPI library<br/>Arduino_GFX lib"]
+    TImpl --> Lib2["XPT2046 library<br/>Wire.h (I2C)<br/>Vendored drivers"]
+    Lib1 --> LVGL["**LVGL 9.5**<br/>Widget rendering<br/>Themes · Fonts · Animations"]
+    Lib2 --> LVGL
+    LVGL --> HW["**Hardware**<br/>(SPI · Display Panel · Touch Controller)"]
 ```
 
 ## Display Driver HAL
@@ -294,12 +252,29 @@ void TFT_eSPI_Driver::setBacklightBrightness(uint8_t brightness_percent) {
 
 ESP32-P4 boards use MIPI-DSI displays via a shared base class (`MipiDsiDriver`) with thin panel-specific subclasses. This replaces per-panel full implementations with a DRY design:
 
-```
-MipiDsiDriver (base)          ← Shared: DSI bus, DBI I/O, DPI panel, DMA2D flush,
-│                                backlight PWM, vendor command sending, ISR callback
-├── ST7703_DSI_Driver          ← Waveshare P4: 24 vendor init commands + timing config
-├── ST7701_DSI_Driver          ← JC4880P433: 39 vendor init commands + timing config
-└── JD9165_DSI_Driver          ← JC1060P470C: 50 vendor init commands + timing config
+```mermaid
+classDiagram
+    class MipiDsiDriver {
+        &lt;&lt;base class&gt;&gt;
+        DSI bus · DBI I/O · DPI panel
+        DMA2D flush · backlight PWM
+        vendor command sending · ISR callback
+    }
+    class ST7703_DSI_Driver {
+        Waveshare P4
+        24 vendor init commands + timing config
+    }
+    class ST7701_DSI_Driver {
+        JC4880P433
+        39 vendor init commands + timing config
+    }
+    class JD9165_DSI_Driver {
+        JC1060P470C
+        50 vendor init commands + timing config
+    }
+    MipiDsiDriver <|-- ST7703_DSI_Driver
+    MipiDsiDriver <|-- ST7701_DSI_Driver
+    MipiDsiDriver <|-- JD9165_DSI_Driver
 ```
 
 **Base Class (`mipi_dsi_driver.h/cpp`):**
@@ -458,12 +433,18 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 For Buffered render-mode drivers (e.g., Arduino_GFX / AXS15231B on jc3248w535), `present()` is decoupled into a separate FreeRTOS task:
 
-```
-lvglTask:      lock → lv_timer_handler() → signal presentSem → unlock → vTaskDelay
-                  ~20ms (LVGL free for touch/animation every ~20ms)
+```mermaid
+sequenceDiagram
+    participant LT as lvglTask (~20ms cycle)
+    participant PT as presentTask (~200ms transfer)
 
-presentTask:   wait(presentSem) → driver->present() → update perf stats
-                  ~200ms QSPI transfer (runs without holding LVGL mutex)
+    LT->>LT: lock mutex
+    LT->>LT: lv_timer_handler()
+    LT-->>PT: signal presentSem
+    LT->>LT: unlock mutex
+    LT->>LT: vTaskDelay
+    PT->>PT: driver->present()
+    PT->>PT: update perf stats
 ```
 
 This means:
@@ -579,24 +560,18 @@ TouchManager ([`src/app/touch_manager.h/cpp`](../src/app/touch_manager.cpp)) han
 
 ### Touch Event Flow
 
-```
-1. User touches screen
-   ↓
-2. Hardware detects (IRQ pin or polling at LV_INDEV_DEF_READ_PERIOD)
-   ↓
-3. LVGL timer calls TouchManager::readCallback() (every ~10ms)
-   ↓
-4. TouchDriver::getTouch() reads I2C/SPI data
-   ↓
-5. Driver validates event field / pressure (driver-specific)
-   ↓
-6. Raw coordinates mapped to screen pixels via calibration
-   ↓
-7. LVGL receives LV_INDEV_STATE_PRESSED + coordinates
-   ↓
-8. LVGL dispatches LV_EVENT_CLICKED to screen object
-   ↓
-9. Screen's touchEventCallback() handles navigation
+```mermaid
+flowchart TD
+    A["1. User touches screen"]
+    B["2. Hardware detects<br/>(IRQ pin or polling at LV_INDEV_DEF_READ_PERIOD)"]
+    C["3. LVGL timer calls TouchManager::readCallback()<br/>(every ~10ms)"]
+    D["4. TouchDriver::getTouch() reads I2C/SPI data"]
+    E["5. Driver validates event field / pressure<br/>(driver-specific)"]
+    F["6. Raw coordinates mapped to screen pixels<br/>via calibration"]
+    G["7. LVGL receives LV_INDEV_STATE_PRESSED + coordinates"]
+    H["8. LVGL dispatches LV_EVENT_CLICKED to screen object"]
+    I["9. Screen's touchEventCallback() handles navigation"]
+    A --> B --> C --> D --> E --> F --> G --> H --> I
 ```
 
 **Polling rate**: `LV_INDEV_DEF_READ_PERIOD` is set to 10 ms (default 30) in `lv_conf.h` for responsive touch input.
@@ -1133,36 +1108,36 @@ Key settings in `src/app/lv_conf.h`:
 
 ## File Organization
 
-```
-src/app/
-├── display_driver.h              # Display HAL interface
-├── display_drivers.cpp           # Display driver compilation unit
-├── display_manager.h/cpp         # Display lifecycle, LVGL, FreeRTOS task
-├── touch_driver.h                # Touch HAL interface
-├── touch_drivers.cpp             # Touch driver compilation unit
-├── touch_manager.h/cpp           # Touch input + LVGL integration
-├── screens.cpp                   # Screen compilation unit
-├── lv_conf.h                     # LVGL configuration
-├── drivers/
-│   ├── tft_espi_driver.h/cpp             # TFT_eSPI display
-│   ├── arduino_gfx_driver.h/cpp          # Arduino_GFX QSPI display (AXS15231B)
-│   ├── arduino_gfx_st77916_driver.h/cpp  # Arduino_GFX ST77916 QSPI display
-│   ├── st7701_rgb_driver.h/cpp           # ST7701 RGB panel display (ESP32-S3)
-│   ├── mipi_dsi_driver.h/cpp             # MIPI-DSI base class (ESP32-P4, shared by ST7703/ST7701/JD9165)
-│   ├── st7703_dsi_driver.h/cpp           # ST7703 MIPI-DSI subclass (Waveshare P4)
-│   ├── st7701_dsi_driver.h/cpp           # ST7701 MIPI-DSI subclass (JC4880P433)
-│   ├── jd9165_dsi_driver.h/cpp           # JD9165 MIPI-DSI subclass (JC1060P470C)
-│   ├── xpt2046_driver.h/cpp              # XPT2046 resistive touch
-│   ├── axs15231b_touch_driver.h/cpp      # AXS15231B capacitive touch
-│   ├── axs15231b/vendor/                 # Vendored AXS15231B I2C touch
-│   ├── wire_cst816s_touch_driver.h/cpp   # CST816S capacitive touch (Wire I2C)
-│   └── gt911_touch_driver.h/cpp          # GT911 capacitive touch
-└── screens/
-    ├── screen.h                  # Base class
-    ├── splash_screen.h/cpp       # Boot screen
-    ├── info_screen.h/cpp         # Device info screen
-    ├── test_screen.h/cpp         # Display test/calibration
-    └── touch_test_screen.h/cpp   # Touch accuracy test (HAS_TOUCH)
+```mermaid
+graph LR
+    App[src/app/] --> DH[display_driver.h]
+    App --> DC[display_drivers.cpp]
+    App --> DM[display_manager.h/cpp]
+    App --> TH[touch_driver.h]
+    App --> TC[touch_drivers.cpp]
+    App --> TM[touch_manager.h/cpp]
+    App --> SC[screens.cpp]
+    App --> LV[lv_conf.h]
+    App --> Drv[drivers/]
+    App --> Scr[screens/]
+    Drv --> D1[tft_espi_driver.h/cpp]
+    Drv --> D2[arduino_gfx_driver.h/cpp]
+    Drv --> D3[arduino_gfx_st77916_driver.h/cpp]
+    Drv --> D4[st7701_rgb_driver.h/cpp]
+    Drv --> D5[mipi_dsi_driver.h/cpp]
+    Drv --> D6[st7703_dsi_driver.h/cpp]
+    Drv --> D7[st7701_dsi_driver.h/cpp]
+    Drv --> D8[jd9165_dsi_driver.h/cpp]
+    Drv --> D9[xpt2046_driver.h/cpp]
+    Drv --> D10[axs15231b_touch_driver.h/cpp]
+    Drv --> D11[axs15231b/vendor/]
+    Drv --> D12[wire_cst816s_touch_driver.h/cpp]
+    Drv --> D13[gt911_touch_driver.h/cpp]
+    Scr --> S1[screen.h]
+    Scr --> S2[splash_screen.h/cpp]
+    Scr --> S3[info_screen.h/cpp]
+    Scr --> S4[test_screen.h/cpp]
+    Scr --> S5[touch_test_screen.h/cpp]
 ```
 
 ## Best Practices
@@ -1317,17 +1292,17 @@ To determine calibration values for a new board:
 
 ### File Organization
 
-```
-src/app/
-├── touch_driver.h                # HAL interface
-├── touch_drivers.cpp             # Touch driver compilation unit
-├── touch_manager.h/cpp           # Manager + LVGL integration
-├── drivers/
-│   ├── xpt2046_driver.h/cpp              # XPT2046 resistive touch
-│   ├── axs15231b_touch_driver.h/cpp      # AXS15231B capacitive touch
-│   ├── axs15231b/vendor/                 # Vendored AXS15231B I2C touch
-│   ├── wire_cst816s_touch_driver.h/cpp   # CST816S capacitive touch (Wire I2C)
-│   └── gt911_touch_driver.h/cpp          # GT911 capacitive touch
+```mermaid
+graph LR
+    App[src/app/] --> TH[touch_driver.h]
+    App --> TC[touch_drivers.cpp]
+    App --> TM[touch_manager.h/cpp]
+    App --> Drv[drivers/]
+    Drv --> D1[xpt2046_driver.h/cpp]
+    Drv --> D2[axs15231b_touch_driver.h/cpp]
+    Drv --> D3[axs15231b/vendor/]
+    Drv --> D4[wire_cst816s_touch_driver.h/cpp]
+    Drv --> D5[gt911_touch_driver.h/cpp]
 ```
 
 ### Architecture Benefits

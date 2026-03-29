@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-03-27
+
 ### Added
 - **Widget animations** — bar chart and gauge widgets now smoothly animate to new values instead of jumping. Arcs sweep, needles rotate, and bars grow/shrink with configurable ease-out transitions. Set **Animation (ms)** per widget in the pad editor (0–5000 ms, default 300, 0 = instant). First data arrival always snaps immediately to avoid animate-from-zero on screen load. Zero-centered gauge arcs animate correctly in both directions.
 - **Image fetch frame drop telemetry** — the image fetch subsystem now tracks per-slot frame drops (when LVGL hasn't consumed a frame before the next one arrives). Drop counts are exposed in `/api/health` under `image_fetch.slot_N_drops` and logged at debug level. Adds `image_fetch_get_drops()` public API. Closes #18.
