@@ -103,16 +103,16 @@ If a board depends on TFT_eSPI and needs a full TFT_eSPI `User_Setup.h` (or you 
 When present, `build.sh` will force-include that file for the board and set `USER_SETUP_LOADED=1` so TFT_eSPI skips its default setup.
 
 **Build Output Structure:**
-```
-build/
-├── esp32-nodisplay/
-│   ├── app.ino.bin
-│   ├── app.ino.bootloader.bin
-│   ├── app.ino.merged.bin
-│   └── app.ino.partitions.bin
-└── cyd-v2/
-    ├── app.ino.bin
-    └── ...
+```mermaid
+graph LR
+    Build[build/] --> Board1[esp32-nodisplay/]
+    Build --> Board2[cyd-v2/]
+    Board1 --> F1[app.ino.bin]
+    Board1 --> F2[app.ino.bootloader.bin]
+    Board1 --> F3[app.ino.merged.bin]
+    Board1 --> F4[app.ino.partitions.bin]
+    Board2 --> F5[app.ino.bin]
+    Board2 --> F6[...]
 ```
 
 **Requirements:** Must run `setup.sh` first.

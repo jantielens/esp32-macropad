@@ -261,15 +261,12 @@ Curated layouts have no `cols`/`rows` fields. The layout name determines button 
 
 ### Button rendering layout (within each tile)
 
-```
-┌────────────────────────┐
-│  label_top  (Font S)   │  ← top-aligned, centered
-│                        │
-│     [icon]             │  ← centered, tier % of tile_h
-│  or label_center (L)   │
-│                        │
-│  label_bottom (Font S) │  ← bottom-aligned, centered
-└────────────────────────┘
+```mermaid
+graph TD
+    top["label_top (Font S)<br/>top-aligned, centered"]
+    center["icon  OR  label_center (Font L)<br/>centered, tier % of tile_h"]
+    bottom["label_bottom (Font S)<br/>bottom-aligned, centered"]
+    top --> center --> bottom
 ```
 
 ### Event handling
@@ -303,11 +300,13 @@ Curated layouts have no `cols`/`rows` fields. The layout name determines button 
 
 ### Data flow
 
-```
-MQTT broker → mqtt_manager → binding_template resolve()
-  → color binding: resolve template → parse hex → apply lv_obj_set_style_bg/text/border_color
-  → label binding: extract value (json_path) → format (printf) → set pending_label_update flag
-  → update() loop: if pending && elapsed > 200ms → lv_label_set_text()
+```mermaid
+flowchart LR
+    Broker["MQTT broker"] --> MM["mqtt_manager"]
+    MM --> BT["binding_template resolve()"]
+    BT --> CB["color binding:\nresolve template → parse hex\n→ apply lv_obj_set_style_*_color"]
+    BT --> LB["label binding:\nextract value → format\n→ set pending_label_update"]
+    LB --> UL["update() loop:\nif pending && elapsed > 200ms\n→ lv_label_set_text()"]
 ```
 
 ### Verification
@@ -362,23 +361,21 @@ MQTT broker → mqtt_manager → binding_template resolve()
 
 ### Image decode pipeline
 
-```
-HTTP response body (raw JPEG/PNG bytes, PSRAM temp buffer)
-    │
-    ├─ Magic byte detection: FF D8 → JPEG, 89 50 4E 47 → PNG
-    │
-    ├─ JPEG path:
-    │   ├─ Get image info (width, height) via tjpgd JD_PREPARE
-    │   ├─ Select best built-in downscale (1/1, 1/2, 1/4, 1/8) to get
-    │   │   closest-to-target dimensions without going below target
-    │   ├─ Decode to RGB888 intermediate buffer (PSRAM)
-    │   └─ Cover-mode scale + RGB888→RGB565 in one pass
-    │
-    ├─ PNG path:
-    │   ├─ lodepng_decode32() → RGBA8888 intermediate buffer (PSRAM)
-    │   └─ Cover-mode scale + RGBA→RGB565 in one pass (alpha discarded)
-    │
-    └─ Output: target_w × target_h RGB565 buffer (PSRAM)
+```mermaid
+flowchart TD
+    In["HTTP response body\n(raw JPEG/PNG bytes, PSRAM temp buffer)"]
+    Det["Magic byte detection:\nFF D8 → JPEG\n89 50 4E 47 → PNG"]
+    In --> Det
+    Det --> JPEG["JPEG path"]
+    Det --> PNG["PNG path"]
+    JPEG --> J1["Get image info via tjpgd JD_PREPARE"]
+    J1 --> J2["Select best built-in downscale\n(1/1, 1/2, 1/4, 1/8)"]
+    J2 --> J3["Decode to RGB888 (PSRAM)"]
+    J3 --> J4["Cover-mode scale + RGB888→RGB565"]
+    PNG --> P1["lodepng_decode32() → RGBA8888 (PSRAM)"]
+    P1 --> P2["Cover-mode scale + RGBA→RGB565\n(alpha discarded)"]
+    J4 --> Out["Output: target_w × target_h RGB565 buffer (PSRAM)"]
+    P2 --> Out
 ```
 
 ### Cover-mode scaling algorithm
@@ -485,25 +482,21 @@ Plus ~100–200 KB temporary decode buffer per fetch. All boards have ≥8 MB PS
 
 ## Implementation Order & Dependencies
 
-```
-Phase 1: Board Config & Fonts
-    │
-    ▼
-Phase 2: Layout Engine ◄── no LVGL dependency, pure computation
-    │
-    ▼
-Phase 3: Button Config & FFat ◄── no LVGL dependency
-    │
-    ├──────────────────┐
-    ▼                  ▼
-Phase 4: REST API    Phase 5: LVGL Screen ◄── depends on 2 + 3
-    │                  │
-    └──────┬───────────┘
-           ▼
-    Phase 6: MQTT Live Labels ◄── depends on 4 + 5
-           │
-           ▼
-    Phase 7: Background Images ◄── depends on 5
+```mermaid
+graph TD
+    P1["Phase 1: Board Config & Fonts"]
+    P2["Phase 2: Layout Engine\n(no LVGL dependency, pure computation)"]
+    P3["Phase 3: Button Config & FFat\n(no LVGL dependency)"]
+    P4["Phase 4: REST API"]
+    P5["Phase 5: LVGL Screen\n(depends on 2 + 3)"]
+    P6["Phase 6: MQTT Live Labels\n(depends on 4 + 5)"]
+    P7["Phase 7: Background Images\n(depends on 5)"]
+    P1 --> P2 --> P3
+    P3 --> P4
+    P3 --> P5
+    P4 --> P6
+    P5 --> P6
+    P5 --> P7
 ```
 
 Phases 4 and 5 can be developed in parallel after Phase 3 is complete.
