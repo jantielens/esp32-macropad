@@ -238,9 +238,15 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_AUDIO
-		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, 70);
-		preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
-		preferences.getString(KEY_LP_BEEP, config->lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
+		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, 50);
+		{
+			size_t n = preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
+			if (n == 0) strlcpy(config->tap_beep, "500:40", CONFIG_BEEP_PATTERN_MAX_LEN);
+		}
+		{
+			size_t n = preferences.getString(KEY_LP_BEEP, config->lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
+			if (n == 0) strlcpy(config->lp_beep, "500:40 60 1000:40", CONFIG_BEEP_PATTERN_MAX_LEN);
+		}
 		#endif
 
 		#if HAS_DISPLAY

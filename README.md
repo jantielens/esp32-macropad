@@ -65,6 +65,7 @@ ESP32 Macropad runs on these ESP32 development boards with touch screens:
 | **JC3636W518** | ESP32-S3 | 3.6" IPS LCD | 360 × 360 | Round |
 | **Waveshare ESP32-P4 Touch LCD 4B** | ESP32-P4 | 4.0" IPS LCD | 720 × 720 | Square |
 | **Guition JC4880P433** | ESP32-P4 | 4.3" IPS LCD | 800 × 480 | Rectangle |
+| **Guition JC1060P470C** | ESP32-P4 | 7.0" IPS LCD | 1024 × 600 | Rectangle |
 
 All boards feature capacitive touch and are widely available from AliExpress and similar retailers.
 

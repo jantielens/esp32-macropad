@@ -12,6 +12,9 @@
 #include <lwip/netif.h>
 #include "ping/ping_sock.h"
 
+// Early init state
+static bool g_early_init_done = false;
+
 // WiFi retry settings
 static constexpr unsigned long WIFI_BACKOFF_BASE = 3000; // 3 seconds base
 static constexpr unsigned long WIFI_CHECK_INTERVAL_MS = 10000; // 10 seconds
@@ -157,6 +160,30 @@ static bool select_strongest_ap(const char *target_ssid, uint8_t out_bssid[6], i
 		return true;
 }
 
+void wifi_manager_early_init() {
+		if (g_early_init_done) return;
+		g_early_init_done = true;
+
+		WiFi.persistent(false);
+
+		#ifdef CONFIG_IDF_TARGET_ESP32P4
+		// ESP32-P4: start SDIO link to C6 co-processor early.
+		// This takes 2-5 s; by calling it before display/config init the link
+		// is usually ready by the time wifi_manager_connect() runs.
+		WiFi.mode(WIFI_STA);
+		LOGI("WiFi", "Early init: SDIO link starting");
+		#else
+		// Non-P4: clean WiFi state and enter STA mode.
+		WiFi.disconnect(true);
+		delay(100);
+		WiFi.mode(WIFI_OFF);
+		delay(500);
+		WiFi.mode(WIFI_STA);
+		delay(100);
+		LOGI("WiFi", "Early init: STA mode ready");
+		#endif
+}
+
 bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 		if (!config) return false;
 
@@ -168,19 +195,16 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 				return false;
 		}
 
-		WiFi.persistent(false);
+		if (!g_early_init_done) {
+				// Backward compat: if early_init wasn't called, do full hardware init now.
+				wifi_manager_early_init();
+		}
 
 		#ifdef CONFIG_IDF_TARGET_ESP32P4
-		// ESP32-P4 uses an external ESP32-C6 co-processor over SDIO (ESP-Hosted).
-		// The SDIO link takes several seconds to establish after boot. The
-		// aggressive disconnect/WIFI_OFF cycle used for normal ESP32 chips
-		// disrupts the SDIO transport negotiation and corrupts internal state,
-		// causing subsequent WiFi.begin() to fail even though scans succeed.
-		// Instead, just set STA mode and let the hosted link come up cleanly.
-		WiFi.mode(WIFI_STA);
+		// Wait for ESP-Hosted SDIO link if not yet ready.
+		// If wifi_manager_early_init() was called earlier, the link may already
+		// be established — this poll returns immediately in that case.
 		LOGI("WiFi", "Waiting for ESP-Hosted link...");
-		// Poll until the SDIO link is alive (MAC becomes readable) instead of
-		// a blind fixed delay. Typically takes 3-4 s, but allow up to 8 s.
 		{
 				const unsigned long hosted_start = millis();
 				const unsigned long HOSTED_TIMEOUT_MS = 8000;
@@ -198,15 +222,10 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 						LOGW("WiFi", "ESP-Hosted link not confirmed after %lums, proceeding anyway", HOSTED_TIMEOUT_MS);
 				}
 				// Brief settle time after SDIO link is confirmed.
-				delay(500);
+				// When wifi_manager_early_init() was called early, the link has
+				// already been up for seconds — 100 ms is sufficient.
+				delay(100);
 		}
-		#else
-		WiFi.disconnect(true);
-		delay(100);
-		WiFi.mode(WIFI_OFF);
-		delay(500);
-		WiFi.mode(WIFI_STA);
-		delay(100);
 		#endif
 
 		// ESP32-P4 ESP-Hosted: setSleep(false) is proxied over SDIO and can

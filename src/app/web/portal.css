@@ -1076,6 +1076,12 @@ footer {
     background: rgba(255,255,255,0.04);
 }
 
+.pad-cell-ghost {
+    opacity: 0.35;
+    outline: 2px dashed rgba(255,255,255,0.35);
+    outline-offset: -2px;
+}
+
 .pad-cell-btn {
     border: none;
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
@@ -1165,6 +1171,22 @@ footer {
     gap: 10px;
     margin-top: 16px;
 }
+
+.action-add-link {
+    display: inline-block;
+    margin-top: 8px;
+    color: #007aff;
+    cursor: pointer;
+    font-size: 13px;
+}
+.action-add-link:hover { text-decoration: underline; }
+
+.action-remove-link {
+    color: #ff3b30;
+    cursor: pointer;
+    font-size: 13px;
+}
+.action-remove-link:hover { text-decoration: underline; }
 
 .pad-empty-state {
     text-align: center;
@@ -1340,10 +1362,16 @@ footer {
     user-select: none; letter-spacing: -0.5px; cursor: pointer;
 }
 .fx-hint:hover { color: rgba(0,113,227,0.85); }
+.reset-hint {
+    display: none; font-size: 11px; margin-left: 2px; vertical-align: baseline;
+    color: rgba(255,59,48,0.6); cursor: pointer; user-select: none;
+}
+.reset-hint:hover { color: rgba(255,59,48,0.9); }
 
 /* Page bindings list */
 .pad-binding-row {
     display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+    flex-wrap: wrap;
 }
 .pad-binding-row .pad-binding-name {
     width: 110px; flex-shrink: 0; padding: 5px 8px; font-size: 13px;
@@ -1409,6 +1437,9 @@ input.binding-mono {
 .style-toggle-btn.active { border-color: #007aff; color: #007aff; background: rgba(0,122,255,.08); }
 /* Mixed labels: monospace when binding detected — match binding-mono size */
 input.has-binding { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; }
+/* Binding validation error */
+input.binding-error { border-color: #ff3b30 !important; box-shadow: 0 0 0 2px rgba(255,59,48,.15) !important; }
+.binding-error-msg { display: block; color: #ff3b30; font-size: 12px; margin-top: 3px; margin-bottom: 2px; line-height: 1.3; flex-basis: 100%; }
 /* Label style wrap: flex row with input + help button */
 .label-style-wrap {
     display: flex; align-items: center; gap: 6px; margin-top: 4px;

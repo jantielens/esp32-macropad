@@ -227,3 +227,14 @@ void handleActionEditorJS(AsyncWebServerRequest *request) {
 		);
 		request->send(response);
 }
+
+void handleBindingValidatorJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_binding_validator_js_gz,
+				portal_binding_validator_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}

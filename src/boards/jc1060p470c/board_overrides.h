@@ -1,12 +1,13 @@
-#ifndef BOARD_OVERRIDES_JC4880P433_H
-#define BOARD_OVERRIDES_JC4880P433_H
+#ifndef BOARD_OVERRIDES_JC1060P470C_H
+#define BOARD_OVERRIDES_JC1060P470C_H
 
 // ============================================================================
-// GUITION JC4880P433 Board Configuration Overrides
+// GUITION JC1060P470C Board Configuration Overrides
 // ============================================================================
-// Hardware: ESP32-P4 (dual RISC-V 400 MHz) + ST7701S MIPI-DSI 480x800 + GT911 touch
+// Hardware: ESP32-P4 (dual RISC-V 360 MHz) + JD9165 MIPI-DSI 1024x600 + GT911 touch
 // WiFi: External ESP32-C6 co-processor over SDIO (no onboard Bluetooth)
-// Reference: https://github.com/csvke/esp32_p4_jc4880p433c_bsp
+// Display: 7-inch IPS, HKC QD070AS01-1 panel with JD9165 driver IC
+// Reference: https://github.com/cheops/JC1060P470C_I_W
 
 // ============================================================================
 // Capabilities
@@ -20,27 +21,28 @@
 // ============================================================================
 // Driver Selection (HAL)
 // ============================================================================
-#define DISPLAY_DRIVER DISPLAY_DRIVER_ST7701_DSI
+#define DISPLAY_DRIVER DISPLAY_DRIVER_JD9165_DSI
 // Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
-#define DISPLAY_PANEL "ST7701"
+#define DISPLAY_PANEL "JD9165"
 #define TOUCH_DRIVER TOUCH_DRIVER_GT911
 
 // ============================================================================
 // Pad Layout
 // ============================================================================
 #define DISPLAY_SHAPE DISPLAY_SHAPE_RECT
-#define UI_SCALE_TIER UI_SCALE_LARGE
+#define UI_SCALE_TIER UI_SCALE_XLARGE
 
 // ============================================================================
 // Display geometry
 // ============================================================================
-#define DISPLAY_WIDTH 480
-#define DISPLAY_HEIGHT 800
-#define DISPLAY_ROTATION 0
+#define DISPLAY_WIDTH 1024
+#define DISPLAY_HEIGHT 600
+#define DISPLAY_ROTATION 1    // Portrait: 90° CW software rotation in flush path
 
 // LVGL draw buffer: PSRAM is fine — DMA2D handles the copy to the framebuffer.
 #define LVGL_BUFFER_PREFER_INTERNAL false
-#define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 80)
+#define LVGL_BUFFER_SIZE (DISPLAY_HEIGHT * 120) // portrait logical width × 120 rows
+#define LVGL_DRAW_BUF_COUNT 2                   // double-buffer: overlap render + flush
 
 // LVGL refresh period — 15 ms (~66 fps target).
 #define LVGL_REFR_PERIOD_MS 15
@@ -51,27 +53,27 @@
 #define LCD_BL_PIN 23
 #define TFT_BACKLIGHT_ON HIGH  // Active-high backlight
 #define TFT_BACKLIGHT_PWM_CHANNEL 0
-#define TFT_BACKLIGHT_PWM_FREQ 20000  // 20 kHz (from BSP defaults)
+#define TFT_BACKLIGHT_PWM_FREQ 1000
 
 // ============================================================================
 // Panel Reset
 // ============================================================================
-#define LCD_RST_PIN 5          // From GUITION BSP
+#define LCD_RST_PIN 27         // From BSP pin definitions
 
 // ============================================================================
-// DSI Timing (from Arduino_GFX + GUITION BSP)
+// DSI Timing (from JC1060P470C BSP, HKC 7.0" IPS panel dtsi)
 // ============================================================================
-// MIPI-DSI: 2-lane, 500 Mbps/lane, 34 MHz DPI clock
-// Defaults in board_config.h match JC4880P433 — no overrides needed.
+// MIPI-DSI: 2-lane, 550 Mbps/lane, 51.2 MHz DPI clock
+// Defaults in board_config.h match JC1060P470C — no overrides needed.
 // Uncomment only if tuning is required:
-// #define ST7701_DSI_DPI_CLK_HZ        34000000L
-// #define ST7701_DSI_LANE_BIT_RATE      500
-// #define ST7701_DSI_HSYNC_PULSE_WIDTH  12
-// #define ST7701_DSI_HSYNC_BACK_PORCH   42
-// #define ST7701_DSI_HSYNC_FRONT_PORCH  42
-// #define ST7701_DSI_VSYNC_PULSE_WIDTH  2
-// #define ST7701_DSI_VSYNC_BACK_PORCH   8
-// #define ST7701_DSI_VSYNC_FRONT_PORCH  166
+// #define JD9165_DSI_DPI_CLK_HZ        51200000L
+// #define JD9165_DSI_LANE_BIT_RATE      550
+// #define JD9165_DSI_HSYNC_PULSE_WIDTH  24
+// #define JD9165_DSI_HSYNC_BACK_PORCH   136
+// #define JD9165_DSI_HSYNC_FRONT_PORCH  160
+// #define JD9165_DSI_VSYNC_PULSE_WIDTH  2
+// #define JD9165_DSI_VSYNC_BACK_PORCH   21
+// #define JD9165_DSI_VSYNC_FRONT_PORCH  12
 
 // ============================================================================
 // Touch (GT911 on I2C bus 0)
@@ -83,20 +85,30 @@
 #define TOUCH_I2C_SCL 8
 #define TOUCH_I2C_ADDR 0x5D
 #define TOUCH_I2C_ADDR_ALT 0x14
-#define TOUCH_RST -1           // No hardware reset (NC per BSP)
-#define TOUCH_INT -1           // No interrupt pin (NC per BSP)
+#define TOUCH_RST 22            // Touch reset pin (from BSP)
+#define TOUCH_INT 21            // Touch interrupt pin (from BSP)
 
 // ============================================================================
 // Audio (ES8311 codec over I2S, I2C control on shared bus 0)
-// Pin mapping from BSP: https://github.com/csvke/esp32_p4_jc4880p433c_bsp
+// Pin mapping from BSP: https://github.com/cheops/JC1060P470C_I_W
 // ============================================================================
 #define HAS_AUDIO true
 #define AUDIO_I2S_MCLK   13    // ES8311 MCLK (master clock)
 #define AUDIO_I2S_BCLK   12    // ES8311 SCLK (bit clock)
 #define AUDIO_I2S_LRCK   10    // ES8311 LRCK (word select)
 #define AUDIO_I2S_DOUT    9    // ESP32 TX → ES8311 DSDIN (codec DAC input)
-#define AUDIO_I2S_DIN    -1    // Not used (mic path on GPIO 48)
-#define AUDIO_PA_PIN     11    // Power amplifier enable (active high)
+#define AUDIO_I2S_DIN    20    // ES8311 data out (mic path, if connected)
+#define AUDIO_PA_PIN     11    // NS4150B power amplifier enable (active-HIGH, confirmed by community)
 #define AUDIO_CODEC_ADDR 0x18  // ES8311 I2C address (shared Wire bus 0)
 
-#endif // BOARD_OVERRIDES_JC4880P433_H
+// ============================================================================
+// Advanced Tuning (MIPI-DSI specific)
+// ============================================================================
+// Hide PSRAM flicker when screensaver fades (DPI FB lives in PSRAM).
+#define DISPLAY_BLANK_ON_SAVE true
+// Avoid PSRAM bus contention — disable background task telemetry.
+#define DEVICE_TELEMETRY_BACKGROUND_TASKS 0
+#define DEVICE_TELEMETRY_CPU_MONITOR 1
+#define DEVICE_TELEMETRY_HEALTH_WINDOW 1
+
+#endif // BOARD_OVERRIDES_JC1060P470C_H

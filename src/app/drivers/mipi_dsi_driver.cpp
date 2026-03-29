@@ -19,6 +19,11 @@
 #define MIPI_DSI_PHY_PWR_LDO_CHAN       3
 #define MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV 2500
 
+// Forward declaration of PPA completion callback (defined below pushColors).
+bool onPpaDone(ppa_client_handle_t client,
+               ppa_event_data_t* event_data,
+               void* user_data);
+
 // DMA2D completion callback — called from ISR when draw_bitmap finishes
 // copying the LVGL buffer into the DPI framebuffer.  Signals LVGL that
 // the draw buffer can be recycled.
@@ -31,9 +36,12 @@ static bool IRAM_ATTR onColorTransDone(esp_lcd_panel_handle_t panel,
 }
 
 MipiDsiDriver::MipiDsiDriver()
-    : framebuffer(nullptr), panel_handle(nullptr), currentBrightness(100),
+    : framebuffer(nullptr), panel_handle(nullptr), rotBuffer(nullptr), ppaClient(nullptr),
+      currentBrightness(100),
       displayWidth(DISPLAY_WIDTH), displayHeight(DISPLAY_HEIGHT), displayRotation(DISPLAY_ROTATION),
-      backlightOn(false), flushX(0), flushY(0), flushW(0), flushH(0), lvglDisplay(nullptr) {
+      backlightOn(false), flushX(0), flushY(0), flushW(0), flushH(0), lvglDisplay(nullptr),
+      physX(0), physY(0), physW(0), physH(0)
+{
 }
 
 MipiDsiDriver::~MipiDsiDriver() {
@@ -185,6 +193,27 @@ void MipiDsiDriver::init() {
     delay(50);
     setBacklightBrightness(currentBrightness);
     
+    // Rotation via PPA hardware (Pixel Processing Accelerator).
+    // The DPI panel driver does NOT support swap_xy/mirror ops, so we
+    // rotate each tile in pushColors() using PPA SRM before draw_bitmap().
+    if (displayRotation != 0) {
+        size_t rotBufSize = LVGL_BUFFER_SIZE * sizeof(uint16_t);
+        rotBufSize = (rotBufSize + 63) & ~63; // cache-line alignment
+        rotBuffer = (uint16_t*)heap_caps_aligned_alloc(64, rotBufSize, MALLOC_CAP_SPIRAM);
+        if (!rotBuffer) {
+            LOGE(tag, "Failed to allocate PPA rotation buffer (%u bytes)", (unsigned)rotBufSize);
+        } else {
+            ppa_client_config_t ppa_cfg = { .oper_type = PPA_OPERATION_SRM };
+            ESP_ERROR_CHECK(ppa_register_client(&ppa_cfg, &ppaClient));
+            // Register PPA async completion callback — chains into draw_bitmap()
+            // after each tile rotation finishes.
+            ppa_event_callbacks_t ppa_cbs = {};
+            ppa_cbs.on_trans_done = onPpaDone;
+            ESP_ERROR_CHECK(ppa_client_register_event_callbacks(ppaClient, &ppa_cbs));
+            LOGI(tag, "PPA async rotation enabled: %u byte buffer @ %p", (unsigned)rotBufSize, rotBuffer);
+        }
+    }
+
     LOGI(tag, "Display ready: %dx%d @ rotation %d", width(), height(), displayRotation);
 }
 
@@ -266,15 +295,114 @@ void MipiDsiDriver::setAddrWindow(int16_t x, int16_t y, uint16_t w, uint16_t h) 
     flushH = h;
 }
 
+// PPA completion callback — called from PPA driver when async rotation finishes.
+// Chains into draw_bitmap() which triggers DMA2D async copy to framebuffer.
+// Safe because LVGL won't issue a new pushColors() until flush_ready() fires
+// after the subsequent DMA2D copy completes (onColorTransDone ISR).
+bool onPpaDone(ppa_client_handle_t client,
+               ppa_event_data_t* event_data,
+               void* user_ctx) {
+    MipiDsiDriver* driver = (MipiDsiDriver*)user_ctx;
+    // Issue DMA2D copy of rotated buffer to framebuffer
+    esp_lcd_panel_draw_bitmap(driver->panel_handle,
+                              driver->physX, driver->physY,
+                              driver->physX + driver->physW,
+                              driver->physY + driver->physH,
+                              driver->rotBuffer);
+    // Note: DMA2D completion is handled by onColorTransDone → flush_ready
+    return false;
+}
+
 void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
     if (!panel_handle || !data || flushW == 0 || flushH == 0) {
         return;
     }
-    // DMA2D hardware async copy — coordinates: inclusive start, exclusive end
-    esp_lcd_panel_draw_bitmap(panel_handle,
-                              flushX, flushY,
-                              flushX + flushW, flushY + flushH,
-                              data);
+
+    if (displayRotation == 0 || !rotBuffer || !ppaClient) {
+        // No rotation — direct DMA2D async copy
+        esp_lcd_panel_draw_bitmap(panel_handle,
+                                  flushX, flushY,
+                                  flushX + flushW, flushY + flushH,
+                                  data);
+        return;
+    }
+
+    // Rotate tile via ESP32-P4 PPA hardware, then DMA2D copy to framebuffer.
+    // LVGL works in logical (portrait) coordinates; we transform each tile
+    // to physical (landscape) panel coordinates.
+    int px, py, pw, ph;
+    ppa_srm_rotation_angle_t angle;
+
+    if (displayRotation == 1) {
+        // 90° CW: portrait → landscape
+        // Logical (lx,ly) → Physical (displayWidth-1-ly, lx)
+        px = displayWidth - flushY - flushH;
+        py = flushX;
+        pw = flushH;
+        ph = flushW;
+        angle = PPA_SRM_ROTATION_ANGLE_270; // 270° CCW = 90° CW
+    } else if (displayRotation == 2) {
+        // 180°
+        px = displayWidth - flushX - flushW;
+        py = displayHeight - flushY - flushH;
+        pw = flushW;
+        ph = flushH;
+        angle = PPA_SRM_ROTATION_ANGLE_180;
+    } else {
+        // 270° CW (rotation == 3)
+        // Logical (lx,ly) → Physical (ly, displayHeight-1-lx)
+        px = flushY;
+        py = displayHeight - flushX - flushW;
+        pw = flushH;
+        ph = flushW;
+        angle = PPA_SRM_ROTATION_ANGLE_90; // 90° CCW = 270° CW
+    }
+
+    size_t outBufSize = (size_t)pw * ph * sizeof(uint16_t);
+    outBufSize = (outBufSize + 63) & ~63; // cache-line alignment
+
+    ppa_srm_oper_config_t srm = {};
+    srm.in.buffer = data;
+    srm.in.pic_w = flushW;
+    srm.in.pic_h = flushH;
+    srm.in.block_offset_x = 0;
+    srm.in.block_offset_y = 0;
+    srm.in.block_w = flushW;
+    srm.in.block_h = flushH;
+    srm.in.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+
+    srm.out.buffer = rotBuffer;
+    srm.out.buffer_size = outBufSize;
+    srm.out.pic_w = pw;
+    srm.out.pic_h = ph;
+    srm.out.block_offset_x = 0;
+    srm.out.block_offset_y = 0;
+    srm.out.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
+
+    srm.rotation_angle = angle;
+    srm.scale_x = 1.0f;
+    srm.scale_y = 1.0f;
+
+    // Save physical coords for PPA done callback → draw_bitmap().
+    // Safe: LVGL won't call pushColors again until flush_ready() fires.
+    physX = px;
+    physY = py;
+    physW = pw;
+    physH = ph;
+
+    // Non-blocking: PPA rotates in hardware, then onPpaDone() chains
+    // into draw_bitmap() for DMA2D copy.  Meanwhile LVGL can render
+    // the next tile into the alternate draw buffer (double buffering).
+    srm.mode = PPA_TRANS_MODE_NON_BLOCKING;
+    srm.user_data = this;
+
+    esp_err_t err = ppa_do_scale_rotate_mirror(ppaClient, &srm);
+    if (err != ESP_OK) {
+        LOGE(getLogTag(), "PPA rotate failed: 0x%x", err);
+        // Signal flush_ready so LVGL doesn't stall
+        lv_display_flush_ready(lvglDisplay);
+        return;
+    }
 }
 
 void MipiDsiDriver::configureLVGL(lv_display_t* disp, uint8_t rotation) {

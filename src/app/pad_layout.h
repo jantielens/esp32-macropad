@@ -54,6 +54,7 @@ static inline const lv_font_t* pad_font_by_size(uint8_t size) {
         case 24: return &lv_font_montserrat_24;
         case 32: return &lv_font_montserrat_32;
         case 36: return &lv_font_montserrat_36;
+        case 48: return &lv_font_montserrat_48;
         default: return nullptr;
     }
 }
@@ -65,6 +66,37 @@ static inline const lv_font_t* pad_resolve_font(const LabelStyle& style, const l
         if (f) return f;
     }
     return default_font;
+}
+
+enum PadLabelAnchorY : uint8_t {
+    PAD_LABEL_ANCHOR_TOP = 0,
+    PAD_LABEL_ANCHOR_CENTER = 1,
+    PAD_LABEL_ANCHOR_BOTTOM = 2,
+};
+
+// Apply optional runtime text upscale for hero-style labels.
+// Uses anchor-aware transform pivot to keep labels visually pinned in place.
+static inline void pad_apply_font_upscale(lv_obj_t* lbl, const LabelStyle& style, PadLabelAnchorY anchor_y) {
+    if (style.font_upscale == 0) return;
+
+    const lv_coord_t w = lv_obj_get_width(lbl);
+    lv_coord_t h = lv_obj_get_height(lbl);
+    if (h <= 0) {
+        const lv_font_t* font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
+        if (font) h = lv_font_get_line_height(font);
+    }
+
+    lv_coord_t pivot_y = h / 2;
+    if (anchor_y == PAD_LABEL_ANCHOR_TOP) {
+        pivot_y = 0;
+    } else if (anchor_y == PAD_LABEL_ANCHOR_BOTTOM) {
+        pivot_y = h;
+    }
+
+    lv_obj_set_style_transform_pivot_x(lbl, w / 2, 0);
+    lv_obj_set_style_transform_pivot_y(lbl, pivot_y, 0);
+    lv_obj_set_style_transform_scale_x(lbl, style.font_upscale, 0);
+    lv_obj_set_style_transform_scale_y(lbl, style.font_upscale, 0);
 }
 
 // Resolve LVGL text alignment from LabelStyle.

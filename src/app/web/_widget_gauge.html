@@ -96,6 +96,11 @@
                         <div class="form-group">
                             <label><input type="checkbox" id="pad-edit-gauge-show-needle" checked> Show needle</label>
                         </div>
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-anim-ms">Animation (ms)</label>
+                            <input type="number" id="pad-edit-gauge-anim-ms" min="0" max="5000" value="300" placeholder="300">
+                            <small>Transition duration in ms. 0 = instant (no animation)</small>
+                        </div>
 
                         <div class="bar-chart-colors">
                             <div class="form-group">
@@ -157,5 +162,38 @@
                                 <small>Line width (px)</small>
                             </div>
                         </div>
+
+                        <hr style="border:none;border-top:1px solid #444;margin:12px 0;">
+                        <div style="font-weight:600;margin-bottom:6px;">Target Zone &amp; Markers</div>
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-marker-value">Target Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-gauge-marker-value" maxlength="63" placeholder="e.g. [mqtt:hvac/setpoint;temperature]">
+                            </div>
+                            <small>Bindable value on the scale. Empty = no target.</small>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-marker-zone-deg">Target Zone Angle</label>
+                                <input type="number" id="pad-edit-gauge-marker-zone-deg" min="0" max="90" value="0" placeholder="0">
+                                <small>Degrees, total (0 = no zone)</small>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-gauge-marker-tick-width">Target Tick Width</label>
+                                <input type="number" id="pad-edit-gauge-marker-tick-width" min="0" max="5" value="2" placeholder="2">
+                                <small>0 = no tick line</small>
+                            </div>
+                        </div>
+                        <div class="bar-chart-colors">
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-marker-tick-color">Target Marker Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-marker-tick-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FFFFFF"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-marker-zone-color">Target Zone Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-marker-zone-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FF5722"></div>
+                            </div>
+                        </div>
+                        <small>Target zone rendered as a semi-transparent overlay</small>
                     </div>
                 </details>

@@ -100,7 +100,7 @@ The Audio section controls device volume and optional touch-feedback beep patter
 
 **Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
 
-Buttons with no action configured are completely inert — no visual tap flash and no audio cue. If the action itself is a beep action, the cue is suppressed to avoid a double-beep. Individual buttons can override or suppress the device-level pattern in the button editor's Audio Feedback section (enter `none` to silence a specific button). Swipe gestures also use the device-level tap beep.
+Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence is a beep action, the cue is suppressed to avoid a double-beep. Individual buttons can override or suppress the device-level pattern in the button editor's Audio Feedback section (enter `none` to silence a specific button). Swipe gestures also use the device-level tap beep.
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
 
@@ -168,11 +168,15 @@ The Pads page is the heart of ESP32 Macropad — this is where you design your t
 
 The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import). This is completely separate from the device config Save & Reboot footer on other pages.
 
+The **Button Defaults** section (collapsible, at the bottom of the Pads page) lets you set device-wide default colors, borders, and label styles that all buttons on all pads inherit automatically — saving you from repeating the same appearance settings on every button. Per-button overrides still take precedence.
+
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 
 For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines), label styling, dynamic colors, pad bindings (named data sources), and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
+
+All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, and expression syntax are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
 
 ---
 

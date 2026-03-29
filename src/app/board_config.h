@@ -121,9 +121,15 @@
 #define HAS_AUDIO false
 #endif
 
-// NS4150B power amplifier enable pin (active high).
+// NS4150B power amplifier enable pin.
 #ifndef AUDIO_PA_PIN
 #define AUDIO_PA_PIN -1
+#endif
+
+// PA enable polarity: false = active-HIGH (default), true = active-LOW.
+// Some boards route the PA enable through an inverting transistor.
+#ifndef AUDIO_PA_ACTIVE_LOW
+#define AUDIO_PA_ACTIVE_LOW false
 #endif
 
 // I2C address of the audio codec (e.g. ES8311 = 0x18).
@@ -336,6 +342,7 @@
 //   DISPLAY_DRIVER_ARDUINO_GFX_ST77916 (7) - Arduino_GFX ST77916 QSPI 360x360 (JC3636W518)
 //   DISPLAY_DRIVER_ST7703_DSI (8) - Direct ESP-IDF ST7703 MIPI-DSI (ESP32-P4-WIFI6-Touch-LCD-4B)
 //   DISPLAY_DRIVER_ST7701_DSI (9) - Direct ESP-IDF ST7701 MIPI-DSI (JC4880P433, ESP32-P4)
+//   DISPLAY_DRIVER_JD9165_DSI (10) - Direct ESP-IDF JD9165 MIPI-DSI (JC1060P470C, ESP32-P4)
 #define DISPLAY_DRIVER_TFT_ESPI 1
 #define DISPLAY_DRIVER_LOVYANGFX 3
 #define DISPLAY_DRIVER_ARDUINO_GFX 4
@@ -343,6 +350,7 @@
 #define DISPLAY_DRIVER_ARDUINO_GFX_ST77916 7
 #define DISPLAY_DRIVER_ST7703_DSI 8
 #define DISPLAY_DRIVER_ST7701_DSI 9
+#define DISPLAY_DRIVER_JD9165_DSI 10
 
 // Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 #ifndef DISPLAY_DRIVER
@@ -442,12 +450,54 @@
 #define ST7701_DSI_VSYNC_FRONT_PORCH 166
 #endif
 
+// DSI timing defaults for JD9165 MIPI-DSI panels (ESP32-P4, direct ESP-IDF).
+// Values from JC1060P470C BSP (HKC 7.0" IPS 1024x600), validated with vendor dtsi.
+// DPI pixel clock in Hz.
+#ifndef JD9165_DSI_DPI_CLK_HZ
+#define JD9165_DSI_DPI_CLK_HZ 51200000L
+#endif
+// MIPI-DSI lane bit rate in Mbps.
+#ifndef JD9165_DSI_LANE_BIT_RATE
+#define JD9165_DSI_LANE_BIT_RATE 550
+#endif
+// HSYNC pulse width in pixel clocks.
+#ifndef JD9165_DSI_HSYNC_PULSE_WIDTH
+#define JD9165_DSI_HSYNC_PULSE_WIDTH 24
+#endif
+// HSYNC back porch in pixel clocks.
+#ifndef JD9165_DSI_HSYNC_BACK_PORCH
+#define JD9165_DSI_HSYNC_BACK_PORCH 136
+#endif
+// HSYNC front porch in pixel clocks.
+#ifndef JD9165_DSI_HSYNC_FRONT_PORCH
+#define JD9165_DSI_HSYNC_FRONT_PORCH 160
+#endif
+// VSYNC pulse width in lines.
+#ifndef JD9165_DSI_VSYNC_PULSE_WIDTH
+#define JD9165_DSI_VSYNC_PULSE_WIDTH 2
+#endif
+// VSYNC back porch in lines.
+#ifndef JD9165_DSI_VSYNC_BACK_PORCH
+#define JD9165_DSI_VSYNC_BACK_PORCH 21
+#endif
+// VSYNC front porch in lines.
+#ifndef JD9165_DSI_VSYNC_FRONT_PORCH
+#define JD9165_DSI_VSYNC_FRONT_PORCH 12
+#endif
+
 // ============================================================================
 // LVGL Configuration
 // ============================================================================
 // LVGL draw buffer size in pixels (larger = faster, more RAM).
 #ifndef LVGL_BUFFER_SIZE
 #define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 10)  // 10 lines buffer
+#endif
+
+// Number of LVGL draw buffers (1 = single, 2 = double-buffered).
+// Double-buffering lets LVGL render the next frame while the previous one
+// is being flushed (useful with async DMA2D or PPA rotation pipelines).
+#ifndef LVGL_DRAW_BUF_COUNT
+#define LVGL_DRAW_BUF_COUNT 1
 #endif
 
 // LVGL tick period in milliseconds.

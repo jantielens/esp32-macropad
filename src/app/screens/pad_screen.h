@@ -26,6 +26,8 @@ struct RuntimeLabelBinding {
     lv_obj_t* label;                                  // LVGL label to update
     char templ[CONFIG_LABEL_MAX_LEN];                 // Original label text (template)
     char last[BINDING_TEMPLATE_MAX_LEN];              // Last rendered result (skip if unchanged)
+    LabelStyle style;                                 // Style used for alignment/font scaling
+    uint8_t anchorY;                                  // PadLabelAnchorY
     bool active;
 };
 
@@ -80,8 +82,10 @@ struct ButtonTile {
     uint8_t page;             // Page index (for HA event)
     uint8_t col;              // Grid column (for HA event)
     uint8_t row;              // Grid row (for HA event)
-    ButtonAction action;      // Tap action
-    ButtonAction lp_action;   // Long-press action
+    ButtonAction actions[MAX_BUTTON_ACTIONS];   // Tap actions (sequential)
+    uint8_t action_count;
+    ButtonAction lp_actions[MAX_BUTTON_ACTIONS]; // Long-press actions (sequential)
+    uint8_t lp_action_count;
     char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];  // Per-button tap beep override
     char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];   // Per-button long-press beep override
     // Widget runtime state (non-null widget_type = this tile is a widget)

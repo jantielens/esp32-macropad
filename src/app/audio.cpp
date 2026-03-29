@@ -45,12 +45,14 @@
 #define ES8311_DAC_REG31           0x31
 #define ES8311_DAC_REG32           0x32
 #define ES8311_DAC_REG37           0x37
+#define ES8311_GPIO_REG44          0x44
 #define ES8311_GP_REG45            0x45
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 static i2s_chan_handle_t tx_handle = NULL;
+static i2s_chan_handle_t rx_handle = NULL;  // RX channel needed for ES8311 clock generation
 static bool audio_initialized = false;
 static uint8_t current_volume = 70; // 0-100
 static const uint32_t SAMPLE_RATE = 16000;
@@ -66,7 +68,7 @@ static const uint8_t COEFF_LRCK_H    = 0x00;
 static const uint8_t COEFF_LRCK_L    = 0xFF;
 static const uint8_t COEFF_BCLK_DIV  = 0x04;
 static const uint8_t COEFF_ADC_OSR   = 0x10;
-static const uint8_t COEFF_DAC_OSR   = 0x10;
+static const uint8_t COEFF_DAC_OSR   = 0x20;
 
 // ---------------------------------------------------------------------------
 // Async playback queue
@@ -125,6 +127,10 @@ static void es8311_apply_volume(uint8_t vol_0_100) {
 // ES8311 init — matches Espressif reference driver
 // ---------------------------------------------------------------------------
 static bool es8311_init_codec() {
+    // I2C noise immunity (written twice per official driver)
+    es8311_write(ES8311_GPIO_REG44, 0x08);
+    es8311_write(ES8311_GPIO_REG44, 0x08);
+
     es8311_write(ES8311_CLK_MANAGER_REG01, 0x30);
     es8311_write(ES8311_CLK_MANAGER_REG02, 0x00);
     es8311_write(ES8311_CLK_MANAGER_REG03, 0x10);
@@ -200,17 +206,21 @@ static bool es8311_init_codec() {
     es8311_write(ES8311_SYSTEM_REG14, 0x1A);
     es8311_write(ES8311_SYSTEM_REG0D, 0x01);
     es8311_write(ES8311_ADC_REG15, 0x40);
-    es8311_write(ES8311_DAC_REG37, 0x48);
+    es8311_write(ES8311_DAC_REG37, 0x08);
     es8311_write(ES8311_GP_REG45, 0x00);
 
+    // Set internal reference signal (ADCL + DACR) — per official driver
+    es8311_write(ES8311_GPIO_REG44, 0x58);
+
     // Format: I2S Philips, 16-bit
+    // REG09/0A bits [3:2]=word_len (11=16-bit), bits [1:0]=format (00=I2S)
     dac_iface = es8311_read(ES8311_SDPIN_REG09);
-    dac_iface &= 0xFC;
+    dac_iface &= 0xF0;
     dac_iface |= 0x0C;
     es8311_write(ES8311_SDPIN_REG09, dac_iface);
 
     adc_iface = es8311_read(ES8311_SDPOUT_REG0A);
-    adc_iface &= 0xFC;
+    adc_iface &= 0xF0;
     adc_iface |= 0x0C;
     es8311_write(ES8311_SDPOUT_REG0A, adc_iface);
 
@@ -364,14 +374,16 @@ void audio_init(uint8_t initial_volume) {
     // PA on permanently (no idle management — avoids settle-time clipping)
     if (AUDIO_PA_PIN >= 0) {
         pinMode(AUDIO_PA_PIN, OUTPUT);
-        digitalWrite(AUDIO_PA_PIN, HIGH);
-        LOGI(TAG, "PA enabled (GPIO%d)", AUDIO_PA_PIN);
+        digitalWrite(AUDIO_PA_PIN, AUDIO_PA_ACTIVE_LOW ? LOW : HIGH);
+        LOGI(TAG, "PA enabled (GPIO%d, active-%s)",
+             AUDIO_PA_PIN, AUDIO_PA_ACTIVE_LOW ? "LOW" : "HIGH");
     }
 
-    // I2S channel setup
-    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    // I2S channel setup — create both TX and RX (vendor demo does full-duplex;
+    // RX channel is required for proper ES8311 clock generation on ESP32-P4)
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.auto_clear = true;
-    esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle, NULL);
+    esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle, &rx_handle);
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_new_channel failed: %s", esp_err_to_name(err));
         return;
@@ -397,27 +409,56 @@ void audio_init(uint8_t initial_volume) {
 
     err = i2s_channel_init_std_mode(tx_handle, &std_cfg);
     if (err != ESP_OK) {
-        LOGE(TAG, "i2s_channel_init_std_mode failed: %s", esp_err_to_name(err));
+        LOGE(TAG, "i2s_channel_init_std_mode(TX) failed: %s", esp_err_to_name(err));
         i2s_del_channel(tx_handle);
+        tx_handle = NULL;
+        return;
+    }
+
+    err = i2s_channel_init_std_mode(rx_handle, &std_cfg);
+    if (err != ESP_OK) {
+        LOGE(TAG, "i2s_channel_init_std_mode(RX) failed: %s", esp_err_to_name(err));
+        i2s_del_channel(rx_handle);
+        i2s_del_channel(tx_handle);
+        rx_handle = NULL;
         tx_handle = NULL;
         return;
     }
 
     err = i2s_channel_enable(tx_handle);
     if (err != ESP_OK) {
-        LOGE(TAG, "i2s_channel_enable failed: %s", esp_err_to_name(err));
+        LOGE(TAG, "i2s_channel_enable(TX) failed: %s", esp_err_to_name(err));
+        i2s_del_channel(rx_handle);
         i2s_del_channel(tx_handle);
+        rx_handle = NULL;
+        tx_handle = NULL;
+        return;
+    }
+
+    err = i2s_channel_enable(rx_handle);
+    if (err != ESP_OK) {
+        LOGE(TAG, "i2s_channel_enable(RX) failed: %s", esp_err_to_name(err));
+        i2s_channel_disable(tx_handle);
+        i2s_del_channel(rx_handle);
+        i2s_del_channel(tx_handle);
+        rx_handle = NULL;
         tx_handle = NULL;
         return;
     }
 
     LOGI(TAG, "I2S TX: %u Hz, 16-bit stereo, MCLK=%lu Hz (384x)", SAMPLE_RATE, MCLK_FREQ);
 
+    // Let MCLK stabilize before configuring codec
+    vTaskDelay(pdMS_TO_TICKS(50));
+
     // Initialize codec
     if (!es8311_init_codec()) {
         LOGE(TAG, "ES8311 init failed");
+        i2s_channel_disable(rx_handle);
         i2s_channel_disable(tx_handle);
+        i2s_del_channel(rx_handle);
         i2s_del_channel(tx_handle);
+        rx_handle = NULL;
         tx_handle = NULL;
         return;
     }
@@ -427,8 +468,9 @@ void audio_init(uint8_t initial_volume) {
 
     // Create command queue and audio task
     // Priority 5: above LVGL (4) to avoid I2S DMA underruns during heavy rendering
+    // Stack 6144: RISC-V (P4) needs ~50% more stack than Xtensa (S3) per call frame
     audio_queue = xQueueCreate(AUDIO_QUEUE_DEPTH, sizeof(AudioCommand));
-    xTaskCreatePinnedToCore(audio_task, "audio", 4096, NULL, 5, &audio_task_handle, 1);
+    xTaskCreatePinnedToCore(audio_task, "audio", 6144, NULL, 5, &audio_task_handle, 1);
 
     audio_initialized = true;
     LOGI(TAG, "Audio ready (volume=%u%%, PA always-on)", current_volume);

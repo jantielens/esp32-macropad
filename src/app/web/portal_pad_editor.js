@@ -3,6 +3,8 @@
 
 // ===== PAD CONFIGURATION =====
 
+const MAX_ACTIONS = 3; // Must match MAX_BUTTON_ACTIONS in pad_config.h
+
 const padState = {
     page: 0,
     rawJson: null,   // Original GET response (for merge-on-save)
@@ -15,6 +17,9 @@ const padState = {
     padClipboard: null,  // Copied pad settings { cols, rows, buttons, name }
     bindings: [],        // Page-level named bindings [{name, value}]
     colorCache: {},      // page → hex[] — colors from visited pads
+    buttonDefaults: {},  // Device-level button defaults (loaded from /api/button-defaults)
+    templatePad: -1,     // Template pad index (-1 = none)
+    templateButtons: [], // Buttons loaded from template pad (for ghost rendering)
 };
 
 let padDirty = false;
@@ -73,6 +78,72 @@ function padIconIdToType(iconId) {
     if (iconId.startsWith('emoji_')) return { type: 'emoji', value: iconId.substring(6) };
     if (iconId.startsWith('mi_')) return { type: 'mi', value: iconId.substring(3) };
     return { type: '', value: '' };
+}
+
+// Shared cell content renderer for normal and ghost buttons.
+// Sets colors, border, labels, icon, and bg-image placeholder on the cell div.
+function padRenderCellContent(cell, btn) {
+    const bg = padColorToHex(btn.bg_color, padGetEffectiveDefault('bg_color'));
+    const fg = padColorToHex(btn.fg_color, padGetEffectiveDefault('fg_color'));
+    cell.style.background = bg;
+    cell.style.color = fg;
+    const borderColor = padColorToHex(btn.border_color, padGetEffectiveDefault('border_color'));
+    const borderWidth = (btn.border_width !== undefined) ? btn.border_width : padGetEffectiveDefault('border_width');
+    const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : padGetEffectiveDefault('corner_radius');
+    cell.style.border = borderWidth + 'px solid ' + borderColor;
+    cell.style.borderRadius = cornerRadius + 'px';
+    const hasTop = !!btn.label_top;
+    const hasBottom = !!btn.label_bottom;
+    if (hasTop || hasBottom) cell.style.justifyContent = 'space-between';
+    if (hasTop) {
+        const el = document.createElement('div');
+        el.className = 'pad-cell-label-top';
+        el.textContent = padSimplifyBindings(btn.label_top);
+        cell.appendChild(el);
+    } else if (hasBottom) {
+        cell.appendChild(document.createElement('div'));
+    }
+    if (btn.bg_image_url) {
+        const img = document.createElement('div');
+        img.className = 'pad-cell-image-placeholder';
+        img.textContent = '\u{1F5BC}';
+        cell.appendChild(img);
+    }
+    if (btn.icon_id) {
+        const iconParsed = padIconIdToType(btn.icon_id);
+        if (iconParsed.type === 'emoji') {
+            const el = document.createElement('div');
+            el.className = 'pad-cell-icon';
+            el.textContent = iconParsed.value;
+            cell.appendChild(el);
+        } else if (iconParsed.type === 'mi') {
+            padEnsureMaterialSymbols();
+            const el = document.createElement('span');
+            el.className = 'material-symbols-outlined pad-cell-icon';
+            el.textContent = iconParsed.value;
+            el.style.color = fg;
+            cell.appendChild(el);
+        }
+    } else if (!btn.bg_image_url) {
+        const centerText = btn.label_center || '\u2022';
+        const elc = document.createElement('div');
+        elc.className = 'pad-cell-label-center';
+        elc.textContent = padSimplifyBindings(centerText);
+        cell.appendChild(elc);
+    } else if (btn.label_center) {
+        const elc = document.createElement('div');
+        elc.className = 'pad-cell-label-center';
+        elc.textContent = padSimplifyBindings(btn.label_center);
+        cell.appendChild(elc);
+    }
+    if (hasBottom) {
+        const el = document.createElement('div');
+        el.className = 'pad-cell-label-bottom';
+        el.textContent = padSimplifyBindings(btn.label_bottom);
+        cell.appendChild(el);
+    } else if (hasTop) {
+        cell.appendChild(document.createElement('div'));
+    }
 }
 
 function padBuildIconId() {
@@ -277,13 +348,33 @@ function padInit() {
     const section = document.getElementById('pad-config-section');
     if (!section) return;
 
-    // Generate action editor HTML from shared module
+    // Generate action editor HTML from shared module — up to 3 sequential actions per gesture.
+    // Slots 2 and 3 start hidden (progressive disclosure via "+ Add" link).
     const aeContainer = document.getElementById('pad-action-editors');
     if (aeContainer) {
-        aeContainer.innerHTML =
-            actionEditorHTML('pad-edit-action', 'Tap Action', { showBleHint: true, showKeyHelp: true }) +
+        var tapHtml = '';
+        var lpHtml = '';
+        var aeOpts = { showBleHint: true, showKeyHelp: true };
+        for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+            var tapPfx = 'pad-edit-action-' + ai;
+            var lpPfx = 'pad-edit-lp-action-' + ai;
+            var tapLabel = ai === 0 ? 'Tap Action' : 'Tap Action ' + (ai + 1);
+            var lpLabel = ai === 0 ? 'Long-Press Action' : 'Long-Press Action ' + (ai + 1);
+            var hidden = ai > 0 ? ' style="display:none"' : '';
+            tapHtml += '<div id="' + tapPfx + '-wrap"' + hidden + '>';
+            if (ai > 0) tapHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><span></span><a class="action-remove-link" onclick="padRemoveAction(\'tap\',' + ai + ')">&times; Remove</a></div>';
+            tapHtml += actionEditorHTML(tapPfx, tapLabel, aeOpts);
+            tapHtml += '</div>';
+            lpHtml += '<div id="' + lpPfx + '-wrap"' + hidden + '>';
+            if (ai > 0) lpHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><span></span><a class="action-remove-link" onclick="padRemoveAction(\'lp\',' + ai + ')">&times; Remove</a></div>';
+            lpHtml += actionEditorHTML(lpPfx, lpLabel, aeOpts);
+            lpHtml += '</div>';
+        }
+        tapHtml += '<a id="pad-add-tap-action" class="action-add-link" onclick="padAddAction(\'tap\')">+ Add tap action</a>';
+        lpHtml += '<a id="pad-add-lp-action" class="action-add-link" onclick="padAddAction(\'lp\')">+ Add long-press action</a>';
+        aeContainer.innerHTML = tapHtml +
             '<hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">' +
-            actionEditorHTML('pad-edit-lp-action', 'Long-Press Action', { showBleHint: true, showKeyHelp: true });
+            lpHtml;
     }
 
     document.getElementById('pad-page-select').addEventListener('change', (e) => {
@@ -308,11 +399,18 @@ function padInit() {
         padMarkDirty();
         padRenderGrid();
     });
+    document.getElementById('pad-template-pad').addEventListener('change', async (e) => {
+        padState.templatePad = parseInt(e.target.value);
+        padMarkDirty();
+        await padLoadTemplateButtons();
+        padRenderGrid();
+    });
 
     document.getElementById('pad-save-btn').addEventListener('click', padSavePage);
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
     document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
     document.getElementById('pad-binding-add').addEventListener('click', padAddBinding);
+    document.getElementById('btn-defaults-save-btn').addEventListener('click', padSaveButtonDefaults);
 
     // More menu toggle
     const moreBtn = document.getElementById('pad-more-btn');
@@ -334,6 +432,12 @@ function padInit() {
     document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
     document.getElementById('pad-edit-cancel').addEventListener('click', padDialogClose);
+
+    // Wire appearance field input listeners for reset-hint visibility (once)
+    PAD_APPEARANCE_FIELDS.forEach(function(f) {
+        var el = document.getElementById(f.input);
+        if (el) el.addEventListener('input', padUpdateResetHints);
+    });
 
     // Pad-level actions
     document.getElementById('pad-fill-btn').addEventListener('click', padFillWithClipboard);
@@ -376,6 +480,9 @@ function padInit() {
                 section.style.display = 'block';
                 const padFooter = document.getElementById('pad-floating-footer');
                 if (padFooter) padFooter.style.display = '';
+                // Show button defaults section
+                var btnDefSec = document.getElementById('btn-defaults-section');
+                if (btnDefSec) btnDefSec.style.display = 'block';
                 // Show audio feedback section in button editor if device has audio
                 if (deviceInfoCache.has_audio === true) {
                     var audioSec = document.getElementById('pad-edit-audio-section');
@@ -383,6 +490,7 @@ function padInit() {
                 }
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
+                padLoadButtonDefaultsFromDevice();
                 padLoadPage(0);
                 padRefreshDropdownLabels();
             } else {
@@ -409,9 +517,51 @@ function padPopulatePadDropdown() {
     }
 }
 
+// Populate the template pad dropdown, excluding the current page
+function padPopulateTemplateDropdown(currentPage) {
+    const sel = document.getElementById('pad-template-pad');
+    if (!sel) return;
+    const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
+    sel.innerHTML = '';
+    const noneOpt = document.createElement('option');
+    noneOpt.value = -1;
+    noneOpt.textContent = '(none)';
+    sel.appendChild(noneOpt);
+    const screens = (deviceInfoCache && deviceInfoCache.available_screens) || [];
+    for (let i = 0; i < maxPads; i++) {
+        if (i === currentPage) continue;
+        const opt = document.createElement('option');
+        opt.value = i;
+        // Try to find a friendly name from available_screens
+        const scr = screens.find(s => s.id === 'pad_' + i);
+        opt.textContent = scr ? scr.name : 'Pad ' + (i + 1);
+        sel.appendChild(opt);
+    }
+    sel.value = padState.templatePad;
+}
+
+// Load template buttons asynchronously for ghost rendering
+async function padLoadTemplateButtons() {
+    padState.templateButtons = [];
+    if (padState.templatePad < 0) return;
+    try {
+        const resp = await fetch('/api/pad?page=' + padState.templatePad);
+        if (!resp.ok) return;
+        const json = await resp.json();
+        padState.templateButtons = (json.buttons && Array.isArray(json.buttons)) ? json.buttons : [];
+    } catch (e) {
+        // Silently ignore — template just won't show ghosts
+    }
+}
+
 function padPopulateScreenDropdown() {
+    var prefixes = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        prefixes.push('pad-edit-action-' + i);
+        prefixes.push('pad-edit-lp-action-' + i);
+    }
     actionEditorPopulateScreens(
-        ['pad-edit-action', 'pad-edit-lp-action'],
+        prefixes,
         deviceInfoCache ? deviceInfoCache.available_screens : null
     );
     // Populate wake-screen dropdown (keep first "(stay on this screen)" option)
@@ -427,9 +577,43 @@ function padPopulateScreenDropdown() {
     }
 }
 
-function padActionTypeChanged(prefix) {
-    const pfx = 'pad-edit-' + ((prefix === 'lp') ? 'lp-action' : 'action');
-    actionEditorTypeChanged(pfx);
+// Show the next hidden action slot for tap or lp
+function padAddAction(gesture) {
+    var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
+    for (var i = 1; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById(pfx + i + '-wrap');
+        if (wrap && wrap.style.display === 'none') {
+            wrap.style.display = '';
+            padMarkDirty();
+            break;
+        }
+    }
+    padUpdateAddLink(gesture);
+}
+
+// Remove (hide + clear) an action slot
+function padRemoveAction(gesture, index) {
+    var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
+    var wrap = document.getElementById(pfx + index + '-wrap');
+    if (wrap) {
+        wrap.style.display = 'none';
+        actionEditorLoad(pfx + index, null);
+    }
+    padMarkDirty();
+    padUpdateAddLink(gesture);
+}
+
+// Show/hide the "+ Add" link based on how many slots are visible
+function padUpdateAddLink(gesture) {
+    var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
+    var linkId = (gesture === 'lp') ? 'pad-add-lp-action' : 'pad-add-tap-action';
+    var visibleCount = 0;
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById(pfx + i + '-wrap');
+        if (wrap && wrap.style.display !== 'none') visibleCount++;
+    }
+    var link = document.getElementById(linkId);
+    if (link) link.style.display = (visibleCount >= 3) ? 'none' : '';
 }
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline'];
@@ -447,6 +631,8 @@ async function padLoadPage(page) {
     padState.rawJson = null;
     padState.buttons = [];
     padState.bindings = [];
+    padState.templatePad = -1;
+    padState.templateButtons = [];
     padClearDirty();
 
     try {
@@ -462,7 +648,10 @@ async function padLoadPage(page) {
             padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
             padSetBindableColor('pad-edit-page-bg-color', '#000000');
             padState.bindings = [];
+            padState.templatePad = -1;
+            padState.templateButtons = [];
             padRenderBindings();
+            padPopulateTemplateDropdown(page);
             padCacheColors(page, [], '#000000');
             padRenderGrid();
             return;
@@ -484,6 +673,11 @@ async function padLoadPage(page) {
         // Load pad bindings
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
+
+        // Load template pad setting
+        padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null) ? json.template_pad : -1;
+        padPopulateTemplateDropdown(page);
+        await padLoadTemplateButtons();
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -520,6 +714,29 @@ function padIsCellOccupied(col, row) {
         }
     }
     return null;
+}
+
+// Find a template button whose origin is at (col, row)
+function padFindTemplateButton(col, row) {
+    return padState.templateButtons.find(b => b.col === col && b.row === row) || null;
+}
+
+// Check whether a template button can be placed (mirrors backend merge_template_buttons occupancy check).
+// Returns false when any span cell is out of bounds or occupied by the target pad's own buttons.
+function padCanPlaceTemplateButton(tplBtn) {
+    const cols = padState.cols, rows = padState.rows;
+    const cs = tplBtn.col_span || 1, rs = tplBtn.row_span || 1;
+    for (let dc = 0; dc < cs; dc++) {
+        for (let dr = 0; dr < rs; dr++) {
+            const c = tplBtn.col + dc, r = tplBtn.row + dr;
+            if (c >= cols || r >= rows) return false;
+            if (padState.buttons.some(b => {
+                const bcs = b.col_span || 1, brs = b.row_span || 1;
+                return c >= b.col && c < b.col + bcs && r >= b.row && r < b.row + brs;
+            })) return false;
+        }
+    }
+    return true;
 }
 
 function padRenderGrid() {
@@ -577,78 +794,7 @@ function padRenderGrid() {
                 if (cs > 1) cell.style.gridColumn = 'span ' + cs;
                 if (rs > 1) cell.style.gridRow = 'span ' + rs;
 
-                const bg = padColorToHex(btn.bg_color, '#333333');
-                const fg = padColorToHex(btn.fg_color, '#ffffff');
-                cell.style.background = bg;
-                cell.style.color = fg;
-
-
-
-                const borderColor = padColorToHex(btn.border_color, '#000000');
-                const borderWidth = (btn.border_width !== undefined) ? btn.border_width : 1;
-                const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
-                cell.style.border = borderWidth + 'px solid ' + borderColor;
-                cell.style.borderRadius = cornerRadius + 'px';
-
-                // Spread labels to edges when top or bottom labels are present
-                const hasTop = !!btn.label_top;
-                const hasBottom = !!btn.label_bottom;
-                if (hasTop || hasBottom) {
-                    cell.style.justifyContent = 'space-between';
-                }
-
-                if (hasTop) {
-                    const el = document.createElement('div');
-                    el.className = 'pad-cell-label-top';
-                    el.textContent = padSimplifyBindings(btn.label_top);
-                    cell.appendChild(el);
-                } else if (hasBottom) {
-                    // Spacer so center content stays centered with space-between
-                    cell.appendChild(document.createElement('div'));
-                }
-                // Background image placeholder (absolute-positioned behind content)
-                if (btn.bg_image_url) {
-                    const img = document.createElement('div');
-                    img.className = 'pad-cell-image-placeholder';
-                    img.textContent = '\u{1F5BC}';
-                    cell.appendChild(img);
-                }
-                if (btn.icon_id) {
-                    const iconParsed = padIconIdToType(btn.icon_id);
-                    if (iconParsed.type === 'emoji') {
-                        const el = document.createElement('div');
-                        el.className = 'pad-cell-icon';
-                        el.textContent = iconParsed.value;
-                        cell.appendChild(el);
-                    } else if (iconParsed.type === 'mi') {
-                        padEnsureMaterialSymbols();
-                        const el = document.createElement('span');
-                        el.className = 'material-symbols-outlined pad-cell-icon';
-                        el.textContent = iconParsed.value;
-                        el.style.color = fg;
-                        cell.appendChild(el);
-                    }
-                } else if (!btn.bg_image_url) {
-                    const centerText = btn.label_center || '•';
-                    const elc = document.createElement('div');
-                    elc.className = 'pad-cell-label-center';
-                    elc.textContent = padSimplifyBindings(centerText);
-                    cell.appendChild(elc);
-                } else if (btn.label_center) {
-                    const elc = document.createElement('div');
-                    elc.className = 'pad-cell-label-center';
-                    elc.textContent = padSimplifyBindings(btn.label_center);
-                    cell.appendChild(elc);
-                }
-                if (hasBottom) {
-                    const el = document.createElement('div');
-                    el.className = 'pad-cell-label-bottom';
-                    el.textContent = padSimplifyBindings(btn.label_bottom);
-                    cell.appendChild(el);
-                } else if (hasTop) {
-                    // Spacer so center content stays centered with space-between
-                    cell.appendChild(document.createElement('div'));
-                }
+                padRenderCellContent(cell, btn);
 
                 // Widget indicator
                 if (btn.widget_type === 'bar_chart') {
@@ -672,8 +818,27 @@ function padRenderGrid() {
 
                 cell.addEventListener('click', () => padDialogOpen(c, r));
             } else {
-                cell.classList.add('pad-cell-empty');
-                cell.textContent = '+';
+                // Check if a template button occupies this position
+                const tplBtn = padFindTemplateButton(c, r);
+                if (tplBtn && padCanPlaceTemplateButton(tplBtn)) {
+                    cell.classList.add('pad-cell-btn', 'pad-cell-ghost');
+                    const cs = Math.min(tplBtn.col_span || 1, cols - c);
+                    const rs = Math.min(tplBtn.row_span || 1, rows - r);
+                    if (cs > 1) cell.style.gridColumn = 'span ' + cs;
+                    if (rs > 1) cell.style.gridRow = 'span ' + rs;
+                    padRenderCellContent(cell, tplBtn);
+                    // Mark cells covered by this template button's span
+                    for (let dc = 0; dc < cs; dc++) {
+                        for (let dr = 0; dr < rs; dr++) {
+                            if (dc === 0 && dr === 0) continue;
+                            covered.add((c + dc) + ',' + (r + dr));
+                        }
+                    }
+                    cell.title = 'Inherited from template pad';
+                } else {
+                    cell.classList.add('pad-cell-empty');
+                    cell.textContent = '+';
+                }
                 cell.addEventListener('click', () => padDialogOpen(c, r));
             }
 
@@ -739,6 +904,136 @@ function syncLabelStyleVisibility(slot) {
     btn.classList.toggle('active', hasValue);
 }
 
+// --- Button Defaults helpers ---
+
+// Firmware hardcoded defaults (must match init_button_defaults in pad_config.cpp)
+const PAD_FIRMWARE_DEFAULTS = {
+    bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000',
+    border_width: '0', corner_radius: '8',
+};
+
+// Load device-level button defaults from the REST API
+async function padLoadButtonDefaultsFromDevice() {
+    try {
+        const resp = await fetch('/api/button-defaults');
+        if (resp.ok) {
+            const defs = await resp.json();
+            padState.buttonDefaults = defs || {};
+        } else {
+            padState.buttonDefaults = {};
+        }
+    } catch (e) {
+        console.error('Failed to load button defaults:', e);
+        padState.buttonDefaults = {};
+    }
+    padLoadButtonDefaults(padState.buttonDefaults);
+}
+
+function padLoadButtonDefaults(defs) {
+    padState.buttonDefaults = defs || {};
+    // Init bindable color controls
+    ['pad-def-bg-color-wrap', 'pad-def-fg-color-wrap', 'pad-def-border-color-wrap'].forEach(id => {
+        var el = document.getElementById(id);
+        if (el) padInitBindableColor(el);
+    });
+    padSetBindableColor('pad-def-bg-color', defs.bg_color || '', PAD_FIRMWARE_DEFAULTS.bg_color);
+    padSetBindableColor('pad-def-fg-color', defs.fg_color || '', PAD_FIRMWARE_DEFAULTS.fg_color);
+    padSetBindableColor('pad-def-border-color', defs.border_color || '', PAD_FIRMWARE_DEFAULTS.border_color);
+    document.getElementById('pad-def-border-width').value = defs.border_width || '';
+    document.getElementById('pad-def-corner-radius').value = defs.corner_radius || '';
+    document.getElementById('pad-def-label-top-style').value = defs.label_top_style || '';
+    document.getElementById('pad-def-label-center-style').value = defs.label_center_style || '';
+    document.getElementById('pad-def-label-bottom-style').value = defs.label_bottom_style || '';
+
+}
+
+function padCollectButtonDefaults() {
+    var d = {};
+    var bgc = padGetBindableColor('pad-def-bg-color');
+    var fgc = padGetBindableColor('pad-def-fg-color');
+    var bdc = padGetBindableColor('pad-def-border-color');
+    if (bgc) d.bg_color = bgc;
+    if (fgc) d.fg_color = fgc;
+    if (bdc) d.border_color = bdc;
+    var bw = document.getElementById('pad-def-border-width').value.trim();
+    if (bw) d.border_width = bw;
+    var cr = document.getElementById('pad-def-corner-radius').value.trim();
+    if (cr) d.corner_radius = cr;
+    var lts = document.getElementById('pad-def-label-top-style').value.trim();
+    if (lts) d.label_top_style = lts;
+    var lcs = document.getElementById('pad-def-label-center-style').value.trim();
+    if (lcs) d.label_center_style = lcs;
+    var lbs = document.getElementById('pad-def-label-bottom-style').value.trim();
+    if (lbs) d.label_bottom_style = lbs;
+
+    return d;
+}
+
+// Save device-level button defaults to /api/button-defaults
+async function padSaveButtonDefaults() {
+    var d = padCollectButtonDefaults();
+    try {
+        var resp = await fetch('/api/button-defaults', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(d),
+        });
+        if (!resp.ok) {
+            var err = await resp.json().catch(function() { return {}; });
+            throw new Error(err.error || 'HTTP ' + resp.status);
+        }
+        padState.buttonDefaults = d;
+        showMessage('Button defaults saved', 'success');
+        // Re-render current pad grid to reflect updated defaults
+        padRenderGrid();
+    } catch (err) {
+        console.error('padSaveButtonDefaults error:', err);
+        showMessage('Save failed: ' + err.message, 'error');
+    }
+}
+
+// Get the effective default for a button appearance field (pad default → firmware default)
+function padGetEffectiveDefault(field) {
+    var d = padState.buttonDefaults || {};
+    if (d[field]) return d[field];
+    return PAD_FIRMWARE_DEFAULTS[field] || '';
+}
+
+// Reset a button appearance field to the effective default and update the reset hint
+function padResetAppearance(inputId, defaultKey) {
+    var eff = padGetEffectiveDefault(defaultKey);
+    var el = document.getElementById(inputId);
+    if (!el) return;
+    // Color fields use the bindable-color component
+    if (el.classList.contains('bc-input')) {
+        padSetBindableColor(inputId, eff);
+    } else {
+        el.value = eff;
+    }
+    padUpdateResetHints();
+}
+
+// Mapping of input IDs → default key names for appearance fields
+var PAD_APPEARANCE_FIELDS = [
+    { input: 'pad-edit-bg-color', key: 'bg_color', isColor: true },
+    { input: 'pad-edit-fg-color', key: 'fg_color', isColor: true },
+    { input: 'pad-edit-border-color', key: 'border_color', isColor: true },
+    { input: 'pad-edit-border-width', key: 'border_width', isColor: false },
+    { input: 'pad-edit-corner-radius', key: 'corner_radius', isColor: false }
+];
+
+// Show/hide reset hints based on whether each field differs from its effective default
+function padUpdateResetHints() {
+    PAD_APPEARANCE_FIELDS.forEach(function(f) {
+        var el = document.getElementById(f.input);
+        var resetEl = document.getElementById(f.input + '-reset');
+        if (!el || !resetEl) return;
+        var val = el.value.trim().toLowerCase();
+        var eff = (padGetEffectiveDefault(f.key) || '').toLowerCase();
+        resetEl.style.display = (val && val !== eff) ? 'inline' : 'none';
+    });
+}
+
 // --- Pad Bindings helpers ---
 
 function padRenderBindings() {
@@ -762,10 +1057,13 @@ function padRenderBindings() {
             this.title = ok ? '' : 'Must start with a letter; only letters, digits, and underscores allowed';
             padMarkDirty();
         });
-        row.querySelector('.pad-binding-value').addEventListener('input', function() {
+        var valueInput = row.querySelector('.pad-binding-value');
+        valueInput.addEventListener('input', function() {
             padState.bindings[idx].value = this.value;
             padMarkDirty();
+            if (this.classList.contains('binding-error')) bindingClearError(this);
         });
+        if (typeof bindingAttachValidation === 'function') bindingAttachValidation(valueInput);
         row.querySelector('.pad-binding-del').addEventListener('click', function() {
             padState.bindings.splice(idx, 1);
             padRenderBindings();
@@ -853,6 +1151,9 @@ function padDialogOpen(col, row) {
     // Refresh target screen dropdowns so pad names are current
     padPopulateScreenDropdown();
 
+    // Sync device-level button defaults from the DOM into padState so placeholders are current
+    padState.buttonDefaults = padCollectButtonDefaults();
+
     const btn = padFindButton(col, row) || {};
 
     document.getElementById('pad-edit-title').textContent =
@@ -864,6 +1165,10 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-label-top-style').value = btn.label_top_style || '';
     document.getElementById('pad-edit-label-center-style').value = btn.label_center_style || '';
     document.getElementById('pad-edit-label-bottom-style').value = btn.label_bottom_style || '';
+    // Set label style placeholders from pad defaults
+    document.getElementById('pad-edit-label-top-style').placeholder = padState.buttonDefaults.label_top_style || 'font:24;align:left;mode:dot';
+    document.getElementById('pad-edit-label-center-style').placeholder = padState.buttonDefaults.label_center_style || 'font:24;align:left;mode:dot';
+    document.getElementById('pad-edit-label-bottom-style').placeholder = padState.buttonDefaults.label_bottom_style || 'font:24;align:left;mode:dot';
     ['top', 'center', 'bottom'].forEach(syncLabelStyleVisibility);
 
     // Wire and init monospace toggle for mixed-binding label inputs
@@ -881,17 +1186,30 @@ function padDialogOpen(col, row) {
     // Initialize bindable color components and set values
     document.querySelectorAll('.pad-edit-modal .bindable-color').forEach(padInitBindableColor);
 
-    padSetBindableColor('pad-edit-bg-color', btn.bg_color || '#333333');
-    padSetBindableColor('pad-edit-fg-color', btn.fg_color || '#ffffff');
-    padSetBindableColor('pad-edit-border-color', btn.border_color || '#000000');
+    // Use pad defaults as fallback when button has no explicit color
+    var effBg = padGetEffectiveDefault('bg_color');
+    var effFg = padGetEffectiveDefault('fg_color');
+    var effBorder = padGetEffectiveDefault('border_color');
+    padSetBindableColor('pad-edit-bg-color', btn.bg_color || effBg);
+    padSetBindableColor('pad-edit-fg-color', btn.fg_color || effFg);
+    padSetBindableColor('pad-edit-border-color', btn.border_color || effBorder);
 
-    // Auto-open colors section if any color has a binding
-    document.getElementById('pad-edit-colors-section').open =
-        padIsBinding(btn.bg_color) || padIsBinding(btn.fg_color) || padIsBinding(btn.border_color);
+    // Auto-open colors section if any color has a binding or custom override
+    var hasColorOverride = btn.bg_color || btn.fg_color || btn.border_color ||
+        (btn.border_width !== undefined) || (btn.corner_radius !== undefined);
+    document.getElementById('pad-edit-colors-section').open = !!hasColorOverride;
 
-    document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : 0;
-    document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : 8;
+    var effBw = padGetEffectiveDefault('border_width');
+    var effCr = padGetEffectiveDefault('corner_radius');
+    document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : effBw;
+    document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : effCr;
+    // Set placeholders to show what the pad default is
+    document.getElementById('pad-edit-border-width').placeholder = effBw;
+    document.getElementById('pad-edit-corner-radius').placeholder = effCr;
     document.getElementById('pad-edit-ui-offset').value = btn.ui_offset || '';
+
+    // Update reset-hint visibility for appearance fields
+    padUpdateResetHints();
 
     // Populate col_span / row_span dropdowns based on available space
     const maxCs = padState.cols - col;
@@ -913,15 +1231,33 @@ function padDialogOpen(col, row) {
         rsSel.appendChild(o);
     }
 
-    // Tap action
-    actionEditorLoad('pad-edit-action', btn.action);
+    // Tap actions (array of up to 3)
+    var tapActions = btn.actions || [];
+    // Legacy single-action fallback
+    if (!tapActions.length && btn.action && btn.action.type) tapActions = [btn.action];
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        actionEditorLoad('pad-edit-action-' + ai, tapActions[ai] || null);
+        var wrap = document.getElementById('pad-edit-action-' + ai + '-wrap');
+        if (wrap) wrap.style.display = (ai === 0 || (tapActions[ai] && tapActions[ai].type)) ? '' : 'none';
+    }
+    padUpdateAddLink('tap');
 
-    // Long-press action
-    actionEditorLoad('pad-edit-lp-action', btn.lp_action);
+    // Long-press actions (array of up to 3)
+    var lpActions = btn.lp_actions || [];
+    // Legacy single-action fallback
+    if (!lpActions.length && btn.lp_action && btn.lp_action.type) lpActions = [btn.lp_action];
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        actionEditorLoad('pad-edit-lp-action-' + ai, lpActions[ai] || null);
+        var wrap = document.getElementById('pad-edit-lp-action-' + ai + '-wrap');
+        if (wrap) wrap.style.display = (ai === 0 || (lpActions[ai] && lpActions[ai].type)) ? '' : 'none';
+    }
+    padUpdateAddLink('lp');
 
     // Audio feedback overrides
     document.getElementById('pad-edit-tap-beep').value = btn.tap_beep || '';
     document.getElementById('pad-edit-lp-beep').value = btn.lp_beep || '';
+    document.getElementById('pad-edit-tap-beep').placeholder = 'device default';
+    document.getElementById('pad-edit-lp-beep').placeholder = 'device default';
     var audioSec = document.getElementById('pad-edit-audio-section');
     if (audioSec) audioSec.open = !!(btn.tap_beep || btn.lp_beep);
 
@@ -954,6 +1290,7 @@ function padDialogOpen(col, row) {
     padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, '#1A1A1A');
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
     document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
+    document.getElementById('pad-edit-widget-bar-anim-ms').value = (btn.widget_anim_ms !== undefined) ? btn.widget_anim_ms : 300;
 
     // Gauge widget fields
     document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
@@ -972,6 +1309,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-dual-binding-pair-1').checked = (btn.widget_gauge_dual_binding_pair_1 !== undefined) ? btn.widget_gauge_dual_binding_pair_1 : false;
     document.getElementById('pad-edit-gauge-dual-binding-pair-2').checked = (btn.widget_gauge_dual_binding_pair_2 !== undefined) ? btn.widget_gauge_dual_binding_pair_2 : false;
     document.getElementById('pad-edit-gauge-show-needle').checked = (btn.widget_gauge_show_needle !== undefined) ? btn.widget_gauge_show_needle : true;
+    document.getElementById('pad-edit-gauge-anim-ms').value = (btn.widget_anim_ms !== undefined) ? btn.widget_anim_ms : 300;
     padSetBindableColor('pad-edit-gauge-arc-color', btn.widget_arc_color, '#4CAF50');
     padSetBindableColor('pad-edit-gauge-arc-color-2', btn.widget_arc_color_2, '#2196F3');
     padSetBindableColor('pad-edit-gauge-arc-color-3', btn.widget_arc_color_3, '#9C27B0');
@@ -983,6 +1321,11 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-ticks').value = (btn.widget_gauge_ticks !== undefined) ? btn.widget_gauge_ticks : 5;
     document.getElementById('pad-edit-gauge-needle-width').value = (btn.widget_gauge_needle_width !== undefined) ? btn.widget_gauge_needle_width : 2;
     document.getElementById('pad-edit-gauge-tick-width').value = (btn.widget_gauge_tick_width !== undefined) ? btn.widget_gauge_tick_width : 1;
+    document.getElementById('pad-edit-gauge-marker-value').value = btn.widget_gauge_marker_value || '';
+    document.getElementById('pad-edit-gauge-marker-zone-deg').value = (btn.widget_gauge_marker_zone_deg !== undefined) ? btn.widget_gauge_marker_zone_deg : 0;
+    document.getElementById('pad-edit-gauge-marker-tick-width').value = (btn.widget_gauge_marker_tick_width !== undefined) ? btn.widget_gauge_marker_tick_width : 2;
+    padSetBindableColor('pad-edit-gauge-marker-tick-color', btn.widget_gauge_marker_tick_color, '#FFFFFF');
+    padSetBindableColor('pad-edit-gauge-marker-zone-color', btn.widget_gauge_marker_zone_color, '#FF5722');
 
     // Sparkline widget fields
     document.getElementById('pad-edit-sparkline-data-binding').value = btn.widget_data_binding || '';
@@ -1081,24 +1424,39 @@ function padDialogOk(keepOpen) {
     if (lcs) btn.label_center_style = lcs;
     if (lbs) btn.label_bottom_style = lbs;
 
-    btn.bg_color = padGetBindableColor('pad-edit-bg-color') || '#333333';
-    btn.fg_color = padGetBindableColor('pad-edit-fg-color') || '#ffffff';
-    btn.border_color = padGetBindableColor('pad-edit-border-color') || '#000000';
+    // Only store appearance values that differ from the effective device default,
+    // so that changing device-level button defaults propagates to existing buttons.
+    var _bg = padGetBindableColor('pad-edit-bg-color');
+    if (_bg && _bg !== padGetEffectiveDefault('bg_color')) btn.bg_color = _bg;
+    var _fg = padGetBindableColor('pad-edit-fg-color');
+    if (_fg && _fg !== padGetEffectiveDefault('fg_color')) btn.fg_color = _fg;
+    var _bc = padGetBindableColor('pad-edit-border-color');
+    if (_bc && _bc !== padGetEffectiveDefault('border_color')) btn.border_color = _bc;
 
     const bw = document.getElementById('pad-edit-border-width').value.trim();
-    btn.border_width = bw || '0';
+    var effBw = padGetEffectiveDefault('border_width');
+    if (bw && bw !== effBw) btn.border_width = bw;
     const cr = document.getElementById('pad-edit-corner-radius').value.trim();
-    btn.corner_radius = cr || '8';
+    var effCr = padGetEffectiveDefault('corner_radius');
+    if (cr && cr !== effCr) btn.corner_radius = cr;
     const uiOffset = document.getElementById('pad-edit-ui-offset').value.trim();
     if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
 
-    // Tap action
-    const tapAct = actionEditorBuild('pad-edit-action');
-    if (tapAct.type) btn.action = tapAct;
+    // Tap actions (array)
+    var tapArr = [];
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        var a = actionEditorBuild('pad-edit-action-' + ai);
+        if (a.type) tapArr.push(a);
+    }
+    if (tapArr.length) btn.actions = tapArr;
 
-    // Long-press action
-    const lpAct = actionEditorBuild('pad-edit-lp-action');
-    if (lpAct.type) btn.lp_action = lpAct;
+    // Long-press actions (array)
+    var lpArr = [];
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        var a = actionEditorBuild('pad-edit-lp-action-' + ai);
+        if (a.type) lpArr.push(a);
+    }
+    if (lpArr.length) btn.lp_actions = lpArr;
 
     // Audio feedback overrides
     var tapBeep = document.getElementById('pad-edit-tap-beep').value.trim();
@@ -1143,6 +1501,8 @@ function padDialogOk(keepOpen) {
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
             const orient = document.getElementById('pad-edit-widget-orientation').value;
             if (orient === 'horizontal') btn.widget_orientation = 'horizontal';
+            const barAnimMs = parseInt(document.getElementById('pad-edit-widget-bar-anim-ms').value);
+            btn.widget_anim_ms = (isNaN(barAnimMs) || barAnimMs < 0) ? 300 : (barAnimMs > 5000) ? 5000 : barAnimMs;
         }
         if (wtype === 'gauge') {
             const gDataBinding = document.getElementById('pad-edit-gauge-data-binding').value.trim();
@@ -1183,6 +1543,15 @@ function padDialogOk(keepOpen) {
             btn.widget_gauge_needle_width = (isNaN(gNeedleW) || gNeedleW < 0) ? 2 : (gNeedleW > 10) ? 10 : gNeedleW;
             const gTickW = parseInt(document.getElementById('pad-edit-gauge-tick-width').value);
             btn.widget_gauge_tick_width = (isNaN(gTickW) || gTickW < 1) ? 1 : (gTickW > 5) ? 5 : gTickW;
+            btn.widget_gauge_marker_value = document.getElementById('pad-edit-gauge-marker-value').value.trim();
+            const gMZoneDeg = parseInt(document.getElementById('pad-edit-gauge-marker-zone-deg').value);
+            btn.widget_gauge_marker_zone_deg = (isNaN(gMZoneDeg) || gMZoneDeg < 0) ? 0 : (gMZoneDeg > 90) ? 90 : gMZoneDeg;
+            const gMTickW = parseInt(document.getElementById('pad-edit-gauge-marker-tick-width').value);
+            btn.widget_gauge_marker_tick_width = (isNaN(gMTickW) || gMTickW < 0) ? 2 : (gMTickW > 5) ? 5 : gMTickW;
+            btn.widget_gauge_marker_tick_color = padGetBindableColor('pad-edit-gauge-marker-tick-color');
+            btn.widget_gauge_marker_zone_color = padGetBindableColor('pad-edit-gauge-marker-zone-color');
+            const gaugeAnimMs = parseInt(document.getElementById('pad-edit-gauge-anim-ms').value);
+            btn.widget_anim_ms = (isNaN(gaugeAnimMs) || gaugeAnimMs < 0) ? 300 : (gaugeAnimMs > 5000) ? 5000 : gaugeAnimMs;
         }
         if (wtype === 'sparkline') {
             const sDataBinding = document.getElementById('pad-edit-sparkline-data-binding').value.trim();
@@ -1252,6 +1621,15 @@ function padDialogOk(keepOpen) {
     const btnState = document.getElementById('pad-edit-btn-state').value.trim();
     if (btnState) btn.btn_state = btnState;
 
+    // Validate all binding fields before accepting
+    if (typeof bindingValidateDialog === 'function') {
+        var bvResult = bindingValidateDialog();
+        if (!bvResult.valid) {
+            showMessage(bvResult.count + ' binding error' + (bvResult.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
+    }
+
     padState.buttons.push(btn);
     padMarkDirty();
     if (!keepOpen) padDialogClose();
@@ -1287,6 +1665,9 @@ async function padSavePage() {
     }
     delete payload.bg_color_default;
 
+    // Strip legacy pad-level button_defaults (now device-level)
+    delete payload.button_defaults;
+
     // Pad bindings → dict (skip entries with invalid names)
     if (padState.bindings && padState.bindings.length > 0) {
         var badNames = padState.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
@@ -1299,6 +1680,32 @@ async function padSavePage() {
         else delete payload.bindings;
     } else {
         delete payload.bindings;
+    }
+
+    // Validate pad-level binding values before save
+    if (typeof bindingValidatePadBindings === 'function') {
+        var bvPad = bindingValidatePadBindings();
+        if (!bvPad.valid) {
+            showMessage(bvPad.count + ' pad binding error' + (bvPad.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
+    }
+
+    // Validate button defaults binding fields
+    if (typeof bindingValidateDefaults === 'function') {
+        var bvDef = bindingValidateDefaults();
+        if (!bvDef.valid) {
+            showMessage(bvDef.count + ' button defaults error' + (bvDef.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
+    }
+
+    // Template pad
+    var tpl = parseInt(document.getElementById('pad-template-pad').value);
+    if (tpl >= 0) {
+        payload.template_pad = tpl;
+    } else {
+        delete payload.template_pad;
     }
 
     payload.buttons = padState.buttons.map(b => Object.assign({}, b));
@@ -1468,6 +1875,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize health widget
     initHealthWidget();
+
+    // Initialize binding validator on static inputs (all pages)
+    if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 
     // Initialize pad configuration UI
     padInit();

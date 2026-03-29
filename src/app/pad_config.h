@@ -60,12 +60,12 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define CONFIG_BINDABLE_SHORT_LEN       64
 #define CONFIG_WIDGET_TYPE_MAX_LEN     16
 #define MAX_WIDGET_BINDINGS             4
-#define WIDGET_CONFIG_MAX_BYTES      1536
+#define WIDGET_CONFIG_MAX_BYTES      1600
 
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
 // ============================================================================
-// DSL format: "font:24;align:right;y:-3;mode:scroll;color:#FF0000"
+// DSL format: "font:24;font_upscale:1.4;align:right;y:-3;mode:scroll;color:#FF0000"
 // All fields default to 0 which means "use default behavior".
 
 // Text alignment values
@@ -82,7 +82,8 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define LABEL_MODE_WRAP      4
 
 struct LabelStyle {
-    uint8_t font_size;     // 0 = auto (from scale tier), 12/14/18/24/32/36
+    uint8_t font_size;     // 0 = auto (from scale tier), 12/14/18/24/32/36/48
+    uint16_t font_upscale; // 0 = 1.0x (disabled), else LVGL transform scale (256 = 1.0x)
     int16_t x_offset;      // pixel nudge from default anchor (-999..+999)
     int16_t y_offset;      // pixel nudge from default anchor (-999..+999)
     uint8_t align;         // LABEL_ALIGN_* (0 = default/center)
@@ -104,6 +105,9 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_BEEP     "beep"
 #define ACTION_TYPE_VOLUME   "volume"
 #define ACTION_TYPE_TIMER    "timer"
+
+// Maximum number of sequential actions per tap or long-press
+#define MAX_BUTTON_ACTIONS   3
 
 // Typed action for tap or long-press
 struct ButtonAction {
@@ -163,9 +167,11 @@ struct ScreenButtonConfig {
     char border_width[CONFIG_BINDABLE_SHORT_LEN]; // default "0" — static or binding
     char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // default "8" — static or binding
 
-    // Typed actions
-    ButtonAction action;     // tap action
-    ButtonAction lp_action;  // long-press action
+    // Typed actions (up to MAX_BUTTON_ACTIONS sequential actions per gesture)
+    ButtonAction actions[MAX_BUTTON_ACTIONS];      // tap actions (executed sequentially)
+    uint8_t action_count;                          // number of tap actions (0-3)
+    ButtonAction lp_actions[MAX_BUTTON_ACTIONS];   // long-press actions (executed sequentially)
+    uint8_t lp_action_count;                       // number of long-press actions (0-3)
 
     // Audio feedback overrides (empty = use device default, "none" = suppress)
     char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
@@ -193,6 +199,21 @@ struct PadBinding {
     char value[CONFIG_LABEL_MAX_LEN];         // binding template, e.g. "[mqtt:solar/power;$.value]"
 };
 
+// Device-level button defaults — fields that cascade to all buttons on the device
+// when the per-button JSON field is missing/null. Uses same field types as
+// ScreenButtonConfig so the cascade is a simple string copy.
+// A field is "set" when its string is non-empty.
+struct ButtonDefaults {
+    char bg_color[CONFIG_COLOR_MAX_LEN];          // e.g. "#1a1a2e"
+    char fg_color[CONFIG_COLOR_MAX_LEN];          // e.g. "#e0e0ff"
+    char border_color[CONFIG_COLOR_MAX_LEN];      // e.g. "#333366"
+    char border_width[CONFIG_BINDABLE_SHORT_LEN]; // e.g. "1"
+    char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // e.g. "16"
+    char label_top_style[CONFIG_LABEL_STYLE_MAX_LEN];
+    char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
+    char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];
+};
+
 // Per-pad config
 struct PadConfig {
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
@@ -200,6 +221,11 @@ struct PadConfig {
     uint8_t rows;                            // 1-8 (grid mode only)
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
+
+    // Template pad: inherit buttons from another pad into empty grid positions.
+    // -1 = none (default). 0..MAX_PADS-1 = source pad index.
+    // Merge is read-only (template buttons are never written to this pad's JSON).
+    int8_t template_pad;
 
     // Named pad-level bindings for [pad:name] references
     uint8_t binding_count;
@@ -233,6 +259,10 @@ bool pad_config_exists(uint8_t page);
 // Read raw JSON from LittleFS. Caller must free() the returned buffer.
 // Returns NULL on failure. *out_len is set to the file size.
 char* pad_config_read_raw(uint8_t page, size_t* out_len);
+
+// Rebuild all in-RAM pad config caches from flash. Call when a shared
+// dependency (e.g. device-level button defaults) changes.
+void pad_config_rebuild_all_caches();
 
 // Generation counter — incremented on every save/delete. PadScreen uses this
 // to detect config changes and rebuild tiles.

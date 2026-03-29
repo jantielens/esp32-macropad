@@ -31,6 +31,7 @@
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "swipe_config.h"
+#include "button_defaults.h"
 #endif
 
 #if HAS_IMAGE_FETCH
@@ -120,13 +121,18 @@ void setup()
 	if (power_manager_is_deep_sleep_wake()) {
 		delay(10);
 	} else {
-		delay(1000);
+		delay(100);
 	}
 
 	// Register WiFi event handlers for connection lifecycle
 	WiFi.onEvent(onWiFiConnected, ARDUINO_EVENT_WIFI_STA_CONNECTED);
 	WiFi.onEvent(onWiFiGotIP, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 	WiFi.onEvent(onWiFiDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+
+	// Start WiFi hardware as early as possible.
+	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
+	// which can run in the background while display, config, and pads initialize.
+	wifi_manager_early_init();
 
 	LOGI("SYS", "Boot");
 	LOGI("SYS", "Firmware: v%s", FIRMWARE_VERSION);
@@ -269,6 +275,9 @@ void setup()
 	// Load swipe gesture actions from LittleFS (uses same filesystem)
 	swipe_config_init();
 
+	// Load device-level button defaults from LittleFS
+	button_defaults_init();
+
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
@@ -351,23 +360,6 @@ void setup()
 	// Snapshot after all subsystems are initialized.
 	device_telemetry_log_memory_snapshot("setup");
 
-	#if HAS_DISPLAY
-	// Flash the IP address on the splash screen so the user can find the portal
-	if (WiFi.status() == WL_CONNECTED) {
-		char ip_msg[48];
-		snprintf(ip_msg, sizeof(ip_msg), "Connected - %s", WiFi.localIP().toString().c_str());
-		display_manager_set_splash_status(ip_msg);
-		delay(2500);
-	} else if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
-		char ip_msg[48];
-		snprintf(ip_msg, sizeof(ip_msg), "AP Mode - %s", WiFi.softAPIP().toString().c_str());
-		display_manager_set_splash_status(ip_msg);
-		delay(2500);
-	} else {
-		delay(1000);
-	}
-	#endif
-
 	#if HAS_MQTT
 	// Attempt blocking MQTT connect + HA discovery during boot.
 	// Non-fatal: if broker is unreachable we simply move on.
@@ -380,8 +372,18 @@ void setup()
 	#endif
 
 	#if HAS_DISPLAY
-	display_manager_set_splash_status("Ready!");
-	delay(1000);
+	// Brief status flash so user can see connection result
+	if (WiFi.status() == WL_CONNECTED) {
+		char ip_msg[48];
+		snprintf(ip_msg, sizeof(ip_msg), "Connected - %s", WiFi.localIP().toString().c_str());
+		display_manager_set_splash_status(ip_msg);
+	} else if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
+		char ip_msg[48];
+		snprintf(ip_msg, sizeof(ip_msg), "AP Mode - %s", WiFi.softAPIP().toString().c_str());
+		display_manager_set_splash_status(ip_msg);
+	}
+
+	delay(500);
 
 	// Navigate to pad_0 if configured, otherwise info screen
 	if (pad_config_exists(0)) {

@@ -84,6 +84,15 @@
                     </div>
                 </div>
 
+                <!-- Template Pad -->
+                <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
+                    <label for="pad-template-pad" style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Template Pad</label>
+                    <select id="pad-template-pad" style="width:100%;">
+                        <option value="-1">(none)</option>
+                    </select>
+                    <small style="display:block; margin-top:4px; color:#86868b;">Inherit buttons from another pad into empty grid positions.</small>
+                </div>
+
                 <!-- Pad Bindings -->
                 <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
                     <div id="pad-bindings-section">
@@ -95,6 +104,65 @@
                         <small style="display:block; color:#86868b; margin-top:2px;">Define named bindings to reuse across buttons via <code>[pad:name]</code>. Names must start with a letter and contain only letters, digits, or underscores.</small>
                     </div>
                 </div>
+            </section>
+
+            <!-- Device-Level Button Defaults Section -->
+            <section class="section" id="btn-defaults-section" style="display:none;">
+                <details id="btn-defaults-details">
+                <summary><h2 style="display:inline;">🎨 Button Defaults</h2></summary>
+                <small style="display:block; margin-bottom:10px; margin-top:8px; color:#86868b;">Set default appearance for all buttons on all pads. Individual buttons can override these values.</small>
+                <div style="display:flex; gap:12px; margin-bottom:8px;">
+                    <div id="pad-def-bg-color-wrap" style="flex:1;">
+                        <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                        <div class="bindable-color">
+                            <div class="bc-swatch"></div>
+                            <input type="text" id="pad-def-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="(firmware default)">
+                        </div>
+                    </div>
+                    <div id="pad-def-fg-color-wrap" style="flex:1;">
+                        <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                        <div class="bindable-color">
+                            <div class="bc-swatch"></div>
+                            <input type="text" id="pad-def-fg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="(firmware default)">
+                        </div>
+                    </div>
+                    <div id="pad-def-border-color-wrap" style="flex:1;">
+                        <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Border <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                        <div class="bindable-color">
+                            <div class="bc-swatch"></div>
+                            <input type="text" id="pad-def-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="(firmware default)">
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:12px;">
+                    <div class="form-group" style="flex:1; margin-bottom:4px;">
+                        <label for="pad-def-border-width" style="font-size:13px;">Border Width <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                        <input type="text" id="pad-def-border-width" maxlength="63" style="width:100%;" placeholder="(firmware default)">
+                    </div>
+                    <div class="form-group" style="flex:1; margin-bottom:4px;">
+                        <label for="pad-def-corner-radius" style="font-size:13px;">Radius <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                        <input type="text" id="pad-def-corner-radius" maxlength="63" style="width:100%;" placeholder="(firmware default)">
+                    </div>
+                </div>
+                <div style="display:flex; gap:12px; margin-top:4px;">
+                    <div class="form-group" style="flex:1; margin-bottom:4px;">
+                        <label for="pad-def-label-top-style" style="font-size:13px;">Top Label Style</label>
+                        <input type="text" id="pad-def-label-top-style" class="label-style-input" maxlength="63" style="width:100%;" placeholder="e.g. font:24;align:left">
+                    </div>
+                    <div class="form-group" style="flex:1; margin-bottom:4px;">
+                        <label for="pad-def-label-center-style" style="font-size:13px;">Center Label Style</label>
+                        <input type="text" id="pad-def-label-center-style" class="label-style-input" maxlength="63" style="width:100%;" placeholder="e.g. font:18;mode:dot">
+                    </div>
+                    <div class="form-group" style="flex:1; margin-bottom:4px;">
+                        <label for="pad-def-label-bottom-style" style="font-size:13px;">Bottom Label Style</label>
+                        <input type="text" id="pad-def-label-bottom-style" class="label-style-input" maxlength="63" style="width:100%;" placeholder="e.g. font:14;align:right">
+                    </div>
+                </div>
+
+                <div style="margin-top:12px; text-align:right;">
+                    <button type="button" id="btn-defaults-save-btn" class="btn btn-primary" style="min-width:160px;">Save Button Defaults</button>
+                </div>
+                </details>
             </section>
 
             <!-- No-display fallback -->
@@ -322,21 +390,21 @@
 
                         <div style="display:flex; gap:12px; margin-bottom:8px;">
                             <div id="pad-edit-bg-color-wrap" style="flex:1;">
-                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-bg-color-reset" onclick="padResetAppearance('pad-edit-bg-color','bg_color')" title="Reset to default">↩</span></label>
                                 <div class="bindable-color">
                                     <div class="bc-swatch"></div>
                                     <input type="text" id="pad-edit-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
                                 </div>
                             </div>
                             <div id="pad-edit-fg-color-wrap" style="flex:1;">
-                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-fg-color-reset" onclick="padResetAppearance('pad-edit-fg-color','fg_color')" title="Reset to default">↩</span></label>
                                 <div class="bindable-color">
                                     <div class="bc-swatch"></div>
                                     <input type="text" id="pad-edit-fg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
                                 </div>
                             </div>
                             <div id="pad-edit-border-color-wrap" style="flex:1;">
-                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Border <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Border <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-border-color-reset" onclick="padResetAppearance('pad-edit-border-color','border_color')" title="Reset to default">↩</span></label>
                                 <div class="bindable-color">
                                     <div class="bc-swatch"></div>
                                     <input type="text" id="pad-edit-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
@@ -346,11 +414,11 @@
 
                         <div style="display:flex; gap:12px; margin-top:4px;">
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-border-width">Border Width <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label for="pad-edit-border-width">Border Width <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-border-width-reset" onclick="padResetAppearance('pad-edit-border-width','border_width')" title="Reset to default">↩</span></label>
                                 <input type="text" id="pad-edit-border-width" value="0" maxlength="63" style="width:100%;" placeholder="0 or [binding]">
                             </div>
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-corner-radius">Radius <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label for="pad-edit-corner-radius">Radius <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-corner-radius-reset" onclick="padResetAppearance('pad-edit-corner-radius','corner_radius')" title="Reset to default">↩</span></label>
                                 <input type="text" id="pad-edit-corner-radius" value="8" maxlength="63" style="width:100%;" placeholder="8 or [binding]">
                             </div>
                         </div>
@@ -400,6 +468,7 @@
     {{REBOOT_OVERLAY}}
 
     <script src="/portal_core.js"></script>
+    <script src="/portal_binding_validator.js"></script>
     <script src="/portal_action_editor.js"></script>
     <script src="/portal_config.js"></script>
     <script src="/portal_firmware.js"></script>

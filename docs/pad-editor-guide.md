@@ -22,6 +22,39 @@ At the top of the pad editor, you configure the pad itself:
 
 > **Example**: A home energy dashboard might use a 4×2 grid named "Energy" with a dark background (`#111111`) — four columns for solar, grid, battery, and net power, with two rows for the bar chart and its label.
 
+### Button Defaults
+
+The **Button Defaults** section (collapsible, at the bottom of the Pads page) lets you set device-wide default values for button appearance. Any button on any pad that doesn't have an explicit override inherits from these defaults.
+
+**Available defaults:**
+
+| Setting | Description |
+|---------|-------------|
+| **Background color** | Default button fill color |
+| **Text color** | Default label/icon color |
+| **Border color** | Default button outline color |
+| **Border width** | Default border thickness (px) |
+| **Corner radius** | Default button corner rounding (px) |
+| **Label top/center/bottom style** | Default label style DSL (e.g., `font:24;align:left`) |
+
+The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius).
+
+> **Tip**: Set your button defaults first, then add buttons. Changing a default immediately updates all buttons that don't have a custom override — both in the editor preview and on the device.
+
+When editing a button, fields that match the device default show their inherited value normally. If you change a field to a custom value, a small **↩** reset link appears next to the field label — click it to revert to the device default.
+
+### Template Pad
+
+The **Template Pad** dropdown (below Background Color) lets you inherit buttons from another pad. When you select a template pad:
+
+- Buttons from the template pad fill **empty** grid positions on the current pad. Your own buttons always take priority — the template only fills gaps.
+- Template buttons appear as **ghost overlays** in the editor (semi-transparent with a dashed outline) so you can see what will be inherited.
+- The template pad's **bindings** are also merged in (your pad's own settings win on any conflict).
+- **No chaining** — if the template pad itself references another template, that second-level reference is ignored. This prevents circular dependencies and keeps behavior predictable.
+- The merge is **read-only** — template buttons are never written into your pad's JSON file. They're merged in-memory each time the pad loads.
+
+> **Use case**: Put navigation buttons (Home, Settings, Back) on a "nav" pad. Then set that as the template for your other pads — the nav buttons automatically appear in empty positions without copying them one by one.
+
 ---
 
 ## The Button Editor
@@ -80,7 +113,8 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 | Property | Values | What it does |
 |----------|--------|-------------|
-| `font` | `12`, `14`, `18`, `24`, `32`, `36` | Override the automatic font size |
+| `font` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
+| `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Scale the current font size at runtime for hero text |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
 | `y` | `-999` to `999` | Shift the label up (negative) or down (positive) in pixels |
@@ -89,15 +123,16 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 Combine them with semicolons:
 
-```
-font:36;align:left;mode:dot
+``` 
+font:48;align:left;mode:dot
 ```
 
-This renders a large left-aligned label that shows "..." when the text is too long.
+This renders a hero-sized left-aligned label that shows "..." when the text is too long.
 
 A few more examples:
 
 - `font:14;color:#FF0` — small yellow text
+- `font:36;font_upscale:1.4` — extra-large hero text (combined scale)
 - `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
 - `font:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
@@ -130,7 +165,7 @@ Each color field accepts either a static `#hex` value or a binding expression fo
 
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
-**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons.
+**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the device-level [Button Defaults](#button-defaults). If you set a custom value, a **↩** reset link appears next to the label — click it to revert to the inherited default.
 
 **UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
 
@@ -185,7 +220,9 @@ Any button can display an image fetched from a URL, rendered as the button backg
 
 ### Actions (Tap and Long-Press)
 
-Each button has two action slots — one for **tap** and one for **long-press** (triggered after holding ~500ms).
+Each button supports up to **3 sequential actions** per gesture — one for **tap** and one for **long-press** (triggered after holding ~500ms). Actions execute in order: for example, action 1 publishes an MQTT message, action 2 plays a beep, and action 3 navigates to another screen.
+
+By default, only the first action slot is shown. Click **"+ Add tap action"** or **"+ Add long-press action"** to reveal additional slots. Use the **"× Remove"** link to hide a slot and clear its action.
 
 **Action types:**
 
@@ -202,7 +239,8 @@ Each button has two action slots — one for **tap** and one for **long-press** 
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
 
 **Example setup for a smart light:**
-- **Tap action**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
+- **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
+- **Tap action 2**: Play Beep → `1000:100` (confirmation chirp)
 - **Long-press action**: Navigate to screen → `pad_3` (a dedicated lighting pad with brightness controls)
 
 **Example setup for navigation:**
@@ -291,8 +329,9 @@ The **Audio Feedback** section in the button editor lets you override the device
 | `1000:30 30 1200:30` | Rising two-tone |
 
 **Behavior notes:**
-- Buttons with no action configured are completely inert — no visual tap flash and no audio cue. A button with no tap action won't flash or beep on tap; a button with no long-press action won't flash or beep on long-press.
-- If the action itself is a **Play Beep** action, the audio cue is automatically suppressed to avoid a double-beep.
+- Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
+- If any action in the sequence is a **Play Beep** action, the audio cue is automatically suppressed to avoid a double-beep.
+- When multiple actions are configured and one of them navigates to a different screen, any subsequent actions in the sequence still execute safely. The last navigation wins (the user sees the final target screen).
 - Swipe gestures use the device-level tap beep (no per-swipe overrides).
 
 ---
@@ -315,6 +354,7 @@ The bar chart widget draws a vertical or horizontal bar that fills based on a nu
 | **Bar color** | The fill color of the bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
 | **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
+| **Animation (ms)** | Duration of the ease-out transition when the bar value changes (0–5000 ms). Default: 300. Set to 0 for instant updates (no animation). The first value after screen load always snaps immediately |
 
 **Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: pick your zone colors, set breakpoints, and the expression auto-generates as you type. For a solar panel with a 5 kW max:
 
@@ -360,12 +400,18 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Track Color** | Color of the unfilled arc background. Supports binding expressions for dynamic color |
 | **Needle Color** | Color of the needle line. Supports binding expressions for dynamic color |
 | **Tick Color** | Color of the tick marks. Supports binding expressions for dynamic color |
+| **Target Value** | Bindable value on the scale that positions a target marker and optional zone across all active rings. Empty = no target. For example `[mqtt:hvac/setpoint;temperature]` |
+| **Target Zone Angle** | Total zone width in degrees centered on the target value (0 = no zone, max 90). The zone is rendered as a semi-transparent overlay on all rings |
+| **Target Tick Width** | Tick line width at the target value position (0 = no tick, 1–5 px). Boundary ticks at the zone edges use the same width |
+| **Target Marker Color** | Color of the target value tick and zone boundary ticks. Supports binding expressions |
+| **Target Zone Color** | Color of the zone overlay arc. Supports binding expressions |
+| **Animation (ms)** | Duration of the ease-out transition when arc and needle values change (0–5000 ms). Default: 300. Set to 0 for instant updates (no animation). Applies to all rings and the needle. The first value after screen load always snaps immediately |
 
 Each ring has its own arc color field, so rings can be independently colored or threshold-driven. Use `[expr:threshold(...)]` in any arc color field for value-based coloring — the color picker's built-in **Generate Color by Threshold** helper makes this easy.
 
 The icon and center label are positioned inside the arc at the pivot point. A typical gauge button uses the center label for the numeric readout and the top label for a title.
 
-**Multi-ring gauges** — fill in slots 2, 3, and 4 to add up to four concentric rings (Apple Health ring style). All active rings share the same min/max, arc degrees, and start angle, but each slot has its own arc color and optional start label. The needle is shown on the outermost active gauge ring only; tick marks are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
+**Multi-ring gauges** — fill in slots 2, 3, and 4 to add up to four concentric rings (Apple Health ring style). All active rings share the same min/max, arc degrees, and start angle, but each slot has its own arc color and optional start label. The needle is shown on the outermost active gauge ring only; tick marks and target markers are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
 
 **Dual binding gauges** — enable Dual Binding Pair 1 and/or Pair 2 to collapse slot pairs into shared rings. In a dual pair, the first slot fills from zero toward the positive direction and the second slot fills from zero toward the negative direction. If the partner binding is empty or invalid, it is treated as `0`. Pair 1 also drives the needle using the signed difference `slot1 - slot2`.
 
@@ -389,6 +435,14 @@ This visualization shows system balance at a glance: the outer combined ring con
 - Data binding: `[time:%S]`, Min: 0, Max: 60
 - Arc Degrees: 359, Start Angle: 270 (12 o'clock)
 - Tick Marks: 12, Center label: `[time:%H:%M]`
+
+**Thermostat setpoint example** (temperature gauge with target zone):
+- Data binding: `[mqtt:hvac/current_temp;temperature]`, Min: 15, Max: 30
+- Arc Degrees: 270, Start Angle: 135
+- Target Value: `[mqtt:hvac/setpoint;temperature]`
+- Target Zone Angle: 4 (±2° around setpoint)
+- Target Tick Width: 2, Target Marker Color: `#FFFFFF`, Target Zone Color: `#FF5722`
+- Center label: `[mqtt:hvac/current_temp;temperature;%.1f]°`
 
 ### Sparkline
 
@@ -453,6 +507,29 @@ Binding templates are the engine behind live data on your buttons. They follow a
 ```
 
 Static text before, after, or between tokens is preserved. If a binding can't resolve (topic not received yet, invalid path), it shows `---` as a placeholder. Errors show `ERR:reason`.
+
+### Binding Validation
+
+The pad editor and Home page validate binding syntax **in real time** as you type. Any field that accepts a binding expression (labels, colors, data bindings, widget parameters, MQTT topics, wake binding, etc.) is checked automatically.
+
+**What gets validated:**
+
+- **Bracket balance** — unclosed `[` or extra `]` characters
+- **Scheme names** — unknown schemes are flagged, with a "did you mean?" suggestion for typos (e.g., `mqt` → `mqtt`)
+- **Parameter counts** — too many or too few semicolon-delimited parameters for the scheme
+- **Known keys** — health binding keys (e.g., `cpu`, `heap_free`, `rssi`) and timer parameters (e.g., `1`, `2_state`, `3_expired`) are checked against the valid set
+- **Format strings** — printf-style format specifiers like `%.0f`, `%d`, `%s` are validated for correct syntax
+- **Expression syntax** — `[expr:]` bodies are checked for operator/operand sequencing errors (e.g., `[expr:1 +]` or `[expr:* 2]`)
+- **Nested bindings** — bindings inside `[expr:]` are recursively validated (e.g., a typo in `[expr:[mqt:topic] * 2]` is caught)
+
+**How it works:**
+
+- Validation runs on a **400 ms debounce** while you type, so errors appear almost immediately without interrupting your typing flow
+- Validation also runs **immediately on blur** (when you click or tab away from a field)
+- Errors appear as a **red border** and a **red message below the field** describing the problem
+- **Saving is blocked** while any field has a validation error — the save button shows which fields need attention
+
+> **Tip:** Validation is purely syntactic — it checks that your binding is well-formed, not that the MQTT topic exists or that the data path returns a value. Runtime resolution issues still show `---` or `ERR:` on the device.
 
 ### Pipe Fallback
 

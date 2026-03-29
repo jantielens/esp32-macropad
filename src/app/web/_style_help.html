@@ -9,7 +9,11 @@
                 <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
                     <tr style="border-bottom:1px solid #e5e5ea;">
                         <td style="padding:4px 0;"><strong>font</strong></td>
-                        <td style="padding:4px 0;color:#86868b;">Font size: <code>12</code>, <code>14</code>, <code>18</code>, <code>24</code>, <code>32</code>, or <code>36</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Font size: <code>12</code>, <code>14</code>, <code>18</code>, <code>24</code>, <code>32</code>, <code>36</code>, or <code>48</code></td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><strong>font_upscale</strong></td>
+                        <td style="padding:4px 0;color:#86868b;">Runtime font scale from <code>1.0</code> to <code>2.0</code> (e.g. <code>1.2</code>, <code>1.4</code>, <code>2</code>)</td>
                     </tr>
                     <tr style="border-bottom:1px solid #e5e5ea;">
                         <td style="padding:4px 0;"><strong>align</strong></td>
@@ -31,8 +35,12 @@
                 <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#1d1d1f;">Examples</p>
                 <table style="width:100%;border-collapse:collapse;font-size:12px;">
                     <tr style="border-bottom:1px solid #e5e5ea;">
-                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:36;align:left;mode:dot</code></td>
-                        <td style="padding:4px 0;color:#86868b;">Large, left-aligned, ellipsis</td>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:48;align:left;mode:dot</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Hero-sized, left-aligned, ellipsis</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #e5e5ea;">
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:36;font_upscale:1.4</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Extra-large text without changing the base size</td>
                     </tr>
                     <tr style="border-bottom:1px solid #e5e5ea;">
                         <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">font:14;color:#FF0</code></td>

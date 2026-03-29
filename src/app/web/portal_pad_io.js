@@ -135,6 +135,8 @@ function padFillWithClipboard() {
 // --- Pad clipboard (copy/paste entire pad) ---
 
 function padCopyPad() {
+    // Snapshot current button defaults from UI
+    padCollectButtonDefaults();
     padState.padClipboard = {
         cols: padState.cols,
         rows: padState.rows,
@@ -143,6 +145,8 @@ function padCopyPad() {
         bg_color: padGetBindableColor('pad-edit-page-bg-color') || '#000000',
         buttons: padState.buttons.map(b => Object.assign({}, b)),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
+        buttonDefaults: Object.assign({}, padState.buttonDefaults),
+        templatePad: padState.templatePad,
     };
     document.getElementById('pad-paste-btn').disabled = false;
     showMessage('Pad ' + (padState.page + 1) + ' copied', 'success');
@@ -165,7 +169,15 @@ function padPastePad() {
     padState.bindings = padState.padClipboard.bindings ? padState.padClipboard.bindings.map(b => Object.assign({}, b)) : [];
     padRenderBindings();
 
-    padRenderGrid();
+    // Paste button defaults
+    padLoadButtonDefaults(padState.padClipboard.buttonDefaults || {});
+
+    // Paste template pad (clear if it would reference self)
+    padState.templatePad = (padState.padClipboard.templatePad !== undefined &&
+        padState.padClipboard.templatePad !== padState.page) ? padState.padClipboard.templatePad : -1;
+    padPopulateTemplateDropdown(padState.page);
+    padLoadTemplateButtons().then(() => padRenderGrid());
+
     padMarkDirty();
     showMessage('Pad pasted (unsaved)', 'success');
 }
@@ -173,6 +185,7 @@ function padPastePad() {
 // --- Export/import single pad ---
 
 function padExportPad() {
+    padCollectButtonDefaults();
     const payload = {
         layout: 'grid',
         cols: padState.cols,
@@ -194,6 +207,9 @@ function padExportPad() {
     if (padState.bindings && padState.bindings.length > 0) {
         var bd = padBindingsToDict(padState.bindings);
         if (bd) payload.bindings = bd;
+    }
+    if (padState.templatePad >= 0) {
+        payload.template_pad = padState.templatePad;
     }
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -234,6 +250,12 @@ async function padImportPad(evt) {
 
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
+
+        // Load template pad (clear if it would reference self)
+        padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null &&
+            json.template_pad !== padState.page) ? json.template_pad : -1;
+        padPopulateTemplateDropdown(padState.page);
+        await padLoadTemplateButtons();
 
         padRenderGrid();
         padMarkDirty();
@@ -281,10 +303,18 @@ async function deviceExportConfig() {
             }
         }
 
+        // Fetch device-level button defaults
+        let buttonDefaults = {};
+        try {
+            const bdResp = await fetch('/api/button-defaults');
+            if (bdResp.ok) buttonDefaults = await bdResp.json();
+        } catch (e) {}
+
         const exportData = {
             _format: DEVICE_CONFIG_FORMAT,
             _version: DEVICE_CONFIG_VERSION,
             config: config,
+            button_defaults: buttonDefaults,
             pads: pads,
         };
 
@@ -328,7 +358,16 @@ async function deviceImportConfig(evt) {
             if (!resp.ok) throw new Error('Config import failed: HTTP ' + resp.status);
         }
 
-        // Step 2: Import all pad configs (save each to trigger icon rendering)
+        // Step 2: Import device-level button defaults
+        if (data.button_defaults && typeof data.button_defaults === 'object') {
+            await fetch('/api/button-defaults', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data.button_defaults),
+            }).catch(() => {});
+        }
+
+        // Step 3: Import all pad configs (save each to trigger icon rendering)
         if (Array.isArray(data.pads)) {
             const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
             for (let i = 0; i < data.pads.length && i < maxPads; i++) {

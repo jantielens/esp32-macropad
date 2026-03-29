@@ -436,6 +436,15 @@ async function saveConfig(event) {
         showMessage(validation.message, 'error');
         return;
     }
+
+    // Validate binding fields
+    if (typeof bindingValidateHomeConfig === 'function') {
+        var bvHome = bindingValidateHomeConfig();
+        if (!bvHome.valid) {
+            showMessage(bvHome.count + ' binding error' + (bvHome.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            return;
+        }
+    }
     
     const currentDeviceNameField = document.getElementById('device_name');
     const currentDeviceName = currentDeviceNameField ? currentDeviceNameField.value : null;

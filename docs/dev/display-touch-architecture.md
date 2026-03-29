@@ -64,7 +64,8 @@ The display and touch subsystem is built on four main pillars:
 │ ST7701_RGB_Driver│          │ GT911_Driver     │
 │ MipiDsiDriver    │          │                  │
 │  ├ ST7703_DSI    │          │                  │
-│  └ ST7701_DSI    │          │                  │
+│  ├ ST7701_DSI    │          │                  │
+│  └ JD9165_DSI    │          │                  │
 └──────────────────┘          └──────────────────┘
         ↓                               ↓
 ┌──────────────────┐          ┌──────────────────┐
@@ -297,7 +298,8 @@ ESP32-P4 boards use MIPI-DSI displays via a shared base class (`MipiDsiDriver`) 
 MipiDsiDriver (base)          ← Shared: DSI bus, DBI I/O, DPI panel, DMA2D flush,
 │                                backlight PWM, vendor command sending, ISR callback
 ├── ST7703_DSI_Driver          ← Waveshare P4: 24 vendor init commands + timing config
-└── ST7701_DSI_Driver          ← JC4880P433: 39 vendor init commands + timing config
+├── ST7701_DSI_Driver          ← JC4880P433: 39 vendor init commands + timing config
+└── JD9165_DSI_Driver          ← JC1060P470C: 50 vendor init commands + timing config
 ```
 
 **Base Class (`mipi_dsi_driver.h/cpp`):**
@@ -1146,9 +1148,10 @@ src/app/
 │   ├── arduino_gfx_driver.h/cpp          # Arduino_GFX QSPI display (AXS15231B)
 │   ├── arduino_gfx_st77916_driver.h/cpp  # Arduino_GFX ST77916 QSPI display
 │   ├── st7701_rgb_driver.h/cpp           # ST7701 RGB panel display (ESP32-S3)
-│   ├── mipi_dsi_driver.h/cpp             # MIPI-DSI base class (ESP32-P4, shared by ST7703/ST7701)
+│   ├── mipi_dsi_driver.h/cpp             # MIPI-DSI base class (ESP32-P4, shared by ST7703/ST7701/JD9165)
 │   ├── st7703_dsi_driver.h/cpp           # ST7703 MIPI-DSI subclass (Waveshare P4)
 │   ├── st7701_dsi_driver.h/cpp           # ST7701 MIPI-DSI subclass (JC4880P433)
+│   ├── jd9165_dsi_driver.h/cpp           # JD9165 MIPI-DSI subclass (JC1060P470C)
 │   ├── xpt2046_driver.h/cpp              # XPT2046 resistive touch
 │   ├── axs15231b_touch_driver.h/cpp      # AXS15231B capacitive touch
 │   ├── axs15231b/vendor/                 # Vendored AXS15231B I2C touch

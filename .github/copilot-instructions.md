@@ -21,7 +21,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `touch_manager.cpp/h` - Touch input registration and calibration
   - `display_drivers.cpp` - Sketch-root “translation unit” that conditionally includes exactly one selected display driver `.cpp`
   - `touch_drivers.cpp` - Sketch-root “translation unit” that conditionally includes exactly one selected touch driver `.cpp`
-  - `drivers/` - Driver implementations (TFT_eSPI, Arduino_GFX, ST77916, ST7701_RGB, MIPI-DSI base, ST7703_DSI, ST7701_DSI, XPT2046, AXS15231B, CST816S, GT911)
+  - `drivers/` - Driver implementations (TFT_eSPI, Arduino_GFX, ST77916, ST7701_RGB, MIPI-DSI base, ST7703_DSI, ST7701_DSI, JD9165_DSI, XPT2046, AXS15231B, CST816S, GT911)
   - `screens/` - Screen base class and implementations (splash, info, test, touch test)
   - Conditional compilation: Only selected drivers are compiled via `display_drivers.cpp` / `touch_drivers.cpp` (Arduino doesn’t auto-compile subdir `.cpp`)
 - **Image Fetch Subsystem**: Background HTTP(S) image download, decode, and scaling (compile-time gated by `HAS_IMAGE_FETCH`)
@@ -33,8 +33,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Widget Subsystem**: Extensible widget type system for specialized button visualizations (compile-time gated by `HAS_DISPLAY`)
   - `widgets/widget.h` - WidgetType interface (parseConfig, createUI, update, destroyUI, tick, getStreamParams function pointers)
   - `widgets/widget.cpp` - Widget type registry and `widget_find()` lookup
-  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color and bindable min/max scale, binding-driven)
-  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, bindable min/max scale, up to 4 slots with optional dual-binding pairs, binding-driven)
+  - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color and bindable min/max scale, configurable animation transitions, binding-driven)
+  - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, bindable min/max scale, configurable animation transitions, up to 4 slots with optional dual-binding pairs, binding-driven)
   - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale or bindable min/max, time-windowed display, bindable line colors, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry, per-marker min/max dots with labels, current-value dot, up to 3 reference lines)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Data Stream Registry**: Background data collection for history-based widgets (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
@@ -69,6 +69,9 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `swipe_actions.cpp/h` - Shared LVGL gesture handler with 300ms debounce; registered on all screens
   - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, timer control); used by both pad buttons and swipe gestures
   - `web_portal_swipe.cpp/h` - REST API for GET/POST `/api/swipe-actions`
+- **Button Defaults Subsystem**: Device-wide default appearance for buttons (compile-time gated by `HAS_DISPLAY`)
+  - `button_defaults.cpp/h` - LittleFS-backed device-level button defaults (`/config/button_defaults.json`) with RAM cache; 8 fields (colors, border, radius, label styles); rebuilds all pad caches on load/save
+  - `web_portal_button_defaults.cpp/h` - REST API for GET/POST `/api/button-defaults`
 - **BLE HID Subsystem**: Bluetooth LE keyboard with key sequence DSL (compile-time gated by `HAS_BLE_HID`; disabled on ESP32-S3 boards due to internal RAM constraints; runtime-toggled via `ble_enabled` config, default disabled, saves ~70 KB internal RAM when off)
   - `ble_hid.cpp/h` - Manual NimBLE HID GATT service, single-owner pairing policy (one bond, 60s timeout), stable hardware address, keyboard + consumer reports, peer metadata getters, auto-re-pair for stale bonds (NVS-persisted owner address); `ble_hid_is_initialized()` used as runtime guard by other modules
   - `key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable, no ESP32 deps
@@ -100,6 +103,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `["jc3636w518"]` → `build/jc3636w518/` (ESP32-S3, 16MB + OPI PSRAM)
   - `["esp32-p4-lcd4b"]` → `build/esp32-p4-lcd4b/` (ESP32-P4 Waveshare, 720×720 MIPI-DSI + GT911 touch, 32MB + 32MB PSRAM)
   - `["jc4880p433"]` → `build/jc4880p433/` (ESP32-P4 GUITION, 480×800 MIPI-DSI ST7701 + GT911 touch, 16MB + 32MB PSRAM)
+  - `["jc1060p470c"]` → `build/jc1060p470c/` (ESP32-P4 GUITION, 1024×600 MIPI-DSI JD9165 + GT911 touch, 16MB + 32MB PSRAM, portrait via PPA rotation)
 
 ## Critical Developer Workflows
 
@@ -263,6 +267,8 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/swipe_config.cpp/h` - LittleFS-backed swipe action configuration with RAM cache
 - `src/app/swipe_actions.cpp/h` - Shared LVGL gesture handler with debounce, registered on all screens
 - `src/app/web_portal_swipe.cpp/h` - Swipe actions REST API (GET/POST `/api/swipe-actions`)
+- `src/app/button_defaults.cpp/h` - LittleFS-backed device-level button defaults with RAM cache
+- `src/app/web_portal_button_defaults.cpp/h` - Button defaults REST API (GET/POST `/api/button-defaults`)
 - `src/app/display_driver.h` - Display HAL interface with configureLVGL() hook
 - `src/app/display_manager.cpp/h` - Display lifecycle, LVGL init, FreeRTOS rendering task
 - `src/app/touch_driver.h` - Touch HAL interface
@@ -275,14 +281,15 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/arduino_gfx_st77916_driver.cpp/h` - Arduino_GFX ST77916 QSPI display driver (JC3636W518)
 - `src/app/drivers/st7703_dsi_driver.cpp/h` - ST7703 MIPI-DSI display subclass (Waveshare ESP32-P4-WIFI6-Touch-LCD-4B)
 - `src/app/drivers/st7701_dsi_driver.cpp/h` - ST7701 MIPI-DSI display subclass (GUITION JC4880P433)
+- `src/app/drivers/jd9165_dsi_driver.cpp/h` - JD9165 MIPI-DSI display subclass (GUITION JC1060P470C)
 - `src/app/drivers/mipi_dsi_driver.cpp/h` - Shared MIPI-DSI base class with DMA2D async flush (ESP32-P4)
 - `src/app/drivers/axs15231b_touch_driver.cpp/h` - AXS15231B touch backend wrapper
 - `src/app/drivers/axs15231b/vendor/AXS15231B_touch.cpp/h` - Vendored AXS15231B touch implementation (driver-scoped vendor code)
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `timer`)
-- `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`)
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `timer`); `ScreenButtonConfig` holds `actions[MAX_BUTTON_ACTIONS]` / `lp_actions[MAX_BUTTON_ACTIONS]` arrays with counts for multi-action sequential dispatch; JSON parser supports both new array format (`"actions": [...]`) and legacy single-object format (`"action": {...}`); `ButtonDefaults` struct for device-level appearance cascade (colors, border, radius, label styles) — per-button fields fall through to device defaults, then to firmware hardcoded defaults; `template_pad` field (int8_t, -1=none) for inheriting buttons from another pad into empty grid positions at load time (no chaining, target wins on conflict)
+- `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`, `pad_apply_font_upscale()`, `PadLabelAnchorY`)
 - `src/app/screens/pad_screen.cpp/h` - Pad screen with LVGL button tiles, label rendering (uses label style resolvers), icon/widget layout, binding updates, and image fetch integration
 - `src/app/screens/splash_screen.cpp/h` - Boot splash with animated spinner
 - `src/app/screens/info_screen.cpp/h` - Device info and real-time stats
@@ -306,6 +313,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web/portal.css` - Styles (gradients, animations, responsive grid)
 - `src/app/web/portal.js` - Client-side logic (multi-page support, API calls, health updates)
 - `src/app/web/portal_action_editor.js` - Shared action editor UI component for button and swipe action editing
+- `src/app/web/portal_binding_validator.js` - Client-side binding syntax validator with scheme registry (live validation, format checking, expression syntax)
 - `src/version.h` - Firmware version tracking
 
 ### Documentation

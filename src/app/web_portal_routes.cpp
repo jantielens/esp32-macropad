@@ -9,6 +9,7 @@
 #include "web_portal_ota.h"
 #include "web_portal_pad.h"
 #include "web_portal_swipe.h"
+#include "web_portal_button_defaults.h"
 #include "web_portal_pages.h"
 
 #include "board_config.h"
@@ -46,6 +47,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/portal_pad_io.js", HTTP_GET, handlePadIOJS);
 		server->on("/portal_pad_editor.js", HTTP_GET, handlePadEditorJS);
 		server->on("/portal_action_editor.js", HTTP_GET, handleActionEditorJS);
+		server->on("/portal_binding_validator.js", HTTP_GET, handleBindingValidatorJS);
 
 		// API endpoints
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
@@ -161,6 +163,19 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				},
 				NULL,
 				handlePostSwipeActions
+		);
+
+		// Button defaults API
+		registerOptions("/api/button-defaults");
+		server->on("/api/button-defaults", HTTP_GET, handleGetButtonDefaults);
+		server->on(
+				"/api/button-defaults",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostButtonDefaults
 		);
 
 		registerOptions("/api/icons/install");
