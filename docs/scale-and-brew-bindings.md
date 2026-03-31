@@ -2,7 +2,7 @@
 
 A complete reference for all `[scale:]` and `[brew:]` bindings available when designing pad screens for the scale features. All bindings work everywhere bindings are supported: labels, colors, widget data, and `[expr:]` expressions.
 
-> **Prerequisite**: Scale bindings require `HAS_SENSOR_HX711` enabled in your board overrides. Brew bindings additionally require `HAS_DISPLAY`.
+> **Prerequisite**: Scale bindings require a scale sensor enabled (`HAS_SENSOR_HX711` or `HAS_SENSOR_NAU7802`) in your board overrides. Brew bindings additionally require `HAS_DISPLAY`.
 
 ---
 
@@ -23,7 +23,7 @@ Both schemes use the standard binding format:
 
 ## Scale Bindings — `[scale:]`
 
-Live data from the HX711 load cell.
+Live data from the load cell (HX711 or NAU7802).
 
 | Key | Type | Default Format | Description |
 |-----|------|---------------|-------------|
@@ -31,7 +31,7 @@ Live data from the HX711 load cell.
 | `flow_rate` | float | `%.1f` | Weight change rate in g/s (1-second window) |
 | `calibration_factor` | float | `%.4f` | Current calibration divisor |
 | `offset` | long | `%ld` | Raw ADC tare offset |
-| `available` | string | — | `ON` if HX711 detected, `OFF` otherwise |
+| `available` | string | — | `ON` if scale sensor detected, `OFF` otherwise |
 | `cal_weight` | float | `%.1f` | Current calibration reference weight (grams) |
 | `status` | string | — | `idle`, `taring`, or `calibrating` |
 

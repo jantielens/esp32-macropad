@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include <ESPAsyncWebServer.h>
 
@@ -18,4 +18,4 @@ void handlePostBrewTemplate(AsyncWebServerRequest* request, uint8_t* data, size_
 // DELETE /api/brew-templates?name=xxx — delete a template from LittleFS; built-in re-emerges if applicable
 void handleDeleteBrewTemplate(AsyncWebServerRequest* request);
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

@@ -1,6 +1,6 @@
 #include "web_portal_brews.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include "brew_log.h"
 #include "fs_health.h"
@@ -313,4 +313,4 @@ void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
     }
 }
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

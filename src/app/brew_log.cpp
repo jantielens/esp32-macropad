@@ -1,6 +1,6 @@
 #include "brew_log.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include "fs_health.h"
 #include "log_manager.h"
@@ -322,4 +322,4 @@ uint16_t brew_log_import_raw(const char* json, size_t json_len) {
     return id;
 }
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

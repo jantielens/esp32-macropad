@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 // Load all dynamic brew templates from /config/brew_templates/*.json on LittleFS.
 // Each valid JSON file is parsed with brew_dsl_parse() and registered via
@@ -17,4 +17,4 @@ void brew_template_loader_reload();
 // LittleFS directory used for template storage.
 #define BREW_TEMPLATE_DIR "/config/brew_templates"
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

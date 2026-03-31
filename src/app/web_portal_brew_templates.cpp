@@ -1,6 +1,6 @@
 #include "web_portal_brew_templates.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include "brew_template_dsl.h"
 #include "brew_template_loader.h"
@@ -213,4 +213,4 @@ void handleDeleteBrewTemplate(AsyncWebServerRequest* request) {
     }
 }
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

@@ -16,8 +16,8 @@
 #include "config_manager.h"
 #include "web_portal_state.h"
 #endif
-#if HAS_SENSOR_HX711
-#include "sensors/hx711_sensor.h"
+#if HAS_SCALE
+#include "scale_hal.h"
 #include "brew_manager.h"
 #endif
 
@@ -111,25 +111,25 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         LOGW(TAG, "%s volume: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_SCALE) == 0) {
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
         LOGI(TAG, "%s scale: tare (deferred)", label);
-        hx711_request_tare();
+        scale_request_tare();
 #else
         LOGW(TAG, "%s scale: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_SCALE_CAL) == 0) {
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
         LOGI(TAG, "%s scale_cal: calibrate (deferred)", label);
-        hx711_request_calibrate();
+        scale_request_calibrate();
 #else
         LOGW(TAG, "%s scale_cal: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_SCALE_CAL_WEIGHT) == 0) {
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
         float delta = strtof(act.mqtt_payload, nullptr);
         if (delta != 0.0f) {
-            hx711_adjust_cal_weight(delta);
-            LOGI(TAG, "%s scale_cal_weight: delta=%.1f -> %.1f g", label, delta, hx711_get_cal_weight());
+            scale_adjust_cal_weight(delta);
+            LOGI(TAG, "%s scale_cal_weight: delta=%.1f -> %.1f g", label, delta, scale_get_cal_weight());
         } else {
             LOGW(TAG, "%s scale_cal_weight: invalid delta '%s'", label, act.mqtt_payload);
         }
@@ -137,11 +137,11 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         LOGW(TAG, "%s scale_cal_weight: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_SCALE_CAL_SET) == 0) {
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
         float val = strtof(act.mqtt_payload, nullptr);
         if (val >= 1.0f) {
-            hx711_set_cal_weight(val);
-            LOGI(TAG, "%s scale_cal_set: %.1f g", label, hx711_get_cal_weight());
+            scale_set_cal_weight(val);
+            LOGI(TAG, "%s scale_cal_set: %.1f g", label, scale_get_cal_weight());
         } else {
             LOGW(TAG, "%s scale_cal_set: invalid value '%s'", label, act.mqtt_payload);
         }
@@ -193,7 +193,7 @@ void action_dispatch(const ButtonAction& act, const char* label) {
             LOGW(TAG, "%s timer: bad payload '%s'", label, p ? p : "(null)");
         }
     } else if (strcmp(act.type, ACTION_TYPE_BREW) == 0) {
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
         const char* cmd = act.mqtt_payload;
         if (!cmd || !cmd[0]) cmd = "start";
         if (strncmp(cmd, "advance:", 8) == 0) {

@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include "brew_manager.h"
 
@@ -35,4 +35,4 @@ void brew_templates_clear_dynamic();
 // Call once at startup.
 void brew_templates_init();
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

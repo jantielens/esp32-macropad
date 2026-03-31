@@ -1,6 +1,6 @@
-#include "hx711_sensor.h"
+#include "nau7802_sensor.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SENSOR_NAU7802
 
 #include "log_manager.h"
 #include "config_manager.h"
@@ -8,57 +8,56 @@
 #if HAS_DISPLAY
 #include "brew_manager.h"
 #endif
-#include <HX711.h>
+#include <SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>
+#include <Wire.h>
 
-#define TAG "HX711"
+#define TAG "NAU7802"
 
 // ============================================================================
-// Tuning knobs — adjust these to taste
+// Tuning knobs — same defaults as HX711 for consistent behaviour
 // ============================================================================
 
-// Weight EMA filter
-static constexpr float    EMA_ALPHA          = 0.3f;   // 0→stable, 1→raw. 0.3 = 30% new + 70% history
-static constexpr float    JUMP_THRESHOLD     = 5.0f;   // grams — reset EMA instantly on big change
+static constexpr float    EMA_ALPHA          = 0.3f;
+static constexpr float    JUMP_THRESHOLD     = 5.0f;
 static constexpr float    DEADBAND_THRESHOLD = 0.15f;  // grams — suppress display flicker when settled
 
-// Flow rate sliding window (time-based — works at any sample rate)
-static constexpr size_t   FLOW_RING_CAPACITY = 80;     // ring buffer capacity (fits 1s@80SPS or 8s@10SPS)
-static constexpr uint32_t FLOW_WINDOW_MS     = 500;    // lookback window for derivative (ms)
-static constexpr uint32_t FLOW_UPDATE_MS     = 100;    // recalc interval (100ms → 10 Hz updates)
-static constexpr uint32_t FLOW_MIN_SPAN_MS   = 50;     // minimum span for valid derivative (ms)
+static constexpr size_t   FLOW_RING_CAPACITY = 80;
+static constexpr uint32_t FLOW_WINDOW_MS     = 500;
+static constexpr uint32_t FLOW_UPDATE_MS     = 100;
+static constexpr uint32_t FLOW_MIN_SPAN_MS   = 50;
 
 // ============================================================================
 // State
 // ============================================================================
-static HX711 s_scale;
+static NAU7802 s_nau;
 static bool  s_initialized = false;
 static bool  s_available   = false;
 
-// EMA-filtered weight
 static float s_weight_ema     = 0.0f;
 static float s_weight_display = 0.0f;  // dead-band filtered output for UI
 static bool  s_ema_primed     = false;
 
+// Calibration
+static float s_cal_factor  = 1.0f;
+static long  s_offset      = 0;
+
 // Flow rate — sliding window ring buffer
 struct WeightSample { float weight; uint32_t ms; };
 static WeightSample s_flow_ring[FLOW_RING_CAPACITY];
-static size_t   s_ring_head     = 0;      // next write index
-static size_t   s_ring_count    = 0;      // samples currently stored
-static uint32_t s_flow_last_ms  = 0;      // last time we recalculated
-static float    s_flow_rate     = 0.0f;   // g/s
+static size_t   s_ring_head     = 0;
+static size_t   s_ring_count    = 0;
+static uint32_t s_flow_last_ms  = 0;
+static float    s_flow_rate     = 0.0f;
 
 // Calibration reference weight (runtime, not persisted)
 static float s_cal_weight = 500.0f;
 
-// Deferred NVS persist flag (set from any task, consumed in loop_cb on main task)
-static volatile bool s_persist_requested = false;
-
-// Deferred operation flags (set from LVGL task, consumed on main task)
+// Deferred flags
+static volatile bool s_persist_requested   = false;
 static volatile bool s_tare_requested      = false;
 static volatile bool s_tare_persist        = true;
 static volatile bool s_calibrate_requested = false;
 
-// Status tracking
 enum ScaleStatus : uint8_t { SCALE_IDLE = 0, SCALE_TARING, SCALE_CALIBRATING };
 static volatile ScaleStatus s_status = SCALE_IDLE;
 
@@ -66,25 +65,25 @@ static volatile ScaleStatus s_status = SCALE_IDLE;
 // Internal helpers
 // ============================================================================
 
-// Read one sample from HX711, apply EMA, update flow rate.
 static void poll_once() {
     if (!s_available) return;
-    if (!s_scale.is_ready()) return;
+    if (!s_nau.available()) return;
 
-    float raw = s_scale.get_units(1);  // single sample, calibrated
+    long raw = s_nau.getReading();
+    float calibrated = (s_cal_factor != 0.0f) ? (float)(raw - s_offset) / s_cal_factor : 0.0f;
 
     // EMA filter with jump detection
     if (!s_ema_primed) {
-        s_weight_ema = raw;
-        s_weight_display = raw;
+        s_weight_ema = calibrated;
+        s_weight_display = calibrated;
         s_ema_primed = true;
     } else {
-        float delta = raw - s_weight_ema;
+        float delta = calibrated - s_weight_ema;
         if (delta > JUMP_THRESHOLD || delta < -JUMP_THRESHOLD) {
-            s_weight_ema = raw;  // instant reset on big change
-            s_weight_display = raw;
+            s_weight_ema = calibrated;
+            s_weight_display = calibrated;
         } else {
-            s_weight_ema = EMA_ALPHA * raw + (1.0f - EMA_ALPHA) * s_weight_ema;
+            s_weight_ema = EMA_ALPHA * calibrated + (1.0f - EMA_ALPHA) * s_weight_ema;
         }
     }
 
@@ -106,7 +105,6 @@ static void poll_once() {
         size_t newest_idx = (s_ring_head + FLOW_RING_CAPACITY - 1) % FLOW_RING_CAPACITY;
         const WeightSample &newest = s_flow_ring[newest_idx];
 
-        // Find reference sample ~FLOW_WINDOW_MS ago (scan backward from newest)
         uint32_t target_ms = now - FLOW_WINDOW_MS;
         size_t ref_idx = (s_ring_head + FLOW_RING_CAPACITY - s_ring_count) % FLOW_RING_CAPACITY;
         for (size_t i = 1; i < s_ring_count; i++) {
@@ -129,22 +127,29 @@ static void poll_once() {
 // Public API
 // ============================================================================
 
-float hx711_get_weight() {
-    return s_weight_display;
-}
+float nau7802_get_weight() { return s_weight_display; }
+float nau7802_get_flow_rate() { return s_flow_rate; }
+bool  nau7802_is_available() { return s_available; }
 
-float hx711_get_flow_rate() {
-    return s_flow_rate;
-}
-
-bool hx711_is_available() {
-    return s_available;
-}
-
-void hx711_tare() {
+void nau7802_tare() {
     if (!s_available) return;
     LOGI(TAG, "Tare (20 samples)...");
-    s_scale.tare(20);
+    // Average 20 raw readings for offset
+    long total = 0;
+    int count = 0;
+    for (int i = 0; i < 20; i++) {
+        // Wait for data ready
+        uint32_t t0 = millis();
+        while (!s_nau.available()) {
+            if (millis() - t0 > 200) break;
+            delay(1);
+        }
+        if (s_nau.available()) {
+            total += s_nau.getReading();
+            count++;
+        }
+    }
+    if (count > 0) s_offset = total / count;
     s_weight_ema     = 0.0f;
     s_weight_display = 0.0f;
     s_ema_primed     = false;
@@ -152,80 +157,82 @@ void hx711_tare() {
     s_ring_head   = 0;
     s_ring_count  = 0;
     s_flow_last_ms = 0;
-    LOGI(TAG, "Tare done, offset=%ld", s_scale.get_offset());
+    LOGI(TAG, "Tare done, offset=%ld", s_offset);
 }
 
-void hx711_set_calibration(float factor) {
-    if (!s_available) return;
-    s_scale.set_scale(factor);
+void nau7802_set_calibration(float factor) {
+    s_cal_factor = factor;
     LOGI(TAG, "Calibration factor set: %.4f", factor);
 }
 
-float hx711_get_calibration_factor() {
-    if (!s_available) return 1.0f;
-    return s_scale.get_scale();
-}
+float nau7802_get_calibration_factor() { return s_cal_factor; }
+long  nau7802_get_offset() { return s_offset; }
 
-long hx711_get_offset() {
-    if (!s_available) return 0;
-    return s_scale.get_offset();
-}
-
-float hx711_get_value(int times) {
+float nau7802_get_value(int times) {
     if (!s_available) return 0.0f;
-    return (float)s_scale.get_value(times);
+    long total = 0;
+    int count = 0;
+    for (int i = 0; i < times; i++) {
+        uint32_t t0 = millis();
+        while (!s_nau.available()) {
+            if (millis() - t0 > 200) break;
+            delay(1);
+        }
+        if (s_nau.available()) {
+            total += s_nau.getReading();
+            count++;
+        }
+    }
+    if (count == 0) return 0.0f;
+    return (float)(total / count - s_offset);
 }
 
-float hx711_get_cal_weight() {
-    return s_cal_weight;
-}
+float nau7802_get_cal_weight() { return s_cal_weight; }
 
-void hx711_adjust_cal_weight(float delta) {
+void nau7802_adjust_cal_weight(float delta) {
     s_cal_weight += delta;
     if (s_cal_weight < 1.0f) s_cal_weight = 1.0f;
-    LOGI(TAG, "Cal weight adjusted by %.1f → %.1f g", delta, s_cal_weight);
+    LOGI(TAG, "Cal weight adjusted by %.1f -> %.1f g", delta, s_cal_weight);
 }
 
-void hx711_set_cal_weight(float value) {
+void nau7802_set_cal_weight(float value) {
     s_cal_weight = (value < 1.0f) ? 1.0f : value;
     LOGI(TAG, "Cal weight set to %.1f g", s_cal_weight);
 }
 
-float hx711_calibrate_with_cal_weight() {
+float nau7802_calibrate_with_cal_weight() {
     if (!s_available) return 0.0f;
-    float raw_delta = hx711_get_value(20);
+    float raw_delta = nau7802_get_value(20);
     if (raw_delta == 0.0f) {
         LOGW(TAG, "Calibrate failed: raw delta is zero");
         return 0.0f;
     }
     float factor = raw_delta / s_cal_weight;
-    LOGI(TAG, "Calibrate: raw_delta=%.1f / cal_weight=%.1f → factor=%.4f", raw_delta, s_cal_weight, factor);
-    hx711_set_calibration(factor);
+    LOGI(TAG, "Calibrate: raw_delta=%.1f / cal_weight=%.1f -> factor=%.4f", raw_delta, s_cal_weight, factor);
+    nau7802_set_calibration(factor);
     return factor;
 }
 
-void hx711_request_persist() {
-    s_persist_requested = true;
-}
+void nau7802_request_persist() { s_persist_requested = true; }
 
-void hx711_request_tare() {
+void nau7802_request_tare() {
     s_tare_requested = true;
     s_tare_persist   = true;
     s_status = SCALE_TARING;
 }
 
-void hx711_request_tare_no_persist() {
+void nau7802_request_tare_no_persist() {
     s_tare_requested = true;
     s_tare_persist   = false;
     s_status = SCALE_TARING;
 }
 
-void hx711_request_calibrate() {
+void nau7802_request_calibrate() {
     s_calibrate_requested = true;
     s_status = SCALE_CALIBRATING;
 }
 
-const char* hx711_get_status() {
+const char* nau7802_get_status() {
     switch (s_status) {
         case SCALE_TARING:      return "taring";
         case SCALE_CALIBRATING: return "calibrating";
@@ -237,51 +244,54 @@ const char* hx711_get_status() {
 // Sensor callback wiring
 // ============================================================================
 
-static void hx711_init_cb() {
+static void nau7802_init_cb() {
     if (s_initialized) return;
     s_initialized = true;
 
-    if (HX711_DOUT_PIN < 0 || HX711_SCK_PIN < 0) {
-        LOGW(TAG, "HX711 pins not configured (DOUT=%d SCK=%d)", HX711_DOUT_PIN, HX711_SCK_PIN);
+    // Initialize I2C on the sensor pins (Wire1 to avoid conflict with touch)
+    Wire1.begin(SENSOR_I2C_SDA, SENSOR_I2C_SCL, SENSOR_I2C_FREQUENCY);
+
+    if (!s_nau.begin(Wire1, true)) {
+        LOGE(TAG, "NAU7802 not detected on I2C (SDA=%d SCL=%d)", SENSOR_I2C_SDA, SENSOR_I2C_SCL);
         return;
     }
 
-    s_scale.begin(HX711_DOUT_PIN, HX711_SCK_PIN);
+    // Configure for load cell use: gain 128, 40 SPS (lower SPS = longer sinc filter window = less noise)
+    s_nau.setGain(NAU7802_GAIN_128);
+    s_nau.setSampleRate(NAU7802_SPS_40);
 
-    if (!s_scale.wait_ready_timeout(1000)) {
-        LOGE(TAG, "HX711 not detected (timeout)");
-        return;
+    // Internal calibration
+    if (!s_nau.calibrateAFE()) {
+        LOGW(TAG, "NAU7802 internal AFE calibration failed (continuing anyway)");
     }
 
-    // Load calibration from NVS via device_config
+    // Load calibration from NVS (field names kept as hx711_* for backward compat)
     extern DeviceConfig device_config;
     float cal = strtof(device_config.hx711_cal_factor, nullptr);
     long  ofs = strtol(device_config.hx711_offset, nullptr, 10);
     if (cal == 0.0f) cal = 1.0f;
 
-    s_scale.set_scale(cal);
-    s_scale.set_offset(ofs);
+    s_cal_factor = cal;
+    s_offset     = ofs;
 
     s_available = true;
-    LOGI(TAG, "HX711 ready (DOUT=%d SCK=%d cal=%.4f ofs=%ld)",
-         HX711_DOUT_PIN, HX711_SCK_PIN, cal, ofs);
+    LOGI(TAG, "NAU7802 ready (SDA=%d SCL=%d cal=%.4f ofs=%ld)",
+         SENSOR_I2C_SDA, SENSOR_I2C_SCL, cal, ofs);
 }
 
-static void hx711_loop_cb() {
-    // Deferred tare — runs on main task (internal RAM stack, no LVGL blocking)
+static void nau7802_loop_cb() {
     if (s_tare_requested && s_available) {
         s_tare_requested = false;
         bool persist = s_tare_persist;
-        s_tare_persist = true;  // reset default
-        hx711_tare();
+        s_tare_persist = true;
+        nau7802_tare();
         if (persist) s_persist_requested = true;
         s_status = SCALE_IDLE;
     }
 
-    // Deferred calibrate — runs on main task
     if (s_calibrate_requested && s_available) {
         s_calibrate_requested = false;
-        float factor = hx711_calibrate_with_cal_weight();
+        float factor = nau7802_calibrate_with_cal_weight();
         if (factor != 0.0f) {
             s_persist_requested = true;
             LOGI(TAG, "Deferred calibrate done: factor=%.4f", factor);
@@ -294,40 +304,37 @@ static void hx711_loop_cb() {
     poll_once();
 
 #if HAS_DISPLAY
-    // Tick the brew state machine after each weight sample
     brew_tick();
 #endif
 
-    // Deferred NVS persist — runs on main task (internal RAM stack, flash-safe)
     if (s_persist_requested && s_available) {
         s_persist_requested = false;
         extern DeviceConfig device_config;
-        snprintf(device_config.hx711_cal_factor, CONFIG_HX711_CAL_MAX_LEN, "%.4f", hx711_get_calibration_factor());
-        snprintf(device_config.hx711_offset, CONFIG_HX711_CAL_MAX_LEN, "%ld", hx711_get_offset());
+        snprintf(device_config.hx711_cal_factor, CONFIG_HX711_CAL_MAX_LEN, "%.4f", s_cal_factor);
+        snprintf(device_config.hx711_offset, CONFIG_HX711_CAL_MAX_LEN, "%ld", s_offset);
         config_manager_save(&device_config);
-        LOGI(TAG, "Calibration persisted to NVS (factor=%.4f offset=%ld)",
-             hx711_get_calibration_factor(), hx711_get_offset());
+        LOGI(TAG, "Calibration persisted to NVS (factor=%.4f offset=%ld)", s_cal_factor, s_offset);
     }
 }
 
-static void hx711_append_api(JsonObject &doc) {
+static void nau7802_append_api(JsonObject &doc) {
     if (!s_available) return;
     sensor_manager_set_number(doc, "weight_g", s_weight_display, true);
     sensor_manager_set_number(doc, "flow_rate", s_flow_rate, true);
 }
 
-static void hx711_append_mqtt(JsonObject &doc) {
-    hx711_append_api(doc);
+static void nau7802_append_mqtt(JsonObject &doc) {
+    nau7802_append_api(doc);
 }
 
-void register_hx711_sensor(SensorRegistry &registry) {
+void register_nau7802_sensor(SensorRegistry &registry) {
     SensorCallbacks callbacks = {};
-    callbacks.name       = "HX711";
-    callbacks.init       = hx711_init_cb;
-    callbacks.loop       = hx711_loop_cb;
-    callbacks.append_api = hx711_append_api;
-    callbacks.append_mqtt = hx711_append_mqtt;
+    callbacks.name        = "NAU7802";
+    callbacks.init        = nau7802_init_cb;
+    callbacks.loop        = nau7802_loop_cb;
+    callbacks.append_api  = nau7802_append_api;
+    callbacks.append_mqtt = nau7802_append_mqtt;
     registry.add(callbacks);
 }
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SENSOR_NAU7802

@@ -208,6 +208,14 @@
 #define HAS_SENSOR_HX711 false
 #endif
 
+// Enable NAU7802 I2C load cell ADC (weight scale).
+#ifndef HAS_SENSOR_NAU7802
+#define HAS_SENSOR_NAU7802 false
+#endif
+
+// Convenience: true when any scale (load cell) sensor is enabled.
+#define HAS_SCALE (HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)
+
 // HX711 data out pin.
 #ifndef HX711_DOUT_PIN
 #define HX711_DOUT_PIN -1

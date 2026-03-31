@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include <stdint.h>
 #include <stddef.h>
@@ -18,4 +18,4 @@ void handlePostScaleCalibrate(AsyncWebServerRequest* request, uint8_t* data, siz
 // GET /api/scale — current scale state
 void handleGetScaleStatus(AsyncWebServerRequest* request);
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

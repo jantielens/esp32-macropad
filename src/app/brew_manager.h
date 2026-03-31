@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include <stdint.h>
 #include <stddef.h>
@@ -204,4 +204,4 @@ void brew_free_series();
 
 void brew_manager_init();
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

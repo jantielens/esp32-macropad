@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include "brew_manager.h"
 #include <stdint.h>
@@ -49,4 +49,4 @@ uint16_t brew_log_import_raw(const char* json, size_t json_len);
 }
 #endif
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

@@ -59,7 +59,8 @@
 #define KEY_TAP_BEEP       "tap_beep"
 #define KEY_LP_BEEP        "lp_beep"
 #endif
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
+// NVS keys kept as "hx711_*" for backward compatibility (shared by all scale sensors)
 #define KEY_HX711_CAL      "hx711_cal"
 #define KEY_HX711_OFS      "hx711_ofs"
 #endif
@@ -253,7 +254,7 @@ bool config_manager_load(DeviceConfig *config) {
 		}
 		#endif
 
-		#if HAS_SENSOR_HX711
+		#if HAS_SCALE
 		preferences.getString(KEY_HX711_CAL, config->hx711_cal_factor, CONFIG_HX711_CAL_MAX_LEN);
 		if (strlen(config->hx711_cal_factor) == 0) strlcpy(config->hx711_cal_factor, "1.0", CONFIG_HX711_CAL_MAX_LEN);
 		preferences.getString(KEY_HX711_OFS, config->hx711_offset, CONFIG_HX711_CAL_MAX_LEN);
@@ -352,7 +353,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putString(KEY_LP_BEEP, config->lp_beep);
 		#endif
 
-		#if HAS_SENSOR_HX711
+		#if HAS_SCALE
 		preferences.putString(KEY_HX711_CAL, config->hx711_cal_factor);
 		preferences.putString(KEY_HX711_OFS, config->hx711_offset);
 		#endif

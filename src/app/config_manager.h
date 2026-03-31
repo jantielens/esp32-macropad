@@ -39,7 +39,7 @@
 // Screen saver MQTT wake binding
 #define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
 
-// HX711 scale calibration (stored as strings for precision)
+// Scale calibration (shared by HX711 and NAU7802; NVS keys kept as "hx711_*" for backward compat)
 #define CONFIG_HX711_CAL_MAX_LEN 16
 
 // Audio feedback beep pattern (may also be defined in pad_config.h)
@@ -111,7 +111,7 @@ struct DeviceConfig {
 		char screen_saver_wake_binding[CONFIG_SS_WAKE_BINDING_MAX_LEN]; // binding expression; wake on "ON"
 #endif
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 		char hx711_cal_factor[CONFIG_HX711_CAL_MAX_LEN];  // calibration divisor (float as string, default "1.0")
 		char hx711_offset[CONFIG_HX711_CAL_MAX_LEN];      // tare offset (long as string, default "0")
 #endif

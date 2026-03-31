@@ -1,9 +1,9 @@
 #include "web_portal_scale.h"
 #include "board_config.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
-#include "sensors/hx711_sensor.h"
+#include "scale_hal.h"
 #include "config_manager.h"
 #include "web_portal_cors.h"
 #include "web_portal_state.h"
@@ -19,10 +19,10 @@ extern DeviceConfig device_config;
 // POST /api/scale/tare — zero the scale
 void handlePostScaleTare(AsyncWebServerRequest* request) {
     LOGI(TAG, "Tare requested via portal");
-    hx711_tare();
+    scale_tare();
 
     // Persist the new offset to NVS
-    snprintf(device_config.hx711_offset, CONFIG_HX711_CAL_MAX_LEN, "%ld", hx711_get_offset());
+    snprintf(device_config.hx711_offset, CONFIG_HX711_CAL_MAX_LEN, "%ld", scale_get_offset());
     config_manager_save(&device_config);
 
     AsyncWebServerResponse* response = request->beginResponse(200, "application/json", "{\"ok\":true}");
@@ -57,10 +57,10 @@ void handlePostScaleCalibrate(AsyncWebServerRequest* request, uint8_t* data, siz
     LOGI(TAG, "Calibrate requested: known_weight=%.1f g", known_weight);
 
     // Temporarily set cal_weight to the requested value, calibrate, then restore
-    float saved_cal_weight = hx711_get_cal_weight();
-    hx711_adjust_cal_weight(known_weight - saved_cal_weight);  // set to known_weight
-    float factor = hx711_calibrate_with_cal_weight();
-    hx711_adjust_cal_weight(saved_cal_weight - known_weight);  // restore
+    float saved_cal_weight = scale_get_cal_weight();
+    scale_adjust_cal_weight(known_weight - saved_cal_weight);  // set to known_weight
+    float factor = scale_calibrate_with_cal_weight();
+    scale_adjust_cal_weight(saved_cal_weight - known_weight);  // restore
 
     if (factor == 0.0f) {
         AsyncWebServerResponse* response = request->beginResponse(400, "application/json",
@@ -71,12 +71,12 @@ void handlePostScaleCalibrate(AsyncWebServerRequest* request, uint8_t* data, siz
     }
 
     // Persist calibration to NVS
-    snprintf(device_config.hx711_cal_factor, CONFIG_HX711_CAL_MAX_LEN, "%.4f", hx711_get_calibration_factor());
-    snprintf(device_config.hx711_offset, CONFIG_HX711_CAL_MAX_LEN, "%ld", hx711_get_offset());
+    snprintf(device_config.hx711_cal_factor, CONFIG_HX711_CAL_MAX_LEN, "%.4f", scale_get_calibration_factor());
+    snprintf(device_config.hx711_offset, CONFIG_HX711_CAL_MAX_LEN, "%ld", scale_get_offset());
     config_manager_save(&device_config);
 
     char resp[128];
-    snprintf(resp, sizeof(resp), "{\"ok\":true,\"calibration_factor\":%.4f}", hx711_get_calibration_factor());
+    snprintf(resp, sizeof(resp), "{\"ok\":true,\"calibration_factor\":%.4f}", scale_get_calibration_factor());
     AsyncWebServerResponse* response = request->beginResponse(200, "application/json", resp);
     web_portal_add_cors_headers(response);
     request->send(response);
@@ -87,14 +87,14 @@ void handleGetScaleStatus(AsyncWebServerRequest* request) {
     char resp[192];
     snprintf(resp, sizeof(resp),
         "{\"available\":%s,\"weight_g\":%.1f,\"flow_rate\":%.1f,\"calibration_factor\":%.4f,\"offset\":%ld}",
-        hx711_is_available() ? "true" : "false",
-        hx711_get_weight(),
-        hx711_get_flow_rate(),
-        hx711_get_calibration_factor(),
-        hx711_get_offset());
+        scale_is_available() ? "true" : "false",
+        scale_get_weight(),
+        scale_get_flow_rate(),
+        scale_get_calibration_factor(),
+        scale_get_offset());
     AsyncWebServerResponse* response = request->beginResponse(200, "application/json", resp);
     web_portal_add_cors_headers(response);
     request->send(response);
 }
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

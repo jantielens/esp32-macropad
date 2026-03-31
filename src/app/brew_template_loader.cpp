@@ -1,6 +1,6 @@
 #include "brew_template_loader.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include "brew_template_dsl.h"
 #include "brew_templates.h"
@@ -75,4 +75,4 @@ void brew_template_loader_reload() {
     brew_template_loader_load();
 }
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE

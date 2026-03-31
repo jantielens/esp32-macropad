@@ -289,7 +289,7 @@ void setup()
 	#endif
 
 	// Initialize brew log (LittleFS must be mounted)
-	#if HAS_SENSOR_HX711
+	#if HAS_SCALE
 	brew_log_init();
 	#endif
 
@@ -358,7 +358,7 @@ void setup()
 	expr_binding_init();
 	pad_binding_init();
 	scale_binding_init();
-	#if HAS_SENSOR_HX711
+	#if HAS_SCALE
 	brew_templates_init();
 	brew_manager_init();
 	brew_binding_init();

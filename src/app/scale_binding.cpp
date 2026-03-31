@@ -1,10 +1,10 @@
 #include "scale_binding.h"
 #include "board_config.h"
 
-#if HAS_DISPLAY && HAS_SENSOR_HX711
+#if HAS_DISPLAY && HAS_SCALE
 
 #include "binding_template.h"
-#include "sensors/hx711_sensor.h"
+#include "scale_hal.h"
 #include "log_manager.h"
 
 #include <string.h>
@@ -41,31 +41,31 @@ static void parse_scale_params(const char* params,
 
 static bool lookup_value(const char* key, char* out, size_t out_len) {
     if (strcmp(key, "weight") == 0) {
-        snprintf(out, out_len, "%.1f", hx711_get_weight());
+        snprintf(out, out_len, "%.1f", scale_get_weight());
         return true;
     }
     if (strcmp(key, "flow_rate") == 0) {
-        snprintf(out, out_len, "%.1f", hx711_get_flow_rate());
+        snprintf(out, out_len, "%.1f", scale_get_flow_rate());
         return true;
     }
     if (strcmp(key, "calibration_factor") == 0) {
-        snprintf(out, out_len, "%.4f", hx711_get_calibration_factor());
+        snprintf(out, out_len, "%.4f", scale_get_calibration_factor());
         return true;
     }
     if (strcmp(key, "offset") == 0) {
-        snprintf(out, out_len, "%ld", hx711_get_offset());
+        snprintf(out, out_len, "%ld", scale_get_offset());
         return true;
     }
     if (strcmp(key, "available") == 0) {
-        strlcpy(out, hx711_is_available() ? "ON" : "OFF", out_len);
+        strlcpy(out, scale_is_available() ? "ON" : "OFF", out_len);
         return true;
     }
     if (strcmp(key, "cal_weight") == 0) {
-        snprintf(out, out_len, "%.1f", hx711_get_cal_weight());
+        snprintf(out, out_len, "%.1f", scale_get_cal_weight());
         return true;
     }
     if (strcmp(key, "status") == 0) {
-        strlcpy(out, hx711_get_status(), out_len);
+        strlcpy(out, scale_get_status(), out_len);
         return true;
     }
     return false;
@@ -125,7 +125,7 @@ void scale_binding_init() {
     }
 }
 
-#else // !HAS_DISPLAY || !HAS_SENSOR_HX711
+#else // !HAS_DISPLAY || !HAS_SCALE
 
 void scale_binding_init() {}
 

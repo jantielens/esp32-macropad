@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 150
+Total flags: 154
 
 ### Features (HAS_*)
 
@@ -37,6 +37,7 @@ Total flags: 150
 - **HAS_SENSOR_DUMMY** default: `false` — Enable dummy sensor adapter (synthetic values for testing).
 - **HAS_SENSOR_HX711** default: `false` — Enable HX711 load cell sensor (weight scale).
 - **HAS_SENSOR_LD2410_OUT** default: `false` — Enable LD2410 OUT pin presence sensor adapter.
+- **HAS_SENSOR_NAU7802** default: `false` — Enable NAU7802 I2C load cell ADC (weight scale).
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 
 ### Selectors (*_DRIVER)
@@ -200,14 +201,16 @@ Total flags: 150
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
-| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
-| jc3636w518 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
-| jc4880p433 | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  | ✅ |  | ✅ |
-| jc1060p470c | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  | ✅ |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ |
+| jc3636w518 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ |
+| jc4880p433 | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ |
+| jc4880p433-hx711 |  |  | ✅ |  |  |  | ? | ✅ |  |  | ✅ |  |  |  |
+| jc4880p433-nau7802 |  |  | ✅ |  |  |  | ? | ✅ |  |  |  |  | ✅ |  |
+| jc1060p470c | ✅ | ✅ | ✅ |  |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -220,6 +223,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-hx711 | — | — |
+| jc4880p433-nau7802 | — | — |
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
@@ -397,35 +402,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/dummy_sensor.cpp
   - src/app/sensors/dummy_sensor.h
 - **HAS_SENSOR_HX711**
-  - src/app/action_dispatch.cpp
-  - src/app/app.ino
   - src/app/board_config.h
-  - src/app/brew_binding.cpp
-  - src/app/brew_log.cpp
-  - src/app/brew_log.h
-  - src/app/brew_manager.cpp
-  - src/app/brew_manager.h
-  - src/app/brew_template_loader.cpp
-  - src/app/brew_template_loader.h
-  - src/app/brew_templates.cpp
-  - src/app/brew_templates.h
-  - src/app/config_manager.cpp
-  - src/app/config_manager.h
-  - src/app/scale_binding.cpp
   - src/app/sensors.cpp
   - src/app/sensors/hx711_sensor.cpp
   - src/app/sensors/hx711_sensor.h
-  - src/app/web_portal_brew_templates.cpp
-  - src/app/web_portal_brew_templates.h
-  - src/app/web_portal_brews.cpp
-  - src/app/web_portal_brews.h
-  - src/app/web_portal_routes.cpp
-  - src/app/web_portal_scale.cpp
-  - src/app/web_portal_scale.h
 - **HAS_SENSOR_LD2410_OUT**
   - src/app/board_config.h
   - src/app/sensors.cpp
   - src/app/sensors/ld2410_out_sensor.cpp
+- **HAS_SENSOR_NAU7802**
+  - src/app/board_config.h
+  - src/app/sensors.cpp
 - **HAS_TOUCH**
   - src/app/app.ino
   - src/app/board_config.h

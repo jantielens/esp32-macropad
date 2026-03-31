@@ -20,6 +20,10 @@
 #include "sensors/hx711_sensor.cpp"
 #endif
 
+#if HAS_SENSOR_NAU7802
+#include "sensors/nau7802_sensor.cpp"
+#endif
+
 void sensor_manager_register_all(SensorRegistry &registry) {
 	#if HAS_SENSOR_BME280
 	register_bme280_sensor(registry);
@@ -35,6 +39,10 @@ void sensor_manager_register_all(SensorRegistry &registry) {
 
 	#if HAS_SENSOR_HX711
 	register_hx711_sensor(registry);
+	#endif
+
+	#if HAS_SENSOR_NAU7802
+	register_nau7802_sensor(registry);
 	#endif
 }
 

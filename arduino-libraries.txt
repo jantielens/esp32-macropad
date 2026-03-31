@@ -38,6 +38,7 @@ lvgl@9.5.0
 
 # Scale sensor
 HX711 Arduino Library@0.7.5
+SparkFun Qwiic Scale NAU7802 Arduino Library@1.0.6
 
 # Display (Arduino_GFX for JC3248W535, JC3636W518, and other QSPI displays)
 GFX Library for Arduino@1.6.5

@@ -1,11 +1,11 @@
 #include "brew_manager.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include "brew_log.h"
 #include "brew_templates.h"
 #include "brew_template_dsl.h"
-#include "sensors/hx711_sensor.h"
+#include "scale_hal.h"
 #include "log_manager.h"
 
 #if HAS_AUDIO
@@ -87,7 +87,7 @@ static void emit_capture(const BrewStage* stage) {
     strlcpy(c.key, stage->capture_key, sizeof(c.key));
     strlcpy(c.label, stage->capture_label, sizeof(c.label));
     strlcpy(c.unit, stage->capture_unit, sizeof(c.unit));
-    c.value = hx711_get_weight();
+    c.value = scale_get_weight();
     LOGI(TAG, "Capture[%u]: %s=%.1f %s", (unsigned)(s_capture_count - 1),
          c.key, c.value, c.unit);
 }
@@ -95,11 +95,11 @@ static void emit_capture(const BrewStage* stage) {
 static void dispatch_effects(BrewEffects effects, const BrewStage* stage) {
     if (effects == EFFECT_NONE) return;
     if (effects & EFFECT_TARE) {
-        hx711_request_tare_no_persist();
+        scale_request_tare_no_persist();
         LOGD(TAG, "Effect: tare");
     }
     if (effects & EFFECT_CAPTURE_DOSE) {
-        s_dose_weight = hx711_get_weight();
+        s_dose_weight = scale_get_weight();
         LOGI(TAG, "Effect: capture_dose=%.1f g", s_dose_weight);
     }
     if (effects & EFFECT_CAPTURE_WEIGHT) {
@@ -176,8 +176,8 @@ static void enter_stage(uint8_t index) {
 
 static void record_sample() {
     if (!s_series || s_series_count >= BREW_SERIES_MAX_SAMPLES) return;
-    s_series[s_series_count].weight = hx711_get_weight();
-    s_series[s_series_count].flow   = hx711_get_flow_rate();
+    s_series[s_series_count].weight = scale_get_weight();
+    s_series[s_series_count].flow   = scale_get_flow_rate();
     s_series_count++;
 }
 
@@ -215,7 +215,7 @@ void brew_start(const char* template_name) {
     s_phase         = BREW_ACTIVE;
 
     LOGI(TAG, "Start: template='%s', taring scale", tpl->name);
-    hx711_request_tare_no_persist();
+    scale_request_tare_no_persist();
     enter_stage(0);
 }
 
@@ -242,8 +242,8 @@ void brew_stop() {
     if (s_timer_running) {
         s_elapsed_ms = millis() - s_start_ms;
         LOGI(TAG, "Stop: elapsed=%lu ms, weight=%.1f g",
-             (unsigned long)s_elapsed_ms, hx711_get_weight());
-        s_save_weight  = hx711_get_weight();
+             (unsigned long)s_elapsed_ms, scale_get_weight());
+        s_save_weight  = scale_get_weight();
         s_save_pending = true;
     } else {
         LOGI(TAG, "Stop: no timer running (cancelled before pour)");
@@ -320,7 +320,7 @@ void brew_tick() {
 
     // --- AUTO_WEIGHT: detect first pour and start timer ---
     if (stage->type == STAGE_AUTO_WEIGHT) {
-        float w = hx711_get_weight();
+        float w = scale_get_weight();
         if (!s_timer_running && w >= stage->auto_threshold) {
             // First pour detected — start timer and recording
             s_start_ms       = millis();
@@ -396,7 +396,7 @@ void brew_tick() {
     if (stage && stage->weight_cue_g > 0.0f && stage->target_weight > 0.0f
         && s_weight_cue_count < stage->weight_cue_times) {
         float next_threshold_g = stage->weight_cue_g * (stage->weight_cue_times - s_weight_cue_count);
-        float remaining = stage->target_weight - hx711_get_weight();
+        float remaining = stage->target_weight - scale_get_weight();
         if (remaining <= next_threshold_g && remaining > 0.0f) {
             s_weight_cue_count++;
             const char* pattern = stage->weight_cue_beep[0] ? stage->weight_cue_beep : nullptr;
@@ -408,7 +408,7 @@ void brew_tick() {
     // --- Weight done beep: fire once when weight reaches target ---
     if (stage && stage->weight_done_beep[0] && stage->target_weight > 0.0f
         && !s_weight_done_fired) {
-        float w = hx711_get_weight();
+        float w = scale_get_weight();
         if (w >= stage->target_weight) {
             s_weight_done_fired = true;
             audio_beep(stage->weight_done_beep, 0);
@@ -440,11 +440,11 @@ uint32_t brew_get_timer_ms() {
 }
 
 float brew_get_weight() {
-    return hx711_get_weight();
+    return scale_get_weight();
 }
 
 float brew_get_flow_rate() {
-    return hx711_get_flow_rate();
+    return scale_get_flow_rate();
 }
 
 bool brew_is_active() {
@@ -462,7 +462,7 @@ float brew_get_dose_weight() {
 
 float brew_get_water_weight() {
     if (s_phase == BREW_DONE)   return s_save_weight;
-    if (s_timer_running)        return hx711_get_weight();
+    if (s_timer_running)        return scale_get_weight();
     return 0.0f;
 }
 
@@ -475,7 +475,7 @@ float brew_get_stage_weight_target() {
 float brew_get_stage_weight_remaining() {
     float t = brew_get_stage_weight_target();
     if (t <= 0.0f) return 0.0f;
-    float diff = t - hx711_get_weight();
+    float diff = t - scale_get_weight();
     return diff > 0.0f ? diff : 0.0f;
 }
 
@@ -602,5 +602,5 @@ void brew_manager_init() {
     LOGI(TAG, "Init");
 }
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE
 

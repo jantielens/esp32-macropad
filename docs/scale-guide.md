@@ -1,8 +1,13 @@
 # Scale Guide
 
-This guide covers the HX711 load cell scale integration — bindings, actions, calibration workflow, guided brew mode, brew history logging, and REST API. It's aimed at users building rich touch-screen UIs (pad dashboards) for a scale application on an ESP32 Macropad device.
+This guide covers the scale integration — bindings, actions, calibration workflow, guided brew mode, brew history logging, and REST API. It's aimed at users building rich touch-screen UIs (pad dashboards) for a scale application on an ESP32 Macropad device.
 
-> **Prerequisite**: The scale requires an HX711 load cell amplifier connected to two GPIO pins and `HAS_SENSOR_HX711` enabled in the board overrides. See the hardware setup section below.
+Two load cell ADCs are supported:
+
+- **HX711** — SPI-like two-wire interface (DOUT + SCK), widely available breakout boards
+- **NAU7802** — I2C 24-bit ADC with built-in PGA, higher precision, lower noise
+
+> **Prerequisite**: A load cell ADC must be connected and enabled in the board overrides. See the hardware setup section below.
 
 ---
 
@@ -31,25 +36,130 @@ All scale data is exposed through the `[scale:]` binding scheme, and the guided 
 
 ## Hardware Setup
 
-### Wiring
+Two board variants are available for the JC4880P433, each with a different load cell ADC. Both use the same two GPIOs on the pin header near the power connector.
 
-Connect an HX711 breakout board to your ESP32:
+### Option A: HX711 (jc4880p433-hx711)
 
-| HX711 Pin | ESP32 GPIO | Description |
-|-----------|------------|-------------|
-| DOUT      | Board-specific | Data output (e.g. GPIO 52) |
-| SCK       | Board-specific | Clock input (e.g. GPIO 51) |
-| VCC       | 3.3V or 5V | Power |
-| GND       | GND | Ground |
+The HX711 uses a proprietary two-wire protocol (not I2C).
+
+```mermaid
+graph LR
+    subgraph JC4880P433
+        G52["GPIO 52"]
+        G51["GPIO 51"]
+        V33["3.3V"]
+        GND1["GND"]
+    end
+
+    subgraph HX711["HX711 Breakout"]
+        DOUT["DOUT"]
+        SCK["SCK"]
+        VCC["VCC"]
+        GND2["GND"]
+        EP["E+"]
+        EM["E-"]
+        AP["A+"]
+        AM["A-"]
+    end
+
+    subgraph LC["Load Cell"]
+        RED["Red"]
+        BLK["Black"]
+        WHT["White"]
+        GRN["Green"]
+    end
+
+    G52 -- "Data out" --> DOUT
+    G51 -- "Clock" --> SCK
+    V33 --> VCC
+    GND1 --> GND2
+    EP --> RED
+    EM --> BLK
+    AP --> WHT
+    AM --> GRN
+```
+
+| JC4880P433 Pin | HX711 Pin | Signal |
+|----------------|-----------|--------|
+| GPIO 52 | DOUT | Data output (HX711 → ESP32) |
+| GPIO 51 | SCK | Clock input (ESP32 → HX711) |
+| 3.3V | VCC | Power (3.3V or 5V) |
+| GND | GND | Ground |
+
+### Option B: NAU7802 (jc4880p433-nau7802)
+
+The NAU7802 uses standard I2C (fixed address 0x2A). Same physical pins, different protocol.
+
+```mermaid
+graph LR
+    subgraph JC4880P433
+        G52["GPIO 52"]
+        G51["GPIO 51"]
+        V33["3.3V"]
+        GND1["GND"]
+    end
+
+    subgraph NAU["NAU7802 Breakout"]
+        SDA["SDA"]
+        SCL["SCL"]
+        VIN["VIN / VCC"]
+        GND2["GND"]
+        EP["E+"]
+        EM["E-"]
+        AP["A+"]
+        AM["A-"]
+    end
+
+    subgraph LC["Load Cell"]
+        RED["Red"]
+        BLK["Black"]
+        WHT["White"]
+        GRN["Green"]
+    end
+
+    G52 -- "I2C Data" --> SDA
+    G51 -- "I2C Clock" --> SCL
+    V33 --> VIN
+    GND1 --> GND2
+    V33 -. "4.7kΩ pull-up" .-> SDA
+    V33 -. "4.7kΩ pull-up" .-> SCL
+    EP --> RED
+    EM --> BLK
+    AP --> WHT
+    AM --> GRN
+```
+
+| JC4880P433 Pin | NAU7802 Pin | Signal |
+|----------------|-------------|--------|
+| GPIO 52 | SDA | I2C data |
+| GPIO 51 | SCL | I2C clock |
+| 3.3V | VIN / VCC | Power (3.3V) |
+| GND | GND | Ground |
+
+> **Note**: Most NAU7802 breakout boards (e.g. SparkFun Qwiic) include on-board pull-up resistors. If yours doesn't, add 4.7 kΩ pull-ups on SDA and SCL to 3.3V (shown as dashed lines above).
 
 ### Board Configuration
 
-Enable the scale in your board's `src/boards/<board-name>/board_overrides.h`:
+Each sensor variant has its own board config. The firmware is built for one sensor at a time:
 
+**HX711 variant** — `src/boards/jc4880p433-hx711/board_overrides.h`:
 ```cpp
 #define HAS_SENSOR_HX711  true
 #define HX711_DOUT_PIN     52
 #define HX711_SCK_PIN      51
+```
+
+**NAU7802 variant** — `src/boards/jc4880p433-nau7802/board_overrides.h`:
+```cpp
+#define HAS_SENSOR_NAU7802 true
+#define SENSOR_I2C_SDA     52
+#define SENSOR_I2C_SCL     51
+```
+
+Build the variant you need:
+```bash
+./build.sh jc4880p433-hx711     # HX711 build
+./build.sh jc4880p433-nau7802   # NAU7802 build
 ```
 
 > **Tip**: Avoid GPIOs used by SDIO, SPI flash, or other peripherals. Check your board's datasheet.

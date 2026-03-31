@@ -17,7 +17,7 @@
 #if HAS_BLE_HID
 #include "web_portal_ble.h"
 #endif
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 #include "web_portal_scale.h"
 #include "web_portal_brews.h"
 #include "web_portal_brew_templates.h"
@@ -235,7 +235,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		});
 #endif
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 		// Scale endpoints
 		registerOptions("/api/scale/tare");
 		server->on("/api/scale/tare", HTTP_POST, [](AsyncWebServerRequest *request) {

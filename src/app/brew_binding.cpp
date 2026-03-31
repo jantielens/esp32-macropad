@@ -1,7 +1,7 @@
 #include "brew_binding.h"
 #include "board_config.h"
 
-#if HAS_DISPLAY && HAS_SENSOR_HX711
+#if HAS_DISPLAY && HAS_SCALE
 
 #include "binding_template.h"
 #include "brew_manager.h"
@@ -186,7 +186,7 @@ void brew_binding_init() {
     }
 }
 
-#else // !HAS_DISPLAY || !HAS_SENSOR_HX711
+#else // !HAS_DISPLAY || !HAS_SCALE
 
 void brew_binding_init() {}
 

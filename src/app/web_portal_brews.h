@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_SENSOR_HX711
+#if HAS_SCALE
 
 #include <ESPAsyncWebServer.h>
 #include <stdint.h>
@@ -24,4 +24,4 @@ void handleDeleteAllBrews(AsyncWebServerRequest* request);
 void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
                           size_t len, size_t index, size_t total);
 
-#endif // HAS_SENSOR_HX711
+#endif // HAS_SCALE
