@@ -142,6 +142,16 @@ else
         tests/test_key_sequence.cpp src/app/key_sequence.cpp
 fi
 
+# ===== scale_smoothing =====
+if $COVERAGE; then
+    build_and_run scale_smoothing -I tests -I src/app \
+        tests/test_scale_smoothing.cpp src/app/sensors/scale_smoothing.cpp -lm
+else
+    build_and_run scale_smoothing \
+        -I tests -I src/app \
+        tests/test_scale_smoothing.cpp src/app/sensors/scale_smoothing.cpp -lm
+fi
+
 # ===== Brew tests (require ArduinoJson) =====
 if [ -z "$ARDUINOJSON_INC" ]; then
     echo "WARNING: ArduinoJson headers not found — skipping brew tests"

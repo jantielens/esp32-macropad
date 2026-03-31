@@ -22,7 +22,7 @@ void handlePostScaleTare(AsyncWebServerRequest* request) {
     scale_tare();
 
     // Persist the new offset to NVS
-    snprintf(device_config.hx711_offset, CONFIG_HX711_CAL_MAX_LEN, "%ld", scale_get_offset());
+    snprintf(device_config.scale_offset, CONFIG_SCALE_CAL_MAX_LEN, "%ld", scale_get_offset());
     config_manager_save(&device_config);
 
     AsyncWebServerResponse* response = request->beginResponse(200, "application/json", "{\"ok\":true}");
@@ -71,8 +71,8 @@ void handlePostScaleCalibrate(AsyncWebServerRequest* request, uint8_t* data, siz
     }
 
     // Persist calibration to NVS
-    snprintf(device_config.hx711_cal_factor, CONFIG_HX711_CAL_MAX_LEN, "%.4f", scale_get_calibration_factor());
-    snprintf(device_config.hx711_offset, CONFIG_HX711_CAL_MAX_LEN, "%ld", scale_get_offset());
+    snprintf(device_config.scale_cal_factor, CONFIG_SCALE_CAL_MAX_LEN, "%.4f", scale_get_calibration_factor());
+    snprintf(device_config.scale_offset, CONFIG_SCALE_CAL_MAX_LEN, "%ld", scale_get_offset());
     config_manager_save(&device_config);
 
     char resp[128];

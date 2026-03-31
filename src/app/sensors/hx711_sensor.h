@@ -14,6 +14,9 @@ void register_hx711_sensor(SensorRegistry &registry);
 // Get the latest EMA-smoothed weight in grams.
 float hx711_get_weight();
 
+// Get the EMA-smoothed weight (pre-dead-band). For brew series recording.
+float hx711_get_weight_ema();
+
 // Get the current flow rate in g/s (computed from weight derivative).
 float hx711_get_flow_rate();
 
@@ -65,6 +68,9 @@ void hx711_request_persist();
 
 // Get human-readable status string ("idle", "taring", "calibrating").
 const char* hx711_get_status();
+
+// Apply a smoothing preset (0=Stable, 1=Balanced, 2=Responsive). Hot-switch.
+void hx711_apply_preset(uint8_t preset_index);
 
 #endif // HAS_SENSOR_HX711
 

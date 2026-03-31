@@ -13,18 +13,7 @@
 
 #define TAG "NAU7802"
 
-// ============================================================================
-// Tuning knobs — same defaults as HX711 for consistent behaviour
-// ============================================================================
-
-static constexpr float    EMA_ALPHA          = 0.3f;
-static constexpr float    JUMP_THRESHOLD     = 5.0f;
-static constexpr float    DEADBAND_THRESHOLD = 0.15f;  // grams — suppress display flicker when settled
-
-static constexpr size_t   FLOW_RING_CAPACITY = 80;
-static constexpr uint32_t FLOW_WINDOW_MS     = 500;
-static constexpr uint32_t FLOW_UPDATE_MS     = 100;
-static constexpr uint32_t FLOW_MIN_SPAN_MS   = 50;
+#include "scale_smoothing.h"
 
 // ============================================================================
 // State
@@ -32,22 +21,11 @@ static constexpr uint32_t FLOW_MIN_SPAN_MS   = 50;
 static NAU7802 s_nau;
 static bool  s_initialized = false;
 static bool  s_available   = false;
-
-static float s_weight_ema     = 0.0f;
-static float s_weight_display = 0.0f;  // dead-band filtered output for UI
-static bool  s_ema_primed     = false;
+static ScaleSmoothingState s_smooth_state = {};
 
 // Calibration
 static float s_cal_factor  = 1.0f;
 static long  s_offset      = 0;
-
-// Flow rate — sliding window ring buffer
-struct WeightSample { float weight; uint32_t ms; };
-static WeightSample s_flow_ring[FLOW_RING_CAPACITY];
-static size_t   s_ring_head     = 0;
-static size_t   s_ring_count    = 0;
-static uint32_t s_flow_last_ms  = 0;
-static float    s_flow_rate     = 0.0f;
 
 // Calibration reference weight (runtime, not persisted)
 static float s_cal_weight = 500.0f;
@@ -71,64 +49,16 @@ static void poll_once() {
 
     long raw = s_nau.getReading();
     float calibrated = (s_cal_factor != 0.0f) ? (float)(raw - s_offset) / s_cal_factor : 0.0f;
-
-    // EMA filter with jump detection
-    if (!s_ema_primed) {
-        s_weight_ema = calibrated;
-        s_weight_display = calibrated;
-        s_ema_primed = true;
-    } else {
-        float delta = calibrated - s_weight_ema;
-        if (delta > JUMP_THRESHOLD || delta < -JUMP_THRESHOLD) {
-            s_weight_ema = calibrated;
-            s_weight_display = calibrated;
-        } else {
-            s_weight_ema = EMA_ALPHA * calibrated + (1.0f - EMA_ALPHA) * s_weight_ema;
-        }
-    }
-
-    // Dead-band: only update display value when EMA drifts past threshold
-    float db_delta = s_weight_ema - s_weight_display;
-    if (db_delta > DEADBAND_THRESHOLD || db_delta < -DEADBAND_THRESHOLD) {
-        s_weight_display = s_weight_ema;
-    }
-
-    // Push sample into ring buffer
-    uint32_t now = millis();
-    s_flow_ring[s_ring_head] = { s_weight_ema, now };
-    s_ring_head = (s_ring_head + 1) % FLOW_RING_CAPACITY;
-    if (s_ring_count < FLOW_RING_CAPACITY) s_ring_count++;
-
-    // Recalculate flow rate at FLOW_UPDATE_MS intervals
-    if (s_ring_count >= 2 && (now - s_flow_last_ms) >= FLOW_UPDATE_MS) {
-        s_flow_last_ms = now;
-        size_t newest_idx = (s_ring_head + FLOW_RING_CAPACITY - 1) % FLOW_RING_CAPACITY;
-        const WeightSample &newest = s_flow_ring[newest_idx];
-
-        uint32_t target_ms = now - FLOW_WINDOW_MS;
-        size_t ref_idx = (s_ring_head + FLOW_RING_CAPACITY - s_ring_count) % FLOW_RING_CAPACITY;
-        for (size_t i = 1; i < s_ring_count; i++) {
-            size_t idx = (s_ring_head + FLOW_RING_CAPACITY - 1 - i) % FLOW_RING_CAPACITY;
-            if (s_flow_ring[idx].ms <= target_ms) {
-                ref_idx = idx;
-                break;
-            }
-        }
-
-        const WeightSample &ref = s_flow_ring[ref_idx];
-        uint32_t span = newest.ms - ref.ms;
-        if (span >= FLOW_MIN_SPAN_MS) {
-            s_flow_rate = (newest.weight - ref.weight) / ((float)span / 1000.0f);
-        }
-    }
+    scale_smoothing_process(s_smooth_state, calibrated, millis());
 }
 
 // ============================================================================
 // Public API
 // ============================================================================
 
-float nau7802_get_weight() { return s_weight_display; }
-float nau7802_get_flow_rate() { return s_flow_rate; }
+float nau7802_get_weight() { return s_smooth_state.weight_display; }
+float nau7802_get_weight_ema() { return s_smooth_state.weight_ema; }
+float nau7802_get_flow_rate() { return s_smooth_state.flow_rate; }
 bool  nau7802_is_available() { return s_available; }
 
 void nau7802_tare() {
@@ -150,13 +80,7 @@ void nau7802_tare() {
         }
     }
     if (count > 0) s_offset = total / count;
-    s_weight_ema     = 0.0f;
-    s_weight_display = 0.0f;
-    s_ema_primed     = false;
-    s_flow_rate   = 0.0f;
-    s_ring_head   = 0;
-    s_ring_count  = 0;
-    s_flow_last_ms = 0;
+    scale_smoothing_reset(s_smooth_state);
     LOGI(TAG, "Tare done, offset=%ld", s_offset);
 }
 
@@ -265,10 +189,10 @@ static void nau7802_init_cb() {
         LOGW(TAG, "NAU7802 internal AFE calibration failed (continuing anyway)");
     }
 
-    // Load calibration from NVS (field names kept as hx711_* for backward compat)
+    // Load calibration from NVS
     extern DeviceConfig device_config;
-    float cal = strtof(device_config.hx711_cal_factor, nullptr);
-    long  ofs = strtol(device_config.hx711_offset, nullptr, 10);
+    float cal = strtof(device_config.scale_cal_factor, nullptr);
+    long  ofs = strtol(device_config.scale_offset, nullptr, 10);
     if (cal == 0.0f) cal = 1.0f;
 
     s_cal_factor = cal;
@@ -277,6 +201,9 @@ static void nau7802_init_cb() {
     s_available = true;
     LOGI(TAG, "NAU7802 ready (SDA=%d SCL=%d cal=%.4f ofs=%ld)",
          SENSOR_I2C_SDA, SENSOR_I2C_SCL, cal, ofs);
+
+    // Apply smoothing preset from config
+    scale_smoothing_apply(device_config.scale_smoothing);
 }
 
 static void nau7802_loop_cb() {
@@ -310,17 +237,21 @@ static void nau7802_loop_cb() {
     if (s_persist_requested && s_available) {
         s_persist_requested = false;
         extern DeviceConfig device_config;
-        snprintf(device_config.hx711_cal_factor, CONFIG_HX711_CAL_MAX_LEN, "%.4f", s_cal_factor);
-        snprintf(device_config.hx711_offset, CONFIG_HX711_CAL_MAX_LEN, "%ld", s_offset);
+        snprintf(device_config.scale_cal_factor, CONFIG_SCALE_CAL_MAX_LEN, "%.4f", s_cal_factor);
+        snprintf(device_config.scale_offset, CONFIG_SCALE_CAL_MAX_LEN, "%ld", s_offset);
         config_manager_save(&device_config);
         LOGI(TAG, "Calibration persisted to NVS (factor=%.4f offset=%ld)", s_cal_factor, s_offset);
     }
 }
 
+void nau7802_apply_preset(uint8_t idx) {
+    scale_smoothing_apply(idx);
+}
+
 static void nau7802_append_api(JsonObject &doc) {
     if (!s_available) return;
-    sensor_manager_set_number(doc, "weight_g", s_weight_display, true);
-    sensor_manager_set_number(doc, "flow_rate", s_flow_rate, true);
+    sensor_manager_set_number(doc, "weight_g", s_smooth_state.weight_display, true);
+    sensor_manager_set_number(doc, "flow_rate", s_smooth_state.flow_rate, true);
 }
 
 static void nau7802_append_mqtt(JsonObject &doc) {

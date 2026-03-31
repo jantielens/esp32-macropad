@@ -60,9 +60,10 @@
 #define KEY_LP_BEEP        "lp_beep"
 #endif
 #if HAS_SCALE
-// NVS keys kept as "hx711_*" for backward compatibility (shared by all scale sensors)
-#define KEY_HX711_CAL      "hx711_cal"
-#define KEY_HX711_OFS      "hx711_ofs"
+// NVS keys kept as "hx711_*" for backward compatibility with existing devices
+#define KEY_SCALE_CAL       "hx711_cal"
+#define KEY_SCALE_OFS       "hx711_ofs"
+#define KEY_SCALE_SMOOTHING "scale_sm"
 #endif
 #define KEY_MAGIC          "magic"
 
@@ -255,10 +256,12 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_SCALE
-		preferences.getString(KEY_HX711_CAL, config->hx711_cal_factor, CONFIG_HX711_CAL_MAX_LEN);
-		if (strlen(config->hx711_cal_factor) == 0) strlcpy(config->hx711_cal_factor, "1.0", CONFIG_HX711_CAL_MAX_LEN);
-		preferences.getString(KEY_HX711_OFS, config->hx711_offset, CONFIG_HX711_CAL_MAX_LEN);
-		if (strlen(config->hx711_offset) == 0) strlcpy(config->hx711_offset, "0", CONFIG_HX711_CAL_MAX_LEN);
+		preferences.getString(KEY_SCALE_CAL, config->scale_cal_factor, CONFIG_SCALE_CAL_MAX_LEN);
+		if (strlen(config->scale_cal_factor) == 0) strlcpy(config->scale_cal_factor, "1.0", CONFIG_SCALE_CAL_MAX_LEN);
+		preferences.getString(KEY_SCALE_OFS, config->scale_offset, CONFIG_SCALE_CAL_MAX_LEN);
+		if (strlen(config->scale_offset) == 0) strlcpy(config->scale_offset, "0", CONFIG_SCALE_CAL_MAX_LEN);
+		config->scale_smoothing = preferences.getUChar(KEY_SCALE_SMOOTHING, 1);  // default: Balanced
+		if (config->scale_smoothing > 2) config->scale_smoothing = 1;
 		#endif
 
 		#if HAS_DISPLAY
@@ -354,8 +357,9 @@ bool config_manager_save(const DeviceConfig *config) {
 		#endif
 
 		#if HAS_SCALE
-		preferences.putString(KEY_HX711_CAL, config->hx711_cal_factor);
-		preferences.putString(KEY_HX711_OFS, config->hx711_offset);
+		preferences.putString(KEY_SCALE_CAL, config->scale_cal_factor);
+		preferences.putString(KEY_SCALE_OFS, config->scale_offset);
+		preferences.putUChar(KEY_SCALE_SMOOTHING, config->scale_smoothing);
 		#endif
 
 		#if HAS_DISPLAY
@@ -516,6 +520,11 @@ LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
 		LOGI("Config", "Audio volume: %u%%", config->audio_volume);
 		if (config->tap_beep[0]) LOGI("Config", "Tap beep: %s", config->tap_beep);
 		if (config->lp_beep[0]) LOGI("Config", "LP beep: %s", config->lp_beep);
+#endif
+
+#if HAS_SCALE
+		static const char* SM_NAMES[] = {"Stable", "Balanced", "Responsive"};
+		LOGI("Config", "Scale smoothing: %s (%u)", SM_NAMES[config->scale_smoothing], config->scale_smoothing);
 #endif
 
 #if HAS_DISPLAY

@@ -82,6 +82,11 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **MQTT Audio Control**: Exposes audio as HA siren + volume + beep entities (compile-time gated by `HAS_AUDIO && HAS_MQTT`)
   - `mqtt_audio.cpp/h` - Siren ON/OFF with loop/duration/tone selection, volume control, 3 beep buttons, custom tone text entity; cross-task pending vars with portMUX spinlock
   - HA discovery published via `ha_discovery_publish_audio_entities()` with siren, number, text, and button entity types
+- **Scale Smoothing Subsystem**: Shared EMA/dead-band/flow-rate processing with runtime-switchable presets (compile-time gated by `HAS_SCALE`)
+  - `sensors/scale_smoothing.cpp/h` - 3 presets (Stable/Balanced/Responsive), EMA weight filter, dead-band display filter, flow rate derivative with second-stage EMA, jump detection
+  - `scale_hal.cpp/h` - Unified scale API dispatching to active sensor backend (HX711 or NAU7802)
+  - `sensors/hx711_sensor.cpp/h` - HX711 load cell driver using shared smoothing module
+  - `sensors/nau7802_sensor.cpp/h` - NAU7802 I2C ADC driver using shared smoothing module
 - **Power + Transport Subsystem**: Power modes, BLE/MQTT transport selection, and duty-cycle runtime
   - `power_config.cpp/h` - Power mode parsing helpers
   - `power_manager.cpp/h` - Boot mode selection, backoff tracking, LED modes, sleep helpers

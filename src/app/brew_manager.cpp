@@ -176,7 +176,7 @@ static void enter_stage(uint8_t index) {
 
 static void record_sample() {
     if (!s_series || s_series_count >= BREW_SERIES_MAX_SAMPLES) return;
-    s_series[s_series_count].weight = scale_get_weight();
+    s_series[s_series_count].weight = scale_get_weight_ema();  // smooth weight for brew data (no dead-band staircase)
     s_series[s_series_count].flow   = scale_get_flow_rate();
     s_series_count++;
 }

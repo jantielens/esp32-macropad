@@ -292,6 +292,13 @@ async function loadConfig() {
             if (audioSection) audioSection.style.display = 'block';
         }
 
+        // Scale settings
+        if (config.scale_smoothing !== undefined) {
+            setValueIfExists('scale_smoothing', config.scale_smoothing);
+            const scaleSection = document.getElementById('scale-section');
+            if (scaleSection) scaleSection.style.display = 'block';
+        }
+
         setValueIfExists('basic_auth_username', config.basic_auth_username);
         const authPwdField = document.getElementById('basic_auth_password');
         if (authPwdField) {
@@ -357,6 +364,7 @@ function extractFormFields(formData) {
                     'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
                     'ble_enabled',
                     'audio_volume', 'tap_beep', 'lp_beep',
+                    'scale_smoothing',
                     'backlight_brightness',
                     'screen_saver_enabled', 'screen_saver_timeout_seconds', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms', 'screen_saver_wake_on_touch',
                     'screen_saver_wake_binding'];

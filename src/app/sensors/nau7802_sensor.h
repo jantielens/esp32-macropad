@@ -12,6 +12,7 @@ void register_nau7802_sensor(SensorRegistry &registry);
 // ---- Scale public API (mirrors HX711 interface for scale HAL) ----
 
 float nau7802_get_weight();
+float nau7802_get_weight_ema();
 float nau7802_get_flow_rate();
 void nau7802_tare();
 void nau7802_request_tare();
@@ -29,6 +30,7 @@ void nau7802_set_cal_weight(float value);
 float nau7802_calibrate_with_cal_weight();
 void nau7802_request_persist();
 const char* nau7802_get_status();
+void nau7802_apply_preset(uint8_t preset_index);
 
 #endif // HAS_SENSOR_NAU7802
 

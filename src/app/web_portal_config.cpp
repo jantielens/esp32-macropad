@@ -20,6 +20,10 @@
 #include "audio.h"
 #endif
 
+#if HAS_SCALE
+#include "scale_hal.h"
+#endif
+
 #include <ArduinoJson.h>
 #include <WiFi.h>
 
@@ -134,6 +138,10 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["audio_volume"] = current_config->audio_volume;
 				(*doc)["tap_beep"] = current_config->tap_beep;
 				(*doc)["lp_beep"] = current_config->lp_beep;
+				#endif
+
+				#if HAS_SCALE
+				(*doc)["scale_smoothing"] = current_config->scale_smoothing;
 				#endif
 
 				#if HAS_DISPLAY
@@ -427,6 +435,16 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 		if (doc.containsKey("lp_beep")) {
 				strlcpy(current_config->lp_beep, doc["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+		}
+		#endif
+
+		#if HAS_SCALE
+		if (doc.containsKey("scale_smoothing")) {
+				uint8_t val = doc["scale_smoothing"].as<uint8_t>();
+				if (val <= 2) {
+						current_config->scale_smoothing = val;
+						scale_apply_preset(val);
+				}
 		}
 		#endif
 

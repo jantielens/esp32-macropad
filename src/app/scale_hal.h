@@ -1,6 +1,7 @@
 #pragma once
 
 #include "board_config.h"
+#include <stdint.h>
 
 #if HAS_SCALE
 
@@ -61,5 +62,11 @@ void scale_request_persist();
 
 // Get human-readable status string ("idle", "taring", "calibrating").
 const char* scale_get_status();
+
+// Apply a smoothing preset (0=Stable, 1=Balanced, 2=Responsive). Hot-switch, no reboot.
+void scale_apply_preset(uint8_t preset_index);
+
+// Get the EMA-smoothed weight (pre-dead-band). For brew series recording.
+float scale_get_weight_ema();
 
 #endif // HAS_SCALE

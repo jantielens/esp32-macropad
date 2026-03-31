@@ -16,6 +16,10 @@
 #include "sensors/dummy_sensor.cpp"
 #endif
 
+#if HAS_SCALE
+#include "sensors/scale_smoothing.cpp"
+#endif
+
 #if HAS_SENSOR_HX711
 #include "sensors/hx711_sensor.cpp"
 #endif

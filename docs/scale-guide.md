@@ -16,7 +16,7 @@ Two load cell ADCs are supported:
 The scale subsystem provides:
 
 - **Real-time weight** — EMA-smoothed readings at ~80 Hz, displayed via bindings
-- **Flow rate** — weight derivative computed over a 1-second window (grams per second)
+- **Flow rate** — weight derivative computed over a configurable window, EMA-smoothed (grams per second)
 - **On-device calibration** — tare and calibrate directly from pad buttons
 - **Guided brew mode** — auto-tare and auto-start timer on first pour (brew manager)
 - **Brew history** — every brew is automatically saved with time-series data, viewable in the web portal with interactive charts
@@ -186,7 +186,7 @@ Where `key` selects what data to read and the optional `;format` applies a print
 | Key | Type | Default Format | Description |
 |-----|------|---------------|-------------|
 | `weight` | float | `%.1f` | Current EMA-smoothed weight in grams |
-| `flow_rate` | float | `%.1f` | Weight change rate in g/s (1-second window) |
+| `flow_rate` | float | `%.1f` | Weight change rate in g/s (EMA-smoothed) |
 | `calibration_factor` | float | `%.4f` | Current calibration divisor |
 | `offset` | long | `%ld` | Raw ADC tare offset |
 | `available` | string | — | `ON` if HX711 detected, `OFF` otherwise |
@@ -961,16 +961,23 @@ A practical 4×2 pad layout for V60 coffee brewing using the V60 template, with 
 Understanding the signal processing helps when tuning your UI:
 
 - **Sample rate**: ~80 Hz (HX711 at 80 SPS, single-sample reads)
-- **EMA filter**: Alpha = 0.3 (30% new sample, 70% history). Smooths noise while remaining responsive to real weight changes.
+- **Smoothing presets**: Three presets control the EMA filter, dead-band, flow window, and flow EMA. Choose a preset in the web portal under **Scale Settings**.
+
+| Preset | EMA Alpha | Dead-band | Flow Window | Flow EMA | Best For |
+|--------|-----------|-----------|-------------|----------|----------|
+| Stable | 0.08 | 0.05 g | 2000 ms | 0.15 | Bean dosing, static weighing |
+| Balanced | 0.20 | 0.03 g | 1200 ms | 0.30 | General brewing (default) |
+| Responsive | 0.50 | 0.02 g | 600 ms | 0.50 | Fast pour tracking |
+
 - **Jump threshold**: 5g. If a single reading differs from the EMA by more than 5g, the EMA resets instantly — this makes placing/removing objects feel immediate.
-- **Flow rate window**: 1 second. The derivative is computed as `(current_weight - weight_1s_ago) / elapsed_seconds`.
+- **Hot-switch**: Changing the preset applies immediately without reboot. The EMA and flow state continue from current values for a smooth transition.
 - **Tare**: Averages 20 raw samples (~250ms) for a stable zero point.
 - **Calibration**: Averages 20 raw samples of the loaded scale, then divides by the known calibration weight to compute the factor.
 
 ### What This Means for Your UI
 
 - Weight labels update smoothly without jitter
-- Flow rate responds within ~1 second of pour changes
+- Flow rate responds within the flow window duration of pour changes
 - Tare and calibrate take ~250ms each (handled in the background — UI stays responsive)
 - The `[scale:status]` binding transitions: `idle` → `taring` → `idle` (or `idle` → `calibrating` → `idle`)
 

@@ -32,10 +32,11 @@ void audio_beep(const char* pattern, uint8_t volume_override) {
     }
 }
 
-// ---- HX711 mock implementations (declarations come from real hx711_sensor.h) ----
-float hx711_get_weight()    { return g_mock_weight; }
-float hx711_get_flow_rate() { return g_mock_flow_rate; }
-void  hx711_request_tare_no_persist() { g_mock_weight = 0.0f; }
+// ---- Scale HAL mock implementations ----
+float scale_get_weight()    { return g_mock_weight; }
+float scale_get_weight_ema(){ return g_mock_weight; }
+float scale_get_flow_rate() { return g_mock_flow_rate; }
+void  scale_request_tare_no_persist() { g_mock_weight = 0.0f; }
 
 // Stub: brew_log_save (no LittleFS on host — extern "C" to match brew_log.h)
 #include "brew_manager.h"

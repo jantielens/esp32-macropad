@@ -241,6 +241,20 @@
                 </div>
             </section>
 
+            <!-- Scale Settings Section (hidden if scale not available) -->
+            <section class="section" id="scale-section" style="display:none;">
+                <h2>⚖️ Scale Settings</h2>
+                <div class="form-group">
+                    <label for="scale_smoothing">Scale Smoothing</label>
+                    <select id="scale_smoothing" name="scale_smoothing">
+                        <option value="0">Stable — minimal flicker, best for dosing</option>
+                        <option value="1">Balanced — smooth with good responsiveness</option>
+                        <option value="2">Responsive — fastest reaction, some jitter</option>
+                    </select>
+                    <small>Controls weight display smoothing and flow rate averaging. Stable is best for static weighing and bean dosing. Responsive tracks fast pours more accurately. Changes apply immediately without reboot.</small>
+                </div>
+            </section>
+
             {{FOOTER}}
         </form>
     </div>

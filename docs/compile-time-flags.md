@@ -313,6 +313,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
   - src/app/sensors/hx711_sensor.cpp
+  - src/app/sensors/nau7802_sensor.cpp
   - src/app/swipe_actions.cpp
   - src/app/swipe_actions.h
   - src/app/swipe_config.cpp
@@ -403,6 +404,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/dummy_sensor.h
 - **HAS_SENSOR_HX711**
   - src/app/board_config.h
+  - src/app/scale_hal.cpp
   - src/app/sensors.cpp
   - src/app/sensors/hx711_sensor.cpp
   - src/app/sensors/hx711_sensor.h
@@ -412,7 +414,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/ld2410_out_sensor.cpp
 - **HAS_SENSOR_NAU7802**
   - src/app/board_config.h
+  - src/app/scale_hal.cpp
   - src/app/sensors.cpp
+  - src/app/sensors/nau7802_sensor.cpp
+  - src/app/sensors/nau7802_sensor.h
 - **HAS_TOUCH**
   - src/app/app.ino
   - src/app/board_config.h
