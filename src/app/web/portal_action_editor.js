@@ -24,10 +24,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="ble_pair">Start BLE Pairing</option>';
     h += '<option value="beep">Play Beep</option>';
     h += '<option value="volume">Set Volume</option>';
-    h += '<option value="scale">Scale Tare</option>';
-    h += '<option value="scale_cal">Scale Calibrate</option>';
-    h += '<option value="scale_cal_weight">Scale Cal Weight &plusmn;</option>';
-    h += '<option value="scale_cal_set">Scale Cal Weight Set</option>';
+    h += '<option value="scale">Scale Control</option>';
     h += '<option value="timer">Timer Control</option>';
     h += '<option value="brew">Brew Control</option>';
     h += '</select>';
@@ -86,20 +83,28 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<label for="' + prefix + '-volume-value">Volume (%)</label>';
     h += '<input type="number" id="' + prefix + '-volume-value" min="0" max="100" placeholder="e.g. 50">';
     h += '</div></div>';
-    // Scale cal weight delta
-    h += '<div id="' + prefix + '-scale-cal-weight-group" style="display:none;">';
+    // Scale — sub-command dropdown with conditional fields
+    h += '<div id="' + prefix + '-scale-group" style="display:none;">';
     h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-scale-cmd">Scale Command</label>';
+    h += '<select id="' + prefix + '-scale-cmd" onchange="actionEditorScaleChanged(\'' + prefix + '\')">'; 
+    h += '<option value="tare">Tare</option>';
+    h += '<option value="calibrate">Calibrate</option>';
+    h += '<option value="cal_weight">Cal Weight &plusmn;</option>';
+    h += '<option value="cal_weight_set">Cal Weight Set</option>';
+    h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-scale-delta-group" style="display:none;">';
     h += '<label for="' + prefix + '-scale-delta">Weight Change (g)</label>';
     h += '<input type="number" id="' + prefix + '-scale-delta" step="0.1" placeholder="e.g. 10, -10, 0.5, -0.5">';
     h += '<small>Grams to add or subtract from the calibration reference weight each tap.</small>';
-    h += '</div></div>';
-    // Scale cal weight set (absolute)
-    h += '<div id="' + prefix + '-scale-cal-set-group" style="display:none;">';
-    h += '<div class="form-group">';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-scale-set-group" style="display:none;">';
     h += '<label for="' + prefix + '-scale-set-value">Calibration Weight (g)</label>';
     h += '<input type="number" id="' + prefix + '-scale-set-value" min="1" step="0.1" placeholder="e.g. 251.5">';
     h += '<small>Set the calibration reference weight to this value (grams).</small>';
-    h += '</div></div>';
+    h += '</div>';
+    h += '</div>';
     // Brew — command dropdown (populated dynamically from /api/brew-templates)
     h += '<div id="' + prefix + '-brew-group" style="display:none;">';
     h += '<div class="form-group">';
@@ -176,16 +181,15 @@ function actionEditorTypeChanged(prefix, skipBrewPopulate) {
     var bleHint = document.getElementById(prefix + '-ble-hint');
     var beepGrp = document.getElementById(prefix + '-beep-group');
     var volGrp = document.getElementById(prefix + '-volume-group');
-    var scaleCwGrp = document.getElementById(prefix + '-scale-cal-weight-group');
-    var scaleSetGrp = document.getElementById(prefix + '-scale-cal-set-group');
     if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
     if (mqttGrp) mqttGrp.style.display = (type === 'mqtt') ? '' : 'none';
     if (keyGrp) keyGrp.style.display = (type === 'key') ? '' : 'none';
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
     if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
     if (volGrp) volGrp.style.display = (type === 'volume') ? '' : 'none';
-    if (scaleCwGrp) scaleCwGrp.style.display = (type === 'scale_cal_weight') ? '' : 'none';
-    if (scaleSetGrp) scaleSetGrp.style.display = (type === 'scale_cal_set') ? '' : 'none';
+    var scaleGrp = document.getElementById(prefix + '-scale-group');
+    if (scaleGrp) scaleGrp.style.display = (type === 'scale') ? '' : 'none';
+    if (type === 'scale') actionEditorScaleChanged(prefix);
     var brewGrp = document.getElementById(prefix + '-brew-group');
     if (brewGrp) brewGrp.style.display = (type === 'brew') ? '' : 'none';
     if (type === 'brew' && !skipBrewPopulate) _actionEditorPopulateBrewCmd(prefix, 'advance');
@@ -198,6 +202,17 @@ function actionEditorTypeChanged(prefix, skipBrewPopulate) {
         var valGrp = document.getElementById(prefix + '-volume-value-group');
         if (modeEl && valGrp) valGrp.style.display = (modeEl.value === 'set') ? '' : 'none';
     }
+}
+
+// Show/hide scale sub-fields based on the scale command dropdown.
+function actionEditorScaleChanged(prefix) {
+    var sel = document.getElementById(prefix + '-scale-cmd');
+    if (!sel) return;
+    var cmd = sel.value;
+    var deltaGrp = document.getElementById(prefix + '-scale-delta-group');
+    var setGrp = document.getElementById(prefix + '-scale-set-group');
+    if (deltaGrp) deltaGrp.style.display = (cmd === 'cal_weight') ? '' : 'none';
+    if (setGrp) setGrp.style.display = (cmd === 'cal_weight_set') ? '' : 'none';
 }
 
 // Show/hide timer sub-fields based on the timer action dropdown.
@@ -248,10 +263,29 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.volume_mode || 'set';
     el = document.getElementById(prefix + '-volume-value');
     if (el) el.value = (action.volume_value !== undefined && action.volume_value > 0) ? action.volume_value : '';
-    el = document.getElementById(prefix + '-scale-delta');
-    if (el) el.value = action.payload || '';
-    el = document.getElementById(prefix + '-scale-set-value');
-    if (el) el.value = action.payload || '';
+    // Scale: parse sub-command payload into structured fields
+    if (action.type === 'scale' && action.payload) {
+        var sp = action.payload;
+        el = document.getElementById(prefix + '-scale-cmd');
+        if (el) {
+            if (sp === 'tare' || sp === '') {
+                el.value = 'tare';
+            } else if (sp === 'calibrate') {
+                el.value = 'calibrate';
+            } else if (sp.indexOf('cal_weight_set:') === 0) {
+                el.value = 'cal_weight_set';
+                var sv = document.getElementById(prefix + '-scale-set-value');
+                if (sv) sv.value = sp.substring(15);
+            } else if (sp.indexOf('cal_weight:') === 0) {
+                el.value = 'cal_weight';
+                var sd = document.getElementById(prefix + '-scale-delta');
+                if (sd) sd.value = sp.substring(11);
+            }
+        }
+    } else {
+        el = document.getElementById(prefix + '-scale-cmd');
+        if (el) el.value = 'tare';
+    }
     // Brew command — populate dropdown dynamically, then set value
     el = document.getElementById(prefix + '-brew-cmd');
     if (el) _actionEditorPopulateBrewCmd(prefix, action.payload || 'start');
@@ -328,13 +362,18 @@ function actionEditorBuild(prefix) {
             if (vv && vv.value !== '') act.volume_value = parseInt(vv.value, 10);
         }
     }
-    if (type === 'scale_cal_weight') {
-        var sd = document.getElementById(prefix + '-scale-delta');
-        if (sd && sd.value !== '') act.payload = sd.value.trim();
-    }
-    if (type === 'scale_cal_set') {
-        var sv = document.getElementById(prefix + '-scale-set-value');
-        if (sv && sv.value !== '') act.payload = sv.value.trim();
+    if (type === 'scale') {
+        var scmd = document.getElementById(prefix + '-scale-cmd');
+        var scmdVal = scmd ? scmd.value : 'tare';
+        if (scmdVal === 'cal_weight') {
+            var sd = document.getElementById(prefix + '-scale-delta');
+            act.payload = 'cal_weight:' + ((sd && sd.value !== '') ? sd.value.trim() : '0');
+        } else if (scmdVal === 'cal_weight_set') {
+            var sv = document.getElementById(prefix + '-scale-set-value');
+            act.payload = 'cal_weight_set:' + ((sv && sv.value !== '') ? sv.value.trim() : '1');
+        } else {
+            act.payload = scmdVal;
+        }
     }
     if (type === 'brew') {
         var bc = document.getElementById(prefix + '-brew-cmd');

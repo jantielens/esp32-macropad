@@ -237,6 +237,8 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
 | **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
+| **Scale** | Control the scale — tare, calibrate, adjust or set calibration weight. Scale boards only. See [Scale Actions](#scale-actions) below. |
+| **Brew** | Control the guided brew workflow — set template, advance, start, stop, reset, or tare. Scale boards only. See [Brew Actions](#brew-actions) below. |
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -308,6 +310,39 @@ When you select a Timer action, a dropdown groups all actions by timer:
 **Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
 
 > **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Set the default countdown to 240 seconds for a 4-minute pour.
+
+### Scale Actions
+
+The **Scale Control** action type controls the scale subsystem. When you select a Scale Control action, a dropdown shows the available commands:
+
+| Command | Description |
+|---------|-------------|
+| **Tare** | Zero the scale (deferred, non-blocking) |
+| **Calibrate** | Calibrate using the current reference weight (deferred, non-blocking) |
+| **Cal Weight ±** | Adjust the calibration reference weight by ± delta grams. Enter the weight change in the input field (e.g., `10`, `-10`, `0.5`, `-0.5`) |
+| **Cal Weight Set** | Set the calibration reference weight to an absolute value in grams (e.g., `251.5`) |
+
+All tare and calibrate operations are **deferred** — the button tap returns immediately, and the actual operation runs on the next main loop cycle. Use `[scale:status]` to show progress.
+
+> **Tip**: Build a calibration pad with Tare, Calibrate, +10g, -10g, +0.5g, -0.5g, and Set 250g buttons. Use `[scale:weight;%.1f] g` and `[scale:cal_weight] g` bindings to show live weight and the current reference weight.
+
+### Brew Actions
+
+The **Brew Control** action type controls the guided brew workflow. When you select a Brew Control action, a dropdown shows the available commands:
+
+| Command | Description |
+|---------|-------------|
+| **Set Template: *name*** | Select a brew recipe template. Templates are defined in JSON files on the device. Pair with a Navigate action to go to your brew pad. |
+| **Advance** | Single-button full cycle (recommended) — start the brew, advance through stages, and stop when complete |
+| **Start** | Begin the brew workflow |
+| **Next** | Advance to the next manual stage |
+| **Stop** | Freeze the timer and save the brew log |
+| **Reset** | Clear all brew state |
+| **Tare** | Zero the scale without persisting (soft tare for the current brew) |
+
+The Set Template dropdown is populated dynamically from templates stored on the device. Use `[brew:next_label]` as a button label to show context-aware text that changes with each brew stage (e.g., "Start" → "Next Pour" → "Done").
+
+> **Tip**: For the simplest setup, use a single **Advance** button with label `[brew:next_label]` — it handles the full brew cycle. Add a **Set Template** button on a menu pad to select the recipe before navigating to the brew pad.
 
 ### Audio Feedback
 

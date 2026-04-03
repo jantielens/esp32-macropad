@@ -112,41 +112,34 @@ void action_dispatch(const ButtonAction& act, const char* label) {
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_SCALE) == 0) {
 #if HAS_SCALE
-        LOGI(TAG, "%s scale: tare (deferred)", label);
-        scale_request_tare();
+        const char* cmd = act.mqtt_payload;
+        if (!cmd || !cmd[0] || strcmp(cmd, "tare") == 0) {
+            LOGI(TAG, "%s scale: tare (deferred)", label);
+            scale_request_tare();
+        } else if (strcmp(cmd, "calibrate") == 0) {
+            LOGI(TAG, "%s scale: calibrate (deferred)", label);
+            scale_request_calibrate();
+        } else if (strncmp(cmd, "cal_weight:", 11) == 0) {
+            float delta = strtof(cmd + 11, nullptr);
+            if (delta != 0.0f) {
+                scale_adjust_cal_weight(delta);
+                LOGI(TAG, "%s scale: cal_weight delta=%.1f -> %.1f g", label, delta, scale_get_cal_weight());
+            } else {
+                LOGW(TAG, "%s scale: cal_weight invalid delta '%s'", label, cmd + 11);
+            }
+        } else if (strncmp(cmd, "cal_weight_set:", 15) == 0) {
+            float val = strtof(cmd + 15, nullptr);
+            if (val >= 1.0f) {
+                scale_set_cal_weight(val);
+                LOGI(TAG, "%s scale: cal_weight_set %.1f g", label, scale_get_cal_weight());
+            } else {
+                LOGW(TAG, "%s scale: cal_weight_set invalid '%s'", label, cmd + 15);
+            }
+        } else {
+            LOGW(TAG, "%s scale: unknown cmd '%s'", label, cmd);
+        }
 #else
         LOGW(TAG, "%s scale: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_SCALE_CAL) == 0) {
-#if HAS_SCALE
-        LOGI(TAG, "%s scale_cal: calibrate (deferred)", label);
-        scale_request_calibrate();
-#else
-        LOGW(TAG, "%s scale_cal: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_SCALE_CAL_WEIGHT) == 0) {
-#if HAS_SCALE
-        float delta = strtof(act.mqtt_payload, nullptr);
-        if (delta != 0.0f) {
-            scale_adjust_cal_weight(delta);
-            LOGI(TAG, "%s scale_cal_weight: delta=%.1f -> %.1f g", label, delta, scale_get_cal_weight());
-        } else {
-            LOGW(TAG, "%s scale_cal_weight: invalid delta '%s'", label, act.mqtt_payload);
-        }
-#else
-        LOGW(TAG, "%s scale_cal_weight: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_SCALE_CAL_SET) == 0) {
-#if HAS_SCALE
-        float val = strtof(act.mqtt_payload, nullptr);
-        if (val >= 1.0f) {
-            scale_set_cal_weight(val);
-            LOGI(TAG, "%s scale_cal_set: %.1f g", label, scale_get_cal_weight());
-        } else {
-            LOGW(TAG, "%s scale_cal_set: invalid value '%s'", label, act.mqtt_payload);
-        }
-#else
-        LOGW(TAG, "%s scale_cal_set: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
         // Payload format: "N:command" or "N:command:arg"

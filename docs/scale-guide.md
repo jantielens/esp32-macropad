@@ -317,12 +317,14 @@ Scale actions are button actions you assign in the pad editor. They enable on-de
 
 ### Action Types
 
-| Action Type | Pad Editor Name | Payload | Description |
+| Sub-command | Pad Editor Name | Payload | Description |
 |-------------|----------------|---------|-------------|
-| `scale` | Scale Tare | — | Zeros the scale (deferred, non-blocking) |
-| `scale_cal` | Scale Calibrate | — | Calibrates using the current reference weight (deferred, non-blocking) |
-| `scale_cal_weight` | Scale Cal Weight ± | delta (g) | Adjusts the reference weight by ± delta grams |
-| `scale_cal_set` | Scale Cal Weight Set | value (g) | Sets the reference weight to an absolute value |
+| `tare` | Tare | — | Zeros the scale (deferred, non-blocking) |
+| `calibrate` | Calibrate | — | Calibrates using the current reference weight (deferred, non-blocking) |
+| `cal_weight:DELTA` | Cal Weight ± | delta (g) | Adjusts the reference weight by ± delta grams |
+| `cal_weight_set:VALUE` | Cal Weight Set | value (g) | Sets the reference weight to an absolute value |
+
+All scale actions use the single `scale` action type with a sub-command in the payload field, following the same pattern as Timer Control and Brew Control.
 
 All tare and calibrate operations are **deferred** — the button tap returns immediately, and the actual operation runs on the next main loop cycle. This keeps the display responsive. Use `[scale:status]` to show progress.
 
@@ -330,29 +332,29 @@ All tare and calibrate operations are **deferred** — the button tap returns im
 
 A complete calibration flow using pad buttons:
 
-1. **Set reference weight** — Use `scale_cal_set` to set the known weight of your calibration object (e.g. 251.5 g)
-2. **Tare** — Tap a `scale` (tare) button with the scale empty
+1. **Set reference weight** — Use Scale Control → Cal Weight Set to set the known weight of your calibration object (e.g. 251.5 g)
+2. **Tare** — Tap a Scale Control → Tare button with the scale empty
 3. **Place object** — Put the known weight on the scale
-4. **Calibrate** — Tap a `scale_cal` button to compute the calibration factor
+4. **Calibrate** — Tap a Scale Control → Calibrate button to compute the calibration factor
 5. **Verify** — The weight display should match the known weight
 
 ### Calibration Pad Example
 
 Here's how to build a calibration pad with all the controls:
 
-| Button | Action | Payload | Labels |
-|--------|--------|---------|--------|
-| Tare | `scale` | — | Center: `Tare` |
-| Calibrate | `scale_cal` | — | Center: `Calibrate` |
-| +10g | `scale_cal_weight` | `10` | Center: `+10` |
-| -10g | `scale_cal_weight` | `-10` | Center: `-10` |
-| +0.5g | `scale_cal_weight` | `0.5` | Center: `+0.5` |
-| -0.5g | `scale_cal_weight` | `-0.5` | Center: `-0.5` |
-| Set 250g | `scale_cal_set` | `250` | Center: `250g` |
+| Button | Action | Sub-command | Labels |
+|--------|--------|-------------|--------|
+| Tare | Scale Control | `tare` | Center: `Tare` |
+| Calibrate | Scale Control | `calibrate` | Center: `Calibrate` |
+| +10g | Scale Control | `cal_weight:10` | Center: `+10` |
+| -10g | Scale Control | `cal_weight:-10` | Center: `-10` |
+| +0.5g | Scale Control | `cal_weight:0.5` | Center: `+0.5` |
+| -0.5g | Scale Control | `cal_weight:-0.5` | Center: `-0.5` |
+| Set 250g | Scale Control | `cal_weight_set:250` | Center: `250g` |
 | Weight | — | — | Top: `Weight`, Center: `[scale:weight;%.1f] g`, Bottom: `Cal: [scale:cal_weight] g` |
 | Status | — | — | Center: `[scale:status]` |
 
-> **Tip**: The `scale_cal_weight` delta supports decimals (e.g. `0.5`, `-0.1`), allowing 0.1 g precision for the reference weight.
+> **Tip**: The Cal Weight ± sub-command supports decimals (e.g. `0.5`, `-0.1`), allowing 0.1 g precision for the reference weight.
 
 ### Status-Aware UI
 
