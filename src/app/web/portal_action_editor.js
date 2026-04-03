@@ -166,7 +166,7 @@ function actionEditorHTML(prefix, label, opts) {
 }
 
 // Show/hide sub-groups when the action type dropdown changes.
-function actionEditorTypeChanged(prefix) {
+function actionEditorTypeChanged(prefix, skipBrewPopulate) {
     var typeEl = document.getElementById(prefix + '-type');
     if (!typeEl) return;
     var type = typeEl.value;
@@ -188,7 +188,7 @@ function actionEditorTypeChanged(prefix) {
     if (scaleSetGrp) scaleSetGrp.style.display = (type === 'scale_cal_set') ? '' : 'none';
     var brewGrp = document.getElementById(prefix + '-brew-group');
     if (brewGrp) brewGrp.style.display = (type === 'brew') ? '' : 'none';
-    if (type === 'brew') _actionEditorPopulateBrewCmd(prefix, 'advance:free_pour');
+    if (type === 'brew' && !skipBrewPopulate) _actionEditorPopulateBrewCmd(prefix, 'advance:free_pour');
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     if (type === 'timer') actionEditorTimerChanged(prefix);
@@ -289,7 +289,8 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.timer_expire_beep || '';
     el = document.getElementById(prefix + '-timer-expire-vol');
     if (el) el.value = (action.timer_expire_volume > 0) ? action.timer_expire_volume : '';
-    actionEditorTypeChanged(prefix);
+    // Skip brew dropdown population — already handled above with the saved value
+    actionEditorTypeChanged(prefix, action.type === 'brew');
 }
 
 // Build an action object from the form. Returns {} if type is empty.
