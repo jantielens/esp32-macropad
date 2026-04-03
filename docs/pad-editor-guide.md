@@ -332,7 +332,8 @@ The **Brew Control** action type controls the guided brew workflow. When you sel
 
 | Command | Description |
 |---------|-------------|
-| **Set Template: *name*** | Select a brew recipe template. Templates are defined in JSON files on the device. Pair with a Navigate action to go to your brew pad. |
+| **Set Template: *name*** | Select a brew recipe template by name. Templates are defined in JSON files on the device. Pair with a Navigate action to go to your brew pad. |
+| **Template slot N** | Select a template by registry index using a binding expression. Use this to build a dynamic template picker pad — see the [Brew Template Guide](brew-template-guide.md#template-picker-pad). |
 | **Advance** | Single-button full cycle (recommended) — start the brew, advance through stages, and stop when complete |
 | **Start** | Begin the brew workflow |
 | **Next** | Advance to the next manual stage |

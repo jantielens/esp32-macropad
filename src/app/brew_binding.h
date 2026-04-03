@@ -5,7 +5,8 @@
 //
 // Keys: weight, flow_rate, timer, stage, active, template, dose, water, ratio,
 //       instruction, next_label, display_name,
-//       stage_weight_*, stage_time_*, stage_flow_*
+//       stage_weight_*, stage_time_*, stage_flow_*,
+//       template_count, tpl_N_name, tpl_N_display_name, tpl_N_description, tpl_N_stages
 //
 // Call once during setup(), after binding_template_init() and brew_manager_init().
 void brew_binding_init();

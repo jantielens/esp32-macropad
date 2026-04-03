@@ -593,6 +593,98 @@ TEST(binding_empty_key) {
     ASSERT_STREQ(out, "ERR:no key");
 }
 
+// --- Template registry (indexed) ---
+
+TEST(binding_template_count) {
+    ensure_init();
+    char out[64];
+    // Registry has: free_pour, v60, rao_v60, bind_test = 4
+    ASSERT_TRUE(resolve_brew("template_count", out, sizeof(out)));
+    ASSERT_STREQ(out, "4");
+}
+
+TEST(binding_tpl_0_name) {
+    ensure_init();
+    char out[64];
+    ASSERT_TRUE(resolve_brew("tpl_0_name", out, sizeof(out)));
+    ASSERT_STREQ(out, "free_pour");
+}
+
+TEST(binding_tpl_0_display_name) {
+    ensure_init();
+    char out[64];
+    ASSERT_TRUE(resolve_brew("tpl_0_display_name", out, sizeof(out)));
+    ASSERT_STREQ(out, "Free Pour");
+}
+
+TEST(binding_tpl_0_description) {
+    ensure_init();
+    char out[64];
+    // free_pour has empty description
+    ASSERT_TRUE(resolve_brew("tpl_0_description", out, sizeof(out)));
+    ASSERT_STREQ(out, "");
+}
+
+TEST(binding_tpl_0_stages) {
+    ensure_init();
+    char out[64];
+    // free_pour has 2 stages
+    ASSERT_TRUE(resolve_brew("tpl_0_stages", out, sizeof(out)));
+    ASSERT_STREQ(out, "2");
+}
+
+TEST(binding_tpl_3_name) {
+    ensure_init();
+    char out[64];
+    // Index 3 = bind_test (registered by ensure_init)
+    ASSERT_TRUE(resolve_brew("tpl_3_name", out, sizeof(out)));
+    ASSERT_STREQ(out, "bind_test");
+}
+
+TEST(binding_tpl_3_display_name) {
+    ensure_init();
+    char out[64];
+    ASSERT_TRUE(resolve_brew("tpl_3_display_name", out, sizeof(out)));
+    ASSERT_STREQ(out, "Binding Test Template");
+}
+
+TEST(binding_tpl_3_description) {
+    ensure_init();
+    char out[64];
+    ASSERT_TRUE(resolve_brew("tpl_3_description", out, sizeof(out)));
+    ASSERT_STREQ(out, "For binding tests");
+}
+
+TEST(binding_tpl_3_stages) {
+    ensure_init();
+    char out[64];
+    ASSERT_TRUE(resolve_brew("tpl_3_stages", out, sizeof(out)));
+    ASSERT_STREQ(out, "3");
+}
+
+TEST(binding_tpl_out_of_range) {
+    ensure_init();
+    char out[64];
+    // Index 99 is beyond registry count
+    bool ok = resolve_brew("tpl_99_name", out, sizeof(out));
+    ASSERT_TRUE(!ok);
+}
+
+TEST(binding_tpl_invalid_field) {
+    ensure_init();
+    char out[64];
+    // "nonexistent" is not a valid tpl_ field
+    bool ok = resolve_brew("tpl_0_nonexistent", out, sizeof(out));
+    ASSERT_TRUE(!ok);
+}
+
+TEST(binding_template_count_format) {
+    ensure_init();
+    char out[64];
+    ASSERT_TRUE(resolve_brew("template_count;%02u", out, sizeof(out)));
+    ASSERT_STREQ(out, "04");
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -636,6 +728,20 @@ int main() {
     printf("\n-- Error cases --\n");
     RUN(binding_unknown_key);
     RUN(binding_empty_key);
+
+    printf("\n-- Template registry (indexed) --\n");
+    RUN(binding_template_count);
+    RUN(binding_tpl_0_name);
+    RUN(binding_tpl_0_display_name);
+    RUN(binding_tpl_0_description);
+    RUN(binding_tpl_0_stages);
+    RUN(binding_tpl_3_name);
+    RUN(binding_tpl_3_display_name);
+    RUN(binding_tpl_3_description);
+    RUN(binding_tpl_3_stages);
+    RUN(binding_tpl_out_of_range);
+    RUN(binding_tpl_invalid_field);
+    RUN(binding_template_count_format);
 
     printf("\n%d/%d tests passed\n", g_passed, g_tests);
     return (g_passed == g_tests) ? 0 : 1;

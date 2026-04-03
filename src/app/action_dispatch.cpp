@@ -19,6 +19,7 @@
 #if HAS_SCALE
 #include "scale_hal.h"
 #include "brew_manager.h"
+#include "binding_template.h"
 #endif
 
 #include "timer_engine.h"
@@ -191,8 +192,15 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         if (!cmd || !cmd[0]) cmd = "advance";
         if (strncmp(cmd, "set_template:", 13) == 0) {
             const char* tpl = cmd + 13;
-            LOGI(TAG, "%s brew: set_template='%s'", label, tpl);
-            brew_hint_template(tpl);
+            if (strchr(tpl, '[')) {
+                char resolved[64];
+                binding_template_resolve(tpl, resolved, sizeof(resolved));
+                LOGI(TAG, "%s brew: set_template='%s' (resolved from '%s')", label, resolved, tpl);
+                brew_hint_template(resolved);
+            } else {
+                LOGI(TAG, "%s brew: set_template='%s'", label, tpl);
+                brew_hint_template(tpl);
+            }
         } else if (strcmp(cmd, "advance") == 0) {
             LOGI(TAG, "%s brew: advance", label);
             brew_advance(nullptr);

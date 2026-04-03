@@ -450,13 +450,6 @@ function _actionEditorFetchBrewTemplates(callback) {
 
 function _actionEditorBuildBrewOptions(templates) {
     var h = '';
-    if (templates.length > 0) {
-        h += '<optgroup label="Set Template">';
-        templates.forEach(function(t) {
-            h += '<option value="set_template:' + t.name + '">' + (t.display_name || t.name) + '</option>';
-        });
-        h += '</optgroup>';
-    }
     h += '<optgroup label="Brew Control">';
     h += '<option value="advance">Advance \u2014 single button, full cycle (recommended)</option>';
     h += '<option value="start">Start \u2014 begin brew</option>';
@@ -464,6 +457,18 @@ function _actionEditorBuildBrewOptions(templates) {
     h += '<option value="stop">Stop \u2014 freeze timer &amp; save</option>';
     h += '<option value="reset">Reset \u2014 clear all state</option>';
     h += '<option value="tare">Tare \u2014 zero the scale</option>';
+    h += '</optgroup>';
+    if (templates.length > 0) {
+        h += '<optgroup label="Set Template">';
+        templates.forEach(function(t) {
+            h += '<option value="set_template:' + t.name + '">' + (t.display_name || t.name) + '</option>';
+        });
+        h += '</optgroup>';
+    }
+    h += '<optgroup label="Set Template by Slot (binding)">';
+    for (var i = 0; i < 16; i++) {
+        h += '<option value="set_template:[brew:tpl_' + i + '_name]">Template slot ' + i + '</option>';
+    }
     h += '</optgroup>';
     return h;
 }
@@ -474,11 +479,15 @@ function _actionEditorPopulateBrewCmd(prefix, selectedValue) {
     _actionEditorFetchBrewTemplates(function(templates) {
         sel.innerHTML = _actionEditorBuildBrewOptions(templates);
         sel.value = selectedValue;
-        // If the saved value isn't in the list (template deleted), add it as-is
+        // If the saved value isn't in the list, add it as-is
         if (sel.value !== selectedValue) {
             var opt = document.createElement('option');
             opt.value = selectedValue;
-            opt.textContent = selectedValue + ' (unknown template)';
+            if (selectedValue.indexOf('[') !== -1) {
+                opt.textContent = selectedValue + ' (binding)';
+            } else {
+                opt.textContent = selectedValue + ' (unknown template)';
+            }
             sel.insertBefore(opt, sel.firstChild);
             sel.value = selectedValue;
         }

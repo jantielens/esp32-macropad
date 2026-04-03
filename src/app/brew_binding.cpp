@@ -5,6 +5,7 @@
 
 #include "binding_template.h"
 #include "brew_manager.h"
+#include "brew_templates.h"
 #include "log_manager.h"
 
 #include <string.h>
@@ -142,6 +143,35 @@ static bool lookup_value(const char* key, const char* fmt,
         if (!dn[0]) return false;
         strlcpy(out, dn, out_len);
         return true;
+    }
+    // ---- template registry (indexed) ----
+    if (strcmp(key, "template_count") == 0)
+        return format_uint(fmt, "%u", brew_template_count(), out, out_len);
+    if (strncmp(key, "tpl_", 4) == 0) {
+        // Parse "tpl_N_field" — N is any unsigned index, capped by registry count
+        const char* p = key + 4;
+        char* end = nullptr;
+        unsigned long idx = strtoul(p, &end, 10);
+        if (end == p || *end != '_' || idx >= brew_template_count())
+            return false;
+        const char* field = end + 1;
+        const BrewTemplate* t = brew_template_get((uint8_t)idx);
+        if (!t) return false;
+        if (strcmp(field, "name") == 0) {
+            strlcpy(out, t->name, out_len);
+            return true;
+        }
+        if (strcmp(field, "display_name") == 0) {
+            strlcpy(out, t->display_name[0] ? t->display_name : t->name, out_len);
+            return true;
+        }
+        if (strcmp(field, "description") == 0) {
+            strlcpy(out, t->description, out_len);
+            return true;
+        }
+        if (strcmp(field, "stages") == 0)
+            return format_uint(fmt, "%u", t->stage_count, out, out_len);
+        return false;  // unknown tpl_ field
     }
     return false;
 }

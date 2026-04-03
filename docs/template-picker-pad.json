@@ -1,0 +1,67 @@
+{
+  "name": "Recipes",
+  "cols": 4,
+  "rows": 8,
+  "buttons": [
+    {
+      "col": 0, "row": 0, "col_span": 4,
+      "label_center": "[brew:tpl_0_display_name|]",
+      "bg_color": "[expr:[brew:template]==[brew:tpl_0_name]?\"#2a7a2a\":\"#333333\"]",
+      "btn_state": "[expr:[brew:template_count]>0?\"enabled\":\"hidden\"]",
+      "actions": [
+        { "type": "brew", "payload": "set_template:[brew:tpl_0_name]" },
+        { "type": "brew", "payload": "advance" }
+      ]
+    },
+    {
+      "col": 0, "row": 1, "col_span": 4,
+      "label_center": "[brew:tpl_1_display_name|]",
+      "bg_color": "[expr:[brew:template]==[brew:tpl_1_name]?\"#2a7a2a\":\"#333333\"]",
+      "btn_state": "[expr:[brew:template_count]>1?\"enabled\":\"hidden\"]",
+      "actions": [
+        { "type": "brew", "payload": "set_template:[brew:tpl_1_name]" },
+        { "type": "brew", "payload": "advance" }
+      ]
+    },
+    {
+      "col": 0, "row": 2, "col_span": 4,
+      "label_center": "[brew:tpl_2_display_name|]",
+      "bg_color": "[expr:[brew:template]==[brew:tpl_2_name]?\"#2a7a2a\":\"#333333\"]",
+      "btn_state": "[expr:[brew:template_count]>2?\"enabled\":\"hidden\"]",
+      "actions": [
+        { "type": "brew", "payload": "set_template:[brew:tpl_2_name]" },
+        { "type": "brew", "payload": "advance" }
+      ]
+    },
+    {
+      "col": 0, "row": 3, "col_span": 4,
+      "label_center": "[brew:tpl_3_display_name|]",
+      "bg_color": "[expr:[brew:template]==[brew:tpl_3_name]?\"#2a7a2a\":\"#333333\"]",
+      "btn_state": "[expr:[brew:template_count]>3?\"enabled\":\"hidden\"]",
+      "actions": [
+        { "type": "brew", "payload": "set_template:[brew:tpl_3_name]" },
+        { "type": "brew", "payload": "advance" }
+      ]
+    },
+    {
+      "col": 0, "row": 4, "col_span": 4,
+      "label_center": "[brew:tpl_4_display_name|]",
+      "bg_color": "[expr:[brew:template]==[brew:tpl_4_name]?\"#2a7a2a\":\"#333333\"]",
+      "btn_state": "[expr:[brew:template_count]>4?\"enabled\":\"hidden\"]",
+      "actions": [
+        { "type": "brew", "payload": "set_template:[brew:tpl_4_name]" },
+        { "type": "brew", "payload": "advance" }
+      ]
+    },
+    {
+      "col": 0, "row": 5, "col_span": 4,
+      "label_center": "[brew:tpl_5_display_name|]",
+      "bg_color": "[expr:[brew:template]==[brew:tpl_5_name]?\"#2a7a2a\":\"#333333\"]",
+      "btn_state": "[expr:[brew:template_count]>5?\"enabled\":\"hidden\"]",
+      "actions": [
+        { "type": "brew", "payload": "set_template:[brew:tpl_5_name]" },
+        { "type": "brew", "payload": "advance" }
+      ]
+    }
+  ]
+}

@@ -51,6 +51,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `expr_binding.cpp/h` - Glue between expr_eval and binding_template engine; bracket-depth `;` splitting (compile-time gated by `HAS_DISPLAY`)
   - Pad scheme registered by `pad_binding_init()` — resolves `[pad:name;format]` tokens against pad-level named bindings; supports per-usage format override; enables define-once-use-everywhere pattern for repeated MQTT topics
   - `pad_binding.cpp/h` - Pad binding scheme resolver with page-context pointer, expand utility for data streams, and topic collector that recurses into underlying bindings (compile-time gated by `HAS_DISPLAY`)
+  - Brew scheme registered by `brew_binding_init()` — resolves `[brew:key;format]` tokens from the brew state machine (weight, flow_rate, timer, stage, active, template, display_name, dose, water, ratio, instruction, next_label) and stage progress families (stage_weight_*, stage_time_*, stage_flow_*); also provides indexed template registry access via `[brew:template_count]` and `[brew:tpl_N_name/display_name/description/stages]`
+  - `brew_binding.cpp/h` - Brew binding scheme resolver with indexed template registry access (compile-time gated by `HAS_DISPLAY && HAS_SCALE`)
   - Pipe fallback syntax: `[scheme:params|fallback]` — replaces default `---` placeholder when a binding can't resolve (e.g., before first MQTT message, during reconnect). Parsed by `split_pipe_fallback()` at outermost bracket depth.
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
 - **Timer Subsystem**: On-device count-up/down timers with expiry beep and binding integration (compile-time gated by `HAS_DISPLAY`)

@@ -124,6 +124,22 @@ Per-stage flow rate guidance. All return numeric values (0 when no target is set
 | `stage_flow_current` | float | `%.1f` | Current flow rate in g/s (same as `flow_rate`, included for naming consistency) |
 | `stage_flow_pct` | float | `%.0f` | Flow accuracy as percentage: current ÷ target × 100. Under 100% = too slow, over 100% = too fast. Returns 0 when no target. |
 
+### Template Registry Bindings
+
+Indexed access to the template registry. Use these to build dynamic template picker pads that auto-populate from available templates.
+
+| Key | Type | Default Format | Description |
+|-----|------|---------------|-------------|
+| `template_count` | uint | `%u` | Number of registered templates (built-in + custom) |
+| `tpl_N_name` | string | — | Machine name of template at index N (e.g. `free_pour`). Returns nothing when N ≥ `template_count`. |
+| `tpl_N_display_name` | string | — | Human-friendly name of template at index N (e.g. `Free Pour`). Falls back to `name` when no display name is set. |
+| `tpl_N_description` | string | — | Description of template at index N. Empty string when not set. |
+| `tpl_N_stages` | uint | `%u` | Number of stages in template at index N |
+
+Where N is a zero-based index (0, 1, 2, ...). Returns nothing when the index is beyond `template_count`.
+
+See the [Brew Template Guide](brew-template-guide.md#template-picker-pad) for a complete example of building a template picker pad with these bindings.
+
 ---
 
 ## Naming Pattern

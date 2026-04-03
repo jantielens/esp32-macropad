@@ -456,3 +456,41 @@ The parser enforces these rules when uploading a template:
 - Template `name` must not contain `/`, `\`, or `..`
 
 Unknown fields are silently ignored, which allows forward compatibility if new fields are added in future schema versions.
+
+## Template Picker Pad
+
+You can build a pad that dynamically lists all available templates and lets the user select one before starting a brew. This uses indexed template bindings (`[brew:tpl_N_*]`) combined with conditional visibility and expression-driven colors.
+
+### How it works
+
+Each button represents a template registry slot (0, 1, 2, ...). The button auto-populates its label from the template's display name and hides itself when no template exists at that index. Tapping a template button selects it and advances the brew workflow.
+
+### Button configuration pattern
+
+For each template slot N (starting at 0):
+
+| Field | Value | Purpose |
+|-------|-------|---------|
+| **Label** | `[brew:tpl_N_display_name\|]` | Shows the template name, empty fallback hides text when slot is empty |
+| **Action 1** | Brew → Set Template by Slot → `Template slot N` | Selects the template by index |
+| **Action 2** | Brew → Advance | Starts the brew after selecting |
+| **btn_state** | `[expr:[brew:template_count]>N?"enabled":"hidden"]` | Hides the button when slot N has no template |
+| **Background color** | `[expr:[brew:template]==[brew:tpl_N_name]?"#2a7a2a":"#333333"]` | Green highlight when this template is selected |
+
+### Complete example
+
+See [template-picker-pad.json](template-picker-pad.json) for a ready-to-import 4×8 pad with 6 template slots.
+
+To use it:
+
+1. Open the web portal → **Pads** tab
+2. Select an empty pad
+3. Click **More ▾** → **Import Pad**
+4. Upload the JSON file
+5. The pad auto-populates with your registered templates
+
+The pad adapts automatically — add or remove templates and the buttons update without reconfiguration.
+
+### Binding reference
+
+For the full list of indexed template bindings (`template_count`, `tpl_N_name`, `tpl_N_display_name`, `tpl_N_description`, `tpl_N_stages`), see the [Scale & Brew Bindings Reference](scale-and-brew-bindings.md#template-registry-bindings).
