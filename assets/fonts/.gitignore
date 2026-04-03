@@ -1,0 +1,2 @@
+# Downloaded font TTF source files (regenerate with: ./tools/generate-fonts.sh --download)
+*.ttf

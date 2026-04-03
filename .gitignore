@@ -41,3 +41,6 @@ __pycache__/
 
 # Repo-local sample workspace (not part of the template firmware)
 /sample/
+
+# Copilot tracking files (HVE Core)
+.copilot-tracking

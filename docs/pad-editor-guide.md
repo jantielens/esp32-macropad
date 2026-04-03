@@ -35,7 +35,7 @@ The **Button Defaults** section (collapsible, at the bottom of the Pads page) le
 | **Border color** | Default button outline color |
 | **Border width** | Default border thickness (px) |
 | **Corner radius** | Default button corner rounding (px) |
-| **Label top/center/bottom style** | Default label style DSL (e.g., `font:24;align:left`) |
+| **Label top/center/bottom style** | Default label style DSL (e.g., `font_size:24;align:left`) |
 
 The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius).
 
@@ -113,7 +113,8 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 | Property | Values | What it does |
 |----------|--------|-------------|
-| `font` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
+| `font_size` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
+| `font_family` | `dseg7` / `segment`, `bebas`, `doto` / `pixel` | Use an alternate display font (see below) |
 | `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Scale the current font size at runtime for hero text |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
@@ -124,20 +125,43 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 Combine them with semicolons:
 
 ``` 
-font:48;align:left;mode:dot
+font_size:48;align:left;mode:dot
 ```
 
 This renders a hero-sized left-aligned label that shows "..." when the text is too long.
 
 A few more examples:
 
-- `font:14;color:#FF0` — small yellow text
-- `font:36;font_upscale:1.4` — extra-large hero text (combined scale)
+- `font_size:14;color:#FF0` — small yellow text
+- `font_size:36;font_upscale:1.4` — extra-large hero text (combined scale)
+- `font_family:dseg7;font_size:48` — 7-segment LCD style for sensor readings
+- `font_family:bebas;font_size:48` — bold condensed headline
+- `font_family:doto` — dot-matrix / pixel style
 - `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
-- `font:24;mode:wrap` — medium text that wraps to multiple lines
+- `font_size:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
 
 > Without style overrides, font size is chosen automatically based on the grid dimensions and display resolution. The default alignment is center, and overflow is clipped.
+
+#### Font Families
+
+Three additional font families are available alongside the default Montserrat:
+
+| Family | DSL value | Aliases | Style | Available sizes |
+|--------|-----------|---------|-------|----------------|
+| DSEG7 Classic Bold | `dseg7` | `segment` | 7-segment LCD display | 12, 14, 18, 24, 32, 36, 48 |
+| Bebas Neue | `bebas` | — | Bold condensed display | 12, 14, 18, 24, 32, 36, 48 |
+| Doto | `doto` | `pixel` | Dot-matrix / pixel | 12, 14, 18, 24, 32, 36, 48 |
+
+All font families share the same set of sizes as the built-in Montserrat font. You can combine `font_family` with an explicit `font_size`:
+
+```
+font_family:dseg7;font_size:48
+```
+
+This is ideal for hero values like temperature readings, power measurements, or countdown timers where a specialized display font adds visual impact.
+
+> **Note**: Custom fonts include digits 0–9, uppercase A–Z, lowercase a–z, and common symbols (`. , : ; - + / % °`). Characters outside this set fall back to Montserrat.
 
 ### Icons
 

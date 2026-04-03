@@ -66,11 +66,15 @@ void label_style_parse(const char* dsl, LabelStyle* out) {
             const char* key = token;
             const char* val = colon + 1;
 
-            if (strcmp(key, "font") == 0) {
+            if (strcmp(key, "font_size") == 0 || strcmp(key, "font") == 0) {
                 int sz = atoi(val);
                 if (sz == 12 || sz == 14 || sz == 18 || sz == 24 || sz == 32 || sz == 36 || sz == 48) {
                     out->font_size = (uint8_t)sz;
                 }
+            } else if (strcmp(key, "font_family") == 0) {
+                if (strcmp(val, "segment") == 0 || strcmp(val, "dseg7") == 0)  out->font_family = 1;
+                else if (strcmp(val, "bebas") == 0)                           out->font_family = 2;
+                else if (strcmp(val, "doto") == 0 || strcmp(val, "pixel") == 0) out->font_family = 3;
             } else if (strcmp(key, "font_upscale") == 0) {
                 char* end = nullptr;
                 double f = strtod(val, &end);

@@ -83,6 +83,7 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 
 struct LabelStyle {
     uint8_t font_size;     // 0 = auto (from scale tier), 12/14/18/24/32/36/48
+    uint8_t font_family;   // 0 = default (Montserrat), 1 = dseg7, 2 = bebas, 3 = doto
     uint16_t font_upscale; // 0 = 1.0x (disabled), else LVGL transform scale (256 = 1.0x)
     int16_t x_offset;      // pixel nudge from default anchor (-999..+999)
     int16_t y_offset;      // pixel nudge from default anchor (-999..+999)
