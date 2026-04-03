@@ -5,11 +5,11 @@
 // ============================================================================
 // Preset table
 // ============================================================================
-//                                    ema_alpha  deadband  flow_window_ms  flow_ema_alpha
+//                                    ema_alpha  deadband  flow_window_ms  flow_deadband
 static const ScaleSmoothingParams PRESETS[SCALE_PRESET_COUNT] = {
-    { 0.15f, 0.03f, 1500, 0.15f },  // STABLE
-    { 0.25f, 0.05f, 1000, 0.20f },  // BALANCED
-    { 0.40f, 0.05f,  500, 0.35f },  // RESPONSIVE
+    { 0.15f, 0.03f, 1500, 0.3f },  // STABLE
+    { 0.25f, 0.05f, 1000, 0.2f },  // BALANCED
+    { 0.40f, 0.05f,  500, 0.1f },  // RESPONSIVE
 };
 
 // Active params — mutable copy of the selected preset
@@ -41,7 +41,6 @@ void scale_smoothing_reset(ScaleSmoothingState &state) {
     state.ring_count     = 0;
     state.flow_last_ms   = 0;
     state.flow_rate      = 0.0f;
-    state.flow_rate_raw  = 0.0f;
     memset(state.flow_ring, 0, sizeof(state.flow_ring));
 }
 
@@ -93,10 +92,17 @@ void scale_smoothing_process(ScaleSmoothingState &state, float raw_calibrated, u
         const WeightSample &ref = state.flow_ring[ref_idx];
         uint32_t span = newest.ms - ref.ms;
         if (span >= FLOW_MIN_SPAN_MS) {
-            state.flow_rate_raw = (newest.weight - ref.weight) / ((float)span / 1000.0f);
-            // Second-stage EMA on flow rate to reduce jitter
-            state.flow_rate = s_active.flow_ema_alpha * state.flow_rate_raw
-                            + (1.0f - s_active.flow_ema_alpha) * state.flow_rate;
+            state.flow_rate = (newest.weight - ref.weight) / ((float)span / 1000.0f);
         }
+    }
+
+    // Flow rate dead band: suppress noise at rest
+    if (state.flow_rate > -s_active.flow_deadband && state.flow_rate < s_active.flow_deadband) {
+        state.flow_rate = 0.0f;
+    }
+
+    // Suppress negative zero on weight display (small negatives that format as "-0.0")
+    if (state.weight_display > -0.05f && state.weight_display < 0.0f) {
+        state.weight_display = 0.0f;
     }
 }

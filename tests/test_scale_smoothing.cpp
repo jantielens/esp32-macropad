@@ -294,27 +294,6 @@ static void test_flow_rate_positive_during_pour() {
     PASS("flow_rate_positive_during_pour");
 }
 
-static void test_flow_rate_raw_vs_ema() {
-    scale_smoothing_apply(SCALE_PRESET_BALANCED);
-    ScaleSmoothingState state = {};
-    uint32_t ms = 0;
-
-    // Prime
-    feed_constant(state, 0.0f, 20, ms);
-
-    // Pour for a while — both raw and smoothed should be set
-    for (int i = 0; i < 200; i++) {
-        ms += 13;
-        float weight = 2.0f * ((float)ms / 1000.0f);
-        scale_smoothing_process(state, weight, ms);
-    }
-
-    // Both should be non-zero (pouring)
-    ASSERT_TRUE(state.flow_rate_raw != 0.0f, "flow_rate_raw_vs_ema");
-    ASSERT_TRUE(state.flow_rate != 0.0f, "flow_rate_raw_vs_ema");
-    PASS("flow_rate_raw_vs_ema");
-}
-
 // ============================================================================
 // Reset
 // ============================================================================
@@ -402,6 +381,174 @@ static void test_hotswitch_new_alpha_takes_effect() {
 }
 
 // ============================================================================
+// Flow rate settling after weight removal
+// ============================================================================
+
+// Helper: simulate weight removal and measure how long flow_rate takes to settle.
+// Waits for the spike to develop first (|flow_rate| must exceed spike_min),
+// then measures time until |flow_rate| < threshold.
+// Returns elapsed ms from removal until settled.
+static uint32_t measure_flow_settle_ms(uint8_t preset, float initial_weight, float threshold) {
+    scale_smoothing_apply(preset);
+    ScaleSmoothingState state = {};
+    uint32_t ms = 0;
+
+    // Stabilize at initial_weight for 3 seconds (well past any window)
+    feed_constant(state, initial_weight, 240, ms);  // 240 * 13ms ≈ 3.1s
+
+    // Remove weight (jump detection will snap weight_ema to 0 instantly)
+    uint32_t removal_ms = ms;
+    feed_constant(state, 0.0f, 1, ms);  // single sample triggers jump
+
+    // Phase 1: wait for the flow spike to develop (|flow| must exceed 1 g/s)
+    bool spike_seen = false;
+    while ((ms - removal_ms) < 15000) {
+        ms += 13;
+        scale_smoothing_process(state, 0.0f, ms);
+        if (fabsf(state.flow_rate) > 1.0f) {
+            spike_seen = true;
+            break;
+        }
+    }
+    if (!spike_seen) return 0;  // no spike → settle is instant (good)
+
+    // Phase 2: wait for flow_rate to settle back below threshold
+    while ((ms - removal_ms) < 15000) {
+        ms += 13;
+        scale_smoothing_process(state, 0.0f, ms);
+        if (fabsf(state.flow_rate) < threshold) {
+            return ms - removal_ms;
+        }
+    }
+    return ms - removal_ms;  // didn't settle in 15s
+}
+
+static void test_flow_settles_within_2s_responsive() {
+    // Responsive window is 500ms — settle within window + margin
+    uint32_t settle = measure_flow_settle_ms(SCALE_PRESET_RESPONSIVE, 200.0f, 0.1f);
+    ASSERT_TRUE(settle < 1000, "flow_settles_within_2s_responsive");
+    PASS("flow_settles_within_2s_responsive");
+}
+
+static void test_flow_settles_within_2s_balanced() {
+    // Balanced window is 1000ms — settle within window + margin
+    uint32_t settle = measure_flow_settle_ms(SCALE_PRESET_BALANCED, 200.0f, 0.1f);
+    ASSERT_TRUE(settle < 1500, "flow_settles_within_2s_balanced");
+    PASS("flow_settles_within_2s_balanced");
+}
+
+static void test_flow_settles_within_3s_stable() {
+    // Stable window is 1500ms — settle within window + margin
+    uint32_t settle = measure_flow_settle_ms(SCALE_PRESET_STABLE, 200.0f, 0.1f);
+    ASSERT_TRUE(settle < 2500, "flow_settles_within_3s_stable");
+    PASS("flow_settles_within_3s_stable");
+}
+
+static void test_flow_settles_heavy_weight_within_3s() {
+    // Even with 500g, settling should be bounded by flow_window_ms, not weight
+    uint32_t settle = measure_flow_settle_ms(SCALE_PRESET_BALANCED, 500.0f, 0.1f);
+    ASSERT_TRUE(settle < 1500, "flow_settles_heavy_weight_within_3s");
+    PASS("flow_settles_heavy_weight_within_3s");
+}
+
+static void test_flow_settle_time_independent_of_weight() {
+    // Settling time should NOT scale with the weight removed
+    uint32_t settle_200 = measure_flow_settle_ms(SCALE_PRESET_BALANCED, 200.0f, 0.1f);
+    uint32_t settle_500 = measure_flow_settle_ms(SCALE_PRESET_BALANCED, 500.0f, 0.1f);
+    // They should be nearly identical — within 200ms of each other
+    int32_t diff = (int32_t)settle_500 - (int32_t)settle_200;
+    if (diff < 0) diff = -diff;
+    ASSERT_TRUE(diff < 200, "flow_settle_time_independent_of_weight");
+    PASS("flow_settle_time_independent_of_weight");
+}
+
+// ============================================================================
+// Flow rate dead band
+// ============================================================================
+
+static void test_flow_deadband_suppresses_noise_at_rest() {
+    scale_smoothing_apply(SCALE_PRESET_BALANCED);
+    ScaleSmoothingState state = {};
+    uint32_t ms = 0;
+
+    // Stabilize at 100g
+    feed_constant(state, 100.0f, 200, ms);
+
+    // Feed tiny weight changes (within EMA noise range, below jump threshold)
+    // that produce small non-zero flow derivatives
+    for (int i = 0; i < 100; i++) {
+        ms += 13;
+        float noise = (i % 2 == 0) ? 0.01f : -0.01f;
+        scale_smoothing_process(state, 100.0f + noise, ms);
+    }
+
+    // Flow rate should be exactly 0.0 due to dead band, not a tiny non-zero value
+    ASSERT_NEAR(state.flow_rate, 0.0f, 0.001f, "flow_deadband_suppresses_noise_at_rest");
+    PASS("flow_deadband_suppresses_noise_at_rest");
+}
+
+static void test_flow_deadband_passes_real_pour() {
+    scale_smoothing_apply(SCALE_PRESET_BALANCED);
+    ScaleSmoothingState state = {};
+    uint32_t ms = 0;
+
+    // Prime at 0g
+    feed_constant(state, 0.0f, 20, ms);
+
+    // Simulate 3 g/s pour — well above any dead band
+    for (int i = 0; i < 400; i++) {
+        ms += 13;
+        float weight = 3.0f * ((float)ms / 1000.0f);
+        scale_smoothing_process(state, weight, ms);
+    }
+
+    // Flow rate should be measurably positive (not suppressed by dead band)
+    ASSERT_TRUE(state.flow_rate > 1.0f, "flow_deadband_passes_real_pour");
+    PASS("flow_deadband_passes_real_pour");
+}
+
+static void test_flow_deadband_varies_by_preset() {
+    // Stable should have larger dead band than Responsive
+    const auto &stable = scale_smoothing_get_params(SCALE_PRESET_STABLE);
+    const auto &balanced = scale_smoothing_get_params(SCALE_PRESET_BALANCED);
+    const auto &responsive = scale_smoothing_get_params(SCALE_PRESET_RESPONSIVE);
+
+    ASSERT_TRUE(stable.flow_deadband > balanced.flow_deadband, "flow_deadband_varies_by_preset");
+    ASSERT_TRUE(balanced.flow_deadband > responsive.flow_deadband, "flow_deadband_varies_by_preset");
+    PASS("flow_deadband_varies_by_preset");
+}
+
+// ============================================================================
+// Negative zero suppression
+// ============================================================================
+
+static void test_weight_display_no_negative_zero() {
+    scale_smoothing_apply(SCALE_PRESET_BALANCED);
+    ScaleSmoothingState state = {};
+    uint32_t ms = 0;
+
+    // Prime with a tiny negative value (simulating load cell drift after tare)
+    scale_smoothing_process(state, -0.02f, ms);
+
+    // weight_display should NOT be negative (would show as "-0.0" with %.1f)
+    ASSERT_TRUE(state.weight_display >= 0.0f, "weight_display_no_negative_zero");
+    PASS("weight_display_no_negative_zero");
+}
+
+static void test_weight_display_preserves_real_negatives() {
+    scale_smoothing_apply(SCALE_PRESET_BALANCED);
+    ScaleSmoothingState state = {};
+    uint32_t ms = 0;
+
+    // Prime with a clearly negative value (e.g., tare drift beyond noise)
+    scale_smoothing_process(state, -0.1f, ms);
+
+    // weight_display should preserve the real negative (displays as "-0.1")
+    ASSERT_TRUE(state.weight_display < 0.0f, "weight_display_preserves_real_negatives");
+    PASS("weight_display_preserves_real_negatives");
+}
+
+// ============================================================================
 // Ring buffer edge cases
 // ============================================================================
 
@@ -449,7 +596,6 @@ int main() {
     printf("\n-- Flow rate --\n");
     test_flow_rate_zero_at_rest();
     test_flow_rate_positive_during_pour();
-    test_flow_rate_raw_vs_ema();
 
     printf("\n-- Reset --\n");
     test_reset_clears_state();
@@ -458,6 +604,22 @@ int main() {
     printf("\n-- Preset hot-switch --\n");
     test_hotswitch_no_state_reset();
     test_hotswitch_new_alpha_takes_effect();
+
+    printf("\n-- Flow rate settling --\n");
+    test_flow_settles_within_2s_responsive();
+    test_flow_settles_within_2s_balanced();
+    test_flow_settles_within_3s_stable();
+    test_flow_settles_heavy_weight_within_3s();
+    test_flow_settle_time_independent_of_weight();
+
+    printf("\n-- Flow rate dead band --\n");
+    test_flow_deadband_suppresses_noise_at_rest();
+    test_flow_deadband_passes_real_pour();
+    test_flow_deadband_varies_by_preset();
+
+    printf("\n-- Negative zero suppression --\n");
+    test_weight_display_no_negative_zero();
+    test_weight_display_preserves_real_negatives();
 
     printf("\n-- Ring buffer --\n");
     test_ring_buffer_wraps_correctly();

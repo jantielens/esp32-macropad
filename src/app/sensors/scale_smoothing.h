@@ -15,7 +15,7 @@ struct ScaleSmoothingParams {
     float    ema_alpha;         // 0→stable, 1→raw
     float    deadband;          // grams
     uint32_t flow_window_ms;   // lookback for derivative
-    float    flow_ema_alpha;   // second-stage flow rate smoothing
+    float    flow_deadband;    // g/s — flow values below this snap to 0
 };
 
 // Ring buffer sample
@@ -41,8 +41,7 @@ struct ScaleSmoothingState {
     size_t   ring_head;
     size_t   ring_count;
     uint32_t flow_last_ms;
-    float    flow_rate;       // g/s (EMA-smoothed)
-    float    flow_rate_raw;   // g/s (before flow EMA)
+    float    flow_rate;       // g/s (windowed derivative)
 };
 
 // Get the resolved parameters for a preset index.
