@@ -195,19 +195,14 @@ void action_dispatch(const ButtonAction& act, const char* label) {
     } else if (strcmp(act.type, ACTION_TYPE_BREW) == 0) {
 #if HAS_SCALE
         const char* cmd = act.mqtt_payload;
-        if (!cmd || !cmd[0]) cmd = "start";
-        if (strncmp(cmd, "advance:", 8) == 0) {
-            const char* tpl = cmd + 8;
-            brew_hint_template(tpl);  // pre-prime [brew:next_label] before first tap
-            LOGI(TAG, "%s brew: advance template='%s'", label, tpl);
-            brew_advance(tpl);
+        if (!cmd || !cmd[0]) cmd = "advance";
+        if (strncmp(cmd, "set_template:", 13) == 0) {
+            const char* tpl = cmd + 13;
+            LOGI(TAG, "%s brew: set_template='%s'", label, tpl);
+            brew_hint_template(tpl);
         } else if (strcmp(cmd, "advance") == 0) {
             LOGI(TAG, "%s brew: advance", label);
             brew_advance(nullptr);
-        } else if (strncmp(cmd, "start:", 6) == 0) {
-            const char* tpl = cmd + 6;
-            LOGI(TAG, "%s brew: start template='%s'", label, tpl);
-            brew_start(tpl);
         } else if (strcmp(cmd, "start") == 0) {
             LOGI(TAG, "%s brew: start", label);
             brew_start(nullptr);
@@ -220,6 +215,9 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         } else if (strcmp(cmd, "reset") == 0) {
             LOGI(TAG, "%s brew: reset", label);
             brew_reset();
+        } else if (strcmp(cmd, "tare") == 0) {
+            LOGI(TAG, "%s brew: tare", label);
+            scale_request_tare_no_persist();
         } else {
             LOGW(TAG, "%s brew: unknown cmd '%s'", label, cmd);
         }

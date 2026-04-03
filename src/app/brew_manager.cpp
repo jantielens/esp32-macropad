@@ -186,12 +186,10 @@ static void record_sample() {
 // ============================================================================
 
 void brew_start(const char* template_name) {
-    const BrewTemplate* tpl = brew_template_find(template_name);
-    if (!tpl) {
-        LOGW(TAG, "brew_start: template '%s' not found, using free_pour",
-             template_name ? template_name : "");
-        tpl = brew_template_find("free_pour");
-    }
+    const BrewTemplate* tpl = (template_name && template_name[0])
+                              ? brew_template_find(template_name) : nullptr;
+    if (!tpl) tpl = s_last_template;  // fall back to hinted template
+    if (!tpl) tpl = brew_template_find("free_pour");
     if (!tpl) {
         LOGE(TAG, "brew_start: no templates registered");
         return;
@@ -453,6 +451,7 @@ bool brew_is_active() {
 
 const char* brew_get_template_name() {
     if (s_template) return s_template->name;
+    if (s_last_template) return s_last_template->name;
     return "";
 }
 

@@ -74,8 +74,8 @@ Live data from the brew manager's guided brew workflow. Organized into sections 
 |-----|------|---------------|-------------|
 | `stage` | string | — | Current stage name: `Idle`, `Done`, or the template stage name (e.g. `Dose beans`, `Bloom`, `Main pour`) |
 | `active` | string | — | `1` if a brew is running (Active meta-phase), `0` otherwise |
-| `template` | string | — | Machine name of active template (`free_pour`, `v60`, `rao_v60`), empty when idle |
-| `display_name` | string | — | Human-friendly template name (e.g. `James Rao V60`), empty when idle |
+| `template` | string | — | Machine name of active or hinted template (`free_pour`, `v60`, `rao_v60`); reflects the last set template even while idle |
+| `display_name` | string | — | Human-friendly template name (e.g. `James Rao V60`); reflects the last set template even while idle |
 
 ### Captured Data
 
@@ -84,7 +84,6 @@ Live data from the brew manager's guided brew workflow. Organized into sections 
 | `dose` | float | `%.1f` | Captured dose weight in grams — 0 until captured via a dose stage |
 | `water` | float | `%.1f` | Water poured in grams — live during brew, frozen after Done, 0 when idle |
 | `ratio` | float | `%.1f` | Brew ratio (water ÷ dose) — shows `---` when no dose captured |
-| `peak_flow` | float | `%.2f` | Peak flow rate from the most recently saved brew (g/s) — 0 until first brew is saved; resets on reboot |
 
 ### UI Guidance
 
@@ -260,8 +259,10 @@ Bloom: [brew:stage_time_current]s / [brew:stage_time_target]s
 
 Single button that handles the full brew cycle:
 
-- Action: `brew`, payload: `advance:rao_v60`
+- Action: `brew`, payload: `advance`
 - Center label: `[brew:next_label]`
+
+> **Note**: Use a separate **Set Template** action (e.g. `set_template:rao_v60`) on a template selector pad to choose which template the Advance button uses. `[brew:next_label]` automatically reflects the selected template.
 
 Label progression for Rao V60:
 
@@ -319,7 +320,7 @@ Only show flow rate during an active brew:
 | `cal_weight` | `251.5` |
 | `status` | `idle` |
 
-### `[brew:]` — 24 bindings
+### `[brew:]` — 23 bindings
 
 | Key | Example Output |
 |-----|---------------|
@@ -335,7 +336,6 @@ Only show flow rate during an active brew:
 | `ratio` | `8.9` |
 | `instruction` | `Pour to 60g, then swirl gently. 23s remaining` |
 | `next_label` | `Blooming...` |
-| `peak_flow` | `3.45` |
 | `stage_weight_target` | `60` |
 | `stage_weight_current` | `142.3` |
 | `stage_weight_remaining` | `0` |

@@ -107,7 +107,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<select id="' + prefix + '-brew-cmd">';
     h += '<option value="">Loading templates...</option>';
     h += '</select>';
-    h += '<small>Use <strong>Advance</strong> for a single button that handles the full cycle. Pair the label with <code>[brew:next_label]</code>. Add a long-press <strong>Reset</strong> as an abort button.</small>';
+    h += '<small>Use <strong>Set Template</strong> to select a brew recipe (pair with a Navigate action to go to your brew pad). Use <strong>Advance</strong> on the brew pad for a single button that handles the full cycle &mdash; pair its label with <code>[brew:next_label]</code>.</small>';
     h += '</div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
@@ -188,7 +188,7 @@ function actionEditorTypeChanged(prefix, skipBrewPopulate) {
     if (scaleSetGrp) scaleSetGrp.style.display = (type === 'scale_cal_set') ? '' : 'none';
     var brewGrp = document.getElementById(prefix + '-brew-group');
     if (brewGrp) brewGrp.style.display = (type === 'brew') ? '' : 'none';
-    if (type === 'brew' && !skipBrewPopulate) _actionEditorPopulateBrewCmd(prefix, 'advance:free_pour');
+    if (type === 'brew' && !skipBrewPopulate) _actionEditorPopulateBrewCmd(prefix, 'advance');
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     if (type === 'timer') actionEditorTimerChanged(prefix);
@@ -411,16 +411,20 @@ function _actionEditorFetchBrewTemplates(callback) {
 
 function _actionEditorBuildBrewOptions(templates) {
     var h = '';
-    templates.forEach(function(t) {
-        h += '<optgroup label="' + (t.display_name || t.name) + '">';
-        h += '<option value="advance:' + t.name + '">' + (t.display_name || t.name) + ' \u2014 Advance (single button, recommended)</option>';
-        h += '<option value="start:' + t.name + '">' + (t.display_name || t.name) + ' \u2014 Start only (multi-button layouts)</option>';
+    if (templates.length > 0) {
+        h += '<optgroup label="Set Template">';
+        templates.forEach(function(t) {
+            h += '<option value="set_template:' + t.name + '">' + (t.display_name || t.name) + '</option>';
+        });
         h += '</optgroup>';
-    });
-    h += '<optgroup label="Any Template">';
+    }
+    h += '<optgroup label="Brew Control">';
+    h += '<option value="advance">Advance \u2014 single button, full cycle (recommended)</option>';
+    h += '<option value="start">Start \u2014 begin brew</option>';
     h += '<option value="next">Next \u2014 advance manual stage</option>';
     h += '<option value="stop">Stop \u2014 freeze timer &amp; save</option>';
     h += '<option value="reset">Reset \u2014 clear all state</option>';
+    h += '<option value="tare">Tare \u2014 zero the scale</option>';
     h += '</optgroup>';
     return h;
 }

@@ -537,7 +537,7 @@ A five-stage workflow that captures the bean dose before grinding.
 | 3 | Ready | Auto-weight | Tare on enter | 2 g |
 | 4 | Brewing | Manual | — | — |
 
-1. **Start V60** (`brew`/`start:v60` or `advance:v60`) — scale auto-tares; enters **Place cup**
+1. **Start V60** (`brew`/`advance` after setting the V60 template) — scale auto-tares; enters **Place cup**
 2. Place empty dosing cup on scale
 3. **Weigh beans** (`brew`/`next`) — tares out the cup weight; enters **Dosing**
 4. Add beans to the cup; `[brew:weight]` shows pure bean weight
@@ -563,7 +563,7 @@ A six-stage Rao-method V60 with bloom stage, flow targets, and named captures.
 | 4 | Bloom | Auto-time | Beep on enter, capture bloom water on exit | 60 g | 6 g/s | 45 s |
 | 5 | Main pour | Manual | Beep on enter | 250 g | 5 g/s | — |
 
-1. **Start Rao V60** (`brew`/`advance:rao_v60`) — scale auto-tares; enters **Place cup**
+1. **Start Rao V60** (`brew`/`advance` after setting the Rao V60 template) — scale auto-tares; enters **Place cup**
 2. Place empty dosing cup on scale
 3. **Weigh beans** (`brew`/`next`) — tares out the cup weight; enters **Dose beans**
 4. Add beans; `[brew:weight]` shows pure bean weight. Target shown via `[brew:stage_weight_target]`
@@ -595,13 +595,12 @@ The `[brew:]` binding scheme provides live brew workflow data. Syntax:
 | `timer` | time | `mm:ss` | Brew elapsed time (0 before first pour, frozen when done) |
 | `stage` | string | — | Current stage name: `Idle`, `Place cup`, `Dosing`, `Prep cup`, `Ready`, `Brewing`, `Done`, … |
 | `active` | string | — | `1` if a template is running (ACTIVE meta-phase), `0` otherwise |
-| `template` | string | — | Active template name: `v60`, `free_pour`, or empty when idle |
+| `template` | string | — | Active or hinted template name: `v60`, `free_pour`, etc. — reflects the last set template even when idle |
 | `dose` | float | `%.1f` | Captured dose weight (g); 0 until dose is captured via `brew:next` on Dosing stage |
 | `water` | float | `%.1f` | Water poured (g): live during brewing (scale was tared with vessel), frozen after Done |
 | `ratio` | float | `%.1f` | Brew ratio (water ÷ dose); `---` when no dose captured |
 | `instruction` | string | — | Current stage instruction text (empty when Idle/Done — use pipe fallback: `[brew:instruction\|tap Start to begin]`) |
 | `next_label` | string | — | Advance button label for the current state — changes as brew progresses (e.g. `Start V60` → `Weigh beans` → `Log dose` → `Next` → `Armed` → `Done` → `Start V60 again`) |
-| `peak_flow` | float | `%.2f` | Peak flow rate from the most recent saved brew (g/s). Returns `0` until the first brew is saved. |
 | `display_name` | string | — | Template display name (e.g. "James Rao V60"); falls back to machine name |
 
 Additional **stage-level bindings** (`stage_weight_target`, `stage_weight_current`, `stage_weight_remaining`, `stage_weight_pct`, `stage_time_target`, `stage_time_current`, `stage_time_remaining`, `stage_time_pct`, `stage_flow_target`, `stage_flow_current`, `stage_flow_pct`) provide per-stage guidance data for widgets and labels. See the [full binding reference](scale-and-brew-bindings.md) for details and practical examples.
@@ -673,18 +672,15 @@ Assign brew actions to pad buttons in the pad editor. The action type is `brew` 
 
 | Payload | Description |
 |---------|-------------|
-| `advance:v60` | **Smart advance for V60** — start on Idle, next on Manual, stop when timer running, restart on Done; recommended for single-button pads |
-| `advance:rao_v60` | **Smart advance for Rao V60** — same pattern with Rao's 6-stage template |
-| `advance:free_pour` | **Smart advance for free pour** — same as above for free pour template |
-| `advance:<name>` | Smart advance for any registered template |
-| `start` | Start with the default template (`free_pour`); **automatically tares scale** |
-| `start:v60` | Start with the V60 template |
-| `start:<name>` | Start with any registered template by name |
+| `set_template:<name>` | **Select a brew template** — primes the brew manager so that subsequent `advance` / `start` commands use this template. Pair with a Navigate action to go to your brew pad. |
+| `advance` | **Smart single-button control** — start on Idle (uses last set template), next on Manual, stop when timer running, restart on Done |
+| `start` | Start a brew with the last set template (or `free_pour` if none set); **automatically tares scale** |
 | `next` | Advance the current **Manual** stage to the next stage |
 | `stop` | Freeze timer, enter Done, save report |
 | `reset` | Clear all state, return to Idle |
+| `tare` | Zero the scale (same as the `scale` tare action, but available under the brew action type for self-contained brew pads) |
 
-> **Tip**: Use `advance:<name>` as your primary button. Its label changes at every stage via `[brew:next_label]`, so one button replaces Start + Next + Stop. Add a long-press **Reset** as an escape hatch.
+> **Tip**: Use **Set Template** buttons on a template selector pad, each paired with a Navigate action to your brew pad. Then use a single **Advance** button on the brew pad — its label changes at every stage via `[brew:next_label]`. Add a long-press **Reset** as an escape hatch.
 
 ### Brew Pad Examples
 
@@ -702,16 +698,18 @@ Assign brew actions to pad buttons in the pad editor. The action type is `brew` 
 
 #### V60 (single-button — recommended)
 
-One **Advance** button handles the full brew. Its label tracks the current state automatically via `[brew:next_label]`.
+One **Advance** button handles the full brew. Its label tracks the current state automatically via `[brew:next_label]`. Use **Set Template** on a template selector pad to choose V60 before navigating here.
 
 | Button | Action | Payload | Labels |
 |--------|--------|---------|--------|
-| **Advance** | `brew` | `advance:v60` | Center: `[brew:next_label]` |
+| **Advance** | `brew` | `advance` | Center: `[brew:next_label]` |
 | Reset | `brew` | `reset` | Center: `Reset` (long-press for abort) |
+| Tare | `brew` | `tare` | Center: `Tare` |
 | Instruction | — | — | Center: `[brew:instruction\|Tap Advance to begin]` |
 | Dose | — | — | Top: `Dose`, Center: `[brew:dose;%.1f] g` |
 | Timer | — | — | Top: `Brew`, Center: `[brew:timer;mm:ss.d]` |
 | Weight | — | — | Top: `Weight`, Center: `[brew:weight;%.1f] g` |
+| Template | — | — | Center: `[brew:display_name\|No template]` |
 
 Label progression on the Advance button:
 
@@ -731,7 +729,7 @@ Label progression on the Advance button:
 
 | Button | Actions | Payload(s) | Labels |
 |--------|---------|------------|--------|
-| Start V60 | `brew` | `start:v60` | Center: `Start V60` |
+| Start | `brew` | `start` | Center: `Start` |
 | Next | `brew` | `next` | Center: `[brew:next_label]` |
 | Stop | `brew` | `stop` | Center: `Stop` |
 | Reset | `brew` | `reset` | Center: `Reset` |
@@ -739,7 +737,7 @@ Label progression on the Advance button:
 | Timer | — | — | Top: `Brew`, Center: `[brew:timer;mm:ss.d]` |
 | Weight | — | — | Top: `Weight`, Center: `[brew:weight;%.1f] g` |
 
-> The **Next** button advances through Place cup → Dosing → Prep cup → Ready. Once in Ready the manager auto-starts on first pour.
+> The **Next** button advances through Place cup → Dosing → Prep cup → Ready. Once in Ready the manager auto-starts on first pour. Use **Set Template** on a template selector pad to choose the template before navigating here.
 
 ### Brew vs. Manual Timer
 
@@ -861,16 +859,27 @@ Each brew is stored as a self-contained JSON file. This is also the format used 
 
 **Import request** — POST a single brew object or an array of brew objects (same format as export, without `id`).
 
-### Peak Flow Binding
+### Template Selector Pad
 
-The `[brew:peak_flow]` binding returns the peak flow rate from the most recently saved brew. This is useful for showing "last brew" stats on your pad dashboard even after a reset:
+With the **Set Template** action, you can build a template selector pad that lets you pick a brew recipe, then navigate to a shared brew pad:
 
+| Button | Action 1 | Action 2 | Labels |
+|--------|----------|----------|--------|
+| V60 | `brew` / `set_template:v60` | `screen` / navigate to `brew_pad` | Center: `V60` |
+| Rao V60 | `brew` / `set_template:rao_v60` | `screen` / navigate to `brew_pad` | Center: `Rao V60` |
+| Free Pour | `brew` / `set_template:free_pour` | `screen` / navigate to `brew_pad` | Center: `Free Pour` |
+
+The brew pad itself uses generic `advance` / `reset` / `tare` commands and `[brew:next_label]` / `[brew:display_name]` bindings — it works with any template.
+
+#### Template Highlighting
+
+Highlight the active template on the selector pad using a conditional background color:
+
+```text
+[expr:[brew:template]=="rao_v60"?"00AA00":"333333"]
 ```
-Peak: [brew:peak_flow] g/s
-```
-→ `Peak: 3.45 g/s`
 
-> **Note**: This value is in-memory only and resets to 0 on device reboot. It updates each time a brew is saved.
+`[brew:template]` returns the hinted template name even while idle, so the highlight persists after selection.
 
 ---
 
@@ -901,11 +910,11 @@ A practical 4×2 pad layout for V60 coffee brewing using the V60 template, with 
 - Bottom label: `[brew:stage]`
 - Background color: `[expr:[brew:active]=="1"?"1a3a1a":"1a1a2e"]`
 
-**Button (3,0) — Start V60:**
-- Center label: `Start V60`
-- Action: `brew`, payload: `start:v60`
+**Button (3,0) — Advance brew:**
+- Center label: `[brew:next_label]`
+- Action: `brew`, payload: `advance`
 - Background color: `#16213e`
-- *(Scale auto-tares when brew starts — no extra tare action needed)*
+- *(Use Set Template on a selector pad to choose V60 before navigating here)*
 
 **Button (0,1) — Weight sparkline:**
 - Widget type: `sparkline`
