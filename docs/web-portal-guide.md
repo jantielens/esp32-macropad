@@ -100,7 +100,7 @@ The Audio section controls device volume and optional touch-feedback beep patter
 
 **Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
 
-Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence is a beep action, the cue is suppressed to avoid a double-beep. Individual buttons can override or suppress the device-level pattern in the button editor's Audio Feedback section (enter `none` to silence a specific button). Swipe gestures also use the device-level tap beep.
+Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Play Beep or Play Sound action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
 

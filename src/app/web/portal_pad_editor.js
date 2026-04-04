@@ -483,11 +483,6 @@ function padInit() {
                 // Show button defaults section
                 var btnDefSec = document.getElementById('btn-defaults-section');
                 if (btnDefSec) btnDefSec.style.display = 'block';
-                // Show audio feedback section in button editor if device has audio
-                if (deviceInfoCache.has_audio === true) {
-                    var audioSec = document.getElementById('pad-edit-audio-section');
-                    if (audioSec) audioSec.style.display = '';
-                }
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
                 padFetchSoundList();
@@ -1276,14 +1271,6 @@ function padDialogOpen(col, row) {
     }
     padUpdateAddLink('lp');
 
-    // Audio feedback overrides
-    document.getElementById('pad-edit-tap-beep').value = btn.tap_beep || '';
-    document.getElementById('pad-edit-lp-beep').value = btn.lp_beep || '';
-    document.getElementById('pad-edit-tap-beep').placeholder = 'device default';
-    document.getElementById('pad-edit-lp-beep').placeholder = 'device default';
-    var audioSec = document.getElementById('pad-edit-audio-section');
-    if (audioSec) audioSec.open = !!(btn.tap_beep || btn.lp_beep);
-
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
     document.getElementById('pad-edit-bg-image-user').value = btn.bg_image_user || '';
@@ -1480,12 +1467,6 @@ function padDialogOk(keepOpen) {
         if (a.type) lpArr.push(a);
     }
     if (lpArr.length) btn.lp_actions = lpArr;
-
-    // Audio feedback overrides
-    var tapBeep = document.getElementById('pad-edit-tap-beep').value.trim();
-    if (tapBeep) { btn.tap_beep = tapBeep; } else { delete btn.tap_beep; }
-    var lpBeep = document.getElementById('pad-edit-lp-beep').value.trim();
-    if (lpBeep) { btn.lp_beep = lpBeep; } else { delete btn.lp_beep; }
 
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();

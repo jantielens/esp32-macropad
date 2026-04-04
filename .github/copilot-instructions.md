@@ -84,7 +84,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - **Audio Subsystem**: ES8311 codec + I2S tone generation with async FreeRTOS playback (compile-time gated by `HAS_AUDIO`)
   - `audio.cpp/h` - ES8311 I2C driver, I2S TX channel, beep pattern DSL parser (`freq:dur` tones, bare `dur` gaps), volume control (0-100, NVS-persisted), background playback task with queue, loop/stop support for siren use
-  - Configurable touch-feedback cues: device-level `tap_beep`/`lp_beep` patterns in DeviceConfig, per-button overrides in ScreenButtonConfig/ButtonTile (`"none"` to suppress), auto-suppressed when action is beep; visual flash and audio cue only fire when action is configured
+  - Configurable touch-feedback cues: device-level `tap_beep`/`lp_beep` patterns in DeviceConfig; auto-suppressed when button or swipe action produces audio (beep or sound action); visual flash and audio cue only fire when action is configured
 - **Sound Player Subsystem**: MP3 file playback from LittleFS via minimp3 decoder (compile-time gated by `HAS_SOUND_PLAYER`, defaults to `HAS_AUDIO`)
   - `sound_store.cpp/h` - LittleFS storage at `/sounds/`, name validation, list/save/delete API
   - `sound_player.cpp/h` - MP3 decode (minimp3, CC0) with linear interpolation resampler to 16 kHz, frame-by-frame I2S output

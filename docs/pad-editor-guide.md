@@ -334,30 +334,17 @@ When you select a Timer action, a dropdown groups all actions by timer:
 
 > **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Set the default countdown to 240 seconds for a 4-minute pour.
 
-### Audio Feedback
+### Audio Behavior
 
-*Shown only on boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
+*Applies only to boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
 
-The **Audio Feedback** section in the button editor lets you override the device-level beep patterns for individual buttons.
-
-| Field | Description |
-|-------|-------------|
-| **Tap Beep** | Beep pattern for this button's tap. Leave empty to use the device default (configured on the Home page). Enter `none` to silence this button. |
-| **Long-Press Beep** | Beep pattern for this button's long-press. Same override rules. |
-
-**Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz:ms). A bare number is a silent gap.
-
-| Pattern | Sound |
-|---------|-------|
-| `800:80` | Quick tap click |
-| `600:40 40 600:40` | Double chirp |
-| `1000:30 30 1200:30` | Rising two-tone |
+Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Play Beep** or **Play Sound** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
 
 **Behavior notes:**
 - Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
-- If any action in the sequence is a **Play Beep** action, the audio cue is automatically suppressed to avoid a double-beep.
+- If any action in the sequence is a **Play Beep** or **Play Sound** action, the device-level feedback beep is automatically suppressed.
 - When multiple actions are configured and one of them navigates to a different screen, any subsequent actions in the sequence still execute safely. The last navigation wins (the user sees the final target screen).
-- Swipe gestures use the device-level tap beep (no per-swipe overrides).
+- Swipe gestures use the device-level tap beep with the same suppression logic.
 
 ---
 

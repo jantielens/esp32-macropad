@@ -261,8 +261,6 @@ void PadScreen::buildTiles() {
         memcpy(tile.actions, bcfg.actions, bcfg.action_count * sizeof(ButtonAction));
         tile.lp_action_count = bcfg.lp_action_count;
         memcpy(tile.lp_actions, bcfg.lp_actions, bcfg.lp_action_count * sizeof(ButtonAction));
-        memcpy(tile.tap_beep, bcfg.tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
-        memcpy(tile.lp_beep, bcfg.lp_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 
         // Create MQTT-bound center label early so widgets can position it
 #if HAS_MQTT

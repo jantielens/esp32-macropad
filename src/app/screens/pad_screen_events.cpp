@@ -27,10 +27,11 @@ static bool has_any_action(const ButtonAction* acts, uint8_t count) {
     return false;
 }
 
-// Returns true if any action in the list is a beep action.
-static bool has_beep_action(const ButtonAction* acts, uint8_t count) {
+// Returns true if any action in the list produces its own audio (beep or sound).
+static bool has_audio_action(const ButtonAction* acts, uint8_t count) {
     for (uint8_t i = 0; i < count; i++)
-        if (strcmp(acts[i].type, ACTION_TYPE_BEEP) == 0) return true;
+        if (strcmp(acts[i].type, ACTION_TYPE_BEEP) == 0 ||
+            strcmp(acts[i].type, ACTION_TYPE_SOUND) == 0) return true;
     return false;
 }
 
@@ -97,8 +98,8 @@ void PadScreen::onTap(lv_event_t* e) {
     if (has_any_action(local, count)) {
         do_tap_flash(tile);
 #if HAS_AUDIO
-        if (!has_beep_action(local, count)) {
-            const char* pattern = tile->tap_beep[0] ? tile->tap_beep : device_config.tap_beep;
+        if (!has_audio_action(local, count)) {
+            const char* pattern = device_config.tap_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) {
                 audio_beep(pattern, 0);
             }
@@ -132,8 +133,8 @@ void PadScreen::onLongPress(lv_event_t* e) {
     if (has_any_action(local, count)) {
         do_tap_flash(tile);
 #if HAS_AUDIO
-        if (!has_beep_action(local, count)) {
-            const char* pattern = tile->lp_beep[0] ? tile->lp_beep : device_config.lp_beep;
+        if (!has_audio_action(local, count)) {
+            const char* pattern = device_config.lp_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) {
                 audio_beep(pattern, 0);
             }
