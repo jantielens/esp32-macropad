@@ -771,7 +771,7 @@ async function loadSoundList() {
             html += '<tr style="border-bottom:1px solid #f0f0f0;">';
             html += '<td style="padding:6px 8px;"><code>' + soundEsc(name) + '</code></td>';
             html += '<td style="text-align:right; padding:4px 8px; white-space:nowrap;">';
-            html += '<button type="button" class="btn" style="font-size:12px; padding:2px 10px; margin-right:4px;" onclick="playSound(\'' + soundEsc(name) + '\')">&9654; Play</button>';
+            html += '<button type="button" class="btn" style="font-size:12px; padding:2px 10px; margin-right:4px;" onclick="playSound(\'' + soundEsc(name) + '\')">\u25B6 Play</button>';
             html += '<button type="button" class="btn" style="font-size:12px; padding:2px 10px; color:#ff3b30;" onclick="deleteSound(\'' + soundEsc(name) + '\')">&times; Delete</button>';
             html += '</td></tr>';
         });
@@ -822,6 +822,15 @@ async function uploadSound() {
         statusEl.innerHTML = '<span style="color:#ff3b30;">Upload error: ' + soundEsc(err.message) + '</span>';
     } finally {
         btn.disabled = false;
+    }
+}
+
+function soundFileSelected(input) {
+    if (!input.files || !input.files.length) return;
+    var nameInput = document.getElementById('sound-upload-name');
+    if (nameInput && !nameInput.value) {
+        var raw = input.files[0].name.replace(/\.mp3$/i, '');
+        nameInput.value = raw.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 31);
     }
 }
 

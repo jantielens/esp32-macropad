@@ -490,7 +490,7 @@ function padInit() {
                 }
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
-                padPopulateSoundDropdown();
+                padFetchSoundList();
                 padLoadButtonDefaultsFromDevice();
                 padLoadPage(0);
                 padRefreshDropdownLabels();
@@ -578,22 +578,25 @@ function padPopulateScreenDropdown() {
     }
 }
 
-// Populate sound file dropdowns in action editors
+// Cached sound file list (populated at init, used synchronously on dialog open)
+var padSoundListCache = [];
+
+// Fetch sound list from device and update cache
+function padFetchSoundList() {
+    fetch('/api/sounds/list')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(sounds) { padSoundListCache = sounds; })
+        .catch(function() {});
+}
+
+// Populate sound file dropdowns in action editors (synchronous, uses cache)
 function padPopulateSoundDropdown() {
     var prefixes = [];
     for (var i = 0; i < MAX_ACTIONS; i++) {
         prefixes.push('pad-edit-action-' + i);
         prefixes.push('pad-edit-lp-action-' + i);
     }
-    // Fetch sound list from device
-    fetch('/api/sounds/list')
-        .then(function(r) { return r.ok ? r.json() : []; })
-        .then(function(sounds) {
-            actionEditorPopulateSounds(prefixes, sounds);
-        })
-        .catch(function() {
-            actionEditorPopulateSounds(prefixes, []);
-        });
+    actionEditorPopulateSounds(prefixes, padSoundListCache);
 }
 
 // Show the next hidden action slot for tap or lp
