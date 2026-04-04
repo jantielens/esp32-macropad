@@ -27,6 +27,7 @@
 #include "icon_store.h"
 #include "pad_binding.h"
 #include "sound_store.h"
+#include "boot_actions.h"
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "pad_config.h"
@@ -280,6 +281,9 @@ void setup()
 	// Load device-level button defaults from LittleFS
 	button_defaults_init();
 
+	// Load boot actions from LittleFS
+	boot_actions_init();
+
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
@@ -398,6 +402,9 @@ void setup()
 	} else {
 		display_manager_show_info();
 	}
+
+	// Dispatch boot actions after first screen navigation
+	boot_actions_dispatch();
 
 	// Start image fetching AFTER the splash is dismissed and the runtime screen is
 	// visible.  This avoids concurrent WiFi pressure (HTTP downloads + MQTT +

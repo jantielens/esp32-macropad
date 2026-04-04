@@ -69,4 +69,18 @@ echo "=== Running unit tests: key_sequence ==="
 ./tests/bin/test_key_sequence
 echo
 
+echo "=== Building unit tests: action_parse ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_action_parse.cpp \
+    src/app/action_parse.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_parse
+
+echo "=== Running unit tests: action_parse ==="
+./tests/bin/test_action_parse
+echo
+
 echo "=== All tests passed ==="

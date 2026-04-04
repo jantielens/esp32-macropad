@@ -73,8 +73,12 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Swipe Actions Subsystem**: Configurable swipe gestures with full ButtonAction parity (compile-time gated by `HAS_DISPLAY`)
   - `swipe_config.cpp/h` - LittleFS-backed swipe action config (`/config/swipe_actions.json`) with RAM cache; 4 directions × ButtonAction
   - `swipe_actions.cpp/h` - Shared LVGL gesture handler with 300ms debounce; registered on all screens
-  - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, timer control); used by both pad buttons and swipe gestures
+  - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, timer control); used by pad buttons, swipe gestures, and boot actions
+  - `action_parse.cpp/h` - Shared `action_parse()` and `action_to_json()` for DRY ButtonAction JSON serialization; used by pad_config, swipe_config, boot_actions, and web_portal_swipe
   - `web_portal_swipe.cpp/h` - REST API for GET/POST `/api/swipe-actions`
+- **Boot Actions Subsystem**: Device-level actions dispatched once at boot after the first screen is shown (compile-time gated by `HAS_DISPLAY`)
+  - `boot_actions.cpp/h` - LittleFS-backed boot action config (`/config/boot_actions.json`) with RAM cache; up to `MAX_BUTTON_ACTIONS` sequential actions; dispatched via `action_dispatch()` after first screen navigation in `setup()`
+  - `web_portal_boot_actions.cpp/h` - REST API for GET/POST `/api/boot-actions`
 - **Button Defaults Subsystem**: Device-wide default appearance for buttons (compile-time gated by `HAS_DISPLAY`)
   - `button_defaults.cpp/h` - LittleFS-backed device-level button defaults (`/config/button_defaults.json`) with RAM cache; 8 fields (colors, border, radius, label styles); rebuilds all pad caches on load/save
   - `web_portal_button_defaults.cpp/h` - REST API for GET/POST `/api/button-defaults`
@@ -274,7 +278,10 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/ble_hid.cpp/h` - BLE HID keyboard with manual NimBLE GATT service, single-owner pairing, keyboard + consumer reports, auto-re-pair for stale bonds (compile-time gated by `HAS_BLE_HID`)
 - `src/app/key_sequence.cpp/h` - Pure C key sequence DSL parser (combos, text literals, delays, media keys); host-testable
 - `src/app/web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
-- `src/app/action_dispatch.cpp/h` - Shared action execution for buttons and swipe gestures (compile-time gated by `HAS_DISPLAY`)
+- `src/app/action_dispatch.cpp/h` - Shared action execution for buttons, swipe gestures, and boot actions (compile-time gated by `HAS_DISPLAY`)
+- `src/app/action_parse.cpp/h` - Shared ButtonAction JSON parse/serialize helpers (compile-time gated by `HAS_DISPLAY`)
+- `src/app/boot_actions.cpp/h` - LittleFS-backed boot action config with RAM cache (compile-time gated by `HAS_DISPLAY`)
+- `src/app/web_portal_boot_actions.cpp/h` - Boot actions REST API (GET/POST `/api/boot-actions`)
 - `src/app/audio.cpp/h` - Audio subsystem: ES8311 codec, I2S tone generation, beep pattern DSL, volume control, loop/stop (compile-time gated by `HAS_AUDIO`)
 - `src/app/mqtt_audio.cpp/h` - MQTT audio control: siren, volume, beep buttons, custom tone text entity (compile-time gated by `HAS_AUDIO && HAS_MQTT`)
 - `src/app/sound_store.cpp/h` - LittleFS-backed MP3 sound file storage at `/sounds/` (compile-time gated by `HAS_SOUND_PLAYER`)
@@ -330,7 +337,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web/firmware.html` - Firmware page (online update, manual upload, factory reset)
 - `src/app/web/portal.css` - Styles (gradients, animations, responsive grid)
 - `src/app/web/portal.js` - Client-side logic (multi-page support, API calls, health updates)
-- `src/app/web/portal_action_editor.js` - Shared action editor UI component for button and swipe action editing
+- `src/app/web/portal_action_editor.js` - Shared action editor UI component for button, swipe, and boot action editing
 - `src/app/web/portal_binding_validator.js` - Client-side binding syntax validator with scheme registry (live validation, format checking, expression syntax)
 - `src/version.h` - Firmware version tracking
 
@@ -360,6 +367,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `tests/test_expr_eval.cpp` - Unit tests for pure expression evaluator (100 tests)
 - `tests/test_expr_binding.cpp` - Integration tests with mock MQTT/health resolvers (64 tests)
 - `tests/test_key_sequence.cpp` - Unit tests for key sequence DSL parser
+- `tests/test_action_parse.cpp` - Unit tests for shared ButtonAction JSON round-trip (action_parse/action_to_json)
 - `tests/stubs.cpp` - `strlcpy()` stub for glibc (not available on Linux)
 - `tests/log_manager.h` - No-op log macros for host compilation
 - `tests/board_config.h` - Minimal board config stub for host compilation

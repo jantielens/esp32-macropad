@@ -149,6 +149,24 @@ async function loadVersion() {
             }
         }
 
+        // Show boot actions section if device has display
+        const bootSection = document.getElementById('boot-actions-section');
+        if (bootSection) {
+            if (version.has_display === true) {
+                bootSection.style.display = 'block';
+                bootActionsInitEditors();
+                actionEditorPopulateScreens(BOOT_ACTION_PREFIXES, version.available_screens);
+                // Populate sound file dropdowns for boot actions
+                fetch('/api/sounds/list')
+                    .then(function(r) { return r.ok ? r.json() : []; })
+                    .then(function(sounds) { actionEditorPopulateSounds(BOOT_ACTION_PREFIXES, sounds); })
+                    .catch(function() {});
+                loadBootActions();
+            } else {
+                bootSection.style.display = 'none';
+            }
+        }
+
         document.getElementById('firmware-version').textContent = `Firmware v${version.version}`;
         document.getElementById('chip-info').textContent = 
             `${version.chip_model} rev ${version.chip_revision}`;
@@ -869,5 +887,66 @@ async function saveSwipeActions() {
     } catch (err) {
         console.error('Error saving swipe actions:', err);
         showMessage('Error saving swipe actions: ' + err.message, 'error');
+    }
+}
+
+// ============================================================================
+// Boot Actions
+// ============================================================================
+
+const BOOT_ACTION_PREFIXES = ['boot-action-1', 'boot-action-2', 'boot-action-3'];
+const BOOT_ACTION_LABELS = { 'boot-action-1': 'Action 1', 'boot-action-2': 'Action 2', 'boot-action-3': 'Action 3' };
+
+function bootActionsInitEditors() {
+    var container = document.getElementById('boot-action-editors');
+    if (!container) return;
+    var html = '';
+    BOOT_ACTION_PREFIXES.forEach(function(prefix) {
+        html += '<details class="editor-group" id="' + prefix + '-group">';
+        html += '<summary>' + BOOT_ACTION_LABELS[prefix] + '</summary>';
+        html += '<div class="editor-group-body">';
+        html += actionEditorHTML(prefix);
+        html += '</div></details>';
+    });
+    container.innerHTML = html;
+}
+
+async function loadBootActions() {
+    try {
+        const response = await fetch('/api/boot-actions');
+        if (!response.ok) return;
+        const data = await response.json();
+        var actions = data.actions || [];
+        BOOT_ACTION_PREFIXES.forEach(function(prefix, i) {
+            actionEditorLoad(prefix, actions[i] || {});
+        });
+    } catch (err) {
+        console.error('Failed to load boot actions:', err);
+    }
+}
+
+async function saveBootActions() {
+    var actions = [];
+    BOOT_ACTION_PREFIXES.forEach(function(prefix) {
+        actions.push(actionEditorBuild(prefix));
+    });
+    // Trim trailing empty actions
+    while (actions.length > 0 && !actions[actions.length - 1].type) {
+        actions.pop();
+    }
+    try {
+        const response = await fetch('/api/boot-actions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actions: actions })
+        });
+        if (response.ok) {
+            showMessage('Boot actions saved', 'success');
+        } else {
+            showMessage('Failed to save boot actions', 'error');
+        }
+    } catch (err) {
+        console.error('Error saving boot actions:', err);
+        showMessage('Error saving boot actions: ' + err.message, 'error');
     }
 }

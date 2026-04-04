@@ -873,6 +873,27 @@ Save swipe action configuration to LittleFS.
 
 ---
 
+### Boot Actions API
+
+All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Boot actions are stored on LittleFS at `/config/boot_actions.json` and dispatched once after the first screen is shown during boot.
+
+#### `GET /api/boot-actions`
+
+Returns the current boot action configuration.
+
+- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, etc.).
+- Default (no file saved): `{"actions": []}`.
+
+#### `POST /api/boot-actions`
+
+Save boot action configuration to LittleFS.
+
+- **Body:** JSON object with an `actions` array of `ButtonAction` objects. Trailing empty actions are trimmed by the web UI.
+- **Response:** `{"ok": true}` on success; JSON error on failure.
+- Changes take effect on next boot.
+
+---
+
 ### Button Defaults API
 
 All button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Button defaults are stored on LittleFS at `/config/button_defaults.json`.

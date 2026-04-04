@@ -2,6 +2,7 @@
 
 #if HAS_DISPLAY
 
+#include "action_parse.h"
 #include "log_manager.h"
 #include "fs_health.h"
 
@@ -17,21 +18,10 @@ static const char* SWIPE_CONFIG_PATH = "/config/swipe_actions.json";
 static SwipeConfig g_config;
 static bool g_loaded = false;
 
-// Parse a JSON action object into a ButtonAction struct.
-// Same JSON schema as pad button actions: { "type", "target", "topic", "payload", "sequence" }
 static void parse_swipe_action(JsonVariant v, ButtonAction* act) {
     memset(act, 0, sizeof(ButtonAction));
     if (!v.is<JsonObject>()) return;
-    JsonObject a = v.as<JsonObject>();
-    strlcpy(act->type,         a["type"]     | "", CONFIG_ACTION_TYPE_MAX_LEN);
-    strlcpy(act->screen_id,    a["target"]   | "", CONFIG_SCREEN_ID_MAX_LEN);
-    strlcpy(act->mqtt_topic,   a["topic"]    | "", CONFIG_MQTT_TOPIC_MAX_LEN);
-    strlcpy(act->mqtt_payload, a["payload"]  | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
-    strlcpy(act->key_sequence, a["sequence"] | "", CONFIG_KEY_SEQ_MAX_LEN);
-    strlcpy(act->beep_pattern, a["beep_pattern"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
-    act->beep_volume = (uint8_t)(a["beep_volume"] | 0);
-    strlcpy(act->volume_mode, a["volume_mode"] | "", CONFIG_VOLUME_MODE_MAX_LEN);
-    act->volume_value = (uint8_t)(a["volume_value"] | 0);
+    action_parse(v.as<JsonObject>(), *act);
 }
 
 static void apply_defaults(SwipeConfig* cfg) {

@@ -104,6 +104,21 @@ Buttons with no actions configured are completely inert — no visual tap flash 
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
 
+#### Sound Files
+
+*Shown only on boards with sound player support (defaults to boards with audio hardware).*
+
+Upload MP3 files to play as button actions or via MQTT. Files are stored on the device's LittleFS filesystem.
+
+| Element | Description |
+|---------|-------------|
+| **Sound list** | Shows all uploaded sounds with Play and Delete buttons |
+| **Name** | Identifier for the sound (letters, numbers, hyphens, underscores). Auto-populated from the selected filename |
+| **MP3 File** | File picker for `.mp3` files (max 512 KB per file). The server validates the MP3 header on upload |
+| **Upload** | Uploads the file to the device |
+
+Once uploaded, sounds appear in the "Play Sound" action type dropdown in the button editor, swipe actions, and boot actions.
+
 #### BLE Signals
 
 The firmware exposes two BLE health signals for bindings and diagnostics:
@@ -157,6 +172,22 @@ Protects your LCD from burn-in by turning off the backlight after a period of in
 | **Fade In** | How long the backlight fade-in takes on wake (ms, 0 = instant) |
 | **Wake on touch** | Wake the display by touching the screen |
 | **Wake on MQTT Binding** | Binding expression that keeps the screen awake while it resolves to ON (e.g. `[mqtt:devices/node/presence/state]`) |
+
+### Swipe Actions
+
+*Shown only on boards with a display.*
+
+Configure what happens when you swipe in each direction. Swipe gestures work on all screens and use the same action system as buttons (screen navigation, MQTT publish, BLE key sequence, beep, sound, etc.).
+
+Each of the four directions (left, right, up, down) can have one action. By default, swipe right navigates back.
+
+### Boot Actions
+
+*Shown only on boards with a display.*
+
+Configure up to 3 sequential actions to run automatically when the device boots — for example, play a startup sound, publish an MQTT message, or navigate to a specific pad. Boot actions use the same action editor as buttons and swipe gestures.
+
+Actions are dispatched once after the first screen is shown during boot. Changes take effect on next reboot.
 
 ---
 

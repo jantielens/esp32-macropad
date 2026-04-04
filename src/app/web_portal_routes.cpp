@@ -9,6 +9,7 @@
 #include "web_portal_ota.h"
 #include "web_portal_pad.h"
 #include "web_portal_swipe.h"
+#include "web_portal_boot_actions.h"
 #include "web_portal_button_defaults.h"
 #include "web_portal_pages.h"
 
@@ -180,6 +181,19 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				},
 				NULL,
 				handlePostButtonDefaults
+		);
+
+		// Boot actions API
+		registerOptions("/api/boot-actions");
+		server->on("/api/boot-actions", HTTP_GET, handleGetBootActions);
+		server->on(
+				"/api/boot-actions",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostBootActions
 		);
 
 		registerOptions("/api/icons/install");

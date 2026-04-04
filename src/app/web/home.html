@@ -107,6 +107,18 @@
                 </div>
             </section>
 
+            <!-- Boot Actions Section (hidden if no display support) -->
+            <section class="section" id="boot-actions-section" style="display:none;">
+                <h2>🚀 Boot Actions</h2>
+                <small style="display:block; margin-bottom:16px;">Actions to run when the device boots (e.g. play a startup sound). Up to 3 sequential actions.</small>
+
+                <div id="boot-action-editors"></div>
+
+                <div style="margin-top: 12px;">
+                    <button type="button" class="btn btn-primary" onclick="saveBootActions()">Save Boot Actions</button>
+                </div>
+            </section>
+
             <!-- Operating Mode & Cadence -->
             <section class="section" id="power-settings-section">
                 <h2>⚡ Operating Mode & Cadence</h2>
