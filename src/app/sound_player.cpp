@@ -3,6 +3,7 @@
 #if HAS_SOUND_PLAYER
 
 #include <LittleFS.h>
+#include <esp_heap_caps.h>
 #include <string.h>
 #include "driver/i2s_std.h"
 #include "log_manager.h"
@@ -22,9 +23,6 @@ static const uint32_t TARGET_RATE = 16000;
 // Read buffer for MP3 file data (must hold at least one full MP3 frame)
 // MINIMP3 recommends minimum ~16KB for reliable frame detection
 #define MP3_READ_BUF_SIZE (16 * 1024)
-
-// PCM output chunk size for I2S writes (stereo frames)
-#define I2S_CHUNK_FRAMES 512
 
 // ---------------------------------------------------------------------------
 // Linear interpolation resampler: any source rate → TARGET_RATE (16 kHz)
@@ -133,44 +131,53 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
     size_t file_size = file.size();
     LOGI(TAG, "Playing %s (%u bytes)", path, (unsigned)file_size);
 
-    // Allocate read buffer
-    uint8_t* read_buf = (uint8_t*)malloc(MP3_READ_BUF_SIZE);
+    // Allocate buffers in PSRAM when available (saves ~35 KB internal RAM).
+    // All buffers are CPU-only — no DMA reads them directly.
+    auto ps_alloc = [](size_t sz) -> void* {
+        void* p = nullptr;
+        if (psramFound()) p = heap_caps_malloc(sz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!p)           p = heap_caps_malloc(sz, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        return p;
+    };
+
+    // Read buffer for MP3 file data (16 KB)
+    uint8_t* read_buf = (uint8_t*)ps_alloc(MP3_READ_BUF_SIZE);
     if (!read_buf) {
         LOGE(TAG, "Failed to allocate read buffer");
         file.close();
         return false;
     }
 
-    // Allocate I2S output buffer (stereo, 16-bit)
+    // I2S output buffer (stereo, 16-bit, 8 KB)
     // At worst case (48kHz → 16kHz), one MP3 frame (1152 samples) produces
     // 1152 * 16000/48000 = 384 output frames. Add margin.
     const int max_out_frames = 2048;
-    int16_t* out_buf = (int16_t*)malloc(max_out_frames * 2 * sizeof(int16_t));
+    int16_t* out_buf = (int16_t*)ps_alloc(max_out_frames * 2 * sizeof(int16_t));
     if (!out_buf) {
         LOGE(TAG, "Failed to allocate output buffer");
-        free(read_buf);
+        heap_caps_free(read_buf);
         file.close();
         return false;
     }
 
-    // Allocate decoder on heap (~6.7 KB — too large for task stack)
-    mp3dec_t* mp3d = (mp3dec_t*)malloc(sizeof(mp3dec_t));
+    // MP3 decoder state (~6 KB — too large for task stack)
+    mp3dec_t* mp3d = (mp3dec_t*)ps_alloc(sizeof(mp3dec_t));
     if (!mp3d) {
         LOGE(TAG, "Failed to allocate MP3 decoder");
-        free(out_buf);
-        free(read_buf);
+        heap_caps_free(out_buf);
+        heap_caps_free(read_buf);
         file.close();
         return false;
     }
     mp3dec_init(mp3d);
 
-    // Allocate PCM decode buffer on heap (4.6 KB)
-    int16_t* pcm = (int16_t*)malloc(MINIMP3_MAX_SAMPLES_PER_FRAME * sizeof(int16_t));
+    // PCM decode buffer (4.5 KB)
+    int16_t* pcm = (int16_t*)ps_alloc(MINIMP3_MAX_SAMPLES_PER_FRAME * sizeof(int16_t));
     if (!pcm) {
         LOGE(TAG, "Failed to allocate PCM buffer");
-        free(mp3d);
-        free(out_buf);
-        free(read_buf);
+        heap_caps_free(mp3d);
+        heap_caps_free(out_buf);
+        heap_caps_free(read_buf);
         file.close();
         return false;
     }
@@ -220,13 +227,20 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
             continue;
         }
 
-        // Initialize resampler on first valid frame
-        if (!resampler_initialized) {
+        // Initialize or re-initialize resampler when format changes
+        if (!resampler_initialized ||
+            (uint32_t)frame_info.hz != resampler.src_rate ||
+            (uint32_t)frame_info.channels != resampler.src_channels) {
             resampler_init(&resampler, frame_info.hz, frame_info.channels);
+            if (!resampler_initialized) {
+                LOGD(TAG, "MP3: %d Hz, %d ch, layer %d, %d kbps",
+                     frame_info.hz, frame_info.channels, frame_info.layer,
+                     frame_info.bitrate_kbps);
+            } else {
+                LOGD(TAG, "MP3 format change: %d Hz, %d ch",
+                     frame_info.hz, frame_info.channels);
+            }
             resampler_initialized = true;
-            LOGD(TAG, "MP3: %d Hz, %d ch, layer %d, %d kbps",
-                 frame_info.hz, frame_info.channels, frame_info.layer,
-                 frame_info.bitrate_kbps);
         }
 
         // Resample to TARGET_RATE if needed
@@ -262,10 +276,10 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
         }
     }
 
-    free(pcm);
-    free(mp3d);
-    free(out_buf);
-    free(read_buf);
+    heap_caps_free(pcm);
+    heap_caps_free(mp3d);
+    heap_caps_free(out_buf);
+    heap_caps_free(read_buf);
     file.close();
 
     LOGI(TAG, "Playback %s: %s", path, success ? "complete" : "error");

@@ -480,8 +480,8 @@ void audio_init(uint8_t initial_volume) {
 
     // Create command queue and audio task
     // Priority 5: above LVGL (4) to avoid I2S DMA underruns during heavy rendering
-    // Stack: RISC-V (P4) needs ~50% more stack than Xtensa (S3) per call frame.
-    // minimp3 decoder requires ~16KB stack per frame decode, so 24KB total.
+    // Stack: minimp3 puts ~14 KB mp3dec_scratch_t on stack per decode call;
+    // RISC-V (P4) needs ~50% more per call frame. 24 KB provides margin.
     audio_queue = xQueueCreate(AUDIO_QUEUE_DEPTH, sizeof(AudioCommand));
     xTaskCreatePinnedToCore(audio_task, "audio", 24576, NULL, 5, &audio_task_handle, 1);
 

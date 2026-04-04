@@ -412,7 +412,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/ha_discovery.cpp
   - src/app/mqtt_audio.cpp
+  - src/app/sound_player.cpp
+  - src/app/sound_player.h
+  - src/app/sound_store.cpp
+  - src/app/sound_store.h
   - src/app/web_portal_routes.cpp
+  - src/app/web_portal_sounds.cpp
+  - src/app/web_portal_sounds.h
 - **HAS_TOUCH**
   - src/app/app.ino
   - src/app/board_config.h

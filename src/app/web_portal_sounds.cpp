@@ -65,13 +65,12 @@ void handlePostSoundUpload(AsyncWebServerRequest *request, uint8_t *data,
                            size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
 
-    if (index == 0) {
-        g_sound_post.errored = false;
-    } else if (g_sound_post.errored) {
+    if (index != 0 && g_sound_post.errored) {
         return;
     }
 
     if (index == 0) {
+        g_sound_post.errored = false;
         // First chunk — parse name param, allocate buffer
         if (!request->hasParam("name")) {
             web_portal_send_json_error(request, 400, "Missing name parameter");
