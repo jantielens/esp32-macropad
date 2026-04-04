@@ -122,6 +122,15 @@ async function loadVersion() {
             screenGroup.style.display = 'none';
         }
 
+        // Show sound files section if device has sound player support
+        if (version.has_sound_player === true) {
+            const soundSection = document.getElementById('sound-files-section');
+            if (soundSection) {
+                soundSection.style.display = 'block';
+                loadSoundList();
+            }
+        }
+
         // Show swipe actions section if device has display (touch)
         const swipeSection = document.getElementById('swipe-actions-section');
         if (swipeSection) {
@@ -129,6 +138,11 @@ async function loadVersion() {
                 swipeSection.style.display = 'block';
                 swipeInitEditors();
                 actionEditorPopulateScreens(SWIPE_DIRECTIONS, version.available_screens);
+                // Populate sound file dropdowns for swipe actions
+                fetch('/api/sounds/list')
+                    .then(function(r) { return r.ok ? r.json() : []; })
+                    .then(function(sounds) { actionEditorPopulateSounds(SWIPE_DIRECTIONS, sounds); })
+                    .catch(function() {});
                 loadSwipeActions();
             } else {
                 swipeSection.style.display = 'none';
@@ -729,6 +743,100 @@ async function loadSwipeActions() {
     } catch (err) {
         console.error('Failed to load swipe actions:', err);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Sound file management
+// ---------------------------------------------------------------------------
+function soundEsc(s) {
+    var d = document.createElement('span');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+async function loadSoundList() {
+    const container = document.getElementById('sound-list');
+    if (!container) return;
+    try {
+        const resp = await fetch('/api/sounds/list');
+        if (!resp.ok) { container.innerHTML = '<small style="color:#86868b;">Could not load sounds.</small>'; return; }
+        const names = await resp.json();
+        if (!names.length) {
+            container.innerHTML = '<small style="color:#86868b;">No sound files uploaded yet.</small>';
+            return;
+        }
+        let html = '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
+        html += '<tr style="border-bottom:1px solid #e5e5ea;"><th style="text-align:left;padding:4px 8px;">Name</th><th style="width:120px;"></th></tr>';
+        names.forEach(function(name) {
+            html += '<tr style="border-bottom:1px solid #f0f0f0;">';
+            html += '<td style="padding:6px 8px;"><code>' + soundEsc(name) + '</code></td>';
+            html += '<td style="text-align:right; padding:4px 8px; white-space:nowrap;">';
+            html += '<button type="button" class="btn" style="font-size:12px; padding:2px 10px; margin-right:4px;" onclick="playSound(\'' + soundEsc(name) + '\')">&9654; Play</button>';
+            html += '<button type="button" class="btn" style="font-size:12px; padding:2px 10px; color:#ff3b30;" onclick="deleteSound(\'' + soundEsc(name) + '\')">&times; Delete</button>';
+            html += '</td></tr>';
+        });
+        html += '</table>';
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<small style="color:#ff3b30;">Error loading sounds.</small>';
+    }
+}
+
+async function uploadSound() {
+    const nameInput = document.getElementById('sound-upload-name');
+    const fileInput = document.getElementById('sound-upload-file');
+    const statusEl = document.getElementById('sound-upload-status');
+    const name = (nameInput.value || '').trim();
+    if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
+        statusEl.innerHTML = '<span style="color:#ff3b30;">Invalid name (letters, digits, _ and - only).</span>';
+        return;
+    }
+    if (!fileInput.files || !fileInput.files.length) {
+        statusEl.innerHTML = '<span style="color:#ff3b30;">Select an MP3 file first.</span>';
+        return;
+    }
+    const file = fileInput.files[0];
+    if (file.size > 512 * 1024) {
+        statusEl.innerHTML = '<span style="color:#ff3b30;">File too large (max 512 KB).</span>';
+        return;
+    }
+    const btn = document.getElementById('sound-upload-btn');
+    btn.disabled = true;
+    statusEl.innerHTML = '<span style="color:#007aff;">Uploading…</span>';
+    try {
+        const resp = await fetch('/api/sounds/upload?name=' + encodeURIComponent(name), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': file.size },
+            body: file
+        });
+        if (resp.ok) {
+            statusEl.innerHTML = '<span style="color:#34c759;">Uploaded successfully.</span>';
+            nameInput.value = '';
+            fileInput.value = '';
+            loadSoundList();
+        } else {
+            const err = await resp.json().catch(function() { return {}; });
+            statusEl.innerHTML = '<span style="color:#ff3b30;">' + soundEsc(err.error || 'Upload failed') + '</span>';
+        }
+    } catch (err) {
+        statusEl.innerHTML = '<span style="color:#ff3b30;">Upload error: ' + soundEsc(err.message) + '</span>';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function playSound(name) {
+    try {
+        await fetch('/api/sounds/play?name=' + encodeURIComponent(name), { method: 'POST' });
+    } catch (err) { /* ignore */ }
+}
+
+async function deleteSound(name) {
+    if (!confirm('Delete sound "' + name + '"?')) return;
+    try {
+        const resp = await fetch('/api/sounds?name=' + encodeURIComponent(name), { method: 'DELETE' });
+        if (resp.ok) loadSoundList();
+    } catch (err) { /* ignore */ }
 }
 
 async function saveSwipeActions() {

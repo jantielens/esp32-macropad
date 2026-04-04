@@ -106,6 +106,7 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_BEEP     "beep"
 #define ACTION_TYPE_VOLUME   "volume"
 #define ACTION_TYPE_TIMER    "timer"
+#define ACTION_TYPE_SOUND    "sound"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -124,6 +125,8 @@ struct ButtonAction {
     uint32_t timer_countdown;                        // type="timer": default countdown in seconds (0 = none)
     char timer_expire_beep[CONFIG_BEEP_PATTERN_MAX_LEN]; // type="timer": beep pattern on countdown expiry
     uint8_t timer_expire_volume;                      // type="timer": 0 = device vol, 1-100 = override
+    char sound_file[32];                              // type="sound": filename (no path/extension)
+    uint8_t sound_volume;                             // type="sound": 0 = device vol, 1-100 = override
 };
 
 // LabelBinding removed — MQTT bindings are now inline in label text.

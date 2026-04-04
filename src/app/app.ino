@@ -26,10 +26,12 @@
 #include "health_binding.h"
 #include "icon_store.h"
 #include "pad_binding.h"
+#include "sound_store.h"
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
+#include "action_dispatch.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
 #endif
@@ -283,6 +285,11 @@ void setup()
 	icon_store_preload_pad_pages();
 	#endif
 
+	#if HAS_SOUND_PLAYER
+	// Initialize sound file store (creates /sounds/ directory)
+	sound_store_init();
+	#endif
+
 	// Start WiFi BEFORE initializing web server (critical for ESP32-C3)
 	#if HAS_DISPLAY
 	display_manager_set_splash_status("Connecting WiFi...");
@@ -412,6 +419,7 @@ void loop()
 
 	#if HAS_DISPLAY
 	screen_saver_manager_loop();
+	action_dispatch_loop();
 	#endif
 
 	#if HAS_TOUCH

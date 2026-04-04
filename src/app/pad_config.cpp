@@ -222,6 +222,8 @@ static void parse_action(JsonVariant v, ButtonAction* act, const char* legacy_sc
         act->timer_countdown = (uint32_t)(a["timer_countdown"] | 0);
         strlcpy(act->timer_expire_beep, a["timer_expire_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
         act->timer_expire_volume = (uint8_t)(a["timer_expire_volume"] | 0);
+        strlcpy(act->sound_file, a["sound_file"] | "", sizeof(act->sound_file));
+        act->sound_volume = (uint8_t)(a["sound_volume"] | 0);
         return;
     }
 

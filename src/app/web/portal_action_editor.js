@@ -23,6 +23,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="key">Send BLE Keys</option>';
     h += '<option value="ble_pair">Start BLE Pairing</option>';
     h += '<option value="beep">Play Beep</option>';
+    h += '<option value="sound">Play Sound</option>';
     h += '<option value="volume">Set Volume</option>';
     h += '<option value="timer">Timer Control</option>';
     h += '</select>';
@@ -65,6 +66,18 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div class="form-group">';
     h += '<label for="' + prefix + '-beep-volume">Volume Override (%)</label>';
     h += '<input type="number" id="' + prefix + '-beep-volume" min="0" max="100" placeholder="(use device volume)">';
+    h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
+    h += '</div></div>';
+    // Sound file
+    h += '<div id="' + prefix + '-sound-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-sound-file">Sound File</label>';
+    h += '<select id="' + prefix + '-sound-file"><option value="">(none)</option></select>';
+    h += '<small>MP3 files uploaded via the web portal. Upload sounds in Home &rarr; Sound Files.</small>';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-sound-volume">Volume Override (%)</label>';
+    h += '<input type="number" id="' + prefix + '-sound-volume" min="0" max="100" placeholder="(use device volume)">';
     h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
     h += '</div></div>';
     // Volume
@@ -147,12 +160,14 @@ function actionEditorTypeChanged(prefix) {
     var keyGrp = document.getElementById(prefix + '-key-group');
     var bleHint = document.getElementById(prefix + '-ble-hint');
     var beepGrp = document.getElementById(prefix + '-beep-group');
+    var soundGrp = document.getElementById(prefix + '-sound-group');
     var volGrp = document.getElementById(prefix + '-volume-group');
     if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
     if (mqttGrp) mqttGrp.style.display = (type === 'mqtt') ? '' : 'none';
     if (keyGrp) keyGrp.style.display = (type === 'key') ? '' : 'none';
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
     if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
+    if (soundGrp) soundGrp.style.display = (type === 'sound') ? '' : 'none';
     if (volGrp) volGrp.style.display = (type === 'volume') ? '' : 'none';
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
@@ -209,6 +224,13 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.beep_pattern || '';
     el = document.getElementById(prefix + '-beep-volume');
     if (el) el.value = (action.beep_volume > 0) ? action.beep_volume : '';
+    el = document.getElementById(prefix + '-sound-file');
+    if (el) {
+        el.value = action.sound_file || '';
+        if (el.selectedIndex < 0) el.value = '';
+    }
+    el = document.getElementById(prefix + '-sound-volume');
+    if (el) el.value = (action.sound_volume > 0) ? action.sound_volume : '';
     el = document.getElementById(prefix + '-volume-mode');
     if (el) el.value = action.volume_mode || 'set';
     el = document.getElementById(prefix + '-volume-value');
@@ -277,6 +299,12 @@ function actionEditorBuild(prefix) {
         var bv = document.getElementById(prefix + '-beep-volume');
         if (bv && bv.value !== '') act.beep_volume = parseInt(bv.value, 10);
     }
+    if (type === 'sound') {
+        var sf = document.getElementById(prefix + '-sound-file');
+        if (sf) act.sound_file = sf.value || '';
+        var sv = document.getElementById(prefix + '-sound-volume');
+        if (sv && sv.value !== '') act.sound_volume = parseInt(sv.value, 10);
+    }
     if (type === 'volume') {
         var vm = document.getElementById(prefix + '-volume-mode');
         if (vm) act.volume_mode = vm.value;
@@ -334,6 +362,24 @@ function actionEditorPopulateScreens(prefixes, screens) {
             var opt = document.createElement('option');
             opt.value = s.id;
             opt.textContent = s.name;
+            sel.appendChild(opt);
+        });
+    });
+}
+
+// Populate the sound file dropdown(s) for one or more action editor prefixes.
+// sounds: array of sound file names (strings) from /api/sounds/list
+// prefixes: array of prefix strings
+function actionEditorPopulateSounds(prefixes, sounds) {
+    if (!sounds) return;
+    prefixes.forEach(function(prefix) {
+        var sel = document.getElementById(prefix + '-sound-file');
+        if (!sel) return;
+        while (sel.options.length > 1) sel.remove(1);
+        sounds.forEach(function(name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
             sel.appendChild(opt);
         });
     });

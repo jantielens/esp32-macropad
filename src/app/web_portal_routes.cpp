@@ -18,6 +18,10 @@
 #include "web_portal_ble.h"
 #endif
 
+#if HAS_SOUND_PLAYER
+#include "web_portal_sounds.h"
+#endif
+
 void web_portal_register_routes(AsyncWebServer* server) {
 		auto handleCorsPreflight = [](AsyncWebServerRequest *request) {
 				web_portal_send_cors_preflight(request);
@@ -226,6 +230,29 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				if (!portal_auth_gate(request)) return;
 				handlePostBlePairingStart(request);
 		});
+#endif
+
+#if HAS_SOUND_PLAYER
+		// Sound file management endpoints
+		registerOptions("/api/sounds/upload");
+		server->on(
+				"/api/sounds/upload",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostSoundUpload
+		);
+
+		registerOptions("/api/sounds/list");
+		server->on("/api/sounds/list", HTTP_GET, handleGetSoundList);
+
+		registerOptions("/api/sounds");
+		server->on("/api/sounds", HTTP_DELETE, handleDeleteSound);
+
+		registerOptions("/api/sounds/play");
+		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
 #endif
 
 }

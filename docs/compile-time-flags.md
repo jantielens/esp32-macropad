@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 151
+Total flags: 152
 
 ### Features (HAS_*)
 
@@ -37,6 +37,7 @@ Total flags: 151
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
 - **HAS_SENSOR_DUMMY** default: `false` — Enable dummy sensor adapter (synthetic values for testing).
 - **HAS_SENSOR_LD2410_OUT** default: `false` — Enable LD2410 OUT pin presence sensor adapter.
+- **HAS_SOUND_PLAYER** default: `HAS_AUDIO` — Defaults to HAS_AUDIO — enable audio to get sound player support.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 
 ### Selectors (*_DRIVER)
@@ -198,14 +199,14 @@ Total flags: 151
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3248w535 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc3636w518 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc4880p433 | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  | ✅ |
-| jc1060p470c | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  | ✅ |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_SOUND_PLAYER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
+| jc3636w518 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
+| jc1060p470c | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -271,6 +272,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HAS_CUSTOM_FONTS**
   - src/app/board_config.h
+  - src/app/custom_fonts.cpp
+  - src/app/fonts/custom_fonts.h
   - src/app/pad_layout.h
 - **HAS_DISPLAY**
   - src/app/action_dispatch.cpp
@@ -401,6 +404,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/sensors.cpp
   - src/app/sensors/ld2410_out_sensor.cpp
+- **HAS_SOUND_PLAYER**
+  - src/app/action_dispatch.cpp
+  - src/app/app.ino
+  - src/app/audio.cpp
+  - src/app/audio.h
+  - src/app/board_config.h
+  - src/app/ha_discovery.cpp
+  - src/app/mqtt_audio.cpp
+  - src/app/web_portal_routes.cpp
 - **HAS_TOUCH**
   - src/app/app.ino
   - src/app/board_config.h

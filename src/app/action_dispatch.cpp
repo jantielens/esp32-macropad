@@ -21,6 +21,12 @@
 
 #define TAG "Action"
 
+#if HAS_AUDIO
+// Deferred NVS volume save — set in LVGL task, processed in main loop.
+// Avoids flash I/O from PSRAM-stack tasks (crashes on ESP32-P4).
+static volatile bool g_volume_save_pending = false;
+#endif
+
 void action_dispatch(const ButtonAction& act, const char* label) {
     if (!act.type[0]) return;
 
@@ -79,6 +85,18 @@ void action_dispatch(const ButtonAction& act, const char* label) {
 #else
         LOGW(TAG, "%s beep: not compiled", label);
 #endif
+    } else if (strcmp(act.type, ACTION_TYPE_SOUND) == 0) {
+#if HAS_SOUND_PLAYER
+        if (act.sound_file[0]) {
+            LOGI(TAG, "%s sound: file='%s' vol=%s", label, act.sound_file,
+                 act.sound_volume > 0 ? String(act.sound_volume).c_str() : "device");
+            audio_play_sound(act.sound_file, act.sound_volume);
+        } else {
+            LOGW(TAG, "%s sound: empty filename", label);
+        }
+#else
+        LOGW(TAG, "%s sound: not compiled", label);
+#endif
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
 #if HAS_AUDIO
         if (strcmp(act.volume_mode, "up") == 0) {
@@ -97,12 +115,8 @@ void action_dispatch(const ButtonAction& act, const char* label) {
             audio_set_volume(v);
             LOGI(TAG, "%s volume set -> %u%%", label, v);
         }
-        // Persist to NVS
-        DeviceConfig *cfg = web_portal_get_current_config();
-        if (cfg) {
-            cfg->audio_volume = audio_get_volume();
-            config_manager_save(cfg);
-        }
+        // Defer NVS persist to main loop (flash I/O not safe from LVGL task)
+        g_volume_save_pending = true;
 #else
         LOGW(TAG, "%s volume: not compiled", label);
 #endif
@@ -153,6 +167,22 @@ void action_dispatch(const ButtonAction& act, const char* label) {
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Deferred operations — called from main loop() (internal-RAM stack)
+// ---------------------------------------------------------------------------
+void action_dispatch_loop() {
+#if HAS_AUDIO
+    if (g_volume_save_pending) {
+        g_volume_save_pending = false;
+        DeviceConfig *cfg = web_portal_get_current_config();
+        if (cfg) {
+            cfg->audio_volume = audio_get_volume();
+            config_manager_save(cfg);
+        }
+    }
+#endif
 }
 
 #endif // HAS_DISPLAY

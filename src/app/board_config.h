@@ -162,6 +162,12 @@
 #define AUDIO_I2S_DIN -1
 #endif
 
+// Sound file player (MP3 playback from LittleFS).
+// Defaults to HAS_AUDIO — enable audio to get sound player support.
+#ifndef HAS_SOUND_PLAYER
+#define HAS_SOUND_PLAYER HAS_AUDIO
+#endif
+
 // ============================================================================
 // User Button (optional)
 // ============================================================================

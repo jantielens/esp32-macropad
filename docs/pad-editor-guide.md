@@ -259,6 +259,7 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). ESP32-P4 boards only. |
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
 | **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
+| **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
 | **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
 

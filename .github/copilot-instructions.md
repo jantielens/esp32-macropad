@@ -85,6 +85,13 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Audio Subsystem**: ES8311 codec + I2S tone generation with async FreeRTOS playback (compile-time gated by `HAS_AUDIO`)
   - `audio.cpp/h` - ES8311 I2C driver, I2S TX channel, beep pattern DSL parser (`freq:dur` tones, bare `dur` gaps), volume control (0-100, NVS-persisted), background playback task with queue, loop/stop support for siren use
   - Configurable touch-feedback cues: device-level `tap_beep`/`lp_beep` patterns in DeviceConfig, per-button overrides in ScreenButtonConfig/ButtonTile (`"none"` to suppress), auto-suppressed when action is beep; visual flash and audio cue only fire when action is configured
+- **Sound Player Subsystem**: MP3 file playback from LittleFS via minimp3 decoder (compile-time gated by `HAS_SOUND_PLAYER`, defaults to `HAS_AUDIO`)
+  - `sound_store.cpp/h` - LittleFS storage at `/sounds/`, name validation, list/save/delete API
+  - `sound_player.cpp/h` - MP3 decode (minimp3, CC0) with linear interpolation resampler to 16 kHz, frame-by-frame I2S output
+  - `minimp3/minimp3.h` - Vendored single-header MP3 decoder (CC0 license)
+  - `web_portal_sounds.cpp/h` - REST API for upload (with MP3 header validation), list, delete, play
+  - `ACTION_TYPE_SOUND` button action with `sound_file` and `sound_volume` fields
+  - MQTT text entity `~/audio/sound/set` for HA integration
 - **MQTT Audio Control**: Exposes audio as HA siren + volume + beep entities (compile-time gated by `HAS_AUDIO && HAS_MQTT`)
   - `mqtt_audio.cpp/h` - Siren ON/OFF with loop/duration/tone selection, volume control, 3 beep buttons, custom tone text entity; cross-task pending vars with portMUX spinlock
   - HA discovery published via `ha_discovery_publish_audio_entities()` with siren, number, text, and button entity types
@@ -270,6 +277,9 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/action_dispatch.cpp/h` - Shared action execution for buttons and swipe gestures (compile-time gated by `HAS_DISPLAY`)
 - `src/app/audio.cpp/h` - Audio subsystem: ES8311 codec, I2S tone generation, beep pattern DSL, volume control, loop/stop (compile-time gated by `HAS_AUDIO`)
 - `src/app/mqtt_audio.cpp/h` - MQTT audio control: siren, volume, beep buttons, custom tone text entity (compile-time gated by `HAS_AUDIO && HAS_MQTT`)
+- `src/app/sound_store.cpp/h` - LittleFS-backed MP3 sound file storage at `/sounds/` (compile-time gated by `HAS_SOUND_PLAYER`)
+- `src/app/sound_player.cpp/h` - MP3 decode + resample + I2S playback via minimp3 (compile-time gated by `HAS_SOUND_PLAYER`)
+- `src/app/web_portal_sounds.cpp/h` - Sound file REST API: upload with MP3 validation, list, delete, play (compile-time gated by `HAS_SOUND_PLAYER`)
 - `src/app/swipe_config.cpp/h` - LittleFS-backed swipe action configuration with RAM cache
 - `src/app/swipe_actions.cpp/h` - Shared LVGL gesture handler with debounce, registered on all screens
 - `src/app/web_portal_swipe.cpp/h` - Swipe actions REST API (GET/POST `/api/swipe-actions`)

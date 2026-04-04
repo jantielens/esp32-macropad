@@ -12,6 +12,10 @@
 #include <freertos/queue.h>
 #include <freertos/task.h>
 
+#if HAS_SOUND_PLAYER
+#include "sound_player.h"
+#endif
+
 #define TAG "Audio"
 
 // ---------------------------------------------------------------------------
@@ -80,6 +84,9 @@ struct AudioCommand {
     char pattern[AUDIO_PATTERN_MAX_LEN];
     uint8_t volume_override; // 0 = use current
     bool loop;               // true = repeat until stop
+#if HAS_SOUND_PLAYER
+    bool is_sound;           // true = play sound file (pattern holds filename)
+#endif
 };
 
 static QueueHandle_t audio_queue = NULL;
@@ -346,6 +353,11 @@ static void audio_task(void* param) {
             LOGD(TAG, "Play: vol=%u%% (override=%u, device=%u) loop=%d", play_vol, cmd.volume_override, current_volume, cmd.loop);
             es8311_apply_volume(play_vol);
 
+#if HAS_SOUND_PLAYER
+            if (cmd.is_sound) {
+                sound_player_play(tx_handle, cmd.pattern, &g_stop_requested);
+            } else
+#endif
             if (cmd.loop) {
                 while (!g_stop_requested) {
                     play_pattern(cmd.pattern);
@@ -468,9 +480,10 @@ void audio_init(uint8_t initial_volume) {
 
     // Create command queue and audio task
     // Priority 5: above LVGL (4) to avoid I2S DMA underruns during heavy rendering
-    // Stack 6144: RISC-V (P4) needs ~50% more stack than Xtensa (S3) per call frame
+    // Stack: RISC-V (P4) needs ~50% more stack than Xtensa (S3) per call frame.
+    // minimp3 decoder requires ~16KB stack per frame decode, so 24KB total.
     audio_queue = xQueueCreate(AUDIO_QUEUE_DEPTH, sizeof(AudioCommand));
-    xTaskCreatePinnedToCore(audio_task, "audio", 6144, NULL, 5, &audio_task_handle, 1);
+    xTaskCreatePinnedToCore(audio_task, "audio", 24576, NULL, 5, &audio_task_handle, 1);
 
     audio_initialized = true;
     LOGI(TAG, "Audio ready (volume=%u%%, PA always-on)", current_volume);
@@ -535,5 +548,37 @@ void audio_stop() {
 bool audio_is_playing() {
     return g_playing;
 }
+
+#if HAS_SOUND_PLAYER
+void audio_play_sound(const char* filename, uint8_t volume_override) {
+    if (!audio_initialized) {
+        LOGW(TAG, "Audio not initialized");
+        return;
+    }
+    if (!filename || !filename[0]) {
+        LOGW(TAG, "Empty sound filename");
+        return;
+    }
+    // Note: don't check sound_store_exists() here — it does flash I/O and the
+    // caller may be the LVGL task whose stack is in PSRAM (crashes on ESP32-P4).
+    // sound_player_play() handles file-not-found gracefully.
+
+    // Stop any current playback
+    if (g_playing) {
+        g_stop_requested = true;
+    }
+    AudioCommand discard;
+    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) {}
+
+    AudioCommand cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    strlcpy(cmd.pattern, filename, AUDIO_PATTERN_MAX_LEN);
+    cmd.volume_override = volume_override;
+    cmd.loop = false;
+    cmd.is_sound = true;
+
+    xQueueSend(audio_queue, &cmd, portMAX_DELAY);
+}
+#endif // HAS_SOUND_PLAYER
 
 #endif // HAS_AUDIO

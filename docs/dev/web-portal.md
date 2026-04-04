@@ -416,6 +416,7 @@ Returns comprehensive device information.
   "hostname": "esp32-1234",
   "has_display": true,
   "has_audio": true,
+  "has_sound_player": true,
   "display_coord_width": 480,
   "display_coord_height": 480,
   "available_screens": [
@@ -953,6 +954,44 @@ Delete a specific icon file from `/icons/`.
 
 - **Query Parameters:** `name` (required, no path separators or `..`)
 - **Response:** `{"success": true}`
+
+---
+
+### Sound File API
+
+All sound endpoints require `HAS_SOUND_PLAYER` (defaults to `HAS_AUDIO`) and are gated by Basic Auth when enabled. Sound files are stored on LittleFS at `/sounds/<name>.mp3`.
+
+#### `POST /api/sounds/upload?name=<name>`
+
+Upload an MP3 sound file.
+
+- **Query Parameters:** `name` (required, `[a-zA-Z0-9_-]`, max 31 chars)
+- **Body:** Raw MP3 bytes (`Content-Type: application/octet-stream`)
+- **Max size:** 512 KB
+- **Validation:** Rejects files that do not start with a valid MP3 frame sync word or ID3v2 tag header.
+- **Response:** `{"status": "ok"}` on success; JSON error on failure
+
+#### `GET /api/sounds/list`
+
+List all uploaded sound file names (without `.mp3` extension).
+
+- **Response:** JSON array of name strings, e.g. `["alert", "chime", "doorbell"]`
+
+#### `DELETE /api/sounds?name=<name>`
+
+Delete a sound file.
+
+- **Query Parameters:** `name` (required)
+- **Response:** `{"status": "ok"}` on success; `404` if not found
+
+#### `POST /api/sounds/play?name=<name>`
+
+Play a sound file immediately (for testing).
+
+- **Query Parameters:** `name` (required)
+- **Response:** `{"status": "ok"}` on success; `404` if not found
+
+---
 
 #### `GET /api/pad/tile_sizes?cols=<N>&rows=<N>`
 

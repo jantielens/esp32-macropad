@@ -490,6 +490,7 @@ function padInit() {
                 }
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
+                padPopulateSoundDropdown();
                 padLoadButtonDefaultsFromDevice();
                 padLoadPage(0);
                 padRefreshDropdownLabels();
@@ -575,6 +576,24 @@ function padPopulateScreenDropdown() {
             wakeSel.appendChild(opt);
         });
     }
+}
+
+// Populate sound file dropdowns in action editors
+function padPopulateSoundDropdown() {
+    var prefixes = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        prefixes.push('pad-edit-action-' + i);
+        prefixes.push('pad-edit-lp-action-' + i);
+    }
+    // Fetch sound list from device
+    fetch('/api/sounds/list')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(sounds) {
+            actionEditorPopulateSounds(prefixes, sounds);
+        })
+        .catch(function() {
+            actionEditorPopulateSounds(prefixes, []);
+        });
 }
 
 // Show the next hidden action slot for tap or lp
@@ -1150,6 +1169,7 @@ function padDialogOpen(col, row) {
 
     // Refresh target screen dropdowns so pad names are current
     padPopulateScreenDropdown();
+    padPopulateSoundDropdown();
 
     // Sync device-level button defaults from the DOM into padState so placeholders are current
     padState.buttonDefaults = padCollectButtonDefaults();
