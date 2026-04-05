@@ -309,6 +309,8 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 The **Timer** action type controls one of 3 independent on-device timers. Timers support count-up (stopwatch) and countdown modes. Use `[timer:N]` bindings on labels to display the timer value (see [Timer Binding](#timer-binding)).
 
+Timer configuration (mode, countdown duration, expire actions) is set at the device level on the **Home** page under the **Timers** section. Button actions only control the timer at runtime.
+
 When you select a Timer action, a dropdown groups all actions by timer:
 
 | Action | Description |
@@ -320,19 +322,26 @@ When you select a Timer action, a dropdown groups all actions by timer:
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
 | **Lap** | Reset the timer and start fresh (useful for step timing) |
-| **Adjust Countdown Time** | Add or subtract seconds from the countdown preset (e.g., +15 or -10). Only affects countdown-mode timers |
-| **Set Countdown** | Set the countdown duration in seconds for this timer |
-| **Set Mode** | Switch between count-up and countdown mode |
+| **Adjust** | Add or subtract seconds from the countdown preset (e.g., +15 or -10). Only affects countdown-mode timers |
 
-**Additional timer settings** appear depending on the selected action:
+#### Device-Level Timer Configuration
 
-- **Default Countdown (seconds)** — when navigating to a pad, the first button referencing each timer automatically configures its countdown preset. Only applied when the timer is stopped at zero (fresh). This lets you pre-configure timers just by entering a pad.
-- **Expire Beep Pattern** — a beep pattern DSL string (e.g., `1000:300 200 1000:300`) that plays when a countdown timer reaches zero. Edge-triggered: fires exactly once per countdown cycle.
-- **Expire Beep Volume** — optional volume override (0 = device volume, 1–100).
+On the **Home** page, the **Timers** section lets you configure each timer:
+
+- **Mode** — Count Up (stopwatch) or Countdown
+- **Countdown Duration** — the starting value in seconds (countdown mode only)
+- **Expire Actions** — up to 3 actions to execute when a countdown timer reaches zero. These use the same action editor as button actions, so you can play a sound, send an MQTT message, navigate to a screen, play a beep, or any combination:
+
+| Example expire action | What happens |
+|----------------------|-------------|
+| Play Sound: `alarm` | Plays the "alarm" MP3 file |
+| MQTT Publish: `home/timer/expired` → `ON` | Sends an MQTT notification |
+| Navigate to screen: `pad_alarm` | Shows an alarm pad |
+| Play Beep: `1000:300 200 1000:300` | Plays a beep pattern |
 
 **Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
 
-> **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Set the default countdown to 240 seconds for a 4-minute pour.
+> **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Configure Timer 1 as a 240-second countdown on the Home page, with an expire action that plays an alarm sound.
 
 ### Audio Behavior
 

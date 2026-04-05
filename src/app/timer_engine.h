@@ -7,8 +7,11 @@
 // ============================================================================
 // Compile-time gated by HAS_DISPLAY. No hardware dependency.
 // Timers are runtime-only (not persisted).
+// Timer configuration (mode, countdown, expire actions) is loaded from
+// /config/timers.json by timer_config and applied at boot.
 
 #define TIMER_COUNT 3    // timers 1..3 (index 0..2)
+#define TIMER_MAX_EXPIRE_ACTIONS 3  // max actions on countdown expiry
 
 enum TimerMode : uint8_t {
     TIMER_MODE_UP   = 0,  // stopwatch (count up from 0)
@@ -40,13 +43,8 @@ void timer_set_mode(uint8_t id, TimerMode mode);
 // Adjust countdown preset by delta seconds (positive = add time, negative = subtract).
 // Clamps countdown_ms to minimum 0. Only affects countdown-mode timers.
 // If adjustment pulls timer back out of overtime, resets expire_fired so
-// the expire beep can fire again if the timer crosses zero again.
+// the expire actions can fire again if the timer crosses zero again.
 void timer_adjust(uint8_t id, int32_t delta_seconds);
-
-// Configure a beep pattern to play when a countdown timer reaches 0.
-// pattern: audio beep DSL string (copied internally), NULL/"" to clear.
-// volume: 0 = device volume, 1-100 = override.
-void timer_set_expire_beep(uint8_t id, const char* pattern, uint8_t volume);
 
 // Query — returns elapsed (up) or remaining/overtime (down) in milliseconds.
 // For countdown: before expiry returns remaining ms, after expiry returns
@@ -57,8 +55,17 @@ TimerMode  timer_get_mode(uint8_t id);
 bool       timer_is_expired(uint8_t id);   // countdown reached 0
 bool       timer_is_overtime(uint8_t id);  // countdown running past 0
 
+// Set expire actions — dispatched once when a countdown timer reaches 0.
+// actions: array of ButtonAction (copied internally), count: number of actions.
+// Requires pad_config.h and action_dispatch.h to be available.
+struct ButtonAction;  // forward declaration
+void timer_set_expire_actions(uint8_t id, const ButtonAction* actions, uint8_t count);
+
+// Clear all expire actions for a timer.
+void timer_clear_expire_actions(uint8_t id);
+
 // Tick function — call periodically (e.g. every render loop iteration).
-// Detects countdown expiry edge and fires the expire beep if configured.
+// Detects countdown expiry edge and dispatches expire actions if configured.
 void timer_engine_tick();
 
 // Format timer value into buffer. Returns number of chars written.

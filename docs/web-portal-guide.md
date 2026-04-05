@@ -189,6 +189,16 @@ Configure up to 3 sequential actions to run automatically when the device boots 
 
 Actions are dispatched once after the first screen is shown during boot. Changes take effect on next reboot.
 
+### Timers
+
+*Shown only on boards with a display.*
+
+Configure up to 3 independent on-device timers. Each timer can run in **Count Up** (stopwatch) or **Countdown** mode. For countdown timers, set the starting duration in seconds and configure **expire actions** — up to 3 actions that execute when the countdown reaches zero.
+
+Expire actions use the same action editor as buttons, so you can play a sound, send an MQTT message, navigate to a screen, play a beep pattern, or any combination. This replaces the previous beep-only expiry with full action parity.
+
+Timer configuration is applied at boot and updated immediately when saved. Button actions on pads only control timers at runtime (toggle, start, stop, pause, adjust). Use `[timer:N]` bindings on pad button labels to display timer values.
+
 ---
 
 ## Pads Page

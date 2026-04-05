@@ -3,19 +3,16 @@
 
 #if HAS_DISPLAY
 
+#include "action_dispatch.h"
+#include "pad_config.h"
+
 #include <Arduino.h>
 #include <string.h>
 #include <stdio.h>
 
-#if HAS_AUDIO
-#include "audio.h"
-#endif
-
 // ============================================================================
 // Timer state
 // ============================================================================
-
-#define TIMER_EXPIRE_BEEP_MAX_LEN 128
 
 struct TimerInstance {
     TimerState state;
@@ -23,10 +20,10 @@ struct TimerInstance {
     uint32_t   start_ms;        // millis() when last started/resumed
     uint32_t   accumulated_ms;  // total elapsed before current run
     uint32_t   countdown_ms;    // preset for countdown mode
-    // Expire beep config
-    char       expire_beep[TIMER_EXPIRE_BEEP_MAX_LEN];
-    uint8_t    expire_volume;   // 0 = device volume, 1-100 = override
-    bool       expire_fired;    // edge detector: true once beep has fired
+    // Expire actions (dispatched once on countdown reaching 0)
+    ButtonAction expire_actions[TIMER_MAX_EXPIRE_ACTIONS];
+    uint8_t    expire_action_count;
+    bool       expire_fired;    // edge detector: true once actions have fired
 };
 
 static TimerInstance s_timers[TIMER_COUNT];
@@ -136,21 +133,27 @@ void timer_adjust(uint8_t id, int32_t delta_seconds) {
     int64_t new_ms = (int64_t)t.countdown_ms + (int64_t)delta_seconds * 1000;
     if (new_ms < 0) new_ms = 0;
     t.countdown_ms = (uint32_t)new_ms;
-    // If we pulled back out of overtime, re-arm the expire beep
+    // If we pulled back out of overtime, re-arm the expire actions
     if (t.expire_fired && raw_elapsed(t) < t.countdown_ms) {
         t.expire_fired = false;
     }
 }
 
-void timer_set_expire_beep(uint8_t id, const char* pattern, uint8_t volume) {
+void timer_set_expire_actions(uint8_t id, const ButtonAction* actions, uint8_t count) {
     if (!valid_id(id)) return;
     auto& t = get(id);
-    if (pattern && pattern[0]) {
-        strlcpy(t.expire_beep, pattern, TIMER_EXPIRE_BEEP_MAX_LEN);
-    } else {
-        t.expire_beep[0] = '\0';
+    if (count > TIMER_MAX_EXPIRE_ACTIONS) count = TIMER_MAX_EXPIRE_ACTIONS;
+    t.expire_action_count = count;
+    if (count > 0 && actions) {
+        memcpy(t.expire_actions, actions, count * sizeof(ButtonAction));
     }
-    t.expire_volume = volume;
+}
+
+void timer_clear_expire_actions(uint8_t id) {
+    if (!valid_id(id)) return;
+    auto& t = get(id);
+    t.expire_action_count = 0;
+    memset(t.expire_actions, 0, sizeof(t.expire_actions));
 }
 
 uint32_t timer_get_ms(uint8_t id) {
@@ -221,12 +224,14 @@ void timer_engine_tick() {
         if (t.mode != TIMER_MODE_DOWN) continue;
         if (t.state != TIMER_RUNNING) continue;
         if (t.expire_fired) continue;
-        if (t.expire_beep[0] == '\0') continue;
+        if (t.expire_action_count == 0) continue;
         if (raw_elapsed(t) >= t.countdown_ms) {
             t.expire_fired = true;
-#if HAS_AUDIO
-            audio_beep(t.expire_beep, t.expire_volume);
-#endif
+            char label[12];
+            snprintf(label, sizeof(label), "T%u Expire", i + 1);
+            for (uint8_t a = 0; a < t.expire_action_count; a++) {
+                action_dispatch(t.expire_actions[a], label);
+            }
         }
     }
 }

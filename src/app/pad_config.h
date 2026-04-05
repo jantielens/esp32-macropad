@@ -122,9 +122,6 @@ struct ButtonAction {
     uint8_t beep_volume;                             // type="beep": 0 = use device volume, 1-100 = override
     char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set", "up", or "down"
     uint8_t volume_value;                            // type="volume": 0-100 (used with mode="set")
-    uint32_t timer_countdown;                        // type="timer": default countdown in seconds (0 = none)
-    char timer_expire_beep[CONFIG_BEEP_PATTERN_MAX_LEN]; // type="timer": beep pattern on countdown expiry
-    uint8_t timer_expire_volume;                      // type="timer": 0 = device vol, 1-100 = override
     char sound_file[32];                              // type="sound": filename (no path/extension)
     uint8_t sound_volume;                             // type="sound": 0 = device vol, 1-100 = override
 };

@@ -30,6 +30,7 @@
 #include "boot_actions.h"
 #include "time_binding.h"
 #include "timer_binding.h"
+#include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "action_dispatch.h"
@@ -359,6 +360,7 @@ void setup()
 	expr_binding_init();
 	pad_binding_init();
 	timer_binding_init();
+	timer_config_init();
 	#endif
 
 	last_heartbeat_ms = millis();

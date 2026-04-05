@@ -11,6 +11,7 @@
 #include "web_portal_swipe.h"
 #include "web_portal_boot_actions.h"
 #include "web_portal_button_defaults.h"
+#include "web_portal_timers.h"
 #include "web_portal_pages.h"
 
 #include "board_config.h"
@@ -194,6 +195,19 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				},
 				NULL,
 				handlePostBootActions
+		);
+
+		// Timer config API
+		registerOptions("/api/timers");
+		server->on("/api/timers", HTTP_GET, handleGetTimerConfig);
+		server->on(
+				"/api/timers",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostTimerConfig
 		);
 
 		registerOptions("/api/icons/install");

@@ -59,9 +59,11 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `pad_binding.cpp/h` - Pad binding scheme resolver with page-context pointer, expand utility for data streams, and topic collector that recurses into underlying bindings (compile-time gated by `HAS_DISPLAY`)
   - Pipe fallback syntax: `[scheme:params|fallback]` — replaces default `---` placeholder when a binding can't resolve (e.g., before first MQTT message, during reconnect). Parsed by `split_pipe_fallback()` at outermost bracket depth.
   - Supports static prefix/suffix, multiple tokens per label, graceful error placeholders (`ERR:xxx`, `---`)
-- **Timer Subsystem**: On-device count-up/down timers with expiry beep and binding integration (compile-time gated by `HAS_DISPLAY`)
-  - `timer_engine.cpp/h` - 3 independent timers (start/stop/pause/reset/lap/toggle/adjust), countdown with overtime, expire beep playback, format helpers (mm:ss, hh:mm:ss, ss, mm:ss.d)
+- **Timer Subsystem**: On-device count-up/down timers with device-level configuration and multi-action expire callbacks (compile-time gated by `HAS_DISPLAY`)
+  - `timer_engine.cpp/h` - 3 independent timers (start/stop/pause/reset/lap/toggle/adjust), countdown with overtime, expire action dispatch via `action_dispatch()`, format helpers (mm:ss, hh:mm:ss, ss, mm:ss.d)
+  - `timer_config.cpp/h` - LittleFS-backed device-level timer configuration (`/config/timers.json`) with RAM cache; per-timer mode, countdown preset, and up to 3 expire actions (any ButtonAction type: beep, sound, mqtt, screen nav, etc.)
   - `timer_binding.cpp/h` - Registers `timer` binding scheme — resolves `[timer:N]`, `[timer:N;format]`, `[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]`
+  - `web_portal_timers.cpp/h` - REST API for GET/POST `/api/timers`
 - **Screen Saver Subsystem**: Inactivity-based display sleep with backlight fading and per-screen wake redirect (compile-time gated by `HAS_DISPLAY`)
   - `screen_saver_manager.cpp/h` - State machine (Awake/FadingOut/Asleep/FadingIn), fade animation, touch wake polling, pixel shift burn-in prevention
   - On entering sleep, calls `displayManager->handleSleepScreenRedirect()` to navigate to a per-screen wake target (invisible under sleep overlay)
@@ -73,8 +75,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Swipe Actions Subsystem**: Configurable swipe gestures with full ButtonAction parity (compile-time gated by `HAS_DISPLAY`)
   - `swipe_config.cpp/h` - LittleFS-backed swipe action config (`/config/swipe_actions.json`) with RAM cache; 4 directions × ButtonAction
   - `swipe_actions.cpp/h` - Shared LVGL gesture handler with 300ms debounce; registered on all screens
-  - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, timer control); used by pad buttons, swipe gestures, and boot actions
-  - `action_parse.cpp/h` - Shared `action_parse()` and `action_to_json()` for DRY ButtonAction JSON serialization; used by pad_config, swipe_config, boot_actions, and web_portal_swipe
+  - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, timer control); used by pad buttons, swipe gestures, boot actions, and timer expire callbacks
+  - `action_parse.cpp/h` - Shared `action_parse()` and `action_to_json()` for DRY ButtonAction JSON serialization; used by pad_config, swipe_config, boot_actions, timer_config, and web_portal_swipe
   - `web_portal_swipe.cpp/h` - REST API for GET/POST `/api/swipe-actions`
 - **Boot Actions Subsystem**: Device-level actions dispatched once at boot after the first screen is shown (compile-time gated by `HAS_DISPLAY`)
   - `boot_actions.cpp/h` - LittleFS-backed boot action config (`/config/boot_actions.json`) with RAM cache; up to `MAX_BUTTON_ACTIONS` sequential actions; dispatched via `action_dispatch()` after first screen navigation in `setup()`
@@ -266,8 +268,10 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/pad_binding.cpp/h` - Pad binding scheme — resolves `[pad:name;format]` against pad-level named bindings (compile-time gated by `HAS_DISPLAY`)
 - `src/app/health_binding.cpp/h` - Health binding scheme resolver with cached telemetry snapshot (compile-time gated by `HAS_DISPLAY`)
 - `src/app/time_binding.cpp/h` - Time binding scheme resolver with Olson TZ table and NTP init (compile-time gated by `HAS_DISPLAY`)
-- `src/app/timer_engine.cpp/h` - On-device timer engine: 3 independent count-up/down timers with countdown, overtime, expire beep, adjust, format helpers (compile-time gated by `HAS_DISPLAY`)
+- `src/app/timer_engine.cpp/h` - On-device timer engine: 3 independent count-up/down timers with countdown, overtime, expire action dispatch, adjust, format helpers (compile-time gated by `HAS_DISPLAY`)
+- `src/app/timer_config.cpp/h` - LittleFS-backed device-level timer configuration with RAM cache (compile-time gated by `HAS_DISPLAY`)
 - `src/app/timer_binding.cpp/h` - Timer binding scheme resolver — `[timer:N]`, `[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]` (compile-time gated by `HAS_DISPLAY`)
+- `src/app/web_portal_timers.cpp/h` - Timer config REST API (GET/POST `/api/timers`)
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
 - `src/app/image_fetch.cpp/h` - Slot-based background image fetcher with per-slot pause/resume (compile-time gated by `HAS_IMAGE_FETCH`)
 - `src/app/icon_store.cpp/h` - PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
@@ -311,7 +315,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/font_family/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `timer`); `ScreenButtonConfig` holds `actions[MAX_BUTTON_ACTIONS]` / `lp_actions[MAX_BUTTON_ACTIONS]` arrays with counts for multi-action sequential dispatch; JSON parser supports both new array format (`"actions": [...]`) and legacy single-object format (`"action": {...}`); `ButtonDefaults` struct for device-level appearance cascade (colors, border, radius, label styles) — per-button fields fall through to device defaults, then to firmware hardcoded defaults; `template_pad` field (int8_t, -1=none) for inheriting buttons from another pad into empty grid positions at load time (no chaining, target wins on conflict)
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/font_family/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `timer`, `sound`); `ScreenButtonConfig` holds `actions[MAX_BUTTON_ACTIONS]` / `lp_actions[MAX_BUTTON_ACTIONS]` arrays with counts for multi-action sequential dispatch; JSON parser supports both new array format (`"actions": [...]`) and legacy single-object format (`"action": {...}`); `ButtonDefaults` struct for device-level appearance cascade (colors, border, radius, label styles) — per-button fields fall through to device defaults, then to firmware hardcoded defaults; `template_pad` field (int8_t, -1=none) for inheriting buttons from another pad into empty grid positions at load time (no chaining, target wins on conflict)
 - `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`, `pad_apply_font_upscale()`, `PadLabelAnchorY`)
 - `src/app/fonts/custom_fonts.h` - Custom font family declarations and lookup API (compile-time gated by `HAS_CUSTOM_FONTS`)
 - `src/app/custom_fonts.cpp` - Custom font compilation unit (includes generated `.c` font files)

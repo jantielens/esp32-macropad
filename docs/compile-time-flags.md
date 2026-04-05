@@ -238,7 +238,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_audio.h
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
-  - src/app/timer_engine.cpp
   - src/app/web_portal_config.cpp
 - **HAS_BACKLIGHT**
   - src/app/app.ino
@@ -278,8 +277,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_DISPLAY**
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
+  - src/app/action_parse.cpp
+  - src/app/action_parse.h
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/boot_actions.cpp
+  - src/app/boot_actions.h
   - src/app/button_defaults.cpp
   - src/app/button_defaults.h
   - src/app/config_manager.cpp
@@ -317,6 +320,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/timer_engine.cpp
   - src/app/touch_manager.cpp
   - src/app/web_portal.cpp
+  - src/app/web_portal_boot_actions.cpp
+  - src/app/web_portal_boot_actions.h
   - src/app/web_portal_button_defaults.cpp
   - src/app/web_portal_button_defaults.h
   - src/app/web_portal_config.cpp

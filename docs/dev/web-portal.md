@@ -915,6 +915,37 @@ Save device-level button defaults to LittleFS.
 
 ---
 
+### Timer Config API
+
+Device-level timer configuration. Compile-time gated by `HAS_DISPLAY`.
+
+#### `GET /api/timers`
+
+Returns the current timer configuration for all 3 timers.
+
+- **Response:** JSON object with keys `"1"`, `"2"`, `"3"`. Each timer object contains:
+  - `mode` — `"up"` or `"down"`
+  - `countdown` — seconds (countdown mode only, omitted if 0)
+  - `expire_actions` — array of ButtonAction objects (omitted if empty)
+
+```json
+{
+  "1": { "mode": "down", "countdown": 300, "expire_actions": [{ "type": "sound", "sound_file": "alarm" }] },
+  "2": { "mode": "up" },
+  "3": { "mode": "down", "countdown": 60, "expire_actions": [{ "type": "beep", "beep_pattern": "1000:500" }] }
+}
+```
+
+#### `POST /api/timers`
+
+Save timer configuration to LittleFS and apply immediately.
+
+- **Body:** Same JSON format as GET response.
+- **Response:** `{"ok": true}` on success; JSON error on failure.
+- Timer engine is updated immediately (mode, countdown preset, expire actions).
+
+---
+
 ### Icon Store API
 
 All icon endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled.

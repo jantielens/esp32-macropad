@@ -233,26 +233,16 @@ TEST(volume_action_round_trip) {
 
 TEST(timer_action_parse) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"timer\",\"timer_command\":\"toggle 0\","
-        "\"timer_countdown\":300,\"timer_expire_beep\":\"880:500\","
-        "\"timer_expire_volume\":90}");
+        "{\"type\":\"timer\",\"timer_command\":\"toggle 0\"}");
     ASSERT_STR(act.type, "timer");
     ASSERT_STR(act.mqtt_payload, "toggle 0");  // timer_command maps to mqtt_payload
-    ASSERT_EQ(act.timer_countdown, 300);
-    ASSERT_STR(act.timer_expire_beep, "880:500");
-    ASSERT_EQ(act.timer_expire_volume, 90);
 }
 
 TEST(timer_action_round_trip) {
     ButtonAction act = round_trip(
-        "{\"type\":\"timer\",\"timer_command\":\"start 1\","
-        "\"timer_countdown\":60,\"timer_expire_beep\":\"1000:200 100 1000:200\","
-        "\"timer_expire_volume\":50}");
+        "{\"type\":\"timer\",\"timer_command\":\"start 1\"}");
     ASSERT_STR(act.type, "timer");
     ASSERT_STR(act.mqtt_payload, "start 1");
-    ASSERT_EQ(act.timer_countdown, 60);
-    ASSERT_STR(act.timer_expire_beep, "1000:200 100 1000:200");
-    ASSERT_EQ(act.timer_expire_volume, 50);
 }
 
 TEST(timer_command_serialized_as_timer_command_not_payload) {
@@ -309,9 +299,6 @@ TEST(missing_optional_fields) {
     ASSERT_EQ(act.beep_volume, 0);
     ASSERT_STR(act.sound_file, "");
     ASSERT_EQ(act.sound_volume, 0);
-    ASSERT_EQ(act.timer_countdown, 0);
-    ASSERT_STR(act.timer_expire_beep, "");
-    ASSERT_EQ(act.timer_expire_volume, 0);
 }
 
 // ============================================================================
@@ -333,8 +320,7 @@ TEST(all_fields_populated) {
         "{\"type\":\"mqtt\",\"target\":\"pad_1\",\"topic\":\"t\",\"payload\":\"p\","
         "\"sequence\":\"Ctrl+A\",\"beep_pattern\":\"500:100\",\"beep_volume\":42,"
         "\"volume_mode\":\"set\",\"volume_value\":55,"
-        "\"timer_countdown\":120,\"timer_expire_beep\":\"880:300\","
-        "\"timer_expire_volume\":75,\"sound_file\":\"alert\",\"sound_volume\":90}";
+        "\"sound_file\":\"alert\",\"sound_volume\":90}";
     ButtonAction act = round_trip(json);
     ASSERT_STR(act.type, "mqtt");
     ASSERT_STR(act.screen_id, "pad_1");
@@ -345,9 +331,6 @@ TEST(all_fields_populated) {
     ASSERT_EQ(act.beep_volume, 42);
     ASSERT_STR(act.volume_mode, "set");
     ASSERT_EQ(act.volume_value, 55);
-    ASSERT_EQ(act.timer_countdown, 120);
-    ASSERT_STR(act.timer_expire_beep, "880:300");
-    ASSERT_EQ(act.timer_expire_volume, 75);
     ASSERT_STR(act.sound_file, "alert");
     ASSERT_EQ(act.sound_volume, 90);
 }

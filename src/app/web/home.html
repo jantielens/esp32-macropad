@@ -119,6 +119,18 @@
                 </div>
             </section>
 
+            <!-- Timer Config Section (hidden if no display support) -->
+            <section class="section" id="timer-config-section" style="display:none;">
+                <h2>⏱️ Timers</h2>
+                <small style="display:block; margin-bottom:16px;">Configure the 3 device-level timers. Use Timer Control actions on buttons to start/stop them. Countdown timers can trigger actions when they expire.</small>
+
+                <div id="timer-config-editors"></div>
+
+                <div style="margin-top: 12px;">
+                    <button type="button" class="btn btn-primary" onclick="saveTimerConfig()">Save Timer Config</button>
+                </div>
+            </section>
+
             <!-- Operating Mode & Cadence -->
             <section class="section" id="power-settings-section">
                 <h2>⚡ Operating Mode & Cadence</h2>

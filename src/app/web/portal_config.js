@@ -138,11 +138,6 @@ async function loadVersion() {
                 swipeSection.style.display = 'block';
                 swipeInitEditors();
                 actionEditorPopulateScreens(SWIPE_DIRECTIONS, version.available_screens);
-                // Populate sound file dropdowns for swipe actions
-                fetch('/api/sounds/list')
-                    .then(function(r) { return r.ok ? r.json() : []; })
-                    .then(function(sounds) { actionEditorPopulateSounds(SWIPE_DIRECTIONS, sounds); })
-                    .catch(function() {});
                 loadSwipeActions();
             } else {
                 swipeSection.style.display = 'none';
@@ -156,15 +151,35 @@ async function loadVersion() {
                 bootSection.style.display = 'block';
                 bootActionsInitEditors();
                 actionEditorPopulateScreens(BOOT_ACTION_PREFIXES, version.available_screens);
-                // Populate sound file dropdowns for boot actions
-                fetch('/api/sounds/list')
-                    .then(function(r) { return r.ok ? r.json() : []; })
-                    .then(function(sounds) { actionEditorPopulateSounds(BOOT_ACTION_PREFIXES, sounds); })
-                    .catch(function() {});
                 loadBootActions();
             } else {
                 bootSection.style.display = 'none';
             }
+        }
+
+        // Show timer config section if device has display
+        const timerSection = document.getElementById('timer-config-section');
+        if (timerSection) {
+            if (version.has_display === true) {
+                timerSection.style.display = 'block';
+                timerConfigInitEditors();
+                actionEditorPopulateScreens(TIMER_EXPIRE_PREFIXES, version.available_screens);
+                loadTimerConfig();
+            } else {
+                timerSection.style.display = 'none';
+            }
+        }
+
+        // Single shared fetch for sound file dropdowns across all action editors
+        if (version.has_display === true) {
+            fetch('/api/sounds/list')
+                .then(function(r) { return r.ok ? r.json() : []; })
+                .then(function(sounds) {
+                    actionEditorPopulateSounds(SWIPE_DIRECTIONS, sounds);
+                    actionEditorPopulateSounds(BOOT_ACTION_PREFIXES, sounds);
+                    actionEditorPopulateSounds(TIMER_EXPIRE_PREFIXES, sounds);
+                })
+                .catch(function() {});
         }
 
         document.getElementById('firmware-version').textContent = `Firmware v${version.version}`;
@@ -948,5 +963,125 @@ async function saveBootActions() {
     } catch (err) {
         console.error('Error saving boot actions:', err);
         showMessage('Error saving boot actions: ' + err.message, 'error');
+    }
+}
+
+// ============================================================================
+// Timer Config (device-level, uses shared portal_action_editor.js)
+// ============================================================================
+
+const TIMER_IDS = [1, 2, 3];
+const TIMER_EXPIRE_PREFIXES = [];
+for (var _ti = 1; _ti <= 3; _ti++) {
+    for (var _ai = 1; _ai <= 3; _ai++) {
+        TIMER_EXPIRE_PREFIXES.push('timer-' + _ti + '-expire-' + _ai);
+    }
+}
+
+function timerConfigInitEditors() {
+    var container = document.getElementById('timer-config-editors');
+    if (!container) return;
+    var html = '';
+    TIMER_IDS.forEach(function(tid) {
+        html += '<details class="editor-group" id="timer-' + tid + '-group">';
+        html += '<summary>Timer ' + tid + '</summary>';
+        html += '<div class="editor-group-body">';
+        // Mode dropdown
+        html += '<div class="form-group">';
+        html += '<label for="timer-' + tid + '-mode">Mode</label>';
+        html += '<select id="timer-' + tid + '-mode" onchange="timerModeChanged(' + tid + ')">';
+        html += '<option value="up">Stopwatch (Count Up)</option>';
+        html += '<option value="down">Countdown</option>';
+        html += '</select>';
+        html += '</div>';
+        // Countdown duration (visible only in countdown mode)
+        html += '<div class="form-group" id="timer-' + tid + '-countdown-group" style="display:none;">';
+        html += '<label for="timer-' + tid + '-countdown">Countdown Duration (seconds)</label>';
+        html += '<input type="number" id="timer-' + tid + '-countdown" min="1" max="86400" placeholder="e.g. 300">';
+        html += '<small>Duration in seconds. The timer will count down from this value.</small>';
+        html += '</div>';
+        // Expire actions (visible only in countdown mode)
+        html += '<div id="timer-' + tid + '-expire-section" style="display:none;">';
+        html += '<h4 style="margin: 12px 0 8px;">On Expire Actions</h4>';
+        html += '<small style="display:block; margin-bottom:12px;">Actions to run when the countdown reaches zero (e.g. play a sound, send MQTT message).</small>';
+        for (var ai = 1; ai <= 3; ai++) {
+            var prefix = 'timer-' + tid + '-expire-' + ai;
+            html += '<details class="editor-group" id="' + prefix + '-group">';
+            html += '<summary>Action ' + ai + '</summary>';
+            html += '<div class="editor-group-body">';
+            html += actionEditorHTML(prefix);
+            html += '</div></details>';
+        }
+        html += '</div>';
+        html += '</div></details>';
+    });
+    container.innerHTML = html;
+}
+
+function timerModeChanged(tid) {
+    var modeEl = document.getElementById('timer-' + tid + '-mode');
+    if (!modeEl) return;
+    var isDown = (modeEl.value === 'down');
+    var cdGrp = document.getElementById('timer-' + tid + '-countdown-group');
+    var expSec = document.getElementById('timer-' + tid + '-expire-section');
+    if (cdGrp) cdGrp.style.display = isDown ? '' : 'none';
+    if (expSec) expSec.style.display = isDown ? '' : 'none';
+}
+
+async function loadTimerConfig() {
+    try {
+        const response = await fetch('/api/timers');
+        if (!response.ok) return;
+        const data = await response.json();
+        TIMER_IDS.forEach(function(tid) {
+            var tcfg = data[String(tid)] || {};
+            var modeEl = document.getElementById('timer-' + tid + '-mode');
+            if (modeEl) modeEl.value = tcfg.mode || 'up';
+            var cdEl = document.getElementById('timer-' + tid + '-countdown');
+            if (cdEl) cdEl.value = (tcfg.countdown > 0) ? tcfg.countdown : '';
+            var expireActions = tcfg.expire_actions || [];
+            for (var ai = 1; ai <= 3; ai++) {
+                var prefix = 'timer-' + tid + '-expire-' + ai;
+                actionEditorLoad(prefix, expireActions[ai - 1] || {});
+            }
+            timerModeChanged(tid);
+        });
+    } catch (err) {
+        console.error('Failed to load timer config:', err);
+    }
+}
+
+async function saveTimerConfig() {
+    var payload = {};
+    TIMER_IDS.forEach(function(tid) {
+        var modeEl = document.getElementById('timer-' + tid + '-mode');
+        var cdEl = document.getElementById('timer-' + tid + '-countdown');
+        var tcfg = { mode: modeEl ? modeEl.value : 'up' };
+        if (tcfg.mode === 'down' && cdEl && cdEl.value !== '' && parseInt(cdEl.value, 10) > 0) {
+            tcfg.countdown = parseInt(cdEl.value, 10);
+        }
+        // Collect expire actions
+        var actions = [];
+        for (var ai = 1; ai <= 3; ai++) {
+            var a = actionEditorBuild('timer-' + tid + '-expire-' + ai);
+            if (a.type) actions.push(a);
+        }
+        if (actions.length > 0) tcfg.expire_actions = actions;
+        payload[String(tid)] = tcfg;
+    });
+    try {
+        const response = await fetch('/api/timers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (response.ok) {
+            showMessage('Timer config saved', 'success');
+        } else {
+            showMessage('Failed to save timer config', 'error');
+        }
+    } catch (err) {
+        console.error('Error saving timer config:', err);
+        showMessage('Error saving timer config: ' + err.message, 'error');
     }
 }

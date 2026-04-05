@@ -19,9 +19,6 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
     if (strcmp(act.type, ACTION_TYPE_TIMER) == 0 && a.containsKey("timer_command")) {
         strlcpy(act.mqtt_payload, a["timer_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
     }
-    act.timer_countdown = (uint32_t)(a["timer_countdown"] | 0);
-    strlcpy(act.timer_expire_beep, a["timer_expire_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
-    act.timer_expire_volume = (uint8_t)(a["timer_expire_volume"] | 0);
     strlcpy(act.sound_file, a["sound_file"] | "", sizeof(act.sound_file));
     act.sound_volume = (uint8_t)(a["sound_volume"] | 0);
 }
@@ -43,9 +40,6 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
     if (act.beep_volume > 0)  obj["beep_volume"]   = act.beep_volume;
     if (act.volume_mode[0])   obj["volume_mode"]   = act.volume_mode;
     if (act.volume_value > 0) obj["volume_value"]  = act.volume_value;
-    if (act.timer_countdown > 0) obj["timer_countdown"] = act.timer_countdown;
-    if (act.timer_expire_beep[0]) obj["timer_expire_beep"] = act.timer_expire_beep;
-    if (act.timer_expire_volume > 0) obj["timer_expire_volume"] = act.timer_expire_volume;
     if (act.sound_file[0])    obj["sound_file"]    = act.sound_file;
     if (act.sound_volume > 0) obj["sound_volume"]  = act.sound_volume;
 }
