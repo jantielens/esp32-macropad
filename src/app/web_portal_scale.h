@@ -4,10 +4,9 @@
 
 #if HAS_SCALE
 
+#include <ESPAsyncWebServer.h>
 #include <stdint.h>
 #include <stddef.h>
-
-class AsyncWebServerRequest;
 
 // POST /api/scale/tare — zero the scale
 void handlePostScaleTare(AsyncWebServerRequest* request);
@@ -17,5 +16,8 @@ void handlePostScaleCalibrate(AsyncWebServerRequest* request, uint8_t* data, siz
 
 // GET /api/scale — current scale state
 void handleGetScaleStatus(AsyncWebServerRequest* request);
+
+// Register all scale REST API routes on the web server.
+void web_portal_scale_register_routes(AsyncWebServer* server);
 
 #endif // HAS_SCALE

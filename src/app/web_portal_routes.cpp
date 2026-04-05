@@ -41,7 +41,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Page routes
 		server->on("/", HTTP_GET, handleRoot);
 		server->on("/home.html", HTTP_GET, handleHome);
+		#if HAS_SCALE
 		server->on("/brews.html", HTTP_GET, handleBrews);
+		#endif
 		server->on("/pads.html", HTTP_GET, handlePad);
 		server->on("/network.html", HTTP_GET, handleNetwork);
 		server->on("/firmware.html", HTTP_GET, handleFirmware);
@@ -59,8 +61,13 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/portal_pad_io.js", HTTP_GET, handlePadIOJS);
 		server->on("/portal_pad_editor.js", HTTP_GET, handlePadEditorJS);
 		server->on("/portal_action_editor.js", HTTP_GET, handleActionEditorJS);
+		#if HAS_SCALE
+		server->on("/portal_action_editor_scale.js", HTTP_GET, handleActionEditorScaleJS);
+		#endif
 		server->on("/portal_binding_validator.js", HTTP_GET, handleBindingValidatorJS);
+		#if HAS_SCALE
 		server->on("/portal_brews.js", HTTP_GET, handleBrewsJS);
+		#endif
 
 		// API endpoints
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
@@ -268,67 +275,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 #endif
 
 #if HAS_SCALE
-		// Scale endpoints
-		registerOptions("/api/scale/tare");
-		server->on("/api/scale/tare", HTTP_POST, [](AsyncWebServerRequest *request) {
-				if (!portal_auth_gate(request)) return;
-				handlePostScaleTare(request);
-		});
-
-		registerOptions("/api/scale/calibrate");
-		server->on(
-				"/api/scale/calibrate",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostScaleCalibrate
-		);
-
-		registerOptions("/api/scale");
-		server->on("/api/scale", HTTP_GET, handleGetScaleStatus);
-
-		// Brew log endpoints
-		registerOptions("/api/brews/import");
-		server->on(
-				"/api/brews/import",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostBrewImport
-		);
-
-		registerOptions("/api/brews");
-		server->on("/api/brews", HTTP_GET, handleGetBrews);
-		server->on("/api/brews", HTTP_DELETE, [](AsyncWebServerRequest *request) {
-				if (!portal_auth_gate(request)) return;
-				handleDeleteBrew(request);
-		});
-
-	// Brew template endpoints
-	registerOptions("/api/brew-templates/get");
-	server->on("/api/brew-templates/get", HTTP_GET, handleGetBrewTemplate);
-
-	registerOptions("/api/brew-templates");
-	server->on("/api/brew-templates", HTTP_GET, handleGetBrewTemplates);
-	server->on(
-			"/api/brew-templates",
-			HTTP_POST,
-			[](AsyncWebServerRequest *request) {
-					if (!portal_auth_gate(request)) return;
-					// Clean up accumulation buffer if body handler didn't consume it
-					if (request->_tempObject) {
-							delete[] (char*)request->_tempObject;
-							request->_tempObject = nullptr;
-					}
-			},
-			NULL,
-			handlePostBrewTemplate
-	);
-	server->on("/api/brew-templates", HTTP_DELETE, handleDeleteBrewTemplate);
+		web_portal_scale_register_routes(server);
+		web_portal_brews_register_routes(server);
+		web_portal_brew_templates_register_routes(server);
 #endif
 
 #if HAS_SOUND_PLAYER

@@ -18,4 +18,7 @@ void handlePostBrewTemplate(AsyncWebServerRequest* request, uint8_t* data, size_
 // DELETE /api/brew-templates?name=xxx — delete a template from LittleFS; built-in re-emerges if applicable
 void handleDeleteBrewTemplate(AsyncWebServerRequest* request);
 
+// Register all brew template REST API routes on the web server.
+void web_portal_brew_templates_register_routes(AsyncWebServer* server);
+
 #endif // HAS_SCALE

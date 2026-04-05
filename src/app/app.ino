@@ -26,11 +26,7 @@
 #include "health_binding.h"
 #include "icon_store.h"
 #include "pad_binding.h"
-#include "scale_binding.h"
-#include "brew_binding.h"
-#include "brew_log.h"
-#include "brew_manager.h"
-#include "brew_templates.h"
+#include "scale_init.h"
 #include "sound_store.h"
 #include "boot_actions.h"
 #include "time_binding.h"
@@ -297,7 +293,7 @@ void setup()
 
 	// Initialize brew log (LittleFS must be mounted)
 	#if HAS_SCALE
-	brew_log_init();
+	scale_subsystem_init_storage();
 	#endif
 
 	#if HAS_SOUND_PLAYER
@@ -369,11 +365,8 @@ void setup()
 	time_binding_init();
 	expr_binding_init();
 	pad_binding_init();
-	scale_binding_init();
 	#if HAS_SCALE
-	brew_templates_init();
-	brew_manager_init();
-	brew_binding_init();
+	scale_subsystem_init();
 	#endif
 	timer_binding_init();
 	timer_config_init();

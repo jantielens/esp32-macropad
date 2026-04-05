@@ -8,6 +8,7 @@
 #include "fs_health.h"
 #include "log_manager.h"
 #include "web_portal_auth.h"
+#include "web_portal_cors.h"
 #include "web_portal_json.h"
 
 #include <ArduinoJson.h>
@@ -211,6 +212,28 @@ void handleDeleteBrewTemplate(AsyncWebServerRequest* request) {
     } else {
         request->send(200, "application/json", "{\"ok\":true,\"status\":\"deleted\"}");
     }
+}
+
+void web_portal_brew_templates_register_routes(AsyncWebServer* server) {
+    server->on("/api/brew-templates/get", HTTP_OPTIONS, [](AsyncWebServerRequest *r){ web_portal_send_cors_preflight(r); });
+    server->on("/api/brew-templates/get", HTTP_GET, handleGetBrewTemplate);
+
+    server->on("/api/brew-templates", HTTP_OPTIONS, [](AsyncWebServerRequest *r){ web_portal_send_cors_preflight(r); });
+    server->on("/api/brew-templates", HTTP_GET, handleGetBrewTemplates);
+    server->on(
+        "/api/brew-templates",
+        HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            if (!portal_auth_gate(request)) return;
+            if (request->_tempObject) {
+                delete[] (char*)request->_tempObject;
+                request->_tempObject = nullptr;
+            }
+        },
+        NULL,
+        handlePostBrewTemplate
+    );
+    server->on("/api/brew-templates", HTTP_DELETE, handleDeleteBrewTemplate);
 }
 
 #endif // HAS_SCALE

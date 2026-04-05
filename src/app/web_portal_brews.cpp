@@ -5,6 +5,7 @@
 #include "brew_log.h"
 #include "fs_health.h"
 #include "log_manager.h"
+#include "web_portal_auth.h"
 #include "web_portal_cors.h"
 #include "web_portal_json.h"
 
@@ -311,6 +312,26 @@ void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
         web_portal_add_cors_headers(resp);
         request->send(resp);
     }
+}
+
+void web_portal_brews_register_routes(AsyncWebServer* server) {
+    server->on("/api/brews/import", HTTP_OPTIONS, [](AsyncWebServerRequest *r){ web_portal_send_cors_preflight(r); });
+    server->on(
+        "/api/brews/import",
+        HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            if (!portal_auth_gate(request)) return;
+        },
+        NULL,
+        handlePostBrewImport
+    );
+
+    server->on("/api/brews", HTTP_OPTIONS, [](AsyncWebServerRequest *r){ web_portal_send_cors_preflight(r); });
+    server->on("/api/brews", HTTP_GET, handleGetBrews);
+    server->on("/api/brews", HTTP_DELETE, [](AsyncWebServerRequest *request) {
+        if (!portal_auth_gate(request)) return;
+        handleDeleteBrew(request);
+    });
 }
 
 #endif // HAS_SCALE

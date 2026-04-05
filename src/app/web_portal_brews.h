@@ -24,4 +24,7 @@ void handleDeleteAllBrews(AsyncWebServerRequest* request);
 void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
                           size_t len, size_t index, size_t total);
 
+// Register all brew log REST API routes on the web server.
+void web_portal_brews_register_routes(AsyncWebServer* server);
+
 #endif // HAS_SCALE

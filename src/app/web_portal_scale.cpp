@@ -5,6 +5,7 @@
 
 #include "scale_hal.h"
 #include "config_manager.h"
+#include "web_portal_auth.h"
 #include "web_portal_cors.h"
 #include "web_portal_state.h"
 #include "log_manager.h"
@@ -95,6 +96,28 @@ void handleGetScaleStatus(AsyncWebServerRequest* request) {
     AsyncWebServerResponse* response = request->beginResponse(200, "application/json", resp);
     web_portal_add_cors_headers(response);
     request->send(response);
+}
+
+void web_portal_scale_register_routes(AsyncWebServer* server) {
+    server->on("/api/scale/tare", HTTP_OPTIONS, [](AsyncWebServerRequest *r){ web_portal_send_cors_preflight(r); });
+    server->on("/api/scale/tare", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!portal_auth_gate(request)) return;
+        handlePostScaleTare(request);
+    });
+
+    server->on("/api/scale/calibrate", HTTP_OPTIONS, [](AsyncWebServerRequest *r){ web_portal_send_cors_preflight(r); });
+    server->on(
+        "/api/scale/calibrate",
+        HTTP_POST,
+        [](AsyncWebServerRequest *request) {
+            if (!portal_auth_gate(request)) return;
+        },
+        NULL,
+        handlePostScaleCalibrate
+    );
+
+    server->on("/api/scale", HTTP_OPTIONS, [](AsyncWebServerRequest *r){ web_portal_send_cors_preflight(r); });
+    server->on("/api/scale", HTTP_GET, handleGetScaleStatus);
 }
 
 #endif // HAS_SCALE

@@ -21,6 +21,7 @@ void handlePadColorsJS(AsyncWebServerRequest *request);
 void handlePadIOJS(AsyncWebServerRequest *request);
 void handlePadEditorJS(AsyncWebServerRequest *request);
 void handleActionEditorJS(AsyncWebServerRequest *request);
+void handleActionEditorScaleJS(AsyncWebServerRequest *request);
 void handleBindingValidatorJS(AsyncWebServerRequest *request);
 void handleBrewsJS(AsyncWebServerRequest *request);
 
