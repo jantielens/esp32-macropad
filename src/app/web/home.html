@@ -107,6 +107,30 @@
                 </div>
             </section>
 
+            <!-- Boot Actions Section (hidden if no display support) -->
+            <section class="section" id="boot-actions-section" style="display:none;">
+                <h2>🚀 Boot Actions</h2>
+                <small style="display:block; margin-bottom:16px;">Actions to run when the device boots (e.g. play a startup sound). Up to 3 sequential actions.</small>
+
+                <div id="boot-action-editors"></div>
+
+                <div style="margin-top: 12px;">
+                    <button type="button" class="btn btn-primary" onclick="saveBootActions()">Save Boot Actions</button>
+                </div>
+            </section>
+
+            <!-- Timer Config Section (hidden if no display support) -->
+            <section class="section" id="timer-config-section" style="display:none;">
+                <h2>⏱️ Timers</h2>
+                <small style="display:block; margin-bottom:16px;">Configure the 3 device-level timers. Use Timer Control actions on buttons to start/stop them. Countdown timers can trigger actions when they expire.</small>
+
+                <div id="timer-config-editors"></div>
+
+                <div style="margin-top: 12px;">
+                    <button type="button" class="btn btn-primary" onclick="saveTimerConfig()">Save Timer Config</button>
+                </div>
+            </section>
+
             <!-- Operating Mode & Cadence -->
             <section class="section" id="power-settings-section">
                 <h2>⚡ Operating Mode & Cadence</h2>
@@ -238,6 +262,28 @@
                     <label for="lp_beep">Long-Press Beep</label>
                     <input type="text" id="lp_beep" name="lp_beep" maxlength="127" placeholder="e.g. 600:40 40 600:40">
                     <small>Beep pattern on long-press. Leave empty for no sound. Overridable per button.</small>
+                </div>
+
+                <!-- Sound Files sub-section (hidden if no sound player) -->
+                <div id="sound-files-section" style="display:none;">
+                    <hr style="border: none; border-top: 1px solid #e5e5ea; margin: 18px 0;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #1d1d1f;">Sound Files</h3>
+                    <small style="display:block; margin-bottom:14px; color:#86868b;">Upload MP3 files to play as button actions or via MQTT. Max 512 KB per file.</small>
+
+                    <div id="sound-list" style="margin-bottom: 14px;"></div>
+
+                    <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                        <div style="flex:1; min-width:150px;">
+                            <label for="sound-upload-name" style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">Name</label>
+                            <input type="text" id="sound-upload-name" placeholder="my-sound" maxlength="31" pattern="[a-zA-Z0-9_-]+" style="width:100%;">
+                        </div>
+                        <div style="flex:1; min-width:150px;">
+                            <label for="sound-upload-file" style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">MP3 File</label>
+                            <input type="file" id="sound-upload-file" accept=".mp3,audio/mpeg" class="file-input" onchange="soundFileSelected(this)">
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="uploadSound()" id="sound-upload-btn">Upload</button>
+                    </div>
+                    <div id="sound-upload-status" style="margin-top:6px; font-size:13px;"></div>
                 </div>
             </section>
 

@@ -9,6 +9,9 @@
 #include "config_manager.h"
 #include "web_portal_state.h"
 #include "log_manager.h"
+#if HAS_SOUND_PLAYER
+#include "sound_store.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <freertos/FreeRTOS.h>
@@ -29,6 +32,9 @@ static char g_beep_double_topic[128]  = {0};
 static char g_beep_triple_topic[128]  = {0};
 static char g_custom_tone_cmd_topic[128]   = {0};
 static char g_custom_tone_state_topic[128] = {0};
+#if HAS_SOUND_PLAYER
+static char g_sound_cmd_topic[128]   = {0};
+#endif
 
 // ---------------------------------------------------------------------------
 // Pending commands (cross-task from MQTT callback → main loop)
@@ -56,6 +62,12 @@ static volatile BeepPending g_beep_pending = BEEP_NONE;
 static char g_custom_tone_pattern[MQTT_AUDIO_PATTERN_MAX] = "1000:200";
 static volatile bool g_custom_tone_pending = false;
 static char g_custom_tone_pending_pattern[MQTT_AUDIO_PATTERN_MAX] = {0};
+
+#if HAS_SOUND_PLAYER
+// Sound playback pending
+static volatile bool g_sound_pending = false;
+static char g_sound_pending_name[32] = {0};
+#endif
 
 // State tracking
 static bool g_siren_on = false;
@@ -94,6 +106,9 @@ void mqtt_audio_init() {
     snprintf(g_beep_triple_topic,  sizeof(g_beep_triple_topic),  "%s/audio/beep_triple",  base);
     snprintf(g_custom_tone_cmd_topic,   sizeof(g_custom_tone_cmd_topic),   "%s/audio/custom_tone/set",   base);
     snprintf(g_custom_tone_state_topic, sizeof(g_custom_tone_state_topic), "%s/audio/custom_tone/state", base);
+#if HAS_SOUND_PLAYER
+    snprintf(g_sound_cmd_topic,   sizeof(g_sound_cmd_topic),   "%s/audio/sound/set",   base);
+#endif
 
     g_siren_on = false;
     g_last_published_volume = 255;
@@ -110,6 +125,9 @@ void mqtt_audio_on_connected() {
     mqtt_manager.subscribe(g_beep_double_topic);
     mqtt_manager.subscribe(g_beep_triple_topic);
     mqtt_manager.subscribe(g_custom_tone_cmd_topic);
+#if HAS_SOUND_PLAYER
+    mqtt_manager.subscribe(g_sound_cmd_topic);
+#endif
 
     // Publish initial custom tone state
     mqtt_manager.publish(g_custom_tone_state_topic, g_custom_tone_pattern, true);
@@ -203,6 +221,24 @@ void mqtt_audio_on_message(const char* topic, const uint8_t* payload, unsigned i
         }
         return;
     }
+
+#if HAS_SOUND_PLAYER
+    // Sound playback command: plain sound filename
+    if (strcmp(topic, g_sound_cmd_topic) == 0) {
+        char buf[32];
+        size_t n = length < sizeof(buf) - 1 ? length : sizeof(buf) - 1;
+        memcpy(buf, payload, n);
+        buf[n] = '\0';
+        if (buf[0] != '\0') {
+            portENTER_CRITICAL(&g_mux);
+            strlcpy(g_sound_pending_name, buf, sizeof(g_sound_pending_name));
+            g_sound_pending = true;
+            portEXIT_CRITICAL(&g_mux);
+            LOGI(TAG, "Sound: %s", buf);
+        }
+        return;
+    }
+#endif
 
     // Beep buttons: payload is "PRESS" (HA button entity)
     if (strcmp(topic, g_beep_topic) == 0) {
@@ -331,6 +367,27 @@ void mqtt_audio_loop() {
         mqtt_manager.publish(g_custom_tone_state_topic, g_custom_tone_pattern, true);
         LOGI(TAG, "Custom tone updated: %s", g_custom_tone_pattern);
     }
+
+#if HAS_SOUND_PLAYER
+    // --- Process sound playback command ---
+    if (g_sound_pending) {
+        char name[32];
+        portENTER_CRITICAL(&g_mux);
+        strlcpy(name, g_sound_pending_name, sizeof(name));
+        g_sound_pending = false;
+        portEXIT_CRITICAL(&g_mux);
+
+        // Stop siren if playing
+        if (g_siren_on) {
+            g_siren_on = false;
+            g_siren_stop_at_ms = 0;
+            mqtt_manager.publish(g_siren_state_topic, "OFF", true);
+        }
+
+        audio_play_sound(name, 0);
+        LOGI(TAG, "Sound play: %s", name);
+    }
+#endif
 
     // --- Publish volume state on change (any source) ---
     uint8_t cur_vol = audio_get_volume();

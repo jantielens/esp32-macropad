@@ -2,6 +2,9 @@
 
 #include "board_config.h"
 #include "pad_config.h"
+#if HAS_CUSTOM_FONTS
+#include "fonts/custom_fonts.h"
+#endif
 #include <lvgl.h>
 #include <stdint.h>
 
@@ -60,7 +63,18 @@ static inline const lv_font_t* pad_font_by_size(uint8_t size) {
 }
 
 // Resolve font for a label: use style override if set, otherwise the provided default.
+// When font_family is set and HAS_CUSTOM_FONTS is enabled, dispatches to custom fonts.
+// When only font_size is set, uses the built-in Montserrat font at that size.
 static inline const lv_font_t* pad_resolve_font(const LabelStyle& style, const lv_font_t* default_font) {
+#if HAS_CUSTOM_FONTS
+    if (style.font_family != 0) {
+        // Custom font family requested — use custom font lookup with requested or default size
+        uint8_t sz = style.font_size ? style.font_size : lv_font_get_line_height(default_font);
+        const lv_font_t* f = pad_custom_font_lookup(style.font_family, sz);
+        if (f) return f;
+        // Fall through to Montserrat if custom family not found
+    }
+#endif
     if (style.font_size) {
         const lv_font_t* f = pad_font_by_size(style.font_size);
         if (f) return f;

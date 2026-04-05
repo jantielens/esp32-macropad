@@ -483,13 +483,9 @@ function padInit() {
                 // Show button defaults section
                 var btnDefSec = document.getElementById('btn-defaults-section');
                 if (btnDefSec) btnDefSec.style.display = 'block';
-                // Show audio feedback section in button editor if device has audio
-                if (deviceInfoCache.has_audio === true) {
-                    var audioSec = document.getElementById('pad-edit-audio-section');
-                    if (audioSec) audioSec.style.display = '';
-                }
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
+                padFetchSoundList();
                 padLoadButtonDefaultsFromDevice();
                 padLoadPage(0);
                 padRefreshDropdownLabels();
@@ -575,6 +571,27 @@ function padPopulateScreenDropdown() {
             wakeSel.appendChild(opt);
         });
     }
+}
+
+// Cached sound file list (populated at init, used synchronously on dialog open)
+var padSoundListCache = [];
+
+// Fetch sound list from device and update cache
+function padFetchSoundList() {
+    fetch('/api/sounds/list')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(sounds) { padSoundListCache = sounds; })
+        .catch(function() {});
+}
+
+// Populate sound file dropdowns in action editors (synchronous, uses cache)
+function padPopulateSoundDropdown() {
+    var prefixes = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        prefixes.push('pad-edit-action-' + i);
+        prefixes.push('pad-edit-lp-action-' + i);
+    }
+    actionEditorPopulateSounds(prefixes, padSoundListCache);
 }
 
 // Show the next hidden action slot for tap or lp
@@ -1150,6 +1167,7 @@ function padDialogOpen(col, row) {
 
     // Refresh target screen dropdowns so pad names are current
     padPopulateScreenDropdown();
+    padPopulateSoundDropdown();
 
     // Sync device-level button defaults from the DOM into padState so placeholders are current
     padState.buttonDefaults = padCollectButtonDefaults();
@@ -1252,14 +1270,6 @@ function padDialogOpen(col, row) {
         if (wrap) wrap.style.display = (ai === 0 || (lpActions[ai] && lpActions[ai].type)) ? '' : 'none';
     }
     padUpdateAddLink('lp');
-
-    // Audio feedback overrides
-    document.getElementById('pad-edit-tap-beep').value = btn.tap_beep || '';
-    document.getElementById('pad-edit-lp-beep').value = btn.lp_beep || '';
-    document.getElementById('pad-edit-tap-beep').placeholder = 'device default';
-    document.getElementById('pad-edit-lp-beep').placeholder = 'device default';
-    var audioSec = document.getElementById('pad-edit-audio-section');
-    if (audioSec) audioSec.open = !!(btn.tap_beep || btn.lp_beep);
 
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
@@ -1457,12 +1467,6 @@ function padDialogOk(keepOpen) {
         if (a.type) lpArr.push(a);
     }
     if (lpArr.length) btn.lp_actions = lpArr;
-
-    // Audio feedback overrides
-    var tapBeep = document.getElementById('pad-edit-tap-beep').value.trim();
-    if (tapBeep) { btn.tap_beep = tapBeep; } else { delete btn.tap_beep; }
-    var lpBeep = document.getElementById('pad-edit-lp-beep').value.trim();
-    if (lpBeep) { btn.lp_beep = lpBeep; } else { delete btn.lp_beep; }
 
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();

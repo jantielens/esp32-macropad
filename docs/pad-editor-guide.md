@@ -35,7 +35,7 @@ The **Button Defaults** section (collapsible, at the bottom of the Pads page) le
 | **Border color** | Default button outline color |
 | **Border width** | Default border thickness (px) |
 | **Corner radius** | Default button corner rounding (px) |
-| **Label top/center/bottom style** | Default label style DSL (e.g., `font:24;align:left`) |
+| **Label top/center/bottom style** | Default label style DSL (e.g., `font_size:24;align:left`) |
 
 The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius).
 
@@ -113,7 +113,8 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 | Property | Values | What it does |
 |----------|--------|-------------|
-| `font` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
+| `font_size` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
+| `font_family` | `dseg7` / `segment`, `bebas`, `doto` / `pixel` | Use an alternate display font (see below) |
 | `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Scale the current font size at runtime for hero text |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
@@ -124,20 +125,43 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 Combine them with semicolons:
 
 ``` 
-font:48;align:left;mode:dot
+font_size:48;align:left;mode:dot
 ```
 
 This renders a hero-sized left-aligned label that shows "..." when the text is too long.
 
 A few more examples:
 
-- `font:14;color:#FF0` — small yellow text
-- `font:36;font_upscale:1.4` — extra-large hero text (combined scale)
+- `font_size:14;color:#FF0` — small yellow text
+- `font_size:36;font_upscale:1.4` — extra-large hero text (combined scale)
+- `font_family:dseg7;font_size:48` — 7-segment LCD style for sensor readings
+- `font_family:bebas;font_size:48` — bold condensed headline
+- `font_family:doto` — dot-matrix / pixel style
 - `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
-- `font:24;mode:wrap` — medium text that wraps to multiple lines
+- `font_size:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
 
 > Without style overrides, font size is chosen automatically based on the grid dimensions and display resolution. The default alignment is center, and overflow is clipped.
+
+#### Font Families
+
+Three additional font families are available alongside the default Montserrat:
+
+| Family | DSL value | Aliases | Style | Available sizes |
+|--------|-----------|---------|-------|----------------|
+| DSEG7 Classic Bold | `dseg7` | `segment` | 7-segment LCD display | 12, 14, 18, 24, 32, 36, 48 |
+| Bebas Neue | `bebas` | — | Bold condensed display | 12, 14, 18, 24, 32, 36, 48 |
+| Doto | `doto` | `pixel` | Dot-matrix / pixel | 12, 14, 18, 24, 32, 36, 48 |
+
+All font families share the same set of sizes as the built-in Montserrat font. You can combine `font_family` with an explicit `font_size`:
+
+```
+font_family:dseg7;font_size:48
+```
+
+This is ideal for hero values like temperature readings, power measurements, or countdown timers where a specialized display font adds visual impact.
+
+> **Note**: Custom fonts include digits 0–9, uppercase A–Z, lowercase a–z, and common symbols (`. , : ; - + / % °`). Characters outside this set fall back to Montserrat.
 
 ### Icons
 
@@ -235,10 +259,9 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). ESP32-P4 boards only. |
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
 | **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
+| **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
 | **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
-| **Scale** | Control the scale — tare, calibrate, adjust or set calibration weight. Scale boards only. See [Scale Actions](#scale-actions) below. |
-| **Brew** | Control the guided brew workflow — set template, advance, start, stop, reset, or tare. Scale boards only. See [Brew Actions](#brew-actions) below. |
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -286,6 +309,8 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 The **Timer** action type controls one of 3 independent on-device timers. Timers support count-up (stopwatch) and countdown modes. Use `[timer:N]` bindings on labels to display the timer value (see [Timer Binding](#timer-binding)).
 
+Timer configuration (mode, countdown duration, expire actions) is set at the device level on the **Home** page under the **Timers** section. Button actions only control the timer at runtime.
+
 When you select a Timer action, a dropdown groups all actions by timer:
 
 | Action | Description |
@@ -297,78 +322,38 @@ When you select a Timer action, a dropdown groups all actions by timer:
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
 | **Lap** | Reset the timer and start fresh (useful for step timing) |
-| **Adjust Countdown Time** | Add or subtract seconds from the countdown preset (e.g., +15 or -10). Only affects countdown-mode timers |
-| **Set Countdown** | Set the countdown duration in seconds for this timer |
-| **Set Mode** | Switch between count-up and countdown mode |
+| **Adjust** | Add or subtract seconds from the countdown preset (e.g., +15 or -10). Only affects countdown-mode timers |
 
-**Additional timer settings** appear depending on the selected action:
+#### Device-Level Timer Configuration
 
-- **Default Countdown (seconds)** — when navigating to a pad, the first button referencing each timer automatically configures its countdown preset. Only applied when the timer is stopped at zero (fresh). This lets you pre-configure timers just by entering a pad.
-- **Expire Beep Pattern** — a beep pattern DSL string (e.g., `1000:300 200 1000:300`) that plays when a countdown timer reaches zero. Edge-triggered: fires exactly once per countdown cycle.
-- **Expire Beep Volume** — optional volume override (0 = device volume, 1–100).
+On the **Home** page, the **Timers** section lets you configure each timer:
+
+- **Mode** — Count Up (stopwatch) or Countdown
+- **Countdown Duration** — the starting value in seconds (countdown mode only)
+- **Expire Actions** — up to 3 actions to execute when a countdown timer reaches zero. These use the same action editor as button actions, so you can play a sound, send an MQTT message, navigate to a screen, play a beep, or any combination:
+
+| Example expire action | What happens |
+|----------------------|-------------|
+| Play Sound: `alarm` | Plays the "alarm" MP3 file |
+| MQTT Publish: `home/timer/expired` → `ON` | Sends an MQTT notification |
+| Navigate to screen: `pad_alarm` | Shows an alarm pad |
+| Play Beep: `1000:300 200 1000:300` | Plays a beep pattern |
 
 **Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
 
-> **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Set the default countdown to 240 seconds for a 4-minute pour.
+> **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Configure Timer 1 as a 240-second countdown on the Home page, with an expire action that plays an alarm sound.
 
-### Scale Actions
+### Audio Behavior
 
-The **Scale Control** action type controls the scale subsystem. When you select a Scale Control action, a dropdown shows the available commands:
+*Applies only to boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
 
-| Command | Description |
-|---------|-------------|
-| **Tare** | Zero the scale (deferred, non-blocking) |
-| **Calibrate** | Calibrate using the current reference weight (deferred, non-blocking) |
-| **Cal Weight ±** | Adjust the calibration reference weight by ± delta grams. Enter the weight change in the input field (e.g., `10`, `-10`, `0.5`, `-0.5`) |
-| **Cal Weight Set** | Set the calibration reference weight to an absolute value in grams (e.g., `251.5`) |
-
-All tare and calibrate operations are **deferred** — the button tap returns immediately, and the actual operation runs on the next main loop cycle. Use `[scale:status]` to show progress.
-
-> **Tip**: Build a calibration pad with Tare, Calibrate, +10g, -10g, +0.5g, -0.5g, and Set 250g buttons. Use `[scale:weight;%.1f] g` and `[scale:cal_weight] g` bindings to show live weight and the current reference weight.
-
-### Brew Actions
-
-The **Brew Control** action type controls the guided brew workflow. When you select a Brew Control action, a dropdown shows the available commands:
-
-| Command | Description |
-|---------|-------------|
-| **Set Template: *name*** | Select a brew recipe template by name. Templates are defined in JSON files on the device. Pair with a Navigate action to go to your brew pad. |
-| **Template slot N** | Select a template by registry index using a binding expression. Use this to build a dynamic template picker pad — see the [Brew Template Guide](brew-template-guide.md#template-picker-pad). |
-| **Advance** | Single-button full cycle (recommended) — start the brew, advance through stages, and stop when complete |
-| **Start** | Begin the brew workflow |
-| **Next** | Advance to the next manual stage |
-| **Stop** | Freeze the timer and save the brew log |
-| **Reset** | Clear all brew state |
-| **Tare** | Zero the scale without persisting (soft tare for the current brew) |
-
-The Set Template dropdown is populated dynamically from templates stored on the device. Use `[brew:next_label]` as a button label to show context-aware text that changes with each brew stage (e.g., "Start" → "Next Pour" → "Done").
-
-> **Tip**: For the simplest setup, use a single **Advance** button with label `[brew:next_label]` — it handles the full brew cycle. Add a **Set Template** button on a menu pad to select the recipe before navigating to the brew pad.
-
-### Audio Feedback
-
-*Shown only on boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
-
-The **Audio Feedback** section in the button editor lets you override the device-level beep patterns for individual buttons.
-
-| Field | Description |
-|-------|-------------|
-| **Tap Beep** | Beep pattern for this button's tap. Leave empty to use the device default (configured on the Home page). Enter `none` to silence this button. |
-| **Long-Press Beep** | Beep pattern for this button's long-press. Same override rules. |
-
-**Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz:ms). A bare number is a silent gap.
-
-| Pattern | Sound |
-|---------|-------|
-| `800:80` | Quick tap click |
-| `600:40 40 600:40` | Double chirp |
-| `1000:30 30 1200:30` | Rising two-tone |
+Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Play Beep** or **Play Sound** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
 
 **Behavior notes:**
 - Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
-- If any action in the sequence is a **Play Beep** action, the audio cue is automatically suppressed to avoid a double-beep.
+- If any action in the sequence is a **Play Beep** or **Play Sound** action, the device-level feedback beep is automatically suppressed.
 - When multiple actions are configured and one of them navigates to a different screen, any subsequent actions in the sequence still execute safely. The last navigation wins (the user sees the final target screen).
-- Swipe gestures use the device-level tap beep (no per-swipe overrides).
+- Swipe gestures use the device-level tap beep with the same suppression logic.
 
 ---
 

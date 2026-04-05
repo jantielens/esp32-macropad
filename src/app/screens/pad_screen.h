@@ -86,8 +86,6 @@ struct ButtonTile {
     uint8_t action_count;
     ButtonAction lp_actions[MAX_BUTTON_ACTIONS]; // Long-press actions (sequential)
     uint8_t lp_action_count;
-    char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];  // Per-button tap beep override
-    char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];   // Per-button long-press beep override
     // Widget runtime state (non-null widget_type = this tile is a widget)
     const WidgetType* widget_type;
     WidgetConfig widget_cfg;   // Copy of config (needed for update calls)

@@ -31,10 +31,14 @@
 #include "brew_log.h"
 #include "brew_manager.h"
 #include "brew_templates.h"
+#include "sound_store.h"
+#include "boot_actions.h"
 #include "time_binding.h"
 #include "timer_binding.h"
+#include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
+#include "action_dispatch.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
 #endif
@@ -283,6 +287,9 @@ void setup()
 	// Load device-level button defaults from LittleFS
 	button_defaults_init();
 
+	// Load boot actions from LittleFS
+	boot_actions_init();
+
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
@@ -291,6 +298,11 @@ void setup()
 	// Initialize brew log (LittleFS must be mounted)
 	#if HAS_SCALE
 	brew_log_init();
+	#endif
+
+	#if HAS_SOUND_PLAYER
+	// Initialize sound file store (creates /sounds/ directory)
+	sound_store_init();
 	#endif
 
 	// Start WiFi BEFORE initializing web server (critical for ESP32-C3)
@@ -364,6 +376,7 @@ void setup()
 	brew_binding_init();
 	#endif
 	timer_binding_init();
+	timer_config_init();
 	#endif
 
 	last_heartbeat_ms = millis();
@@ -408,6 +421,9 @@ void setup()
 		display_manager_show_info();
 	}
 
+	// Dispatch boot actions after first screen navigation
+	boot_actions_dispatch();
+
 	// Start image fetching AFTER the splash is dismissed and the runtime screen is
 	// visible.  This avoids concurrent WiFi pressure (HTTP downloads + MQTT +
 	// ESP-Hosted RPC) during the critical early-boot window.
@@ -428,6 +444,7 @@ void loop()
 
 	#if HAS_DISPLAY
 	screen_saver_manager_loop();
+	action_dispatch_loop();
 	#endif
 
 	#if HAS_TOUCH

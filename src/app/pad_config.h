@@ -83,6 +83,7 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 
 struct LabelStyle {
     uint8_t font_size;     // 0 = auto (from scale tier), 12/14/18/24/32/36/48
+    uint8_t font_family;   // 0 = default (Montserrat), 1 = dseg7, 2 = bebas, 3 = doto
     uint16_t font_upscale; // 0 = 1.0x (disabled), else LVGL transform scale (256 = 1.0x)
     int16_t x_offset;      // pixel nudge from default anchor (-999..+999)
     int16_t y_offset;      // pixel nudge from default anchor (-999..+999)
@@ -107,6 +108,7 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_SCALE    "scale"
 #define ACTION_TYPE_TIMER    "timer"
 #define ACTION_TYPE_BREW     "brew"
+#define ACTION_TYPE_SOUND    "sound"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -122,9 +124,8 @@ struct ButtonAction {
     uint8_t beep_volume;                             // type="beep": 0 = use device volume, 1-100 = override
     char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set", "up", or "down"
     uint8_t volume_value;                            // type="volume": 0-100 (used with mode="set")
-    uint32_t timer_countdown;                        // type="timer": default countdown in seconds (0 = none)
-    char timer_expire_beep[CONFIG_BEEP_PATTERN_MAX_LEN]; // type="timer": beep pattern on countdown expiry
-    uint8_t timer_expire_volume;                      // type="timer": 0 = device vol, 1-100 = override
+    char sound_file[32];                              // type="sound": filename (no path/extension)
+    uint8_t sound_volume;                             // type="sound": 0 = device vol, 1-100 = override
 };
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
@@ -174,10 +175,6 @@ struct ScreenButtonConfig {
     uint8_t action_count;                          // number of tap actions (0-3)
     ButtonAction lp_actions[MAX_BUTTON_ACTIONS];   // long-press actions (executed sequentially)
     uint8_t lp_action_count;                       // number of long-press actions (0-3)
-
-    // Audio feedback overrides (empty = use device default, "none" = suppress)
-    char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
-    char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];
 
     // Background image (fetched from URL, displayed as tile background)
     char bg_image_url[CONFIG_BG_IMAGE_URL_MAX_LEN];       // empty = no image

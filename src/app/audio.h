@@ -36,4 +36,11 @@ void audio_stop();
 // Returns true if a pattern is currently playing (one-shot or loop).
 bool audio_is_playing();
 
+#if HAS_SOUND_PLAYER
+// Play an MP3 sound file from LittleFS. Non-blocking (queued).
+// filename: sound name (without path or extension), e.g. "doorbell"
+// volume_override: 1-100 = use this volume, 0 = use device volume.
+void audio_play_sound(const char* filename, uint8_t volume_override);
+#endif
+
 #endif // HAS_AUDIO
