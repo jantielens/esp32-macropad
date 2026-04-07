@@ -1,6 +1,6 @@
 # Pad Editor Guide
 
-The pad editor is the heart of ESP32 Macropad — it turns your touch screen into a fully custom dashboard, remote control, or status panel. Each device supports up to **8 independent pads**, each with its own grid of buttons that can display live data, control smart home devices, and react to real-time conditions.
+The pad editor is the heart of ESP32 Macropad — it turns your touch screen into a fully custom dashboard, remote control, or status panel. Each device supports up to **16 independent pads**, each with its own grid of buttons that can display live data, control smart home devices, and react to real-time conditions.
 
 You'll find the pad editor on the **Pads** page of the web portal (Full mode only). If you haven't connected your device to WiFi yet, complete the [first-time setup](first-time-setup.md) first.
 
@@ -517,6 +517,26 @@ Labels, icons, and colors still work alongside the widget. A typical sparkline b
 - Min: 0, Max: auto, Time window: 600 (10 minutes), Slots: 60
 - Top label: `Solar`, Bottom label: `[mqtt:home/solar/power;production;%.0fW]`
 
+### Table
+
+The table widget renders multi-column row data from a structured binding payload.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Data binding** | Must resolve to a table schema payload. Use an exact single-token binding expression such as `[health:table]` or `[health:extended_table]` |
+| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font_family:bebas`) |
+| **Scroll** | Enable or disable table scrolling |
+
+**Important:** Do not wrap the table binding in static text and do not add a format parameter. The table widget expects the resolved structured payload, not formatted text.
+
+**Examples:**
+
+- Standard table source: `[health:table]`
+- Extended table source: `[health:extended_table]`
+- Optional fallback during startup: `[health:table|{}]`
+
 ---
 
 ## Binding Templates
@@ -529,6 +549,8 @@ Binding templates are the engine behind live data on your buttons. They follow a
 
 Static text before, after, or between tokens is preserved. If a binding can't resolve (topic not received yet, invalid path), it shows `---` as a placeholder. Errors show `ERR:reason`.
 
+For bindings that return structured payloads (for example `health:table` and `health:extended_table`), use an exact single-token template (for example `[health:table]`) with no prefix/suffix text and no format parameter.
+
 ### Binding Validation
 
 The pad editor and Home page validate binding syntax **in real time** as you type. Any field that accepts a binding expression (labels, colors, data bindings, widget parameters, MQTT topics, wake binding, etc.) is checked automatically.
@@ -538,7 +560,7 @@ The pad editor and Home page validate binding syntax **in real time** as you typ
 - **Bracket balance** — unclosed `[` or extra `]` characters
 - **Scheme names** — unknown schemes are flagged, with a "did you mean?" suggestion for typos (e.g., `mqt` → `mqtt`)
 - **Parameter counts** — too many or too few semicolon-delimited parameters for the scheme
-- **Known keys** — health binding keys (e.g., `cpu`, `heap_free`, `rssi`) and timer parameters (e.g., `1`, `2_state`, `3_expired`) are checked against the valid set
+- **Known keys** — health binding keys (e.g., `cpu`, `heap_free`, `rssi`, `table`, `extended_table`) and timer parameters (e.g., `1`, `2_state`, `3_expired`) are checked against the valid set
 - **Format strings** — printf-style format specifiers like `%.0f`, `%d`, `%s` are validated for correct syntax
 - **Expression syntax** — `[expr:]` bodies are checked for operator/operand sequencing errors (e.g., `[expr:1 +]` or `[expr:* 2]`)
 - **Nested bindings** — bindings inside `[expr:]` are recursively validated (e.g., a typo in `[expr:[mqt:topic] * 2]` is caught)
@@ -596,7 +618,7 @@ This shows dark gray (`#333333`) during startup, then switches to red/green once
 | **path** | No | JSON key to extract. Use dot-notation for nested objects (`data.temp`). Omit or use `.` for raw payload |
 | **format** | No | Printf format string for the value |
 
-The device automatically subscribes to every topic it discovers across all 8 pads. Each unique topic is subscribed once, even if used by dozens of buttons.
+The device automatically subscribes to every topic it discovers across all 16 pads. Each unique topic is subscribed once, even if used by dozens of buttons.
 
 **Practical examples:**
 
@@ -670,6 +692,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `wifi_ssid` | Connected network name | `MyNetwork` |
 | `ip` | Device IP address | `192.168.1.42` |
 | `hostname` | Device hostname | `macropad` |
+| `table` | Structured table payload (standard schema) | `{"title":"Status","columns":[...],"rows":[...]}` |
+| `extended_table` | Structured table payload (extended schema) | `{"title":"Status","columns":[...],"rows":[...],"styles":...}` |
 | `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
 | `ble_name` | Current BLE keyboard name | `Kitchen Pad EEFF` |
 | `ble_state` | Detailed BLE state | `disabled`, `pairing`, `connecting`, `secured`, `claimed`, ... |
@@ -680,6 +704,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `ble_peer_id_addr` | Connected peer's identity address | `AA:BB:CC:DD:EE:FF` |
 
 Values are cached for up to 2 seconds to keep the CPU impact low.
+
+`table` and `extended_table` are intended for the Table widget data binding field. Use them as exact single-token templates (for example `[health:table]`) so the structured payload is passed through unchanged.
 
 **BLE signal values:**
 
@@ -1068,7 +1094,7 @@ After copying a button, **Fill Pad** applies it to every position in the grid (c
 
 ### Export / Import Device Config
 
-**Export Device Config** downloads everything — all 8 pads plus all device settings (network, MQTT, display, operating mode) — as a single JSON file. **Import Device Config** restores from that file, triggering a reboot.
+**Export Device Config** downloads everything — all 16 pads plus all device settings (network, MQTT, display, operating mode) — as a single JSON file. **Import Device Config** restores from that file, triggering a reboot.
 
 This is your backup and migration tool. Export regularly, and use import to clone a setup to a new device.
 
@@ -1224,4 +1250,4 @@ NTP hasn't synced yet. This usually resolves within a few seconds of connecting 
 Too many binding updates or high-resolution background images can increase CPU load. Reduce camera refresh intervals, simplify expressions, or use fewer background images.
 
 **Backing up your work**
-Use **More ▾ → Export Device Config** regularly. It captures *everything* — all 8 pads, network settings, display config, and button layouts — in a single JSON file. If you ever factory reset or set up a new device, **Import Device Config** restores it all.
+Use **More ▾ → Export Device Config** regularly. It captures *everything* — all 16 pads, network settings, display config, and button layouts — in a single JSON file. If you ever factory reset or set up a new device, **Import Device Config** restores it all.

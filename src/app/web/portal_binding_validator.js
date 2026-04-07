@@ -616,6 +616,7 @@ var _BV_GAUGE_LABEL = [
     'pad-edit-gauge-start-label', 'pad-edit-gauge-start-label-2',
     'pad-edit-gauge-start-label-3', 'pad-edit-gauge-start-label-4'
 ];
+var _BV_TABLE_DATA = ['pad-edit-table-data-binding'];
 
 function _bvAttach(ids, opts) {
     for (var i = 0; i < ids.length; i++) {
@@ -658,6 +659,7 @@ function bindingInitStaticInputs() {
     _bvAttach(_BV_BAR_COLOR);
     _bvAttach(_BV_BAR_NUM, { isWidgetBinding: true });
     _bvAttach(_BV_GAUGE_LABEL);
+    _bvAttach(_BV_TABLE_DATA, { isWidgetBinding: true });
 
     var wakeEl = document.getElementById('screen_saver_wake_binding');
     if (wakeEl) bindingAttachValidation(wakeEl);
@@ -673,7 +675,7 @@ function bindingValidateDialog() {
     var wtype = document.getElementById('pad-edit-widget-type');
     var activeType = wtype ? wtype.value : '';
 
-    if (activeType) {
+    if (activeType === 'bar_chart') {
         var wdb = document.getElementById('pad-edit-widget-data-binding');
         if (wdb && wdb.value.trim() && !bindingValidateInput(wdb, { isWidgetBinding: true })) count++;
     }
@@ -692,6 +694,9 @@ function bindingValidateDialog() {
     if (activeType === 'bar_chart') {
         count += _bvCount(_BV_BAR_COLOR, null, true);
         count += _bvCount(_BV_BAR_NUM, { isWidgetBinding: true }, true);
+    }
+    if (activeType === 'table') {
+        count += _bvCount(_BV_TABLE_DATA, { isWidgetBinding: true }, true);
     }
 
     return { valid: count === 0, count: count };
@@ -764,6 +769,7 @@ bindingRegisterScheme('health', {
         'psram_free', 'psram_min', 'psram_largest',
         'heap_total', 'heap_internal_total', 'heap_internal_used',
         'psram_total', 'psram_used',
+        'table', 'extended_table',
         'chip', 'chip_rev', 'chip_cores', 'cpu_freq', 'flash_size',
         'firmware', 'board', 'mac', 'reset_reason',
         'wifi_connected', 'wifi_ssid', 'ip', 'hostname',

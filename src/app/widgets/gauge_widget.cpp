@@ -1316,6 +1316,6 @@ static void gauge_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
-REGISTER_WIDGET(gauge, nullptr);
+REGISTER_WIDGET(gauge, nullptr, false);
 
 #endif // HAS_DISPLAY

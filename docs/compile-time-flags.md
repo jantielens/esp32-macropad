@@ -317,6 +317,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/swipe_config.h
   - src/app/time_binding.cpp
   - src/app/timer_binding.cpp
+  - src/app/timer_config.cpp
+  - src/app/timer_config.h
   - src/app/timer_engine.cpp
   - src/app/touch_manager.cpp
   - src/app/web_portal.cpp
@@ -335,6 +337,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_swipe.cpp
   - src/app/web_portal_swipe.h
+  - src/app/web_portal_timers.cpp
+  - src/app/web_portal_timers.h
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/gauge_widget.cpp

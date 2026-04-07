@@ -58,6 +58,14 @@ bool binding_template_has_bindings(const char* label);
 // Errors produce "ERR:message" in place of the token (never crashes).
 bool binding_template_resolve(const char* templ, char* out, size_t out_len);
 
+// Resolve a template only when it is exactly one binding token with no
+// surrounding static text, e.g. "[health:table]".
+// This bypasses the small internal token scratch buffer used by the generic
+// resolver and forwards out_len directly to the scheme resolver.
+// Returns true when templ matched the exact single-token shape. Output is
+// always populated with either resolved content, a fallback, or an error.
+bool binding_template_resolve_single_token(const char* templ, char* out, size_t out_len);
+
 // Scan a template string and call the collector for each binding token.
 // Used by mqtt_sub_store to discover topics to subscribe.
 void binding_template_collect_topics(const char* templ, void* user_data);
