@@ -298,6 +298,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
+  - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
   - src/app/lv_conf.h
@@ -343,6 +344,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
+  - src/app/widgets/table_widget.cpp
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
 - **HAS_IMAGE_FETCH**

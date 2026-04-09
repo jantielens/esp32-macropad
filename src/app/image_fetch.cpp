@@ -404,7 +404,9 @@ static void fetch_task(void* param) {
             LOGE(TAG, "HEAP CORRUPT after decode/swap (slot %d)", next);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        // Brief yield after each successful decode so other tasks get CPU time.
+        // With HW decode the active work is <20 ms; a 5 ms yield is sufficient.
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
 }
 

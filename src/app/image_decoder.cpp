@@ -5,6 +5,7 @@
 #include "log_manager.h"
 #include <esp_heap_caps.h>
 #include <string.h>
+#include <math.h>
 
 // LVGL's built-in tjpgd (JPEG)
 #include <libs/tjpgd/tjpgd.h>
@@ -27,6 +28,325 @@ static void* psram_alloc(size_t bytes) {
     if (!p) p = malloc(bytes);  // fallback to internal
     return p;
 }
+
+// ============================================================================
+// ESP32-P4: Hardware JPEG decoder + PPA scaling
+// ============================================================================
+// Replaces software tjpgd decode + CPU bilinear scale for JPEG images.
+//
+// Pipeline (P4 only):
+//   1. jpeg_decoder_process()      — HW JPEG → full-res RGB565  (~3 ms)
+//   2. ppa_do_scale_rotate_mirror() — HW PPA SRM crop+scale      (~2 ms)
+//
+// Falls back transparently to the software path (below) on any error.
+// Both handles are lazy-initialised on first call and kept alive for reuse.
+//
+// Cover scale: finds the smallest PPA-precision scale (m/16, m∈[1..64]) that:
+//   (a) is ≥ the required cover scale,
+//   (b) produces integer block_w and block_h from target dimensions, and
+//   (c) both blocks fit within the decoded source image.
+// This guarantees the PPA output is exactly target_w × target_h pixels.
+// If no such m exists (unusual source/target ratio), falls back to SW.
+//
+// Letterbox scale: picks the largest m/16 ≤ min_scale so the scaled image
+// fits inside target dimensions.  Black padding is written by memset before
+// the PPA call, so the output buffer is always fully initialised.
+// ============================================================================
+
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+#include "driver/jpeg_decode.h"
+#include "driver/ppa.h"
+
+static jpeg_decoder_handle_t g_hw_jpeg  = nullptr;
+static ppa_client_handle_t   g_ppa_srm  = nullptr;
+static bool g_hw_init_done              = false;
+static bool g_hw_ready                  = false;
+
+static bool hw_init_once() {
+    if (g_hw_init_done) return g_hw_ready;
+    g_hw_init_done = true;
+
+    jpeg_decode_engine_cfg_t jcfg = {};
+    jcfg.intr_priority = 0;
+    jcfg.timeout_ms    = 500;
+    if (jpeg_new_decoder_engine(&jcfg, &g_hw_jpeg) != ESP_OK) {
+        LOGE(TAG, "HW JPEG: engine init failed");
+        return false;
+    }
+
+    ppa_client_config_t pcfg = {};
+    pcfg.oper_type = PPA_OPERATION_SRM;
+    if (ppa_register_client(&pcfg, &g_ppa_srm) != ESP_OK) {
+        LOGE(TAG, "PPA SRM: client init failed");
+        jpeg_del_decoder_engine(g_hw_jpeg);
+        g_hw_jpeg = nullptr;
+        return false;
+    }
+
+    LOGI(TAG, "HW JPEG decoder + PPA SRM client ready");
+    g_hw_ready = true;
+    return true;
+}
+
+// Decode JPEG bytes into full-resolution RGB565 using the HW decoder.
+// Allocated output buffer must be freed with free() / heap_caps_free().
+// *decoded_w reflects the HW-aligned stride (16-px padded); *actual_w/h = true image size.
+static bool hw_decode_jpeg(
+    const uint8_t* data, size_t len,
+    uint16_t** out_buf,
+    int* actual_w, int* actual_h,
+    int* decoded_w)
+{
+    // Parse header without hardware (CPU-only).
+    jpeg_decode_picture_info_t info = {};
+    if (jpeg_decoder_get_info(data, (uint32_t)len, &info) != ESP_OK) {
+        LOGE(TAG, "HW JPEG: get_info failed");
+        return false;
+    }
+    int aw = (int)info.width;
+    int ah = (int)info.height;
+    if (aw <= 0 || ah <= 0 || aw > 4096 || ah > 4096) {
+        LOGE(TAG, "HW JPEG: invalid dims %dx%d", aw, ah);
+        return false;
+    }
+
+    // HW decoder pads width to 16-pixel boundaries for YUV420/YUV422 MCU alignment.
+    int dw = (aw + 15) & ~15;
+    int dh = (ah + 15) & ~15;
+
+    // Allocate HW-aligned input buffer and copy JPEG bitstream.
+    jpeg_decode_memory_alloc_cfg_t tx_cfg = {};
+    tx_cfg.buffer_direction = JPEG_DEC_ALLOC_INPUT_BUFFER;
+    size_t tx_size = 0;
+    uint8_t* in_buf = (uint8_t*)jpeg_alloc_decoder_mem(len, &tx_cfg, &tx_size);
+    if (!in_buf) {
+        LOGE(TAG, "HW JPEG: OOM input buf (%u bytes)", (unsigned)len);
+        return false;
+    }
+    memcpy(in_buf, data, len);
+
+    // Allocate HW-aligned output buffer (RGB565, padded dims).
+    jpeg_decode_memory_alloc_cfg_t rx_cfg = {};
+    rx_cfg.buffer_direction = JPEG_DEC_ALLOC_OUTPUT_BUFFER;
+    size_t rx_size   = 0;
+    size_t out_bytes = (size_t)dw * dh * 2;  // RGB565
+    uint8_t* rgb565  = (uint8_t*)jpeg_alloc_decoder_mem(out_bytes, &rx_cfg, &rx_size);
+    if (!rgb565) {
+        LOGE(TAG, "HW JPEG: OOM output buf (%ux%u = %u bytes)", dw, dh, (unsigned)out_bytes);
+        free(in_buf);
+        return false;
+    }
+
+    // Decode: JPEG compressed → RGB565.
+    // JPEG_DEC_RGB_ELEMENT_ORDER_BGR = "small endian" in Espressif terms.
+    // In practice this means the uint16_t RGB565 value is stored in the
+    // standard little-endian layout that all LVGL color operations expect:
+    //   byte[0] = low byte  = GGGBBBBB
+    //   byte[1] = high byte = RRRRRGGG
+    // The confusingly named RGB order ("big endian") places R at byte[0],
+    // which is byte-swapped relative to what LVGL / the display expects.
+    jpeg_decode_cfg_t dcfg = {};
+    dcfg.output_format = JPEG_DECODE_OUT_FORMAT_RGB565;
+    dcfg.rgb_order     = JPEG_DEC_RGB_ELEMENT_ORDER_BGR;  // little-endian RGB565 = LVGL format
+    uint32_t decoded_size = 0;
+    esp_err_t err = jpeg_decoder_process(
+        g_hw_jpeg, &dcfg,
+        in_buf, (uint32_t)len,
+        rgb565, (uint32_t)rx_size,
+        &decoded_size);
+    free(in_buf);
+
+    if (err != ESP_OK) {
+        LOGE(TAG, "HW JPEG: decode failed (0x%x)", err);
+        free(rgb565);
+        return false;
+    }
+
+    *out_buf   = (uint16_t*)rgb565;
+    *actual_w  = aw;
+    *actual_h  = ah;
+    *decoded_w = dw;
+    return true;
+}
+
+// Cover scale via PPA SRM: crop source + scale → exact target_w × target_h.
+// Returns false if the 1/16-precision constraint prevents an exact match.
+static bool ppa_cover_scale(
+    const uint16_t* src, int src_w, int src_h, int hw_src_w,
+    uint16_t* out, size_t out_aligned_size,
+    uint16_t target_w, uint16_t target_h)
+{
+    float raw_scale_x = (float)target_w / src_w;
+    float raw_scale_y = (float)target_h / src_h;
+    float raw_scale   = raw_scale_x > raw_scale_y ? raw_scale_x : raw_scale_y;
+
+    // Find the smallest m ∈ [1..64] (PPA scale = m/16) such that:
+    //   m/16 ≥ raw_scale,
+    //   block_w = target_w * 16 / m is integer and ≤ src_w,
+    //   block_h = target_h * 16 / m is integer and ≤ src_h.
+    // This guarantees floor(block_w * m/16) == target_w exactly.
+    int min_m = (int)ceilf(raw_scale * 16.0f);
+    if (min_m < 1) min_m = 1;
+
+    int found_m = 0, block_w = 0, block_h = 0;
+    for (int m = min_m; m <= 64; m++) {
+        if ((target_w * 16) % m != 0) continue;
+        if ((target_h * 16) % m != 0) continue;
+        int bw = (int)(target_w * 16 / m);
+        int bh = (int)(target_h * 16 / m);
+        if (bw > src_w || bh > src_h) continue;
+        if (bw <= 0 || bh <= 0) continue;
+        found_m = m;  block_w = bw;  block_h = bh;
+        break;
+    }
+    if (!found_m) {
+        LOGD(TAG, "PPA cover: no exact m for %dx%d→%dx%d, SW fallback",
+             src_w, src_h, target_w, target_h);
+        return false;
+    }
+
+    int off_x = (src_w - block_w) / 2;
+    int off_y = (src_h - block_h) / 2;
+    float ppa_scale = found_m / 16.0f;
+
+    ppa_srm_oper_config_t srm = {};
+    srm.in.buffer        = src;
+    srm.in.pic_w         = (uint32_t)hw_src_w;   // stride = HW-padded width
+    srm.in.pic_h         = (uint32_t)src_h;       // actual content rows
+    srm.in.block_w       = (uint32_t)block_w;
+    srm.in.block_h       = (uint32_t)block_h;
+    srm.in.block_offset_x = (uint32_t)off_x;
+    srm.in.block_offset_y = (uint32_t)off_y;
+    srm.in.srm_cm        = PPA_SRM_COLOR_MODE_RGB565;
+
+    srm.out.buffer       = out;
+    srm.out.buffer_size  = out_aligned_size;
+    srm.out.pic_w        = (uint32_t)target_w;
+    srm.out.pic_h        = (uint32_t)target_h;
+    srm.out.block_offset_x = 0;
+    srm.out.block_offset_y = 0;
+    srm.out.srm_cm       = PPA_SRM_COLOR_MODE_RGB565;
+
+    srm.rotation_angle   = PPA_SRM_ROTATION_ANGLE_0;
+    srm.scale_x          = ppa_scale;
+    srm.scale_y          = ppa_scale;
+    srm.mode             = PPA_TRANS_MODE_BLOCKING;
+
+    esp_err_t err = ppa_do_scale_rotate_mirror(g_ppa_srm, &srm);
+    if (err != ESP_OK) {
+        LOGE(TAG, "PPA cover: SRM failed 0x%x", err);
+        return false;
+    }
+    LOGD(TAG, "PPA cover: %dx%d block(%dx%d@%d,%d) ×%.4f→%dx%d",
+         src_w, src_h, block_w, block_h, off_x, off_y, ppa_scale, target_w, target_h);
+    return true;
+}
+
+// Letterbox scale via PPA SRM: scale whole source to fit, black bars fill rest.
+static bool ppa_letterbox_scale(
+    const uint16_t* src, int src_w, int src_h, int hw_src_w,
+    uint16_t* out, size_t out_aligned_size,
+    uint16_t target_w, uint16_t target_h)
+{
+    float raw_scale_x = (float)target_w / src_w;
+    float raw_scale_y = (float)target_h / src_h;
+    float raw_scale   = raw_scale_x < raw_scale_y ? raw_scale_x : raw_scale_y;
+
+    // Find the largest m ∈ [1..64] where the scaled output fits in target.
+    int max_m = (int)floorf(raw_scale * 16.0f);
+    if (max_m < 1) max_m = 1;
+
+    int found_m = 0, out_block_w = 0, out_block_h = 0;
+    for (int m = max_m; m >= 1; m--) {
+        int obw = (int)((src_w * m) / 16);
+        int obh = (int)((src_h * m) / 16);
+        if (obw > target_w || obh > target_h) continue;
+        if (obw <= 0 || obh <= 0) continue;
+        found_m = m;  out_block_w = obw;  out_block_h = obh;
+        break;
+    }
+    if (!found_m) {
+        LOGD(TAG, "PPA letterbox: no valid m for %dx%d→%dx%d, SW fallback",
+             src_w, src_h, target_w, target_h);
+        return false;
+    }
+
+    int off_x = (target_w  - out_block_w) / 2;
+    int off_y = (target_h - out_block_h) / 2;
+    float ppa_scale = found_m / 16.0f;
+
+    // Pre-fill with black so the bars are zeroed.
+    memset(out, 0, out_aligned_size);
+
+    ppa_srm_oper_config_t srm = {};
+    srm.in.buffer        = src;
+    srm.in.pic_w         = (uint32_t)hw_src_w;
+    srm.in.pic_h         = (uint32_t)src_h;
+    srm.in.block_w       = (uint32_t)src_w;
+    srm.in.block_h       = (uint32_t)src_h;
+    srm.in.block_offset_x = 0;
+    srm.in.block_offset_y = 0;
+    srm.in.srm_cm        = PPA_SRM_COLOR_MODE_RGB565;
+
+    srm.out.buffer       = out;
+    srm.out.buffer_size  = out_aligned_size;
+    srm.out.pic_w        = (uint32_t)target_w;
+    srm.out.pic_h        = (uint32_t)target_h;
+    srm.out.block_offset_x = (uint32_t)off_x;
+    srm.out.block_offset_y = (uint32_t)off_y;
+    srm.out.srm_cm       = PPA_SRM_COLOR_MODE_RGB565;
+
+    srm.rotation_angle   = PPA_SRM_ROTATION_ANGLE_0;
+    srm.scale_x          = ppa_scale;
+    srm.scale_y          = ppa_scale;
+    srm.mode             = PPA_TRANS_MODE_BLOCKING;
+
+    esp_err_t err = ppa_do_scale_rotate_mirror(g_ppa_srm, &srm);
+    if (err != ESP_OK) {
+        LOGE(TAG, "PPA letterbox: SRM failed 0x%x", err);
+        return false;
+    }
+    LOGD(TAG, "PPA letterbox: %dx%d ×%.4f→%dx%d@(%d,%d) in %dx%d",
+         src_w, src_h, ppa_scale, out_block_w, out_block_h, off_x, off_y, target_w, target_h);
+    return true;
+}
+
+// Orchestrate full P4 hardware path.  Returns true and fills *out on success.
+// Returns false on any failure so the caller can use the software path.
+static bool hw_decode_and_scale(
+    const uint8_t* data, size_t len,
+    uint16_t target_w, uint16_t target_h,
+    ImageScaleMode scale_mode,
+    uint16_t* out, size_t out_aligned_size)
+{
+    if (!hw_init_once()) return false;
+
+    uint16_t* decoded = nullptr;
+    int actual_w = 0, actual_h = 0;
+    int decoded_w = 0;
+
+    if (!hw_decode_jpeg(data, len, &decoded,
+                        &actual_w, &actual_h, &decoded_w)) {
+        return false;
+    }
+
+    bool ok = false;
+    if (scale_mode == IMAGE_SCALE_LETTERBOX) {
+        ok = ppa_letterbox_scale(decoded, actual_w, actual_h, decoded_w,
+                                  out, out_aligned_size, target_w, target_h);
+    } else {
+        ok = ppa_cover_scale(decoded, actual_w, actual_h, decoded_w,
+                              out, out_aligned_size, target_w, target_h);
+    }
+
+    free(decoded);
+    return ok;
+}
+#endif  // CONFIG_IDF_TARGET_ESP32P4
+
+// ============================================================================
+// End of P4 hardware section
+// ============================================================================
 
 // ============================================================================
 // Format detection
@@ -488,9 +808,19 @@ bool image_decode_to_rgb565(
         return false;
     }
 
-    // Allocate output RGB565 buffer
+    // Allocate output RGB565 buffer.
+    // On ESP32-P4 the buffer is 64-byte cache-line aligned so PPA can write
+    // directly into it.  heap_caps_aligned_alloc is compatible with
+    // heap_caps_free used by the caller (image_fetch.cpp).
     size_t out_bytes = (size_t)target_w * target_h * 2;
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+    size_t out_aligned_size = (out_bytes + 63) & ~63UL;
+    uint16_t* out = (uint16_t*)heap_caps_aligned_alloc(
+        64, out_aligned_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    size_t out_aligned_size = out_bytes;
     uint16_t* out = (uint16_t*)psram_alloc(out_bytes);
+#endif
     if (!out) {
         LOGE(TAG, "OOM for output %ux%u RGB565 (%u bytes)", target_w, target_h, (unsigned)out_bytes);
         return false;
@@ -499,11 +829,24 @@ bool image_decode_to_rgb565(
     bool ok = false;
 
     if (fmt == IMAGE_FORMAT_JPEG) {
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+        // Try hardware decode + PPA scale first; fall through to SW on failure.
+        if (hw_decode_and_scale(data, len, target_w, target_h, scale_mode,
+                                out, out_aligned_size)) {
+            LOGD(TAG, "JPEG HW: %ux%u %s (HW+PPA)",
+                 target_w, target_h,
+                 scale_mode == IMAGE_SCALE_LETTERBOX ? "letterbox" : "cover");
+            if (out_pixels) *out_pixels = out;
+            if (out_size)   *out_size   = out_bytes;
+            return true;
+        }
+        LOGD(TAG, "JPEG HW path failed, using SW fallback");
+#endif
         uint8_t* rgb888 = nullptr;
         int src_w = 0, src_h = 0;
         if (decode_jpeg(data, len, &rgb888, &src_w, &src_h)) {
             const char* mode_str = (scale_mode == IMAGE_SCALE_LETTERBOX) ? "letterbox" : "cover";
-            LOGD(TAG, "JPEG %dx%d → %s %ux%u", src_w, src_h, mode_str, target_w, target_h);
+            LOGD(TAG, "JPEG SW %dx%d → %s %ux%u", src_w, src_h, mode_str, target_w, target_h);
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
                 ok = letterbox_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h);
             } else {
