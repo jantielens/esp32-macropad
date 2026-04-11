@@ -14,11 +14,15 @@
 #define HAS_SCALE        (HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)
 #define HAS_AUDIO        true
 
-// strlcpy is available on ESP32 (newlib) but not glibc — declare for host tests
+// strlcpy is available on ESP32 (newlib) but not older glibc — declare for host
+// tests. glibc 2.38+ (Ubuntu 24.04) ships strlcpy natively, so skip when present.
 #include <stddef.h>
+#include <string.h>
+#if !defined(__GLIBC__) || (__GLIBC__ < 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 38)
 #ifdef __cplusplus
 extern "C"
 #endif
 size_t strlcpy(char* dst, const char* src, size_t siz);
+#endif
 
 #endif // BOARD_CONFIG_H
