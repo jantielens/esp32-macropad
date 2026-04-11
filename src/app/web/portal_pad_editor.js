@@ -483,13 +483,9 @@ function padInit() {
                 // Show button defaults section
                 var btnDefSec = document.getElementById('btn-defaults-section');
                 if (btnDefSec) btnDefSec.style.display = 'block';
-                // Show audio feedback section in button editor if device has audio
-                if (deviceInfoCache.has_audio === true) {
-                    var audioSec = document.getElementById('pad-edit-audio-section');
-                    if (audioSec) audioSec.style.display = '';
-                }
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
+                padFetchSoundList();
                 padLoadButtonDefaultsFromDevice();
                 padLoadPage(0);
                 padRefreshDropdownLabels();
@@ -577,6 +573,27 @@ function padPopulateScreenDropdown() {
     }
 }
 
+// Cached sound file list (populated at init, used synchronously on dialog open)
+var padSoundListCache = [];
+
+// Fetch sound list from device and update cache
+function padFetchSoundList() {
+    fetch('/api/sounds/list')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(sounds) { padSoundListCache = sounds; })
+        .catch(function() {});
+}
+
+// Populate sound file dropdowns in action editors (synchronous, uses cache)
+function padPopulateSoundDropdown() {
+    var prefixes = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        prefixes.push('pad-edit-action-' + i);
+        prefixes.push('pad-edit-lp-action-' + i);
+    }
+    actionEditorPopulateSounds(prefixes, padSoundListCache);
+}
+
 // Show the next hidden action slot for tap or lp
 function padAddAction(gesture) {
     var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
@@ -616,7 +633,7 @@ function padUpdateAddLink(gesture) {
     if (link) link.style.display = (visibleCount >= 3) ? 'none' : '';
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline'];
+const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table'];
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
@@ -814,6 +831,12 @@ function padRenderGrid() {
                     spark.className = 'pad-cell-widget-sparkline';
                     spark.title = 'Sparkline Widget';
                     cell.appendChild(spark);
+                }
+                if (btn.widget_type === 'table') {
+                    const tbl = document.createElement('div');
+                    tbl.className = 'pad-cell-widget-table';
+                    tbl.title = 'Table Widget';
+                    cell.appendChild(tbl);
                 }
 
                 cell.addEventListener('click', () => padDialogOpen(c, r));
@@ -1150,6 +1173,7 @@ function padDialogOpen(col, row) {
 
     // Refresh target screen dropdowns so pad names are current
     padPopulateScreenDropdown();
+    padPopulateSoundDropdown();
 
     // Sync device-level button defaults from the DOM into padState so placeholders are current
     padState.buttonDefaults = padCollectButtonDefaults();
@@ -1252,14 +1276,6 @@ function padDialogOpen(col, row) {
         if (wrap) wrap.style.display = (ai === 0 || (lpActions[ai] && lpActions[ai].type)) ? '' : 'none';
     }
     padUpdateAddLink('lp');
-
-    // Audio feedback overrides
-    document.getElementById('pad-edit-tap-beep').value = btn.tap_beep || '';
-    document.getElementById('pad-edit-lp-beep').value = btn.lp_beep || '';
-    document.getElementById('pad-edit-tap-beep').placeholder = 'device default';
-    document.getElementById('pad-edit-lp-beep').placeholder = 'device default';
-    var audioSec = document.getElementById('pad-edit-audio-section');
-    if (audioSec) audioSec.open = !!(btn.tap_beep || btn.lp_beep);
 
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
@@ -1367,6 +1383,11 @@ function padDialogOpen(col, row) {
     }
     document.getElementById('pad-edit-sparkline-ref-in-view').checked = btn.widget_sparkline_ref_in_view || false;
 
+    // Table widget fields
+    document.getElementById('pad-edit-table-data-binding').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-table-style').value = btn.widget_table_style || '';
+    document.getElementById('pad-edit-table-scrollable').value = (btn.widget_table_scrollable === false) ? 'false' : 'true';
+
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -1458,12 +1479,6 @@ function padDialogOk(keepOpen) {
     }
     if (lpArr.length) btn.lp_actions = lpArr;
 
-    // Audio feedback overrides
-    var tapBeep = document.getElementById('pad-edit-tap-beep').value.trim();
-    if (tapBeep) { btn.tap_beep = tapBeep; } else { delete btn.tap_beep; }
-    var lpBeep = document.getElementById('pad-edit-lp-beep').value.trim();
-    if (lpBeep) { btn.lp_beep = lpBeep; } else { delete btn.lp_beep; }
-
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();
     if (imgUrl) {
@@ -1489,10 +1504,9 @@ function padDialogOk(keepOpen) {
     const wtype = document.getElementById('pad-edit-widget-type').value;
     if (wtype) {
         btn.widget_type = wtype;
-        // Data binding template for widget value
-        const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
-        if (wDataBinding) btn.widget_data_binding = wDataBinding;
         if (wtype === 'bar_chart') {
+            const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
+            if (wDataBinding) btn.widget_data_binding = wDataBinding;
             btn.widget_bar_min = padGetBindableNumber('pad-edit-widget-bar-min', 0);
             btn.widget_bar_max = padGetBindableNumber('pad-edit-widget-bar-max', 3);
             btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');
@@ -1614,6 +1628,13 @@ function padDialogOk(keepOpen) {
                 }
             }
             if (document.getElementById('pad-edit-sparkline-ref-in-view').checked) btn.widget_sparkline_ref_in_view = true;
+        }
+        if (wtype === 'table') {
+            const tDataBinding = document.getElementById('pad-edit-table-data-binding').value.trim();
+            if (tDataBinding) btn.widget_data_binding = tDataBinding;
+            const tStyle = document.getElementById('pad-edit-table-style').value.trim();
+            if (tStyle) btn.widget_table_style = tStyle;
+            btn.widget_table_scrollable = document.getElementById('pad-edit-table-scrollable').value === 'true';
         }
     }
 

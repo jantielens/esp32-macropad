@@ -34,6 +34,33 @@ echo "=== Running integration tests: expr_binding ==="
 ./tests/bin/test_expr_binding
 echo
 
+echo "=== Building unit tests: binding_template ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    tests/test_binding_template.cpp \
+    src/app/binding_template.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_binding_template -lm
+
+echo "=== Running unit tests: binding_template ==="
+./tests/bin/test_binding_template
+echo
+
+echo "=== Building unit tests: health_table_builder ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_health_table_builder.cpp \
+    src/app/health_table_builder.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_health_table_builder -lm
+
+echo "=== Running unit tests: health_table_builder ==="
+./tests/bin/test_health_table_builder
+echo
+
 echo "=== Building integration tests: pad_binding ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \
@@ -67,6 +94,20 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running unit tests: key_sequence ==="
 ./tests/bin/test_key_sequence
+echo
+
+echo "=== Building unit tests: action_parse ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_action_parse.cpp \
+    src/app/action_parse.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_parse
+
+echo "=== Running unit tests: action_parse ==="
+./tests/bin/test_action_parse
 echo
 
 echo "=== All tests passed ==="

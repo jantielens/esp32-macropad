@@ -162,6 +162,39 @@ python3 tools/generate-board-driver-table.py --update-file path/to/file.md
 
 ---
 
+## tools/generate-fonts.sh
+
+**Purpose:** Download TTF font sources and generate LVGL C font files into `src/app/fonts/`.
+
+This script manages the full lifecycle of custom display fonts: downloading TTF sources from Google Fonts and GitHub, converting them to LVGL-compatible C arrays via `lv_font_conv`, and post-processing to avoid symbol collisions when multiple font files are compiled in a single translation unit.
+
+**Commands:**
+```bash
+./tools/generate-fonts.sh download   # Download TTF source files to assets/fonts/
+./tools/generate-fonts.sh convert    # Generate .c files (downloads first if needed)
+./tools/generate-fonts.sh clean      # Remove generated .c files
+./tools/generate-fonts.sh summary    # Show font list with approximate flash costs
+./tools/generate-fonts.sh            # Default: convert (includes download)
+```
+
+**Generated output:**
+- `src/app/fonts/font_dseg7_{12,14,18,24,32,36,48}.c` — DSEG7 Classic Bold (7-segment LCD)
+- `src/app/fonts/font_bebas_{12,14,18,24,32,36,48}.c` — Bebas Neue (bold condensed)
+- `src/app/fonts/font_doto_{12,14,18,24,32,36,48}.c` — Doto (dot-matrix, wght=900, ROND=0)
+
+**Adding a new font:**
+1. Add an entry to the `FONTS` array in `tools/generate-fonts.sh`
+2. Add a `download_<name>` function if the font requires special download logic
+3. Run `./tools/generate-fonts.sh`
+4. Add `LV_FONT_DECLARE()` and extern in `src/app/fonts/custom_fonts.h`
+5. Add `#include` in `src/app/custom_fonts.cpp` and update `pad_custom_font_lookup()`
+6. Add the DSL alias in `src/app/pad_config.cpp` under `font_family` parsing
+7. Rebuild firmware
+
+**Requirements:** Node.js + npm (`npx lv_font_conv`). Downloaded TTFs are git-ignored via `assets/fonts/.gitignore`.
+
+---
+
 ## tools/compile_flags_report.py
 
 **Purpose:** Generate a compile-time flags report (flag list + per-board matrices + per-file preprocessor usage map) and print the active flags for a specific board.

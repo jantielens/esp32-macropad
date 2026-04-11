@@ -457,6 +457,34 @@ static bool publish_custom_tone_text_config(MqttManager &mqtt) {
 		return mqtt.publishJson(topic, doc, true);
 }
 
+#if HAS_SOUND_PLAYER
+static bool publish_sound_text_config(MqttManager &mqtt) {
+		char topic[160];
+		snprintf(topic, sizeof(topic), "homeassistant/text/%s/sound/config", mqtt.sanitizedName());
+
+		StaticJsonDocument<768> doc;
+		doc["~"] = mqtt.baseTopic();
+		doc["name"] = "Play Sound";
+
+		char ha_oid[96];
+		snprintf(ha_oid, sizeof(ha_oid), "%s_sound", mqtt.sanitizedName());
+		doc["object_id"] = ha_oid;
+		doc["uniq_id"] = ha_oid;
+
+		doc["cmd_t"] = "~/audio/sound/set";
+		doc["max"] = 31;
+		doc["ic"] = "mdi:file-music";
+
+		doc["avty_t"] = "~/availability";
+		doc["pl_avail"] = "online";
+		doc["pl_not_avail"] = "offline";
+
+		fill_device_block(doc, mqtt);
+		if (doc.overflowed()) return false;
+		return mqtt.publishJson(topic, doc, true);
+}
+#endif
+
 bool ha_discovery_publish_audio_entities(MqttManager &mqtt) {
 		bool ok = true;
 		ok &= publish_siren_config(mqtt);
@@ -465,6 +493,9 @@ bool ha_discovery_publish_audio_entities(MqttManager &mqtt) {
 		ok &= publish_beep_button_config(mqtt, "beep",        "Beep",        "audio/beep");
 		ok &= publish_beep_button_config(mqtt, "beep_double", "Beep Double", "audio/beep_double");
 		ok &= publish_beep_button_config(mqtt, "beep_triple", "Beep Triple", "audio/beep_triple");
+#if HAS_SOUND_PLAYER
+		ok &= publish_sound_text_config(mqtt);
+#endif
 		return ok;
 }
 

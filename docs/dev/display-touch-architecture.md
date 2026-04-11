@@ -385,6 +385,48 @@ public:
 - Ghost touch suppression via `touch_manager_suppress_lvgl_input(200)` on show
 - Adaptive brush size (~0.8% of smaller display dimension, clamped 2–6 px)
 
+### Table Widget Payload Contract
+
+The table widget consumes a structured JSON payload, not plain formatted text.
+
+**Binding constraints:**
+- Use an exact single-token data binding template such as `[health:table]` or `[health:extended_table]`
+- Do not add static prefix or suffix text around the token
+- Do not add a format parameter in the binding token
+
+The widget resolves binding data through `binding_template_resolve_single_token()` and expects JSON with this contract:
+
+```json
+{
+    "header_text_color": "#404070",
+    "row_text_color": "#b0b0d0",
+    "default_bg": "#12122a",
+    "columns": [
+        { "key": "metric", "header": "Metric", "width_pct": 42 },
+        { "key": "value", "header": "Value", "width_pct": 58 }
+    ],
+    "rows": [
+        {
+            "_bg": "#0a2a0a",
+            "metric": "CPU",
+            "value": { "text": "42%", "color": "#6edc8c" }
+        }
+    ]
+}
+```
+
+Contract semantics:
+- `columns` defines rendering order and optional width percentages
+- `rows` is an array of objects and each object maps by column key
+- `_bg` is optional and sets row background color
+- a cell may be a primitive value or an object with `text`, `bg`, and `color`
+- if `columns` is absent, the widget derives columns from the first non-meta row keys
+
+Current built-in sources:
+- `health:table` returns the standard status table schema
+- `health:extended_table` returns the standard schema plus extra static device rows
+- both payloads are built in `health_table_builder.cpp` and routed from `health_binding.cpp`
+
 ## Rendering System
 
 ### FreeRTOS Task-Based Architecture

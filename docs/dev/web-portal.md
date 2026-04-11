@@ -215,14 +215,15 @@ Real-time device health monitoring integrated as a header badge with expandable 
 
 **Sections:**
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
-  - **Pad selection & naming**: Dropdown for Pad 1–8 with optional custom names (max 31 chars)
+  - **Pad selection & naming**: Dropdown for Pad 1–16 with optional custom names (max 31 chars)
   - **Grid preview**: Click any cell to open the button editor dialog
-  - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Actions, Icon, Image Background, Appearance, State)
+  - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
+  - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
-  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 8 pad configs), Clear Pad
-  - **Device config export/import**: Exports NVS settings (excluding network) plus all 8 pad pages to a single JSON file; import overwrites settings and reboots
+  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
+  - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
 - **Custom floating footer**: Save Pad, Show on Device, and More menu (not the shared `{{FOOTER}}` template)
 
@@ -416,6 +417,7 @@ Returns comprehensive device information.
   "hostname": "esp32-1234",
   "has_display": true,
   "has_audio": true,
+  "has_sound_player": true,
   "display_coord_width": 480,
   "display_coord_height": 480,
   "available_screens": [
@@ -872,6 +874,27 @@ Save swipe action configuration to LittleFS.
 
 ---
 
+### Boot Actions API
+
+All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Boot actions are stored on LittleFS at `/config/boot_actions.json` and dispatched once after the first screen is shown during boot.
+
+#### `GET /api/boot-actions`
+
+Returns the current boot action configuration.
+
+- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, etc.).
+- Default (no file saved): `{"actions": []}`.
+
+#### `POST /api/boot-actions`
+
+Save boot action configuration to LittleFS.
+
+- **Body:** JSON object with an `actions` array of `ButtonAction` objects. Trailing empty actions are trimmed by the web UI.
+- **Response:** `{"ok": true}` on success; JSON error on failure.
+- Changes take effect on next boot.
+
+---
+
 ### Button Defaults API
 
 All button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Button defaults are stored on LittleFS at `/config/button_defaults.json`.
@@ -890,6 +913,37 @@ Save device-level button defaults to LittleFS.
 - **Body:** JSON object with any subset of the fields listed above.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - All pad caches are rebuilt immediately so changes take effect without reboot.
+
+---
+
+### Timer Config API
+
+Device-level timer configuration. Compile-time gated by `HAS_DISPLAY`.
+
+#### `GET /api/timers`
+
+Returns the current timer configuration for all 3 timers.
+
+- **Response:** JSON object with keys `"1"`, `"2"`, `"3"`. Each timer object contains:
+  - `mode` — `"up"` or `"down"`
+  - `countdown` — seconds (countdown mode only, omitted if 0)
+  - `expire_actions` — array of ButtonAction objects (omitted if empty)
+
+```json
+{
+  "1": { "mode": "down", "countdown": 300, "expire_actions": [{ "type": "sound", "sound_file": "alarm" }] },
+  "2": { "mode": "up" },
+  "3": { "mode": "down", "countdown": 60, "expire_actions": [{ "type": "beep", "beep_pattern": "1000:500" }] }
+}
+```
+
+#### `POST /api/timers`
+
+Save timer configuration to LittleFS and apply immediately.
+
+- **Body:** Same JSON format as GET response.
+- **Response:** `{"ok": true}` on success; JSON error on failure.
+- Timer engine is updated immediately (mode, countdown preset, expire actions).
 
 ---
 
@@ -953,6 +1007,44 @@ Delete a specific icon file from `/icons/`.
 
 - **Query Parameters:** `name` (required, no path separators or `..`)
 - **Response:** `{"success": true}`
+
+---
+
+### Sound File API
+
+All sound endpoints require `HAS_SOUND_PLAYER` (defaults to `HAS_AUDIO`) and are gated by Basic Auth when enabled. Sound files are stored on LittleFS at `/sounds/<name>.mp3`.
+
+#### `POST /api/sounds/upload?name=<name>`
+
+Upload an MP3 sound file.
+
+- **Query Parameters:** `name` (required, `[a-zA-Z0-9_-]`, max 31 chars)
+- **Body:** Raw MP3 bytes (`Content-Type: application/octet-stream`)
+- **Max size:** 512 KB
+- **Validation:** Rejects files that do not start with a valid MP3 frame sync word or ID3v2 tag header.
+- **Response:** `{"status": "ok"}` on success; JSON error on failure
+
+#### `GET /api/sounds/list`
+
+List all uploaded sound file names (without `.mp3` extension).
+
+- **Response:** JSON array of name strings, e.g. `["alert", "chime", "doorbell"]`
+
+#### `DELETE /api/sounds?name=<name>`
+
+Delete a sound file.
+
+- **Query Parameters:** `name` (required)
+- **Response:** `{"status": "ok"}` on success; `404` if not found
+
+#### `POST /api/sounds/play?name=<name>`
+
+Play a sound file immediately (for testing).
+
+- **Query Parameters:** `name` (required)
+- **Response:** `{"status": "ok"}` on success; `404` if not found
+
+---
 
 #### `GET /api/pad/tile_sizes?cols=<N>&rows=<N>`
 

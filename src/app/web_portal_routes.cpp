@@ -9,13 +9,19 @@
 #include "web_portal_ota.h"
 #include "web_portal_pad.h"
 #include "web_portal_swipe.h"
+#include "web_portal_boot_actions.h"
 #include "web_portal_button_defaults.h"
+#include "web_portal_timers.h"
 #include "web_portal_pages.h"
 
 #include "board_config.h"
 
 #if HAS_BLE_HID
 #include "web_portal_ble.h"
+#endif
+
+#if HAS_SOUND_PLAYER
+#include "web_portal_sounds.h"
 #endif
 
 void web_portal_register_routes(AsyncWebServer* server) {
@@ -178,6 +184,32 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				handlePostButtonDefaults
 		);
 
+		// Boot actions API
+		registerOptions("/api/boot-actions");
+		server->on("/api/boot-actions", HTTP_GET, handleGetBootActions);
+		server->on(
+				"/api/boot-actions",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostBootActions
+		);
+
+		// Timer config API
+		registerOptions("/api/timers");
+		server->on("/api/timers", HTTP_GET, handleGetTimerConfig);
+		server->on(
+				"/api/timers",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostTimerConfig
+		);
+
 		registerOptions("/api/icons/install");
 		server->on(
 				"/api/icons/install",
@@ -226,6 +258,29 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				if (!portal_auth_gate(request)) return;
 				handlePostBlePairingStart(request);
 		});
+#endif
+
+#if HAS_SOUND_PLAYER
+		// Sound file management endpoints
+		registerOptions("/api/sounds/upload");
+		server->on(
+				"/api/sounds/upload",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {
+						if (!portal_auth_gate(request)) return;
+				},
+				NULL,
+				handlePostSoundUpload
+		);
+
+		registerOptions("/api/sounds/list");
+		server->on("/api/sounds/list", HTTP_GET, handleGetSoundList);
+
+		registerOptions("/api/sounds");
+		server->on("/api/sounds", HTTP_DELETE, handleDeleteSound);
+
+		registerOptions("/api/sounds/play");
+		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
 #endif
 
 }

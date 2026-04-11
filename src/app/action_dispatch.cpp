@@ -21,6 +21,12 @@
 
 #define TAG "Action"
 
+#if HAS_AUDIO
+// Deferred NVS volume save — set in LVGL task, processed in main loop.
+// Avoids flash I/O from PSRAM-stack tasks (crashes on ESP32-P4).
+static volatile bool g_volume_save_pending = false;
+#endif
+
 void action_dispatch(const ButtonAction& act, const char* label) {
     if (!act.type[0]) return;
 
@@ -79,6 +85,18 @@ void action_dispatch(const ButtonAction& act, const char* label) {
 #else
         LOGW(TAG, "%s beep: not compiled", label);
 #endif
+    } else if (strcmp(act.type, ACTION_TYPE_SOUND) == 0) {
+#if HAS_SOUND_PLAYER
+        if (act.sound_file[0]) {
+            LOGI(TAG, "%s sound: file='%s' vol=%s", label, act.sound_file,
+                 act.sound_volume > 0 ? String(act.sound_volume).c_str() : "device");
+            audio_play_sound(act.sound_file, act.sound_volume);
+        } else {
+            LOGW(TAG, "%s sound: empty filename", label);
+        }
+#else
+        LOGW(TAG, "%s sound: not compiled", label);
+#endif
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
 #if HAS_AUDIO
         if (strcmp(act.volume_mode, "up") == 0) {
@@ -97,27 +115,18 @@ void action_dispatch(const ButtonAction& act, const char* label) {
             audio_set_volume(v);
             LOGI(TAG, "%s volume set -> %u%%", label, v);
         }
-        // Persist to NVS
-        DeviceConfig *cfg = web_portal_get_current_config();
-        if (cfg) {
-            cfg->audio_volume = audio_get_volume();
-            config_manager_save(cfg);
-        }
+        // Defer NVS persist to main loop (flash I/O not safe from LVGL task)
+        g_volume_save_pending = true;
 #else
         LOGW(TAG, "%s volume: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
         // Payload format: "N:command" or "N:command:arg"
-        // e.g. "1:toggle", "2:start", "1:countdown:300", "1:mode:down"
+        // e.g. "1:toggle", "2:start", "1:adjust:30"
         const char* p = act.mqtt_payload;
         if (p && p[0] >= '1' && p[0] <= '0' + TIMER_COUNT && p[1] == ':') {
             uint8_t tid = p[0] - '0';
             const char* cmd = p + 2;
-
-            // Always (re)apply expire beep config from button config
-            if (act.timer_expire_beep[0]) {
-                timer_set_expire_beep(tid, act.timer_expire_beep, act.timer_expire_volume);
-            }
 
             if (strcmp(cmd, "start") == 0) {
                 timer_start(tid);
@@ -133,16 +142,9 @@ void action_dispatch(const ButtonAction& act, const char* label) {
                 timer_reset(tid);
             } else if (strcmp(cmd, "lap") == 0) {
                 timer_lap(tid);
-            } else if (strncmp(cmd, "countdown:", 10) == 0) {
-                uint32_t secs = (uint32_t)atoi(cmd + 10);
-                timer_set_countdown(tid, secs);
-                timer_set_mode(tid, TIMER_MODE_DOWN);
             } else if (strncmp(cmd, "adjust:", 7) == 0) {
                 int32_t delta = (int32_t)atoi(cmd + 7);
                 timer_adjust(tid, delta);
-            } else if (strncmp(cmd, "mode:", 5) == 0) {
-                TimerMode m = (strcmp(cmd + 5, "down") == 0) ? TIMER_MODE_DOWN : TIMER_MODE_UP;
-                timer_set_mode(tid, m);
             } else {
                 LOGW(TAG, "%s timer: unknown cmd '%s'", label, cmd);
             }
@@ -153,6 +155,22 @@ void action_dispatch(const ButtonAction& act, const char* label) {
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Deferred operations — called from main loop() (internal-RAM stack)
+// ---------------------------------------------------------------------------
+void action_dispatch_loop() {
+#if HAS_AUDIO
+    if (g_volume_save_pending) {
+        g_volume_save_pending = false;
+        DeviceConfig *cfg = web_portal_get_current_config();
+        if (cfg) {
+            cfg->audio_volume = audio_get_volume();
+            config_manager_save(cfg);
+        }
+    }
+#endif
 }
 
 #endif // HAS_DISPLAY

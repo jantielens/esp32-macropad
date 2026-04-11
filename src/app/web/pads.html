@@ -147,15 +147,15 @@
                 <div style="display:flex; gap:12px; margin-top:4px;">
                     <div class="form-group" style="flex:1; margin-bottom:4px;">
                         <label for="pad-def-label-top-style" style="font-size:13px;">Top Label Style</label>
-                        <input type="text" id="pad-def-label-top-style" class="label-style-input" maxlength="63" style="width:100%;" placeholder="e.g. font:24;align:left">
+                        <input type="text" id="pad-def-label-top-style" class="label-style-input" maxlength="63" style="width:100%;" placeholder="e.g. font_size:24;align:left">
                     </div>
                     <div class="form-group" style="flex:1; margin-bottom:4px;">
                         <label for="pad-def-label-center-style" style="font-size:13px;">Center Label Style</label>
-                        <input type="text" id="pad-def-label-center-style" class="label-style-input" maxlength="63" style="width:100%;" placeholder="e.g. font:18;mode:dot">
+                        <input type="text" id="pad-def-label-center-style" class="label-style-input" maxlength="63" style="width:100%;" placeholder="e.g. font_size:18;mode:dot">
                     </div>
                     <div class="form-group" style="flex:1; margin-bottom:4px;">
                         <label for="pad-def-label-bottom-style" style="font-size:13px;">Bottom Label Style</label>
-                        <input type="text" id="pad-def-label-bottom-style" class="label-style-input" maxlength="63" style="width:100%;" placeholder="e.g. font:14;align:right">
+                        <input type="text" id="pad-def-label-bottom-style" class="label-style-input" maxlength="63" style="width:100%;" placeholder="e.g. font_size:14;align:right">
                     </div>
                 </div>
 
@@ -218,6 +218,7 @@
                                 <option value="bar_chart">Bar Chart</option>
                                 <option value="gauge">Gauge</option>
                                 <option value="sparkline">Sparkline</option>
+                                <option value="table">Table</option>
                             </select>
                         </div>
                         <div style="display:flex; gap:12px;">
@@ -245,7 +246,7 @@
                                 
                             </div>
                             <div id="pad-edit-label-top-style-wrap" class="label-style-wrap" style="display:none;">
-                                <input type="text" id="pad-edit-label-top-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
+                                <input type="text" id="pad-edit-label-top-style" class="label-style-input" maxlength="127" placeholder="font_size:24;align:left;mode:dot">
                                 <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
                             </div>
                         </div>
@@ -257,7 +258,7 @@
                                 
                             </div>
                             <div id="pad-edit-label-center-style-wrap" class="label-style-wrap" style="display:none;">
-                                <input type="text" id="pad-edit-label-center-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
+                                <input type="text" id="pad-edit-label-center-style" class="label-style-input" maxlength="127" placeholder="font_size:24;align:left;mode:dot">
                                 <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
                             </div>
                         </div>
@@ -269,7 +270,7 @@
                                 
                             </div>
                             <div id="pad-edit-label-bottom-style-wrap" class="label-style-wrap" style="display:none;">
-                                <input type="text" id="pad-edit-label-bottom-style" class="label-style-input" maxlength="127" placeholder="font:24;align:left;mode:dot">
+                                <input type="text" id="pad-edit-label-bottom-style" class="label-style-input" maxlength="127" placeholder="font_size:24;align:left;mode:dot">
                                 <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
                             </div>
                         </div>
@@ -282,26 +283,12 @@
 
                 {{WIDGET_SPARKLINE}}
 
+                {{WIDGET_TABLE}}
+
                 <!-- Actions group (open by default) -->
                 <details class="editor-group" open>
                     <summary>Actions</summary>
                     <div class="editor-group-body" id="pad-action-editors"></div>
-                </details>
-
-                <!-- Audio Feedback (hidden if audio not available) -->
-                <details class="editor-group" id="pad-edit-audio-section" style="display:none;">
-                    <summary>Audio Feedback</summary>
-                    <div class="editor-group-body">
-                        <small style="display:block; margin-bottom:12px; color:#86868b;">Override the device-level beep pattern for this button. Leave empty to use the device default, enter <code>none</code> to silence.<br>Format: <code>freq:duration</code> pairs (Hz:ms), space-separated. Bare number = silent gap. E.g. <code>800:80</code>, <code>600:40 40 600:40</code>.</small>
-                        <div class="form-group">
-                            <label for="pad-edit-tap-beep">Tap Beep</label>
-                            <input type="text" id="pad-edit-tap-beep" maxlength="127" placeholder="device default">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-lp-beep">Long-Press Beep</label>
-                            <input type="text" id="pad-edit-lp-beep" maxlength="127" placeholder="device default">
-                        </div>
-                    </div>
                 </details>
 
                 <!-- Icon -->
@@ -349,13 +336,13 @@
 
                 <!-- Image Background -->
                 <details class="editor-group" id="pad-edit-image-section">
-                    <summary>Image Background</summary>
+                    <summary>Image / Camera Feed</summary>
                     <div class="editor-group-body">
-                        <small style="display:block; margin-bottom:12px; color:#86868b;">Fetch a JPEG/PNG image from a URL and display it as the button background.</small>
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Fetch a JPEG, PNG, or MJPEG stream from a URL and display it as the button background. For live camera feeds, point the URL at an MJPEG stream for best performance.</small>
 
                         <div class="form-group">
-                            <label for="pad-edit-bg-image-url">Image URL</label>
-                            <input type="text" id="pad-edit-bg-image-url" maxlength="255" placeholder="e.g. http://192.168.1.10/cam/snapshot.jpg">
+                            <label for="pad-edit-bg-image-url">Image or Stream URL</label>
+                            <input type="text" id="pad-edit-bg-image-url" maxlength="255" placeholder="e.g. http://192.168.1.10/stream.mjpeg or /snap.jpg">
                         </div>
                         <div style="display:flex; gap:8px;">
                             <div class="form-group" style="flex:1;">
@@ -369,8 +356,8 @@
                         </div>
                         <div class="form-group">
                             <label for="pad-edit-bg-image-interval">Refresh Interval (ms)</label>
-                            <input type="number" id="pad-edit-bg-image-interval" min="0" max="86400000" value="0" placeholder="0 = fetch once">
-                            <small>0 = fetch once at startup. E.g. 5000 = refresh every 5 seconds.</small>
+                            <input type="number" id="pad-edit-bg-image-interval" min="0" max="86400000" value="0" placeholder="0 = fetch once / stream">
+                            <small>For MJPEG streams: set to <code>0</code> — the stream runs continuously. For snapshots: e.g. <code>5000</code> = refresh every 5 s.</small>
                         </div>
                         <div class="form-group" style="margin-top:8px;">
                             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">

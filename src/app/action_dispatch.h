@@ -11,4 +11,7 @@
 // label: short prefix for log messages (e.g. "Tap", "LP", "SwipeR")
 void action_dispatch(const ButtonAction& act, const char* label);
 
+// Process deferred operations (NVS writes) — call from main loop().
+void action_dispatch_loop();
+
 #endif // HAS_DISPLAY

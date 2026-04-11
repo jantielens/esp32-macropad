@@ -127,6 +127,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(DISPLAY_BLANK_ON_SAVE ? "true" : "false");
 		response->print(",\"has_audio\":");
 		response->print(HAS_AUDIO ? "true" : "false");
+		response->print(",\"has_sound_player\":");
+		response->print(HAS_SOUND_PLAYER ? "true" : "false");
 
 		#if HAS_DISPLAY
 				// Display screen information

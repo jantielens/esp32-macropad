@@ -1,5 +1,6 @@
 #include "pad_config.h"
 
+#include "action_parse.h"
 #include "board_config.h"
 #include "button_defaults.h"
 #include "fs_health.h"
@@ -66,11 +67,15 @@ void label_style_parse(const char* dsl, LabelStyle* out) {
             const char* key = token;
             const char* val = colon + 1;
 
-            if (strcmp(key, "font") == 0) {
+            if (strcmp(key, "font_size") == 0 || strcmp(key, "font") == 0) {
                 int sz = atoi(val);
                 if (sz == 12 || sz == 14 || sz == 18 || sz == 24 || sz == 32 || sz == 36 || sz == 48) {
                     out->font_size = (uint8_t)sz;
                 }
+            } else if (strcmp(key, "font_family") == 0) {
+                if (strcmp(val, "segment") == 0 || strcmp(val, "dseg7") == 0)  out->font_family = 1;
+                else if (strcmp(val, "bebas") == 0)                           out->font_family = 2;
+                else if (strcmp(val, "doto") == 0 || strcmp(val, "pixel") == 0) out->font_family = 3;
             } else if (strcmp(key, "font_upscale") == 0) {
                 char* end = nullptr;
                 double f = strtod(val, &end);
@@ -195,29 +200,12 @@ static void parse_bindable_field(JsonVariant v, char* out, size_t out_len, const
     strlcpy(out, default_str, out_len);
 }
 
-// Parse a typed action object: { "type": "screen", "target": "pad_1" }
-// Also supports legacy flat key fallback (old "action_screen" string → type=screen).
-static void parse_action(JsonVariant v, ButtonAction* act, const char* legacy_screen_key, JsonObject obj) {
+// Parse a typed action object, with legacy flat key fallback for old pad configs.
+static void parse_pad_action(JsonVariant v, ButtonAction* act, const char* legacy_screen_key, JsonObject obj) {
     memset(act, 0, sizeof(ButtonAction));
 
     if (v.is<JsonObject>()) {
-        JsonObject a = v.as<JsonObject>();
-        strlcpy(act->type, a["type"] | "", CONFIG_ACTION_TYPE_MAX_LEN);
-        strlcpy(act->screen_id, a["target"] | "", CONFIG_SCREEN_ID_MAX_LEN);
-        strlcpy(act->mqtt_topic, a["topic"] | "", CONFIG_MQTT_TOPIC_MAX_LEN);
-        strlcpy(act->mqtt_payload, a["payload"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
-        strlcpy(act->key_sequence, a["sequence"] | "", CONFIG_KEY_SEQ_MAX_LEN);
-        strlcpy(act->beep_pattern, a["beep_pattern"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
-        act->beep_volume = (uint8_t)(a["beep_volume"] | 0);
-        strlcpy(act->volume_mode, a["volume_mode"] | "", CONFIG_VOLUME_MODE_MAX_LEN);
-        act->volume_value = (uint8_t)(a["volume_value"] | 0);
-        // Timer: "timer_command" from web → reuse mqtt_payload for storage
-        if (strcmp(act->type, ACTION_TYPE_TIMER) == 0 && a.containsKey("timer_command")) {
-            strlcpy(act->mqtt_payload, a["timer_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
-        }
-        act->timer_countdown = (uint32_t)(a["timer_countdown"] | 0);
-        strlcpy(act->timer_expire_beep, a["timer_expire_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
-        act->timer_expire_volume = (uint8_t)(a["timer_expire_volume"] | 0);
+        action_parse(v.as<JsonObject>(), *act);
         return;
     }
 
@@ -291,13 +279,13 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         if (v.is<JsonArray>()) {
             JsonArray arr = v.as<JsonArray>();
             for (size_t i = 0; i < arr.size() && btn->action_count < MAX_BUTTON_ACTIONS; i++) {
-                parse_action(arr[i], &btn->actions[btn->action_count], nullptr, obj);
+                parse_pad_action(arr[i], &btn->actions[btn->action_count], nullptr, obj);
                 if (btn->actions[btn->action_count].type[0]) btn->action_count++;
             }
         } else {
             // Legacy: try singular "action" key (old single-object format)
             JsonVariant legacy = v.isNull() ? obj["action"].as<JsonVariant>() : v;
-            parse_action(legacy, &btn->actions[0], "action_screen", obj);
+            parse_pad_action(legacy, &btn->actions[0], "action_screen", obj);
             if (btn->actions[0].type[0]) btn->action_count = 1;
         }
     }
@@ -306,20 +294,16 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         if (v.is<JsonArray>()) {
             JsonArray arr = v.as<JsonArray>();
             for (size_t i = 0; i < arr.size() && btn->lp_action_count < MAX_BUTTON_ACTIONS; i++) {
-                parse_action(arr[i], &btn->lp_actions[btn->lp_action_count], nullptr, obj);
+                parse_pad_action(arr[i], &btn->lp_actions[btn->lp_action_count], nullptr, obj);
                 if (btn->lp_actions[btn->lp_action_count].type[0]) btn->lp_action_count++;
             }
         } else {
             // Legacy: try singular "lp_action" key (old single-object format)
             JsonVariant legacy = v.isNull() ? obj["lp_action"].as<JsonVariant>() : v;
-            parse_action(legacy, &btn->lp_actions[0], "lp_action_screen", obj);
+            parse_pad_action(legacy, &btn->lp_actions[0], "lp_action_screen", obj);
             if (btn->lp_actions[0].type[0]) btn->lp_action_count = 1;
         }
     }
-
-    // Audio feedback overrides: button JSON → empty (device default in DeviceConfig)
-    strlcpy(btn->tap_beep, obj["tap_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
-    strlcpy(btn->lp_beep, obj["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
 
     // Background image fields
     strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);

@@ -1,0 +1,32 @@
+                <!-- Table Settings (conditional, shown only for table widget type) -->
+                <details class="editor-group" id="pad-edit-table-section" style="display:none;">
+                    <summary>Table Settings</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-table-data-binding">Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-table-data-binding" maxlength="191" placeholder="e.g. [health:table] or [health:extended_table]">
+                                
+                            </div>
+                            <small>Binding must resolve to a table schema. Use an exact single-token expression such as <code>[health:table]</code> or <code>[health:extended_table]</code> (no prefix/suffix text and no format parameter).</small>
+                        </div>
+
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-table-style">Font Style Override</label>
+                                <div class="label-style-wrap">
+                                    <input type="text" id="pad-edit-table-style" class="label-style-input" maxlength="63" placeholder="e.g. font_size:14 or font_family:bebas">
+                                    <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                                </div>
+                                <small>Label style DSL. Empty = auto (matches button label size).</small>
+                            </div>
+                            <div class="form-group" style="flex:0 0 80px;">
+                                <label for="pad-edit-table-scrollable">Scroll</label>
+                                <select id="pad-edit-table-scrollable">
+                                    <option value="true">On</option>
+                                    <option value="false">Off</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </details>

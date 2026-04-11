@@ -100,9 +100,24 @@ The Audio section controls device volume and optional touch-feedback beep patter
 
 **Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
 
-Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence is a beep action, the cue is suppressed to avoid a double-beep. Individual buttons can override or suppress the device-level pattern in the button editor's Audio Feedback section (enter `none` to silence a specific button). Swipe gestures also use the device-level tap beep.
+Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Play Beep or Play Sound action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
+
+#### Sound Files
+
+*Shown only on boards with sound player support (defaults to boards with audio hardware).*
+
+Upload MP3 files to play as button actions or via MQTT. Files are stored on the device's LittleFS filesystem.
+
+| Element | Description |
+|---------|-------------|
+| **Sound list** | Shows all uploaded sounds with Play and Delete buttons |
+| **Name** | Identifier for the sound (letters, numbers, hyphens, underscores). Auto-populated from the selected filename |
+| **MP3 File** | File picker for `.mp3` files (max 512 KB per file). The server validates the MP3 header on upload |
+| **Upload** | Uploads the file to the device |
+
+Once uploaded, sounds appear in the "Play Sound" action type dropdown in the button editor, swipe actions, and boot actions.
 
 #### BLE Signals
 
@@ -158,6 +173,32 @@ Protects your LCD from burn-in by turning off the backlight after a period of in
 | **Wake on touch** | Wake the display by touching the screen |
 | **Wake on MQTT Binding** | Binding expression that keeps the screen awake while it resolves to ON (e.g. `[mqtt:devices/node/presence/state]`) |
 
+### Swipe Actions
+
+*Shown only on boards with a display.*
+
+Configure what happens when you swipe in each direction. Swipe gestures work on all screens and use the same action system as buttons (screen navigation, MQTT publish, BLE key sequence, beep, sound, etc.).
+
+Each of the four directions (left, right, up, down) can have one action. By default, swipe right navigates back.
+
+### Boot Actions
+
+*Shown only on boards with a display.*
+
+Configure up to 3 sequential actions to run automatically when the device boots — for example, play a startup sound, publish an MQTT message, or navigate to a specific pad. Boot actions use the same action editor as buttons and swipe gestures.
+
+Actions are dispatched once after the first screen is shown during boot. Changes take effect on next reboot.
+
+### Timers
+
+*Shown only on boards with a display.*
+
+Configure up to 3 independent on-device timers. Each timer can run in **Count Up** (stopwatch) or **Countdown** mode. For countdown timers, set the starting duration in seconds and configure **expire actions** — up to 3 actions that execute when the countdown reaches zero.
+
+Expire actions use the same action editor as buttons, so you can play a sound, send an MQTT message, navigate to a screen, play a beep pattern, or any combination. This replaces the previous beep-only expiry with full action parity.
+
+Timer configuration is applied at boot and updated immediately when saved. Button actions on pads only control timers at runtime (toggle, start, stop, pause, adjust). Use `[timer:N]` bindings on pad button labels to display timer values.
+
 ---
 
 ## Pads Page
@@ -172,11 +213,13 @@ The **Button Defaults** section (collapsible, at the bottom of the Pads page) le
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 
+The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
+
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 
-For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines), label styling, dynamic colors, pad bindings (named data sources), and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
+For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines, tables), label styling, dynamic colors, pad bindings (named data sources), and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
 
-All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, and expression syntax are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
+All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, expression syntax, and known health/timer keys (including `table` and `extended_table`) are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
 
 ---
 
@@ -272,5 +315,5 @@ After a reboot, the portal shows an automatic reconnection dialog. If it can't r
 - **Back up your config**: Use **Export Device Config** regularly — it saves everything into a single JSON file
 - **Clone devices**: Export from one device, import on another to duplicate your setup
 - **Copy/paste buttons**: The button editor has Copy and Paste buttons to quickly duplicate button settings across cells. Both keep the editor open so you can keep working, and column/row spans are preserved when space allows
-- **Binding templates**: Mix static text with live data — e.g., `Solar: [mqtt:home/solar;power;%.0f W]` shows "Solar: 3500 W"
+- **Binding templates**: Mix static text with live data — e.g., `Solar: [mqtt:home/solar;power;%.0f W]` shows "Solar: 3500 W". For Table widget data, use exact single-token structured bindings such as `[health:table]`.
 - **Security**: Enable HTTP Basic Auth on devices accessible from outside your home network

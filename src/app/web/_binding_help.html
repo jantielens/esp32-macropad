@@ -289,6 +289,8 @@
                     <div><dt>rssi</dt><dd>Signal strength in dBm (integer)</dd></div>
                     <div><dt>ip</dt><dd>Device IP address</dd></div>
                     <div><dt>hostname</dt><dd>mDNS hostname</dd></div>
+                    <div><dt>table</dt><dd>Structured table payload for Table widget (standard schema)</dd></div>
+                    <div><dt>extended_table</dt><dd>Structured table payload for Table widget (extended schema)</dd></div>
                 </dl>
 
                 <p class="binding-docs-note" style="margin-bottom:4px"><strong>BLE</strong> <small>(ESP32-P4 only)</small></p>
@@ -343,6 +345,14 @@
                         </div>
                         <pre class="binding-example-code"><code>[health:ble_status]</code></pre>
                         <p>Compact user-facing BLE state.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Table payload</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[health:table]</code></pre>
+                        <p>Use as an exact single-token data binding in the Table widget.</p>
                     </article>
                     <article class="binding-example">
                         <div class="binding-example-head">
@@ -536,6 +546,7 @@
                     </div>
                 </div>
                 <p class="binding-docs-note binding-docs-note-strong">Do not include a format parameter in widget data bindings. Formatting turns the value into display text and breaks numeric parsing.</p>
+                <p class="binding-docs-note">Table widget exception: use an exact single-token binding that resolves to a structured table payload, such as <code>[health:table]</code> or <code>[health:extended_table]</code>. Do not wrap with static text.</p>
                 <div class="binding-example-grid">
                     <article class="binding-example">
                         <div class="binding-example-head">
@@ -560,6 +571,14 @@
                         </div>
                         <pre class="binding-example-code"><code>[expr:[mqtt:solar;w] - [mqtt:grid;w]]</code></pre>
                         <p>Expressions are valid as long as they still resolve to a number.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Table widget payload</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[health:extended_table]</code></pre>
+                        <p>For Table widget data binding fields only. Must remain an exact single token.</p>
                     </article>
                 </div>
             </section>

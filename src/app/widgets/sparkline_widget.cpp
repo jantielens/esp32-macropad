@@ -985,6 +985,6 @@ static bool sparkline_get_stream_params(const WidgetConfig* wcfg,
     return true;
 }
 
-REGISTER_WIDGET(sparkline, sparkline_get_stream_params);
+REGISTER_WIDGET(sparkline, sparkline_get_stream_params, false);
 
 #endif // HAS_DISPLAY

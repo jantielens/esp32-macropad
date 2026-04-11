@@ -1,6 +1,6 @@
 # Pad Editor Guide
 
-The pad editor is the heart of ESP32 Macropad — it turns your touch screen into a fully custom dashboard, remote control, or status panel. Each device supports up to **8 independent pads**, each with its own grid of buttons that can display live data, control smart home devices, and react to real-time conditions.
+The pad editor is the heart of ESP32 Macropad — it turns your touch screen into a fully custom dashboard, remote control, or status panel. Each device supports up to **16 independent pads**, each with its own grid of buttons that can display live data, control smart home devices, and react to real-time conditions.
 
 You'll find the pad editor on the **Pads** page of the web portal (Full mode only). If you haven't connected your device to WiFi yet, complete the [first-time setup](first-time-setup.md) first.
 
@@ -35,7 +35,7 @@ The **Button Defaults** section (collapsible, at the bottom of the Pads page) le
 | **Border color** | Default button outline color |
 | **Border width** | Default border thickness (px) |
 | **Corner radius** | Default button corner rounding (px) |
-| **Label top/center/bottom style** | Default label style DSL (e.g., `font:24;align:left`) |
+| **Label top/center/bottom style** | Default label style DSL (e.g., `font_size:24;align:left`) |
 
 The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius).
 
@@ -113,7 +113,8 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 | Property | Values | What it does |
 |----------|--------|-------------|
-| `font` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
+| `font_size` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
+| `font_family` | `dseg7` / `segment`, `bebas`, `doto` / `pixel` | Use an alternate display font (see below) |
 | `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Scale the current font size at runtime for hero text |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
@@ -124,20 +125,43 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 Combine them with semicolons:
 
 ``` 
-font:48;align:left;mode:dot
+font_size:48;align:left;mode:dot
 ```
 
 This renders a hero-sized left-aligned label that shows "..." when the text is too long.
 
 A few more examples:
 
-- `font:14;color:#FF0` — small yellow text
-- `font:36;font_upscale:1.4` — extra-large hero text (combined scale)
+- `font_size:14;color:#FF0` — small yellow text
+- `font_size:36;font_upscale:1.4` — extra-large hero text (combined scale)
+- `font_family:dseg7;font_size:48` — 7-segment LCD style for sensor readings
+- `font_family:bebas;font_size:48` — bold condensed headline
+- `font_family:doto` — dot-matrix / pixel style
 - `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
-- `font:24;mode:wrap` — medium text that wraps to multiple lines
+- `font_size:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
 
 > Without style overrides, font size is chosen automatically based on the grid dimensions and display resolution. The default alignment is center, and overflow is clipped.
+
+#### Font Families
+
+Three additional font families are available alongside the default Montserrat:
+
+| Family | DSL value | Aliases | Style | Available sizes |
+|--------|-----------|---------|-------|----------------|
+| DSEG7 Classic Bold | `dseg7` | `segment` | 7-segment LCD display | 12, 14, 18, 24, 32, 36, 48 |
+| Bebas Neue | `bebas` | — | Bold condensed display | 12, 14, 18, 24, 32, 36, 48 |
+| Doto | `doto` | `pixel` | Dot-matrix / pixel | 12, 14, 18, 24, 32, 36, 48 |
+
+All font families share the same set of sizes as the built-in Montserrat font. You can combine `font_family` with an explicit `font_size`:
+
+```
+font_family:dseg7;font_size:48
+```
+
+This is ideal for hero values like temperature readings, power measurements, or countdown timers where a specialized display font adds visual impact.
+
+> **Note**: Custom fonts include digits 0–9, uppercase A–Z, lowercase a–z, and common symbols (`. , : ; - + / % °`). Characters outside this set fall back to Montserrat.
 
 ### Icons
 
@@ -199,24 +223,38 @@ This disables a door-lock button when the alarm is armed.
 
 Spanned buttons automatically claim the grid cells they cover. Other buttons in those cells will be hidden behind the spanning button.
 
-### Background Images
+### Background Images and Camera Feeds
 
-Any button can display an image fetched from a URL, rendered as the button background behind labels and icons.
+Any button can display an image or live camera stream fetched from a URL, rendered as the button background behind labels and icons.
 
 | Setting | Description |
 |---------|-------------|
-| **Image URL** | HTTP or HTTPS URL to a JPEG or PNG image |
-| **Auth User / Password** | HTTP Basic Auth credentials for protected images |
-| **Refresh Interval** | How often to re-fetch in milliseconds. `0` = fetch once and keep |
+| **Image or Stream URL** | HTTP or HTTPS URL to a JPEG, PNG, or MJPEG stream (`multipart/x-mixed-replace`) |
+| **Auth User / Password** | HTTP Basic Auth credentials for protected sources |
+| **Refresh Interval** | How often to re-fetch in milliseconds. `0` = fetch once (or stream continuously for MJPEG) |
 | **Letterbox** | When enabled, the image fits inside the button with black bars. When off, the image covers the full button area (cropping if needed) |
+
+**MJPEG streaming (recommended for cameras):**
+
+When the URL serves a `multipart/x-mixed-replace` MJPEG stream, the device opens a single persistent TCP connection and reads frames as they arrive — no repeated TCP setup or per-frame server-side capture delay. Set **Refresh Interval to `0`** for continuous streaming.
+
+Typical sources:
+- **go2rtc** (built into Home Assistant): `http://homeassistant.local:1984/api/stream.mjpeg?src=camera_name`
+- **Frigate**: `http://frigate.local:5000/api/front_door/latest.jpg` (snapshot) or check the Frigate MJPEG endpoint docs
+- **VLC / ffmpeg relay**: any `multipart/x-mixed-replace` HTTP server wrapping an RTSP stream
+
+**Snapshot mode (JPEG/PNG):**
+
+For static images or cameras that only expose a snapshot endpoint, set the URL to the JPEG URL and configure a **Refresh Interval** (e.g. `5000` for 5 s polling).
 
 **Common uses:**
 
-- **Security cameras**: Set the URL to your camera's snapshot endpoint, add credentials, and set a refresh interval of 5000–10000 ms for a near-live view.
-- **Weather maps**: Fetch a radar image once per minute (interval: 60000).
+- **Security cameras (MJPEG)**: Point at a go2rtc or Frigate MJPEG stream, set interval to `0`, get 8–15 fps live view.
+- **Security cameras (snapshot)**: Set the URL to the camera's snapshot endpoint, add credentials, set interval to `5000`–`10000` ms.
+- **Weather maps**: Fetch a radar image once per minute (interval: `60000`).
 - **Album art**: Use a Home Assistant media player's entity picture URL.
 
-> Images are decoded in a background task and scaled to the button's pixel dimensions using bilinear filtering. Keep image resolution reasonable — the device fetches, decodes, and scales in PSRAM. A few camera buttons at 480×320 work fine; avoid huge 4K images.
+> Images and streams are decoded in a background task and scaled to the button's pixel dimensions. On ESP32-P4, hardware JPEG decode and PPA scaling are used automatically for best performance. Keep source resolution reasonable — very large images increase PSRAM usage and decode time.
 
 ### Actions (Tap and Long-Press)
 
@@ -235,6 +273,7 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). ESP32-P4 boards only. |
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
 | **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
+| **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
 | **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
 
@@ -284,6 +323,8 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 The **Timer** action type controls one of 3 independent on-device timers. Timers support count-up (stopwatch) and countdown modes. Use `[timer:N]` bindings on labels to display the timer value (see [Timer Binding](#timer-binding)).
 
+Timer configuration (mode, countdown duration, expire actions) is set at the device level on the **Home** page under the **Timers** section. Button actions only control the timer at runtime.
+
 When you select a Timer action, a dropdown groups all actions by timer:
 
 | Action | Description |
@@ -295,44 +336,38 @@ When you select a Timer action, a dropdown groups all actions by timer:
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
 | **Lap** | Reset the timer and start fresh (useful for step timing) |
-| **Adjust Countdown Time** | Add or subtract seconds from the countdown preset (e.g., +15 or -10). Only affects countdown-mode timers |
-| **Set Countdown** | Set the countdown duration in seconds for this timer |
-| **Set Mode** | Switch between count-up and countdown mode |
+| **Adjust** | Add or subtract seconds from the countdown preset (e.g., +15 or -10). Only affects countdown-mode timers |
 
-**Additional timer settings** appear depending on the selected action:
+#### Device-Level Timer Configuration
 
-- **Default Countdown (seconds)** — when navigating to a pad, the first button referencing each timer automatically configures its countdown preset. Only applied when the timer is stopped at zero (fresh). This lets you pre-configure timers just by entering a pad.
-- **Expire Beep Pattern** — a beep pattern DSL string (e.g., `1000:300 200 1000:300`) that plays when a countdown timer reaches zero. Edge-triggered: fires exactly once per countdown cycle.
-- **Expire Beep Volume** — optional volume override (0 = device volume, 1–100).
+On the **Home** page, the **Timers** section lets you configure each timer:
+
+- **Mode** — Count Up (stopwatch) or Countdown
+- **Countdown Duration** — the starting value in seconds (countdown mode only)
+- **Expire Actions** — up to 3 actions to execute when a countdown timer reaches zero. These use the same action editor as button actions, so you can play a sound, send an MQTT message, navigate to a screen, play a beep, or any combination:
+
+| Example expire action | What happens |
+|----------------------|-------------|
+| Play Sound: `alarm` | Plays the "alarm" MP3 file |
+| MQTT Publish: `home/timer/expired` → `ON` | Sends an MQTT notification |
+| Navigate to screen: `pad_alarm` | Shows an alarm pad |
+| Play Beep: `1000:300 200 1000:300` | Plays a beep pattern |
 
 **Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
 
-> **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Set the default countdown to 240 seconds for a 4-minute pour.
+> **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Configure Timer 1 as a 240-second countdown on the Home page, with an expire action that plays an alarm sound.
 
-### Audio Feedback
+### Audio Behavior
 
-*Shown only on boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
+*Applies only to boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
 
-The **Audio Feedback** section in the button editor lets you override the device-level beep patterns for individual buttons.
-
-| Field | Description |
-|-------|-------------|
-| **Tap Beep** | Beep pattern for this button's tap. Leave empty to use the device default (configured on the Home page). Enter `none` to silence this button. |
-| **Long-Press Beep** | Beep pattern for this button's long-press. Same override rules. |
-
-**Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz:ms). A bare number is a silent gap.
-
-| Pattern | Sound |
-|---------|-------|
-| `800:80` | Quick tap click |
-| `600:40 40 600:40` | Double chirp |
-| `1000:30 30 1200:30` | Rising two-tone |
+Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Play Beep** or **Play Sound** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
 
 **Behavior notes:**
 - Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
-- If any action in the sequence is a **Play Beep** action, the audio cue is automatically suppressed to avoid a double-beep.
+- If any action in the sequence is a **Play Beep** or **Play Sound** action, the device-level feedback beep is automatically suppressed.
 - When multiple actions are configured and one of them navigates to a different screen, any subsequent actions in the sequence still execute safely. The last navigation wins (the user sees the final target screen).
-- Swipe gestures use the device-level tap beep (no per-swipe overrides).
+- Swipe gestures use the device-level tap beep with the same suppression logic.
 
 ---
 
@@ -496,6 +531,26 @@ Labels, icons, and colors still work alongside the widget. A typical sparkline b
 - Min: 0, Max: auto, Time window: 600 (10 minutes), Slots: 60
 - Top label: `Solar`, Bottom label: `[mqtt:home/solar/power;production;%.0fW]`
 
+### Table
+
+The table widget renders multi-column row data from a structured binding payload.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Data binding** | Must resolve to a table schema payload. Use an exact single-token binding expression such as `[health:table]` or `[health:extended_table]` |
+| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font_family:bebas`) |
+| **Scroll** | Enable or disable table scrolling |
+
+**Important:** Do not wrap the table binding in static text and do not add a format parameter. The table widget expects the resolved structured payload, not formatted text.
+
+**Examples:**
+
+- Standard table source: `[health:table]`
+- Extended table source: `[health:extended_table]`
+- Optional fallback during startup: `[health:table|{}]`
+
 ---
 
 ## Binding Templates
@@ -508,6 +563,8 @@ Binding templates are the engine behind live data on your buttons. They follow a
 
 Static text before, after, or between tokens is preserved. If a binding can't resolve (topic not received yet, invalid path), it shows `---` as a placeholder. Errors show `ERR:reason`.
 
+For bindings that return structured payloads (for example `health:table` and `health:extended_table`), use an exact single-token template (for example `[health:table]`) with no prefix/suffix text and no format parameter.
+
 ### Binding Validation
 
 The pad editor and Home page validate binding syntax **in real time** as you type. Any field that accepts a binding expression (labels, colors, data bindings, widget parameters, MQTT topics, wake binding, etc.) is checked automatically.
@@ -517,7 +574,7 @@ The pad editor and Home page validate binding syntax **in real time** as you typ
 - **Bracket balance** — unclosed `[` or extra `]` characters
 - **Scheme names** — unknown schemes are flagged, with a "did you mean?" suggestion for typos (e.g., `mqt` → `mqtt`)
 - **Parameter counts** — too many or too few semicolon-delimited parameters for the scheme
-- **Known keys** — health binding keys (e.g., `cpu`, `heap_free`, `rssi`) and timer parameters (e.g., `1`, `2_state`, `3_expired`) are checked against the valid set
+- **Known keys** — health binding keys (e.g., `cpu`, `heap_free`, `rssi`, `table`, `extended_table`) and timer parameters (e.g., `1`, `2_state`, `3_expired`) are checked against the valid set
 - **Format strings** — printf-style format specifiers like `%.0f`, `%d`, `%s` are validated for correct syntax
 - **Expression syntax** — `[expr:]` bodies are checked for operator/operand sequencing errors (e.g., `[expr:1 +]` or `[expr:* 2]`)
 - **Nested bindings** — bindings inside `[expr:]` are recursively validated (e.g., a typo in `[expr:[mqt:topic] * 2]` is caught)
@@ -575,7 +632,7 @@ This shows dark gray (`#333333`) during startup, then switches to red/green once
 | **path** | No | JSON key to extract. Use dot-notation for nested objects (`data.temp`). Omit or use `.` for raw payload |
 | **format** | No | Printf format string for the value |
 
-The device automatically subscribes to every topic it discovers across all 8 pads. Each unique topic is subscribed once, even if used by dozens of buttons.
+The device automatically subscribes to every topic it discovers across all 16 pads. Each unique topic is subscribed once, even if used by dozens of buttons.
 
 **Practical examples:**
 
@@ -649,6 +706,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `wifi_ssid` | Connected network name | `MyNetwork` |
 | `ip` | Device IP address | `192.168.1.42` |
 | `hostname` | Device hostname | `macropad` |
+| `table` | Structured table payload (standard schema) | `{"title":"Status","columns":[...],"rows":[...]}` |
+| `extended_table` | Structured table payload (extended schema) | `{"title":"Status","columns":[...],"rows":[...],"styles":...}` |
 | `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
 | `ble_name` | Current BLE keyboard name | `Kitchen Pad EEFF` |
 | `ble_state` | Detailed BLE state | `disabled`, `pairing`, `connecting`, `secured`, `claimed`, ... |
@@ -659,6 +718,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `ble_peer_id_addr` | Connected peer's identity address | `AA:BB:CC:DD:EE:FF` |
 
 Values are cached for up to 2 seconds to keep the CPU impact low.
+
+`table` and `extended_table` are intended for the Table widget data binding field. Use them as exact single-token templates (for example `[health:table]`) so the structured payload is passed through unchanged.
 
 **BLE signal values:**
 
@@ -1047,7 +1108,7 @@ After copying a button, **Fill Pad** applies it to every position in the grid (c
 
 ### Export / Import Device Config
 
-**Export Device Config** downloads everything — all 8 pads plus all device settings (network, MQTT, display, operating mode) — as a single JSON file. **Import Device Config** restores from that file, triggering a reboot.
+**Export Device Config** downloads everything — all 16 pads plus all device settings (network, MQTT, display, operating mode) — as a single JSON file. **Import Device Config** restores from that file, triggering a reboot.
 
 This is your backup and migration tool. Export regularly, and use import to clone a setup to a new device.
 
@@ -1115,10 +1176,10 @@ Amber when on, dark gray when off.
 
 **Pad settings**: 2 columns × 2 rows, name "Cameras", background `#000000`.
 
-| Button | Image URL | Auth | Refresh | Letterbox |
-|--------|-----------|------|---------|-----------|
-| Front Door | `http://192.168.1.50/snap.cgi` | admin / password | 5000 ms | Off (cover) |
-| Backyard | `http://192.168.1.51/snap.cgi` | admin / password | 5000 ms | Off (cover) |
+| Button | Image or Stream URL | Auth | Refresh | Letterbox |
+|--------|---------------------|------|---------|-----------|
+| Front Door | `http://ha.local:1984/api/stream.mjpeg?src=front_door` | — | 0 (stream) | Off (cover) |
+| Backyard | `http://ha.local:1984/api/stream.mjpeg?src=backyard` | — | 0 (stream) | Off (cover) |
 | Garage | `http://192.168.1.52/snap.cgi` | admin / password | 10000 ms | Off (cover) |
 | Driveway | `http://192.168.1.53/snap.cgi` | admin / password | 5000 ms | Off (cover) |
 
@@ -1203,4 +1264,4 @@ NTP hasn't synced yet. This usually resolves within a few seconds of connecting 
 Too many binding updates or high-resolution background images can increase CPU load. Reduce camera refresh intervals, simplify expressions, or use fewer background images.
 
 **Backing up your work**
-Use **More ▾ → Export Device Config** regularly. It captures *everything* — all 8 pads, network settings, display config, and button layouts — in a single JSON file. If you ever factory reset or set up a new device, **Import Device Config** restores it all.
+Use **More ▾ → Export Device Config** regularly. It captures *everything* — all 16 pads, network settings, display config, and button layouts — in a single JSON file. If you ever factory reset or set up a new device, **Import Device Config** restores it all.
