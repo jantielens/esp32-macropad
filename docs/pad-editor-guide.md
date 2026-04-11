@@ -223,24 +223,38 @@ This disables a door-lock button when the alarm is armed.
 
 Spanned buttons automatically claim the grid cells they cover. Other buttons in those cells will be hidden behind the spanning button.
 
-### Background Images
+### Background Images and Camera Feeds
 
-Any button can display an image fetched from a URL, rendered as the button background behind labels and icons.
+Any button can display an image or live camera stream fetched from a URL, rendered as the button background behind labels and icons.
 
 | Setting | Description |
 |---------|-------------|
-| **Image URL** | HTTP or HTTPS URL to a JPEG or PNG image |
-| **Auth User / Password** | HTTP Basic Auth credentials for protected images |
-| **Refresh Interval** | How often to re-fetch in milliseconds. `0` = fetch once and keep |
+| **Image or Stream URL** | HTTP or HTTPS URL to a JPEG, PNG, or MJPEG stream (`multipart/x-mixed-replace`) |
+| **Auth User / Password** | HTTP Basic Auth credentials for protected sources |
+| **Refresh Interval** | How often to re-fetch in milliseconds. `0` = fetch once (or stream continuously for MJPEG) |
 | **Letterbox** | When enabled, the image fits inside the button with black bars. When off, the image covers the full button area (cropping if needed) |
+
+**MJPEG streaming (recommended for cameras):**
+
+When the URL serves a `multipart/x-mixed-replace` MJPEG stream, the device opens a single persistent TCP connection and reads frames as they arrive — no repeated TCP setup or per-frame server-side capture delay. Set **Refresh Interval to `0`** for continuous streaming.
+
+Typical sources:
+- **go2rtc** (built into Home Assistant): `http://homeassistant.local:1984/api/stream.mjpeg?src=camera_name`
+- **Frigate**: `http://frigate.local:5000/api/front_door/latest.jpg` (snapshot) or check the Frigate MJPEG endpoint docs
+- **VLC / ffmpeg relay**: any `multipart/x-mixed-replace` HTTP server wrapping an RTSP stream
+
+**Snapshot mode (JPEG/PNG):**
+
+For static images or cameras that only expose a snapshot endpoint, set the URL to the JPEG URL and configure a **Refresh Interval** (e.g. `5000` for 5 s polling).
 
 **Common uses:**
 
-- **Security cameras**: Set the URL to your camera's snapshot endpoint, add credentials, and set a refresh interval of 5000–10000 ms for a near-live view.
-- **Weather maps**: Fetch a radar image once per minute (interval: 60000).
+- **Security cameras (MJPEG)**: Point at a go2rtc or Frigate MJPEG stream, set interval to `0`, get 8–15 fps live view.
+- **Security cameras (snapshot)**: Set the URL to the camera's snapshot endpoint, add credentials, set interval to `5000`–`10000` ms.
+- **Weather maps**: Fetch a radar image once per minute (interval: `60000`).
 - **Album art**: Use a Home Assistant media player's entity picture URL.
 
-> Images are decoded in a background task and scaled to the button's pixel dimensions using bilinear filtering. Keep image resolution reasonable — the device fetches, decodes, and scales in PSRAM. A few camera buttons at 480×320 work fine; avoid huge 4K images.
+> Images and streams are decoded in a background task and scaled to the button's pixel dimensions. On ESP32-P4, hardware JPEG decode and PPA scaling are used automatically for best performance. Keep source resolution reasonable — very large images increase PSRAM usage and decode time.
 
 ### Actions (Tap and Long-Press)
 
@@ -1162,10 +1176,10 @@ Amber when on, dark gray when off.
 
 **Pad settings**: 2 columns × 2 rows, name "Cameras", background `#000000`.
 
-| Button | Image URL | Auth | Refresh | Letterbox |
-|--------|-----------|------|---------|-----------|
-| Front Door | `http://192.168.1.50/snap.cgi` | admin / password | 5000 ms | Off (cover) |
-| Backyard | `http://192.168.1.51/snap.cgi` | admin / password | 5000 ms | Off (cover) |
+| Button | Image or Stream URL | Auth | Refresh | Letterbox |
+|--------|---------------------|------|---------|-----------|
+| Front Door | `http://ha.local:1984/api/stream.mjpeg?src=front_door` | — | 0 (stream) | Off (cover) |
+| Backyard | `http://ha.local:1984/api/stream.mjpeg?src=backyard` | — | 0 (stream) | Off (cover) |
 | Garage | `http://192.168.1.52/snap.cgi` | admin / password | 10000 ms | Off (cover) |
 | Driveway | `http://192.168.1.53/snap.cgi` | admin / password | 5000 ms | Off (cover) |
 

@@ -15,6 +15,7 @@
 #include <freertos/semphr.h>
 #include <new>
 #include <string.h>
+#include <strings.h>
 
 #define TAG "ImgFetch"
 
@@ -53,7 +54,7 @@ struct ImageSlot {
 // Module state
 // ============================================================================
 
-static ImageSlot g_slots[IMAGE_SLOT_MAX];
+static ImageSlot* g_slots = nullptr;
 static SemaphoreHandle_t g_mutex = nullptr;
 static TaskHandle_t g_task = nullptr;
 static RtosTaskPsramAlloc g_task_alloc;
@@ -75,13 +76,28 @@ struct SlotConn {
     HTTPClient        http;
     bool              active;     // connection has been set up
     bool              is_https;
+    // MJPEG streaming state (valid only when is_streaming == true)
+    bool              is_streaming;   // server returned multipart/x-mixed-replace
+    char              boundary[64];   // MIME boundary extracted from Content-Type
 };
 
-static SlotConn g_conn[IMAGE_SLOT_MAX];
+static SlotConn* g_conn = nullptr;
 
 static void conn_close(int slot) {
     SlotConn& c = g_conn[slot];
     if (!c.active) return;
+
+    // For MJPEG streams, stop the underlying WiFiClient BEFORE
+    // HTTPClient::end() runs.  Without this, end() → disconnect() →
+    // _client->clear() tries to drain all buffered stream data over the
+    // network, which is slow and pointless for a continuous MJPEG feed.
+    // Calling stop() first closes the socket and marks the handle invalid,
+    // so HTTPClient::end() sees connected()==false and skips the drain.
+    if (c.is_streaming) {
+        WiFiClient* client = c.is_https ? (WiFiClient*)c.tls : c.plain;
+        if (client) client->stop();
+    }
+
     c.http.end();
     // Let WiFi MAC finish processing TCP close frames before destroying
     // the client.  Without this delay the MAC DMA can access freed memory
@@ -91,6 +107,8 @@ static void conn_close(int slot) {
     delete c.plain;  c.plain = nullptr;
     c.active = false;
     c.is_https = false;
+    c.is_streaming = false;
+    c.boundary[0] = '\0';
 }
 
 // Ensure a persistent connection exists for a slot.  Creates the client
@@ -134,6 +152,11 @@ static bool conn_ensure(int slot, const char* url, const char* user, const char*
     // Calling it before begin() would use a dangling pointer from a
     // previous conn_close() cycle.
     c.http.setTimeout(HTTP_TIMEOUT_MS);
+
+    // Request Content-Type collection so mjpeg_read_frame can detect
+    // multipart/x-mixed-replace without an extra round-trip.
+    const char* headers[] = { "Content-Type", "content-type" };
+    c.http.collectHeaders(headers, 2);
 
     if (user && user[0] && pass && pass[0]) {
         c.http.setAuthorization(user, pass);
@@ -239,6 +262,202 @@ static bool conn_download(int slot, uint8_t** out_data, size_t* out_len) {
 }
 
 // ============================================================================
+// MJPEG streaming: open the connection once, read frames as they arrive.
+// ============================================================================
+//
+// Protocol: server sends a continuous HTTP response with
+//   Content-Type: multipart/x-mixed-replace; boundary=<token>
+// Each frame is preceded by a part header:
+//   --<boundary>\r\n
+//   Content-Type: image/jpeg\r\n
+//   Content-Length: <N>\r\n
+//   \r\n
+//   <N bytes of JPEG data>
+//
+// This function:
+//   1. On first call (c.is_streaming == false): sends the GET request,
+//      reads the HTTP response headers, extracts the boundary string, and
+//      leaves the socket open.
+//   2. On subsequent calls: reads the next frame from the already-open socket.
+//
+// Returns a PSRAM-allocated buffer (caller must heap_caps_free) or nullptr.
+// On any error the connection is fully closed so the next call reconnects.
+
+// Read one line from stream (up to max_len-1 chars), stripping \r\n.
+// Returns number of chars read, or -1 on timeout/disconnect.
+static int read_line(WiFiClient* stream, char* buf, size_t max_len, uint32_t timeout_ms) {
+    size_t pos = 0;
+    uint32_t start = (uint32_t)millis();
+    while (pos < max_len - 1) {
+        if ((uint32_t)millis() - start > timeout_ms) return -1;
+        if (!stream->available()) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+            continue;
+        }
+        char c = (char)stream->read();
+        if (c == '\n') break;
+        if (c != '\r') buf[pos++] = c;
+    }
+    buf[pos] = '\0';
+    return (int)pos;
+}
+
+// Read exactly `len` bytes from stream into buf.  Returns true on success.
+static bool read_exact(WiFiClient* stream, uint8_t* buf, size_t len, uint32_t timeout_ms) {
+    size_t received = 0;
+    uint32_t start = (uint32_t)millis();
+    while (received < len) {
+        if ((uint32_t)millis() - start > timeout_ms) return false;
+        size_t avail = stream->available();
+        if (avail == 0) { vTaskDelay(pdMS_TO_TICKS(1)); continue; }
+        size_t chunk = (avail < len - received) ? avail : (len - received);
+        int n = stream->readBytes(buf + received, chunk);
+        if (n <= 0) return false;
+        received += n;
+    }
+    return true;
+}
+
+static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
+    *out_data = nullptr;
+    *out_len  = 0;
+
+    SlotConn& c = g_conn[slot];
+    const uint32_t LINE_TIMEOUT_MS  = 5000;
+    const uint32_t FRAME_TIMEOUT_MS = 15000;
+
+    // ---- Step 1: First call — open connection and parse headers ----
+    if (!c.is_streaming) {
+        int code = c.http.GET();
+        if (code != 200) {
+            LOGW(TAG, "MJPEG slot %d: HTTP %d", slot, code);
+            c.http.end();
+            if (code < 0) conn_close(slot);
+            return false;
+        }
+
+        // Extract boundary from Content-Type header.
+        // e.g. "multipart/x-mixed-replace; boundary=frame"
+        String ct = c.http.header("Content-Type");
+        if (ct.isEmpty()) ct = c.http.header("content-type");
+
+        if (ct.indexOf("multipart") < 0) {
+            // Server returned a single image, not a stream.
+            // Read the body from this response directly to avoid a wasted
+            // second GET when the caller falls back to snapshot mode.
+            LOGD(TAG, "MJPEG slot %d: not multipart (%s) — snapshot", slot, ct.c_str());
+            int cl = c.http.getSize();
+            if (cl <= 0 || (size_t)cl > MAX_DOWNLOAD_SIZE) { c.http.end(); return false; }
+            uint8_t* buf = (uint8_t*)heap_caps_malloc((size_t)cl, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (!buf) buf = (uint8_t*)malloc((size_t)cl);
+            if (!buf) { c.http.end(); return false; }
+            WiFiClient* s = c.http.getStreamPtr();
+            size_t got = 0;
+            uint32_t t0 = (uint32_t)millis();
+            while (got < (size_t)cl && (uint32_t)millis() - t0 < MAX_DOWNLOAD_WALL_MS) {
+                size_t a = s->available();
+                if (a == 0) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }
+                size_t chunk = (a < (size_t)cl - got) ? a : ((size_t)cl - got);
+                int nr = s->readBytes(buf + got, chunk);
+                if (nr <= 0) break;
+                got += nr;
+            }
+            c.http.end();
+            if (got == 0) { heap_caps_free(buf); return false; }
+            *out_data = buf;
+            *out_len  = got;
+            return true;
+        }
+
+        // Parse boundary (after "boundary=")
+        int bi = ct.indexOf("boundary=");
+        if (bi < 0) {
+            LOGW(TAG, "MJPEG slot %d: no boundary in Content-Type", slot);
+            c.http.end();
+            conn_close(slot);
+            return false;
+        }
+        String bnd = ct.substring(bi + 9);
+        bnd.trim();
+        // Some cameras wrap boundary in quotes
+        if (bnd.startsWith("\"") && bnd.endsWith("\"")) bnd = bnd.substring(1, bnd.length() - 1);
+        strlcpy(c.boundary, bnd.c_str(), sizeof(c.boundary));
+        c.is_streaming = true;
+
+        LOGI(TAG, "MJPEG slot %d: stream open, boundary='%s'", slot, c.boundary);
+        // Intentional fall-through: read first frame from the now-open stream.
+    }
+
+    // ---- Step 2: Read next frame from open stream ----
+    WiFiClient* stream = c.http.getStreamPtr();
+    if (!stream || !stream->connected()) {
+        LOGW(TAG, "MJPEG slot %d: stream disconnected", slot);
+        conn_close(slot);
+        return false;
+    }
+
+    char line[256];
+    // Scan for the boundary line (--<boundary>)
+    uint32_t search_start = (uint32_t)millis();
+    bool found_boundary = false;
+    while ((uint32_t)millis() - search_start < FRAME_TIMEOUT_MS) {
+        int n = read_line(stream, line, sizeof(line), LINE_TIMEOUT_MS);
+        if (n < 0) {
+            LOGW(TAG, "MJPEG slot %d: timeout waiting for boundary", slot);
+            conn_close(slot);
+            return false;
+        }
+        // Match "--<boundary>" or "----<boundary>" (some cameras prefix with --)
+        if (strstr(line, c.boundary) != nullptr) {
+            found_boundary = true;
+            break;
+        }
+    }
+    if (!found_boundary) {
+        LOGW(TAG, "MJPEG slot %d: boundary not found within timeout", slot);
+        conn_close(slot);
+        return false;
+    }
+
+    // Read part headers until blank line, extracting Content-Length.
+    int content_length = -1;
+    for (int header_i = 0; header_i < 16; header_i++) {
+        int n = read_line(stream, line, sizeof(line), LINE_TIMEOUT_MS);
+        if (n < 0) { conn_close(slot); return false; }
+        if (n == 0) break;  // blank line = end of part headers
+        if (strncasecmp(line, "content-length:", 15) == 0) {
+            content_length = atoi(line + 15);
+        }
+    }
+
+    if (content_length <= 0 || (size_t)content_length > MAX_DOWNLOAD_SIZE) {
+        LOGW(TAG, "MJPEG slot %d: bad Content-Length %d", slot, content_length);
+        conn_close(slot);
+        return false;
+    }
+
+    // Allocate PSRAM buffer and read the JPEG body.
+    uint8_t* buf = (uint8_t*)heap_caps_malloc((size_t)content_length, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!buf) buf = (uint8_t*)malloc((size_t)content_length);
+    if (!buf) {
+        LOGE(TAG, "MJPEG slot %d: OOM %d bytes", slot, content_length);
+        conn_close(slot);
+        return false;
+    }
+
+    if (!read_exact(stream, buf, (size_t)content_length, FRAME_TIMEOUT_MS)) {
+        LOGW(TAG, "MJPEG slot %d: incomplete frame (%d bytes)", slot, content_length);
+        heap_caps_free(buf);
+        conn_close(slot);
+        return false;
+    }
+
+    *out_data = buf;
+    *out_len  = (size_t)content_length;
+    return true;
+}
+
+// ============================================================================
 // Fetch task — round-robin through slots
 // ============================================================================
 
@@ -266,6 +485,11 @@ static void fetch_task(void* param) {
             // Check if this slot is due for a fetch
             if (!s.fetched_once) {
                 // Never fetched — do it now
+                next = idx;
+                break;
+            }
+            // MJPEG streaming slots are always ready — the server controls frame rate.
+            if (g_conn[idx].is_streaming) {
                 next = idx;
                 break;
             }
@@ -314,14 +538,16 @@ static void fetch_task(void* param) {
         strlcpy(pass, slot.pass, sizeof(pass));
         xSemaphoreGive(g_mutex);
 
-        LOGD(TAG, "Fetch slot %d: %.60s (%ux%u)", next, url, tw, th);
-
         // --- Heap integrity checkpoint: BEFORE download ---
         if (!heap_caps_check_integrity_all(true)) {
             LOGE(TAG, "HEAP CORRUPT before download (slot %d)", next);
         }
 
-        // Persistent connection: ensure client exists, then download
+        // Persistent connection: ensure client exists, then fetch a frame.
+        // MJPEG streaming: if the server responds with multipart/x-mixed-replace,
+        // mjpeg_read_frame() keeps the socket open and reads one frame per call.
+        // Snapshot mode: conn_download() does a GET per frame (existing behaviour).
+        // The mode is auto-detected on the first GET and cached in SlotConn.
         uint8_t* raw_data = nullptr;
         size_t raw_len = 0;
 
@@ -333,8 +559,37 @@ static void fetch_task(void* param) {
             continue;
         }
 
-        if (!conn_ensure(next, url, user, pass) ||
-            !conn_download(next, &raw_data, &raw_len)) {
+        if (!conn_ensure(next, url, user, pass)) {
+            LOGW(TAG, "Slot %d connection failed", next);
+            xSemaphoreTake(g_mutex, portMAX_DELAY);
+            if (g_slots[next].active) {
+                g_slots[next].last_fetch_ms = (uint32_t)millis();
+                g_slots[next].fetched_once = true;
+            }
+            xSemaphoreGive(g_mutex);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+
+        bool got_frame;
+        if (g_conn[next].is_streaming) {
+            // Already in MJPEG streaming mode — read next frame from open socket.
+            got_frame = mjpeg_read_frame(next, &raw_data, &raw_len);
+        } else {
+            // First fetch (or after reconnect): try MJPEG first.
+            // mjpeg_read_frame auto-detects: if the server returns multipart,
+            // it sets is_streaming and returns the first frame.  If single-image,
+            // it reads the body from the same response and returns it directly
+            // (no wasted second GET).  Fall back to conn_download only on error.
+            got_frame = mjpeg_read_frame(next, &raw_data, &raw_len);
+            if (!got_frame && !g_conn[next].is_streaming) {
+                if (conn_ensure(next, url, user, pass)) {
+                    got_frame = conn_download(next, &raw_data, &raw_len);
+                }
+            }
+        }
+
+        if (!got_frame) {
             LOGW(TAG, "Slot %d download failed", next);
             // Mark last_fetch to avoid immediate retry
             xSemaphoreTake(g_mutex, portMAX_DELAY);
@@ -386,13 +641,10 @@ static void fetch_task(void* param) {
             s.back_buf = old_front;
             if (s.new_frame) {
                 s.frame_drops++;
-                LOGD(TAG, "Slot %d: frame drop (pending ack, total=%lu)", next, (unsigned long)s.frame_drops);
             }
             s.new_frame = true;
             s.last_fetch_ms = (uint32_t)millis();
             s.fetched_once = true;
-
-            LOGD(TAG, "Slot %d frame ready (%ux%u, %u bytes)", next, tw, th, (unsigned)pixel_size);
         } else {
             // Slot was cancelled or paused while we were decoding
             heap_caps_free(pixels);
@@ -405,8 +657,10 @@ static void fetch_task(void* param) {
         }
 
         // Brief yield after each successful decode so other tasks get CPU time.
-        // With HW decode the active work is <20 ms; a 5 ms yield is sufficient.
-        vTaskDelay(pdMS_TO_TICKS(5));
+        // In MJPEG streaming mode the server controls frame rate, so we yield
+        // just 1 ms to allow higher-priority tasks to run.
+        // In snapshot mode 5 ms gives other tasks CPU between HTTP round-trips.
+        vTaskDelay(pdMS_TO_TICKS(g_conn[next].is_streaming ? 1 : 5));
     }
 }
 
@@ -417,8 +671,20 @@ static void fetch_task(void* param) {
 void image_fetch_init() {
     if (g_task) return;  // Already initialized
 
+    // Allocate slot and connection arrays in PSRAM to save ~30 KB internal RAM.
+    g_slots = (ImageSlot*)heap_caps_calloc(IMAGE_SLOT_MAX, sizeof(ImageSlot), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!g_slots) { LOGE(TAG, "OOM: g_slots (%u bytes)", (unsigned)(IMAGE_SLOT_MAX * sizeof(ImageSlot))); return; }
+
+    void* conn_mem = heap_caps_calloc(IMAGE_SLOT_MAX, sizeof(SlotConn), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!conn_mem) {
+        LOGE(TAG, "OOM: g_conn (%u bytes)", (unsigned)(IMAGE_SLOT_MAX * sizeof(SlotConn)));
+        heap_caps_free(g_slots); g_slots = nullptr;
+        return;
+    }
+    g_conn = (SlotConn*)conn_mem;
+    for (int i = 0; i < IMAGE_SLOT_MAX; i++) new (&g_conn[i]) SlotConn();
+
     g_mutex = xSemaphoreCreateMutex();
-    memset(g_slots, 0, sizeof(g_slots));
 
     bool ok = rtos_create_task_psram_stack_pinned(
         fetch_task, "img_fetch",
@@ -478,7 +744,7 @@ image_slot_t image_fetch_request(
 }
 
 void image_fetch_cancel(image_slot_t slot) {
-    if (slot < 0 || slot >= IMAGE_SLOT_MAX) return;
+    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return;
     if (!g_mutex) return;
 
     xSemaphoreTake(g_mutex, portMAX_DELAY);
@@ -493,7 +759,7 @@ void image_fetch_cancel(image_slot_t slot) {
 }
 
 void image_fetch_cancel_all() {
-    if (!g_mutex) return;
+    if (!g_slots || !g_mutex) return;
     xSemaphoreTake(g_mutex, portMAX_DELAY);
     for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
         ImageSlot& s = g_slots[i];
@@ -508,7 +774,7 @@ void image_fetch_cancel_all() {
 }
 
 void image_fetch_pause_slot(image_slot_t slot) {
-    if (slot < 0 || slot >= IMAGE_SLOT_MAX) return;
+    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return;
     if (!g_mutex) return;
 
     xSemaphoreTake(g_mutex, portMAX_DELAY);
@@ -527,11 +793,12 @@ void image_fetch_pause_slot(image_slot_t slot) {
 }
 
 void image_fetch_resume_slot(image_slot_t slot) {
-    if (slot < 0 || slot >= IMAGE_SLOT_MAX) return;
+    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return;
     g_slots[slot].paused = false;
 }
 
 void image_fetch_pause() {
+    if (!g_slots) return;
     for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
         if (g_slots[i].active) g_slots[i].paused = true;
     }
@@ -539,6 +806,7 @@ void image_fetch_pause() {
 }
 
 void image_fetch_resume() {
+    if (!g_slots) return;
     for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
         if (g_slots[i].active) g_slots[i].paused = false;
     }
@@ -556,7 +824,7 @@ void image_fetch_unsuspend() {
 }
 
 bool image_fetch_has_new_frame(image_slot_t slot) {
-    if (slot < 0 || slot >= IMAGE_SLOT_MAX) return false;
+    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return false;
     return g_slots[slot].active && g_slots[slot].new_frame;
 }
 
@@ -572,7 +840,7 @@ bool image_fetch_has_new_frame(image_slot_t slot) {
 //  4. The caller (pollImageFrames) copies the data into its own owned_pixels
 //     buffer immediately, so it never holds the front_buf pointer long-term.
 const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16_t* out_h) {
-    if (slot < 0 || slot >= IMAGE_SLOT_MAX) return nullptr;
+    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return nullptr;
     const ImageSlot& s = g_slots[slot];
     if (!s.active || !s.front_buf) return nullptr;
     if (out_w) *out_w = s.target_w;
@@ -581,12 +849,12 @@ const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16
 }
 
 void image_fetch_ack_frame(image_slot_t slot) {
-    if (slot < 0 || slot >= IMAGE_SLOT_MAX) return;
+    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return;
     g_slots[slot].new_frame = false;
 }
 
 uint32_t image_fetch_get_drops(image_slot_t slot) {
-    if (slot < 0 || slot >= IMAGE_SLOT_MAX) return 0;
+    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return 0;
     return g_slots[slot].frame_drops;
 }
 

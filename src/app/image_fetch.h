@@ -26,7 +26,7 @@
 
 typedef int8_t image_slot_t;
 #define IMAGE_SLOT_INVALID (-1)
-#define IMAGE_SLOT_MAX     64
+#define IMAGE_SLOT_MAX     16
 
 // ---- PSRAM memory budget per slot ----
 // Each active slot holds 3 copies of the tile's RGB565 frame:

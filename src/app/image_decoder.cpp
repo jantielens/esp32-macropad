@@ -237,8 +237,6 @@ static bool ppa_cover_scale(
         LOGE(TAG, "PPA cover: SRM failed 0x%x", err);
         return false;
     }
-    LOGD(TAG, "PPA cover: %dx%d block(%dx%d@%d,%d) ×%.4f→%dx%d",
-         src_w, src_h, block_w, block_h, off_x, off_y, ppa_scale, target_w, target_h);
     return true;
 }
 
@@ -306,8 +304,6 @@ static bool ppa_letterbox_scale(
         LOGE(TAG, "PPA letterbox: SRM failed 0x%x", err);
         return false;
     }
-    LOGD(TAG, "PPA letterbox: %dx%d ×%.4f→%dx%d@(%d,%d) in %dx%d",
-         src_w, src_h, ppa_scale, out_block_w, out_block_h, off_x, off_y, target_w, target_h);
     return true;
 }
 
@@ -833,9 +829,6 @@ bool image_decode_to_rgb565(
         // Try hardware decode + PPA scale first; fall through to SW on failure.
         if (hw_decode_and_scale(data, len, target_w, target_h, scale_mode,
                                 out, out_aligned_size)) {
-            LOGD(TAG, "JPEG HW: %ux%u %s (HW+PPA)",
-                 target_w, target_h,
-                 scale_mode == IMAGE_SCALE_LETTERBOX ? "letterbox" : "cover");
             if (out_pixels) *out_pixels = out;
             if (out_size)   *out_size   = out_bytes;
             return true;
@@ -845,8 +838,6 @@ bool image_decode_to_rgb565(
         uint8_t* rgb888 = nullptr;
         int src_w = 0, src_h = 0;
         if (decode_jpeg(data, len, &rgb888, &src_w, &src_h)) {
-            const char* mode_str = (scale_mode == IMAGE_SCALE_LETTERBOX) ? "letterbox" : "cover";
-            LOGD(TAG, "JPEG SW %dx%d → %s %ux%u", src_w, src_h, mode_str, target_w, target_h);
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
                 ok = letterbox_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h);
             } else {
@@ -858,8 +849,6 @@ bool image_decode_to_rgb565(
         uint8_t* rgba = nullptr;
         int src_w = 0, src_h = 0;
         if (decode_png(data, len, &rgba, &src_w, &src_h)) {
-            const char* mode_str = (scale_mode == IMAGE_SCALE_LETTERBOX) ? "letterbox" : "cover";
-            LOGD(TAG, "PNG %dx%d → %s %ux%u", src_w, src_h, mode_str, target_w, target_h);
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
                 ok = letterbox_scale_rgba8888_to_565(rgba, src_w, src_h, out, target_w, target_h);
             } else {
