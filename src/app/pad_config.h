@@ -15,9 +15,16 @@
 // pad_config_load() parses only the fields needed for rendering.
 
 // MAX_PADS is defined in board_config.h (overridable per board, default 16)
+// MAX_PAD_BUTTONS, MAX_GRID_COLS, MAX_GRID_ROWS are overridable per board.
+#ifndef MAX_PAD_BUTTONS
 #define MAX_PAD_BUTTONS       64
+#endif
+#ifndef MAX_GRID_COLS
 #define MAX_GRID_COLS          8
+#endif
+#ifndef MAX_GRID_ROWS
 #define MAX_GRID_ROWS          8
+#endif
 
 #define CONFIG_LABEL_MAX_LEN          192
 #define CONFIG_ICON_ID_MAX_LEN         32

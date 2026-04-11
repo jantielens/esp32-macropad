@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 152
+Total flags: 155
 
 ### Features (HAS_*)
 
@@ -107,8 +107,11 @@ Total flags: 152
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
+- **MAX_GRID_COLS** default: `(no default)` — Maximum grid columns.
+- **MAX_GRID_ROWS** default: `(no default)` — Maximum grid rows.
 - **MAX_NON_PAD_SCREENS** default: `10` — Number of non-pad screens (info, test, fps, touch_test, + headroom).
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
+- **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
@@ -563,10 +566,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LVGL_TICK_PERIOD_MS**
   - src/app/board_config.h
+- **MAX_GRID_COLS**
+  - src/app/pad_config.h
+- **MAX_GRID_ROWS**
+  - src/app/pad_config.h
 - **MAX_NON_PAD_SCREENS**
   - src/app/board_config.h
 - **MAX_PADS**
   - src/app/board_config.h
+- **MAX_PAD_BUTTONS**
+  - src/app/pad_config.h
 - **POWERON_CONFIG_BURST_ENABLED**
   - src/app/board_config.h
   - src/app/power_manager.cpp

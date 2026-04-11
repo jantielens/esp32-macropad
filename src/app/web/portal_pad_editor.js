@@ -483,6 +483,7 @@ function padInit() {
                 // Show button defaults section
                 var btnDefSec = document.getElementById('btn-defaults-section');
                 if (btnDefSec) btnDefSec.style.display = 'block';
+                padPopulateGridDropdowns();
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
                 padFetchSoundList();
@@ -498,6 +499,29 @@ function padInit() {
         }
     };
     waitForInfo();
+}
+
+function padPopulateGridDropdowns() {
+    const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
+    const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
+    const colSel = document.getElementById('pad-cols');
+    const rowSel = document.getElementById('pad-rows');
+    if (colSel) {
+        colSel.innerHTML = '';
+        for (let i = 1; i <= maxCols; i++) {
+            const o = document.createElement('option');
+            o.value = i; o.textContent = i;
+            colSel.appendChild(o);
+        }
+    }
+    if (rowSel) {
+        rowSel.innerHTML = '';
+        for (let i = 1; i <= maxRows; i++) {
+            const o = document.createElement('option');
+            o.value = i; o.textContent = i;
+            rowSel.appendChild(o);
+        }
+    }
 }
 
 function padPopulatePadDropdown() {
@@ -677,8 +701,10 @@ async function padLoadPage(page) {
 
         const json = await resp.json();
         padState.rawJson = json;
-        padState.cols = json.cols || 3;
-        padState.rows = json.rows || 2;
+        const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
+        const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
+        padState.cols = Math.min(json.cols || 3, maxCols);
+        padState.rows = Math.min(json.rows || 2, maxRows);
 
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;

@@ -418,6 +418,9 @@ Returns comprehensive device information.
   "has_display": true,
   "has_audio": true,
   "has_sound_player": true,
+  "max_pads": 16,
+  "max_grid_cols": 8,
+  "max_grid_rows": 8,
   "display_coord_width": 480,
   "display_coord_height": 480,
   "available_screens": [

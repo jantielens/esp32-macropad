@@ -16,7 +16,7 @@ At the top of the pad editor, you configure the pad itself:
 
 - **Pad selection** — switch between Pad 1 through 16. Each pad is saved independently.
 - **Pad Name** — an optional label shown in Home Assistant and on-device. For example, "Solar", "Lights", or "Cameras".
-- **Columns / Rows** — the grid size, from 1×1 up to 8×8. A 3×2 grid gives you 6 large buttons; a 4×4 grid gives you 16 smaller ones.
+- **Columns / Rows** — the grid size. The maximum depends on the board (e.g. 5×5 on round displays, 8×8 on larger panels). A 3×2 grid gives you 6 large buttons; a 4×4 grid gives you 16 smaller ones.
 - **Wake Screen** — when the screensaver wakes up, which screen should appear? Leave empty to return to the last active screen, or pick a specific pad.
 - **Background** — the color behind the grid. Accepts a `#hex` color or a binding expression for dynamic backgrounds.
 

@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Gauge needle cutoff** — new `Needle Cutoff` parameter (0–99%) removes the inner portion of the gauge needle starting from the center point, preventing overlap with the center label or icon. Set in the pad editor under the gauge widget section. Default 0 preserves the existing full-length needle.
+- **Per-board grid limits** — `MAX_PAD_BUTTONS`, `MAX_GRID_COLS`, and `MAX_GRID_ROWS` are now overridable per board via `board_overrides.h`. The pad editor dynamically populates grid size dropdowns from the device's `/api/info` endpoint. The jc3636w518 (360×360 round display) is set to 5×5 max grid and 3 LRU cached pads, reducing peak PSRAM usage from ~5.3 MB to ~0.8 MB.
 
 ### Fixed
 
 - **Compile-time flags report for inheriting boards** — `compile_flags_report.py` now resolves relative `#include` directives in board override files, so boards that inherit from a parent (e.g. `jc4880p433-hx711` including `../jc4880p433/board_overrides.h`) correctly report inherited flags like `HAS_DISPLAY` and driver selectors. Previously these boards showed `(none)` for active features and `—` for driver selectors in build logs and the compile-time flags doc.
 - **P4 letterbox scaling black bars** — letterbox mode on ESP32-P4 boards produced unnecessary black bars on both axes because the PPA hardware scaler quantises to m/16 steps, undershooting the ideal scale on most aspect ratios. Replaced PPA with a CPU bilinear RGB565 scaler for letterbox mode while keeping the fast HW JPEG decoder. Cover mode continues to use PPA where quantisation is harmless.
+- **PadConfig OOM log flood** — when `buildTiles()` failed to allocate PadConfig or binding arrays, it returned without setting `tilesBuilt`, causing the LVGL task to retry every frame (~30 Hz) and flood the serial log. Now marks `tilesBuilt = true` on OOM so the error logs once per config generation change.
 
 ## [1.13.0] - 2026-04-11
 
