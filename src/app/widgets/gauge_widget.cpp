@@ -132,6 +132,7 @@ struct GaugeState {
     uint32_t  cached_marker_tick_color; // Marker tick color cache
     uint32_t  cached_marker_zone_color; // Marker zone color cache
     uint8_t   marker_ring_count;   // Number of rings with marker objects
+    uint32_t  last_update_ms;      // Timestamp of last update (rapid-change detection)
     bool      has_received_data;   // True after first value received (snap on first)
     int32_t   needle_cdeg;         // Current needle angle in centidegrees (for animation from-value)
 };
@@ -959,8 +960,15 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     if (!st->arc_bg) return;
 
-    // Determine if we should animate (skip on first data arrival)
-    bool animate = st->has_received_data && cfg->anim_ms > 0;
+    // Determine if we should animate.
+    // Skip on first data arrival and when values arrive faster than the
+    // animation duration (rapid restarts cause the ease-out curve to reset
+    // before visible progress, making arcs/needle appear stuck).
+    uint32_t now = lv_tick_get();
+    bool rapid_update = st->has_received_data &&
+                        (now - st->last_update_ms) < (uint32_t)cfg->anim_ms;
+    st->last_update_ms = now;
+    bool animate = st->has_received_data && cfg->anim_ms > 0 && !rapid_update;
     st->has_received_data = true;
 
     // Resolve bindable min/max once per update
