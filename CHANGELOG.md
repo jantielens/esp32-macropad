@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Gauge needle cutoff** — new `Needle Cutoff` parameter (0–99%) removes the inner portion of the gauge needle starting from the center point, preventing overlap with the center label or icon. Set in the pad editor under the gauge widget section. Default 0 preserves the existing full-length needle.
+
 ### Fixed
 
 - **Compile-time flags report for inheriting boards** — `compile_flags_report.py` now resolves relative `#include` directives in board override files, so boards that inherit from a parent (e.g. `jc4880p433-hx711` including `../jc4880p433/board_overrides.h`) correctly report inherited flags like `HAS_DISPLAY` and driver selectors. Previously these boards showed `(none)` for active features and `—` for driver selectors in build logs and the compile-time flags doc.

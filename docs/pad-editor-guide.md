@@ -427,6 +427,7 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
 | **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
 | **Needle Width** | Line width in pixels (0 = hidden, max 10) |
+| **Needle Cutoff** | Percentage of the needle length to remove from the center (0–99%). Use this to prevent the needle from overlapping a center label or icon. Default: 0 (full-length needle) |
 | **Tick Width** | Tick line width in pixels (1–5) |
 | **Arc Color** | Fill color for slot 1. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Arc Color 2** | Fill color for slot 2, or the negative half of Dual Binding Pair 1. Default: blue (`#2196F3`) |
