@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-04-11
+
 ### Added
 - **CI test job** — host-native unit and integration tests now run automatically on every PR in the GitHub Actions build workflow. Tests execute in parallel with firmware builds, and test failures block the PR summary comment. ArduinoJson headers are installed on-the-fly for tests that need them.
 - **Hardware JPEG decode + PPA scaling on ESP32-P4** — image fetch slots on ESP32-P4 boards now use the hardware JPEG decoder (`driver/jpeg_decode.h`) and PPA SRM scaler (`driver/ppa.h`) instead of software tjpgd + CPU bilinear interpolation. Decode time drops from ~50 ms to ~10 ms per frame. The PPA handles both cover and letterbox scale modes with 1/16-step precision. Output buffers are 64-byte cache-line aligned for PPA DMA. The hardware handles are lazy-initialised once and reused across frames. PNG images and all non-P4 boards continue to use the unmodified software path. Falls back transparently to software on any hardware failure. Gated by `CONFIG_IDF_TARGET_ESP32P4`.
