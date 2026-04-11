@@ -555,9 +555,10 @@ const char* brew_get_next_label() {
 
 void brew_hint_template(const char* template_name) {
     if (!template_name || !template_name[0]) return;
-    if (s_phase != BREW_IDLE) return;  // don't override an active brew
     const BrewTemplate* tpl = brew_template_find(template_name);
-    if (tpl) s_last_template = tpl;
+    if (!tpl) return;
+    if (s_phase != BREW_IDLE) brew_reset();  // reset any active/done brew
+    s_last_template = tpl;
 }
 
 // ============================================================================
