@@ -210,8 +210,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  |  | ? | ✅ |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  |  | ? | ✅ |
 | jc4880p433 | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  |  | ? | ✅ |
-| jc4880p433-hx711 |  |  | ✅ |  |  | ? |  | ? | ✅ |  |  | ✅ |  |  | ? |  |
-| jc4880p433-nau7802 |  |  | ✅ |  |  | ? |  | ? | ✅ |  |  |  |  | ✅ | ? |  |
+| jc4880p433-hx711 | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  | ✅ |  |  | ? | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ✅ | ? | ✅ |
 | jc1060p470c | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  |  | ? | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
@@ -225,8 +225,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-hx711 | — | — |
-| jc4880p433-nau7802 | — | — |
+| jc4880p433-hx711 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-nau7802 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
@@ -286,6 +286,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_DISPLAY**
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
+  - src/app/action_dispatch_scale.cpp
+  - src/app/action_dispatch_scale.h
   - src/app/action_parse.cpp
   - src/app/action_parse.h
   - src/app/app.ino

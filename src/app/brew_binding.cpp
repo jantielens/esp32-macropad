@@ -144,6 +144,118 @@ static bool lookup_value(const char* key, const char* fmt,
         strlcpy(out, dn, out_len);
         return true;
     }
+    // ---- stages_json — JSON array for indicators widget ----
+    if (strcmp(key, "stages_json") == 0) {
+        uint8_t count = brew_get_stage_count();
+        if (count == 0) return false;  // no template → fallback via pipe
+        BrewPhase phase = brew_get_phase();
+        uint8_t cur = brew_get_stage_index();
+        // Build wrapped JSON for table widget with per-cell text colors and no header.
+        // Active stage prefixed with "> ", others plain. Colors: green done, amber active, dim pending.
+        static const char k_prefix[] = "{\"show_header\":false,\"columns\":[{\"key\":\"s\",\"header\":\" \"}],\"rows\":[";
+        size_t pos = 0;
+        size_t plen = sizeof(k_prefix) - 1;
+        if (plen < out_len) { memcpy(out, k_prefix, plen); pos = plen; }
+        for (uint8_t i = 0; i < count && pos < out_len - 1; i++) {
+            const BrewStage* s = brew_get_stage(i);
+            if (!s) continue;
+            if (i > 0 && pos < out_len - 1) out[pos++] = ',';
+            const char* color;
+            bool is_active = false;
+            if (phase == BREW_DONE) {
+                color = "#4CAF50";
+            } else if (phase == BREW_ACTIVE) {
+                if (i < cur) {
+                    color = "#4CAF50";
+                } else if (i == cur) {
+                    color = "#FFB300";
+                    is_active = true;
+                } else {
+                    color = "#555555";
+                }
+            } else {
+                color = "#555555";
+            }
+            int n;
+            if (is_active) {
+                n = snprintf(out + pos, out_len - pos,
+                    "{\"s\":{\"text\":\"> %s\",\"color\":\"%s\"}}",
+                    s->name, color);
+            } else {
+                n = snprintf(out + pos, out_len - pos,
+                    "{\"s\":{\"text\":\"%s\",\"color\":\"%s\"}}",
+                    s->name, color);
+            }
+            if (n > 0) pos += (size_t)n;
+        }
+        if (pos < out_len - 1) { out[pos++] = ']'; out[pos++] = '}'; }
+        if (pos < out_len) out[pos] = '\0';
+        else if (out_len > 0) out[out_len - 1] = '\0';
+        return true;
+    }
+    // ---- summary_json — JSON array for table widget ----
+    if (strcmp(key, "summary_json") == 0) {
+        BrewPhase phase = brew_get_phase();
+        float dose  = brew_get_dose_weight();
+        float water = brew_get_water_weight();
+        char timer_buf[16];
+        brew_format_timer(nullptr, timer_buf, sizeof(timer_buf));
+        size_t pos = 0;
+        if (pos < out_len) out[pos++] = '[';
+        // Dose
+        {
+            char val[16];
+            if (dose > 0.0f) snprintf(val, sizeof(val), "%.1f", dose);
+            else strlcpy(val, "---", sizeof(val));
+            int n = snprintf(out + pos, out_len - pos,
+                "{\"label\":\"Dose\",\"value\":\"%s\",\"unit\":\"g\"}", val);
+            if (n > 0) pos += (size_t)n;
+        }
+        // Water
+        {
+            char val[16];
+            if (phase == BREW_ACTIVE || phase == BREW_DONE)
+                snprintf(val, sizeof(val), "%.1f", water);
+            else strlcpy(val, "---", sizeof(val));
+            int n = snprintf(out + pos, out_len - pos,
+                ",{\"label\":\"Water\",\"value\":\"%s\",\"unit\":\"g\"}", val);
+            if (n > 0) pos += (size_t)n;
+        }
+        // Ratio
+        {
+            char val[16];
+            if (dose > 0.0f && (phase == BREW_ACTIVE || phase == BREW_DONE))
+                snprintf(val, sizeof(val), "1:%.1f", water / dose);
+            else strlcpy(val, "---", sizeof(val));
+            int n = snprintf(out + pos, out_len - pos,
+                ",{\"label\":\"Ratio\",\"value\":\"%s\",\"unit\":\"\"}", val);
+            if (n > 0) pos += (size_t)n;
+        }
+        // Time
+        {
+            const char* val = (phase == BREW_ACTIVE || phase == BREW_DONE)
+                              ? timer_buf : "---";
+            int n = snprintf(out + pos, out_len - pos,
+                ",{\"label\":\"Time\",\"value\":\"%s\",\"unit\":\"\"}", val);
+            if (n > 0) pos += (size_t)n;
+        }
+        // Named captures
+        uint8_t cap_count = brew_get_capture_count();
+        for (uint8_t i = 0; i < cap_count; i++) {
+            const BrewCapture* c = brew_get_capture(i);
+            if (!c) continue;
+            char val[16];
+            snprintf(val, sizeof(val), "%.1f", c->value);
+            int n = snprintf(out + pos, out_len - pos,
+                ",{\"label\":\"%s\",\"value\":\"%s\",\"unit\":\"%s\"}",
+                c->label, val, c->unit);
+            if (n > 0) pos += (size_t)n;
+        }
+        if (pos < out_len) out[pos++] = ']';
+        if (pos < out_len) out[pos] = '\0';
+        else if (out_len > 0) out[out_len - 1] = '\0';
+        return true;
+    }
     // ---- template registry (indexed) ----
     if (strcmp(key, "template_count") == 0)
         return format_uint(fmt, "%u", brew_template_count(), out, out_len);

@@ -124,6 +124,53 @@ Per-stage flow rate guidance. All return numeric values (0 when no target is set
 | `stage_flow_current` | float | `%.1f` | Current flow rate in g/s (same as `flow_rate`, included for naming consistency) |
 | `stage_flow_pct` | float | `%.0f` | Flow accuracy as percentage: current ÷ target × 100. Under 100% = too slow, over 100% = too fast. Returns 0 when no target. |
 
+### Widget Data Bindings
+
+Pre-formatted JSON payloads for data-driven widgets. These bindings produce complete JSON arrays that can be used directly as widget `data_binding` values — no expression glue needed.
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `stages_json` | JSON object | Per-stage progress for table widget (wrapped format with no header). Each row has a single cell with colored text: green (#4CAF50) for done, amber (#FFB300) with `>` prefix for active, dim (#555555) for pending. Returns fallback (no output) when no template is loaded. |
+| `summary_json` | JSON array | Brew summary rows for table widget. Always-present rows: Dose, Water, Ratio, Time. Named captures from the template are appended automatically. Each element: `{"label", "value", "unit"}`. Values show `---` when not yet available. |
+
+#### `stages_json` Output
+
+During an active brew using the Rao V60 template (currently on stage 4 "Bloom"):
+
+```json
+{
+  "columns": [{"key": "s", "header": " "}],
+  "rows": [
+    {"s": {"text": "Place cup",  "color": "#4CAF50"}},
+    {"s": {"text": "Dose beans", "color": "#4CAF50"}},
+    {"s": {"text": "Prep",       "color": "#4CAF50"}},
+    {"s": {"text": "Arm pour",   "color": "#4CAF50"}},
+    {"s": {"text": "> Bloom",    "color": "#FFB300"}},
+    {"s": {"text": "Main pour",  "color": "#555555"}}
+  ]
+}
+```
+
+The table widget renders each row with colored text: green for completed stages, amber with `>` prefix for the active stage, and dim gray for pending stages. Uses per-cell text color which works on all boards including ESP32-P4.
+
+When the brew is done, all stages show green. When idle, all show dim gray. When no template is loaded, the binding returns nothing (use pipe fallback).
+
+#### `summary_json` Output
+
+During an active brew with dose captured and a named "Bloom Water" capture:
+
+```json
+[
+  {"label":"Dose",        "value":"16.0",  "unit":"g"},
+  {"label":"Water",       "value":"142.3", "unit":"g"},
+  {"label":"Ratio",       "value":"1:8.9", "unit":""},
+  {"label":"Time",        "value":"4:05",  "unit":""},
+  {"label":"Bloom Water", "value":"58.2",  "unit":"g"}
+]
+```
+
+When idle, values show `---`. Named captures appear only after the stage that defines them completes.
+
 ### Template Registry Bindings
 
 Indexed access to the template registry. Use these to build dynamic template picker pads that auto-populate from available templates.
@@ -320,6 +367,39 @@ Only show flow rate during an active brew:
 [expr:[brew:active]=="1"?[brew:flow_rate;%.1f]:"--.-"] g/s
 ```
 
+### Brew Stage Indicators
+
+Show a stage progress table with colored text using the table widget:
+
+```json
+{
+  "widget_type": "table",
+  "widget_data_binding": "[brew:stages_json]",
+  "widget_table_scrollable": true,
+  "widget_table_style": "font:12"
+}
+```
+
+Completed stages show green text, the active stage shows amber text with a `>` prefix, and pending stages are dimmed. Uses per-cell text color which works on all boards including ESP32-P4.
+
+### Brew Summary Table
+
+Show a live brew stats table with dose, water, ratio, time, and any named captures:
+
+```json
+{
+  "type": "table",
+  "data_binding": "[brew:summary_json]",
+  "columns": [
+    {"key": "label", "label": "", "width": 40},
+    {"key": "value", "label": "", "width": 35, "align": "right"},
+    {"key": "unit",  "label": "", "width": 25}
+  ]
+}
+```
+
+Rows appear automatically — Dose, Water, Ratio, and Time are always present, plus any named captures defined in the template.
+
 ---
 
 ## Quick Reference Card
@@ -336,7 +416,7 @@ Only show flow rate during an active brew:
 | `cal_weight` | `251.5` |
 | `status` | `idle` |
 
-### `[brew:]` — 23 bindings
+### `[brew:]` — 25 bindings
 
 | Key | Example Output |
 |-----|---------------|
@@ -363,3 +443,5 @@ Only show flow rate during an active brew:
 | `stage_flow_target` | `6.0` |
 | `stage_flow_current` | `2.5` |
 | `stage_flow_pct` | `42` |
+| `stages_json` | `{"columns":[...],"rows":[{"s":{"text":"> Bloom",...}},...]}` |
+| `summary_json` | `[{"label":"Dose","value":"16.0","unit":"g"},...]` |

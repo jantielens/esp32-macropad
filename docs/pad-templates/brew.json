@@ -1,0 +1,135 @@
+{
+  "layout": "grid",
+  "cols": 4,
+  "rows": 8,
+  "bg_color": "#000000",
+  "buttons": [
+    {
+      "col": 0, "row": 0, "col_span": 2, "row_span": 3,
+      "widget_type": "gauge",
+      "data_binding": "[brew:weight]",
+      "widget_min_value": "0",
+      "widget_max_value": "[brew:stage_weight_target]",
+      "widget_arc_degrees": 240,
+      "widget_start_angle": 150,
+      "widget_arc_color": "[expr:[brew:stage_weight_pct]>100?\"#F44336\":\"#4CAF50\"]",
+      "widget_show_needle": true,
+      "widget_needle_width": 2,
+      "widget_anim_ms": 200,
+      "label_top": "Weight",
+      "label_top_style": "font:14;color:#888888",
+      "label_center": "[brew:weight;%.1f]g",
+      "label_center_style": "font:24",
+      "label_bottom": "[brew:stage_weight_remaining;%.0f]g remaining",
+      "label_bottom_style": "font:12;color:#888888",
+      "bg_color": "#0a0a1e",
+      "border_width": "0",
+      "corner_radius": "12"
+    },
+    {
+      "col": 2, "row": 0, "col_span": 2, "row_span": 3,
+      "widget_type": "sparkline",
+      "data_binding": "[brew:flow_rate]",
+      "widget_min_val": "0",
+      "widget_max_val": "12",
+      "widget_window_secs": 120,
+      "widget_slot_count": 60,
+      "widget_line_color": "#2196F3",
+      "widget_line_width": 2,
+      "widget_current_dot_size": 5,
+      "widget_current_label": "[brew:flow_rate;%.1f] g/s",
+      "widget_marker_size_min": 4,
+      "widget_marker_size_max": 4,
+      "label_top": "Flow Rate",
+      "label_top_style": "font:14;color:#888888;align:left",
+      "bg_color": "#0a0a1e",
+      "border_width": "0",
+      "corner_radius": "12"
+    },
+    {
+      "col": 0, "row": 3, "col_span": 2, "row_span": 1,
+      "label_center": "[brew:timer]",
+      "label_center_style": "font_family:dseg7;font:36",
+      "label_top": "Timer",
+      "label_top_style": "font:12;color:#888888",
+      "bg_color": "#0a0a1e",
+      "corner_radius": "12"
+    },
+    {
+      "col": 2, "row": 3,
+      "label_center": "[brew:stage]",
+      "label_center_style": "font:18",
+      "label_top": "Stage",
+      "label_top_style": "font:12;color:#888888",
+      "bg_color": "#0a0a1e",
+      "corner_radius": "12"
+    },
+    {
+      "col": 3, "row": 3,
+      "label_center": "1:[brew:ratio;%.1f]",
+      "label_center_style": "font:18",
+      "label_top": "Ratio",
+      "label_top_style": "font:12;color:#888888",
+      "bg_color": "#0a0a1e",
+      "corner_radius": "12"
+    },
+    {
+      "col": 0, "row": 4, "col_span": 4, "row_span": 1,
+      "label_center": "[brew:instruction|Ready — select a template to begin]",
+      "label_center_style": "font:14;mode:scroll",
+      "bg_color": "#0D47A1",
+      "corner_radius": "8"
+    },
+    {
+      "col": 0, "row": 5, "col_span": 4, "row_span": 2,
+      "widget_type": "table",
+      "widget_data_binding": "[brew:stages_json]",
+      "widget_table_scrollable": true,
+      "widget_table_style": "font:12",
+      "bg_color": "#0a0a1e",
+      "border_width": "0",
+      "corner_radius": "12"
+    },
+    {
+      "col": 0, "row": 7,
+      "label_center": "[brew:dose;%.1f]g",
+      "label_center_style": "font:18",
+      "label_top": "Dose",
+      "label_top_style": "font:12;color:#888888",
+      "bg_color": "#0a0a1e",
+      "corner_radius": "12"
+    },
+    {
+      "col": 1, "row": 7,
+      "label_center": "[brew:water;%.1f]g",
+      "label_center_style": "font:18",
+      "label_top": "Water",
+      "label_top_style": "font:12;color:#888888",
+      "bg_color": "#0a0a1e",
+      "corner_radius": "12"
+    },
+    {
+      "col": 2, "row": 7,
+      "label_center": "[brew:next_label]",
+      "label_center_style": "font:18",
+      "bg_color": "[expr:[brew:active]?\"#2E7D32\":\"#1565C0\"]",
+      "fg_color": "#FFFFFF",
+      "corner_radius": "12",
+      "actions": [
+        { "type": "brew", "payload": "advance" }
+      ]
+    },
+    {
+      "col": 3, "row": 7,
+      "label_center": "Stop",
+      "label_center_style": "font:18",
+      "bg_color": "#B71C1C",
+      "fg_color": "#FFFFFF",
+      "corner_radius": "12",
+      "btn_state": "[expr:[brew:active]?\"enabled\":\"disabled\"]",
+      "actions": [
+        { "type": "brew", "payload": "stop" }
+      ]
+    }
+  ]
+}

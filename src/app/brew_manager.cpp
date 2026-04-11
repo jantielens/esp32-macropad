@@ -521,6 +521,21 @@ const BrewCapture* brew_get_capture(uint8_t index) {
     return &s_captures[index];
 }
 
+uint8_t brew_get_stage_count() {
+    const BrewTemplate* t = s_template ? s_template : s_last_template;
+    return t ? t->stage_count : 0;
+}
+
+uint8_t brew_get_stage_index() {
+    return (s_phase == BREW_ACTIVE) ? s_stage_index : 0;
+}
+
+const BrewStage* brew_get_stage(uint8_t index) {
+    const BrewTemplate* t = s_template ? s_template : s_last_template;
+    if (!t || index >= t->stage_count) return nullptr;
+    return &t->stages[index];
+}
+
 const char* brew_get_instruction() {
     if (s_phase != BREW_ACTIVE) return "";
     const BrewStage* stage = current_stage();

@@ -685,6 +685,128 @@ TEST(binding_template_count_format) {
     ASSERT_STREQ(out, "04");
 }
 
+// ---------------------------------------------------------------------------
+// stages_json
+// ---------------------------------------------------------------------------
+
+TEST(binding_stages_json_idle) {
+    ensure_init();
+    brew_reset();
+    brew_hint_template("bind_test");
+    char out[1024];
+    ASSERT_TRUE(resolve_brew("stages_json", out, sizeof(out)));
+    // All stages pending: dim color, plain text (no marker)
+    ASSERT_TRUE(strstr(out, "\"color\":\"#555555\"") != nullptr);
+    ASSERT_TRUE(strstr(out, "\"color\":\"#4CAF50\"") == nullptr);  // no done
+    ASSERT_TRUE(strstr(out, "\"color\":\"#FFB300\"") == nullptr);  // no active
+    ASSERT_TRUE(strstr(out, "\"text\":\"Arm Pour\"") != nullptr);
+    ASSERT_TRUE(strstr(out, "\"text\":\"Bloom\"") != nullptr);
+    ASSERT_TRUE(strstr(out, "> ") == nullptr);  // no > marker when idle
+    // Wrapped format with columns and rows
+    ASSERT_TRUE(strstr(out, "\"columns\"") != nullptr);
+    ASSERT_TRUE(strstr(out, "\"rows\"") != nullptr);
+}
+
+TEST(binding_stages_json_active) {
+    ensure_init();
+    brew_reset();
+    reset_mocks();
+    brew_start("bind_test");
+    char out[1024];
+    ASSERT_TRUE(resolve_brew("stages_json", out, sizeof(out)));
+    // First stage active (amber with > marker), rest pending (dim, plain)
+    ASSERT_TRUE(strstr(out, "\"color\":\"#FFB300\"") != nullptr);  // active
+    ASSERT_TRUE(strstr(out, "\"color\":\"#555555\"") != nullptr);  // pending
+    ASSERT_TRUE(strstr(out, "\"text\":\"> Arm Pour\"") != nullptr); // active marker
+    ASSERT_TRUE(strstr(out, "\"text\":\"Bloom\"") != nullptr);     // pending: plain
+}
+
+TEST(binding_stages_json_mid_brew) {
+    ensure_init();
+    brew_reset();
+    reset_mocks();
+    brew_start("bind_test");
+    // Advance past auto_weight stage
+    g_mock_weight = 5.0f;
+    brew_tick();
+    char out[1024];
+    ASSERT_TRUE(resolve_brew("stages_json", out, sizeof(out)));
+    // First stage done (green, plain), second active (amber, >), third pending (dim, plain)
+    ASSERT_TRUE(strstr(out, "\"color\":\"#4CAF50\"") != nullptr);  // done
+    ASSERT_TRUE(strstr(out, "\"color\":\"#FFB300\"") != nullptr);  // active
+    ASSERT_TRUE(strstr(out, "\"color\":\"#555555\"") != nullptr);  // pending
+    ASSERT_TRUE(strstr(out, "\"text\":\"Arm Pour\"") != nullptr);  // done: plain
+    ASSERT_TRUE(strstr(out, "\"text\":\"> Bloom\"") != nullptr);   // active marker
+    ASSERT_TRUE(strstr(out, "\"text\":\"Main Pour\"") != nullptr); // pending: plain
+}
+
+TEST(binding_stages_json_done) {
+    ensure_init();
+    brew_reset();
+    reset_mocks();
+    brew_start("bind_test");
+    g_mock_weight = 5.0f;
+    brew_tick();  // → Bloom
+    g_mock_millis = 11000;
+    brew_tick();  // → Main Pour (auto_time elapsed)
+    brew_next();  // → Done
+    char out[1024];
+    ASSERT_TRUE(resolve_brew("stages_json", out, sizeof(out)));
+    // All stages done: green, plain text (no markers)
+    ASSERT_TRUE(strstr(out, "\"color\":\"#555555\"") == nullptr);  // no pending
+    ASSERT_TRUE(strstr(out, "\"color\":\"#FFB300\"") == nullptr);  // no active
+    ASSERT_TRUE(strstr(out, "\"color\":\"#4CAF50\"") != nullptr);  // all done
+    ASSERT_TRUE(strstr(out, "> ") == nullptr);  // no > marker when done
+}
+
+// ---------------------------------------------------------------------------
+// summary_json
+// ---------------------------------------------------------------------------
+
+TEST(binding_summary_json_idle) {
+    ensure_init();
+    brew_reset();
+    char out[512];
+    ASSERT_TRUE(resolve_brew("summary_json", out, sizeof(out)));
+    ASSERT_TRUE(strstr(out, "\"label\":\"Dose\"") != nullptr);
+    ASSERT_TRUE(strstr(out, "\"label\":\"Water\"") != nullptr);
+    ASSERT_TRUE(strstr(out, "\"label\":\"Ratio\"") != nullptr);
+    ASSERT_TRUE(strstr(out, "\"label\":\"Time\"") != nullptr);
+    // All values should be "---" when idle
+    ASSERT_TRUE(strstr(out, "\"value\":\"---\"") != nullptr);
+}
+
+TEST(binding_summary_json_active) {
+    ensure_init();
+    brew_reset();
+    reset_mocks();
+    brew_start("bind_test");
+    g_mock_weight = 5.0f;
+    brew_tick();
+    char out[512];
+    ASSERT_TRUE(resolve_brew("summary_json", out, sizeof(out)));
+    ASSERT_TRUE(strstr(out, "\"label\":\"Water\"") != nullptr);
+    // Water should have a numeric value, not "---"
+    ASSERT_TRUE(strstr(out, "\"label\":\"Time\"") != nullptr);
+}
+
+TEST(binding_summary_json_with_captures) {
+    ensure_init();
+    brew_reset();
+    reset_mocks();
+    brew_start("bind_test");
+    g_mock_weight = 5.0f;
+    brew_tick();  // → Bloom (auto_weight trigger)
+    g_mock_millis = 11000;
+    g_mock_weight = 48.0f;
+    brew_tick();  // → Main Pour (auto_time elapsed, captures "Bloom Water")
+    char out[1024];
+    ASSERT_TRUE(resolve_brew("summary_json", out, sizeof(out)));
+    // Should have the named capture from Bloom exit
+    ASSERT_TRUE(strstr(out, "\"label\":\"Bloom Water\"") != nullptr);
+    ASSERT_TRUE(strstr(out, "\"unit\":\"g\"") != nullptr);
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -742,6 +864,17 @@ int main() {
     RUN(binding_tpl_out_of_range);
     RUN(binding_tpl_invalid_field);
     RUN(binding_template_count_format);
+
+    printf("\n-- stages_json --\n");
+    RUN(binding_stages_json_idle);
+    RUN(binding_stages_json_active);
+    RUN(binding_stages_json_mid_brew);
+    RUN(binding_stages_json_done);
+
+    printf("\n-- summary_json --\n");
+    RUN(binding_summary_json_idle);
+    RUN(binding_summary_json_active);
+    RUN(binding_summary_json_with_captures);
 
     printf("\n%d/%d tests passed\n", g_passed, g_tests);
     return (g_passed == g_tests) ? 0 : 1;

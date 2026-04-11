@@ -186,6 +186,11 @@ const char* brew_get_next_label();
 // Access captured data points (for brew_binding)
 uint8_t     brew_get_capture_count();
 const BrewCapture* brew_get_capture(uint8_t index);
+// Meta-phase, stage count, and stage index for widget data bindings
+BrewPhase   brew_get_phase();
+uint8_t     brew_get_stage_count();     // 0 when no template loaded
+uint8_t     brew_get_stage_index();     // 0-based index of current stage (0 when idle/done)
+const BrewStage* brew_get_stage(uint8_t index);  // stage by index, nullptr if out of range
 // Pre-prime the idle label so [brew:next_label] shows the template's
 // start_label before the first tap. Call from action_dispatch when handling
 // advance:<name> — even before the brew starts.
