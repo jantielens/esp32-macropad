@@ -121,6 +121,23 @@ jobs:
         echo "matrix={\"board\":$boards_json}" >> $GITHUB_OUTPUT
         echo "Generated matrix: {\"board\":$boards_json}"
 
+  # Run host-native unit and integration tests
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install ArduinoJson headers
+      run: |
+        mkdir -p ~/Arduino/libraries
+        git clone --depth 1 --branch v7.2.1 https://github.com/bblanchon/ArduinoJson.git ~/Arduino/libraries/ArduinoJson
+
+    - name: Run host-native tests
+      run: |
+        chmod +x tests/run_tests.sh
+        ./tests/run_tests.sh
+
   compile-flags-doc:
     runs-on: ubuntu-latest
     steps:
@@ -228,7 +245,7 @@ jobs:
   # Post PR comment with release instructions
   pr-comment:
     if: github.event_name == 'pull_request'
-    needs: [validate-release, build]
+    needs: [validate-release, build, tests]
     runs-on: ubuntu-latest
     steps:
     - name: Generate PR comment
