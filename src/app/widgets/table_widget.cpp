@@ -43,6 +43,7 @@ struct TableWidgetState {
     uint8_t    col_count;
     uint16_t   row_count;
     uint32_t   last_payload_hash;
+    bool       hide_header;
 };
 
 static inline TableWidgetState* table_get_state(WidgetState* state) {
@@ -242,17 +243,21 @@ static void table_draw_cb(lv_event_t* e) {
 
     if (row == 0) {
         lv_draw_label_dsc_t* label_dsc = lv_draw_task_get_label_dsc(draw_task);
-        if (label_dsc) label_dsc->color = st->hdr_text_color;
-
         lv_draw_fill_dsc_t* fill_dsc = lv_draw_task_get_fill_dsc(draw_task);
-        if (fill_dsc) fill_dsc->opa = LV_OPA_TRANSP;
-
         lv_draw_border_dsc_t* border_dsc = lv_draw_task_get_border_dsc(draw_task);
-        if (border_dsc) {
-            border_dsc->color = st->hdr_border_color;
-            border_dsc->width = 1;
-            border_dsc->side = LV_BORDER_SIDE_BOTTOM;
-            border_dsc->opa = LV_OPA_COVER;
+        if (st->hide_header) {
+            if (label_dsc) label_dsc->opa = LV_OPA_TRANSP;
+            if (fill_dsc) fill_dsc->opa = LV_OPA_TRANSP;
+            if (border_dsc) border_dsc->opa = LV_OPA_TRANSP;
+        } else {
+            if (label_dsc) label_dsc->color = st->hdr_text_color;
+            if (fill_dsc) fill_dsc->opa = LV_OPA_TRANSP;
+            if (border_dsc) {
+                border_dsc->color = st->hdr_border_color;
+                border_dsc->width = 1;
+                border_dsc->side = LV_BORDER_SIDE_BOTTOM;
+                border_dsc->opa = LV_OPA_COVER;
+            }
         }
         return;
     }
@@ -450,12 +455,14 @@ static void table_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (table_parse_color_str(obj["default_bg"], &color)) {
             st->default_bg = color;
         }
+        st->hide_header = !(obj["show_header"] | true);
 
         if (!rows.isNull() && rows.size() > 0 && rows[0].is<JsonObjectConst>()) {
             first_row = rows[0].as<JsonObjectConst>();
         }
     } else if (doc.is<JsonArray>()) {
         rows = doc.as<JsonArrayConst>();
+        st->hide_header = false;
         if (!rows.isNull() && rows.size() > 0 && rows[0].is<JsonObjectConst>()) {
             first_row = rows[0].as<JsonObjectConst>();
         }
