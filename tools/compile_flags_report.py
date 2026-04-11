@@ -91,11 +91,39 @@ def detect_include_guard_macros(lines: List[str]) -> Set[str]:
     return guard
 
 
-def parse_all_defines(header: Path) -> Dict[str, str]:
+def parse_all_defines(
+    header: Path, follow_includes: bool = False, _visited: Optional[set] = None
+) -> Dict[str, str]:
+    """Extract all ``#define NAME value`` pairs from *header*.
+
+    When *follow_includes* is ``True``, relative ``#include "..."``
+    directives are resolved recursively so that board override files
+    that inherit from a parent (e.g.
+    ``#include "../jc4880p433/board_overrides.h"``) correctly report
+    the full set of defines.  Cycle-safe via *_visited*.
+    """
+    if _visited is None:
+        _visited = set()
+    resolved = header.resolve()
+    if resolved in _visited:
+        return {}
+    _visited.add(resolved)
+
     lines = read_text(header).splitlines()
     include_guards = detect_include_guard_macros(lines)
 
     defines: Dict[str, str] = {}
+
+    if follow_includes:
+        for line in lines:
+            m_inc = re.match(r'^\s*#\s*include\s+"([^"]+)"', line)
+            if m_inc:
+                inc_path = (header.parent / m_inc.group(1)).resolve()
+                if inc_path.exists():
+                    defines.update(
+                        parse_all_defines(inc_path, follow_includes=True, _visited=_visited)
+                    )
+
     for line in lines:
         m = re.match(r"^\s*#\s*define\s+([A-Z_][A-Z0-9_]*)\b(.*)$", line)
         if not m:
@@ -548,7 +576,7 @@ def cmd_build(args: argparse.Namespace) -> None:
     lv_conf_defines = set(parse_all_defines(lv_conf_h).keys())
 
     overrides_path = root / "src" / "boards" / board / "board_overrides.h"
-    overrides = parse_all_defines(overrides_path) if overrides_path.exists() else {}
+    overrides = parse_all_defines(overrides_path, follow_includes=True) if overrides_path.exists() else {}
 
     # Remove LVGL-config macros (defined in lv_conf.h) from override consideration.
     overrides = {k: v for (k, v) in overrides.items() if k not in lv_conf_defines}
@@ -678,7 +706,7 @@ def cmd_md(args: argparse.Namespace) -> None:
     board_overrides: Dict[str, Dict[str, str]] = {}
     for b in boards:
         path = root / "src" / "boards" / b / "board_overrides.h"
-        ov = parse_all_defines(path) if path.exists() else {}
+        ov = parse_all_defines(path, follow_includes=True) if path.exists() else {}
         ov = {k: v for (k, v) in ov.items() if not is_lvgl_config_macro(k, lv_conf_defines)}
         board_overrides[b] = ov
 
