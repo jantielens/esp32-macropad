@@ -215,14 +215,15 @@ Real-time device health monitoring integrated as a header badge with expandable 
 
 **Sections:**
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
-  - **Pad selection & naming**: Dropdown for Pad 1–8 with optional custom names (max 31 chars)
+  - **Pad selection & naming**: Dropdown for Pad 1–16 with optional custom names (max 31 chars)
   - **Grid preview**: Click any cell to open the button editor dialog
-  - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Actions, Icon, Image Background, Appearance, State)
+  - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
+  - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
-  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 8 pad configs), Clear Pad
-  - **Device config export/import**: Exports NVS settings (excluding network) plus all 8 pad pages to a single JSON file; import overwrites settings and reboots
+  - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
+  - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
 - **Custom floating footer**: Save Pad, Show on Device, and More menu (not the shared `{{FOOTER}}` template)
 

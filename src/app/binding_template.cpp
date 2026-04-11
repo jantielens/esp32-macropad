@@ -216,6 +216,44 @@ bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
     return any_resolved;
 }
 
+bool binding_template_resolve_single_token(const char* templ, char* out, size_t out_len) {
+    if (!templ || !out || out_len == 0) {
+        if (out && out_len > 0) out[0] = '\0';
+        return false;
+    }
+
+    const char *token_start, *scheme, *params, *token_end;
+    size_t scheme_len, params_len;
+    if (!find_next_token(templ, &token_start, &scheme, &scheme_len,
+                         &params, &params_len, &token_end)) {
+        out[0] = '\0';
+        return false;
+    }
+    if (token_start != templ || *token_end != '\0') {
+        out[0] = '\0';
+        return false;
+    }
+
+    const SchemeEntry* entry = find_scheme(scheme, scheme_len);
+    if (!entry || !entry->resolver) {
+        strlcpy(out, "ERR:unknown", out_len);
+        return true;
+    }
+
+    char params_buf[BINDING_TEMPLATE_MAX_LEN];
+    size_t plen = params_len < sizeof(params_buf) - 1 ? params_len : sizeof(params_buf) - 1;
+    memcpy(params_buf, params, plen);
+    params_buf[plen] = '\0';
+
+    char* fallback = split_pipe_fallback(params_buf);
+    if (entry->resolver(params_buf, out, out_len)) {
+        return true;
+    }
+
+    strlcpy(out, fallback ? fallback : "---", out_len);
+    return true;
+}
+
 void binding_template_collect_topics(const char* templ, void* user_data) {
     if (!templ) return;
 

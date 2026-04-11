@@ -53,7 +53,7 @@ If your device has a display, head to the **Pads** page to configure your pad la
    - **Icons** — choose from emoji or Material Symbols
    - **Colors** — background, text, border
    - **Tap/long-press actions** — navigate screens or publish MQTT messages
-   - **Background images** — load images from a URL (JPEG/PNG)
+   - **Background images and camera feeds** — load images or MJPEG streams from a URL (JPEG, PNG, or MJPEG)
 4. Click **Save Pad** when you're done
 
 You can create up to **16 pads** and switch between them on the device or via Home Assistant.

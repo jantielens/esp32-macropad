@@ -81,6 +81,10 @@ struct WidgetType {
     bool (*getStreamParams)(const WidgetConfig* cfg, uint8_t stream_index,
                             uint16_t* window_secs, uint8_t* slot_count,
                             const char** out_binding);
+
+    // When true, this widget resolves its own data bindings from tick()
+    // instead of receiving pre-resolved update() payloads from PadScreen.
+    bool resolveInTick;
 };
 
 // Look up a widget type by name. Returns NULL for "" or unknown types.
@@ -166,10 +170,10 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
 // prefix_tick from the given prefix.  stream_fn is passed verbatim
 // (use nullptr when the widget has no data-stream support).
 // ----------------------------------------------------------------------------
-#define REGISTER_WIDGET(prefix, stream_fn)                                     \
+#define REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)               \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
-        prefix##_destroy, prefix##_tick, stream_fn                             \
+        prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag       \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \

@@ -289,6 +289,6 @@ static void bar_chart_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
-REGISTER_WIDGET(bar_chart, nullptr);
+REGISTER_WIDGET(bar_chart, nullptr, false);
 
 #endif // HAS_DISPLAY

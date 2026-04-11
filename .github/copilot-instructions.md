@@ -26,7 +26,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - Conditional compilation: Only selected drivers are compiled via `display_drivers.cpp` / `touch_drivers.cpp` (Arduino doesn’t auto-compile subdir `.cpp`)
 - **Image Fetch Subsystem**: Background HTTP(S) image download, decode, and scaling (compile-time gated by `HAS_IMAGE_FETCH`)
   - `image_decoder.cpp/h` - Stateless JPEG (tjpgd) / PNG (lodepng) decode + bilinear scale to RGB565 (cover or letterbox mode)
-  - `image_fetch.cpp/h` - Slot-based FreeRTOS background fetcher with per-slot pause/resume, double-buffered PSRAM frames, and per-slot scale mode (cover/letterbox)
+  - `image_fetch.cpp/h` - Slot-based FreeRTOS background fetcher with per-slot pause/resume, double-buffered PSRAM frames, per-slot scale mode (cover/letterbox), and MJPEG streaming (auto-detected from `multipart/x-mixed-replace` Content-Type; persistent TCP connection reads frames continuously)
 - **Icon Store Subsystem**: PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
   - `icon_store.cpp/h` - LittleFS I/O, lodepng decode with R↔B swap, growable PSRAM cache
   - `web_portal_icons.cpp/h` - REST API for icon upload, delete, list, and debug endpoints
@@ -273,7 +273,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/timer_binding.cpp/h` - Timer binding scheme resolver — `[timer:N]`, `[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]` (compile-time gated by `HAS_DISPLAY`)
 - `src/app/web_portal_timers.cpp/h` - Timer config REST API (GET/POST `/api/timers`)
 - `src/app/image_decoder.cpp/h` - JPEG/PNG decode + bilinear scale to RGB565 with cover or letterbox mode (compile-time gated by `HAS_IMAGE_FETCH`)
-- `src/app/image_fetch.cpp/h` - Slot-based background image fetcher with per-slot pause/resume (compile-time gated by `HAS_IMAGE_FETCH`)
+- `src/app/image_fetch.cpp/h` - Slot-based background image fetcher with per-slot pause/resume, MJPEG streaming auto-detection, PSRAM-allocated slot arrays (compile-time gated by `HAS_IMAGE_FETCH`)
 - `src/app/icon_store.cpp/h` - PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers (compile-time gated by `HAS_DISPLAY`)
 - `src/app/web_portal_icons.cpp/h` - Icon store REST API (upload, delete, list, debug endpoints)
 - `src/app/screen_saver_manager.cpp/h` - Screensaver state machine with fade, pixel shift, and wake-screen redirect

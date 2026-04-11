@@ -1,6 +1,6 @@
 # Pad Editor Guide
 
-The pad editor is the heart of ESP32 Macropad — it turns your touch screen into a fully custom dashboard, remote control, or status panel. Each device supports up to **8 independent pads**, each with its own grid of buttons that can display live data, control smart home devices, and react to real-time conditions.
+The pad editor is the heart of ESP32 Macropad — it turns your touch screen into a fully custom dashboard, remote control, or status panel. Each device supports up to **16 independent pads**, each with its own grid of buttons that can display live data, control smart home devices, and react to real-time conditions.
 
 You'll find the pad editor on the **Pads** page of the web portal (Full mode only). If you haven't connected your device to WiFi yet, complete the [first-time setup](first-time-setup.md) first.
 
@@ -223,24 +223,38 @@ This disables a door-lock button when the alarm is armed.
 
 Spanned buttons automatically claim the grid cells they cover. Other buttons in those cells will be hidden behind the spanning button.
 
-### Background Images
+### Background Images and Camera Feeds
 
-Any button can display an image fetched from a URL, rendered as the button background behind labels and icons.
+Any button can display an image or live camera stream fetched from a URL, rendered as the button background behind labels and icons.
 
 | Setting | Description |
 |---------|-------------|
-| **Image URL** | HTTP or HTTPS URL to a JPEG or PNG image |
-| **Auth User / Password** | HTTP Basic Auth credentials for protected images |
-| **Refresh Interval** | How often to re-fetch in milliseconds. `0` = fetch once and keep |
+| **Image or Stream URL** | HTTP or HTTPS URL to a JPEG, PNG, or MJPEG stream (`multipart/x-mixed-replace`) |
+| **Auth User / Password** | HTTP Basic Auth credentials for protected sources |
+| **Refresh Interval** | How often to re-fetch in milliseconds. `0` = fetch once (or stream continuously for MJPEG) |
 | **Letterbox** | When enabled, the image fits inside the button with black bars. When off, the image covers the full button area (cropping if needed) |
+
+**MJPEG streaming (recommended for cameras):**
+
+When the URL serves a `multipart/x-mixed-replace` MJPEG stream, the device opens a single persistent TCP connection and reads frames as they arrive — no repeated TCP setup or per-frame server-side capture delay. Set **Refresh Interval to `0`** for continuous streaming.
+
+Typical sources:
+- **go2rtc** (built into Home Assistant): `http://homeassistant.local:1984/api/stream.mjpeg?src=camera_name`
+- **Frigate**: `http://frigate.local:5000/api/front_door/latest.jpg` (snapshot) or check the Frigate MJPEG endpoint docs
+- **VLC / ffmpeg relay**: any `multipart/x-mixed-replace` HTTP server wrapping an RTSP stream
+
+**Snapshot mode (JPEG/PNG):**
+
+For static images or cameras that only expose a snapshot endpoint, set the URL to the JPEG URL and configure a **Refresh Interval** (e.g. `5000` for 5 s polling).
 
 **Common uses:**
 
-- **Security cameras**: Set the URL to your camera's snapshot endpoint, add credentials, and set a refresh interval of 5000–10000 ms for a near-live view.
-- **Weather maps**: Fetch a radar image once per minute (interval: 60000).
+- **Security cameras (MJPEG)**: Point at a go2rtc or Frigate MJPEG stream, set interval to `0`, get 8–15 fps live view.
+- **Security cameras (snapshot)**: Set the URL to the camera's snapshot endpoint, add credentials, set interval to `5000`–`10000` ms.
+- **Weather maps**: Fetch a radar image once per minute (interval: `60000`).
 - **Album art**: Use a Home Assistant media player's entity picture URL.
 
-> Images are decoded in a background task and scaled to the button's pixel dimensions using bilinear filtering. Keep image resolution reasonable — the device fetches, decodes, and scales in PSRAM. A few camera buttons at 480×320 work fine; avoid huge 4K images.
+> Images and streams are decoded in a background task and scaled to the button's pixel dimensions. On ESP32-P4, hardware JPEG decode and PPA scaling are used automatically for best performance. Keep source resolution reasonable — very large images increase PSRAM usage and decode time.
 
 ### Actions (Tap and Long-Press)
 
@@ -517,6 +531,26 @@ Labels, icons, and colors still work alongside the widget. A typical sparkline b
 - Min: 0, Max: auto, Time window: 600 (10 minutes), Slots: 60
 - Top label: `Solar`, Bottom label: `[mqtt:home/solar/power;production;%.0fW]`
 
+### Table
+
+The table widget renders multi-column row data from a structured binding payload.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Data binding** | Must resolve to a table schema payload. Use an exact single-token binding expression such as `[health:table]` or `[health:extended_table]` |
+| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font_family:bebas`) |
+| **Scroll** | Enable or disable table scrolling |
+
+**Important:** Do not wrap the table binding in static text and do not add a format parameter. The table widget expects the resolved structured payload, not formatted text.
+
+**Examples:**
+
+- Standard table source: `[health:table]`
+- Extended table source: `[health:extended_table]`
+- Optional fallback during startup: `[health:table|{}]`
+
 ---
 
 ## Binding Templates
@@ -529,6 +563,8 @@ Binding templates are the engine behind live data on your buttons. They follow a
 
 Static text before, after, or between tokens is preserved. If a binding can't resolve (topic not received yet, invalid path), it shows `---` as a placeholder. Errors show `ERR:reason`.
 
+For bindings that return structured payloads (for example `health:table` and `health:extended_table`), use an exact single-token template (for example `[health:table]`) with no prefix/suffix text and no format parameter.
+
 ### Binding Validation
 
 The pad editor and Home page validate binding syntax **in real time** as you type. Any field that accepts a binding expression (labels, colors, data bindings, widget parameters, MQTT topics, wake binding, etc.) is checked automatically.
@@ -538,7 +574,7 @@ The pad editor and Home page validate binding syntax **in real time** as you typ
 - **Bracket balance** — unclosed `[` or extra `]` characters
 - **Scheme names** — unknown schemes are flagged, with a "did you mean?" suggestion for typos (e.g., `mqt` → `mqtt`)
 - **Parameter counts** — too many or too few semicolon-delimited parameters for the scheme
-- **Known keys** — health binding keys (e.g., `cpu`, `heap_free`, `rssi`) and timer parameters (e.g., `1`, `2_state`, `3_expired`) are checked against the valid set
+- **Known keys** — health binding keys (e.g., `cpu`, `heap_free`, `rssi`, `table`, `extended_table`) and timer parameters (e.g., `1`, `2_state`, `3_expired`) are checked against the valid set
 - **Format strings** — printf-style format specifiers like `%.0f`, `%d`, `%s` are validated for correct syntax
 - **Expression syntax** — `[expr:]` bodies are checked for operator/operand sequencing errors (e.g., `[expr:1 +]` or `[expr:* 2]`)
 - **Nested bindings** — bindings inside `[expr:]` are recursively validated (e.g., a typo in `[expr:[mqt:topic] * 2]` is caught)
@@ -596,7 +632,7 @@ This shows dark gray (`#333333`) during startup, then switches to red/green once
 | **path** | No | JSON key to extract. Use dot-notation for nested objects (`data.temp`). Omit or use `.` for raw payload |
 | **format** | No | Printf format string for the value |
 
-The device automatically subscribes to every topic it discovers across all 8 pads. Each unique topic is subscribed once, even if used by dozens of buttons.
+The device automatically subscribes to every topic it discovers across all 16 pads. Each unique topic is subscribed once, even if used by dozens of buttons.
 
 **Practical examples:**
 
@@ -670,6 +706,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `wifi_ssid` | Connected network name | `MyNetwork` |
 | `ip` | Device IP address | `192.168.1.42` |
 | `hostname` | Device hostname | `macropad` |
+| `table` | Structured table payload (standard schema) | `{"title":"Status","columns":[...],"rows":[...]}` |
+| `extended_table` | Structured table payload (extended schema) | `{"title":"Status","columns":[...],"rows":[...],"styles":...}` |
 | `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
 | `ble_name` | Current BLE keyboard name | `Kitchen Pad EEFF` |
 | `ble_state` | Detailed BLE state | `disabled`, `pairing`, `connecting`, `secured`, `claimed`, ... |
@@ -680,6 +718,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `ble_peer_id_addr` | Connected peer's identity address | `AA:BB:CC:DD:EE:FF` |
 
 Values are cached for up to 2 seconds to keep the CPU impact low.
+
+`table` and `extended_table` are intended for the Table widget data binding field. Use them as exact single-token templates (for example `[health:table]`) so the structured payload is passed through unchanged.
 
 **BLE signal values:**
 
@@ -1068,7 +1108,7 @@ After copying a button, **Fill Pad** applies it to every position in the grid (c
 
 ### Export / Import Device Config
 
-**Export Device Config** downloads everything — all 8 pads plus all device settings (network, MQTT, display, operating mode) — as a single JSON file. **Import Device Config** restores from that file, triggering a reboot.
+**Export Device Config** downloads everything — all 16 pads plus all device settings (network, MQTT, display, operating mode) — as a single JSON file. **Import Device Config** restores from that file, triggering a reboot.
 
 This is your backup and migration tool. Export regularly, and use import to clone a setup to a new device.
 
@@ -1136,10 +1176,10 @@ Amber when on, dark gray when off.
 
 **Pad settings**: 2 columns × 2 rows, name "Cameras", background `#000000`.
 
-| Button | Image URL | Auth | Refresh | Letterbox |
-|--------|-----------|------|---------|-----------|
-| Front Door | `http://192.168.1.50/snap.cgi` | admin / password | 5000 ms | Off (cover) |
-| Backyard | `http://192.168.1.51/snap.cgi` | admin / password | 5000 ms | Off (cover) |
+| Button | Image or Stream URL | Auth | Refresh | Letterbox |
+|--------|---------------------|------|---------|-----------|
+| Front Door | `http://ha.local:1984/api/stream.mjpeg?src=front_door` | — | 0 (stream) | Off (cover) |
+| Backyard | `http://ha.local:1984/api/stream.mjpeg?src=backyard` | — | 0 (stream) | Off (cover) |
 | Garage | `http://192.168.1.52/snap.cgi` | admin / password | 10000 ms | Off (cover) |
 | Driveway | `http://192.168.1.53/snap.cgi` | admin / password | 5000 ms | Off (cover) |
 
@@ -1224,4 +1264,4 @@ NTP hasn't synced yet. This usually resolves within a few seconds of connecting 
 Too many binding updates or high-resolution background images can increase CPU load. Reduce camera refresh intervals, simplify expressions, or use fewer background images.
 
 **Backing up your work**
-Use **More ▾ → Export Device Config** regularly. It captures *everything* — all 8 pads, network settings, display config, and button layouts — in a single JSON file. If you ever factory reset or set up a new device, **Import Device Config** restores it all.
+Use **More ▾ → Export Device Config** regularly. It captures *everything* — all 16 pads, network settings, display config, and button layouts — in a single JSON file. If you ever factory reset or set up a new device, **Import Device Config** restores it all.

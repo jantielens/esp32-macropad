@@ -14,6 +14,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Bar chart widgets** — visualize data with color-coded threshold bars
 - **Gauge widgets** — arc-based gauges with ticks, needle, labels and color thresholds
 - **Sparkline widgets** — mini trend lines with background data collection and auto-scaling
+- **Table widgets** — structured multi-column data views from binding payloads
 - **Screen saver** — automatic backlight fade with pixel-shift burn-in prevention
 
 ### BLE Keyboard

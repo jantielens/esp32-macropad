@@ -39,40 +39,45 @@ void PadScreen::pollMqttBindings() {
 
     for (uint8_t i = 0; i < tileCount; i++) {
         ButtonTile& tile = tiles[i];
-        if (!tile.widget_type || !tile.widget_type->update) continue;
-        if (!tile.widget_binding[0][0]) continue;
+        if (!tile.widget_type) continue;
 
-        // Resolve primary binding
-        binding_template_resolve(tile.widget_binding[0], widget_resolved, sizeof(widget_resolved));
+        const bool widget_handles_own_resolution = tile.widget_type->resolveInTick;
 
-        // Build combined string with empty intermediate slots preserved,
-        // e.g. "val1\t\tval3" when only binding_3 is set.
-        size_t off = strlcpy(widget_combined, widget_resolved, sizeof(widget_combined));
-        int max_slot = 0;
-        for (int wb = MAX_WIDGET_BINDINGS - 1; wb >= 1; wb--) {
-            if (tile.widget_binding[wb][0]) {
-                max_slot = wb;
-                break;
-            }
-        }
-        for (int wb = 1; wb <= max_slot; wb++) {
-            if (off < sizeof(widget_combined) - 1) {
-                widget_combined[off++] = '\t';
-                widget_combined[off] = '\0';
-            }
-            if (!tile.widget_binding[wb][0]) continue;
-            binding_template_resolve(tile.widget_binding[wb], widget_resolved, sizeof(widget_resolved));
-            off += strlcpy(widget_combined + off, widget_resolved, sizeof(widget_combined) - off);
-            if (off >= sizeof(widget_combined)) {
-                off = sizeof(widget_combined) - 1;
-                widget_combined[off] = '\0';
-            }
-        }
+        // Widgets with a primary binding are update-driven by resolved values.
+        // Widgets without a primary binding can still run via tick() (e.g. local data sources).
+        if (!widget_handles_own_resolution && tile.widget_type->update && tile.widget_binding[0][0]) {
+            // Resolve primary binding
+            binding_template_resolve(tile.widget_binding[0], widget_resolved, sizeof(widget_resolved));
 
-        // Only update widget if any resolved value changed
-        if (strcmp(widget_combined, tile.widget_last) != 0) {
-            strlcpy(tile.widget_last, widget_combined, sizeof(tile.widget_last));
-            tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, widget_combined);
+            // Build combined string with empty intermediate slots preserved,
+            // e.g. "val1\t\tval3" when only binding_3 is set.
+            size_t off = strlcpy(widget_combined, widget_resolved, sizeof(widget_combined));
+            int max_slot = 0;
+            for (int wb = MAX_WIDGET_BINDINGS - 1; wb >= 1; wb--) {
+                if (tile.widget_binding[wb][0]) {
+                    max_slot = wb;
+                    break;
+                }
+            }
+            for (int wb = 1; wb <= max_slot; wb++) {
+                if (off < sizeof(widget_combined) - 1) {
+                    widget_combined[off++] = '\t';
+                    widget_combined[off] = '\0';
+                }
+                if (!tile.widget_binding[wb][0]) continue;
+                binding_template_resolve(tile.widget_binding[wb], widget_resolved, sizeof(widget_resolved));
+                off += strlcpy(widget_combined + off, widget_resolved, sizeof(widget_combined) - off);
+                if (off >= sizeof(widget_combined)) {
+                    off = sizeof(widget_combined) - 1;
+                    widget_combined[off] = '\0';
+                }
+            }
+
+            // Only update widget if any resolved value changed
+            if (strcmp(widget_combined, tile.widget_last) != 0) {
+                strlcpy(tile.widget_last, widget_combined, sizeof(tile.widget_last));
+                tile.widget_type->update(tile.obj, &tile.widget_cfg, &tile.widget_state, widget_combined);
+            }
         }
 
         // Always call tick (if implemented) for time-driven widgets

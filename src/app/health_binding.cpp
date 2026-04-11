@@ -5,6 +5,7 @@
 
 #include "binding_template.h"
 #include "device_telemetry.h"
+#include "health_table_builder.h"
 #include "log_manager.h"
 
 #if HAS_BLE_HID
@@ -320,6 +321,11 @@ static bool health_binding_resolve(const char* params, char* out, size_t out_len
 
     ensure_static_initialized();
     refresh_if_stale();
+
+    if (strcmp(key, "table") == 0 || strcmp(key, "extended_table") == 0) {
+        bool extended = (strcmp(key, "extended_table") == 0);
+        return health_table_build(extended, lookup_value, out, out_len);
+    }
 
     char raw[64];
     if (!lookup_value(key, raw, sizeof(raw))) {

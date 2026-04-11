@@ -73,6 +73,7 @@ if $COVERAGE; then
     )
     if [ -n "$ARDUINOJSON_INC" ]; then
         COV_SOURCES+=(
+            src/app/health_table_builder.cpp
             src/app/brew_manager.cpp
             src/app/brew_templates.cpp
             src/app/brew_template_dsl.cpp
@@ -105,6 +106,33 @@ if $COVERAGE; then
 else
     build_and_run expr_eval \
         tests/test_expr_eval.cpp src/app/expr_eval.cpp -lm
+fi
+
+# ===== binding_template =====
+if $COVERAGE; then
+    build_and_run binding_template $INC \
+        tests/test_binding_template.cpp $(OBJ binding_template) $(OBJ stubs) -lm
+else
+    build_and_run binding_template \
+        -include tests/log_manager.h -include tests/board_config.h -I src/app \
+        tests/test_binding_template.cpp src/app/binding_template.cpp \
+        tests/stubs.cpp -lm
+fi
+
+# ===== health_table_builder (requires ArduinoJson) =====
+if [ -n "$ARDUINOJSON_INC" ]; then
+    if $COVERAGE; then
+        build_and_run health_table_builder $INC \
+            tests/test_health_table_builder.cpp $(OBJ health_table_builder) $(OBJ stubs) -lm
+    else
+        build_and_run health_table_builder \
+            -include tests/log_manager.h -include tests/board_config.h \
+            -I src/app -I "$ARDUINOJSON_INC" \
+            tests/test_health_table_builder.cpp src/app/health_table_builder.cpp \
+            tests/stubs.cpp -lm
+    fi
+else
+    echo "WARNING: ArduinoJson headers not found — skipping health_table_builder tests"
 fi
 
 # ===== expr_binding =====
@@ -224,7 +252,7 @@ if $COVERAGE; then
 
     SOURCES="expr_eval.cpp binding_template.cpp pad_binding.cpp key_sequence.cpp"
     if [ -n "$ARDUINOJSON_INC" ]; then
-        SOURCES="$SOURCES brew_manager.cpp brew_binding.cpp brew_templates.cpp brew_template_dsl.cpp"
+        SOURCES="$SOURCES health_table_builder.cpp brew_manager.cpp brew_binding.cpp brew_templates.cpp brew_template_dsl.cpp"
     fi
 
     echo "File                        Lines    Exec  Missed  Cover"

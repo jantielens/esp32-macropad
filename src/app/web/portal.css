@@ -1165,6 +1165,17 @@ footer {
     border-bottom: 1px solid #4CAF50;
 }
 
+.pad-cell-widget-table {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 18px;
+    height: 10px;
+    opacity: 0.6;
+    border: 1px solid #90CAF9;
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, #90CAF9 3px, #90CAF9 4px);
+}
+
 .pad-actions {
     display: flex;
     flex-wrap: wrap;

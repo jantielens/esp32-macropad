@@ -633,7 +633,7 @@ function padUpdateAddLink(gesture) {
     if (link) link.style.display = (visibleCount >= 3) ? 'none' : '';
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline'];
+const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table'];
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
@@ -831,6 +831,12 @@ function padRenderGrid() {
                     spark.className = 'pad-cell-widget-sparkline';
                     spark.title = 'Sparkline Widget';
                     cell.appendChild(spark);
+                }
+                if (btn.widget_type === 'table') {
+                    const tbl = document.createElement('div');
+                    tbl.className = 'pad-cell-widget-table';
+                    tbl.title = 'Table Widget';
+                    cell.appendChild(tbl);
                 }
 
                 cell.addEventListener('click', () => padDialogOpen(c, r));
@@ -1377,6 +1383,11 @@ function padDialogOpen(col, row) {
     }
     document.getElementById('pad-edit-sparkline-ref-in-view').checked = btn.widget_sparkline_ref_in_view || false;
 
+    // Table widget fields
+    document.getElementById('pad-edit-table-data-binding').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-table-style').value = btn.widget_table_style || '';
+    document.getElementById('pad-edit-table-scrollable').value = (btn.widget_table_scrollable === false) ? 'false' : 'true';
+
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -1493,10 +1504,9 @@ function padDialogOk(keepOpen) {
     const wtype = document.getElementById('pad-edit-widget-type').value;
     if (wtype) {
         btn.widget_type = wtype;
-        // Data binding template for widget value
-        const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
-        if (wDataBinding) btn.widget_data_binding = wDataBinding;
         if (wtype === 'bar_chart') {
+            const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
+            if (wDataBinding) btn.widget_data_binding = wDataBinding;
             btn.widget_bar_min = padGetBindableNumber('pad-edit-widget-bar-min', 0);
             btn.widget_bar_max = padGetBindableNumber('pad-edit-widget-bar-max', 3);
             btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');
@@ -1618,6 +1628,13 @@ function padDialogOk(keepOpen) {
                 }
             }
             if (document.getElementById('pad-edit-sparkline-ref-in-view').checked) btn.widget_sparkline_ref_in_view = true;
+        }
+        if (wtype === 'table') {
+            const tDataBinding = document.getElementById('pad-edit-table-data-binding').value.trim();
+            if (tDataBinding) btn.widget_data_binding = tDataBinding;
+            const tStyle = document.getElementById('pad-edit-table-style').value.trim();
+            if (tStyle) btn.widget_table_style = tStyle;
+            btn.widget_table_scrollable = document.getElementById('pad-edit-table-scrollable').value === 'true';
         }
     }
 

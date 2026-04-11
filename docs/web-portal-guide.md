@@ -213,11 +213,13 @@ The **Button Defaults** section (collapsible, at the bottom of the Pads page) le
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 
+The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
+
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 
-For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines), label styling, dynamic colors, pad bindings (named data sources), and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
+For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines, tables), label styling, dynamic colors, pad bindings (named data sources), and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
 
-All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, and expression syntax are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
+All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, expression syntax, and known health/timer keys (including `table` and `extended_table`) are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
 
 ---
 
@@ -313,5 +315,5 @@ After a reboot, the portal shows an automatic reconnection dialog. If it can't r
 - **Back up your config**: Use **Export Device Config** regularly — it saves everything into a single JSON file
 - **Clone devices**: Export from one device, import on another to duplicate your setup
 - **Copy/paste buttons**: The button editor has Copy and Paste buttons to quickly duplicate button settings across cells. Both keep the editor open so you can keep working, and column/row spans are preserved when space allows
-- **Binding templates**: Mix static text with live data — e.g., `Solar: [mqtt:home/solar;power;%.0f W]` shows "Solar: 3500 W"
+- **Binding templates**: Mix static text with live data — e.g., `Solar: [mqtt:home/solar;power;%.0f W]` shows "Solar: 3500 W". For Table widget data, use exact single-token structured bindings such as `[health:table]`.
 - **Security**: Enable HTTP Basic Auth on devices accessible from outside your home network
