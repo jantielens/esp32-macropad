@@ -11,6 +11,9 @@
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "timer_engine.h"
+#if IS_DARKROOM_TIMER
+#include "expose_timer.h"
+#endif
 
 #include <esp_timer.h>
 
@@ -132,6 +135,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 				// Check countdown timer expiry (fire beep on edge)
 				timer_engine_tick();
+#if IS_DARKROOM_TIMER
+				expose_timer_tick();
+#endif
 				
 #if HAS_MQTT
 				// Poll data stream registry (background ring buffers for

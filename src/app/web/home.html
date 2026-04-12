@@ -119,6 +119,18 @@
                 </div>
             </section>
 
+            <!-- Darkroom Timer Section (hidden if feature not compiled in) -->
+            <section class="section" id="darkroom-timer-section" style="display:none;">
+                <h2>🔴 Darkroom Timer</h2>
+                <small style="display:block; margin-bottom:16px;">Enlarger timer with relay control via Shelly Plug. Use Exposure Timer actions on buttons for countdown, f-stop adjustments, and focus mode.</small>
+
+                <div class="form-group">
+                    <label for="shelly_ip">Shelly Plug IP Address</label>
+                    <input type="text" id="shelly_ip" name="shelly_ip" maxlength="63" placeholder="192.168.1.100">
+                    <small>IP address or hostname of the Shelly Plug controlling the enlarger lamp.</small>
+                </div>
+            </section>
+
             <!-- Timer Config Section (hidden if no display support) -->
             <section class="section" id="timer-config-section" style="display:none;">
                 <h2>⏱️ Timers</h2>

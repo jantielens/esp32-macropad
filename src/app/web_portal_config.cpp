@@ -136,6 +136,10 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["lp_beep"] = current_config->lp_beep;
 				#endif
 
+				#if IS_DARKROOM_TIMER
+				(*doc)["shelly_ip"] = current_config->shelly_ip;
+				#endif
+
 				#if HAS_DISPLAY
 				// Screen saver settings
 				(*doc)["screen_saver_enabled"] = current_config->screen_saver_enabled;
@@ -427,6 +431,12 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 		if (doc.containsKey("lp_beep")) {
 				strlcpy(current_config->lp_beep, doc["lp_beep"] | "", CONFIG_BEEP_PATTERN_MAX_LEN);
+		}
+		#endif
+
+		#if IS_DARKROOM_TIMER
+		if (doc.containsKey("shelly_ip")) {
+				strlcpy(current_config->shelly_ip, doc["shelly_ip"] | "", CONFIG_SHELLY_IP_MAX_LEN);
 		}
 		#endif
 

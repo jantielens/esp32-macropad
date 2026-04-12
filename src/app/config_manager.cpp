@@ -59,6 +59,9 @@
 #define KEY_TAP_BEEP       "tap_beep"
 #define KEY_LP_BEEP        "lp_beep"
 #endif
+#if IS_DARKROOM_TIMER
+#define KEY_SHELLY_IP      "shelly_ip"
+#endif
 #define KEY_MAGIC          "magic"
 
 static Preferences preferences;
@@ -249,6 +252,10 @@ bool config_manager_load(DeviceConfig *config) {
 		}
 		#endif
 
+		#if IS_DARKROOM_TIMER
+		preferences.getString(KEY_SHELLY_IP, config->shelly_ip, CONFIG_SHELLY_IP_MAX_LEN);
+		#endif
+
 		#if HAS_DISPLAY
 		// Load screen saver settings
 		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, false);
@@ -341,8 +348,11 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putString(KEY_LP_BEEP, config->lp_beep);
 		#endif
 
+		#if IS_DARKROOM_TIMER
+		preferences.putString(KEY_SHELLY_IP, config->shelly_ip);
+		#endif
+
 		#if HAS_DISPLAY
-		// Save screen saver settings
 		preferences.putBool(KEY_SCREEN_SAVER_ENABLED, config->screen_saver_enabled);
 		preferences.putUShort(KEY_SCREEN_SAVER_TIMEOUT, config->screen_saver_timeout_seconds);
 		preferences.putUShort(KEY_SCREEN_SAVER_FADE_OUT, config->screen_saver_fade_out_ms);
@@ -499,6 +509,10 @@ LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
 		LOGI("Config", "Audio volume: %u%%", config->audio_volume);
 		if (config->tap_beep[0]) LOGI("Config", "Tap beep: %s", config->tap_beep);
 		if (config->lp_beep[0]) LOGI("Config", "LP beep: %s", config->lp_beep);
+#endif
+
+#if IS_DARKROOM_TIMER
+		if (config->shelly_ip[0]) LOGI("Config", "Shelly IP: %s", config->shelly_ip);
 #endif
 
 #if HAS_DISPLAY

@@ -31,6 +31,9 @@
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "timer_config.h"
+#if IS_DARKROOM_TIMER
+#include "expose_timer.h"
+#endif
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "action_dispatch.h"
@@ -361,6 +364,9 @@ void setup()
 	pad_binding_init();
 	timer_binding_init();
 	timer_config_init();
+	#if IS_DARKROOM_TIMER
+	expose_timer_init();
+	#endif
 	#endif
 
 	last_heartbeat_ms = millis();
@@ -429,6 +435,9 @@ void loop()
 	#if HAS_DISPLAY
 	screen_saver_manager_loop();
 	action_dispatch_loop();
+	#if IS_DARKROOM_TIMER
+	expose_timer_loop();
+	#endif
 	#endif
 
 	#if HAS_TOUCH

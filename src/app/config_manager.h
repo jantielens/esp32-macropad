@@ -44,6 +44,9 @@
 #define CONFIG_BEEP_PATTERN_MAX_LEN 128
 #endif
 
+// Shelly Plug IP/hostname for expose timer relay control
+#define CONFIG_SHELLY_IP_MAX_LEN 64
+
 // Web portal Basic Auth (STA/full mode only)
 #define CONFIG_BASIC_AUTH_USERNAME_MAX_LEN 32
 #define CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN 64
@@ -96,6 +99,10 @@ struct DeviceConfig {
 		uint8_t audio_volume;                    // 0-100, default 70
 		char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];   // Beep DSL on tap (empty = disabled)
 		char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];    // Beep DSL on long-press (empty = disabled)
+#endif
+
+#if IS_DARKROOM_TIMER
+		char shelly_ip[CONFIG_SHELLY_IP_MAX_LEN];  // Shelly Plug IP or hostname
 #endif
 
 #if HAS_DISPLAY

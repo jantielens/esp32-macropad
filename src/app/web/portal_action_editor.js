@@ -26,6 +26,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="sound">Play Sound</option>';
     h += '<option value="volume">Set Volume</option>';
     h += '<option value="timer">Timer Control</option>';
+    h += '<option value="expose">Exposure Timer</option>';
     h += '</select>';
     if (opts.showBleHint) {
         h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
@@ -119,6 +120,31 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<small>Positive adds time, negative subtracts. Applied to the countdown preset.</small>';
     h += '</div>';
     h += '</div>';
+    // Expose timer control
+    h += '<div id="' + prefix + '-expose-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-expose-action">Exposure Timer Action</label>';
+    h += '<select id="' + prefix + '-expose-action" onchange="actionEditorExposeChanged(\'' + prefix + '\')">';
+    h += '<option value="toggle">Toggle (Start/Pause/Resume)</option>';
+    h += '<option value="start">Start</option>';
+    h += '<option value="stop">Stop</option>';
+    h += '<option value="pause">Pause</option>';
+    h += '<option value="resume">Resume</option>';
+    h += '<option value="reset">Reset</option>';
+    h += '<option value="focus">Focus Light ON</option>';
+    h += '<option value="focus_off">Focus Light OFF</option>';
+    h += '<option value="focus_toggle">Focus Light Toggle</option>';
+    h += '<option value="set_time">Set Time</option>';
+    h += '<option value="add_seconds">Add Seconds</option>';
+    h += '<option value="add_stops">Add F-Stops</option>';
+    h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-expose-value-group" style="display:none;">';
+    h += '<label for="' + prefix + '-expose-value">Value</label>';
+    h += '<input type="text" id="' + prefix + '-expose-value" placeholder="e.g. 10 or 0.5 or -0.333">';
+    h += '<small id="' + prefix + '-expose-value-hint">Seconds for set_time/add_seconds, f-stops for add_stops (e.g. 0.333 = 1/3 stop).</small>';
+    h += '</div>';
+    h += '</div>';
     return h;
 }
 
@@ -144,6 +170,9 @@ function actionEditorTypeChanged(prefix) {
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     if (type === 'timer') actionEditorTimerChanged(prefix);
+    var exposeGrp = document.getElementById(prefix + '-expose-group');
+    if (exposeGrp) exposeGrp.style.display = (type === 'expose') ? '' : 'none';
+    if (type === 'expose') actionEditorExposeChanged(prefix);
     // Show/hide volume value field depending on mode
     if (type === 'volume') {
         var modeEl = document.getElementById(prefix + '-volume-mode');
@@ -161,6 +190,16 @@ function actionEditorTimerChanged(prefix) {
     var cmd = parts[1] || '';
     var adjustGrp = document.getElementById(prefix + '-timer-adjust-group');
     if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
+}
+
+// Show/hide expose sub-fields based on the expose action dropdown.
+function actionEditorExposeChanged(prefix) {
+    var sel = document.getElementById(prefix + '-expose-action');
+    if (!sel) return;
+    var val = sel.value;
+    var valGrp = document.getElementById(prefix + '-expose-value-group');
+    var needsValue = (val === 'set_time' || val === 'add_seconds' || val === 'add_stops');
+    if (valGrp) valGrp.style.display = needsValue ? '' : 'none';
 }
 
 // Load an action object { type, target, topic, payload, sequence } into the form.
@@ -214,6 +253,31 @@ function actionEditorLoad(prefix, action) {
     } else {
         el = document.getElementById(prefix + '-timer-action');
         if (el) el.value = '1:toggle';
+    }
+    // Expose: parse DSL string "command[:value]" into structured fields
+    if (action.expose_command) {
+        var ec = action.expose_command;
+        var colonIdx = ec.indexOf(':');
+        var expCmd, expVal;
+        if (colonIdx >= 0) {
+            expCmd = ec.substring(0, colonIdx);
+            expVal = ec.substring(colonIdx + 1);
+        } else {
+            expCmd = ec;
+            expVal = '';
+        }
+        el = document.getElementById(prefix + '-expose-action');
+        if (el) {
+            el.value = expCmd;
+            if (el.selectedIndex < 0) el.value = 'toggle';
+        }
+        if (expVal) {
+            el = document.getElementById(prefix + '-expose-value');
+            if (el) el.value = expVal;
+        }
+    } else {
+        el = document.getElementById(prefix + '-expose-action');
+        if (el) el.value = 'toggle';
     }
     actionEditorTypeChanged(prefix);
 }
@@ -271,6 +335,17 @@ function actionEditorBuild(prefix) {
                 if (adj !== 0 && !isNaN(adj)) val = val + ':' + adj;
             }
             act.timer_command = val;
+        }
+    }
+    if (type === 'expose') {
+        var eSel = document.getElementById(prefix + '-expose-action');
+        if (eSel) {
+            var eCmd = eSel.value;
+            if (eCmd === 'set_time' || eCmd === 'add_seconds' || eCmd === 'add_stops') {
+                var eVal = document.getElementById(prefix + '-expose-value');
+                if (eVal && eVal.value !== '') eCmd = eCmd + ':' + eVal.value.trim();
+            }
+            act.expose_command = eCmd;
         }
     }
     return act;

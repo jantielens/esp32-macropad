@@ -19,6 +19,10 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
     if (strcmp(act.type, ACTION_TYPE_TIMER) == 0 && a.containsKey("timer_command")) {
         strlcpy(act.mqtt_payload, a["timer_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
     }
+    // Expose: "expose_command" from web → reuse mqtt_payload for storage
+    if (strcmp(act.type, ACTION_TYPE_EXPOSE) == 0 && a.containsKey("expose_command")) {
+        strlcpy(act.mqtt_payload, a["expose_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
+    }
     strlcpy(act.sound_file, a["sound_file"] | "", sizeof(act.sound_file));
     act.sound_volume = (uint8_t)(a["sound_volume"] | 0);
 }
@@ -31,6 +35,8 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
     if (act.mqtt_payload[0]) {
         if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
             obj["timer_command"] = act.mqtt_payload;
+        } else if (strcmp(act.type, ACTION_TYPE_EXPOSE) == 0) {
+            obj["expose_command"] = act.mqtt_payload;
         } else {
             obj["payload"] = act.mqtt_payload;
         }

@@ -192,6 +192,15 @@
 #endif
 
 // ============================================================================
+// Darkroom Timer (product variant flag)
+// ============================================================================
+// Enables darkroom-specific features: enlarger exposure timer, relay control,
+// and future darkroom workflow additions. Requires HAS_DISPLAY.
+#ifndef IS_DARKROOM_TIMER
+#define IS_DARKROOM_TIMER false
+#endif
+
+// ============================================================================
 // Sensors (Optional)
 // ============================================================================
 // Enable BME280 (I2C) environmental sensor adapter.

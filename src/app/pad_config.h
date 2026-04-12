@@ -114,6 +114,7 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_VOLUME   "volume"
 #define ACTION_TYPE_TIMER    "timer"
 #define ACTION_TYPE_SOUND    "sound"
+#define ACTION_TYPE_EXPOSE   "expose"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3

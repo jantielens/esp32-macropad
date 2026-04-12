@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 155
+Total flags: 156
 
 ### Features (HAS_*)
 
@@ -143,6 +143,7 @@ Total flags: 155
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
+- **IS_DARKROOM_TIMER** default: `false` — and future darkroom workflow additions. Requires HAS_DISPLAY.
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
 - **JD9165_DSI_HSYNC_PULSE_WIDTH** default: `24` — HSYNC pulse width in pixel clocks.
@@ -509,6 +510,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS**
   - src/app/board_config.h
+- **IS_DARKROOM_TIMER**
+  - src/app/action_dispatch.cpp
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/display_task.cpp
+  - src/app/web_portal_config.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **JD9165_DSI_HSYNC_BACK_PORCH**

@@ -18,6 +18,9 @@
 #endif
 
 #include "timer_engine.h"
+#if IS_DARKROOM_TIMER
+#include "expose_timer.h"
+#endif
 
 #define TAG "Action"
 
@@ -152,6 +155,16 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         } else {
             LOGW(TAG, "%s timer: bad payload '%s'", label, p ? p : "(null)");
         }
+#if IS_DARKROOM_TIMER
+    } else if (strcmp(act.type, ACTION_TYPE_EXPOSE) == 0) {
+        const char* cmd = act.mqtt_payload;
+        if (cmd && cmd[0]) {
+            LOGI(TAG, "%s expose: '%s'", label, cmd);
+            expose_timer_dispatch(cmd);
+        } else {
+            LOGW(TAG, "%s expose: empty command", label);
+        }
+#endif
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
     }
