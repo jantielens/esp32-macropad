@@ -214,6 +214,7 @@ const char* display_manager_get_current_screen_id();
 const ScreenInfo* display_manager_get_available_screens(size_t* count);
 void display_manager_set_splash_status(const char* text);
 void display_manager_set_backlight_brightness(uint8_t brightness);  // 0-100%
+uint8_t display_manager_get_backlight_brightness();  // 0-100%
 
 // Serialization helpers for code running outside the LVGL task.
 // Use these to avoid concurrent access to buffered display backends (e.g., Arduino_GFX canvas).

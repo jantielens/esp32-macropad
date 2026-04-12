@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Gauge needle cutoff** — new `Needle Cutoff` parameter (0–99%) removes the inner portion of the gauge needle starting from the center point, preventing overlap with the center label or icon. Set in the pad editor under the gauge widget section. Default 0 preserves the existing full-length needle.
 - **Per-board grid limits** — `MAX_PAD_BUTTONS`, `MAX_GRID_COLS`, and `MAX_GRID_ROWS` are now overridable per board via `board_overrides.h`. The pad editor dynamically populates grid size dropdowns from the device's `/api/info` endpoint. The jc3636w518 (360×360 round display) is set to 5×5 max grid and 3 LRU cached pads, reducing peak PSRAM usage from ~5.3 MB to ~0.8 MB.
+- **Brightness button action** — new `brightness` action type sets, increases, or decreases display backlight brightness (configurable step size or absolute set, default ±10%). Values clamped to 0–100%. Session-only — not persisted to NVS.
+
+### Changed
+
+- **Volume button action no longer persists to NVS** — volume changes from the `volume` button action are now session-only, matching the new brightness action behavior. Volume resets to the NVS-saved value on reboot.
 
 ### Fixed
 

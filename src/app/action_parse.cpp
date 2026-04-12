@@ -15,6 +15,8 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
     act.beep_volume = (uint8_t)(a["beep_volume"] | 0);
     strlcpy(act.volume_mode, a["volume_mode"] | "", CONFIG_VOLUME_MODE_MAX_LEN);
     act.volume_value = (uint8_t)(a["volume_value"] | 0);
+    strlcpy(act.brightness_mode, a["brightness_mode"] | "", CONFIG_VOLUME_MODE_MAX_LEN);
+    act.brightness_value = (uint8_t)(a["brightness_value"] | 0);
     // Timer: "timer_command" from web → reuse mqtt_payload for storage
     if (strcmp(act.type, ACTION_TYPE_TIMER) == 0 && a.containsKey("timer_command")) {
         strlcpy(act.mqtt_payload, a["timer_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
@@ -40,6 +42,8 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
     if (act.beep_volume > 0)  obj["beep_volume"]   = act.beep_volume;
     if (act.volume_mode[0])   obj["volume_mode"]   = act.volume_mode;
     if (act.volume_value > 0) obj["volume_value"]  = act.volume_value;
+    if (act.brightness_mode[0])   obj["brightness_mode"]   = act.brightness_mode;
+    if (act.brightness_value > 0) obj["brightness_value"]  = act.brightness_value;
     if (act.sound_file[0])    obj["sound_file"]    = act.sound_file;
     if (act.sound_volume > 0) obj["sound_volume"]  = act.sound_volume;
 }

@@ -73,6 +73,13 @@ void display_manager_set_backlight_brightness(uint8_t brightness) {
 		}
 }
 
+uint8_t display_manager_get_backlight_brightness() {
+		if (displayManager && displayManager->getDriver()) {
+				return displayManager->getDriver()->getBacklightBrightness();
+		}
+		return 100;
+}
+
 void display_manager_lock() {
 		if (displayManager) {
 				displayManager->lock();

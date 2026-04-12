@@ -111,7 +111,8 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_KEY      "key"
 #define ACTION_TYPE_BLE_PAIR "ble_pair"
 #define ACTION_TYPE_BEEP     "beep"
-#define ACTION_TYPE_VOLUME   "volume"
+#define ACTION_TYPE_VOLUME     "volume"
+#define ACTION_TYPE_BRIGHTNESS "brightness"
 #define ACTION_TYPE_TIMER    "timer"
 #define ACTION_TYPE_SOUND    "sound"
 
@@ -129,6 +130,8 @@ struct ButtonAction {
     uint8_t beep_volume;                             // type="beep": 0 = use device volume, 1-100 = override
     char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set", "up", or "down"
     uint8_t volume_value;                            // type="volume": 0-100 (used with mode="set")
+    char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // type="brightness": "set", "up", or "down"
+    uint8_t brightness_value;                         // type="brightness": 0-100 (target or step size)
     char sound_file[32];                              // type="sound": filename (no path/extension)
     uint8_t sound_volume;                             // type="sound": 0 = device vol, 1-100 = override
 };
