@@ -237,6 +237,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/expose_timer.cpp
   - src/app/ha_discovery.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
@@ -517,6 +518,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/display_task.cpp
+  - src/app/expose_timer.cpp
   - src/app/web_portal_config.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h

@@ -33,6 +33,7 @@
 #include "timer_config.h"
 #if IS_DARKROOM_TIMER
 #include "expose_timer.h"
+#include "test_strip.h"
 #endif
 #include "pad_config.h"
 #include "screen_saver_manager.h"
@@ -366,6 +367,7 @@ void setup()
 	timer_config_init();
 	#if IS_DARKROOM_TIMER
 	expose_timer_init();
+	test_strip_init();
 	#endif
 	#endif
 
@@ -437,6 +439,7 @@ void loop()
 	action_dispatch_loop();
 	#if IS_DARKROOM_TIMER
 	expose_timer_loop();
+	test_strip_loop();
 	#endif
 	#endif
 

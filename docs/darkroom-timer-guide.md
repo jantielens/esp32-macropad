@@ -210,6 +210,131 @@ In a darkroom under safelight, the display is your primary light source. Keep th
 
 ---
 
+## Test Strip Sequencer
+
+The test strip sequencer automates f-stop test strip exposures. It calculates a series of segments spaced at equal f-stop intervals around a base time, then exposes each segment in sequence with audio cues and inter-segment pauses for mask movement.
+
+### How It Works
+
+The sequencer uses the **progressive uncover** technique. Start with the paper fully masked, then reveal one more strip before each exposure step. Segment 1 is uncovered first and accumulates the most light; the last segment receives only a single exposure increment.
+
+Segment times are calculated using f-stop math: each segment's cumulative time is `base_time × 2^(offset)`, where the offset is determined by the step interval and position relative to the center segment.
+
+With default settings (8s base, ⅓-stop steps, 7 segments), a typical strip produces cumulative exposures from roughly 4s to 16s — a 2-stop range centered on your estimate.
+
+### Sequence Flow
+
+When you start the sequencer, it runs automatically through all segments:
+
+1. **Initial countdown** — a configurable heads-up period (default 5s) with per-second ticks and a pre-expose beep in the last 3 seconds
+2. **Expose** — the relay turns on for the incremental exposure time (with optional per-second ticks); after this step, uncover the next strip
+3. **Pause** — the relay turns off and a configurable pause (default 3s) gives you time to uncover the next strip; the pre-expose beep plays in the last 3 seconds
+4. Steps 2-3 repeat for each remaining segment
+5. **Done** — the relay turns off, a completion tone sounds, and the sequencer returns to idle
+
+The only user interaction during a sequence is **Cancel** to abort.
+
+### Binding Tokens
+
+Use the `strip` binding scheme to display sequencer data on button labels.
+
+#### State and Progress
+
+| Token | Description | Example output |
+|-------|-------------|----------------|
+| `[strip:state]` | Current state | `exposing` |
+| `[strip:segment]` | Current segment number (1-based) | `3` |
+| `[strip:segments]` | Total segment count | `7` |
+| `[strip:progress]` | Current progress | `3/7` |
+| `[strip:remaining]` | Current phase remaining (seconds) | `4.2` |
+| `[strip:elapsed]` | Current phase elapsed (seconds) | `1.8` |
+| `[strip:relay]` | Relay state | `ON` |
+
+#### Segment Data
+
+| Token | Description | Example output |
+|-------|-------------|----------------|
+| `[strip:seg_time:N]` | Cumulative time for segment N | `8.0` |
+| `[strip:seg_inc:N]` | Incremental time for segment N | `1.9` |
+| `[strip:seg_offset:N]` | F-stop offset for segment N | `+0.3` |
+| `[strip:seg_inc]` | Incremental time for current segment | `1.9` |
+
+#### Configuration
+
+| Token | Description | Example output |
+|-------|-------------|----------------|
+| `[strip:base_time]` | Base time setting | `8.0` |
+| `[strip:step]` | Step interval (fraction) | `1/3` |
+| `[strip:range]` | Exposure range | `4.0-16.0` |
+| `[strip:total_time]` | Estimated total sequence time | `98` |
+| `[strip:countdown]` | Initial countdown setting | `5` |
+| `[strip:pause]` | Inter-segment pause setting | `3` |
+| `[strip:tick]` | Exposure tick on/off | `on` |
+
+#### Table Widget
+
+The `[strip:table]` token returns a JSON payload for the table widget, showing all segments with their incremental exposure duration and cumulative total. The table uses darkroom-safe red tones for text and highlights the active segment during a sequence. Use it as the `widget_data_binding` on a button configured with the table widget type.
+
+#### Format Override
+
+Time tokens (`remaining`, `elapsed`, `total_time`) support format overrides:
+
+- `[strip:remaining;mm:ss.d]` — remaining as `0:04.2`
+- `[strip:total_time;mm:ss]` — total time as `1:38`
+
+### Button Actions
+
+Use the **Test Strip** action type in the button editor.
+
+#### Control Commands
+
+| Command | Description |
+|---------|-------------|
+| **Start** | Begin the sequence from idle |
+| **Cancel** | Abort the sequence, turn relay off |
+
+#### Configuration Commands
+
+Configuration commands only take effect when the sequencer is idle.
+
+| Command | Value | Description |
+|---------|-------|-------------|
+| **Set Base Time** | seconds | Center exposure time (1.0-999.9, default 8.0) |
+| **Add Base Time** | seconds | Add or subtract from base time (e.g. 1, -0.5) |
+| **Step Interval Up** | — | Increase step: 1/5 → 1/4 → 1/3 → 1/2 → 1/1 |
+| **Step Interval Down** | — | Decrease step: 1/1 → 1/2 → 1/3 → 1/4 → 1/5 |
+| **Add Segments** | count | Add or remove segments (+2/-2, stays odd, clamped 3-11) |
+| **Set Segments** | count | Set number of segments (rounded to odd, clamped 3-11) |
+| **Set Countdown** | seconds | Initial countdown duration (2-10, default 5) |
+| **Set Pause** | seconds | Inter-segment pause for mask movement (3-15, default 3) |
+| **Set Tick** | on/off | Per-second tick during exposure (default on) |
+
+### Building a Test Strip Pad
+
+A 3×4 grid provides a practical layout for test strip controls:
+
+| | Column 1 | Column 2 | Column 3 |
+|---|----------|----------|----------|
+| **Row 1** | Base time display | Progress / state | Step display |
+| **Row 2** | Step down | Start | Step up |
+| **Row 3** | -1 segment | Cancel | +1 segment |
+| **Row 4** | Segment table (span 3 cols) | | |
+
+#### Key Buttons
+
+- **Base time display** — Label: `[strip:base_time]s`, no action (display-only)
+- **Progress / state** — Label: `[expr:[strip:state]=="idle"?"READY":[strip:progress]]`
+- **Step display** — Label: `[strip:step] stop`
+- **Start** — Action: Test Strip → Start
+- **Cancel** — Action: Test Strip → Cancel
+- **Step down / Step up** — Action: Test Strip → Step Interval Down / Step Interval Up
+- **-1 / +1 segment** — Action: Test Strip → Add Segments, value: `-2` / `2` (always odd count)
+- **Segment table** — Widget: Table, data binding: `[strip:table]` (shows all segments with duration and total)
+
+> **Tip**: The default ⅓-stop step matches standard aperture increments. Tap Step Up for wider coverage (½ or full stop) or Step Down for finer precision (¼ or ⅕ stop).
+
+---
+
 ## Chemistry Timers
 
 For timing chemical processing (developer, stop bath, fixer), the darkroom timer device includes the standard **Timer Control** action type with three independent count-up or countdown timers. These use the existing timer engine and don't require the Shelly Plug.

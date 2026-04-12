@@ -20,6 +20,7 @@
 #include "timer_engine.h"
 #if IS_DARKROOM_TIMER
 #include "expose_timer.h"
+#include "test_strip.h"
 #endif
 
 #define TAG "Action"
@@ -163,6 +164,14 @@ void action_dispatch(const ButtonAction& act, const char* label) {
             expose_timer_dispatch(cmd);
         } else {
             LOGW(TAG, "%s expose: empty command", label);
+        }
+    } else if (strcmp(act.type, ACTION_TYPE_STRIP) == 0) {
+        const char* cmd = act.mqtt_payload;
+        if (cmd && cmd[0]) {
+            LOGI(TAG, "%s strip: '%s'", label, cmd);
+            test_strip_dispatch(cmd);
+        } else {
+            LOGW(TAG, "%s strip: empty command", label);
         }
 #endif
     } else {
