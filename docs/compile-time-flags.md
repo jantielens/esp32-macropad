@@ -243,6 +243,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_audio.h
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
+  - src/app/test_strip.cpp
   - src/app/web_portal_config.cpp
 - **HAS_BACKLIGHT**
   - src/app/app.ino
@@ -519,6 +520,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/display_task.cpp
   - src/app/expose_timer.cpp
+  - src/app/test_strip.cpp
   - src/app/web_portal_config.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
