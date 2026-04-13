@@ -217,7 +217,7 @@ The Table widget's **Data Binding** field accepts structured table payload bindi
 
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 
-For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines, tables), label styling, dynamic colors, pad bindings (named data sources), and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
+For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines, tables, rockers), label styling, dynamic colors, pad bindings (named data sources), and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
 
 All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, expression syntax, and known health/timer keys (including `table` and `extended_table`) are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
 
