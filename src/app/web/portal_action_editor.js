@@ -29,6 +29,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="beep">Play Beep</option>';
     h += '<option value="sound">Play Sound</option>';
     h += '<option value="volume">Set Volume</option>';
+    h += '<option value="brightness">Set Brightness</option>';
     h += '<option value="timer">Timer Control</option>';
     // Extension action types (e.g. scale, brew)
     _actionEditorExtensions.forEach(function(ext) { if (ext.options) h += ext.options(); });
@@ -100,6 +101,21 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<label for="' + prefix + '-volume-value">Volume (%)</label>';
     h += '<input type="number" id="' + prefix + '-volume-value" min="0" max="100" placeholder="e.g. 50">';
     h += '</div></div>';
+    // Brightness
+    h += '<div id="' + prefix + '-brightness-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-brightness-mode">Brightness Action</label>';
+    h += '<select id="' + prefix + '-brightness-mode" onchange="actionEditorTypeChanged(\'' + prefix + '\')">'; 
+    h += '<option value="set">Set to value</option>';
+    h += '<option value="up">Brightness Up (+10%)</option>';
+    h += '<option value="down">Brightness Down (&minus;10%)</option>';
+    h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-brightness-value-group">';
+    h += '<label for="' + prefix + '-brightness-value">Brightness (%)</label>';
+    h += '<input type="number" id="' + prefix + '-brightness-value" min="0" max="100" placeholder="e.g. 50">';
+    h += '<small id="' + prefix + '-brightness-step-hint" style="display:none;">Step size (default 10 if empty).</small>';
+    h += '</div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
     h += '<div class="form-group">';
@@ -149,6 +165,8 @@ function actionEditorTypeChanged(prefix, skipBrewPopulate) {
     if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
     if (soundGrp) soundGrp.style.display = (type === 'sound') ? '' : 'none';
     if (volGrp) volGrp.style.display = (type === 'volume') ? '' : 'none';
+    var brightGrp = document.getElementById(prefix + '-brightness-group');
+    if (brightGrp) brightGrp.style.display = (type === 'brightness') ? '' : 'none';
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     if (type === 'timer') actionEditorTimerChanged(prefix);
@@ -159,6 +177,16 @@ function actionEditorTypeChanged(prefix, skipBrewPopulate) {
         var modeEl = document.getElementById(prefix + '-volume-mode');
         var valGrp = document.getElementById(prefix + '-volume-value-group');
         if (modeEl && valGrp) valGrp.style.display = (modeEl.value === 'set') ? '' : 'none';
+    }
+    // Show/hide brightness value field and step hint depending on mode
+    if (type === 'brightness') {
+        var bModeEl = document.getElementById(prefix + '-brightness-mode');
+        var bValGrp = document.getElementById(prefix + '-brightness-value-group');
+        var bStepHint = document.getElementById(prefix + '-brightness-step-hint');
+        if (bModeEl && bValGrp) {
+            bValGrp.style.display = '';
+            if (bStepHint) bStepHint.style.display = (bModeEl.value !== 'set') ? '' : 'none';
+        }
     }
 }
 
@@ -207,6 +235,10 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.volume_value !== undefined && action.volume_value > 0) ? action.volume_value : '';
     // Extension load handlers (e.g. scale, brew)
     _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
+    el = document.getElementById(prefix + '-brightness-mode');
+    if (el) el.value = action.brightness_mode || 'set';
+    el = document.getElementById(prefix + '-brightness-value');
+    if (el) el.value = (action.brightness_value !== undefined && action.brightness_value > 0) ? action.brightness_value : '';
     // Timer: parse DSL string "N:command[:arg]" into structured fields
     if (action.timer_command) {
         var tc = action.timer_command;
@@ -279,6 +311,12 @@ function actionEditorBuild(prefix) {
             if (extra) { for (var k in extra) act[k] = extra[k]; }
         }
     });
+    if (type === 'brightness') {
+        var bm = document.getElementById(prefix + '-brightness-mode');
+        if (bm) act.brightness_mode = bm.value;
+        var bv = document.getElementById(prefix + '-brightness-value');
+        if (bv && bv.value !== '') act.brightness_value = parseInt(bv.value, 10);
+    }
     if (type === 'timer') {
         var sel = document.getElementById(prefix + '-timer-action');
         if (sel) {

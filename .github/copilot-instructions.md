@@ -42,6 +42,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color and bindable min/max scale, configurable animation transitions, binding-driven)
   - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, bindable min/max scale, configurable animation transitions, up to 4 slots with optional dual-binding pairs, binding-driven)
   - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale or bindable min/max, time-windowed display, bindable line colors, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry, per-marker min/max dots with labels, current-value dot, up to 3 reference lines)
+  - `widgets/table_widget.cpp` - Table widget (multi-column row data from structured binding payload; optional font style override and scrolling)
+  - `widgets/rocker_widget.cpp` - Rocker widget (splits button into two tap zones for directional actions; vertical or horizontal axis; chevron indicators; zone-based tap flash and audio cues; no data binding)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Data Stream Registry**: Background data collection for history-based widgets (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
   - `data_stream.cpp/h` - Demand-driven registry of per-widget ring buffers; resolves bindings and feeds PSRAM-allocated ring buffers every LVGL cycle regardless of active screen; LOCF for data gaps; rebuild triggered by pad config generation changes
@@ -75,7 +77,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Swipe Actions Subsystem**: Configurable swipe gestures with full ButtonAction parity (compile-time gated by `HAS_DISPLAY`)
   - `swipe_config.cpp/h` - LittleFS-backed swipe action config (`/config/swipe_actions.json`) with RAM cache; 4 directions × ButtonAction
   - `swipe_actions.cpp/h` - Shared LVGL gesture handler with 300ms debounce; registered on all screens
-  - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, timer control); used by pad buttons, swipe gestures, boot actions, and timer expire callbacks
+  - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, brightness, timer control); used by pad buttons, swipe gestures, boot actions, and timer expire callbacks
   - `action_parse.cpp/h` - Shared `action_parse()` and `action_to_json()` for DRY ButtonAction JSON serialization; used by pad_config, swipe_config, boot_actions, timer_config, and web_portal_swipe
   - `web_portal_swipe.cpp/h` - REST API for GET/POST `/api/swipe-actions`
 - **Boot Actions Subsystem**: Device-level actions dispatched once at boot after the first screen is shown (compile-time gated by `HAS_DISPLAY`)
@@ -315,7 +317,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/font_family/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `timer`, `sound`); `ScreenButtonConfig` holds `actions[MAX_BUTTON_ACTIONS]` / `lp_actions[MAX_BUTTON_ACTIONS]` arrays with counts for multi-action sequential dispatch; JSON parser supports both new array format (`"actions": [...]`) and legacy single-object format (`"action": {...}`); `ButtonDefaults` struct for device-level appearance cascade (colors, border, radius, label styles) — per-button fields fall through to device defaults, then to firmware hardcoded defaults; `template_pad` field (int8_t, -1=none) for inheriting buttons from another pad into empty grid positions at load time (no chaining, target wins on conflict)
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/font_family/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `brightness`, `timer`, `sound`); `ScreenButtonConfig` holds `actions[MAX_BUTTON_ACTIONS]` / `lp_actions[MAX_BUTTON_ACTIONS]` arrays with counts for multi-action sequential dispatch; JSON parser supports both new array format (`"actions": [...]`) and legacy single-object format (`"action": {...}`); `ButtonDefaults` struct for device-level appearance cascade (colors, border, radius, label styles) — per-button fields fall through to device defaults, then to firmware hardcoded defaults; `template_pad` field (int8_t, -1=none) for inheriting buttons from another pad into empty grid positions at load time (no chaining, target wins on conflict)
 - `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`, `pad_apply_font_upscale()`, `PadLabelAnchorY`)
 - `src/app/fonts/custom_fonts.h` - Custom font family declarations and lookup API (compile-time gated by `HAS_CUSTOM_FONTS`)
 - `src/app/custom_fonts.cpp` - Custom font compilation unit (includes generated `.c` font files)
@@ -332,6 +334,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (bindable bar color, bindable min/max scale, MQTT data binding)
 - `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, per-ring bindable arc colors, bindable min/max scale, up to 4 slots with optional dual-binding pairs, binding-driven)
 - `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, up to 3 overlaid lines, reads from data stream registry, auto-scale or bindable min/max, bindable line colors, per-marker min/max dots with labels and color overrides, current-value dot, up to 3 reference lines with color and pattern)
+- `src/app/widgets/rocker_widget.cpp` - Rocker widget implementation (directional tap zones, vertical/horizontal axis, chevron indicators, zone-based tap flash and audio cues)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template
@@ -620,7 +623,7 @@ Use these terms consistently in user-facing text (UI, docs, log messages, API re
 | **Screen** | Any UI that can be displayed on the device (splash, info, test, pad, …). | User-facing + code |
 | **Pad** | A user-customizable screen containing a grid of buttons. The device supports up to 16 pads (configurable via MAX_PADS). | User-facing + code |
 | **Button** | An interactive element in a pad's grid. May host labels, icons, colors, actions, images, and optionally a widget. | User-facing + code |
-| **Widget** | A specialized data visualization (gauge, sparkline, bar chart) rendered inside a button. A button without a widget is just a normal button. | User-facing + code |
+| **Widget** | A specialized data visualization or interaction mode (gauge, sparkline, bar chart, rocker) rendered inside a button. A button without a widget is just a normal button. | User-facing + code |
 
 ### Retired / Internal-Only Terms
 

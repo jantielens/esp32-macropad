@@ -228,6 +228,36 @@ TEST(volume_action_round_trip) {
 }
 
 // ============================================================================
+// Brightness action
+// ============================================================================
+
+TEST(brightness_action_parse) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"brightness\",\"brightness_mode\":\"set\",\"brightness_value\":75}");
+    ASSERT_STR(act.type, "brightness");
+    ASSERT_STR(act.brightness_mode, "set");
+    ASSERT_EQ(act.brightness_value, 75);
+}
+
+TEST(brightness_action_round_trip) {
+    ButtonAction act = round_trip(
+        "{\"type\":\"brightness\",\"brightness_mode\":\"up\",\"brightness_value\":20}");
+    ASSERT_STR(act.type, "brightness");
+    ASSERT_STR(act.brightness_mode, "up");
+    ASSERT_EQ(act.brightness_value, 20);
+}
+
+TEST(brightness_zero_value_not_serialized) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"brightness\",\"brightness_mode\":\"down\",\"brightness_value\":0}");
+    StaticJsonDocument<256> doc;
+    JsonObject obj = doc.to<JsonObject>();
+    action_to_json(act, obj);
+    ASSERT_TRUE(!obj.containsKey("brightness_value"));
+    ASSERT_TRUE(obj.containsKey("brightness_mode"));
+}
+
+// ============================================================================
 // Timer action
 // ============================================================================
 
@@ -320,6 +350,7 @@ TEST(all_fields_populated) {
         "{\"type\":\"mqtt\",\"target\":\"pad_1\",\"topic\":\"t\",\"payload\":\"p\","
         "\"sequence\":\"Ctrl+A\",\"beep_pattern\":\"500:100\",\"beep_volume\":42,"
         "\"volume_mode\":\"set\",\"volume_value\":55,"
+        "\"brightness_mode\":\"up\",\"brightness_value\":15,"
         "\"sound_file\":\"alert\",\"sound_volume\":90}";
     ButtonAction act = round_trip(json);
     ASSERT_STR(act.type, "mqtt");
@@ -331,6 +362,8 @@ TEST(all_fields_populated) {
     ASSERT_EQ(act.beep_volume, 42);
     ASSERT_STR(act.volume_mode, "set");
     ASSERT_EQ(act.volume_value, 55);
+    ASSERT_STR(act.brightness_mode, "up");
+    ASSERT_EQ(act.brightness_value, 15);
     ASSERT_STR(act.sound_file, "alert");
     ASSERT_EQ(act.sound_volume, 90);
 }
@@ -370,6 +403,11 @@ int main() {
     printf("\n--- Volume action ---\n");
     RUN(volume_action_parse);
     RUN(volume_action_round_trip);
+
+    printf("\n--- Brightness action ---\n");
+    RUN(brightness_action_parse);
+    RUN(brightness_action_round_trip);
+    RUN(brightness_zero_value_not_serialized);
 
     printf("\n--- Timer action ---\n");
     RUN(timer_action_parse);

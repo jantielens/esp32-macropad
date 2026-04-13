@@ -7,9 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Rocker widget** — a new widget type that splits a button into two tap zones. Tap the top half to trigger one set of actions, tap the bottom half to trigger another — ideal for brightness up/down, volume +/−, or any value you want to adjust from a single button. Reuses existing tap and long-press action slots for the two zones (no schema changes). Supports both vertical (up/down, default) and horizontal (left/right) axis. Visual cue: small chevron indicators (▲▼ or ◄►) at the edges. Tap flash covers only the tapped half. Zone B (down/right) uses the device long-press beep pattern for a distinct audio cue. Configure axis, indicator color, and opacity in the button editor under Rocker Settings.
+- **Gauge needle cutoff** — new `Needle Cutoff` parameter (0–99%) removes the inner portion of the gauge needle starting from the center point, preventing overlap with the center label or icon. Set in the pad editor under the gauge widget section. Default 0 preserves the existing full-length needle.
+- **Per-board grid limits** — `MAX_PAD_BUTTONS`, `MAX_GRID_COLS`, and `MAX_GRID_ROWS` are now overridable per board via `board_overrides.h`. The pad editor dynamically populates grid size dropdowns from the device's `/api/info` endpoint. The jc3636w518 (360×360 round display) is set to 5×5 max grid and 3 LRU cached pads, reducing peak PSRAM usage from ~5.3 MB to ~0.8 MB.
+- **Brightness button action** — new `brightness` action type sets, increases, or decreases display backlight brightness (configurable step size or absolute set, default ±10%). Values clamped to 0–100%. Session-only — not persisted to NVS.
+
+### Changed
+
+- **Volume button action no longer persists to NVS** — volume changes from the `volume` button action are now session-only, matching the new brightness action behavior. Volume resets to the NVS-saved value on reboot.
+
 ### Fixed
 
+- **Widget animation stuck on rapid bindings** — bar chart and gauge widgets appeared frozen when their data binding resolved faster than the configured animation duration (e.g. `[time:%ms]` every ~10–20 ms vs 300 ms ease-out). Each `lv_anim_start()` replaced the running animation and reset the ease-out curve before any visible progress. Widgets now track the last update timestamp and fall back to direct-set when updates arrive faster than `anim_ms`. Slow-updating bindings (MQTT sensors) still animate smoothly.
 - **Compile-time flags report for inheriting boards** — `compile_flags_report.py` now resolves relative `#include` directives in board override files, so boards that inherit from a parent (e.g. `jc4880p433-hx711` including `../jc4880p433/board_overrides.h`) correctly report inherited flags like `HAS_DISPLAY` and driver selectors. Previously these boards showed `(none)` for active features and `—` for driver selectors in build logs and the compile-time flags doc.
+- **P4 letterbox scaling black bars** — letterbox mode on ESP32-P4 boards produced unnecessary black bars on both axes because the PPA hardware scaler quantises to m/16 steps, undershooting the ideal scale on most aspect ratios. Replaced PPA with a CPU bilinear RGB565 scaler for letterbox mode while keeping the fast HW JPEG decoder. Cover mode continues to use PPA where quantisation is harmless.
+- **PadConfig OOM log flood** — when `buildTiles()` failed to allocate PadConfig or binding arrays, it returned without setting `tilesBuilt`, causing the LVGL task to retry every frame (~30 Hz) and flood the serial log. Now marks `tilesBuilt = true` on OOM so the error logs once per config generation change.
 
 ## [1.13.0] - 2026-04-11
 

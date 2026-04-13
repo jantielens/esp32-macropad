@@ -13,8 +13,6 @@
 #endif
 #if HAS_AUDIO
 #include "audio.h"
-#include "config_manager.h"
-#include "web_portal_state.h"
 #endif
 
 #include "action_dispatch_scale.h"
@@ -22,12 +20,6 @@
 #include "timer_engine.h"
 
 #define TAG "Action"
-
-#if HAS_AUDIO
-// Deferred NVS volume save — set in LVGL task, processed in main loop.
-// Avoids flash I/O from PSRAM-stack tasks (crashes on ESP32-P4).
-static volatile bool g_volume_save_pending = false;
-#endif
 
 void action_dispatch(const ButtonAction& act, const char* label) {
     if (!act.type[0]) return;
@@ -117,13 +109,29 @@ void action_dispatch(const ButtonAction& act, const char* label) {
             audio_set_volume(v);
             LOGI(TAG, "%s volume set -> %u%%", label, v);
         }
-        // Defer NVS persist to main loop (flash I/O not safe from LVGL task)
-        g_volume_save_pending = true;
 #else
         LOGW(TAG, "%s volume: not compiled", label);
 #endif
     } else if (scale_action_dispatch(act, label)) {
         // handled by scale/brew module
+    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
+        uint8_t step = act.brightness_value > 0 ? act.brightness_value : 10;
+        if (strcmp(act.brightness_mode, "up") == 0) {
+            uint8_t v = display_manager_get_backlight_brightness();
+            v = (v + step > 100) ? 100 : v + step;
+            display_manager_set_backlight_brightness(v);
+            LOGI(TAG, "%s brightness up -> %u%%", label, v);
+        } else if (strcmp(act.brightness_mode, "down") == 0) {
+            uint8_t v = display_manager_get_backlight_brightness();
+            v = (v < step) ? 0 : v - step;
+            display_manager_set_backlight_brightness(v);
+            LOGI(TAG, "%s brightness down -> %u%%", label, v);
+        } else {
+            uint8_t v = act.brightness_value;
+            if (v > 100) v = 100;
+            display_manager_set_backlight_brightness(v);
+            LOGI(TAG, "%s brightness set -> %u%%", label, v);
+        }
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
         // Payload format: "N:command" or "N:command:arg"
         // e.g. "1:toggle", "2:start", "1:adjust:30"
@@ -162,19 +170,9 @@ void action_dispatch(const ButtonAction& act, const char* label) {
 }
 
 // ---------------------------------------------------------------------------
-// Deferred operations — called from main loop() (internal-RAM stack)
+// Called from main loop() — placeholder for future deferred operations.
 // ---------------------------------------------------------------------------
 void action_dispatch_loop() {
-#if HAS_AUDIO
-    if (g_volume_save_pending) {
-        g_volume_save_pending = false;
-        DeviceConfig *cfg = web_portal_get_current_config();
-        if (cfg) {
-            cfg->audio_volume = audio_get_volume();
-            config_manager_save(cfg);
-        }
-    }
-#endif
 }
 
 #endif // HAS_DISPLAY

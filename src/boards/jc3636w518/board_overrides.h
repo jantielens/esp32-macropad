@@ -37,6 +37,19 @@
 #define UI_SCALE_TIER UI_SCALE_MEDIUM
 
 // ---------------------------------------------------------------------------
+// Memory tuning — 360×360 round display needs at most 5×5 grid.
+// Reduces per-pad PSRAM from ~672 KB to ~271 KB.
+// ---------------------------------------------------------------------------
+// Maximum buttons per pad (5×5 grid).
+#define MAX_PAD_BUTTONS       25
+// Maximum grid columns.
+#define MAX_GRID_COLS          5
+// Maximum grid rows.
+#define MAX_GRID_ROWS          5
+// LRU pad cache depth (number of pads kept in memory).
+#define SCREEN_HISTORY_MAX     3
+
+// ---------------------------------------------------------------------------
 // Display geometry
 // ---------------------------------------------------------------------------
 // Panel width in pixels.

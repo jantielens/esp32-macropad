@@ -307,6 +307,75 @@ static bool ppa_letterbox_scale(
     return true;
 }
 
+// Letterbox scale from HW-decoded RGB565 (with stride) using CPU bilinear.
+// Replaces PPA for letterbox because PPA's m/16 quantised scale undershoots
+// on most aspect ratios, producing unwanted black bars on both axes.
+static bool letterbox_scale_rgb565_to_565(
+    const uint16_t* src, int src_w, int src_h, int src_stride,
+    uint16_t* dst, int dst_w, int dst_h)
+{
+    if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
+
+    memset(dst, 0, (size_t)dst_w * dst_h * 2);
+
+    float scale_x = (float)dst_w / (float)src_w;
+    float scale_y = (float)dst_h / (float)src_h;
+    float scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+    int scaled_w = (int)(src_w * scale + 0.5f);
+    int scaled_h = (int)(src_h * scale + 0.5f);
+    if (scaled_w > dst_w) scaled_w = dst_w;
+    if (scaled_h > dst_h) scaled_h = dst_h;
+    int offset_x = (dst_w - scaled_w) / 2;
+    int offset_y = (dst_h - scaled_h) / 2;
+
+    for (int dy = 0; dy < scaled_h; dy++) {
+        float src_yf = (float)dy / scale;
+        int sy0 = (int)src_yf;
+        float fy = src_yf - sy0;
+        int sy1 = sy0 + 1;
+        if (sy0 < 0) { sy0 = 0; fy = 0; }
+        if (sy1 >= src_h) sy1 = src_h - 1;
+
+        uint16_t* row_out = dst + (size_t)(dy + offset_y) * dst_w + offset_x;
+
+        for (int dx = 0; dx < scaled_w; dx++) {
+            float src_xf = (float)dx / scale;
+            int sx0 = (int)src_xf;
+            float fx = src_xf - sx0;
+            int sx1 = sx0 + 1;
+            if (sx0 < 0) { sx0 = 0; fx = 0; }
+            if (sx1 >= src_w) sx1 = src_w - 1;
+
+            uint16_t c00 = src[(size_t)sy0 * src_stride + sx0];
+            uint16_t c10 = src[(size_t)sy0 * src_stride + sx1];
+            uint16_t c01 = src[(size_t)sy1 * src_stride + sx0];
+            uint16_t c11 = src[(size_t)sy1 * src_stride + sx1];
+
+            float w00 = (1.0f - fx) * (1.0f - fy);
+            float w10 = fx * (1.0f - fy);
+            float w01 = (1.0f - fx) * fy;
+            float w11 = fx * fy;
+
+            float r = ((c00 >> 11) & 0x1F) * w00 + ((c10 >> 11) & 0x1F) * w10
+                    + ((c01 >> 11) & 0x1F) * w01 + ((c11 >> 11) & 0x1F) * w11;
+            float g = ((c00 >> 5) & 0x3F) * w00 + ((c10 >> 5) & 0x3F) * w10
+                    + ((c01 >> 5) & 0x3F) * w01 + ((c11 >> 5) & 0x3F) * w11;
+            float b = (c00 & 0x1F) * w00 + (c10 & 0x1F) * w10
+                    + (c01 & 0x1F) * w01 + (c11 & 0x1F) * w11;
+
+            uint8_t ri = (uint8_t)(r + 0.5f); if (ri > 31) ri = 31;
+            uint8_t gi = (uint8_t)(g + 0.5f); if (gi > 63) gi = 63;
+            uint8_t bi = (uint8_t)(b + 0.5f); if (bi > 31) bi = 31;
+
+            row_out[dx] = (uint16_t)((ri << 11) | (gi << 5) | bi);
+        }
+
+        if ((dy & 0x0F) == 0) taskYIELD();
+    }
+    return true;
+}
+
 // Orchestrate full P4 hardware path.  Returns true and fills *out on success.
 // Returns false on any failure so the caller can use the software path.
 static bool hw_decode_and_scale(
@@ -328,8 +397,10 @@ static bool hw_decode_and_scale(
 
     bool ok = false;
     if (scale_mode == IMAGE_SCALE_LETTERBOX) {
-        ok = ppa_letterbox_scale(decoded, actual_w, actual_h, decoded_w,
-                                  out, out_aligned_size, target_w, target_h);
+        // CPU bilinear for letterbox — PPA's m/16 quantisation undershoots
+        // on most aspect ratios, producing unwanted bars on both axes.
+        ok = letterbox_scale_rgb565_to_565(decoded, actual_w, actual_h, decoded_w,
+                                           out, target_w, target_h);
     } else {
         ok = ppa_cover_scale(decoded, actual_w, actual_h, decoded_w,
                               out, out_aligned_size, target_w, target_h);

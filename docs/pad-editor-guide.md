@@ -16,7 +16,7 @@ At the top of the pad editor, you configure the pad itself:
 
 - **Pad selection** — switch between Pad 1 through 16. Each pad is saved independently.
 - **Pad Name** — an optional label shown in Home Assistant and on-device. For example, "Solar", "Lights", or "Cameras".
-- **Columns / Rows** — the grid size, from 1×1 up to 8×8. A 3×2 grid gives you 6 large buttons; a 4×4 grid gives you 16 smaller ones.
+- **Columns / Rows** — the grid size. The maximum depends on the board (e.g. 5×5 on round displays, 8×8 on larger panels). A 3×2 grid gives you 6 large buttons; a 4×4 grid gives you 16 smaller ones.
 - **Wake Screen** — when the screensaver wakes up, which screen should appear? Leave empty to return to the last active screen, or pick a specific pad.
 - **Background** — the color behind the grid. Accepts a `#hex` color or a binding expression for dynamic backgrounds.
 
@@ -275,6 +275,7 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
 | **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
 | **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
+| **Set Brightness** | Adjust the display backlight brightness — set to a specific value, or step up/down (default 10%). Session-only, resets on reboot. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
 
 **Example setup for a smart light:**
@@ -373,7 +374,45 @@ Buttons use the device-level beep patterns configured on the Home page. To play 
 
 ## Widgets
 
-Widgets replace the standard button rendering with specialized visualizations. Select the widget type in the button editor.
+Widgets replace the standard button rendering with specialized visualizations or interaction modes. Select the widget type in the button editor.
+
+### Rocker
+
+The rocker widget splits a button into two tap zones — tap the top half to trigger one set of actions, tap the bottom half to trigger another. This turns a single button into a directional control, ideal for brightness up/down, volume +/−, thermostat setpoints, or any value you want to nudge from one place.
+
+Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes how the button responds to taps.
+
+**How it works:**
+
+- The button area is divided into two equal zones along the selected axis.
+- **Zone A** (top or left) dispatches the **Tap Action** set.
+- **Zone B** (bottom or right) dispatches the **Long-Press Action** set.
+- Small chevron indicators (▲▼ or ◄►) appear at the edges so the user knows the button is directional.
+- The tap flash overlay covers only the tapped half for clear visual feedback.
+- Zone B uses the device's **Long-Press Beep** pattern for a distinct audio cue (suppressed when the action itself produces audio).
+- Long-press is disabled on rocker buttons since both action slots are used for the two zones.
+
+> **Note:** The action labels in the button editor change contextually when a rocker widget is selected — "Tap Action" becomes "Up Action" (or "Left Action") and "Long-Press Action" becomes "Down Action" (or "Right Action").
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Direction** | Vertical (up/down, default) or horizontal (left/right) |
+| **Indicator Color** | Color of the chevron symbols (default white) |
+| **Opacity** | Chevron visibility from 0 (invisible) to 255 (fully opaque). Default 80 (~31%) |
+
+**Example — Brightness rocker:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | Rocker |
+| Direction | Vertical |
+| Center label | `☀️` or `[health:brightness]` |
+| Up Action | Brightness → Up |
+| Down Action | Brightness → Down |
+
+Labels, icons, and colors work alongside the rocker widget. A typical rocker button uses the center label for an icon or the current value, with top/bottom labels for context.
 
 ### Bar Chart
 
@@ -427,6 +466,7 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
 | **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
 | **Needle Width** | Line width in pixels (0 = hidden, max 10) |
+| **Needle Cutoff** | Percentage of the needle length to remove from the center (0–99%). Use this to prevent the needle from overlapping a center label or icon. Default: 0 (full-length needle) |
 | **Tick Width** | Tick line width in pixels (1–5) |
 | **Arc Color** | Fill color for slot 1. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Arc Color 2** | Fill color for slot 2, or the negative half of Dual Binding Pair 1. Default: blue (`#2196F3`) |

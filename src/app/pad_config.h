@@ -15,9 +15,16 @@
 // pad_config_load() parses only the fields needed for rendering.
 
 // MAX_PADS is defined in board_config.h (overridable per board, default 16)
+// MAX_PAD_BUTTONS, MAX_GRID_COLS, MAX_GRID_ROWS are overridable per board.
+#ifndef MAX_PAD_BUTTONS
 #define MAX_PAD_BUTTONS       64
+#endif
+#ifndef MAX_GRID_COLS
 #define MAX_GRID_COLS          8
+#endif
+#ifndef MAX_GRID_ROWS
 #define MAX_GRID_ROWS          8
+#endif
 
 #define CONFIG_LABEL_MAX_LEN          192
 #define CONFIG_ICON_ID_MAX_LEN         32
@@ -104,8 +111,9 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_KEY      "key"
 #define ACTION_TYPE_BLE_PAIR "ble_pair"
 #define ACTION_TYPE_BEEP     "beep"
-#define ACTION_TYPE_VOLUME   "volume"
-#define ACTION_TYPE_SCALE    "scale"
+#define ACTION_TYPE_VOLUME     "volume"
+#define ACTION_TYPE_SCALE      "scale"
+#define ACTION_TYPE_BRIGHTNESS "brightness"
 #define ACTION_TYPE_TIMER    "timer"
 #define ACTION_TYPE_BREW     "brew"
 #define ACTION_TYPE_SOUND    "sound"
@@ -124,6 +132,8 @@ struct ButtonAction {
     uint8_t beep_volume;                             // type="beep": 0 = use device volume, 1-100 = override
     char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set", "up", or "down"
     uint8_t volume_value;                            // type="volume": 0-100 (used with mode="set")
+    char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // type="brightness": "set", "up", or "down"
+    uint8_t brightness_value;                         // type="brightness": 0-100 (target or step size)
     char sound_file[32];                              // type="sound": filename (no path/extension)
     uint8_t sound_volume;                             // type="sound": 0 = device vol, 1-100 = override
 };

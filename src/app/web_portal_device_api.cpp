@@ -135,6 +135,10 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 				response->print(",\"has_display\":true");
 				response->print(",\"max_pads\":");
 				response->print(MAX_PADS);
+				response->print(",\"max_grid_cols\":");
+				response->print(MAX_GRID_COLS);
+				response->print(",\"max_grid_rows\":");
+				response->print(MAX_GRID_ROWS);
 
 				// Display resolution (driver coordinate space for direct writes / image upload)
 				int display_coord_width = DISPLAY_WIDTH;

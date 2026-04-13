@@ -1176,6 +1176,30 @@ footer {
     background: repeating-linear-gradient(0deg, transparent, transparent 3px, #90CAF9 3px, #90CAF9 4px);
 }
 
+.pad-cell-widget-rocker {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 10px;
+    height: 14px;
+    opacity: 0.6;
+}
+.pad-cell-widget-rocker::before, .pad-cell-widget-rocker::after {
+    content: '';
+    position: absolute;
+    left: 1px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+}
+.pad-cell-widget-rocker::before {
+    top: 0;
+    border-bottom: 5px solid #fff;
+}
+.pad-cell-widget-rocker::after {
+    bottom: 0;
+    border-top: 5px solid #fff;
+}
+
 .pad-actions {
     display: flex;
     flex-wrap: wrap;

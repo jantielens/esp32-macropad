@@ -28,29 +28,11 @@
                     <div class="pad-controls-row" style="margin-top:6px;">
                         <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
                             <label for="pad-cols">Columns</label>
-                            <select id="pad-cols">
-                                <option value="1">1</option>
-                                <option value="2">2</option>
-                                <option value="3" selected>3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8">8</option>
-                            </select>
+                            <select id="pad-cols"></select>
                         </div>
                         <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
                             <label for="pad-rows">Rows</label>
-                            <select id="pad-rows">
-                                <option value="1">1</option>
-                                <option value="2" selected>2</option>
-                                <option value="3">3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8">8</option>
-                            </select>
+                            <select id="pad-rows"></select>
                         </div>
                         <div class="form-group" style="margin-bottom:0; flex:1;">
                             <label for="pad-wake-screen">Screensaver wakes up screen</label>
@@ -219,6 +201,7 @@
                                 <option value="gauge">Gauge</option>
                                 <option value="sparkline">Sparkline</option>
                                 <option value="table">Table</option>
+                                <option value="rocker">Rocker</option>
                             </select>
                         </div>
                         <div style="display:flex; gap:12px;">
@@ -284,6 +267,8 @@
                 {{WIDGET_SPARKLINE}}
 
                 {{WIDGET_TABLE}}
+
+                {{WIDGET_ROCKER}}
 
                 <!-- Actions group (open by default) -->
                 <details class="editor-group" open>
