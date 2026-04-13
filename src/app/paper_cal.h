@@ -1,7 +1,7 @@
 #pragma once
 
 // ============================================================================
-// Paper Calibration — bare-bulb Lref reading (Phase 1a)
+// Paper Calibration — bare-bulb Lref reading
 // ============================================================================
 // Compile-time gated by IS_DARKROOM_TIMER (requires HAS_DISPLAY).
 //

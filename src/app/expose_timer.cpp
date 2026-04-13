@@ -376,10 +376,6 @@ void expose_timer_tick() {
     }
 }
 
-void expose_timer_loop() {
-    // Relay I/O now handled by relay_loop() in main loop.
-}
-
 void expose_timer_init() {
     if (!binding_template_register("expose", expose_resolve, expose_collect)) {
         LOGE(TAG, "Failed to register expose binding scheme");
@@ -393,6 +389,5 @@ void expose_timer_init() {
 void expose_timer_init() {}
 void expose_timer_dispatch(const char*) {}
 void expose_timer_tick() {}
-void expose_timer_loop() {}
 
 #endif // IS_DARKROOM_TIMER

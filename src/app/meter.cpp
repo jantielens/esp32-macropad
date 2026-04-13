@@ -11,8 +11,6 @@
 
 #include <Arduino.h>
 #include <math.h>
-#include <string.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #define TAG "Meter"
@@ -94,7 +92,7 @@ static struct {
     bool has_results;
 
     // Deferred sensor read flag (set from LVGL task, consumed in loop)
-    volatile PendingRead pending_read;
+    PendingRead pending_read;
 } s = {
     .state       = METER_IDLE,
     .lref        = 0.0f,
@@ -108,6 +106,8 @@ static struct {
     .has_results = false,
     .pending_read = PENDING_NONE,
 };
+
+static portMUX_TYPE g_meter_lock = portMUX_INITIALIZER_UNLOCKED;
 
 // ============================================================================
 // Computation
@@ -173,7 +173,10 @@ static void refresh_lref() {
 // ============================================================================
 
 static void cmd_focus_on() {
-    if (s.state == METER_AWAITING_BRIGHT || s.state == METER_AWAITING_DARK) return;
+    if (s.state == METER_AWAITING_BRIGHT || s.state == METER_AWAITING_DARK) {
+        LOGD(TAG, "Focus ON ignored — already awaiting reading");
+        return;
+    }
 
     // Refresh Lref from shared memory at start of each metering cycle
     refresh_lref();
@@ -191,12 +194,16 @@ static void cmd_focus_on() {
 
 static void cmd_read_bright() {
     if (s.state != METER_AWAITING_BRIGHT) return;
+    portENTER_CRITICAL(&g_meter_lock);
     s.pending_read = PENDING_BRIGHT;
+    portEXIT_CRITICAL(&g_meter_lock);
 }
 
 static void cmd_read_dark() {
     if (s.state != METER_AWAITING_DARK) return;
+    portENTER_CRITICAL(&g_meter_lock);
     s.pending_read = PENDING_DARK;
+    portEXIT_CRITICAL(&g_meter_lock);
 }
 
 static void cmd_cancel() {
@@ -207,7 +214,9 @@ static void cmd_cancel() {
     s.l_dark   = -1.0f;
     s.has_results = false;
     s.time_s = -1.0f;
+    portENTER_CRITICAL(&g_meter_lock);
     s.pending_read = PENDING_NONE;
+    portEXIT_CRITICAL(&g_meter_lock);
     relay_request(false);
     LOGI(TAG, "Cancelled");
 }
@@ -366,9 +375,11 @@ void meter_tick() {
 }
 
 void meter_loop() {
+    portENTER_CRITICAL(&g_meter_lock);
     PendingRead pr = s.pending_read;
-    if (pr == PENDING_NONE) return;
     s.pending_read = PENDING_NONE;
+    portEXIT_CRITICAL(&g_meter_lock);
+    if (pr == PENDING_NONE) return;
 
     float lux = tsl2591_read_lux();
 

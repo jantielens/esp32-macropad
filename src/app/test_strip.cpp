@@ -744,10 +744,6 @@ void test_strip_tick() {
     }
 }
 
-void test_strip_loop() {
-    // Relay I/O now handled by relay_loop() in main loop.
-}
-
 void test_strip_init() {
     recalculate_segments();
     if (!binding_template_register("strip", strip_resolve, strip_collect)) {
@@ -762,6 +758,5 @@ void test_strip_init() {
 void test_strip_init() {}
 void test_strip_dispatch(const char*) {}
 void test_strip_tick() {}
-void test_strip_loop() {}
 
 #endif // IS_DARKROOM_TIMER

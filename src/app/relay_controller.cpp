@@ -15,8 +15,9 @@
 // State
 // ============================================================================
 
-static volatile uint8_t g_relay_pending = 0;   // 0=none, 1=ON, 2=OFF
-static volatile bool    g_relay_on      = false;
+static uint8_t g_relay_pending = 0;   // 0=none, 1=ON, 2=OFF
+static bool    g_relay_on      = false;
+static portMUX_TYPE g_relay_lock = portMUX_INITIALIZER_UNLOCKED;
 
 // ============================================================================
 // Shelly HTTP backend — fire-and-forget
@@ -56,18 +57,25 @@ void relay_controller_init() {
 }
 
 void relay_request(bool on) {
+    portENTER_CRITICAL(&g_relay_lock);
     g_relay_on = on;
     g_relay_pending = on ? 1 : 2;
+    portEXIT_CRITICAL(&g_relay_lock);
 }
 
 bool relay_is_on() {
-    return g_relay_on;
+    portENTER_CRITICAL(&g_relay_lock);
+    bool on = g_relay_on;
+    portEXIT_CRITICAL(&g_relay_lock);
+    return on;
 }
 
 void relay_loop() {
+    portENTER_CRITICAL(&g_relay_lock);
     uint8_t pending = g_relay_pending;
-    if (pending == 0) return;
     g_relay_pending = 0;
+    portEXIT_CRITICAL(&g_relay_lock);
+    if (pending == 0) return;
     shelly_send(pending == 1);
 }
 

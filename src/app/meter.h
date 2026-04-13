@@ -1,7 +1,7 @@
 #pragma once
 
 // ============================================================================
-// Print Prep Meter — bright/dark spot metering (Phase 2)
+// Print Prep Meter — bright/dark spot metering
 // ============================================================================
 // Compile-time gated by IS_DARKROOM_TIMER (requires HAS_DISPLAY).
 //

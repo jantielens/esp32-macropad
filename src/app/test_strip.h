@@ -68,6 +68,4 @@ void test_strip_dispatch(const char* command);
 // Tick function — call from LVGL render task to drive the state machine.
 void test_strip_tick();
 
-// Deferred operations — call from main loop() on internal-RAM stack.
-// Processes pending Shelly HTTP requests.
-void test_strip_loop();
+

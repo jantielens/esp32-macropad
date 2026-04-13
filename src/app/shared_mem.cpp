@@ -144,7 +144,35 @@ static bool mem_resolve(const char* params, char* out, size_t out_len) {
     }
 
     if (fmt && fmt[0]) {
-        snprintf(out, out_len, fmt, val);
+        // Validate format: must contain exactly one %-conversion for a float.
+        // Reject user-supplied strings that could read stack memory.
+        const char* p = fmt;
+        int conv_count = 0;
+        bool safe = true;
+        while (*p) {
+            if (*p == '%') {
+                p++;
+                if (*p == '%') { p++; continue; }  // literal %%
+                // Skip flags, width, precision
+                while (*p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0') p++;
+                while (*p >= '0' && *p <= '9') p++;
+                if (*p == '.') { p++; while (*p >= '0' && *p <= '9') p++; }
+                // Only allow float conversions
+                if (*p == 'f' || *p == 'e' || *p == 'g' || *p == 'F' || *p == 'E' || *p == 'G') {
+                    conv_count++;
+                    p++;
+                } else {
+                    safe = false; break;
+                }
+            } else {
+                p++;
+            }
+        }
+        if (safe && conv_count == 1) {
+            snprintf(out, out_len, fmt, val);
+        } else {
+            snprintf(out, out_len, "%.1f", val);
+        }
     } else {
         // Default: up to 1 decimal, strip trailing zeros
         snprintf(out, out_len, "%.1f", val);

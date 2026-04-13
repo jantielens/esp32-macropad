@@ -49,6 +49,4 @@ void expose_timer_dispatch(const char* command);
 // Tick function — call from main loop or LVGL task to detect countdown expiry.
 void expose_timer_tick();
 
-// Deferred operations — call from main loop() on internal-RAM stack.
-// Processes pending Shelly HTTP requests.
-void expose_timer_loop();
+
