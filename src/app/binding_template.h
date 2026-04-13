@@ -44,7 +44,7 @@ typedef bool (*binding_resolver_fn)(const char* params, char* out, size_t out_le
 typedef void (*binding_topic_collector_fn)(const char* params, void* user_data);
 
 // Register a scheme resolver. scheme is a short name (e.g. "mqtt").
-// Max 4 schemes. Returns false if registry is full.
+// Max 8 schemes. Returns false if registry is full.
 bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
                                binding_topic_collector_fn collector);
 

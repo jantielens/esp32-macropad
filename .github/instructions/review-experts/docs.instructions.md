@@ -25,6 +25,7 @@ When code changes affect documented behavior, verify these files are still accur
 * `docs/pad-editor-guide.md` — Pad editor, bindings, widgets
 * `docs/compile-time-flags.md` — Compile-time flag reference
 * `.github/copilot-instructions.md` — Agent instructions, architecture, key files
+* `.github/instructions/*.instructions.md` — Scoped agent instructions (terminology, web portal, config settings, display/touch, compile-time flags, binding system, agent guidelines, diagramming)
 * `CHANGELOG.md` — Release notes accuracy
 * `src/app/drivers/README.md` — Driver selection table (if driver changes)
 
@@ -64,6 +65,7 @@ When code changes affect documented behavior, verify these files are still accur
 * Actually read the referenced documentation files and compare against the code changes. Do not guess whether docs are accurate.
 * Check cross-references: if a feature is documented in multiple places, verify all locations.
 * Verify that `copilot-instructions.md` entries for new subsystems or key files are present and accurate.
+* Verify that scoped instruction files in `.github/instructions/` are updated when their domain is affected (e.g., web portal conventions, display/touch HAL, terminology).
 
 ## DON'T
 
