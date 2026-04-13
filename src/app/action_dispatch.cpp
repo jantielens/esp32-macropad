@@ -4,9 +4,11 @@
 
 #include "display_manager.h"
 #include "log_manager.h"
+#include "message_bubble.h"
 
 #if HAS_MQTT
 #include "mqtt_manager.h"
+#include "binding_template.h"
 #endif
 #if HAS_BLE_HID
 #include "ble_hid.h"
@@ -159,6 +161,54 @@ void action_dispatch(const ButtonAction& act, const char* label) {
             LOGI(TAG, "%s timer: %c:%s", label, p[0], cmd);
         } else {
             LOGW(TAG, "%s timer: bad payload '%s'", label, p ? p : "(null)");
+        }
+    } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
+        // Resolve all bindable fields before building params struct
+        MessageBubbleParams params = {};
+
+        // Resolve a bindable string field: binding → resolve, plain → copy, empty → default.
+        auto resolve_field = [](const char* field, const char* def, char* out, size_t len) {
+#if HAS_MQTT
+            if (field[0] && binding_template_has_bindings(field)) {
+                binding_template_resolve(field, out, len);
+            } else
+#endif
+            {
+                strlcpy(out, field[0] ? field : def, len);
+            }
+        };
+
+        resolve_field(act.notify_text, "", params.text, sizeof(params.text));
+
+        if (!params.text[0]) {
+            message_bubble_dismiss();
+            LOGI(TAG, "%s notify: dismiss", label);
+        } else {
+            // Duration
+            char buf[16];
+            resolve_field(act.notify_duration_ms, "3000", buf, sizeof(buf));
+            params.duration_ms = (uint16_t)atoi(buf);
+
+            // Colors
+            char cbuf[CONFIG_BINDABLE_SHORT_LEN];
+            resolve_field(act.notify_text_color, "#ffffff", cbuf, sizeof(cbuf));
+            if (!parse_hex_color(cbuf, &params.text_color)) params.text_color = 0xFFFFFF;
+
+            resolve_field(act.notify_bg_color, "#333333", cbuf, sizeof(cbuf));
+            if (!parse_hex_color(cbuf, &params.bg_color)) params.bg_color = 0x333333;
+
+            if (act.notify_border_color[0]) {
+                resolve_field(act.notify_border_color, "", cbuf, sizeof(cbuf));
+                params.has_border = parse_hex_color(cbuf, &params.border_color);
+            }
+
+            params.opacity = act.notify_opacity;
+            params.font_size = act.notify_font_size;
+            params.location = notify_location_from_str(act.notify_location);
+
+            message_bubble_show(&params);
+            LOGI(TAG, "%s notify: '%s' dur=%u loc=%s", label, params.text,
+                 params.duration_ms, act.notify_location[0] ? act.notify_location : "bottom");
         }
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);

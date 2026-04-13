@@ -66,6 +66,7 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 		#if HAS_DISPLAY
 		ha_discovery_publish_button_event_config(mqtt);
 		ha_discovery_publish_screen_select_config(mqtt);
+		ha_discovery_publish_notify_text_config(mqtt);
 		#endif
 
 		// Audio entities (siren, volume, beep buttons)
@@ -309,6 +310,41 @@ bool ha_discovery_publish_screen_select_config(MqttManager &mqtt) {
 
 		if (doc.overflowed()) return false;
 
+		return mqtt.publishJson(topic, doc, true);
+#else
+		return false;
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Notify text entity
+// ---------------------------------------------------------------------------
+
+bool ha_discovery_publish_notify_text_config(MqttManager &mqtt) {
+#if HAS_DISPLAY
+		char topic[160];
+		snprintf(topic, sizeof(topic), "homeassistant/text/%s/notify/config", mqtt.sanitizedName());
+
+		StaticJsonDocument<768> doc;
+		doc["~"] = mqtt.baseTopic();
+		doc["name"] = "Notify";
+
+		char ha_oid[96];
+		snprintf(ha_oid, sizeof(ha_oid), "%s_notify", mqtt.sanitizedName());
+		doc["object_id"] = ha_oid;
+		doc["uniq_id"] = ha_oid;
+
+		doc["cmd_t"] = "~/notify/set";
+		doc["stat_t"] = "~/notify/state";
+		doc["max"] = 255;
+		doc["ic"] = "mdi:message-text";
+
+		doc["avty_t"] = "~/availability";
+		doc["pl_avail"] = "online";
+		doc["pl_not_avail"] = "offline";
+
+		fill_device_block(doc, mqtt);
+		if (doc.overflowed()) return false;
 		return mqtt.publishJson(topic, doc, true);
 #else
 		return false;

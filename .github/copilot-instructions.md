@@ -74,10 +74,15 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - HA discovery published via `ha_discovery_publish_screen_select_config()` with dynamic options list from screen registry
 - **MQTT Wake Subsystem**: Binding-driven screensaver wakeup (compile-time gated by `HAS_MQTT && HAS_DISPLAY`)
   - `mqtt_wake.cpp/h` - Resolves a user-configured binding expression each loop tick; wakes screensaver on OFF→ON edge; keeps screen awake while ON persists via throttled idle-timer reset (~1 s)
+- **Notification Bubble Subsystem**: On-screen message overlay with fade animation, tap-to-dismiss, and HA remote trigger (compile-time gated by `HAS_DISPLAY`)
+  - `message_bubble.cpp/h` - LVGL overlay lifecycle on `lv_layer_top()`, dynamic sizing (min 40% screen width), scale-tier default font, fade in/out via `lv_anim`, auto-dismiss via `lv_timer`, tap-to-dismiss; cross-task portMUX signaling
+  - `mqtt_notify.cpp/h` - HA text entity (`~/notify/set` / `~/notify/state`); accepts plain text (default styling) or JSON (full control: colors, opacity, font_size, location, duration); cross-task pending pattern (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
+  - HA discovery published via `ha_discovery_publish_notify_text_config()` with text entity type
+  - `ACTION_TYPE_NOTIFY` button action with bindable text, duration, colors, opacity, font_size, and location fields
 - **Swipe Actions Subsystem**: Configurable swipe gestures with full ButtonAction parity (compile-time gated by `HAS_DISPLAY`)
   - `swipe_config.cpp/h` - LittleFS-backed swipe action config (`/config/swipe_actions.json`) with RAM cache; 4 directions × ButtonAction
   - `swipe_actions.cpp/h` - Shared LVGL gesture handler with 300ms debounce; registered on all screens
-  - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, brightness, timer control); used by pad buttons, swipe gestures, boot actions, and timer expire callbacks
+  - `action_dispatch.cpp/h` - Shared action execution (screen nav, back, MQTT publish, BLE key sequence, BLE pair, beep, volume, brightness, timer control, notify); used by pad buttons, swipe gestures, boot actions, and timer expire callbacks
   - `action_parse.cpp/h` - Shared `action_parse()` and `action_to_json()` for DRY ButtonAction JSON serialization; used by pad_config, swipe_config, boot_actions, timer_config, and web_portal_swipe
   - `web_portal_swipe.cpp/h` - REST API for GET/POST `/api/swipe-actions`
 - **Boot Actions Subsystem**: Device-level actions dispatched once at boot after the first screen is shown (compile-time gated by `HAS_DISPLAY`)
@@ -286,6 +291,8 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/web_portal_ble.cpp/h` - BLE pairing REST endpoint (`POST /api/ble/pairing/start`)
 - `src/app/action_dispatch.cpp/h` - Shared action execution for buttons, swipe gestures, and boot actions (compile-time gated by `HAS_DISPLAY`)
 - `src/app/action_parse.cpp/h` - Shared ButtonAction JSON parse/serialize helpers (compile-time gated by `HAS_DISPLAY`)
+- `src/app/message_bubble.cpp/h` - Notification bubble overlay with fade animation, dynamic sizing, tap-to-dismiss (compile-time gated by `HAS_DISPLAY`)
+- `src/app/mqtt_notify.cpp/h` - MQTT notify text entity for HA remote notification triggering (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
 - `src/app/boot_actions.cpp/h` - LittleFS-backed boot action config with RAM cache (compile-time gated by `HAS_DISPLAY`)
 - `src/app/web_portal_boot_actions.cpp/h` - Boot actions REST API (GET/POST `/api/boot-actions`)
 - `src/app/audio.cpp/h` - Audio subsystem: ES8311 codec, I2S tone generation, beep pattern DSL, volume control, loop/stop (compile-time gated by `HAS_AUDIO`)
@@ -317,7 +324,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/drivers/wire_cst816s_touch_driver.cpp/h` - CST816S Wire I2C touch driver (JC3636W518)
 - `src/app/drivers/README.md` - Driver selection conventions + generated board→drivers table
 - `src/app/screens/screen.h` - Screen base class interface
-- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/font_family/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `brightness`, `timer`, `sound`); `ScreenButtonConfig` holds `actions[MAX_BUTTON_ACTIONS]` / `lp_actions[MAX_BUTTON_ACTIONS]` arrays with counts for multi-action sequential dispatch; JSON parser supports both new array format (`"actions": [...]`) and legacy single-object format (`"action": {...}`); `ButtonDefaults` struct for device-level appearance cascade (colors, border, radius, label styles) — per-button fields fall through to device defaults, then to firmware hardcoded defaults; `template_pad` field (int8_t, -1=none) for inheriting buttons from another pad into empty grid positions at load time (no chaining, target wins on conflict)
+- `src/app/pad_config.cpp/h` - Pad JSON config parser; `PadBinding` struct for pad-level named bindings; `LabelStyle` struct and `label_style_parse()` DSL parser for per-label font/align/y-offset/font_family/mode/color overrides; `ButtonAction` struct with action types (`screen`, `mqtt`, `key`, `ble_pair`, `back`, `beep`, `volume`, `brightness`, `timer`, `sound`, `notify`); `ScreenButtonConfig` holds `actions[MAX_BUTTON_ACTIONS]` / `lp_actions[MAX_BUTTON_ACTIONS]` arrays with counts for multi-action sequential dispatch; JSON parser supports both new array format (`"actions": [...]`) and legacy single-object format (`"action": {...}`); `ButtonDefaults` struct for device-level appearance cascade (colors, border, radius, label styles) — per-button fields fall through to device defaults, then to firmware hardcoded defaults; `template_pad` field (int8_t, -1=none) for inheriting buttons from another pad into empty grid positions at load time (no chaining, target wins on conflict)
 - `src/app/pad_layout.h` - Layout computation engine, UI scale tiers, and label style resolver helpers (`pad_resolve_font()`, `pad_resolve_align()`, `pad_apply_long_mode()`, `pad_resolve_label_color()`, `pad_apply_font_upscale()`, `PadLabelAnchorY`)
 - `src/app/fonts/custom_fonts.h` - Custom font family declarations and lookup API (compile-time gated by `HAS_CUSTOM_FONTS`)
 - `src/app/custom_fonts.cpp` - Custom font compilation unit (includes generated `.c` font files)
