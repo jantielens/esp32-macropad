@@ -277,6 +277,7 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
 | **Set Brightness** | Adjust the display backlight brightness — set to a specific value, or step up/down (default 10%). Session-only, resets on reboot. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
+| **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -357,6 +358,34 @@ On the **Home** page, the **Timers** section lets you configure each timer:
 **Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
 
 > **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Configure Timer 1 as a 240-second countdown on the Home page, with an expire action that plays an alarm sound.
+
+### Notification Action
+
+The **Show Notification** action displays a floating message bubble on the device screen — useful for confirmations, alerts, or status messages triggered by button presses or automations.
+
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| **Message** | The notification text. Supports binding templates (e.g., `Power: [mqtt:home/solar/power;$.power;%.0f]W`). Empty message dismisses the active notification. |
+| **Duration (ms)** | How long the bubble stays visible. Default `3000` (3 seconds). Set to `0` for a persistent notification that stays until tapped. Supports bindings. |
+| **Text Color** | Hex color for the message text (default `#ffffff`). Supports bindings. |
+| **Background Color** | Hex color for the bubble background (default `#333333`). Supports bindings. |
+| **Border Color** | Hex color for the bubble border. Leave empty for no border. Supports bindings. |
+| **Opacity (%)** | Background opacity, 0–100 (default 85). |
+| **Font Size** | Explicit font size (12/14/18/24/32/36/48). Leave at 0 for auto — uses the same scale-tier font as button center labels. |
+| **Location** | Where the bubble appears: **Bottom** (default), **Center**, or **Top**. |
+
+The bubble fades in over 200 ms, displays for the configured duration, then fades out. Tap anywhere on the bubble to dismiss it immediately. A new notification replaces the active one.
+
+**Example: confirmation bubble on MQTT publish**
+- **Tap action 1**: Publish MQTT → topic: `home/lights/toggle`, payload: `ON`
+- **Tap action 2**: Show Notification → message: `Lights toggled!`, duration: `2000`
+
+**Example: persistent alert from binding**
+- **Tap action**: Show Notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, duration: `0`, bg_color: `#1a3a1a`, location: `center`
+
+> **Home Assistant integration**: Notifications can also be triggered remotely via the **Notify** text entity. See the [Home Assistant Integration Guide](ha-integration-guide.md#notifications) for details and automation examples.
 
 ### Audio Behavior
 
