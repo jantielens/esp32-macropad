@@ -14,6 +14,7 @@
 #if IS_DARKROOM_TIMER
 #include "expose_timer.h"
 #include "test_strip.h"
+#include "paper_cal.h"
 #endif
 
 #include <esp_timer.h>
@@ -139,6 +140,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 #if IS_DARKROOM_TIMER
 				expose_timer_tick();
 				test_strip_tick();
+				paper_cal_tick();
 #endif
 				
 #if HAS_MQTT

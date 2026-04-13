@@ -352,6 +352,68 @@ A 3×4 grid provides a practical layout for test strip controls:
 
 ---
 
+## Paper Calibration
+
+Paper calibration takes a bare-bulb light reading (Lref) that anchors metering to your specific enlarger setup. The device turns the enlarger on, reads the TSL2591 light sensor, turns the enlarger off, and stores the result. This is a one-time step per session (or whenever you change the enlarger setup).
+
+> [!NOTE]
+> Paper calibration requires the TSL2591 light sensor. See [Light Sensor](#light-sensor-optional) in Hardware Setup.
+
+### How It Works
+
+1. Remove any negative from the enlarger
+2. Set the lens to working aperture with a Grade 2 filter
+3. Place the sensor puck on the easel
+4. Press **Read Lref** — the enlarger turns on briefly (~1 second), reads the sensor, and turns off
+5. The Lref value (in lux) is displayed and stored in [shared memory](#shared-memory) as `lref`
+
+After calibration, run a bare-bulb test strip (see [Test Strip Sequencer](#test-strip-sequencer)) with a 5.0s base time to find your Zone V exposure time.
+
+### States
+
+| State | Lamp | Description |
+|-------|------|-------------|
+| **Idle** | OFF | Ready — no reading taken |
+| **Reading** | ON (briefly) | Lamp on, settling, sensor reading in progress |
+| **Done** | OFF | Reading complete — Lref displayed |
+
+### Binding Tokens
+
+| Token | Description | Example output |
+|-------|-------------|----------------|
+| `[cal:state]` | Current state | `idle`, `reading`, `done` |
+| `[cal:lref]` | Lref reading (lux) | `1847.3` or `---` |
+
+### Button Actions
+
+Use the **Paper Cal** action type in the button editor.
+
+| Command | Description |
+|---------|-------------|
+| **Start** | Begin a bare-bulb reading (re-reads if already done) |
+| **Cancel** | Abort and return to idle, clear reading |
+
+### Building a Paper Cal Pad
+
+A simple pad with mostly informational display and a single action button:
+
+| | Full width |
+|---|----------|
+| **Row 1** | Instructions: "No negative. Lens open. Grade 2 filter. Puck on easel." |
+| **Row 2** | State: `[cal:state]` |
+| **Row 3** | Lref display: `[cal:lref] lux` (large font) |
+| **Row 4** | Read Lref button (tap = start, long-press = cancel) |
+
+**Key buttons**:
+
+- **Read Lref** — Action: Paper Cal → Start. Long-press action: Paper Cal → Cancel. Label: `Read Lref`, bottom label: `(hold to cancel)`.
+- **Lref display** — Label: `[cal:lref]` with `font_size:48` for readability. No action (display-only).
+- **State** — Label: `[cal:state]`. Use expression binding for a visual indicator: `[expr:[cal:state]=="done"?"✓ DONE":[cal:state]=="reading"?"● READING":"IDLE"]`
+
+> **Tip**: After calibration, navigate to your test strip pad and set the base time to **5.0s** for a bare-bulb strip. The medium-grey segment gives you the Zone V time for metering.
+
+---
+
 ## Shared Memory
 
 Shared memory is a RAM-only key-value store for passing numeric values between darkroom modules. Values set by one feature (such as a calibration reading) can be displayed on any button label or consumed by other features.

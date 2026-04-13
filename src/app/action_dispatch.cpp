@@ -19,6 +19,7 @@
 #if IS_DARKROOM_TIMER
 #include "expose_timer.h"
 #include "test_strip.h"
+#include "paper_cal.h"
 #include "shared_mem.h"
 #endif
 
@@ -192,7 +193,12 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         }
     } else if (strcmp(act.type, ACTION_TYPE_CAL) == 0) {
         const char* cmd = act.mqtt_payload;
-        LOGW(TAG, "%s cal: '%s' (not implemented)", label, cmd ? cmd : "");
+        if (cmd && cmd[0]) {
+            LOGI(TAG, "%s cal: '%s'", label, cmd);
+            paper_cal_dispatch(cmd);
+        } else {
+            LOGW(TAG, "%s cal: empty command", label);
+        }
     } else if (strcmp(act.type, ACTION_TYPE_METER) == 0) {
         const char* cmd = act.mqtt_payload;
         LOGW(TAG, "%s meter: '%s' (not implemented)", label, cmd ? cmd : "");

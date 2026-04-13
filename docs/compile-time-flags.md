@@ -521,7 +521,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/display_task.cpp
   - src/app/expose_timer.cpp
+  - src/app/relay_controller.cpp
   - src/app/sensors.cpp
+  - src/app/sensors/tsl2591_sensor.cpp
+  - src/app/shared_mem.cpp
   - src/app/test_strip.cpp
   - src/app/web_portal_config.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
