@@ -64,6 +64,30 @@ static int find_entry(const char* id) {
     return -1;
 }
 
+// Remove cache entries from the lookup table without freeing the draw buffers.
+// LVGL image objects may still reference the old pixel memory until their
+// screens are rebuilt, so invalidation only drops the key->buffer mapping.
+static uint16_t invalidate_entries_with_prefix(const char* prefix) {
+    if (!prefix || !prefix[0]) return 0;
+
+    const size_t prefix_len = strlen(prefix);
+    uint16_t removed = 0;
+
+    for (uint16_t i = 0; i < g_count; ) {
+        if (strncmp(g_entries[i].id, prefix, prefix_len) == 0) {
+            if (i != g_count - 1) {
+                g_entries[i] = g_entries[g_count - 1];
+            }
+            g_count--;
+            removed++;
+            continue;
+        }
+        i++;
+    }
+
+    return removed;
+}
+
 static bool validate_png(const uint8_t* data, size_t len) {
     // PNG signature: 89 50 4E 47 0D 0A 1A 0A
     if (len < 8) return false;
@@ -296,7 +320,6 @@ static uint16_t preload_pad_icons(uint8_t page, PadConfig* cfg) {
         icon_store_build_key(page, cfg->buttons[i].col,
                              cfg->buttons[i].row, key, sizeof(key));
 
-        if (find_entry(key) >= 0) continue;  // Already cached
         IconKind kind = kind_from_icon_id(cfg->buttons[i].icon_id);
         if (load_from_fs(key, kind)) { loaded++; continue; }
 
@@ -391,8 +414,11 @@ void icon_store_delete_page_icons(uint8_t page) {
         LittleFS.remove(path);
     }
 
-    if (del_count > 0) {
-        LOGI(TAG, "Deleted %u icon files for page %u", del_count, page);
+    uint16_t invalidated = invalidate_entries_with_prefix(prefix);
+
+    if (del_count > 0 || invalidated > 0) {
+        LOGI(TAG, "Deleted %u icon files and invalidated %u cache entries for page %u",
+             del_count, invalidated, page);
     }
 }
 
