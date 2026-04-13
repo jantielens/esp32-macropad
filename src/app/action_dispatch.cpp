@@ -20,6 +20,7 @@
 #include "expose_timer.h"
 #include "test_strip.h"
 #include "paper_cal.h"
+#include "meter.h"
 #include "shared_mem.h"
 #endif
 
@@ -201,7 +202,12 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         }
     } else if (strcmp(act.type, ACTION_TYPE_METER) == 0) {
         const char* cmd = act.mqtt_payload;
-        LOGW(TAG, "%s meter: '%s' (not implemented)", label, cmd ? cmd : "");
+        if (cmd && cmd[0]) {
+            LOGI(TAG, "%s meter: '%s'", label, cmd);
+            meter_dispatch(cmd);
+        } else {
+            LOGW(TAG, "%s meter: empty command", label);
+        }
 #endif
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);

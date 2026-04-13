@@ -414,6 +414,165 @@ A simple pad with mostly informational display and a single action button:
 
 ---
 
+## Print Prep Meter
+
+The print prep meter takes two spot readings through a negative — one at the brightest area, one at the darkest — and computes a contrast grade recommendation and base exposure time. This is the core metering feature.
+
+**Grade recommendation works without any calibration** — SBR is purely a ratio of the two readings. Exposure time requires Lref (from [Paper Calibration](#paper-calibration)) and a Zone V time (from a bare-bulb test strip).
+
+> [!NOTE]
+> The meter requires the TSL2591 light sensor. See [Light Sensor](#light-sensor-optional) in Hardware Setup.
+
+### How It Works
+
+1. Insert a negative in the enlarger and focus the image on the easel
+2. Tap **Focus ON** — the enlarger turns on for framing
+3. Place the sensor puck on the **brightest** spot and tap **Read Bright**
+4. Move the puck to the **darkest** spot and tap **Read Dark** — the enlarger turns off
+5. Results appear: SBR, recommended grade, and (if calibrated) suggested exposure time
+
+If you read the spots in the wrong order, the meter automatically swaps them.
+
+### States
+
+| State | Lamp | Description |
+|-------|------|-------------|
+| **Idle** | OFF | Ready — no readings taken |
+| **Awaiting bright** | ON | Enlarger on, waiting for bright spot reading |
+| **Awaiting dark** | ON | Bright captured, waiting for dark spot reading |
+| **Results** | OFF | Both readings done, results computed |
+
+### State Transitions
+
+```mermaid
+stateDiagram-v2
+    Idle --> Awaiting_bright : focus_on
+    Awaiting_bright --> Awaiting_dark : read_bright
+    Awaiting_dark --> Results : read_dark (enlarger off)
+    Results --> Awaiting_bright : focus_on (re-meter)
+    Awaiting_bright --> Idle : cancel
+    Awaiting_dark --> Idle : cancel
+    Results --> Idle : cancel
+```
+
+### User Inputs
+
+The meter uses two values from previous calibration steps:
+
+| Setting | Source | Entry |
+|---------|--------|-------|
+| **Lref** | Auto from paper calibration via [shared memory](#shared-memory) | Auto-populated on each Focus ON. Override with `set_lref`/`add_lref`. |
+| **Zone V time** | Noted from bare-bulb test strip | Manual via ±0.1s and ±1s buttons (`add_zone5`). |
+
+Without both values, the meter still computes SBR and recommends a grade. The exposure time shows `---` until both are set.
+
+### The Math
+
+After the dark reading, the meter computes:
+
+- **SBR** = log₁₀(L_bright / L_dark) — the negative's contrast range
+- **Grade** = looked up from an SBR-to-grade table (Zone System standard values)
+- **Exposure time** = Zone V time × 10^(D_mid), where D_mid is the average density offset from Lref
+
+### SBR-to-Grade Table
+
+| SBR ≤ | Grade | Description |
+|-------|-------|-------------|
+| 0.60 | 5 | Very flat |
+| 0.70 | 4.5 | Flat |
+| 0.80 | 4 | Flat |
+| 0.90 | 3.5 | Slightly flat |
+| 1.00 | 3 | Normal- |
+| 1.10 | 2.5 | Normal |
+| 1.20 | 2 | Normal |
+| 1.35 | 1.5 | Contrasty |
+| 1.50 | 1 | Contrasty |
+| 1.65 | 0.5 | Very contrasty |
+| > 1.65 | 0 | Extremely contrasty |
+
+### Binding Tokens
+
+| Token | Description | Example output |
+|-------|-------------|----------------|
+| `[meter:state]` | Current state | `idle`, `awaiting_bright`, `results` |
+| `[meter:lref]` | Lref (lux) | `1847` or `---` |
+| `[meter:zone5_time]` | Zone V time (seconds) | `6.3` or `---` |
+| `[meter:l_bright]` | Bright spot reading (lux) | `423.7` or `---` |
+| `[meter:l_dark]` | Dark spot reading (lux) | `14.2` or `---` |
+| `[meter:sbr]` | SBR (computed) | `1.25` or `---` |
+| `[meter:grade]` | Recommended grade | `2` or `2.5` or `---` |
+| `[meter:grade_label]` | Grade description | `Normal`, `Contrasty` |
+| `[meter:time]` | Suggested exposure time (seconds) | `14.2` or `---` |
+| `[meter:relay]` | Relay state | `ON` or `OFF` |
+
+### Button Actions
+
+Use the **Meter** action type in the button editor.
+
+#### Control Commands
+
+| Command | Description |
+|---------|-------------|
+| **Focus ON** | Turn enlarger on, enter awaiting bright |
+| **Read Bright** | Take bright spot reading |
+| **Read Dark** | Take dark spot reading, compute results, enlarger off |
+| **Cancel** | Abort, enlarger off (clears readings, keeps Lref and Zone V) |
+
+#### Configuration Commands
+
+| Command | Value | Description |
+|---------|-------|-------------|
+| **Set Lref** | lux | Override Lref value (e.g., `set_lref:1847.3`) |
+| **Add Lref** | lux | Adjust Lref ± (e.g., `add_lref:100`) |
+| **Set Zone V** | seconds | Set Zone V time (e.g., `set_zone5:6.3`) |
+| **Add Zone V** | seconds | Adjust Zone V time ± (e.g., `add_zone5:0.1`) |
+
+### Building a Meter Pad
+
+A 4×8 grid with display rows at the top and action buttons at the bottom:
+
+| | Column 1 | Column 2 | Column 3 | Column 4 |
+|---|----------|----------|----------|----------|
+| **Row 1** | Lref (auto) | | Zone V time | |
+| **Row 2** | -0.1 | -1 | +1 | +0.1 |
+| **Row 3** | Bright reading | | Dark reading | |
+| **Row 4** | SBR | | Grade | |
+| **Row 5** | Grade label (full width) | | | |
+| **Row 6** | Suggested time (full width, large font) | | | |
+| **Row 7** | Focus ON | | State display | |
+| **Row 8** | Read BRIGHT | | Read DARK | |
+
+**Key buttons**:
+
+- **Lref display** — Label: `[meter:lref]`, top label: `Lref (auto)`. No action (display-only).
+- **Zone V time** — Label: `[meter:zone5_time] s`, top label: `Zone V time`. No action.
+- **Zone V adjustment** — Row of four buttons: -0.1, -1, +1, +0.1. Action: Meter → Add Zone V with values `-0.1`, `-1`, `1`, `0.1`.
+- **Bright / Dark readings** — Labels: `[meter:l_bright]` / `[meter:l_dark]`. Display-only.
+- **SBR / Grade** — Labels: `[meter:sbr]` / `[meter:grade]`. Display-only.
+- **Grade label** — Full width, label: `[meter:grade_label]`.
+- **Suggested time** — Full width, label: `[meter:time] s` with `font_size:48`. Display-only.
+- **Focus ON** — Action: Meter → Focus ON. Long-press: Meter → Cancel. Label: `1. Focus ON`, bottom: `(hold to cancel)`.
+- **State** — Label: `[meter:state]`. Display-only.
+- **Read BRIGHT** — Action: Meter → Read Bright. Label: `2. BRIGHT`.
+- **Read DARK** — Action: Meter → Read Dark. Label: `3. DARK`.
+
+### Typical Workflow
+
+After completing [Paper Calibration](#paper-calibration) and a bare-bulb test strip:
+
+1. Navigate to the Meter pad — Lref is auto-populated
+2. Set Zone V time (one-time per paper calibration, e.g., 6.3s)
+3. Insert a negative, focus the image
+4. Tap **Focus ON** → enlarger turns on
+5. Place puck on brightest spot → tap **Read BRIGHT**
+6. Move puck to darkest spot → tap **Read DARK** → enlarger turns off
+7. Read results: SBR, grade, suggested time
+8. Navigate to exposure pad → set the suggested time → print
+
+To meter another negative, tap **Focus ON** again — readings reset but Lref and Zone V stay.
+
+---
+
 ## Shared Memory
 
 Shared memory is a RAM-only key-value store for passing numeric values between darkroom modules. Values set by one feature (such as a calibration reading) can be displayed on any button label or consumed by other features.
