@@ -6,6 +6,7 @@
 #include "binding_template.h"
 #include "config_manager.h"
 #include "log_manager.h"
+#include "relay_controller.h"
 #include "web_portal_state.h"
 
 #if HAS_AUDIO
@@ -13,8 +14,6 @@
 #endif
 
 #include <Arduino.h>
-#include <HTTPClient.h>
-#include <WiFi.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -45,50 +44,13 @@ static struct {
     uint32_t     start_ms;          // millis() at start/resume
     uint32_t     accumulated_ms;    // accumulated before pause
     bool         expire_fired;      // avoid re-firing
-    bool         relay_on;          // tracked relay state
 } s = {
     .exposure_time_s = 10.0f,
     .state           = EXPOSE_STOPPED,
     .start_ms        = 0,
     .accumulated_ms  = 0,
     .expire_fired    = false,
-    .relay_on        = false,
 };
-
-// ============================================================================
-// Shelly Plug HTTP — fire-and-forget from main loop
-// ============================================================================
-
-// Pending relay command: 0=none, 1=ON, 2=OFF
-static volatile uint8_t g_shelly_pending = 0;
-
-static void shelly_request(bool on) {
-    s.relay_on = on;
-    g_shelly_pending = on ? 1 : 2;
-}
-
-static void shelly_send(bool on) {
-    DeviceConfig* cfg = web_portal_get_current_config();
-    if (!cfg || cfg->shelly_ip[0] == '\0') {
-        LOGW(TAG, "Shelly IP not configured");
-        return;
-    }
-
-    char url[128];
-    snprintf(url, sizeof(url), "http://%s/relay/0?turn=%s", cfg->shelly_ip, on ? "on" : "off");
-
-    HTTPClient http;
-    http.setConnectTimeout(2000);
-    http.setTimeout(2000);
-    http.begin(url);
-    int code = http.GET();
-    if (code > 0) {
-        LOGI(TAG, "Shelly %s → HTTP %d", on ? "ON" : "OFF", code);
-    } else {
-        LOGW(TAG, "Shelly %s failed: %s", on ? "ON" : "OFF", http.errorToString(code).c_str());
-    }
-    http.end();
-}
 
 // ============================================================================
 // Timer helpers
@@ -160,7 +122,7 @@ static void cmd_start() {
     s.expire_fired = false;
     s.start_ms = millis();
     s.state = EXPOSE_RUNNING;
-    shelly_request(true);
+    relay_request(true);
     LOGI(TAG, "Start %.1fs", s.exposure_time_s);
 }
 
@@ -169,7 +131,7 @@ static void cmd_stop() {
     s.state = EXPOSE_STOPPED;
     s.accumulated_ms = 0;
     s.expire_fired = false;
-    shelly_request(false);
+    relay_request(false);
     LOGI(TAG, "Stop");
 }
 
@@ -177,7 +139,7 @@ static void cmd_pause() {
     if (s.state != EXPOSE_RUNNING) return;
     s.accumulated_ms += millis() - s.start_ms;
     s.state = EXPOSE_PAUSED;
-    shelly_request(false);
+    relay_request(false);
     LOGI(TAG, "Pause at %ums", s.accumulated_ms);
 }
 
@@ -185,7 +147,7 @@ static void cmd_resume() {
     if (s.state != EXPOSE_PAUSED) return;
     s.start_ms = millis();
     s.state = EXPOSE_RUNNING;
-    shelly_request(true);
+    relay_request(true);
     LOGI(TAG, "Resume");
 }
 
@@ -202,7 +164,7 @@ static void cmd_reset() {
     s.state = EXPOSE_STOPPED;
     s.accumulated_ms = 0;
     s.expire_fired = false;
-    if (s.relay_on) shelly_request(false);
+    if (relay_is_on()) relay_request(false);
     LOGI(TAG, "Reset");
 }
 
@@ -211,14 +173,14 @@ static void cmd_focus() {
     s.state = EXPOSE_FOCUS;
     s.accumulated_ms = 0;
     s.expire_fired = false;
-    shelly_request(true);
+    relay_request(true);
     LOGI(TAG, "Focus ON");
 }
 
 static void cmd_focus_off() {
     if (s.state != EXPOSE_FOCUS) return;
     s.state = EXPOSE_STOPPED;
-    shelly_request(false);
+    relay_request(false);
     LOGI(TAG, "Focus OFF");
 }
 
@@ -341,7 +303,7 @@ static bool expose_resolve(const char* params, char* out, size_t out_len) {
 
     // Key: relay
     if (strcmp(params, "relay") == 0) {
-        snprintf(out, out_len, "%s", s.relay_on ? "ON" : "OFF");
+        snprintf(out, out_len, "%s", relay_is_on() ? "ON" : "OFF");
         return true;
     }
 
@@ -399,7 +361,7 @@ void expose_timer_tick() {
         s.expire_fired = true;
         s.state = EXPOSE_STOPPED;
         s.accumulated_ms = 0;
-        shelly_request(false);
+        relay_request(false);
         LOGI(TAG, "Exposure complete");
 
 #if HAS_AUDIO
@@ -415,10 +377,7 @@ void expose_timer_tick() {
 }
 
 void expose_timer_loop() {
-    uint8_t pending = g_shelly_pending;
-    if (pending == 0) return;
-    g_shelly_pending = 0;
-    shelly_send(pending == 1);
+    // Relay I/O now handled by relay_loop() in main loop.
 }
 
 void expose_timer_init() {

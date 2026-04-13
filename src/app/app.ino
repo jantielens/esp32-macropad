@@ -34,6 +34,9 @@
 #if IS_DARKROOM_TIMER
 #include "expose_timer.h"
 #include "test_strip.h"
+#include "relay_controller.h"
+#include "shared_mem.h"
+#include "sensors/tsl2591_sensor.h"
 #endif
 #include "pad_config.h"
 #include "screen_saver_manager.h"
@@ -366,8 +369,11 @@ void setup()
 	timer_binding_init();
 	timer_config_init();
 	#if IS_DARKROOM_TIMER
+	relay_controller_init();
+	shared_mem_init();
 	expose_timer_init();
 	test_strip_init();
+	tsl2591_init();
 	#endif
 	#endif
 
@@ -438,8 +444,7 @@ void loop()
 	screen_saver_manager_loop();
 	action_dispatch_loop();
 	#if IS_DARKROOM_TIMER
-	expose_timer_loop();
-	test_strip_loop();
+	relay_loop();
 	#endif
 	#endif
 

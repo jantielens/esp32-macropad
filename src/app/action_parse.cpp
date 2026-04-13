@@ -29,6 +29,18 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
     if (strcmp(act.type, ACTION_TYPE_STRIP) == 0 && a.containsKey("strip_command")) {
         strlcpy(act.mqtt_payload, a["strip_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
     }
+    // Cal: "cal_command" from web → reuse mqtt_payload for storage
+    if (strcmp(act.type, ACTION_TYPE_CAL) == 0 && a.containsKey("cal_command")) {
+        strlcpy(act.mqtt_payload, a["cal_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
+    }
+    // Meter: "meter_command" from web → reuse mqtt_payload for storage
+    if (strcmp(act.type, ACTION_TYPE_METER) == 0 && a.containsKey("meter_command")) {
+        strlcpy(act.mqtt_payload, a["meter_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
+    }
+    // Mem: "mem_command" from web → reuse mqtt_payload for storage
+    if (strcmp(act.type, ACTION_TYPE_MEM) == 0 && a.containsKey("mem_command")) {
+        strlcpy(act.mqtt_payload, a["mem_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
+    }
     strlcpy(act.sound_file, a["sound_file"] | "", sizeof(act.sound_file));
     act.sound_volume = (uint8_t)(a["sound_volume"] | 0);
 }
@@ -45,6 +57,12 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
             obj["expose_command"] = act.mqtt_payload;
         } else if (strcmp(act.type, ACTION_TYPE_STRIP) == 0) {
             obj["strip_command"] = act.mqtt_payload;
+        } else if (strcmp(act.type, ACTION_TYPE_CAL) == 0) {
+            obj["cal_command"] = act.mqtt_payload;
+        } else if (strcmp(act.type, ACTION_TYPE_METER) == 0) {
+            obj["meter_command"] = act.mqtt_payload;
+        } else if (strcmp(act.type, ACTION_TYPE_MEM) == 0) {
+            obj["mem_command"] = act.mqtt_payload;
         } else {
             obj["payload"] = act.mqtt_payload;
         }

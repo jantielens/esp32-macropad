@@ -15,6 +15,7 @@ The darkroom timer controls an enlarger lamp through a **Shelly Plug** (Gen1 or 
 - A Shelly Plug (any model) connected to your WiFi network
 - The enlarger lamp plugged into the Shelly Plug
 - The macropad connected to the same WiFi network
+- (Optional) A **TSL2591 light sensor** connected via I2C for metering features
 
 ### Shelly Plug Configuration
 
@@ -23,6 +24,22 @@ The darkroom timer controls an enlarger lamp through a **Shelly Plug** (Gen1 or 
 3. Note the IP address (e.g., `192.168.1.100`).
 
 > **Tip**: Test the Shelly Plug by opening `http://<shelly-ip>/relay/0?turn=on` in a browser. The relay should click on. Use `turn=off` to turn it back off.
+
+### Light Sensor (Optional)
+
+The **TSL2591** digital light sensor enables metering features (paper calibration and print metering). Connect the sensor to the shared I2C bus:
+
+| Pin  | Connection        |
+|------|-------------------|
+| SDA  | I2C SDA (GPIO 7)  |
+| SCL  | I2C SCL (GPIO 8)  |
+| VIN  | 3.3V              |
+| GND  | GND               |
+
+The sensor uses I2C address `0x29` and shares the bus with the touch controller and audio codec. It initializes automatically on boot and logs its detection status to the serial monitor.
+
+> [!NOTE]
+> The light sensor is optional. All timer features (exposure timer, test strip sequencer, chemistry timers) work without it. Metering features require the sensor.
 
 ---
 
@@ -332,6 +349,42 @@ A 3×4 grid provides a practical layout for test strip controls:
 - **Segment table** — Widget: Table, data binding: `[strip:table]` (shows all segments with duration and total)
 
 > **Tip**: The default ⅓-stop step matches standard aperture increments. Tap Step Up for wider coverage (½ or full stop) or Step Down for finer precision (¼ or ⅕ stop).
+
+---
+
+## Shared Memory
+
+Shared memory is a RAM-only key-value store for passing numeric values between darkroom modules. Values set by one feature (such as a calibration reading) can be displayed on any button label or consumed by other features.
+
+Values are stored in RAM only and reset on reboot. The store holds up to 8 entries.
+
+### Binding Tokens
+
+Use the `mem` binding scheme to display stored values on button labels.
+
+| Token | Description | Example output |
+|-------|-------------|----------------|
+| `[mem:lref]` | Value for key `lref` | `1847.3` |
+| `[mem:lref;%.0f]` | With printf format override | `1847` |
+| `[mem:undefined_key]` | Key not set | `---` |
+
+The default format shows one decimal place and strips trailing `.0` for clean integers. Override the format with a semicolon and a printf-style format string (e.g., `%.0f` for no decimals, `%.2f` for two decimals).
+
+### Button Actions
+
+Use the **Memory** action type in the button editor to set values from button presses.
+
+| Command | Description |
+|---------|-------------|
+| `set_<key>:<value>` | Set a named value (e.g., `set_lref:1847.3`) |
+
+The command format is `set_` followed by the key name, a colon, and the numeric value. Keys are up to 15 characters.
+
+**Examples**:
+
+- `set_lref:1847.3` — store a reference light reading
+- `set_grade:2` — store a paper grade selection
+- `set_base:8.0` — store a base exposure time
 
 ---
 

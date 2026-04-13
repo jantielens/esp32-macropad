@@ -19,6 +19,7 @@
 #if IS_DARKROOM_TIMER
 #include "expose_timer.h"
 #include "test_strip.h"
+#include "shared_mem.h"
 #endif
 
 #define TAG "Action"
@@ -181,6 +182,20 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         } else {
             LOGW(TAG, "%s strip: empty command", label);
         }
+    } else if (strcmp(act.type, ACTION_TYPE_MEM) == 0) {
+        const char* cmd = act.mqtt_payload;
+        if (cmd && cmd[0]) {
+            LOGI(TAG, "%s mem: '%s'", label, cmd);
+            shared_mem_dispatch(cmd);
+        } else {
+            LOGW(TAG, "%s mem: empty command", label);
+        }
+    } else if (strcmp(act.type, ACTION_TYPE_CAL) == 0) {
+        const char* cmd = act.mqtt_payload;
+        LOGW(TAG, "%s cal: '%s' (not implemented)", label, cmd ? cmd : "");
+    } else if (strcmp(act.type, ACTION_TYPE_METER) == 0) {
+        const char* cmd = act.mqtt_payload;
+        LOGW(TAG, "%s meter: '%s' (not implemented)", label, cmd ? cmd : "");
 #endif
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);

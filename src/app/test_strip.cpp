@@ -6,15 +6,13 @@
 #include "binding_template.h"
 #include "config_manager.h"
 #include "log_manager.h"
-#include "web_portal_state.h"
+#include "relay_controller.h"
 
 #if HAS_AUDIO
 #include "audio.h"
 #endif
 
 #include <Arduino.h>
-#include <HTTPClient.h>
-#include <WiFi.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -92,7 +90,6 @@ static struct {
     int        current_segment;   // 1-based, current or just-completed
     uint32_t   phase_start_ms;    // millis() at phase start
     uint32_t   phase_duration_ms; // target duration for current phase
-    bool       relay_on;          // tracked relay state
 
     // Pre-calculated segment table
     SegmentInfo segments[STRIP_MAX_SEGMENTS];
@@ -111,45 +108,10 @@ static struct {
     .current_segment = 0,
     .phase_start_ms  = 0,
     .phase_duration_ms = 0,
-    .relay_on        = false,
     .segments        = {},
     .last_tick_ms    = 0,
     .pre_beep_fired  = false,
 };
-
-// ============================================================================
-// Shelly Plug HTTP — fire-and-forget from main loop
-// ============================================================================
-
-static volatile uint8_t g_strip_shelly_pending = 0;
-
-static void shelly_request(bool on) {
-    s.relay_on = on;
-    g_strip_shelly_pending = on ? 1 : 2;
-}
-
-static void shelly_send(bool on) {
-    DeviceConfig* cfg = web_portal_get_current_config();
-    if (!cfg || cfg->shelly_ip[0] == '\0') {
-        LOGW(TAG, "Shelly IP not configured");
-        return;
-    }
-
-    char url[128];
-    snprintf(url, sizeof(url), "http://%s/relay/0?turn=%s", cfg->shelly_ip, on ? "on" : "off");
-
-    HTTPClient http;
-    http.setConnectTimeout(2000);
-    http.setTimeout(2000);
-    http.begin(url);
-    int code = http.GET();
-    if (code > 0) {
-        LOGI(TAG, "Shelly %s → HTTP %d", on ? "ON" : "OFF", code);
-    } else {
-        LOGW(TAG, "Shelly %s failed: %s", on ? "ON" : "OFF", http.errorToString(code).c_str());
-    }
-    http.end();
-}
 
 // ============================================================================
 // F-stop math
@@ -293,7 +255,7 @@ static void start_exposing() {
     uint32_t dur_ms = (uint32_t)(s.segments[idx].incremental_s * 1000.0f);
 
     enter_phase(STRIP_EXPOSING, dur_ms);
-    shelly_request(true);
+    relay_request(true);
 
     LOGI(TAG, "Exposing seg %d/%d: %.1fs (cum %.1fs)",
          s.current_segment, s.segment_count,
@@ -302,7 +264,7 @@ static void start_exposing() {
 
 static void start_between_segments() {
     enter_phase(STRIP_BETWEEN_SEGMENTS, s.pause_s * 1000U);
-    shelly_request(false);
+    relay_request(false);
 
 #if HAS_AUDIO
     audio_beep(AUDIO_SEGMENT_DONE, 0);
@@ -313,7 +275,7 @@ static void start_between_segments() {
 }
 
 static void sequence_complete() {
-    shelly_request(false);
+    relay_request(false);
 
 #if HAS_AUDIO
     audio_beep(AUDIO_SEQUENCE_DONE, 0);
@@ -334,7 +296,7 @@ static void cancel_sequence() {
     StripPhase prev = s.phase;
     s.phase = STRIP_IDLE;
     s.current_segment = 0;
-    if (s.relay_on) shelly_request(false);
+    if (relay_is_on()) relay_request(false);
 
     LOGI(TAG, "Cancelled from phase %d", prev);
 }
@@ -551,7 +513,7 @@ static bool strip_resolve(const char* params, char* out, size_t out_len) {
 
     // relay
     if (strcmp(params, "relay") == 0) {
-        snprintf(out, out_len, "%s", s.relay_on ? "ON" : "OFF");
+        snprintf(out, out_len, "%s", relay_is_on() ? "ON" : "OFF");
         return true;
     }
 
@@ -783,10 +745,7 @@ void test_strip_tick() {
 }
 
 void test_strip_loop() {
-    uint8_t pending = g_strip_shelly_pending;
-    if (pending == 0) return;
-    g_strip_shelly_pending = 0;
-    shelly_send(pending == 1);
+    // Relay I/O now handled by relay_loop() in main loop.
 }
 
 void test_strip_init() {

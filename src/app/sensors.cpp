@@ -16,6 +16,10 @@
 #include "sensors/dummy_sensor.cpp"
 #endif
 
+#if IS_DARKROOM_TIMER
+#include "sensors/tsl2591_sensor.cpp"
+#endif
+
 void sensor_manager_register_all(SensorRegistry &registry) {
 	#if HAS_SENSOR_BME280
 	register_bme280_sensor(registry);
