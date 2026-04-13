@@ -8,6 +8,7 @@
 #include "mqtt_screen.h"
 #include "mqtt_wake.h"
 #include "mqtt_audio.h"
+#include "mqtt_notify.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
 #include "power_config.h"
@@ -43,6 +44,7 @@
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "action_dispatch.h"
+#include "message_bubble.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
 #endif
@@ -361,6 +363,7 @@ void setup()
 	mqtt_screen_init();
 	mqtt_wake_init(&device_config);
 	mqtt_audio_init();
+	mqtt_notify_init();
 	#endif
 
 	#if HAS_DISPLAY
@@ -452,6 +455,7 @@ void loop()
 	paper_cal_loop();
 	meter_loop();
 	#endif
+	message_bubble_loop();
 	#endif
 
 	#if HAS_TOUCH
@@ -472,6 +476,7 @@ void loop()
 	mqtt_screen_loop();
 	mqtt_wake_loop();
 	mqtt_audio_loop();
+	mqtt_notify_loop();
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).

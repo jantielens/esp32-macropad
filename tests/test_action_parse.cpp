@@ -351,7 +351,11 @@ TEST(all_fields_populated) {
         "\"sequence\":\"Ctrl+A\",\"beep_pattern\":\"500:100\",\"beep_volume\":42,"
         "\"volume_mode\":\"set\",\"volume_value\":55,"
         "\"brightness_mode\":\"up\",\"brightness_value\":15,"
-        "\"sound_file\":\"alert\",\"sound_volume\":90}";
+        "\"sound_file\":\"alert\",\"sound_volume\":90,"
+        "\"notify_text\":\"hello\",\"notify_duration_ms\":\"5000\","
+        "\"notify_text_color\":\"#ff0000\",\"notify_bg_color\":\"#00ff00\","
+        "\"notify_border_color\":\"#0000ff\",\"notify_opacity\":90,"
+        "\"notify_font_size\":24,\"notify_location\":\"top\"}";
     ButtonAction act = round_trip(json);
     ASSERT_STR(act.type, "mqtt");
     ASSERT_STR(act.screen_id, "pad_1");
@@ -366,6 +370,69 @@ TEST(all_fields_populated) {
     ASSERT_EQ(act.brightness_value, 15);
     ASSERT_STR(act.sound_file, "alert");
     ASSERT_EQ(act.sound_volume, 90);
+    ASSERT_STR(act.notify_text, "hello");
+    ASSERT_STR(act.notify_duration_ms, "5000");
+    ASSERT_STR(act.notify_text_color, "#ff0000");
+    ASSERT_STR(act.notify_bg_color, "#00ff00");
+    ASSERT_STR(act.notify_border_color, "#0000ff");
+    ASSERT_EQ(act.notify_opacity, 90);
+    ASSERT_EQ(act.notify_font_size, 24);
+    ASSERT_STR(act.notify_location, "top");
+}
+
+// ============================================================================
+// Notify action
+// ============================================================================
+
+TEST(notify_action_parse) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"notify\",\"notify_text\":\"Power high!\","
+        "\"notify_duration_ms\":\"5000\",\"notify_text_color\":\"#ffa0a0\","
+        "\"notify_bg_color\":\"#2e1a1a\",\"notify_border_color\":\"#5a2a2a\","
+        "\"notify_opacity\":90,\"notify_font_size\":18,\"notify_location\":\"top\"}");
+    ASSERT_STR(act.type, "notify");
+    ASSERT_STR(act.notify_text, "Power high!");
+    ASSERT_STR(act.notify_duration_ms, "5000");
+    ASSERT_STR(act.notify_text_color, "#ffa0a0");
+    ASSERT_STR(act.notify_bg_color, "#2e1a1a");
+    ASSERT_STR(act.notify_border_color, "#5a2a2a");
+    ASSERT_EQ(act.notify_opacity, 90);
+    ASSERT_EQ(act.notify_font_size, 18);
+    ASSERT_STR(act.notify_location, "top");
+}
+
+TEST(notify_action_round_trip) {
+    ButtonAction act = round_trip(
+        "{\"type\":\"notify\",\"notify_text\":\"Test msg\","
+        "\"notify_duration_ms\":\"0\",\"notify_bg_color\":\"#333333\","
+        "\"notify_location\":\"center\"}");
+    ASSERT_STR(act.type, "notify");
+    ASSERT_STR(act.notify_text, "Test msg");
+    ASSERT_STR(act.notify_duration_ms, "0");
+    ASSERT_STR(act.notify_bg_color, "#333333");
+    ASSERT_STR(act.notify_location, "center");
+}
+
+TEST(notify_zero_opacity_not_serialized) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"notify\",\"notify_text\":\"hi\",\"notify_opacity\":0}");
+    StaticJsonDocument<512> doc;
+    JsonObject obj = doc.to<JsonObject>();
+    action_to_json(act, obj);
+    ASSERT_TRUE(obj.containsKey("notify_text"));
+    ASSERT_TRUE(!obj.containsKey("notify_opacity"));
+}
+
+TEST(notify_minimal_only_text) {
+    ButtonAction act = round_trip("{\"type\":\"notify\",\"notify_text\":\"hello\"}");
+    ASSERT_STR(act.type, "notify");
+    ASSERT_STR(act.notify_text, "hello");
+    ASSERT_STR(act.notify_duration_ms, "");
+    ASSERT_STR(act.notify_text_color, "");
+    ASSERT_STR(act.notify_bg_color, "");
+    ASSERT_EQ(act.notify_opacity, 0);
+    ASSERT_EQ(act.notify_font_size, 0);
+    ASSERT_STR(act.notify_location, "");
 }
 
 // ============================================================================
@@ -426,6 +493,12 @@ int main() {
     RUN(missing_optional_fields);
     RUN(compact_serialization);
     RUN(all_fields_populated);
+
+    printf("\n--- Notify action ---\n");
+    RUN(notify_action_parse);
+    RUN(notify_action_round_trip);
+    RUN(notify_zero_opacity_not_serialized);
+    RUN(notify_minimal_only_text);
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

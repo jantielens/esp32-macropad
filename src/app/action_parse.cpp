@@ -43,6 +43,15 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
     }
     strlcpy(act.sound_file, a["sound_file"] | "", sizeof(act.sound_file));
     act.sound_volume = (uint8_t)(a["sound_volume"] | 0);
+    // Notify fields
+    strlcpy(act.notify_text, a["notify_text"] | "", sizeof(act.notify_text));
+    strlcpy(act.notify_duration_ms, a["notify_duration_ms"] | "", CONFIG_BINDABLE_SHORT_LEN);
+    strlcpy(act.notify_text_color, a["notify_text_color"] | "", CONFIG_BINDABLE_SHORT_LEN);
+    strlcpy(act.notify_bg_color, a["notify_bg_color"] | "", CONFIG_BINDABLE_SHORT_LEN);
+    strlcpy(act.notify_border_color, a["notify_border_color"] | "", CONFIG_BINDABLE_SHORT_LEN);
+    act.notify_opacity = (uint8_t)(a["notify_opacity"] | 0);
+    act.notify_font_size = (uint8_t)(a["notify_font_size"] | 0);
+    strlcpy(act.notify_location, a["notify_location"] | "", sizeof(act.notify_location));
 }
 
 void action_to_json(const ButtonAction& act, JsonObject obj) {
@@ -76,6 +85,15 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
     if (act.brightness_value > 0) obj["brightness_value"]  = act.brightness_value;
     if (act.sound_file[0])    obj["sound_file"]    = act.sound_file;
     if (act.sound_volume > 0) obj["sound_volume"]  = act.sound_volume;
+    // Notify fields
+    if (act.notify_text[0])           obj["notify_text"]         = act.notify_text;
+    if (act.notify_duration_ms[0])    obj["notify_duration_ms"]  = act.notify_duration_ms;
+    if (act.notify_text_color[0])     obj["notify_text_color"]   = act.notify_text_color;
+    if (act.notify_bg_color[0])       obj["notify_bg_color"]     = act.notify_bg_color;
+    if (act.notify_border_color[0])   obj["notify_border_color"] = act.notify_border_color;
+    if (act.notify_opacity > 0)       obj["notify_opacity"]      = act.notify_opacity;
+    if (act.notify_font_size > 0)     obj["notify_font_size"]    = act.notify_font_size;
+    if (act.notify_location[0])       obj["notify_location"]     = act.notify_location;
 }
 
 #endif // HAS_DISPLAY
