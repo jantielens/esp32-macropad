@@ -657,7 +657,7 @@ function padUpdateAddLink(gesture) {
     if (link) link.style.display = (visibleCount >= 3) ? 'none' : '';
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table'];
+const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker'];
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
@@ -665,6 +665,34 @@ function padWidgetTypeChanged() {
         const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
         if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
     });
+
+    // Rocker widget: relabel Tap/LP action groups contextually
+    var isRocker = (wtype === 'rocker');
+    var axis = 'vertical';
+    if (isRocker) {
+        var axSel = document.getElementById('pad-edit-rocker-axis');
+        if (axSel) axis = axSel.value;
+    }
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        var tapLbl = document.querySelector('label[for="pad-edit-action-' + ai + '-type"]');
+        var lpLbl = document.querySelector('label[for="pad-edit-lp-action-' + ai + '-type"]');
+        if (tapLbl) {
+            if (isRocker) {
+                var zoneA = (axis === 'horizontal') ? 'Left' : 'Up';
+                tapLbl.textContent = ai === 0 ? zoneA + ' Action' : zoneA + ' Action ' + (ai + 1);
+            } else {
+                tapLbl.textContent = ai === 0 ? 'Tap Action' : 'Tap Action ' + (ai + 1);
+            }
+        }
+        if (lpLbl) {
+            if (isRocker) {
+                var zoneB = (axis === 'horizontal') ? 'Right' : 'Down';
+                lpLbl.textContent = ai === 0 ? zoneB + ' Action' : zoneB + ' Action ' + (ai + 1);
+            } else {
+                lpLbl.textContent = ai === 0 ? 'Long-Press Action' : 'Long-Press Action ' + (ai + 1);
+            }
+        }
+    }
 }
 
 async function padLoadPage(page) {
@@ -863,6 +891,12 @@ function padRenderGrid() {
                     tbl.className = 'pad-cell-widget-table';
                     tbl.title = 'Table Widget';
                     cell.appendChild(tbl);
+                }
+                if (btn.widget_type === 'rocker') {
+                    const rk = document.createElement('div');
+                    rk.className = 'pad-cell-widget-rocker';
+                    rk.title = 'Rocker Widget';
+                    cell.appendChild(rk);
                 }
 
                 cell.addEventListener('click', () => padDialogOpen(c, r));
@@ -1415,6 +1449,11 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-table-style').value = btn.widget_table_style || '';
     document.getElementById('pad-edit-table-scrollable').value = (btn.widget_table_scrollable === false) ? 'false' : 'true';
 
+    // Rocker widget fields
+    document.getElementById('pad-edit-rocker-axis').value = btn.widget_rocker_axis || 'vertical';
+    document.getElementById('pad-edit-rocker-color').value = btn.widget_rocker_color || '#FFFFFF';
+    document.getElementById('pad-edit-rocker-opacity').value = (btn.widget_rocker_opacity !== undefined) ? btn.widget_rocker_opacity : 80;
+
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -1664,6 +1703,14 @@ function padDialogOk(keepOpen) {
             const tStyle = document.getElementById('pad-edit-table-style').value.trim();
             if (tStyle) btn.widget_table_style = tStyle;
             btn.widget_table_scrollable = document.getElementById('pad-edit-table-scrollable').value === 'true';
+        }
+        if (wtype === 'rocker') {
+            const rAxis = document.getElementById('pad-edit-rocker-axis').value;
+            if (rAxis === 'horizontal') btn.widget_rocker_axis = 'horizontal';
+            const rColor = document.getElementById('pad-edit-rocker-color').value.trim();
+            if (rColor && rColor !== '#FFFFFF') btn.widget_rocker_color = rColor;
+            const rOpa = parseInt(document.getElementById('pad-edit-rocker-opacity').value);
+            if (!isNaN(rOpa) && rOpa !== 80) btn.widget_rocker_opacity = Math.max(0, Math.min(255, rOpa));
         }
     }
 

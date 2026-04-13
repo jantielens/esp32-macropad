@@ -42,6 +42,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
   - `widgets/bar_chart_widget.cpp` - Bar chart widget (vertical or horizontal bar with bindable bar color and bindable min/max scale, configurable animation transitions, binding-driven)
   - `widgets/gauge_widget.cpp` - Gauge widget (arc with needle, tick marks, per-ring bindable arc colors, bindable min/max scale, configurable animation transitions, up to 4 slots with optional dual-binding pairs, binding-driven)
   - `widgets/sparkline_widget.cpp` - Sparkline widget (mini trend line with auto-scale or bindable min/max, time-windowed display, bindable line colors, up to 3 overlaid lines via data_binding_2/3, reads from data stream registry, per-marker min/max dots with labels, current-value dot, up to 3 reference lines)
+  - `widgets/table_widget.cpp` - Table widget (multi-column row data from structured binding payload; optional font style override and scrolling)
+  - `widgets/rocker_widget.cpp` - Rocker widget (splits button into two tap zones for directional actions; vertical or horizontal axis; chevron indicators; zone-based tap flash and audio cues; no data binding)
   - `widgets.cpp` - Sketch-root compilation unit that includes all widget `.cpp` files
 - **Data Stream Registry**: Background data collection for history-based widgets (compile-time gated by `HAS_DISPLAY && HAS_MQTT`)
   - `data_stream.cpp/h` - Demand-driven registry of per-widget ring buffers; resolves bindings and feeds PSRAM-allocated ring buffers every LVGL cycle regardless of active screen; LOCF for data gaps; rebuild triggered by pad config generation changes
@@ -332,6 +334,7 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `src/app/widgets/bar_chart_widget.cpp` - Bar chart widget implementation (bindable bar color, bindable min/max scale, MQTT data binding)
 - `src/app/widgets/gauge_widget.cpp` - Gauge widget implementation (arc, needle, tick marks, per-ring bindable arc colors, bindable min/max scale, up to 4 slots with optional dual-binding pairs, binding-driven)
 - `src/app/widgets/sparkline_widget.cpp` - Sparkline widget implementation (mini trend line, up to 3 overlaid lines, reads from data stream registry, auto-scale or bindable min/max, bindable line colors, per-marker min/max dots with labels and color overrides, current-value dot, up to 3 reference lines with color and pattern)
+- `src/app/widgets/rocker_widget.cpp` - Rocker widget implementation (directional tap zones, vertical/horizontal axis, chevron indicators, zone-based tap flash and audio cues)
 - `src/app/web/_header.html` - Common HTML head template
 - `src/app/web/_nav.html` - Navigation tabs and loading overlay wrapper
 - `src/app/web/_footer.html` - Form buttons template
@@ -620,7 +623,7 @@ Use these terms consistently in user-facing text (UI, docs, log messages, API re
 | **Screen** | Any UI that can be displayed on the device (splash, info, test, pad, …). | User-facing + code |
 | **Pad** | A user-customizable screen containing a grid of buttons. The device supports up to 16 pads (configurable via MAX_PADS). | User-facing + code |
 | **Button** | An interactive element in a pad's grid. May host labels, icons, colors, actions, images, and optionally a widget. | User-facing + code |
-| **Widget** | A specialized data visualization (gauge, sparkline, bar chart) rendered inside a button. A button without a widget is just a normal button. | User-facing + code |
+| **Widget** | A specialized data visualization or interaction mode (gauge, sparkline, bar chart, rocker) rendered inside a button. A button without a widget is just a normal button. | User-facing + code |
 
 ### Retired / Internal-Only Terms
 

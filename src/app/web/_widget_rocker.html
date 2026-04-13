@@ -1,0 +1,26 @@
+                <!-- Rocker Settings (conditional, shown only for rocker widget type) -->
+                <details class="editor-group" id="pad-edit-rocker-section" style="display:none;">
+                    <summary>Rocker Settings</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Splits the button into two tap zones. The <b>Tap Action</b> fires when tapping one side, and the <b>Long-Press Action</b> fires when tapping the other side.</small>
+                        <div class="form-group">
+                            <label for="pad-edit-rocker-axis">Direction</label>
+                            <select id="pad-edit-rocker-axis" onchange="padWidgetTypeChanged()">
+                                <option value="vertical">Up / Down</option>
+                                <option value="horizontal">Left / Right</option>
+                            </select>
+                            <small>Vertical: top half = Tap Action, bottom half = Long-Press Action. Horizontal: left = Tap, right = Long-Press.</small>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-rocker-color">Indicator Color</label>
+                                <input type="text" id="pad-edit-rocker-color" maxlength="31" value="#FFFFFF" placeholder="#FFFFFF">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-rocker-opacity">Opacity (0-255)</label>
+                                <input type="number" id="pad-edit-rocker-opacity" min="0" max="255" value="80" placeholder="80">
+                                <small>0 = invisible, 255 = fully opaque</small>
+                            </div>
+                        </div>
+                    </div>
+                </details>

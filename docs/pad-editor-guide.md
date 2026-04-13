@@ -374,7 +374,45 @@ Buttons use the device-level beep patterns configured on the Home page. To play 
 
 ## Widgets
 
-Widgets replace the standard button rendering with specialized visualizations. Select the widget type in the button editor.
+Widgets replace the standard button rendering with specialized visualizations or interaction modes. Select the widget type in the button editor.
+
+### Rocker
+
+The rocker widget splits a button into two tap zones — tap the top half to trigger one set of actions, tap the bottom half to trigger another. This turns a single button into a directional control, ideal for brightness up/down, volume +/−, thermostat setpoints, or any value you want to nudge from one place.
+
+Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes how the button responds to taps.
+
+**How it works:**
+
+- The button area is divided into two equal zones along the selected axis.
+- **Zone A** (top or left) dispatches the **Tap Action** set.
+- **Zone B** (bottom or right) dispatches the **Long-Press Action** set.
+- Small chevron indicators (▲▼ or ◄►) appear at the edges so the user knows the button is directional.
+- The tap flash overlay covers only the tapped half for clear visual feedback.
+- Zone B uses the device's **Long-Press Beep** pattern for a distinct audio cue (suppressed when the action itself produces audio).
+- Long-press is disabled on rocker buttons since both action slots are used for the two zones.
+
+> **Note:** The action labels in the button editor change contextually when a rocker widget is selected — "Tap Action" becomes "Up Action" (or "Left Action") and "Long-Press Action" becomes "Down Action" (or "Right Action").
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Direction** | Vertical (up/down, default) or horizontal (left/right) |
+| **Indicator Color** | Color of the chevron symbols (default white) |
+| **Opacity** | Chevron visibility from 0 (invisible) to 255 (fully opaque). Default 80 (~31%) |
+
+**Example — Brightness rocker:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | Rocker |
+| Direction | Vertical |
+| Center label | `☀️` or `[health:brightness]` |
+| Up Action | Brightness → Up |
+| Down Action | Brightness → Down |
+
+Labels, icons, and colors work alongside the rocker widget. A typical rocker button uses the center label for an icon or the current value, with top/bottom labels for context.
 
 ### Bar Chart
 
