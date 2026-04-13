@@ -391,6 +391,18 @@ See `docs/dev/wsl-development.md` for complete USB/IP setup guide.
 - `arduino-libraries.txt` - List of required Arduino libraries (auto-installed by setup.sh)
 - `.github/workflows/build.yml` - CI/CD pipeline with matrix builds for all board variants
 
+### Code Review Infrastructure
+- `.github/prompts/sanitycheck.prompt.md` - Pre-commit expert panel code review prompt
+- `.github/agents/code-review.agent.md` - Code Review agent with batch triage workflow
+- `.github/agents/subagents/code-reviewer.agent.md` - Expert reviewer subagent (non-user-invocable)
+- `.github/instructions/review-experts/*.instructions.md` - Expert reviewer instruction files (architecture, binding-system, dead-code, docs, dry, esp32, kiss, naming, performance)
+
+### Code Review Infrastructure
+- `.github/prompts/sanitycheck.prompt.md` - Pre-commit expert panel code review prompt
+- `.github/agents/code-review.agent.md` - Code Review agent with batch triage workflow
+- `.github/agents/subagents/code-reviewer.agent.md` - Expert reviewer subagent (non-user-invocable)
+- `.github/instructions/review-experts/*.instructions.md` - Expert reviewer instruction files (architecture, binding-system, dead-code, docs, dry, esp32, kiss, naming, performance)
+
 ## Library Management
 
 - **Configuration File**: `arduino-libraries.txt` lists all required Arduino libraries
