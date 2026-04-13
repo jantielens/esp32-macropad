@@ -65,7 +65,8 @@ bool icon_store_lookup(const char* id, IconRef* out);
 void icon_store_preload_pad_pages();
 
 // Preload icons for a single pad page (including template fallback).
-// Safe to call after pad config changes — skips already-cached icons.
+// Safe to call after pad config changes — refreshes cache entries from the
+// current on-disk/page-template source for each icon-bearing button.
 void icon_store_preload_pad(uint8_t page);
 
 // Delete all icon files for a page (pad_<page>_*.png).
