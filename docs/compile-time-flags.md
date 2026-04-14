@@ -305,6 +305,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/icon_store.cpp
   - src/app/icon_store.h
   - src/app/lv_conf.h
+  - src/app/message_bubble.cpp
+  - src/app/message_bubble.h
+  - src/app/mqtt_notify.cpp
+  - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
   - src/app/mqtt_screen.h
   - src/app/mqtt_wake.cpp
@@ -383,6 +387,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_audio.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
+  - src/app/mqtt_notify.cpp
+  - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
   - src/app/mqtt_screen.h
   - src/app/mqtt_sub_store.cpp
