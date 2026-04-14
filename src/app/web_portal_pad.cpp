@@ -5,6 +5,7 @@
 #include "board_config.h"
 #include "icon_store.h"
 #include "log_manager.h"
+#include "pad_block.h"
 #include "pad_config.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
@@ -230,6 +231,59 @@ void handleDeletePadConfig(AsyncWebServerRequest *request) {
     mqtt_sub_store_subscribe_all();
 #endif
     request->send(200, "application/json", "{\"success\":true}");
+}
+
+// ============================================================================
+// GET /api/pad/blocks — building block catalog
+// ============================================================================
+void handleGetPadBlocks(AsyncWebServerRequest *request) {
+    if (!portal_auth_gate(request)) return;
+
+    const uint8_t count = pad_block_catalog_count();
+    const PadBlock* const* catalog = pad_block_catalog();
+
+    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    response->print('[');
+    for (uint8_t i = 0; i < count; i++) {
+        const PadBlock* blk = catalog[i];
+        if (i > 0) response->print(',');
+        response->print("{\"id\":\"");
+        response->print(blk->id);
+        response->print("\",\"name\":\"");
+        response->print(blk->name);
+        response->print("\",\"desc\":\"");
+        response->print(blk->desc);
+        response->print("\",\"icon\":\"");
+        response->print(blk->icon);
+        response->printf("\",\"min_cols\":%u,\"min_rows\":%u,\"min_free\":%u,\"buttons\":[",
+                         blk->min_cols, blk->min_rows, blk->min_free_cells);
+        for (uint8_t j = 0; j < blk->button_count; j++) {
+            const PadBlockButton& btn = blk->buttons[j];
+            if (j > 0) response->print(',');
+            // Inject per-button JSON with positional fields prepended
+            response->printf("{\"col_offset\":%u,\"row_offset\":%u,\"col_span\":%u,\"row_span\":%u,",
+                             btn.col_offset, btn.row_offset, btn.col_span, btn.row_span);
+            // btn.json is a JSON object string starting with '{' — skip the opening brace
+            // to merge its fields into the object we already opened
+            if (btn.json && btn.json[0] == '{') {
+                response->print(btn.json + 1); // includes the closing '}'
+            } else {
+                response->print('}');
+            }
+        }
+        response->print("],\"bindings\":{");
+        for (uint8_t j = 0; j < blk->binding_count; j++) {
+            if (j > 0) response->print(',');
+            response->print('"');
+            response->print(blk->bindings[j].name);
+            response->print("\":\"");
+            response->print(blk->bindings[j].value);
+            response->print('"');
+        }
+        response->print("}}");
+    }
+    response->print(']');
+    request->send(response);
 }
 
 #endif // HAS_DISPLAY

@@ -44,6 +44,10 @@
                 </div>
 
                 <!-- Visual grid preview -->
+                <div id="pad-block-banner" class="pad-block-banner" style="display:none;">
+                    <span id="pad-block-banner-text"></span>
+                    <button type="button" class="btn btn-small" id="pad-block-cancel-btn">Cancel</button>
+                </div>
                 <div id="pad-grid" class="pad-grid"></div>
 
                 <!-- Empty state -->
@@ -166,6 +170,11 @@
                         <button type="button" id="pad-fill-btn" disabled>Fill Pad</button>
                         <button type="button" id="pad-copy-btn">Copy Pad</button>
                         <button type="button" id="pad-paste-btn" disabled>Paste Pad</button>
+                        <div id="pad-block-separator" style="display:none;">
+                            <hr>
+                            <span class="pad-more-heading">━━ Blocks ━━</span>
+                        </div>
+                        <div id="pad-block-items"></div>
                         <hr>
                         <button type="button" id="pad-export-btn">Export Pad</button>
                         <button type="button" id="pad-import-btn">Import Pad</button>

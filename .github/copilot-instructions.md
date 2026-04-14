@@ -32,6 +32,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Power + Transport**: Power modes, BLE/MQTT transport selection, duty-cycle runtime, WiFi manager, portal idle timeout.
 - **Web Portal**: Multi-page async web server with captive portal. See `.github/instructions/web-portal.instructions.md`.
 - **Pad Config**: `pad_config.cpp/h` — JSON parser for pad/button/widget configuration, `LabelStyle` DSL, `ButtonAction` types, `ButtonDefaults` cascade, `template_pad` inheritance.
+- **Pad Building Blocks** (`HAS_DISPLAY`): Registration-based catalog of pre-configured button groups. `pad_block.h/cpp` — `pad_block_register()` API for feature branches to add blocks independently. REST endpoint `GET /api/pad/blocks`.
 - **Pad Layout**: `pad_layout.h` — Layout computation, UI scale tiers, label style resolver helpers.
 - **Output**: Compiled binaries in `./build/<board-name>/`
 

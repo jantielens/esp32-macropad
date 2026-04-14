@@ -29,6 +29,7 @@
 #include "pad_binding.h"
 #include "sound_store.h"
 #include "boot_actions.h"
+#include "pad_block.h"
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "timer_config.h"
@@ -286,6 +287,9 @@ void setup()
 
 	// Load boot actions from LittleFS
 	boot_actions_init();
+
+	// Register core building blocks (feature branches add their own via pad_block_register)
+	pad_block_init();
 
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
