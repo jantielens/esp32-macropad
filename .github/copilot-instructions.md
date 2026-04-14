@@ -120,6 +120,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution — they work from an
 - `tests/test_pad_binding.cpp` — Pad binding scheme tests
 - `tests/test_widget_common.cpp` — Widget common utility tests
 - `tests/test_health_table_builder.cpp` — Health table builder tests
+- `tests/test_wifi_reconnect.cpp` — WiFi reconnect backoff and tier escalation tests
 
 ### Documentation
 

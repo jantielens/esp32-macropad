@@ -320,6 +320,7 @@ void setup()
 				power_manager_note_wifi_success();
 				wifi_manager_start_mdns(&device_config);
 				device_telemetry_cache_rssi();
+				wifi_manager_register_events();
 				time_binding_start_ntp();
 			} else {
 				LOGW("Main", "WiFi failed - fallback to AP");
