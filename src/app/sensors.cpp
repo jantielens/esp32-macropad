@@ -32,6 +32,10 @@ void sensor_manager_register_all(SensorRegistry &registry) {
 	#if HAS_SENSOR_DUMMY
 	register_dummy_sensor(registry);
 	#endif
+
+	#if IS_DARKROOM_TIMER
+	register_tsl2591_sensor(registry);
+	#endif
 }
 
 #include "sensors/sensor_manager.cpp"

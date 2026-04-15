@@ -29,10 +29,6 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
     if (strcmp(act.type, ACTION_TYPE_STRIP) == 0 && a.containsKey("strip_command")) {
         strlcpy(act.mqtt_payload, a["strip_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
     }
-    // Cal: "cal_command" from web → reuse mqtt_payload for storage
-    if (strcmp(act.type, ACTION_TYPE_CAL) == 0 && a.containsKey("cal_command")) {
-        strlcpy(act.mqtt_payload, a["cal_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
-    }
     // Meter: "meter_command" from web → reuse mqtt_payload for storage
     if (strcmp(act.type, ACTION_TYPE_METER) == 0 && a.containsKey("meter_command")) {
         strlcpy(act.mqtt_payload, a["meter_command"] | "", CONFIG_MQTT_PAYLOAD_MAX_LEN);
@@ -66,8 +62,6 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
             obj["expose_command"] = act.mqtt_payload;
         } else if (strcmp(act.type, ACTION_TYPE_STRIP) == 0) {
             obj["strip_command"] = act.mqtt_payload;
-        } else if (strcmp(act.type, ACTION_TYPE_CAL) == 0) {
-            obj["cal_command"] = act.mqtt_payload;
         } else if (strcmp(act.type, ACTION_TYPE_METER) == 0) {
             obj["meter_command"] = act.mqtt_payload;
         } else if (strcmp(act.type, ACTION_TYPE_MEM) == 0) {

@@ -10,9 +10,12 @@
 // is selected at runtime from DeviceConfig.
 //
 // Thread model:
-//   relay_request()  — called from LVGL task (sets pending flag)
-//   relay_loop()     — called from main loop() (processes pending HTTP/GPIO)
-//   relay_is_on()    — safe to call from any context (reads volatile state)
+//   relay_request()  — safe from any task (sets flag + signals relay task)
+//   relay_is_on()    — safe from any task (reads volatile state)
+//   relay_loop()     — no-op (kept for call-site compatibility)
+//
+// The actual HTTP I/O runs on a dedicated FreeRTOS task to avoid
+// xTaskPriorityDisinherit crashes with the esp_hosted WiFi stack on P4.
 
 // Initialize the relay controller. Call once during setup().
 void relay_controller_init();

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 160
+Total flags: 162
 
 ### Features (HAS_*)
 
@@ -170,6 +170,7 @@ Total flags: 160
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
+- **SENSOR_I2C_BUS** default: `0` — Use bus 1 to avoid mutex contention with touch/audio on bus 0.
 - **ST7701_DSI_HSYNC_BACK_PORCH** default: `42` — HSYNC back porch in pixel clocks.
 - **ST7701_DSI_HSYNC_FRONT_PORCH** default: `42` — HSYNC front porch in pixel clocks.
 - **ST7701_DSI_HSYNC_PULSE_WIDTH** default: `12` — HSYNC pulse width in pixel clocks.
@@ -535,7 +536,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_task.cpp
   - src/app/expose_timer.cpp
   - src/app/meter.cpp
-  - src/app/paper_cal.cpp
   - src/app/relay_controller.cpp
   - src/app/sensors.cpp
   - src/app/sensors/tsl2591_sensor.cpp
@@ -616,6 +616,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SCREEN_HISTORY_MAX**
   - src/app/board_config.h
+- **SENSOR_I2C_BUS**
+  - src/app/board_config.h
+  - src/app/sensors/tsl2591_sensor.cpp
 - **SENSOR_I2C_FREQUENCY**
   - src/app/board_config.h
 - **SENSOR_I2C_SCL**

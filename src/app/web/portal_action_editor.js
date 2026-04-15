@@ -191,6 +191,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</select>';
     h += '</div>';
     h += '</div>';
+    h += '</div>';
     // Extension form groups (e.g. expose, strip)
     _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
     return h;

@@ -20,6 +20,7 @@ void handlePadColorsJS(AsyncWebServerRequest *request);
 void handlePadIOJS(AsyncWebServerRequest *request);
 void handlePadEditorJS(AsyncWebServerRequest *request);
 void handleActionEditorJS(AsyncWebServerRequest *request);
+void handleActionEditorDarkroomJS(AsyncWebServerRequest *request);
 void handleBindingValidatorJS(AsyncWebServerRequest *request);
 
 #endif // WEB_PORTAL_PAGES_H

@@ -244,6 +244,12 @@
 #define HAS_SENSOR_DUMMY false
 #endif
 
+// I2C bus for sensors: 0 = Wire (shared), 1 = Wire1 (dedicated).
+// Use bus 1 to avoid mutex contention with touch/audio on bus 0.
+#ifndef SENSOR_I2C_BUS
+#define SENSOR_I2C_BUS 0
+#endif
+
 // I2C pins for sensors. Use -1 to keep default Wire pins.
 #ifndef SENSOR_I2C_SDA
 #define SENSOR_I2C_SDA -1

@@ -27,7 +27,7 @@ The darkroom timer controls an enlarger lamp through a **Shelly Plug** (Gen1 or 
 
 ### Light Sensor (Optional)
 
-The **TSL2591** digital light sensor enables metering features (paper calibration and print metering). Connect the sensor to the shared I2C bus:
+The **TSL2591** digital light sensor enables the [Light Meter](#light-meter) (bare-bulb reference reading and spot metering through negatives). Connect the sensor to the I2C bus:
 
 | Pin  | Connection        |
 |------|-------------------|
@@ -352,125 +352,56 @@ A 3×4 grid provides a practical layout for test strip controls:
 
 ---
 
-## Paper Calibration
+## Light Meter
 
-Paper calibration takes a bare-bulb light reading (Lref) that anchors metering to your specific enlarger setup. The device turns the enlarger on, reads the TSL2591 light sensor, turns the enlarger off, and stores the result. This is a one-time step per session (or whenever you change the enlarger setup).
+The light meter takes sensor readings to calibrate your enlarger and meter negatives. It combines bare-bulb reference reading (Lref), bright/dark spot metering, and exposure time calculation into a single module. All commands are independent — call them in any order, re-read at any time, and results recalculate automatically.
+
+**Grade recommendation works without any calibration** — SBR is purely a ratio of the two spot readings. Exposure time requires Lref and a Zone V time.
 
 > [!NOTE]
-> Paper calibration requires the TSL2591 light sensor. See [Light Sensor](#light-sensor-optional) in Hardware Setup.
+> The light meter requires the TSL2591 light sensor. See [Light Sensor](#light-sensor-optional) in Hardware Setup.
 
 ### How It Works
 
-1. Remove any negative from the enlarger
-2. Set the lens to working aperture with a Grade 2 filter
-3. Place the sensor puck on the easel
-4. Press **Read Lref** — the enlarger turns on briefly (~1 second), reads the sensor, and turns off
-5. The Lref value (in lux) is displayed and stored in [shared memory](#shared-memory) as `lref`
+The meter has three independent readings and two configuration values:
 
-After calibration, run a bare-bulb test strip (see [Test Strip Sequencer](#test-strip-sequencer)) with a 5.0s base time to find your Zone V exposure time.
+| Input | How to set | Persists across negatives |
+|-------|-----------|--------------------------|
+| **Lref** | Read Lref button (bare-bulb sensor reading) or manual set | Yes — stored in [shared memory](#shared-memory) |
+| **Zone V time** | Manual via ±0.1s and ±1s buttons | Yes |
+| **Bright spot** | Read Bright button (sensor reading through negative) | No — cleared on next read |
+| **Dark spot** | Read Dark button (sensor reading through negative) | No — cleared on next read |
 
-### States
+Whenever any input changes, the meter recalculates all derived values (SBR, grade, exposure time). If you read the spots in the wrong order, the meter automatically swaps them.
 
-| State | Lamp | Description |
-|-------|------|-------------|
-| **Idle** | OFF | Ready — no reading taken |
-| **Reading** | ON (briefly) | Lamp on, settling, sensor reading in progress |
-| **Done** | OFF | Reading complete — Lref displayed |
+### Calibration Steps (One-Time Per Session)
 
-### Binding Tokens
+Before metering negatives, take two calibration readings:
 
-| Token | Description | Example output |
-|-------|-------------|----------------|
-| `[cal:state]` | Current state | `idle`, `reading`, `done` |
-| `[cal:lref]` | Lref reading (lux) | `1847.3` or `---` |
+1. **Read Lref** — Remove the negative. Set the lens to working aperture with a Grade 2 filter. Place the sensor puck on the easel. Press **Read Lref** — the sensor takes a bare-bulb reading and stores it as the reference illuminance.
 
-### Button Actions
+2. **Bare-bulb test strip** — Run a [test strip](#test-strip-sequencer) with a 5.0s base time (no negative, same enlarger setup). The segment that produces a medium grey is your **Zone V time**. Enter it on the meter pad.
 
-Use the **Paper Cal** action type in the button editor.
+These two values anchor the meter to your specific enlarger, lens, and paper combination. Redo them whenever you change the enlarger setup.
 
-| Command | Description |
-|---------|-------------|
-| **Start** | Begin a bare-bulb reading (re-reads if already done) |
-| **Cancel** | Abort and return to idle, clear reading |
+### Metering a Negative
 
-### Building a Paper Cal Pad
+With Lref and Zone V time set:
 
-A simple pad with mostly informational display and a single action button:
+1. Insert a negative and focus the image
+2. Turn on the enlarger (use the exposure timer's Focus mode or a separate Focus button)
+3. Place the sensor puck on the **brightest** image area and tap **Read Bright**
+4. Move the puck to the **darkest** area and tap **Read Dark**
+5. Read results: SBR, recommended grade, and suggested exposure time
+6. Navigate to your exposure pad, set the suggested time, and print
 
-| | Full width |
-|---|----------|
-| **Row 1** | Instructions: "No negative. Lens open. Grade 2 filter. Puck on easel." |
-| **Row 2** | State: `[cal:state]` |
-| **Row 3** | Lref display: `[cal:lref] lux` (large font) |
-| **Row 4** | Read Lref button (tap = start, long-press = cancel) |
-
-**Key buttons**:
-
-- **Read Lref** — Action: Paper Cal → Start. Long-press action: Paper Cal → Cancel. Label: `Read Lref`, bottom label: `(hold to cancel)`.
-- **Lref display** — Label: `[cal:lref]` with `font_size:48` for readability. No action (display-only).
-- **State** — Label: `[cal:state]`. Use expression binding for a visual indicator: `[expr:[cal:state]=="done"?"✓ DONE":[cal:state]=="reading"?"● READING":"IDLE"]`
-
-> **Tip**: After calibration, navigate to your test strip pad and set the base time to **5.0s** for a bare-bulb strip. The medium-grey segment gives you the Zone V time for metering.
-
----
-
-## Print Prep Meter
-
-The print prep meter takes two spot readings through a negative — one at the brightest area, one at the darkest — and computes a contrast grade recommendation and base exposure time. This is the core metering feature.
-
-**Grade recommendation works without any calibration** — SBR is purely a ratio of the two readings. Exposure time requires Lref (from [Paper Calibration](#paper-calibration)) and a Zone V time (from a bare-bulb test strip).
-
-> [!NOTE]
-> The meter requires the TSL2591 light sensor. See [Light Sensor](#light-sensor-optional) in Hardware Setup.
-
-### How It Works
-
-1. Insert a negative in the enlarger and focus the image on the easel
-2. Tap **Focus ON** — the enlarger turns on for framing
-3. Place the sensor puck on the **brightest** spot and tap **Read Bright**
-4. Move the puck to the **darkest** spot and tap **Read Dark** — the enlarger turns off
-5. Results appear: SBR, recommended grade, and (if calibrated) suggested exposure time
-
-If you read the spots in the wrong order, the meter automatically swaps them.
-
-### States
-
-| State | Lamp | Description |
-|-------|------|-------------|
-| **Idle** | OFF | Ready — no readings taken |
-| **Awaiting bright** | ON | Enlarger on, waiting for bright spot reading |
-| **Awaiting dark** | ON | Bright captured, waiting for dark spot reading |
-| **Results** | OFF | Both readings done, results computed |
-
-### State Transitions
-
-```mermaid
-stateDiagram-v2
-    Idle --> Awaiting_bright : focus_on
-    Awaiting_bright --> Awaiting_dark : read_bright
-    Awaiting_dark --> Results : read_dark (enlarger off)
-    Results --> Awaiting_bright : focus_on (re-meter)
-    Awaiting_bright --> Idle : cancel
-    Awaiting_dark --> Idle : cancel
-    Results --> Idle : cancel
-```
-
-### User Inputs
-
-The meter uses two values from previous calibration steps:
-
-| Setting | Source | Entry |
-|---------|--------|-------|
-| **Lref** | Auto from paper calibration via [shared memory](#shared-memory) | Auto-populated on each Focus ON. Override with `set_lref`/`add_lref`. |
-| **Zone V time** | Noted from bare-bulb test strip | Manual via ±0.1s and ±1s buttons (`add_zone5`). |
-
-Without both values, the meter still computes SBR and recommends a grade. The exposure time shows `---` until both are set.
+To meter another negative: re-read bright and dark. Lref and Zone V time persist.
 
 ### The Math
 
-After the dark reading, the meter computes:
+After both spot readings, the meter computes:
 
-- **SBR** = log₁₀(L_bright / L_dark) — the negative's contrast range
+- **SBR** = log₁₀(L_bright / L_dark) — the negative’s contrast range
 - **Grade** = looked up from an SBR-to-grade table (Zone System standard values)
 - **Exposure time** = Zone V time × 10^(D_mid), where D_mid is the average density offset from Lref
 
@@ -490,42 +421,45 @@ After the dark reading, the meter computes:
 | 1.65 | 0.5 | Very contrasty |
 | > 1.65 | 0 | Extremely contrasty |
 
+### Sensor Configuration
+
+The TSL2591 uses **auto-gain** starting at high sensitivity (428× gain, 300ms integration) and falls back to lower gain on overflow. Each reading averages 3 samples for noise reduction. Total read time is approximately 1 second.
+
+Lux values are displayed with 4 decimal places for full precision at the sensor’s resolution (~0.003 lux at high gain).
+
 ### Binding Tokens
 
 | Token | Description | Example output |
 |-------|-------------|----------------|
-| `[meter:state]` | Current state | `idle`, `awaiting_bright`, `results` |
-| `[meter:lref]` | Lref (lux) | `1847` or `---` |
+| `[meter:lref]` | Lref (lux) | `3.1270` or `---` |
 | `[meter:zone5_time]` | Zone V time (seconds) | `6.3` or `---` |
-| `[meter:l_bright]` | Bright spot reading (lux) | `423.7` or `---` |
-| `[meter:l_dark]` | Dark spot reading (lux) | `14.2` or `---` |
-| `[meter:sbr]` | SBR (computed) | `1.25` or `---` |
+| `[meter:l_bright]` | Bright spot reading (lux) | `1.0430` or `---` |
+| `[meter:l_dark]` | Dark spot reading (lux) | `0.0870` or `---` |
+| `[meter:sbr]` | SBR (computed) | `1.08` or `---` |
 | `[meter:grade]` | Recommended grade | `2` or `2.5` or `---` |
 | `[meter:grade_label]` | Grade description | `Normal`, `Contrasty` |
 | `[meter:time]` | Suggested exposure time (seconds) | `14.2` or `---` |
-| `[meter:relay]` | Relay state | `ON` or `OFF` |
 
 ### Button Actions
 
-Use the **Meter** action type in the button editor.
+Use the **Light Meter** action type in the button editor.
 
-#### Control Commands
+#### Reading Commands
 
 | Command | Description |
 |---------|-------------|
-| **Focus ON** | Turn enlarger on, enter awaiting bright |
-| **Read Bright** | Take bright spot reading |
-| **Read Dark** | Take dark spot reading, compute results, enlarger off |
-| **Cancel** | Abort, enlarger off (clears readings, keeps Lref and Zone V) |
+| **Read Lref** | Bare-bulb sensor reading — stores result as Lref and in shared memory |
+| **Read Bright** | Take bright spot reading (callable any time) |
+| **Read Dark** | Take dark spot reading (callable any time) |
 
 #### Configuration Commands
 
 | Command | Value | Description |
 |---------|-------|-------------|
-| **Set Lref** | lux | Override Lref value (e.g., `set_lref:1847.3`) |
-| **Add Lref** | lux | Adjust Lref ± (e.g., `add_lref:100`) |
-| **Set Zone V** | seconds | Set Zone V time (e.g., `set_zone5:6.3`) |
-| **Add Zone V** | seconds | Adjust Zone V time ± (e.g., `add_zone5:0.1`) |
+| **Set Lref** | lux | Override Lref value manually |
+| **Add Lref** | lux | Adjust Lref ± (e.g., `100` or `-50`) |
+| **Set Zone V** | seconds | Set Zone V time (e.g., `6.3`) |
+| **Add Zone V** | seconds | Adjust Zone V time ± (e.g., `0.1` or `-0.1`) |
 
 ### Building a Meter Pad
 
@@ -533,45 +467,38 @@ A 4×8 grid with display rows at the top and action buttons at the bottom:
 
 | | Column 1 | Column 2 | Column 3 | Column 4 |
 |---|----------|----------|----------|----------|
-| **Row 1** | Lref (auto) | | Zone V time | |
+| **Row 1** | Lref display | | Zone V time | |
 | **Row 2** | -0.1 | -1 | +1 | +0.1 |
 | **Row 3** | Bright reading | | Dark reading | |
 | **Row 4** | SBR | | Grade | |
 | **Row 5** | Grade label (full width) | | | |
 | **Row 6** | Suggested time (full width, large font) | | | |
-| **Row 7** | Focus ON | | State display | |
+| **Row 7** | Read Lref | | (empty or info) | |
 | **Row 8** | Read BRIGHT | | Read DARK | |
 
 **Key buttons**:
 
-- **Lref display** — Label: `[meter:lref]`, top label: `Lref (auto)`. No action (display-only).
+- **Lref display** — Label: `[meter:lref]`, top label: `Lref`. No action (display-only).
 - **Zone V time** — Label: `[meter:zone5_time] s`, top label: `Zone V time`. No action.
-- **Zone V adjustment** — Row of four buttons: -0.1, -1, +1, +0.1. Action: Meter → Add Zone V with values `-0.1`, `-1`, `1`, `0.1`.
+- **Zone V adjustment** — Row of four buttons: -0.1, -1, +1, +0.1. Action: Light Meter → Add Zone V with values `-0.1`, `-1`, `1`, `0.1`.
 - **Bright / Dark readings** — Labels: `[meter:l_bright]` / `[meter:l_dark]`. Display-only.
 - **SBR / Grade** — Labels: `[meter:sbr]` / `[meter:grade]`. Display-only.
 - **Grade label** — Full width, label: `[meter:grade_label]`.
 - **Suggested time** — Full width, label: `[meter:time] s` with `font_size:48`. Display-only.
-- **Focus ON** — Action: Meter → Focus ON. Long-press: Meter → Cancel. Label: `1. Focus ON`, bottom: `(hold to cancel)`.
-- **State** — Label: `[meter:state]`. Display-only.
-- **Read BRIGHT** — Action: Meter → Read Bright. Label: `2. BRIGHT`.
-- **Read DARK** — Action: Meter → Read Dark. Label: `3. DARK`.
+- **Read Lref** — Action: Light Meter → Read Lref. Label: `Read Lref`.
+- **Read BRIGHT** — Action: Light Meter → Read Bright. Label: `BRIGHT`.
+- **Read DARK** — Action: Light Meter → Read Dark. Label: `DARK`.
 
 ### Typical Workflow
 
-After completing [Paper Calibration](#paper-calibration) and a bare-bulb test strip:
+1. **First session setup**: Read Lref (bare-bulb), run a test strip, enter Zone V time
+2. Insert a negative, turn on the enlarger (Focus mode)
+3. Read BRIGHT → Read DARK
+4. Read results: SBR, grade, suggested time
+5. Go to exposure pad → set time → print
 
-1. Navigate to the Meter pad — Lref is auto-populated
-2. Set Zone V time (one-time per paper calibration, e.g., 6.3s)
-3. Insert a negative, focus the image
-4. Tap **Focus ON** → enlarger turns on
-5. Place puck on brightest spot → tap **Read BRIGHT**
-6. Move puck to darkest spot → tap **Read DARK** → enlarger turns off
-7. Read results: SBR, grade, suggested time
-8. Navigate to exposure pad → set the suggested time → print
+For the next negative, repeat steps 2–5. Lref and Zone V time persist.
 
-To meter another negative, tap **Focus ON** again — readings reset but Lref and Zone V stay.
-
----
 
 ## Shared Memory
 

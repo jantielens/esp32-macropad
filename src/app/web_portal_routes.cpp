@@ -53,6 +53,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/portal_pad_io.js", HTTP_GET, handlePadIOJS);
 		server->on("/portal_pad_editor.js", HTTP_GET, handlePadEditorJS);
 		server->on("/portal_action_editor.js", HTTP_GET, handleActionEditorJS);
+		server->on("/portal_action_editor_darkroom.js", HTTP_GET, handleActionEditorDarkroomJS);
 		server->on("/portal_binding_validator.js", HTTP_GET, handleBindingValidatorJS);
 
 		// API endpoints

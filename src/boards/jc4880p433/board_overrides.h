@@ -100,4 +100,13 @@
 #define AUDIO_PA_PIN     11    // Power amplifier enable (active high)
 #define AUDIO_CODEC_ADDR 0x18  // ES8311 I2C address (shared Wire bus 0)
 
+// ============================================================================
+// Sensor I2C (Wire1 — dedicated bus to avoid GT911 mutex contention)
+// ============================================================================
+// TSL2591 light sensor on the 2-pin header near the power connector.
+// Uses Wire1 so sensor reads never block touch polling on Wire (bus 0).
+#define SENSOR_I2C_BUS  1
+#define SENSOR_I2C_SDA 52
+#define SENSOR_I2C_SCL 51
+
 #endif // BOARD_OVERRIDES_JC4880P433_H

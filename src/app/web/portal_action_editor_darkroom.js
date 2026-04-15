@@ -1,7 +1,8 @@
 // ============================================================================
 // Darkroom Action Editor Extension
 // ============================================================================
-// Extends portal_action_editor.js with Exposure Timer and Test Strip actions.
+// Extends portal_action_editor.js with darkroom actions: Exposure Timer,
+// Test Strip, and Light Meter.
 // Self-registers into the action editor extension system on load.
 // No-ops gracefully if the extension system is absent.
 
@@ -12,7 +13,8 @@
         // Extra <option> tags for the type dropdown
         options: function() {
             return '<option value="expose">Exposure Timer</option>'
-                 + '<option value="strip">Test Strip</option>';
+                 + '<option value="strip">Test Strip</option>'
+                 + '<option value="meter">Light Meter</option>';
         },
 
         // Extra form group HTML
@@ -67,6 +69,26 @@
             h += '<small id="' + prefix + '-strip-value-hint"></small>';
             h += '</div>';
             h += '</div>';
+            // Light meter control
+            h += '<div id="' + prefix + '-meter-group" style="display:none;">';
+            h += '<div class="form-group">';
+            h += '<label for="' + prefix + '-meter-action">Meter Action</label>';
+            h += '<select id="' + prefix + '-meter-action" onchange="_actionEditorDarkroomMeterChanged(\'' + prefix + '\')">'; 
+            h += '<option value="read_lref">Read Lref (bare-bulb)</option>';
+            h += '<option value="read_bright">Read Bright Spot</option>';
+            h += '<option value="read_dark">Read Dark Spot</option>';
+            h += '<option value="set_lref">Set Lref</option>';
+            h += '<option value="add_lref">Add Lref</option>';
+            h += '<option value="set_zone5">Set Zone V Time</option>';
+            h += '<option value="add_zone5">Add Zone V Time</option>';
+            h += '</select>';
+            h += '</div>';
+            h += '<div class="form-group" id="' + prefix + '-meter-value-group" style="display:none;">';
+            h += '<label for="' + prefix + '-meter-value">Value</label>';
+            h += '<input type="text" id="' + prefix + '-meter-value" placeholder="">';
+            h += '<small id="' + prefix + '-meter-value-hint"></small>';
+            h += '</div>';
+            h += '</div>';
             return h;
         },
 
@@ -78,6 +100,9 @@
             var stripGrp = document.getElementById(prefix + '-strip-group');
             if (stripGrp) stripGrp.style.display = (type === 'strip') ? '' : 'none';
             if (type === 'strip') _actionEditorDarkroomStripChanged(prefix);
+            var meterGrp = document.getElementById(prefix + '-meter-group');
+            if (meterGrp) meterGrp.style.display = (type === 'meter') ? '' : 'none';
+            if (type === 'meter') _actionEditorDarkroomMeterChanged(prefix);
         },
 
         // Load saved action data into form fields
@@ -133,6 +158,36 @@
                 el = document.getElementById(prefix + '-strip-action');
                 if (el) el.value = 'start';
             }
+            // Cal (legacy): treat as meter for backwards compatibility
+            if (action.cal_command) {
+                // Old Paper Cal buttons — no longer supported, ignore
+            }
+            // Meter: parse DSL string "command[:value]" into structured fields
+            if (action.meter_command) {
+                var mc = action.meter_command;
+                var mColonIdx = mc.indexOf(':');
+                var mCmd, mVal;
+                if (mColonIdx >= 0) {
+                    mCmd = mc.substring(0, mColonIdx);
+                    mVal = mc.substring(mColonIdx + 1);
+                } else {
+                    mCmd = mc;
+                    mVal = '';
+                }
+                el = document.getElementById(prefix + '-meter-action');
+                if (el) {
+                    el.value = mCmd;
+                    if (el.selectedIndex < 0) el.value = 'read_lref';
+                }
+                if (mVal) {
+                    el = document.getElementById(prefix + '-meter-value');
+                    if (el) el.value = mVal;
+                }
+            } else {
+                el = document.getElementById(prefix + '-meter-action');
+                if (el) el.value = 'read_lref';
+            }
+            _actionEditorDarkroomMeterChanged(prefix);
         },
 
         // Build action object fields from form
@@ -159,6 +214,21 @@
                         if (sVal && sVal.value !== '') sCmd = sCmd + ':' + sVal.value.trim();
                     }
                     return { strip_command: sCmd };
+                }
+            }
+            if (type === 'cal') {
+                // Legacy — no longer used
+                return null;
+            }
+            if (type === 'meter') {
+                var mSel = document.getElementById(prefix + '-meter-action');
+                if (mSel) {
+                    var mCmd = mSel.value;
+                    if (mCmd === 'set_lref' || mCmd === 'add_lref' || mCmd === 'set_zone5' || mCmd === 'add_zone5') {
+                        var mVal = document.getElementById(prefix + '-meter-value');
+                        if (mVal && mVal.value !== '') mCmd = mCmd + ':' + mVal.value.trim();
+                    }
+                    return { meter_command: mCmd };
                 }
             }
             return null;
@@ -206,6 +276,32 @@
             else if (val === 'set_countdown') valInput.placeholder = 'e.g. 5';
             else if (val === 'set_pause') valInput.placeholder = 'e.g. 3';
             else if (val === 'set_tick') valInput.placeholder = 'on or off';
+            else valInput.placeholder = '';
+        }
+    };
+
+    // Show/hide meter sub-fields based on the meter action dropdown.
+    window._actionEditorDarkroomMeterChanged = function(prefix) {
+        var sel = document.getElementById(prefix + '-meter-action');
+        if (!sel) return;
+        var val = sel.value;
+        var valGrp = document.getElementById(prefix + '-meter-value-group');
+        var hint = document.getElementById(prefix + '-meter-value-hint');
+        var valInput = document.getElementById(prefix + '-meter-value');
+        var needsValue = (val === 'set_lref' || val === 'add_lref' || val === 'set_zone5' || val === 'add_zone5');
+        if (valGrp) valGrp.style.display = needsValue ? '' : 'none';
+        if (hint) {
+            if (val === 'set_lref') hint.textContent = 'Lref value in lux (overrides auto from paper cal).';
+            else if (val === 'add_lref') hint.textContent = 'Lux to add or subtract (e.g. 100 or -50).';
+            else if (val === 'set_zone5') hint.textContent = 'Zone V time in seconds (from bare-bulb test strip).';
+            else if (val === 'add_zone5') hint.textContent = 'Seconds to add or subtract (e.g. 0.1 or -0.1).';
+            else hint.textContent = '';
+        }
+        if (valInput) {
+            if (val === 'set_lref') valInput.placeholder = 'e.g. 1847.3';
+            else if (val === 'add_lref') valInput.placeholder = 'e.g. 100 or -50';
+            else if (val === 'set_zone5') valInput.placeholder = 'e.g. 6.3';
+            else if (val === 'add_zone5') valInput.placeholder = 'e.g. 0.1 or -0.1';
             else valInput.placeholder = '';
         }
     };

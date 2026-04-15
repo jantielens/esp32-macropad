@@ -228,6 +228,17 @@ void handleActionEditorJS(AsyncWebServerRequest *request) {
 		request->send(response);
 }
 
+void handleActionEditorDarkroomJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_action_editor_darkroom_js_gz,
+				portal_action_editor_darkroom_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+
 void handleBindingValidatorJS(AsyncWebServerRequest *request) {
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
 				request,

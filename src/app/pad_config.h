@@ -117,7 +117,6 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_SOUND    "sound"
 #define ACTION_TYPE_EXPOSE   "expose"
 #define ACTION_TYPE_STRIP    "strip"
-#define ACTION_TYPE_CAL      "cal"
 #define ACTION_TYPE_METER    "meter"
 #define ACTION_TYPE_MEM      "mem"
 #define ACTION_TYPE_NOTIFY   "notify"

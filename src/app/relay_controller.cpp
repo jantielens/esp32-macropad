@@ -5,6 +5,7 @@
 
 #include "config_manager.h"
 #include "log_manager.h"
+#include "rtos_task_utils.h"
 #include "web_portal_state.h"
 
 #include <HTTPClient.h>
@@ -12,15 +13,27 @@
 #define TAG "Relay"
 
 // ============================================================================
+// Configuration
+// ============================================================================
+
+static constexpr uint32_t RELAY_TASK_STACK_WORDS = 4096;
+static constexpr UBaseType_t RELAY_TASK_PRIORITY  = 2;
+
+// ============================================================================
 // State
 // ============================================================================
 
-static uint8_t g_relay_pending = 0;   // 0=none, 1=ON, 2=OFF
 static bool    g_relay_on      = false;
 static portMUX_TYPE g_relay_lock = portMUX_INITIALIZER_UNLOCKED;
 
+static TaskHandle_t       g_relay_task   = nullptr;
+static RtosTaskPsramAlloc g_relay_alloc  = {};
+static SemaphoreHandle_t  g_relay_sem    = nullptr;
+// Pending command for the relay task: 0=none, 1=ON, 2=OFF
+static volatile uint8_t   g_relay_cmd    = 0;
+
 // ============================================================================
-// Shelly HTTP backend — fire-and-forget
+// Shelly HTTP backend — runs on the dedicated relay task
 // ============================================================================
 
 static void shelly_send(bool on) {
@@ -44,6 +57,27 @@ static void shelly_send(bool on) {
         LOGW(TAG, "Shelly %s failed: %s", on ? "ON" : "OFF", http.errorToString(code).c_str());
     }
     http.end();
+    vTaskDelay(pdMS_TO_TICKS(100));   // TCP close guard — protect WiFi MAC DMA
+}
+
+// ============================================================================
+// Relay FreeRTOS task
+// ============================================================================
+
+static void relay_task_fn(void*) {
+    for (;;) {
+        xSemaphoreTake(g_relay_sem, portMAX_DELAY);
+
+        // Drain: only the latest command matters
+        portENTER_CRITICAL(&g_relay_lock);
+        uint8_t cmd = g_relay_cmd;
+        g_relay_cmd = 0;
+        portEXIT_CRITICAL(&g_relay_lock);
+
+        if (cmd) {
+            shelly_send(cmd == 1);
+        }
+    }
 }
 
 // ============================================================================
@@ -51,16 +85,30 @@ static void shelly_send(bool on) {
 // ============================================================================
 
 void relay_controller_init() {
-    g_relay_pending = 0;
     g_relay_on = false;
-    LOGI(TAG, "Relay controller initialized (Shelly backend)");
+    g_relay_cmd = 0;
+
+    g_relay_sem = xSemaphoreCreateBinary();
+
+    bool ok = rtos_create_task_psram_stack_pinned(
+        relay_task_fn, "relay",
+        RELAY_TASK_STACK_WORDS, nullptr,
+        RELAY_TASK_PRIORITY, &g_relay_task, &g_relay_alloc,
+        tskNO_AFFINITY);
+
+    if (!ok) {
+        LOGE(TAG, "Failed to create relay task");
+    } else {
+        LOGI(TAG, "Relay task created (Shelly backend)");
+    }
 }
 
 void relay_request(bool on) {
     portENTER_CRITICAL(&g_relay_lock);
     g_relay_on = on;
-    g_relay_pending = on ? 1 : 2;
+    g_relay_cmd = on ? 1 : 2;
     portEXIT_CRITICAL(&g_relay_lock);
+    if (g_relay_sem) xSemaphoreGive(g_relay_sem);
 }
 
 bool relay_is_on() {
@@ -71,12 +119,7 @@ bool relay_is_on() {
 }
 
 void relay_loop() {
-    portENTER_CRITICAL(&g_relay_lock);
-    uint8_t pending = g_relay_pending;
-    g_relay_pending = 0;
-    portEXIT_CRITICAL(&g_relay_lock);
-    if (pending == 0) return;
-    shelly_send(pending == 1);
+    // No-op: relay requests are now processed by the dedicated relay task.
 }
 
 #else // !IS_DARKROOM_TIMER

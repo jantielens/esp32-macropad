@@ -36,7 +36,6 @@
 #if IS_DARKROOM_TIMER
 #include "expose_timer.h"
 #include "test_strip.h"
-#include "paper_cal.h"
 #include "meter.h"
 #include "relay_controller.h"
 #include "shared_mem.h"
@@ -383,7 +382,6 @@ void setup()
 	shared_mem_init();
 	expose_timer_init();
 	test_strip_init();
-	paper_cal_init();
 	meter_init();
 	tsl2591_init();
 	#endif
@@ -457,7 +455,6 @@ void loop()
 	action_dispatch_loop();
 	#if IS_DARKROOM_TIMER
 	relay_loop();
-	paper_cal_loop();
 	meter_loop();
 	#endif
 	message_bubble_loop();

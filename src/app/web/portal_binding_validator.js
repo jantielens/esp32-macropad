@@ -877,3 +877,63 @@ bindingRegisterScheme('expr', {
         return null;
     }
 });
+
+// ─── Scheme: expose ──────────────────────────────────────────────
+// [expose:key;format]  — exposure timer binding
+bindingRegisterScheme('expose', {
+    maxParams: 2,
+    firstParamRequired: true,
+    firstParamLabel: 'Expose key',
+    keysLabel: 'expose key',
+    formatParam: 1,
+    keys: ['time', 'remaining', 'elapsed', 'state', 'relay']
+});
+
+// ─── Scheme: mem ─────────────────────────────────────────────────
+// [mem:key;format]  — shared memory binding (user-defined keys)
+bindingRegisterScheme('mem', {
+    maxParams: 2,
+    firstParamRequired: true,
+    firstParamLabel: 'Memory key',
+    formatParam: 1
+});
+
+// ─── Scheme: meter ───────────────────────────────────────────────
+// [meter:key]  — light meter binding
+bindingRegisterScheme('meter', {
+    maxParams: 1,
+    firstParamRequired: true,
+    firstParamLabel: 'Meter key',
+    keysLabel: 'meter key',
+    keys: ['lref', 'zone5_time', 'l_bright', 'l_dark',
+           'sbr', 'grade', 'grade_label', 'time']
+});
+
+// ─── Scheme: strip ───────────────────────────────────────────────
+// [strip:key;format]  — test strip binding
+bindingRegisterScheme('strip', {
+    validate: function(params, opts) {
+        var parts = bindingSplitParams(params);
+        var key = parts[0].trim();
+        if (key === '') return 'Strip key is empty';
+        var fixed = ['state', 'segment', 'segments', 'remaining', 'elapsed',
+                     'seg_inc', 'base_time', 'step', 'relay', 'progress',
+                     'range', 'total_time', 'countdown', 'pause', 'tick', 'table'];
+        var paramKeys = /^seg_(time|offset|inc):\d+$/;
+        if (fixed.indexOf(key) === -1 && !paramKeys.test(key)) {
+            return 'Unknown strip key "' + key + '"';
+        }
+        if (parts.length > 2) return 'Too many parameters — expected at most 2';
+        if (opts && opts.isWidgetBinding && parts.length > 1) {
+            return 'Widget data bindings must not include a format parameter';
+        }
+        if (parts.length > 1) {
+            var fmt = parts[1].trim();
+            if (fmt !== '') {
+                var fmtErr = bindingValidateFormat(fmt);
+                if (fmtErr) return fmtErr;
+            }
+        }
+        return null;
+    }
+});
