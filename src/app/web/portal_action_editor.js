@@ -28,6 +28,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="brightness">Set Brightness</option>';
     h += '<option value="timer">Timer Control</option>';
     h += '<option value="notify">Show Notification</option>';
+    h += '<option value="system">System Command</option>';
     h += '</select>';
     if (opts.showBleHint) {
         h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
@@ -186,6 +187,16 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</div>';
     h += '</div>';
     h += '</div>';
+    // System command
+    h += '<div id="' + prefix + '-system-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-system-command">Command</label>';
+    h += '<select id="' + prefix + '-system-command">';
+    h += '<option value="reboot">Reboot Device</option>';
+    h += '<option value="wifi_reconnect">Reconnect WiFi</option>';
+    h += '<option value="screensaver">Enable Screensaver</option>';
+    h += '</select>';
+    h += '</div></div>';
     return h;
 }
 
@@ -214,6 +225,8 @@ function actionEditorTypeChanged(prefix) {
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     var notifyGrp = document.getElementById(prefix + '-notify-group');
     if (notifyGrp) notifyGrp.style.display = (type === 'notify') ? '' : 'none';
+    var systemGrp = document.getElementById(prefix + '-system-group');
+    if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
     if (type === 'notify') actionEditorInitNotifyBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
     // Show/hide volume value field depending on mode
@@ -334,6 +347,9 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.notify_font_size > 0) ? action.notify_font_size : '';
     el = document.getElementById(prefix + '-notify-location');
     if (el) el.value = action.notify_location || 'bottom';
+    // System fields
+    el = document.getElementById(prefix + '-system-command');
+    if (el) el.value = action.system_command || 'reboot';
     actionEditorTypeChanged(prefix);
 }
 
@@ -415,6 +431,10 @@ function actionEditorBuild(prefix) {
         if (nfs && nfs.value !== '') act.notify_font_size = parseInt(nfs.value, 10);
         var nloc = document.getElementById(prefix + '-notify-location');
         if (nloc) act.notify_location = nloc.value;
+    }
+    if (type === 'system') {
+        var sc = document.getElementById(prefix + '-system-command');
+        if (sc) act.system_command = sc.value;
     }
     return act;
 }

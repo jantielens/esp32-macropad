@@ -32,6 +32,8 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
     act.notify_opacity = (uint8_t)(a["notify_opacity"] | 0);
     act.notify_font_size = (uint8_t)(a["notify_font_size"] | 0);
     strlcpy(act.notify_location, a["notify_location"] | "", sizeof(act.notify_location));
+    // System fields
+    strlcpy(act.system_command, a["system_command"] | "", CONFIG_ACTION_TYPE_MAX_LEN);
 }
 
 void action_to_json(const ButtonAction& act, JsonObject obj) {
@@ -64,6 +66,8 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
     if (act.notify_opacity > 0)       obj["notify_opacity"]      = act.notify_opacity;
     if (act.notify_font_size > 0)     obj["notify_font_size"]    = act.notify_font_size;
     if (act.notify_location[0])       obj["notify_location"]     = act.notify_location;
+    // System fields
+    if (act.system_command[0])        obj["system_command"]    = act.system_command;
 }
 
 #endif // HAS_DISPLAY

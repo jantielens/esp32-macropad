@@ -24,6 +24,10 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 // Call once after the first successful WiFi connection.
 void wifi_manager_register_events();
 
+// Request a WiFi reconnect cycle from any task context.
+// Sets an atomic flag consumed by the watchdog in loop().
+void wifi_manager_request_reconnect();
+
 // --- Pure helper functions (unit-testable, no WiFi dependency) ---
 
 // Compute next backoff interval using exponential growth.

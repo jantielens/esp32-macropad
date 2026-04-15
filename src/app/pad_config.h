@@ -116,6 +116,7 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_TIMER    "timer"
 #define ACTION_TYPE_SOUND    "sound"
 #define ACTION_TYPE_NOTIFY   "notify"
+#define ACTION_TYPE_SYSTEM   "system"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -144,6 +145,8 @@ struct ButtonAction {
     uint8_t notify_opacity;                            // type="notify": 0-100%, 0 = use default (85)
     uint8_t notify_font_size;                          // type="notify": 0 = auto
     char notify_location[8];                           // type="notify": "top", "center", "bottom"
+    // System action fields
+    char system_command[CONFIG_ACTION_TYPE_MAX_LEN];   // type="system": "reboot", "wifi_reconnect", "screensaver"
 };
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
