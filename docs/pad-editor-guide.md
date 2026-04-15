@@ -85,6 +85,16 @@ After placing a block, all its buttons become regular buttons — you can edit, 
 
 ---
 
+## Moving Buttons
+
+To rearrange your pad layout, **drag any configured button to an empty cell**. Click a button and move the pointer to start dragging — the button keeps its full configuration (labels, actions, colors, icon, widget). While dragging, the source cell dims and valid drop targets show a green dashed outline.
+
+If the button has a multi-cell span (e.g. 2×2) and the target position has room, the span is preserved. Otherwise the button is placed as 1×1.
+
+Drop targets must be empty — you cannot drop onto an occupied cell. To cancel a drag, release over an occupied cell or press **Escape**. The [copy and paste workflow](#copy-and-paste-buttons) is always available as an alternative, and is also the only option on mobile browsers where drag-and-drop is not supported.
+
+---
+
 ## The Button Editor
 
 Click any button in the grid preview to open the button editor. This is where each button gets its personality — from static labels and icons to live MQTT data and conditional colors.

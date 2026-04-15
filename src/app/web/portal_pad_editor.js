@@ -21,6 +21,7 @@ const padState = {
     templatePad: -1,     // Template pad index (-1 = none)
     templateButtons: [], // Buttons loaded from template pad (for ghost rendering)
     placingBlock: null,  // Block being placed (from catalog), or null
+    dragSource: null,    // {col, row} of button being dragged, or null
 };
 
 let padDirty = false;
@@ -1055,7 +1056,12 @@ function padRenderGrid() {
                     cell.appendChild(rk);
                 }
 
-                if (!padState.placingBlock) cell.addEventListener('click', () => padDialogOpen(c, r));
+                if (!padState.placingBlock) {
+                    cell.addEventListener('click', () => padDialogOpen(c, r));
+                    cell.draggable = true;
+                    cell.addEventListener('dragstart', (e) => padDragStart(e, c, r));
+                    cell.addEventListener('dragend', padDragEnd);
+                }
             } else {
                 // Check if a template button occupies this position
                 const tplBtn = padFindTemplateButton(c, r);
@@ -1077,6 +1083,11 @@ function padRenderGrid() {
                 } else {
                     cell.classList.add('pad-cell-empty');
                     cell.textContent = '+';
+                    if (!padState.placingBlock) {
+                        cell.addEventListener('dragover', (e) => padDragOver(e, c, r));
+                        cell.addEventListener('dragleave', padDragLeave);
+                        cell.addEventListener('drop', (e) => padDrop(e, c, r));
+                    }
                 }
                 if (padState.placingBlock) {
                     cell.addEventListener('click', () => padPlacementClick(c, r));
@@ -1123,6 +1134,100 @@ function padPlacementClearGhosts(grid) {
     for (const c of cells) {
         c.classList.remove('pad-cell-ghost-block', 'invalid');
     }
+}
+
+// ===== DRAG-AND-DROP MOVE =====
+
+function padDragStart(e, col, row) {
+    const btn = padFindButton(col, row);
+    if (!btn) { e.preventDefault(); return; }
+    padState.dragSource = { col: col, row: row };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', col + ',' + row);
+    // rAF so the browser captures the original cell as the drag image before dimming
+    requestAnimationFrame(() => {
+        const cell = e.target.closest('.pad-cell');
+        if (cell) cell.style.opacity = '0.3';
+    });
+}
+
+function padDragEnd(e) {
+    const cell = e.target.closest('.pad-cell');
+    if (cell) cell.style.opacity = '';
+    padState.dragSource = null;
+    const grid = document.getElementById('pad-grid');
+    if (grid) padPlacementClearGhosts(grid);
+}
+
+function padDragOver(e, col, row) {
+    if (!padState.dragSource) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const grid = document.getElementById('pad-grid');
+    padPlacementClearGhosts(grid);
+
+    const srcBtn = padFindButton(padState.dragSource.col, padState.dragSource.row);
+    if (!srcBtn) return;
+
+    const cs = srcBtn.col_span || 1;
+    const rs = srcBtn.row_span || 1;
+    const buttonsWithoutSrc = padState.buttons.filter(b =>
+        !(b.col === padState.dragSource.col && b.row === padState.dragSource.row)
+    );
+    const spanFits = (cs <= 1 && rs <= 1) || padCanSpanFit(col, row, cs, rs, buttonsWithoutSrc);
+    const effCs = spanFits ? cs : 1;
+    const effRs = spanFits ? rs : 1;
+
+    for (let dc = 0; dc < effCs; dc++) {
+        for (let dr = 0; dr < effRs; dr++) {
+            const target = grid.querySelector(
+                '.pad-cell[data-col="' + (col + dc) + '"][data-row="' + (row + dr) + '"]'
+            );
+            if (target) target.classList.add('pad-cell-ghost-block');
+        }
+    }
+}
+
+function padDragLeave(e) {
+    // Only clear when leaving the cell entirely (not entering a child element)
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    const grid = document.getElementById('pad-grid');
+    if (grid) padPlacementClearGhosts(grid);
+}
+
+function padDrop(e, col, row) {
+    e.preventDefault();
+    const grid = document.getElementById('pad-grid');
+    if (grid) padPlacementClearGhosts(grid);
+
+    if (!padState.dragSource) return;
+    const srcCol = padState.dragSource.col;
+    const srcRow = padState.dragSource.row;
+    padState.dragSource = null;
+
+    if (col === srcCol && row === srcRow) return;
+
+    const srcIdx = padState.buttons.findIndex(b => b.col === srcCol && b.row === srcRow);
+    if (srcIdx === -1) return;
+    const btn = padState.buttons.splice(srcIdx, 1)[0];
+
+    btn.col = col;
+    btn.row = row;
+
+    const cs = btn.col_span || 1;
+    const rs = btn.row_span || 1;
+    if (cs > 1 || rs > 1) {
+        if (!padCanSpanFit(col, row, cs, rs, padState.buttons)) {
+            delete btn.col_span;
+            delete btn.row_span;
+        }
+    }
+
+    padState.buttons.push(btn);
+    padMarkDirty();
+    padRenderGrid();
+    showMessage('Button moved', 'success');
 }
 
 function padPlacementClick(col, row) {
