@@ -158,6 +158,10 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		registerOptions("/api/pad/button_sizes");
 		server->on("/api/pad/button_sizes", HTTP_GET, handleGetButtonSizes);
 
+		// Pad building blocks catalog (registered before /api/pad to avoid prefix match)
+		registerOptions("/api/pad/blocks");
+		server->on("/api/pad/blocks", HTTP_GET, handleGetPadBlocks);
+
 		// Pad config API
 		registerOptions("/api/pad");
 		server->on("/api/pad", HTTP_GET, handleGetPadConfig);

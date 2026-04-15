@@ -55,6 +55,44 @@ The **Template Pad** dropdown (below Background Color) lets you inherit buttons 
 
 > **Use case**: Put navigation buttons (Home, Settings, Back) on a "nav" pad. Then set that as the template for your other pads — the nav buttons automatically appear in empty positions without copying them one by one.
 
+### Building Blocks
+
+Building blocks are pre-configured groups of buttons that you can insert into a pad in one step. Instead of manually creating and configuring 3–6 related buttons, select a block from the **More ▾** menu and place it with a single click.
+
+**How to use:**
+
+1. Open the **More ▾** menu on the Pads page. Available blocks appear under the **━━ Blocks ━━** heading.
+2. Click a block name to enter **placement mode**. A banner appears above the grid with a Cancel button.
+3. Hover over empty cells to see a live ghost overlay — **green dashed outline** means the block fits, **red** means it overlaps existing buttons or exceeds the grid boundary.
+4. Click a valid cell to place the block. The block's buttons (with their spans, labels, actions, bindings, and styles) are inserted at that position.
+5. Press **Escape** or click **Cancel** to exit placement mode without placing anything.
+
+**Availability checks** — a block only appears in the menu when the current pad meets its requirements:
+
+- Grid dimensions are at least as large as the block's minimum (e.g., 3 columns × 2 rows for the Countdown Timer).
+- The pad has enough free (empty) cells for the block's buttons.
+- The total button count after insertion stays within the 64-button limit.
+
+After placing a block, all its buttons become regular buttons — you can edit, move, or delete them individually just like any other button.
+
+**Built-in blocks:**
+
+| Block | Size | Description |
+|-------|------|-------------|
+| **Countdown Timer** | 3×2 min | Three rocker buttons (hours, minutes, seconds) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Includes pad bindings for all three timers. |
+
+> **Tip**: Building blocks and template pads serve different purposes. Use **template pads** to share common buttons (like navigation) across many pads. Use **building blocks** to quickly add a self-contained functional group (like a timer control panel) to a specific pad.
+
+---
+
+## Moving Buttons
+
+To rearrange your pad layout, **drag any configured button to an empty cell**. Click a button and move the pointer to start dragging — the button keeps its full configuration (labels, actions, colors, icon, widget). While dragging, the source cell dims and valid drop targets show a green dashed outline.
+
+If the button has a multi-cell span (e.g. 2×2) and the target position has room, the span is preserved. Otherwise the button is placed as 1×1.
+
+Drop targets must be empty — you cannot drop onto an occupied cell. To cancel a drag, release over an occupied cell or press **Escape**. The [copy and paste workflow](#copy-and-paste-buttons) is always available as an alternative, and is also the only option on mobile browsers where drag-and-drop is not supported.
+
 ---
 
 ## The Button Editor

@@ -20,6 +20,8 @@ const padState = {
     buttonDefaults: {},  // Device-level button defaults (loaded from /api/button-defaults)
     templatePad: -1,     // Template pad index (-1 = none)
     templateButtons: [], // Buttons loaded from template pad (for ghost rendering)
+    placingBlock: null,  // Block being placed (from catalog), or null
+    dragSource: null,    // {col, row} of button being dragged, or null
 };
 
 let padDirty = false;
@@ -30,6 +32,148 @@ function padMarkDirty() {
 
 function padClearDirty() {
     padDirty = false;
+}
+
+// ===== BUILDING BLOCKS =====
+
+let padBlockCatalog = [];
+
+async function padLoadBlockCatalog() {
+    try {
+        const resp = await fetch('/api/pad/blocks');
+        if (resp.ok) padBlockCatalog = await resp.json();
+        else padBlockCatalog = [];
+    } catch (e) { padBlockCatalog = []; }
+    padRenderBlockMenuItems();
+}
+
+function padBuildOccupancySet() {
+    const occupied = new Set();
+    for (const b of padState.buttons) {
+        const cs = b.col_span || 1, rs = b.row_span || 1;
+        for (let dc = 0; dc < cs; dc++)
+            for (let dr = 0; dr < rs; dr++)
+                occupied.add((b.col + dc) + ',' + (b.row + dr));
+    }
+    return occupied;
+}
+
+function padCountFreeCells() {
+    const occupied = padBuildOccupancySet();
+    let free = 0;
+    for (let r = 0; r < padState.rows; r++)
+        for (let c = 0; c < padState.cols; c++)
+            if (!occupied.has(c + ',' + r)) free++;
+    return free;
+}
+
+function padCanPlaceBlock(block, anchorCol, anchorRow, occupied) {
+    if (!occupied) occupied = padBuildOccupancySet();
+    for (const btn of block.buttons) {
+        const c = anchorCol + btn.col_offset;
+        const r = anchorRow + btn.row_offset;
+        const cs = btn.col_span || 1, rs = btn.row_span || 1;
+        for (let dc = 0; dc < cs; dc++) {
+            for (let dr = 0; dr < rs; dr++) {
+                if (c + dc >= padState.cols || r + dr >= padState.rows) return false;
+                if (occupied.has((c + dc) + ',' + (r + dr))) return false;
+            }
+        }
+    }
+    return true;
+}
+
+function padBlockFootprintCells(block, anchorCol, anchorRow) {
+    const cells = new Set();
+    for (const btn of block.buttons) {
+        const c = anchorCol + btn.col_offset;
+        const r = anchorRow + btn.row_offset;
+        const cs = btn.col_span || 1, rs = btn.row_span || 1;
+        for (let dc = 0; dc < cs; dc++)
+            for (let dr = 0; dr < rs; dr++)
+                cells.add((c + dc) + ',' + (r + dr));
+    }
+    return cells;
+}
+
+function padRenderBlockMenuItems() {
+    const container = document.getElementById('pad-block-items');
+    const separator = document.getElementById('pad-block-separator');
+    if (!container) return;
+    container.innerHTML = '';
+    if (padBlockCatalog.length === 0) {
+        if (separator) separator.style.display = 'none';
+        return;
+    }
+    if (separator) separator.style.display = '';
+    for (const block of padBlockCatalog) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = block.icon + ' ' + block.name;
+        btn.addEventListener('click', () => padTryInsertBlock(block));
+        container.appendChild(btn);
+    }
+}
+
+function padTryInsertBlock(block) {
+    document.getElementById('pad-more-menu').style.display = 'none';
+
+    if (padState.cols < block.min_cols || padState.rows < block.min_rows) {
+        showMessage("Can't insert " + block.name + " — needs " +
+            block.min_cols + "×" + block.min_rows + " grid, pad is " +
+            padState.cols + "×" + padState.rows, 'error');
+        return;
+    }
+    const free = padCountFreeCells();
+    if (free < block.min_free) {
+        showMessage("Can't insert " + block.name + " — needs " +
+            block.min_free + " free cells, pad has " + free, 'error');
+        return;
+    }
+    if (padState.buttons.length + block.buttons.length > 64) {
+        showMessage("Can't insert " + block.name + " — would exceed 64 button limit", 'error');
+        return;
+    }
+    padEnterPlacementMode(block);
+}
+
+function padEnterPlacementMode(block) {
+    padState.placingBlock = block;
+    const banner = document.getElementById('pad-block-banner');
+    const bannerText = document.getElementById('pad-block-banner-text');
+    if (banner) banner.style.display = 'flex';
+    if (bannerText) bannerText.textContent = 'Click a cell to place ' + block.icon + ' ' + block.name + ' — Esc to cancel';
+    padRenderGrid();
+}
+
+function padExitPlacementMode() {
+    padState.placingBlock = null;
+    const banner = document.getElementById('pad-block-banner');
+    if (banner) banner.style.display = 'none';
+    padRenderGrid();
+}
+
+function padInsertBlock(block, anchorCol, anchorRow) {
+    for (const btn of block.buttons) {
+        const newBtn = JSON.parse(JSON.stringify(btn));
+        newBtn.col = anchorCol + btn.col_offset;
+        newBtn.row = anchorRow + btn.row_offset;
+        delete newBtn.col_offset;
+        delete newBtn.row_offset;
+        padState.buttons.push(newBtn);
+    }
+    if (block.bindings) {
+        for (const [name, value] of Object.entries(block.bindings)) {
+            if (!padState.bindings.find(b => b.name === name)) {
+                padState.bindings.push({ name, value });
+            }
+        }
+        padRenderBindings();
+    }
+    padExitPlacementMode();
+    padMarkDirty();
+    padRenderGrid();
+    showMessage('Building block "' + block.name + '" inserted (unsaved)', 'success');
 }
 
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
@@ -463,6 +607,16 @@ function padInit() {
         if (e.target.id === 'pad-edit-overlay') padDialogClose();
     });
 
+    // Block placement cancel + Escape key
+    const blockCancelBtn = document.getElementById('pad-block-cancel-btn');
+    if (blockCancelBtn) blockCancelBtn.addEventListener('click', padExitPlacementMode);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && padState.placingBlock) {
+            padExitPlacementMode();
+            e.stopImmediatePropagation();
+        }
+    });
+
     // Track unsaved changes on name and other inputs
     document.getElementById('pad-name').addEventListener('input', padMarkDirty);
 
@@ -489,6 +643,7 @@ function padInit() {
                 padFetchSoundList();
                 padLoadButtonDefaultsFromDevice();
                 padLoadPage(0);
+                padLoadBlockCatalog();
                 padRefreshDropdownLabels();
             } else {
                 const noDisp = document.getElementById('pad-no-display-section');
@@ -857,6 +1012,8 @@ function padRenderGrid() {
             const btn = padFindButton(c, r);
             const cell = document.createElement('div');
             cell.classList.add('pad-cell');
+            cell.dataset.col = c;
+            cell.dataset.row = r;
 
             if (btn) {
                 cell.classList.add('pad-cell-btn');
@@ -899,7 +1056,12 @@ function padRenderGrid() {
                     cell.appendChild(rk);
                 }
 
-                cell.addEventListener('click', () => padDialogOpen(c, r));
+                if (!padState.placingBlock) {
+                    cell.addEventListener('click', () => padDialogOpen(c, r));
+                    cell.draggable = true;
+                    cell.addEventListener('dragstart', (e) => padDragStart(e, c, r));
+                    cell.addEventListener('dragend', padDragEnd);
+                }
             } else {
                 // Check if a template button occupies this position
                 const tplBtn = padFindTemplateButton(c, r);
@@ -921,12 +1083,158 @@ function padRenderGrid() {
                 } else {
                     cell.classList.add('pad-cell-empty');
                     cell.textContent = '+';
+                    if (!padState.placingBlock) {
+                        cell.addEventListener('dragover', (e) => padDragOver(e, c, r));
+                        cell.addEventListener('dragleave', padDragLeave);
+                        cell.addEventListener('drop', (e) => padDrop(e, c, r));
+                    }
                 }
-                cell.addEventListener('click', () => padDialogOpen(c, r));
+                if (padState.placingBlock) {
+                    cell.addEventListener('click', () => padPlacementClick(c, r));
+                } else {
+                    cell.addEventListener('click', () => padDialogOpen(c, r));
+                }
             }
 
             grid.appendChild(cell);
         }
+    }
+
+    // Placement mode: add hover overlay behavior
+    if (padState.placingBlock) {
+        grid.addEventListener('mouseover', padPlacementHover);
+        grid.addEventListener('mouseleave', () => padPlacementClearGhosts(grid));
+    }
+}
+
+function padPlacementHover(e) {
+    const cell = e.target.closest('.pad-cell');
+    if (!cell || !cell.dataset.col) return;
+    const grid = document.getElementById('pad-grid');
+    padPlacementClearGhosts(grid);
+    const ac = parseInt(cell.dataset.col);
+    const ar = parseInt(cell.dataset.row);
+    const block = padState.placingBlock;
+    if (!block) return;
+    const occupied = padBuildOccupancySet();
+    const valid = padCanPlaceBlock(block, ac, ar, occupied);
+    const footprint = padBlockFootprintCells(block, ac, ar);
+    const allCells = grid.querySelectorAll('.pad-cell');
+    for (const c of allCells) {
+        const key = c.dataset.col + ',' + c.dataset.row;
+        if (footprint.has(key)) {
+            c.classList.add('pad-cell-ghost-block');
+            if (!valid) c.classList.add('invalid');
+        }
+    }
+}
+
+function padPlacementClearGhosts(grid) {
+    const cells = grid.querySelectorAll('.pad-cell-ghost-block');
+    for (const c of cells) {
+        c.classList.remove('pad-cell-ghost-block', 'invalid');
+    }
+}
+
+// ===== DRAG-AND-DROP MOVE =====
+
+function padDragStart(e, col, row) {
+    const btn = padFindButton(col, row);
+    if (!btn) { e.preventDefault(); return; }
+    padState.dragSource = { col: col, row: row };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', col + ',' + row);
+    // rAF so the browser captures the original cell as the drag image before dimming
+    requestAnimationFrame(() => {
+        const cell = e.target.closest('.pad-cell');
+        if (cell) cell.style.opacity = '0.3';
+    });
+}
+
+function padDragEnd(e) {
+    const cell = e.target.closest('.pad-cell');
+    if (cell) cell.style.opacity = '';
+    padState.dragSource = null;
+    const grid = document.getElementById('pad-grid');
+    if (grid) padPlacementClearGhosts(grid);
+}
+
+function padDragOver(e, col, row) {
+    if (!padState.dragSource) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const grid = document.getElementById('pad-grid');
+    padPlacementClearGhosts(grid);
+
+    const srcBtn = padFindButton(padState.dragSource.col, padState.dragSource.row);
+    if (!srcBtn) return;
+
+    const cs = srcBtn.col_span || 1;
+    const rs = srcBtn.row_span || 1;
+    const buttonsWithoutSrc = padState.buttons.filter(b =>
+        !(b.col === padState.dragSource.col && b.row === padState.dragSource.row)
+    );
+    const spanFits = (cs <= 1 && rs <= 1) || padCanSpanFit(col, row, cs, rs, buttonsWithoutSrc);
+    const effCs = spanFits ? cs : 1;
+    const effRs = spanFits ? rs : 1;
+
+    for (let dc = 0; dc < effCs; dc++) {
+        for (let dr = 0; dr < effRs; dr++) {
+            const target = grid.querySelector(
+                '.pad-cell[data-col="' + (col + dc) + '"][data-row="' + (row + dr) + '"]'
+            );
+            if (target) target.classList.add('pad-cell-ghost-block');
+        }
+    }
+}
+
+function padDragLeave(e) {
+    // Only clear when leaving the cell entirely (not entering a child element)
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    const grid = document.getElementById('pad-grid');
+    if (grid) padPlacementClearGhosts(grid);
+}
+
+function padDrop(e, col, row) {
+    e.preventDefault();
+    const grid = document.getElementById('pad-grid');
+    if (grid) padPlacementClearGhosts(grid);
+
+    if (!padState.dragSource) return;
+    const srcCol = padState.dragSource.col;
+    const srcRow = padState.dragSource.row;
+    padState.dragSource = null;
+
+    if (col === srcCol && row === srcRow) return;
+
+    const srcIdx = padState.buttons.findIndex(b => b.col === srcCol && b.row === srcRow);
+    if (srcIdx === -1) return;
+    const btn = padState.buttons.splice(srcIdx, 1)[0];
+
+    btn.col = col;
+    btn.row = row;
+
+    const cs = btn.col_span || 1;
+    const rs = btn.row_span || 1;
+    if (cs > 1 || rs > 1) {
+        if (!padCanSpanFit(col, row, cs, rs, padState.buttons)) {
+            delete btn.col_span;
+            delete btn.row_span;
+        }
+    }
+
+    padState.buttons.push(btn);
+    padMarkDirty();
+    padRenderGrid();
+    showMessage('Button moved', 'success');
+}
+
+function padPlacementClick(col, row) {
+    const block = padState.placingBlock;
+    if (!block) return;
+    if (padCanPlaceBlock(block, col, row)) {
+        padInsertBlock(block, col, row);
     }
 }
 

@@ -30,6 +30,7 @@
 #include "scale_init.h"
 #include "sound_store.h"
 #include "boot_actions.h"
+#include "pad_block.h"
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "timer_config.h"
@@ -288,6 +289,9 @@ void setup()
 	// Load boot actions from LittleFS
 	boot_actions_init();
 
+	// Register core building blocks (feature branches add their own via pad_block_register)
+	pad_block_init();
+
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
@@ -322,6 +326,7 @@ void setup()
 				power_manager_note_wifi_success();
 				wifi_manager_start_mdns(&device_config);
 				device_telemetry_cache_rssi();
+				wifi_manager_register_events();
 				time_binding_start_ntp();
 			} else {
 				LOGW("Main", "WiFi failed - fallback to AP");

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 156
+Total flags: 164
 
 ### Features (HAS_*)
 
@@ -125,6 +125,7 @@ Total flags: 156
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS** default: `5000` — Timeout for an incomplete /api/config upload (ms) before freeing the buffer.
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES** default: `4096` — Max JSON body size accepted by /api/config.
 - **WIFI_MAX_ATTEMPTS** default: `3` — Maximum WiFi connection attempts at boot before falling back.
+- **WIFI_TIER2_BACKOFF_MAX_MS** default: `60000` — Tier 2 exponential backoff: maximum retry interval cap.
 
 ### Other
 
@@ -199,6 +200,10 @@ Total flags: 156
 - **TOUCH_I2C_BUS** default: `1` — ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
 - **TOUCH_I2C_PORT** default: `(no default)` — I2C controller index.
 - **UI_SCALE_TIER** default: `UI_SCALE_MEDIUM` — Default UI scale tier (boards override in board_overrides.h)
+- **WIFI_REBOOT_AFTER_MS** default: `600000` — Total outage before controlled device reboot.
+- **WIFI_TIER1_DURATION_MS** default: `60000` — Tier 1: SDK auto-reconnect window — device takes no active reconnect action.
+- **WIFI_TIER2_BACKOFF_BASE_MS** default: `10000` — Tier 2 exponential backoff: initial retry interval.
+- **WIFI_TIER2_DURATION_MS** default: `300000` — Tier 2: active reconnect with exponential backoff.
 <!-- END COMPILE_FLAG_REPORT:FLAGS -->
 
 ## Board Matrix: Features (generated)
@@ -317,12 +322,18 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/icon_store.cpp
   - src/app/icon_store.h
   - src/app/lv_conf.h
+  - src/app/message_bubble.cpp
+  - src/app/message_bubble.h
+  - src/app/mqtt_notify.cpp
+  - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
   - src/app/mqtt_screen.h
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
+  - src/app/pad_block.cpp
+  - src/app/pad_block.h
   - src/app/pad_config.cpp
   - src/app/scale_binding.cpp
   - src/app/screen_saver_manager.cpp
@@ -394,6 +405,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_audio.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
+  - src/app/mqtt_notify.cpp
+  - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
   - src/app/mqtt_screen.h
   - src/app/mqtt_sub_store.cpp
@@ -708,5 +721,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES**
   - src/app/board_config.h
 - **WIFI_MAX_ATTEMPTS**
+  - src/app/board_config.h
+- **WIFI_REBOOT_AFTER_MS**
+  - src/app/board_config.h
+- **WIFI_TIER1_DURATION_MS**
+  - src/app/board_config.h
+- **WIFI_TIER2_BACKOFF_BASE_MS**
+  - src/app/board_config.h
+- **WIFI_TIER2_BACKOFF_MAX_MS**
+  - src/app/board_config.h
+- **WIFI_TIER2_DURATION_MS**
   - src/app/board_config.h
 <!-- END COMPILE_FLAG_REPORT:USAGE -->

@@ -22,7 +22,9 @@ Before implementing significant changes or starting major work, the agent must:
 After every significant change, the agent must:
 
 1. **Verify the changes by building** the code:
-   - Run `./build.sh` to ensure the code compiles successfully
+   - Check `/memories/board-preferences.md` for the user's preferred verification board
+   - If a preferred board is set, run `./build.sh <board-name>`
+   - If no preference is stored, ask the user which board to use, then save the choice to `/memories/board-preferences.md`
    - Check for any compilation errors or warnings
    - Only proceed if the build completes without errors
 
@@ -46,11 +48,15 @@ After every significant change, the agent must:
 
 ## Build Verification
 
-Always verify code changes by building:
+Always verify code changes by building for the user's preferred board:
 
-```bash
-./build.sh  # Must complete successfully after code changes
-```
+1. Read `/memories/board-preferences.md` for the preferred verification board
+2. If a preferred board exists:
+   ```bash
+   ./build.sh <board-name>  # Must complete successfully after code changes
+   ```
+3. If no preference file exists, ask the user which board to use for verification builds, then save the choice to `/memories/board-preferences.md`
+4. When the user explicitly requests building for a different board, update `/memories/board-preferences.md` with their new preference
 
 If the build fails:
 

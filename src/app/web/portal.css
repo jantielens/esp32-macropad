@@ -1274,6 +1274,36 @@ footer {
     margin: 4px 0;
 }
 
+.pad-more-heading {
+    display: block;
+    padding: 4px 16px 2px;
+    font-size: 11px;
+    color: #86868b;
+    letter-spacing: 0.5px;
+    text-align: center;
+}
+
+.pad-block-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #1c1c1e;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.pad-cell-ghost-block {
+    outline: 2px dashed rgba(52, 199, 89, 0.7);
+    outline-offset: -2px;
+}
+
+.pad-cell-ghost-block.invalid {
+    outline-color: rgba(255, 59, 48, 0.7);
+}
+
 .pad-edit-modal {
     max-width: 520px;
     text-align: left;
