@@ -437,6 +437,40 @@ TEST(notify_minimal_only_text) {
 
 // ============================================================================
 
+// ============================================================================
+// System action
+// ============================================================================
+
+TEST(system_action_parse) {
+    ButtonAction act = parse_from_string("{\"type\":\"system\",\"system_command\":\"reboot\"}");
+    ASSERT_STR(act.type, "system");
+    ASSERT_STR(act.system_command, "reboot");
+}
+
+TEST(system_action_round_trip) {
+    ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"wifi_reconnect\"}");
+    ASSERT_STR(act.type, "system");
+    ASSERT_STR(act.system_command, "wifi_reconnect");
+}
+
+TEST(system_command_not_serialized_when_empty) {
+    ButtonAction act;
+    memset(&act, 0, sizeof(act));
+    strlcpy(act.type, "system", CONFIG_ACTION_TYPE_MAX_LEN);
+    // system_command is empty
+    StaticJsonDocument<256> doc;
+    JsonObject obj = doc.to<JsonObject>();
+    action_to_json(act, obj);
+    ASSERT_TRUE(obj.containsKey("type"));
+    ASSERT_TRUE(!obj.containsKey("system_command"));
+}
+
+TEST(system_action_screensaver) {
+    ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"screensaver\"}");
+    ASSERT_STR(act.type, "system");
+    ASSERT_STR(act.system_command, "screensaver");
+}
+
 int main() {
     printf("=== ButtonAction Parse/Serialize Tests ===\n\n");
 
@@ -499,6 +533,12 @@ int main() {
     RUN(notify_action_round_trip);
     RUN(notify_zero_opacity_not_serialized);
     RUN(notify_minimal_only_text);
+
+    printf("\n--- System action ---\n");
+    RUN(system_action_parse);
+    RUN(system_action_round_trip);
+    RUN(system_command_not_serialized_when_empty);
+    RUN(system_action_screensaver);
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

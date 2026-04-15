@@ -18,6 +18,8 @@
 #endif
 
 #include "timer_engine.h"
+#include "wifi_manager.h"
+#include "screen_saver_manager.h"
 #if IS_DARKROOM_TIMER
 #include "expose_timer.h"
 #include "test_strip.h"
@@ -249,6 +251,20 @@ void action_dispatch(const ButtonAction& act, const char* label) {
             message_bubble_show(&params);
             LOGI(TAG, "%s notify: '%s' dur=%u loc=%s", label, params.text,
                  params.duration_ms, act.notify_location[0] ? act.notify_location : "bottom");
+        }
+    } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
+        if (strcmp(act.system_command, "reboot") == 0) {
+            LOGI(TAG, "%s system: reboot", label);
+            delay(200);
+            ESP.restart();
+        } else if (strcmp(act.system_command, "wifi_reconnect") == 0) {
+            LOGI(TAG, "%s system: wifi_reconnect", label);
+            wifi_manager_request_reconnect();
+        } else if (strcmp(act.system_command, "screensaver") == 0) {
+            LOGI(TAG, "%s system: screensaver", label);
+            screen_saver_manager_sleep_now();
+        } else {
+            LOGW(TAG, "%s system: unknown command '%s'", label, act.system_command);
         }
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);

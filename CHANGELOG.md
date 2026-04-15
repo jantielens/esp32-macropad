@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 
 - **Pad building blocks** — pre-configured groups of buttons that you can insert into any pad from the **More ▾** menu. Select a block, click an empty cell to place it, and the block's buttons, spans, bindings, and actions are inserted automatically. A live ghost overlay shows where the block will land (green for valid, red for overlap or out-of-bounds). Press Escape or Cancel to exit placement mode. Blocks check grid dimensions, free cell count, and the 64-button limit before offering placement. Ships with a built-in **Countdown Timer** block (3 rocker buttons + 2-column timer display with `font_family:segment`) and a **System Info** block (network bar, triple CPU/RAM/PSRAM gauge, chip info, and uptime — all powered by health bindings). The block catalog uses a registration API (`pad_block_register()`) so feature branches can add their own blocks without merge conflicts.
 - **Notification bubble action** — a new "Show Notification" button action that displays a floating message bubble on the device screen. Supports customizable text, duration, text/background/border colors, opacity, font size, and location (top, center, bottom). All text and color fields support binding templates for dynamic content. Duration `0` creates a persistent notification that stays until tapped. Font size defaults to the same scale-tier font used by button center labels (scales with display resolution). Bubble sizing is responsive — minimum 40% screen width with dynamic padding scaled to resolution. Also exposed as a Home Assistant text entity (`~/notify/set`) that accepts plain text (default styling) or JSON for full control. Empty message dismisses the active bubble.
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.13.0] - 2026-04-11
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **CI test job** — host-native unit and integration tests now run automatically on every PR in the GitHub Actions build workflow. Tests execute in parallel with firmware builds, and test failures block the PR summary comment. ArduinoJson headers are installed on-the-fly for tests that need them.
 - **Hardware JPEG decode + PPA scaling on ESP32-P4** — image fetch slots on ESP32-P4 boards now use the hardware JPEG decoder (`driver/jpeg_decode.h`) and PPA SRM scaler (`driver/ppa.h`) instead of software tjpgd + CPU bilinear interpolation. Decode time drops from ~50 ms to ~10 ms per frame. The PPA handles both cover and letterbox scale modes with 1/16-step precision. Output buffers are 64-byte cache-line aligned for PPA DMA. The hardware handles are lazy-initialised once and reused across frames. PNG images and all non-P4 boards continue to use the unmodified software path. Falls back transparently to software on any hardware failure. Gated by `CONFIG_IDF_TARGET_ESP32P4`.
 - **MJPEG streaming for camera buttons** — when a button's image URL serves a `multipart/x-mixed-replace` MJPEG stream, the device opens a persistent TCP connection and reads frames continuously instead of making repeated per-frame HTTP requests. Eliminates per-frame TCP setup and camera-side capture latency, improving camera button frame rates from ~2–3 fps (snapshot mode) to ~8–15 fps (streaming mode). Mode is auto-detected from the HTTP `Content-Type` response header — no config change needed, existing snapshot URLs continue to work unchanged. Set **Refresh Interval to `0`** for streaming. Compatible with go2rtc, Frigate, and any `multipart/x-mixed-replace` source. Also reduces image fetch internal RAM usage: max slot count reduced 64→16, slot and connection arrays moved from static `.bss` to PSRAM allocation, and MJPEG stream close bypasses the HTTPClient data drain to speed up socket cleanup.
@@ -58,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.12.0] - 2026-03-27
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Widget animations** — bar chart and gauge widgets now smoothly animate to new values instead of jumping. Arcs sweep, needles rotate, and bars grow/shrink with configurable ease-out transitions. Set **Animation (ms)** per widget in the pad editor (0–5000 ms, default 300, 0 = instant). First data arrival always snaps immediately to avoid animate-from-zero on screen load. Zero-centered gauge arcs animate correctly in both directions.
 - **Image fetch frame drop telemetry** — the image fetch subsystem now tracks per-slot frame drops (when LVGL hasn't consumed a frame before the next one arrives). Drop counts are exposed in `/api/health` under `image_fetch.slot_N_drops` and logged at debug level. Adds `image_fetch_get_drops()` public API. Closes #18.
 - **Template pads** — set any pad as a "template" for another pad. Buttons from the template pad automatically appear in empty grid positions, shown as ghost overlays in the editor. Template buttons and bindings are merged at load time (target pad always wins on conflict). No chaining — a template pad's own template reference is ignored. Configure via the new **Template Pad** dropdown on the Pads page.
@@ -81,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.11.0] - 2026-03-18
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Timer engine** — 3 independent timers with count-up (stopwatch) and countdown modes. Assign timer actions to buttons to toggle, start, stop, pause, resume, reset, or lap timers directly from the touch screen. Countdown timers display negative values (e.g., "-0:05") when running past zero.
 - **Timer binding scheme** — display timer values on any button label using `[timer:N]` bindings. Supports multiple formats (`mm:ss`, `hh:mm:ss`, `ss`, `mm:ss.d`) and state queries (`[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]`).
 - **Timer countdown presets** — configure a default countdown duration per button. When navigating to a pad, the first button referencing each timer automatically sets its countdown preset (only when the timer is fresh/stopped at zero).
@@ -110,6 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.10.0] - 2026-03-16
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **WiFi health binding keys** — new `[health:wifi_connected]` (`ON`/`OFF`) and `[health:wifi_ssid]` (connected network name) binding keys for building WiFi status indicators directly on pad buttons
 - **BLE HID keyboard** — the macropad can now act as a Bluetooth keyboard. Assign a `key` action to any button to send keystrokes (single keys, modifier combos, media keys, or multi-step sequences) to a paired host. Assign a `ble_pair` action to clear bonds and open a fresh 60-second pairing window. Features:
   - Key sequence DSL with text literals, modifier keys, consumer/media keys, and delays
@@ -189,6 +194,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Gauge center label clipping** — the center label inside a gauge arc was clipped to the innermost ring width, causing bound labels (driven by binding templates) to vanish entirely when text was set dynamically. The label now uses a wide draw area (`content_w × 3`) so CLIP-mode rendering is stable after binding updates. `LV_OBJ_FLAG_OVERFLOW_VISIBLE` is set on both the tile and the label so text can render outside the tile bounds
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Shared binding reference template** — extracted duplicated inline binding-help markup from `home.html` and `pads.html` into reusable `src/app/web/_binding_help.html`, injected at build time with `{{BINDING_HELP}}`
 - **Binding reference docs-style UI** — redesigned the binding popup with sectioned navigation, sticky-ish top toolbar placement between header and content, neutral docs palette, and responsive card-based examples
 - **Binding example copy buttons** — each binding example now has a one-click copy action with clipboard fallback and temporary copied-state feedback
@@ -231,6 +237,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Sparkline dot alignment** — current-value dots, min/max markers now use the exact pixel coordinates from the rendered line points, eliminating sub-pixel gaps between dots and the sparkline line
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Sparkline smoothing** — new "Smoothing" setting (0–8) applies Gaussian kernel smoothing to sparkline data, producing visually smoother trend lines. Higher values = more smoothing (radius 8 averages 17 neighbors per sample). Min/max markers and current-value dots are repositioned to sit on the smoothed line. Set to 0 (default) for raw data rendering
 - **Sparkline widget** — mini trend line that plots the last N data points over a configurable time window. Supports auto or manual min/max, configurable line width and color, optional color thresholds (4-zone, like bar chart), and any binding type (MQTT, health, time, expressions). Supports up to 3 overlaid lines (each with its own data binding and color) sharing the same Y-axis — ideal for comparing related metrics (e.g., solar production vs grid import). Unified auto-scale (default on) ensures all lines share the same Y-axis range for visual comparability; disable for independent per-line scaling. Backed by the new data stream registry for background data collection — sparklines have historical data ready even when navigating to a screen for the first time
 - **Sparkline min/max markers** — configurable dot markers at the minimum and maximum data points in the visible range. Each marker has its own size (0 = off, 1–20 px), printf format string for numeric labels (e.g., `hi %.1f`), and optional color override (defaults to line color)
@@ -251,6 +258,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.0] - 2026-03-08
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Per-label style DSL** — each button label (top/center/bottom) now supports a compact style string for advanced typography control without cluttering the main UI. Toggle the **Aa** button next to any label field to reveal the style input. Properties are semicolon-separated key:value pairs:
   - `font:24` — override font size (available sizes: 12, 14, 18, 24, 32, 36 px)
   - `align:left` / `align:right` / `align:center` — horizontal text alignment
@@ -289,6 +297,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.0] - 2026-03-05
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Wake Screen redirect** — per-pad `wake_screen` setting navigates to a target screen when the screensaver enters sleep (invisible under the sleep overlay); configurable in the web portal Pad Editor "Wake Screen" dropdown; default is to stay on the current screen
 - **MQTT Active Screen control** — exposes active screen as an HA `select` entity (`~/screen/state` + `~/screen/set`); HA can navigate the device to any screen and wake the screensaver; navigating to the current screen while asleep wakes the device; inactivity timer resets on HA navigation (mimics a tap)
 - **Pad background color** — per-pad `bg_color` setting with color picker and recently-used swatches in the web portal; default is pure black; applied as LVGL screen background on the device
@@ -339,6 +348,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.0] - 2026-03-03
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Pad button icons** — emoji and Material Symbol icon support for pad buttons with PNG storage on LittleFS, PSRAM-cached ARGB8888 draw buffers, and browser-based icon picker with canvas-to-PNG upload
 - **Sleep overlay** — opaque black layer rendered on `lv_layer_top()` while the screen saver is asleep, preventing stale content from showing through on displays without true backlight off
 - **Pixel shift (burn-in prevention)** — each sleep/wake cycle applies a new sub-pixel offset (±4 px) to the active screen, cycling through 81 positions to distribute pixel wear evenly; pad layouts already reserve `PIXEL_SHIFT_MARGIN` insets
@@ -380,6 +390,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.0] - 2026-03-01
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Letterbox image scaling** — new `ImageScaleMode` option for button background images
   - `IMAGE_SCALE_LETTERBOX`: fit image inside target area with black bars (CSS object-fit: contain)
   - `IMAGE_SCALE_COVER` (default): existing fill + center-crop behavior preserved
@@ -390,6 +401,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2026-03-01
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Background image fetch** — per-button HTTP(S) image backgrounds with configurable refresh interval
   - `image_fetch` module: FreeRTOS background task with round-robin slot scheduling (up to 64 slots)
   - `image_decoder` module: JPEG (tjpgd) and PNG (lodepng) decode with cover-mode bilinear scaling to RGB565
@@ -407,6 +419,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0] - 2026-02-28
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - **Pad screen system** — multi-page configurable button grid with tap and long-press actions
   - Layout engine with grid computation (up to 8×8) and UI scale tiers per board
   - LittleFS-backed JSON config at `/config/pad_N.json` (8 pages, 64 buttons max)
@@ -434,4 +447,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-02-27
 
 ### Added
+- **System command button action** — new "System Command" action type lets you assign device-level operations to any button tap, long-press, or swipe gesture. Three commands available: **Reboot Device** (with 200 ms flush delay), **Reconnect WiFi** (triggers a clean disconnect + reconnect through the tiered escalation state machine), and **Enable Screensaver** (immediately activates the screensaver). Unknown commands are logged and ignored for forward compatibility. Configurable in the web portal action editor with a command sub-selector dropdown.
 - Initial release of ESP32 Macropad firmware (forked from esp32-template)

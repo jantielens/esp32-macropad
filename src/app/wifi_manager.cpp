@@ -45,6 +45,7 @@ static bool g_events_registered = false;
 // Atomic flags — written from system event task, read from loop() task.
 static std::atomic<bool> g_wifi_disconnected{false};
 static std::atomic<bool> g_wifi_reconnected{false};
+static std::atomic<bool> g_wifi_reconnect_requested{false};
 
 // --- Gateway ping liveness check ---
 static unsigned long g_last_ping_ms = 0;
@@ -448,6 +449,11 @@ void wifi_manager_register_events() {
 		LOGI("WiFi", "Event handlers registered");
 }
 
+void wifi_manager_request_reconnect() {
+		g_wifi_reconnect_requested.store(true, std::memory_order_release);
+		LOGI("WiFi", "Reconnect requested");
+}
+
 // --- State machine helpers ---
 
 static void enter_outage(unsigned long now) {
@@ -527,6 +533,13 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 		const bool event_disconnected = g_wifi_disconnected.exchange(false, std::memory_order_acquire);
 		const bool event_reconnected = g_wifi_reconnected.exchange(false, std::memory_order_acquire);
 
+		// --- Handle explicit reconnect request ---
+		if (g_wifi_reconnect_requested.exchange(false, std::memory_order_acquire)) {
+				LOGI("WiFi", "Processing reconnect request");
+				WiFi.disconnect(false);
+				enter_outage(now);
+				return;
+		}
 		// --- Handle reconnection event (takes priority over disconnect) ---
 		if (event_reconnected) {
 				if (g_wifi_state != WifiState::Connected) {
