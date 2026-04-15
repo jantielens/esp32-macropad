@@ -110,4 +110,15 @@ echo "=== Running unit tests: action_parse ==="
 ./tests/bin/test_action_parse
 echo
 
+echo "=== Building unit tests: wifi_reconnect ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I tests -I src/app \
+    tests/test_wifi_reconnect.cpp \
+    src/app/wifi_reconnect.cpp \
+    -o tests/bin/test_wifi_reconnect
+
+echo "=== Running unit tests: wifi_reconnect ==="
+./tests/bin/test_wifi_reconnect
+echo
+
 echo "=== All tests passed ==="

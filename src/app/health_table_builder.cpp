@@ -1,4 +1,5 @@
 #include "health_table_builder.h"
+#include "board_config.h"
 
 #if HAS_DISPLAY
 

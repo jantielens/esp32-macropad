@@ -74,6 +74,32 @@
 #define WIFI_MAX_ATTEMPTS 3
 #endif
 
+// WiFi reconnect tier thresholds (event-driven state machine).
+// Tier 1: SDK auto-reconnect window — device takes no active reconnect action.
+#ifndef WIFI_TIER1_DURATION_MS
+#define WIFI_TIER1_DURATION_MS 60000
+#endif
+
+// Tier 2: active reconnect with exponential backoff.
+#ifndef WIFI_TIER2_DURATION_MS
+#define WIFI_TIER2_DURATION_MS 300000
+#endif
+
+// Total outage before controlled device reboot.
+#ifndef WIFI_REBOOT_AFTER_MS
+#define WIFI_REBOOT_AFTER_MS 600000
+#endif
+
+// Tier 2 exponential backoff: initial retry interval.
+#ifndef WIFI_TIER2_BACKOFF_BASE_MS
+#define WIFI_TIER2_BACKOFF_BASE_MS 10000
+#endif
+
+// Tier 2 exponential backoff: maximum retry interval cap.
+#ifndef WIFI_TIER2_BACKOFF_MAX_MS
+#define WIFI_TIER2_BACKOFF_MAX_MS 60000
+#endif
+
 // ============================================================================
 // Additional Default Configuration Settings
 // ============================================================================
