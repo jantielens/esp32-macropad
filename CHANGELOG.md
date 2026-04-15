@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **P4 letterbox scaling black bars** — letterbox mode on ESP32-P4 boards produced unnecessary black bars on both axes because the PPA hardware scaler quantises to m/16 steps, undershooting the ideal scale on most aspect ratios. Replaced PPA with a CPU bilinear RGB565 scaler for letterbox mode while keeping the fast HW JPEG decoder. Cover mode continues to use PPA where quantisation is harmless.
 - **PadConfig OOM log flood** — when `buildTiles()` failed to allocate PadConfig or binding arrays, it returned without setting `tilesBuilt`, causing the LVGL task to retry every frame (~30 Hz) and flood the serial log. Now marks `tilesBuilt = true` on OOM so the error logs once per config generation change.
 - **Template-inherited icons showing wrong image** — pads using a template pad could display stale or wrong icons for inherited buttons after editing. The icon cache retained old page-local entries even after icon files were deleted, and the preload path skipped refresh for keys already in cache. Fixed by invalidating page-prefixed cache entries when page icons are deleted and always reconciling preloaded icons from the current on-disk or template source.
+- **Health table builder missing board config include** — `health_table_builder.cpp` was missing `#include "board_config.h"`, which defines the `HAS_DISPLAY` guard used at the top of the file. Could cause compilation failures depending on include order.
 
 ## [1.13.0] - 2026-04-11
 
