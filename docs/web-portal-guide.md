@@ -315,5 +315,6 @@ After a reboot, the portal shows an automatic reconnection dialog. If it can't r
 - **Back up your config**: Use **Export Device Config** regularly — it saves everything into a single JSON file
 - **Clone devices**: Export from one device, import on another to duplicate your setup
 - **Copy/paste buttons**: The button editor has Copy and Paste buttons to quickly duplicate button settings across cells. Both keep the editor open so you can keep working, and column/row spans are preserved when space allows
+- **Drag to resize**: Hover over a button to see edge handles, then drag to grow or shrink it across cells — faster than editing span values manually
 - **Binding templates**: Mix static text with live data — e.g., `Solar: [mqtt:home/solar;power;%.0f W]` shows "Solar: 3500 W". For Table widget data, use exact single-token structured bindings such as `[health:table]`.
 - **Security**: Enable HTTP Basic Auth on devices accessible from outside your home network

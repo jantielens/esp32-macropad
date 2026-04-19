@@ -95,6 +95,22 @@ Drop targets must be empty — you cannot drop onto an occupied cell. To cancel 
 
 ---
 
+## Resizing Buttons
+
+Hover over any button to reveal thin drag handles on all four edges (right, left, bottom, top). Drag an edge outward to grow the button into adjacent empty cells, or drag inward to shrink it back down.
+
+- **Snap behavior** — the resize snaps to cell boundaries early (~20% into the next cell) so there is no dead zone between sizes.
+- **Occupancy validation** — you cannot resize into cells occupied by other buttons. The drag simply stops at the last valid size.
+- **Grid bounds** — the button cannot grow beyond the grid edges. Shrinking stops at 1×1 (the minimum size).
+- **Touch support** — drag handles work with both mouse and touch input. On touch devices, press and drag an edge to resize.
+- **Cursor hints** — horizontal edges show a `col-resize` cursor, vertical edges show `row-resize`.
+
+The resize handles appear only when the editor is in normal mode — they are hidden during [block placement](#building-blocks) and [drag-and-drop moves](#moving-buttons).
+
+> **Tip**: Combine resizing with [column/row spans](#spans-multi-columnrow-buttons) for precise layouts. Drag handles are the fastest way to visually adjust span sizes without opening the button editor.
+
+---
+
 ## The Button Editor
 
 Click any button in the grid preview to open the button editor. This is where each button gets its personality — from static labels and icons to live MQTT data and conditional colors.
@@ -261,6 +277,8 @@ This disables a door-lock button when the alarm is armed.
 
 Spanned buttons automatically claim the grid cells they cover. Other buttons in those cells will be hidden behind the spanning button.
 
+> **Tip**: The fastest way to adjust spans is to [drag the resize handles](#resizing-buttons) on the button edges in the grid preview. You can also set exact span values here in the button editor.
+
 ### Background Images and Camera Feeds
 
 Any button can display an image or live camera stream fetched from a URL, rendered as the button background behind labels and icons.
@@ -316,6 +334,7 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Set Brightness** | Adjust the display backlight brightness — set to a specific value, or step up/down (default 10%). Session-only, resets on reboot. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
+| **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, or **Enable Screensaver**. |
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
