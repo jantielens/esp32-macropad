@@ -942,6 +942,120 @@ function padIsCellOccupied(col, row) {
     return null;
 }
 
+// ===== BUTTON RESIZE (DRAG HANDLES) =====
+
+function padGetGridGeometry() {
+    const grid = document.getElementById('pad-grid');
+    if (!grid) return null;
+    const rect = grid.getBoundingClientRect();
+    const gap = parseFloat(getComputedStyle(grid).gap) || 4;
+    const cellW = (rect.width - gap * (padState.cols - 1)) / padState.cols;
+    const cellH = (rect.height - gap * (padState.rows - 1)) / padState.rows;
+    return { rect, gap, cellW, cellH };
+}
+
+function padRenderResizeHandles(cell, btn, col, row) {
+    if (padState.placingBlock || padState.dragSource) return;
+    const sides = ['right', 'left', 'down', 'up'];
+    for (const side of sides) {
+        const handle = document.createElement('div');
+        handle.className = 'pad-resize-handle pad-resize-handle-' + side;
+        handle.addEventListener('mousedown', ((s) => (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            padResizeDragStart(col, row, s, e.clientX, e.clientY);
+        })(side));
+        handle.addEventListener('touchstart', ((s) => (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const t = e.touches[0];
+            padResizeDragStart(col, row, s, t.clientX, t.clientY);
+        })(side), { passive: false });
+        handle.draggable = false;
+        cell.appendChild(handle);
+    }
+}
+
+function padResizeDragStart(col, row, side, startX, startY) {
+    const btn = padFindButton(col, row);
+    if (!btn) return;
+    const geo = padGetGridGeometry();
+    if (!geo) return;
+
+    const origCol = btn.col, origRow = btn.row;
+    const origCs = btn.col_span || 1, origRs = btn.row_span || 1;
+    const axis = (side === 'left' || side === 'right') ? 'x' : 'y';
+    const cellSize = axis === 'x' ? geo.cellW + geo.gap : geo.cellH + geo.gap;
+
+    const occupied = padBuildOccupancySet();
+    // Remove this button's own cells from the occupancy set
+    for (let dc = 0; dc < origCs; dc++)
+        for (let dr = 0; dr < origRs; dr++)
+            occupied.delete((origCol + dc) + ',' + (origRow + dr));
+
+    let lastDelta = 0;
+
+    function onMove(clientX, clientY) {
+        const raw = axis === 'x' ? clientX - startX : clientY - startY;
+        const sign = (side === 'right' || side === 'down') ? 1 : -1;
+        // Snap at 20% into the next cell: 0.8 = 1.0 − 0.2, so floor triggers at frac ≥ 0.2
+        const frac = (raw * sign) / cellSize;
+        const delta = frac >= 0 ? Math.floor(frac + 0.8) : Math.ceil(frac - 0.8);
+        if (delta === lastDelta) return;
+        lastDelta = delta;
+
+        // Compute new col, row, col_span, row_span
+        let nc = origCol, nr = origRow, ncs = origCs, nrs = origRs;
+        if (side === 'right')     ncs = origCs + delta;
+        else if (side === 'left') { nc = origCol - delta; ncs = origCs + delta; }
+        else if (side === 'down') nrs = origRs + delta;
+        else if (side === 'up')   { nr = origRow - delta; nrs = origRs + delta; }
+
+        // Clamp to valid range
+        if (ncs < 1) { ncs = 1; nc = origCol + origCs - 1; }
+        if (nrs < 1) { nrs = 1; nr = origRow + origRs - 1; }
+        if (nc < 0) { ncs += nc; nc = 0; }
+        if (nr < 0) { nrs += nr; nr = 0; }
+        if (nc + ncs > padState.cols) ncs = padState.cols - nc;
+        if (nr + nrs > padState.rows) nrs = padState.rows - nr;
+
+        // Check occupancy for all new cells
+        for (let dc = 0; dc < ncs; dc++) {
+            for (let dr = 0; dr < nrs; dr++) {
+                if (occupied.has((nc + dc) + ',' + (nr + dr))) return;
+            }
+        }
+
+        // Apply preview
+        btn.col = nc; btn.row = nr;
+        btn.col_span = ncs; btn.row_span = nrs;
+        if (btn.col_span === 1) delete btn.col_span;
+        if (btn.row_span === 1) delete btn.row_span;
+        padRenderGrid();
+    }
+
+    function onMouseMove(e) { onMove(e.clientX, e.clientY); }
+    function onTouchMove(e) { if (e.touches.length) onMove(e.touches[0].clientX, e.touches[0].clientY); }
+
+    function onEnd() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onEnd);
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onEnd);
+        document.removeEventListener('touchcancel', onEnd);
+        const changed = btn.col !== origCol || btn.row !== origRow ||
+                        (btn.col_span || 1) !== origCs || (btn.row_span || 1) !== origRs;
+        if (changed) padMarkDirty();
+        padRenderGrid();
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+    document.addEventListener('touchcancel', onEnd);
+}
+
 // Find a template button whose origin is at (col, row)
 function padFindTemplateButton(col, row) {
     return padState.templateButtons.find(b => b.col === col && b.row === row) || null;
@@ -1003,6 +1117,9 @@ function padRenderGrid() {
         }
     }
 
+    // Build full occupancy set for resize handle validation
+    const occupied = padBuildOccupancySet();
+
     // Second pass: render cells
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -1055,6 +1172,8 @@ function padRenderGrid() {
                     rk.title = 'Rocker Widget';
                     cell.appendChild(rk);
                 }
+
+                padRenderResizeHandles(cell, btn, c, r);
 
                 if (!padState.placingBlock) {
                     cell.addEventListener('click', () => padDialogOpen(c, r));
