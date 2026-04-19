@@ -72,6 +72,7 @@ BOARD_PROFILE=psram ./build.sh esp32-nodisplay  # Optional build profile (if def
 - Prints a per-board "Compile-time flags summary" (active `HAS_*` features + key selectors) to make it clear what the build will include
 - Compiles `src/app/app.ino` for specified board(s)
 - Creates board-specific directories: `./build/esp32-nodisplay/`, `./build/cyd-v2/`, etc.
+- Uses a per-board `intermediate/` subdirectory for `arduino-cli`'s object cache, so switching between boards does not invalidate the build cache
 - Generates `.bin`, `.bootloader.bin`, `.merged.bin`, and `.partitions.bin` files per board
 - Detects build errors including:
   - Compilation failures (exit code ≠ 0)
@@ -111,8 +112,11 @@ graph LR
     Board1 --> F2[app.ino.bootloader.bin]
     Board1 --> F3[app.ino.merged.bin]
     Board1 --> F4[app.ino.partitions.bin]
+    Board1 --> I1[intermediate/]
+    I1 --> IC[core/ libraries/ sketch/]
     Board2 --> F5[app.ino.bin]
     Board2 --> F6[...]
+    Board2 --> I2[intermediate/]
 ```
 
 **Requirements:** Must run `setup.sh` first.
@@ -333,7 +337,7 @@ This script automates both steps.
 ```
 
 **What it does:**
-- Removes the `./build/` directory and all board subdirectories
+- Removes the `./build/` directory and all board subdirectories (including per-board `intermediate/` object caches)
 - Lists board directories being removed
 - Cleans up temporary files (*.tmp, *.bak, *~)
 - Prepares for a fresh build

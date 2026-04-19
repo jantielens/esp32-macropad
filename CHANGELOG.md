@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Per-board intermediate build cache** — `build.sh` now passes `--build-path build/<board>/intermediate/` to `arduino-cli compile`, giving each board its own persistent object cache. Switching between boards no longer invalidates the entire library cache, making incremental rebuilds seconds instead of minutes. Disk usage grows to ~170 MB per board (~1 GB for 6 boards). `clean.sh` already removes the full `build/` tree including intermediate caches. CI builds are unaffected. (Closes #25)
+
 ## [1.14.0] - 2026-04-19
 
 ### Added

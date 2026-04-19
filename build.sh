@@ -193,6 +193,11 @@ build_board() {
         fi
     fi
 
+    # Per-board intermediate build path so switching boards does not thrash the
+    # shared arduino-cli sketch cache (see GitHub issue #25).
+    local board_intermediate_path="$board_build_path/intermediate"
+    mkdir -p "$board_intermediate_path"
+
     # Compile the sketch with optional board-specific includes and build props
     # Run compile and capture exit code (disable set -e temporarily to capture output even on failure)
     local build_output
@@ -200,6 +205,7 @@ build_board() {
     set +e
     build_output=$("$ARDUINO_CLI" compile \
         --fqbn "$fqbn" \
+        --build-path "$board_intermediate_path" \
         "${EXTRA_FLAGS[@]}" \
         "${BUILD_PROPS_ARR[@]}" \
         --output-dir "$board_build_path" \
