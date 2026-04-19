@@ -58,6 +58,7 @@ void PadScreen::buildTiles() {
     // Ensure lazy arrays are allocated before building
     if (!allocateArrays()) {
         LOGE(TAG, "Pad %u: OOM for binding arrays", pageIndex);
+        tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
 
@@ -71,6 +72,7 @@ void PadScreen::buildTiles() {
     }
     if (!cfg) {
         LOGE(TAG, "OOM for PadConfig");
+        tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
 

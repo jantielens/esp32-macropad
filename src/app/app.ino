@@ -8,6 +8,7 @@
 #include "mqtt_screen.h"
 #include "mqtt_wake.h"
 #include "mqtt_audio.h"
+#include "mqtt_notify.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
 #include "power_config.h"
@@ -28,12 +29,14 @@
 #include "pad_binding.h"
 #include "sound_store.h"
 #include "boot_actions.h"
+#include "pad_block.h"
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "action_dispatch.h"
+#include "message_bubble.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
 #endif
@@ -285,6 +288,9 @@ void setup()
 	// Load boot actions from LittleFS
 	boot_actions_init();
 
+	// Register core building blocks (feature branches add their own via pad_block_register)
+	pad_block_init();
+
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
@@ -314,6 +320,7 @@ void setup()
 				power_manager_note_wifi_success();
 				wifi_manager_start_mdns(&device_config);
 				device_telemetry_cache_rssi();
+				wifi_manager_register_events();
 				time_binding_start_ntp();
 			} else {
 				LOGW("Main", "WiFi failed - fallback to AP");
@@ -352,6 +359,7 @@ void setup()
 	mqtt_screen_init();
 	mqtt_wake_init(&device_config);
 	mqtt_audio_init();
+	mqtt_notify_init();
 	#endif
 
 	#if HAS_DISPLAY
@@ -429,6 +437,7 @@ void loop()
 	#if HAS_DISPLAY
 	screen_saver_manager_loop();
 	action_dispatch_loop();
+	message_bubble_loop();
 	#endif
 
 	#if HAS_TOUCH
@@ -449,6 +458,7 @@ void loop()
 	mqtt_screen_loop();
 	mqtt_wake_loop();
 	mqtt_audio_loop();
+	mqtt_notify_loop();
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).

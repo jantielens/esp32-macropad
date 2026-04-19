@@ -1176,6 +1176,42 @@ footer {
     background: repeating-linear-gradient(0deg, transparent, transparent 3px, #90CAF9 3px, #90CAF9 4px);
 }
 
+.pad-cell-widget-rocker {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 10px;
+    height: 14px;
+    opacity: 0.6;
+}
+.pad-cell-widget-rocker::before, .pad-cell-widget-rocker::after {
+    content: '';
+    position: absolute;
+    left: 1px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+}
+.pad-cell-widget-rocker::before {
+    top: 0;
+    border-bottom: 5px solid #fff;
+}
+.pad-cell-widget-rocker::after {
+    bottom: 0;
+    border-top: 5px solid #fff;
+}
+
+/* Resize drag handles */
+.pad-resize-handle {
+    position: absolute; background: rgba(100,180,255,0.45); border-radius: 2px;
+    opacity: 0; transition: opacity .15s; z-index: 10; touch-action: none;
+}
+.pad-cell:hover > .pad-resize-handle { opacity: 1; }
+.pad-resize-handle-right  { top: 12%; right: 0; width: 5px; height: 76%; cursor: col-resize; }
+.pad-resize-handle-left   { top: 12%; left: 0;  width: 5px; height: 76%; cursor: col-resize; }
+.pad-resize-handle-down   { left: 12%; bottom: 0; height: 5px; width: 76%; cursor: row-resize; }
+.pad-resize-handle-up     { left: 12%; top: 0;    height: 5px; width: 76%; cursor: row-resize; }
+.pad-resize-handle:hover  { background: rgba(100,180,255,0.85); }
+
 .pad-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1248,6 +1284,36 @@ footer {
     border: none;
     border-top: 1px solid #e5e5ea;
     margin: 4px 0;
+}
+
+.pad-more-heading {
+    display: block;
+    padding: 4px 16px 2px;
+    font-size: 11px;
+    color: #86868b;
+    letter-spacing: 0.5px;
+    text-align: center;
+}
+
+.pad-block-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #1c1c1e;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.pad-cell-ghost-block {
+    outline: 2px dashed rgba(52, 199, 89, 0.7);
+    outline-offset: -2px;
+}
+
+.pad-cell-ghost-block.invalid {
+    outline-color: rgba(255, 59, 48, 0.7);
 }
 
 .pad-edit-modal {

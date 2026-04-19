@@ -16,7 +16,7 @@ At the top of the pad editor, you configure the pad itself:
 
 - **Pad selection** — switch between Pad 1 through 16. Each pad is saved independently.
 - **Pad Name** — an optional label shown in Home Assistant and on-device. For example, "Solar", "Lights", or "Cameras".
-- **Columns / Rows** — the grid size, from 1×1 up to 8×8. A 3×2 grid gives you 6 large buttons; a 4×4 grid gives you 16 smaller ones.
+- **Columns / Rows** — the grid size. The maximum depends on the board (e.g. 5×5 on round displays, 8×8 on larger panels). A 3×2 grid gives you 6 large buttons; a 4×4 grid gives you 16 smaller ones.
 - **Wake Screen** — when the screensaver wakes up, which screen should appear? Leave empty to return to the last active screen, or pick a specific pad.
 - **Background** — the color behind the grid. Accepts a `#hex` color or a binding expression for dynamic backgrounds.
 
@@ -54,6 +54,60 @@ The **Template Pad** dropdown (below Background Color) lets you inherit buttons 
 - The merge is **read-only** — template buttons are never written into your pad's JSON file. They're merged in-memory each time the pad loads.
 
 > **Use case**: Put navigation buttons (Home, Settings, Back) on a "nav" pad. Then set that as the template for your other pads — the nav buttons automatically appear in empty positions without copying them one by one.
+
+### Building Blocks
+
+Building blocks are pre-configured groups of buttons that you can insert into a pad in one step. Instead of manually creating and configuring 3–6 related buttons, select a block from the **More ▾** menu and place it with a single click.
+
+**How to use:**
+
+1. Open the **More ▾** menu on the Pads page. Available blocks appear under the **━━ Blocks ━━** heading.
+2. Click a block name to enter **placement mode**. A banner appears above the grid with a Cancel button.
+3. Hover over empty cells to see a live ghost overlay — **green dashed outline** means the block fits, **red** means it overlaps existing buttons or exceeds the grid boundary.
+4. Click a valid cell to place the block. The block's buttons (with their spans, labels, actions, bindings, and styles) are inserted at that position.
+5. Press **Escape** or click **Cancel** to exit placement mode without placing anything.
+
+**Availability checks** — a block only appears in the menu when the current pad meets its requirements:
+
+- Grid dimensions are at least as large as the block's minimum (e.g., 3 columns × 2 rows for the Countdown Timer).
+- The pad has enough free (empty) cells for the block's buttons.
+- The total button count after insertion stays within the 64-button limit.
+
+After placing a block, all its buttons become regular buttons — you can edit, move, or delete them individually just like any other button.
+
+**Built-in blocks:**
+
+| Block | Size | Description |
+|-------|------|-------------|
+| **Countdown Timer** | 3×2 min | Three rocker buttons (hours, minutes, seconds) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Includes pad bindings for all three timers. |
+
+> **Tip**: Building blocks and template pads serve different purposes. Use **template pads** to share common buttons (like navigation) across many pads. Use **building blocks** to quickly add a self-contained functional group (like a timer control panel) to a specific pad.
+
+---
+
+## Moving Buttons
+
+To rearrange your pad layout, **drag any configured button to an empty cell**. Click a button and move the pointer to start dragging — the button keeps its full configuration (labels, actions, colors, icon, widget). While dragging, the source cell dims and valid drop targets show a green dashed outline.
+
+If the button has a multi-cell span (e.g. 2×2) and the target position has room, the span is preserved. Otherwise the button is placed as 1×1.
+
+Drop targets must be empty — you cannot drop onto an occupied cell. To cancel a drag, release over an occupied cell or press **Escape**. The [copy and paste workflow](#copy-and-paste-buttons) is always available as an alternative, and is also the only option on mobile browsers where drag-and-drop is not supported.
+
+---
+
+## Resizing Buttons
+
+Hover over any button to reveal thin drag handles on all four edges (right, left, bottom, top). Drag an edge outward to grow the button into adjacent empty cells, or drag inward to shrink it back down.
+
+- **Snap behavior** — the resize snaps to cell boundaries early (~20% into the next cell) so there is no dead zone between sizes.
+- **Occupancy validation** — you cannot resize into cells occupied by other buttons. The drag simply stops at the last valid size.
+- **Grid bounds** — the button cannot grow beyond the grid edges. Shrinking stops at 1×1 (the minimum size).
+- **Touch support** — drag handles work with both mouse and touch input. On touch devices, press and drag an edge to resize.
+- **Cursor hints** — horizontal edges show a `col-resize` cursor, vertical edges show `row-resize`.
+
+The resize handles appear only when the editor is in normal mode — they are hidden during [block placement](#building-blocks) and [drag-and-drop moves](#moving-buttons).
+
+> **Tip**: Combine resizing with [column/row spans](#spans-multi-columnrow-buttons) for precise layouts. Drag handles are the fastest way to visually adjust span sizes without opening the button editor.
 
 ---
 
@@ -223,6 +277,8 @@ This disables a door-lock button when the alarm is armed.
 
 Spanned buttons automatically claim the grid cells they cover. Other buttons in those cells will be hidden behind the spanning button.
 
+> **Tip**: The fastest way to adjust spans is to [drag the resize handles](#resizing-buttons) on the button edges in the grid preview. You can also set exact span values here in the button editor.
+
 ### Background Images and Camera Feeds
 
 Any button can display an image or live camera stream fetched from a URL, rendered as the button background behind labels and icons.
@@ -275,7 +331,10 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
 | **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
 | **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
+| **Set Brightness** | Adjust the display backlight brightness — set to a specific value, or step up/down (default 10%). Session-only, resets on reboot. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
+| **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
+| **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, or **Enable Screensaver**. |
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -357,6 +416,34 @@ On the **Home** page, the **Timers** section lets you configure each timer:
 
 > **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Configure Timer 1 as a 240-second countdown on the Home page, with an expire action that plays an alarm sound.
 
+### Notification Action
+
+The **Show Notification** action displays a floating message bubble on the device screen — useful for confirmations, alerts, or status messages triggered by button presses or automations.
+
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| **Message** | The notification text. Supports binding templates (e.g., `Power: [mqtt:home/solar/power;$.power;%.0f]W`). Empty message dismisses the active notification. |
+| **Duration (ms)** | How long the bubble stays visible. Default `3000` (3 seconds). Set to `0` for a persistent notification that stays until tapped. Supports bindings. |
+| **Text Color** | Hex color for the message text (default `#ffffff`). Supports bindings. |
+| **Background Color** | Hex color for the bubble background (default `#333333`). Supports bindings. |
+| **Border Color** | Hex color for the bubble border. Leave empty for no border. Supports bindings. |
+| **Opacity (%)** | Background opacity, 0–100 (default 85). |
+| **Font Size** | Explicit font size (12/14/18/24/32/36/48). Leave at 0 for auto — uses the same scale-tier font as button center labels. |
+| **Location** | Where the bubble appears: **Bottom** (default), **Center**, or **Top**. |
+
+The bubble fades in over 200 ms, displays for the configured duration, then fades out. Tap anywhere on the bubble to dismiss it immediately. A new notification replaces the active one.
+
+**Example: confirmation bubble on MQTT publish**
+- **Tap action 1**: Publish MQTT → topic: `home/lights/toggle`, payload: `ON`
+- **Tap action 2**: Show Notification → message: `Lights toggled!`, duration: `2000`
+
+**Example: persistent alert from binding**
+- **Tap action**: Show Notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, duration: `0`, bg_color: `#1a3a1a`, location: `center`
+
+> **Home Assistant integration**: Notifications can also be triggered remotely via the **Notify** text entity. See the [Home Assistant Integration Guide](ha-integration-guide.md#notifications) for details and automation examples.
+
 ### Audio Behavior
 
 *Applies only to boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
@@ -373,7 +460,45 @@ Buttons use the device-level beep patterns configured on the Home page. To play 
 
 ## Widgets
 
-Widgets replace the standard button rendering with specialized visualizations. Select the widget type in the button editor.
+Widgets replace the standard button rendering with specialized visualizations or interaction modes. Select the widget type in the button editor.
+
+### Rocker
+
+The rocker widget splits a button into two tap zones — tap the top half to trigger one set of actions, tap the bottom half to trigger another. This turns a single button into a directional control, ideal for brightness up/down, volume +/−, thermostat setpoints, or any value you want to nudge from one place.
+
+Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes how the button responds to taps.
+
+**How it works:**
+
+- The button area is divided into two equal zones along the selected axis.
+- **Zone A** (top or left) dispatches the **Tap Action** set.
+- **Zone B** (bottom or right) dispatches the **Long-Press Action** set.
+- Small chevron indicators (▲▼ or ◄►) appear at the edges so the user knows the button is directional.
+- The tap flash overlay covers only the tapped half for clear visual feedback.
+- Zone B uses the device's **Long-Press Beep** pattern for a distinct audio cue (suppressed when the action itself produces audio).
+- Long-press is disabled on rocker buttons since both action slots are used for the two zones.
+
+> **Note:** The action labels in the button editor change contextually when a rocker widget is selected — "Tap Action" becomes "Up Action" (or "Left Action") and "Long-Press Action" becomes "Down Action" (or "Right Action").
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Direction** | Vertical (up/down, default) or horizontal (left/right) |
+| **Indicator Color** | Color of the chevron symbols (default white) |
+| **Opacity** | Chevron visibility from 0 (invisible) to 255 (fully opaque). Default 80 (~31%) |
+
+**Example — Brightness rocker:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | Rocker |
+| Direction | Vertical |
+| Center label | `☀️` or `[health:brightness]` |
+| Up Action | Brightness → Up |
+| Down Action | Brightness → Down |
+
+Labels, icons, and colors work alongside the rocker widget. A typical rocker button uses the center label for an icon or the current value, with top/bottom labels for context.
 
 ### Bar Chart
 
@@ -427,6 +552,7 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
 | **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
 | **Needle Width** | Line width in pixels (0 = hidden, max 10) |
+| **Needle Cutoff** | Percentage of the needle length to remove from the center (0–99%). Use this to prevent the needle from overlapping a center label or icon. Default: 0 (full-length needle) |
 | **Tick Width** | Tick line width in pixels (1–5) |
 | **Arc Color** | Fill color for slot 1. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Arc Color 2** | Fill color for slot 2, or the negative half of Dual Binding Pair 1. Default: blue (`#2196F3`) |

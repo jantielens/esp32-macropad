@@ -58,6 +58,7 @@ struct GaugeConfig {
     uint8_t  arc_width_pct;          // Arc thickness as % of radius (5–50, default 15)
     uint8_t  tick_count;             // Major tick count (0 = none, default 5)
     uint8_t  needle_width;           // Needle line width in pixels (1–10, default 2)
+    uint8_t  needle_cutoff_pct;      // Inner needle cutoff as % of length (0–99, default 0)
     uint8_t  tick_width;             // Tick line width in pixels (1–5, default 1)
     bool     show_needle;            // Draw a needle line (default true)
     bool     zero_centered;          // Arc fills from zero point instead of min (default false)
@@ -104,6 +105,7 @@ struct GaugeState {
     int16_t   arc_width_px;        // Arc thickness in pixels
     int16_t   ring_gap_px;         // Gap between ring slots in pixels
     int16_t   needle_len;          // Needle length in pixels
+    int16_t   needle_inner;        // Inner cutoff offset in pixels
     uint8_t   tick_line_count;     // Number of cached tick line pointers
     uint8_t   start_label_slot_1;  // Visual ring slot index for start_label_1
     uint8_t   start_label_slot_2;  // Visual ring slot index for start_label_2
@@ -130,6 +132,7 @@ struct GaugeState {
     uint32_t  cached_marker_tick_color; // Marker tick color cache
     uint32_t  cached_marker_zone_color; // Marker zone color cache
     uint8_t   marker_ring_count;   // Number of rings with marker objects
+    uint32_t  last_update_ms;      // Timestamp of last update (rapid-change detection)
     bool      has_received_data;   // True after first value received (snap on first)
     int32_t   needle_cdeg;         // Current needle angle in centidegrees (for animation from-value)
 };
@@ -192,15 +195,20 @@ static lv_obj_t* gauge_create_line(lv_obj_t* parent,
 
 static void gauge_set_needle(lv_obj_t* needle, lv_point_precise_t* pts,
                              int16_t cx, int16_t cy,
-                             int16_t needle_len, float angle_rad) {
-    int16_t tip_x = cx + (int16_t)roundf(cosf(angle_rad) * needle_len);
-    int16_t tip_y = cy + (int16_t)roundf(sinf(angle_rad) * needle_len);
+                             int16_t needle_len, int16_t inner_offset,
+                             float angle_rad) {
+    float cos_a = cosf(angle_rad);
+    float sin_a = sinf(angle_rad);
+    int16_t base_x = cx + (int16_t)roundf(cos_a * inner_offset);
+    int16_t base_y = cy + (int16_t)roundf(sin_a * inner_offset);
+    int16_t tip_x  = cx + (int16_t)roundf(cos_a * needle_len);
+    int16_t tip_y  = cy + (int16_t)roundf(sin_a * needle_len);
 
-    int16_t min_x = (cx < tip_x) ? cx : tip_x;
-    int16_t min_y = (cy < tip_y) ? cy : tip_y;
+    int16_t min_x = (base_x < tip_x) ? base_x : tip_x;
+    int16_t min_y = (base_y < tip_y) ? base_y : tip_y;
 
-    pts[0].x = cx - min_x;    pts[0].y = cy - min_y;
-    pts[1].x = tip_x - min_x; pts[1].y = tip_y - min_y;
+    pts[0].x = base_x - min_x;  pts[0].y = base_y - min_y;
+    pts[1].x = tip_x  - min_x;  pts[1].y = tip_y  - min_y;
 
     lv_line_set_points(needle, pts, 2);
     lv_obj_set_pos(needle, min_x, min_y);
@@ -431,6 +439,9 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     uint8_t nw = btn["widget_gauge_needle_width"] | (uint8_t)2;
     cfg->needle_width = (nw > 10) ? 10 : nw;  // 0 = no needle
 
+    uint8_t ncut = btn["widget_gauge_needle_cutoff_pct"] | (uint8_t)0;
+    cfg->needle_cutoff_pct = (ncut > 99) ? 99 : ncut;
+
     uint8_t tw = btn["widget_gauge_tick_width"] | (uint8_t)1;
     cfg->tick_width = clamp_val<uint8_t>(tw, 1, 5);
 
@@ -547,6 +558,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Needle extends from center outward past the arc outer edge
     st->needle_len = radius + 4;
     if (st->needle_len < 10) st->needle_len = 10;
+    st->needle_inner = (int16_t)(st->needle_len * cfg->needle_cutoff_pct / 100);
 
     LOGD(TAG, "Layout: rect=%dx%d avail=%dx%d radius=%d arc_w=%d cx=%d cy=%d rings=%d",
             rect->w, rect->h, avail_w, avail_h, radius, arc_width, cx, cy, active_ring_count);
@@ -757,7 +769,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
             // Initial position at start angle (min value)
             float init_rad = (float)cfg->start_angle * (float)M_PI / 180.0f;
-            gauge_set_needle(st->needle, st->n_pts, cx, cy, st->needle_len, init_rad);
+            gauge_set_needle(st->needle, st->n_pts, cx, cy, st->needle_len, st->needle_inner, init_rad);
         }
     }
 
@@ -858,7 +870,7 @@ static void gauge_needle_anim_cb(void* var, int32_t value) {
     if (!st->needle || !st->n_pts) return;
     st->needle_cdeg = value;
     float a_rad = (float)value / 100.0f * (float)M_PI / 180.0f;
-    gauge_set_needle(st->needle, st->n_pts, st->cx, st->cy, st->needle_len, a_rad);
+    gauge_set_needle(st->needle, st->n_pts, st->cx, st->cy, st->needle_len, st->needle_inner, a_rad);
 }
 
 // ---- Helper: update a single arc ring (with optional animation) ----
@@ -948,8 +960,15 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     if (!st->arc_bg) return;
 
-    // Determine if we should animate (skip on first data arrival)
-    bool animate = st->has_received_data && cfg->anim_ms > 0;
+    // Determine if we should animate.
+    // Skip on first data arrival and when values arrive faster than the
+    // animation duration (rapid restarts cause the ease-out curve to reset
+    // before visible progress, making arcs/needle appear stuck).
+    uint32_t now = lv_tick_get();
+    bool rapid_update = st->has_received_data &&
+                        (now - st->last_update_ms) < (uint32_t)cfg->anim_ms;
+    st->last_update_ms = now;
+    bool animate = st->has_received_data && cfg->anim_ms > 0 && !rapid_update;
     st->has_received_data = true;
 
     // Resolve bindable min/max once per update

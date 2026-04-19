@@ -15,4 +15,7 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
 // DELETE /api/pad?page=N — delete config for page N
 void handleDeletePadConfig(AsyncWebServerRequest *request);
 
+// GET /api/pad/blocks — return building block catalog
+void handleGetPadBlocks(AsyncWebServerRequest *request);
+
 #endif // HAS_DISPLAY

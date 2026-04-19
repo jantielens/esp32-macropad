@@ -52,6 +52,7 @@ struct BarChartState {
     float     cached_max; // Last resolved max (for detecting binding changes in tick)
     uint32_t  cached_bar_bg_color;  // Last resolved bar background color
     uint32_t  cached_bar_color;     // Last resolved bar fill color
+    uint32_t  last_update_ms;       // Timestamp of last update (rapid-change detection)
     bool      has_received_data;    // True after first value received (snap on first)
     bool      horizontal;           // Cached orientation for anim callback
 };
@@ -234,7 +235,16 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         ? (int16_t)lv_obj_get_width(st->bar_fill)
         : (int16_t)lv_obj_get_height(st->bar_fill);
 
-    bool should_animate = st->has_received_data && cfg->anim_ms > 0 && cur_px != target_px;
+    // Skip animation when values arrive faster than the animation duration.
+    // Rapid restarts cause the ease-out curve to reset before visible progress,
+    // making the bar appear stuck.
+    uint32_t now = lv_tick_get();
+    bool rapid_update = st->has_received_data &&
+                        (now - st->last_update_ms) < (uint32_t)cfg->anim_ms;
+    st->last_update_ms = now;
+
+    bool should_animate = st->has_received_data && cfg->anim_ms > 0
+                          && cur_px != target_px && !rapid_update;
     st->has_received_data = true;
 
     if (should_animate) {

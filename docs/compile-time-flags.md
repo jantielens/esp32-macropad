@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 152
+Total flags: 160
 
 ### Features (HAS_*)
 
@@ -107,8 +107,11 @@ Total flags: 152
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
+- **MAX_GRID_COLS** default: `(no default)` — Maximum grid columns.
+- **MAX_GRID_ROWS** default: `(no default)` — Maximum grid rows.
 - **MAX_NON_PAD_SCREENS** default: `10` — Number of non-pad screens (info, test, fps, touch_test, + headroom).
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
+- **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
@@ -118,6 +121,7 @@ Total flags: 152
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS** default: `5000` — Timeout for an incomplete /api/config upload (ms) before freeing the buffer.
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES** default: `4096` — Max JSON body size accepted by /api/config.
 - **WIFI_MAX_ATTEMPTS** default: `3` — Maximum WiFi connection attempts at boot before falling back.
+- **WIFI_TIER2_BACKOFF_MAX_MS** default: `60000` — Tier 2 exponential backoff: maximum retry interval cap.
 
 ### Other
 
@@ -192,6 +196,10 @@ Total flags: 152
 - **TOUCH_I2C_BUS** default: `1` — ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
 - **TOUCH_I2C_PORT** default: `(no default)` — I2C controller index.
 - **UI_SCALE_TIER** default: `UI_SCALE_MEDIUM` — Default UI scale tier (boards override in board_overrides.h)
+- **WIFI_REBOOT_AFTER_MS** default: `600000` — Total outage before controlled device reboot.
+- **WIFI_TIER1_DURATION_MS** default: `60000` — Tier 1: SDK auto-reconnect window — device takes no active reconnect action.
+- **WIFI_TIER2_BACKOFF_BASE_MS** default: `10000` — Tier 2 exponential backoff: initial retry interval.
+- **WIFI_TIER2_DURATION_MS** default: `300000` — Tier 2: active reconnect with exponential backoff.
 <!-- END COMPILE_FLAG_REPORT:FLAGS -->
 
 ## Board Matrix: Features (generated)
@@ -302,12 +310,18 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/icon_store.cpp
   - src/app/icon_store.h
   - src/app/lv_conf.h
+  - src/app/message_bubble.cpp
+  - src/app/message_bubble.h
+  - src/app/mqtt_notify.cpp
+  - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
   - src/app/mqtt_screen.h
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
+  - src/app/pad_block.cpp
+  - src/app/pad_block.h
   - src/app/pad_config.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
@@ -343,6 +357,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/gauge_widget.cpp
+  - src/app/widgets/rocker_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/widget.cpp
@@ -379,6 +394,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_audio.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
+  - src/app/mqtt_notify.cpp
+  - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
   - src/app/mqtt_screen.h
   - src/app/mqtt_sub_store.cpp
@@ -563,10 +580,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LVGL_TICK_PERIOD_MS**
   - src/app/board_config.h
+- **MAX_GRID_COLS**
+  - src/app/pad_config.h
+- **MAX_GRID_ROWS**
+  - src/app/pad_config.h
 - **MAX_NON_PAD_SCREENS**
   - src/app/board_config.h
 - **MAX_PADS**
   - src/app/board_config.h
+- **MAX_PAD_BUTTONS**
+  - src/app/pad_config.h
 - **POWERON_CONFIG_BURST_ENABLED**
   - src/app/board_config.h
   - src/app/power_manager.cpp
@@ -671,5 +694,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES**
   - src/app/board_config.h
 - **WIFI_MAX_ATTEMPTS**
+  - src/app/board_config.h
+- **WIFI_REBOOT_AFTER_MS**
+  - src/app/board_config.h
+- **WIFI_TIER1_DURATION_MS**
+  - src/app/board_config.h
+- **WIFI_TIER2_BACKOFF_BASE_MS**
+  - src/app/board_config.h
+- **WIFI_TIER2_BACKOFF_MAX_MS**
+  - src/app/board_config.h
+- **WIFI_TIER2_DURATION_MS**
   - src/app/board_config.h
 <!-- END COMPILE_FLAG_REPORT:USAGE -->

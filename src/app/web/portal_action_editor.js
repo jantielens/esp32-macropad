@@ -25,7 +25,10 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="beep">Play Beep</option>';
     h += '<option value="sound">Play Sound</option>';
     h += '<option value="volume">Set Volume</option>';
+    h += '<option value="brightness">Set Brightness</option>';
     h += '<option value="timer">Timer Control</option>';
+    h += '<option value="notify">Show Notification</option>';
+    h += '<option value="system">System Command</option>';
     h += '</select>';
     if (opts.showBleHint) {
         h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
@@ -94,6 +97,21 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<label for="' + prefix + '-volume-value">Volume (%)</label>';
     h += '<input type="number" id="' + prefix + '-volume-value" min="0" max="100" placeholder="e.g. 50">';
     h += '</div></div>';
+    // Brightness
+    h += '<div id="' + prefix + '-brightness-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-brightness-mode">Brightness Action</label>';
+    h += '<select id="' + prefix + '-brightness-mode" onchange="actionEditorTypeChanged(\'' + prefix + '\')">'; 
+    h += '<option value="set">Set to value</option>';
+    h += '<option value="up">Brightness Up (+10%)</option>';
+    h += '<option value="down">Brightness Down (&minus;10%)</option>';
+    h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-brightness-value-group">';
+    h += '<label for="' + prefix + '-brightness-value">Brightness (%)</label>';
+    h += '<input type="number" id="' + prefix + '-brightness-value" min="0" max="100" placeholder="e.g. 50">';
+    h += '<small id="' + prefix + '-brightness-step-hint" style="display:none;">Step size (default 10 if empty).</small>';
+    h += '</div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
     h += '<div class="form-group">';
@@ -119,6 +137,66 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<small>Positive adds time, negative subtracts. Applied to the countdown preset.</small>';
     h += '</div>';
     h += '</div>';
+    // Notify
+    h += '<div id="' + prefix + '-notify-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-notify-text">Message <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" id="' + prefix + '-notify-text" maxlength="127" placeholder="e.g. Brightness is at 100%">';
+    h += '<small>Supports binding templates. Empty = dismiss current notification.</small>';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-notify-duration">Duration (ms) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" id="' + prefix + '-notify-duration" value="3000" placeholder="3000">';
+    h += '<small>0 = persistent (tap to dismiss). Supports bindings.</small>';
+    h += '</div>';
+    h += '<div class="grid-2col">';
+    h += '<div class="form-group">';
+    h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<div class="bindable-color" id="' + prefix + '-notify-text-color-wrap"><div class="bc-swatch"></div>';
+    h += '<input type="text" id="' + prefix + '-notify-text-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#ffffff or [binding]"></div>';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<div class="bindable-color" id="' + prefix + '-notify-bg-color-wrap"><div class="bc-swatch"></div>';
+    h += '<input type="text" id="' + prefix + '-notify-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#333333 or [binding]"></div>';
+    h += '</div>';
+    h += '</div>';
+    h += '<div class="grid-2col">';
+    h += '<div class="form-group">';
+    h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Border Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<div class="bindable-color" id="' + prefix + '-notify-border-color-wrap"><div class="bc-swatch"></div>';
+    h += '<input type="text" id="' + prefix + '-notify-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="Empty = no border"></div>';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-notify-opacity">Opacity (%)</label>';
+    h += '<input type="number" id="' + prefix + '-notify-opacity" min="0" max="100" placeholder="85">';
+    h += '</div>';
+    h += '</div>';
+    h += '<div class="grid-2col">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-notify-font-size">Font Size</label>';
+    h += '<input type="number" id="' + prefix + '-notify-font-size" min="0" max="48" placeholder="0 = auto">';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-notify-location">Location</label>';
+    h += '<select id="' + prefix + '-notify-location">';
+    h += '<option value="bottom" selected>Bottom</option>';
+    h += '<option value="center">Center</option>';
+    h += '<option value="top">Top</option>';
+    h += '</select>';
+    h += '</div>';
+    h += '</div>';
+    h += '</div>';
+    // System command
+    h += '<div id="' + prefix + '-system-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label for="' + prefix + '-system-command">Command</label>';
+    h += '<select id="' + prefix + '-system-command">';
+    h += '<option value="reboot">Reboot Device</option>';
+    h += '<option value="wifi_reconnect">Reconnect WiFi</option>';
+    h += '<option value="screensaver">Enable Screensaver</option>';
+    h += '</select>';
+    h += '</div></div>';
     return h;
 }
 
@@ -141,14 +219,31 @@ function actionEditorTypeChanged(prefix) {
     if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
     if (soundGrp) soundGrp.style.display = (type === 'sound') ? '' : 'none';
     if (volGrp) volGrp.style.display = (type === 'volume') ? '' : 'none';
+    var brightGrp = document.getElementById(prefix + '-brightness-group');
+    if (brightGrp) brightGrp.style.display = (type === 'brightness') ? '' : 'none';
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
+    var notifyGrp = document.getElementById(prefix + '-notify-group');
+    if (notifyGrp) notifyGrp.style.display = (type === 'notify') ? '' : 'none';
+    var systemGrp = document.getElementById(prefix + '-system-group');
+    if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
+    if (type === 'notify') actionEditorInitNotifyBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
     // Show/hide volume value field depending on mode
     if (type === 'volume') {
         var modeEl = document.getElementById(prefix + '-volume-mode');
         var valGrp = document.getElementById(prefix + '-volume-value-group');
         if (modeEl && valGrp) valGrp.style.display = (modeEl.value === 'set') ? '' : 'none';
+    }
+    // Show/hide brightness value field and step hint depending on mode
+    if (type === 'brightness') {
+        var bModeEl = document.getElementById(prefix + '-brightness-mode');
+        var bValGrp = document.getElementById(prefix + '-brightness-value-group');
+        var bStepHint = document.getElementById(prefix + '-brightness-step-hint');
+        if (bModeEl && bValGrp) {
+            bValGrp.style.display = '';
+            if (bStepHint) bStepHint.style.display = (bModeEl.value !== 'set') ? '' : 'none';
+        }
     }
 }
 
@@ -161,6 +256,25 @@ function actionEditorTimerChanged(prefix) {
     var cmd = parts[1] || '';
     var adjustGrp = document.getElementById(prefix + '-timer-adjust-group');
     if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
+}
+
+// Initialize bindable-color pickers and binding font toggles for notify fields.
+// Idempotent — safe to call on every type-change.
+function actionEditorInitNotifyBindings(prefix) {
+    // Init color pickers
+    ['-notify-text-color-wrap', '-notify-bg-color-wrap', '-notify-border-color-wrap'].forEach(function(suffix) {
+        var wrap = document.getElementById(prefix + suffix);
+        if (wrap) padInitBindableColor(wrap);
+    });
+    // Wire monospace toggle on binding-capable text inputs
+    ['-notify-text', '-notify-duration'].forEach(function(suffix) {
+        var el = document.getElementById(prefix + suffix);
+        if (el && !el.dataset.bcBind) {
+            el.dataset.bcBind = '1';
+            el.oninput = function() { padUpdateMixedBindingFont(el); };
+            padUpdateMixedBindingFont(el);
+        }
+    });
 }
 
 // Load an action object { type, target, topic, payload, sequence } into the form.
@@ -195,6 +309,10 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.volume_mode || 'set';
     el = document.getElementById(prefix + '-volume-value');
     if (el) el.value = (action.volume_value !== undefined && action.volume_value > 0) ? action.volume_value : '';
+    el = document.getElementById(prefix + '-brightness-mode');
+    if (el) el.value = action.brightness_mode || 'set';
+    el = document.getElementById(prefix + '-brightness-value');
+    if (el) el.value = (action.brightness_value !== undefined && action.brightness_value > 0) ? action.brightness_value : '';
     // Timer: parse DSL string "N:command[:arg]" into structured fields
     if (action.timer_command) {
         var tc = action.timer_command;
@@ -215,6 +333,23 @@ function actionEditorLoad(prefix, action) {
         el = document.getElementById(prefix + '-timer-action');
         if (el) el.value = '1:toggle';
     }
+    // Notify fields
+    el = document.getElementById(prefix + '-notify-text');
+    if (el) { el.value = action.notify_text || ''; padUpdateMixedBindingFont(el); }
+    el = document.getElementById(prefix + '-notify-duration');
+    if (el) { el.value = action.notify_duration_ms || '3000'; padUpdateMixedBindingFont(el); }
+    padSetBindableColor(prefix + '-notify-text-color', action.notify_text_color || '', '#ffffff');
+    padSetBindableColor(prefix + '-notify-bg-color', action.notify_bg_color || '', '#333333');
+    padSetBindableColor(prefix + '-notify-border-color', action.notify_border_color || '', '');
+    el = document.getElementById(prefix + '-notify-opacity');
+    if (el) el.value = (action.notify_opacity > 0) ? action.notify_opacity : '';
+    el = document.getElementById(prefix + '-notify-font-size');
+    if (el) el.value = (action.notify_font_size > 0) ? action.notify_font_size : '';
+    el = document.getElementById(prefix + '-notify-location');
+    if (el) el.value = action.notify_location || 'bottom';
+    // System fields
+    el = document.getElementById(prefix + '-system-command');
+    if (el) el.value = action.system_command || 'reboot';
     actionEditorTypeChanged(prefix);
 }
 
@@ -259,6 +394,12 @@ function actionEditorBuild(prefix) {
             if (vv && vv.value !== '') act.volume_value = parseInt(vv.value, 10);
         }
     }
+    if (type === 'brightness') {
+        var bm = document.getElementById(prefix + '-brightness-mode');
+        if (bm) act.brightness_mode = bm.value;
+        var bv = document.getElementById(prefix + '-brightness-value');
+        if (bv && bv.value !== '') act.brightness_value = parseInt(bv.value, 10);
+    }
     if (type === 'timer') {
         var sel = document.getElementById(prefix + '-timer-action');
         if (sel) {
@@ -272,6 +413,28 @@ function actionEditorBuild(prefix) {
             }
             act.timer_command = val;
         }
+    }
+    if (type === 'notify') {
+        var nt = document.getElementById(prefix + '-notify-text');
+        if (nt) act.notify_text = (nt.value || '').trim();
+        var nd = document.getElementById(prefix + '-notify-duration');
+        if (nd && nd.value !== '') act.notify_duration_ms = (nd.value || '').trim();
+        var ntc = padGetBindableColor(prefix + '-notify-text-color');
+        if (ntc) act.notify_text_color = ntc;
+        var nbc = padGetBindableColor(prefix + '-notify-bg-color');
+        if (nbc) act.notify_bg_color = nbc;
+        var nbrc = padGetBindableColor(prefix + '-notify-border-color');
+        if (nbrc) act.notify_border_color = nbrc;
+        var nop = document.getElementById(prefix + '-notify-opacity');
+        if (nop && nop.value !== '') act.notify_opacity = parseInt(nop.value, 10);
+        var nfs = document.getElementById(prefix + '-notify-font-size');
+        if (nfs && nfs.value !== '') act.notify_font_size = parseInt(nfs.value, 10);
+        var nloc = document.getElementById(prefix + '-notify-location');
+        if (nloc) act.notify_location = nloc.value;
+    }
+    if (type === 'system') {
+        var sc = document.getElementById(prefix + '-system-command');
+        if (sc) act.system_command = sc.value;
     }
     return act;
 }

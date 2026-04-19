@@ -39,19 +39,71 @@ static bool has_audio_action(const ButtonAction* acts, uint8_t count) {
 // Event Handlers
 // ============================================================================
 
-// Tap flash: show overlay briefly, then hide after timeout
+// Tap flash: show overlay briefly, then hide after timeout.
+// For rocker widgets, the overlay is resized to cover only the tapped zone;
+// on timeout we restore full size so the next flash starts clean.
+struct TapFlashCtx {
+    lv_obj_t* overlay;
+    lv_coord_t orig_x;
+    lv_coord_t orig_y;
+    lv_coord_t orig_w;
+    lv_coord_t orig_h;
+};
+
 void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
-    lv_obj_t* overlay = (lv_obj_t*)lv_timer_get_user_data(timer);
-    if (overlay) {
-        lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    auto* ctx = (TapFlashCtx*)lv_timer_get_user_data(timer);
+    if (ctx && ctx->overlay) {
+        lv_obj_add_flag(ctx->overlay, LV_OBJ_FLAG_HIDDEN);
+        // Restore original size/position
+        lv_obj_set_pos(ctx->overlay, ctx->orig_x, ctx->orig_y);
+        lv_obj_set_size(ctx->overlay, ctx->orig_w, ctx->orig_h);
     }
+    delete ctx;
     lv_timer_delete(timer);
 }
 
-static void do_tap_flash(ButtonTile* tile) {
+// zone: 0 = full button, 1 = zone A (top/left), 2 = zone B (bottom/right)
+// horizontal: only meaningful when zone != 0
+static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = false) {
     if (!tile->tap_overlay) return;
-    lv_obj_remove_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
-    lv_timer_create(PadScreen::tapFlashTimerCb, TAP_FLASH_DURATION_MS, tile->tap_overlay);
+
+    lv_obj_t* ov = tile->tap_overlay;
+
+    // Save original geometry
+    auto* ctx = new TapFlashCtx();
+    ctx->overlay = ov;
+    ctx->orig_x = lv_obj_get_x(ov);
+    ctx->orig_y = lv_obj_get_y(ov);
+    ctx->orig_w = lv_obj_get_width(ov);
+    ctx->orig_h = lv_obj_get_height(ov);
+
+    // Resize to cover only the tapped zone for rocker
+    if (zone == 1) {
+        // Zone A: top half (vertical) or left half (horizontal)
+        if (horizontal) {
+            lv_obj_set_size(ov, ctx->orig_w / 2, ctx->orig_h);
+        } else {
+            lv_obj_set_size(ov, ctx->orig_w, ctx->orig_h / 2);
+        }
+    } else if (zone == 2) {
+        // Zone B: bottom half (vertical) or right half (horizontal)
+        if (horizontal) {
+            lv_obj_set_pos(ov, ctx->orig_x + ctx->orig_w / 2, ctx->orig_y);
+            lv_obj_set_size(ov, ctx->orig_w - ctx->orig_w / 2, ctx->orig_h);
+        } else {
+            lv_obj_set_pos(ov, ctx->orig_x, ctx->orig_y + ctx->orig_h / 2);
+            lv_obj_set_size(ov, ctx->orig_w, ctx->orig_h - ctx->orig_h / 2);
+        }
+    }
+
+    lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
+    lv_timer_t* t = lv_timer_create(PadScreen::tapFlashTimerCb, TAP_FLASH_DURATION_MS, ctx);
+    if (!t) {
+        lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(ov, ctx->orig_x, ctx->orig_y);
+        lv_obj_set_size(ov, ctx->orig_w, ctx->orig_h);
+        delete ctx;
+    }
 }
 
 
@@ -88,18 +140,61 @@ void PadScreen::onTap(lv_event_t* e) {
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
+    // Rocker widget: select zone-based action set from tap coordinates
+    const ButtonAction* src_actions;
+    uint8_t src_count;
+    const char* event_label = "Tap";
+    uint8_t flash_zone = 0;   // 0=full, 1=zone A (top/left), 2=zone B (bottom/right)
+    bool rocker_horizontal = false;
+    bool is_zone_b = false;
+
+    if (tile->widget_type && strcmp(tile->widget_type->name, "rocker") == 0) {
+        // Determine which zone was tapped (primary vs secondary)
+        lv_point_t point;
+        lv_indev_get_point(lv_indev_active(), &point);
+        lv_area_t area;
+        lv_obj_get_coords(tile->obj, &area);
+
+        // Read axis from widget config
+        rocker_horizontal = tile->widget_cfg.data[0]; // RockerConfig.horizontal is the first byte
+
+        if (rocker_horizontal) {
+            int16_t mid_x = (area.x1 + area.x2) / 2;
+            is_zone_b = (point.x > mid_x);
+        } else {
+            int16_t mid_y = (area.y1 + area.y2) / 2;
+            is_zone_b = (point.y > mid_y);
+        }
+
+        if (is_zone_b) {
+            src_actions = tile->lp_actions;
+            src_count = tile->lp_action_count;
+            event_label = rocker_horizontal ? "RockerR" : "RockerD";
+            flash_zone = 2;
+        } else {
+            src_actions = tile->actions;
+            src_count = tile->action_count;
+            event_label = rocker_horizontal ? "RockerL" : "RockerU";
+            flash_zone = 1;
+        }
+    } else {
+        src_actions = tile->actions;
+        src_count = tile->action_count;
+    }
+
     // Copy actions to local storage before dispatch — a screen nav action
     // may destroy this tile's owning PadScreen (LRU eviction).
-    const uint8_t count = tile->action_count;
+    const uint8_t count = src_count;
     ButtonAction local[MAX_BUTTON_ACTIONS];
-    memcpy(local, tile->actions, count * sizeof(ButtonAction));
+    memcpy(local, src_actions, count * sizeof(ButtonAction));
 
     // Visual and audio cues only when at least one action is configured
     if (has_any_action(local, count)) {
-        do_tap_flash(tile);
+        do_tap_flash(tile, flash_zone, rocker_horizontal);
 #if HAS_AUDIO
         if (!has_audio_action(local, count)) {
-            const char* pattern = device_config.tap_beep;
+            // Rocker zone B uses the long-press beep pattern
+            const char* pattern = is_zone_b ? device_config.lp_beep : device_config.tap_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) {
                 audio_beep(pattern, 0);
             }
@@ -108,7 +203,7 @@ void PadScreen::onTap(lv_event_t* e) {
     }
 
     for (uint8_t i = 0; i < count; i++) {
-        action_dispatch(local[i], "Tap");
+        action_dispatch(local[i], event_label);
     }
 
 #if HAS_MQTT
@@ -119,6 +214,9 @@ void PadScreen::onTap(lv_event_t* e) {
 void PadScreen::onLongPress(lv_event_t* e) {
     ButtonTile* tile = (ButtonTile*)lv_event_get_user_data(e);
     if (!tile || !tile->obj) return;
+
+    // Rocker widget uses lp_actions for the second zone — suppress long-press
+    if (tile->widget_type && strcmp(tile->widget_type->name, "rocker") == 0) return;
 
     // Suppress long-press that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;

@@ -4,28 +4,24 @@
 
 #include "display_manager.h"
 #include "log_manager.h"
+#include "message_bubble.h"
 
 #if HAS_MQTT
 #include "mqtt_manager.h"
+#include "binding_template.h"
 #endif
 #if HAS_BLE_HID
 #include "ble_hid.h"
 #endif
 #if HAS_AUDIO
 #include "audio.h"
-#include "config_manager.h"
-#include "web_portal_state.h"
 #endif
 
 #include "timer_engine.h"
+#include "wifi_manager.h"
+#include "screen_saver_manager.h"
 
 #define TAG "Action"
-
-#if HAS_AUDIO
-// Deferred NVS volume save — set in LVGL task, processed in main loop.
-// Avoids flash I/O from PSRAM-stack tasks (crashes on ESP32-P4).
-static volatile bool g_volume_save_pending = false;
-#endif
 
 void action_dispatch(const ButtonAction& act, const char* label) {
     if (!act.type[0]) return;
@@ -115,11 +111,27 @@ void action_dispatch(const ButtonAction& act, const char* label) {
             audio_set_volume(v);
             LOGI(TAG, "%s volume set -> %u%%", label, v);
         }
-        // Defer NVS persist to main loop (flash I/O not safe from LVGL task)
-        g_volume_save_pending = true;
 #else
         LOGW(TAG, "%s volume: not compiled", label);
 #endif
+    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
+        uint8_t step = act.brightness_value > 0 ? act.brightness_value : 10;
+        if (strcmp(act.brightness_mode, "up") == 0) {
+            uint8_t v = display_manager_get_backlight_brightness();
+            v = (v + step > 100) ? 100 : v + step;
+            display_manager_set_backlight_brightness(v);
+            LOGI(TAG, "%s brightness up -> %u%%", label, v);
+        } else if (strcmp(act.brightness_mode, "down") == 0) {
+            uint8_t v = display_manager_get_backlight_brightness();
+            v = (v < step) ? 0 : v - step;
+            display_manager_set_backlight_brightness(v);
+            LOGI(TAG, "%s brightness down -> %u%%", label, v);
+        } else {
+            uint8_t v = act.brightness_value;
+            if (v > 100) v = 100;
+            display_manager_set_backlight_brightness(v);
+            LOGI(TAG, "%s brightness set -> %u%%", label, v);
+        }
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
         // Payload format: "N:command" or "N:command:arg"
         // e.g. "1:toggle", "2:start", "1:adjust:30"
@@ -152,25 +164,77 @@ void action_dispatch(const ButtonAction& act, const char* label) {
         } else {
             LOGW(TAG, "%s timer: bad payload '%s'", label, p ? p : "(null)");
         }
+    } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
+        // Resolve all bindable fields before building params struct
+        MessageBubbleParams params = {};
+
+        // Resolve a bindable string field: binding → resolve, plain → copy, empty → default.
+        auto resolve_field = [](const char* field, const char* def, char* out, size_t len) {
+#if HAS_MQTT
+            if (field[0] && binding_template_has_bindings(field)) {
+                binding_template_resolve(field, out, len);
+            } else
+#endif
+            {
+                strlcpy(out, field[0] ? field : def, len);
+            }
+        };
+
+        resolve_field(act.notify_text, "", params.text, sizeof(params.text));
+
+        if (!params.text[0]) {
+            message_bubble_dismiss();
+            LOGI(TAG, "%s notify: dismiss", label);
+        } else {
+            // Duration
+            char buf[16];
+            resolve_field(act.notify_duration_ms, "3000", buf, sizeof(buf));
+            params.duration_ms = (uint16_t)atoi(buf);
+
+            // Colors
+            char cbuf[CONFIG_BINDABLE_SHORT_LEN];
+            resolve_field(act.notify_text_color, "#ffffff", cbuf, sizeof(cbuf));
+            if (!parse_hex_color(cbuf, &params.text_color)) params.text_color = 0xFFFFFF;
+
+            resolve_field(act.notify_bg_color, "#333333", cbuf, sizeof(cbuf));
+            if (!parse_hex_color(cbuf, &params.bg_color)) params.bg_color = 0x333333;
+
+            if (act.notify_border_color[0]) {
+                resolve_field(act.notify_border_color, "", cbuf, sizeof(cbuf));
+                params.has_border = parse_hex_color(cbuf, &params.border_color);
+            }
+
+            params.opacity = act.notify_opacity;
+            params.font_size = act.notify_font_size;
+            params.location = notify_location_from_str(act.notify_location);
+
+            message_bubble_show(&params);
+            LOGI(TAG, "%s notify: '%s' dur=%u loc=%s", label, params.text,
+                 params.duration_ms, act.notify_location[0] ? act.notify_location : "bottom");
+        }
+    } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
+        if (strcmp(act.system_command, "reboot") == 0) {
+            LOGI(TAG, "%s system: reboot", label);
+            delay(200);
+            ESP.restart();
+        } else if (strcmp(act.system_command, "wifi_reconnect") == 0) {
+            LOGI(TAG, "%s system: wifi_reconnect", label);
+            wifi_manager_request_reconnect();
+        } else if (strcmp(act.system_command, "screensaver") == 0) {
+            LOGI(TAG, "%s system: screensaver", label);
+            screen_saver_manager_sleep_now();
+        } else {
+            LOGW(TAG, "%s system: unknown command '%s'", label, act.system_command);
+        }
     } else {
         LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
     }
 }
 
 // ---------------------------------------------------------------------------
-// Deferred operations — called from main loop() (internal-RAM stack)
+// Called from main loop() — placeholder for future deferred operations.
 // ---------------------------------------------------------------------------
 void action_dispatch_loop() {
-#if HAS_AUDIO
-    if (g_volume_save_pending) {
-        g_volume_save_pending = false;
-        DeviceConfig *cfg = web_portal_get_current_config();
-        if (cfg) {
-            cfg->audio_volume = audio_get_volume();
-            config_manager_save(cfg);
-        }
-    }
-#endif
 }
 
 #endif // HAS_DISPLAY

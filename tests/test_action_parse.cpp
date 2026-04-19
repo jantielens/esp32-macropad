@@ -228,6 +228,36 @@ TEST(volume_action_round_trip) {
 }
 
 // ============================================================================
+// Brightness action
+// ============================================================================
+
+TEST(brightness_action_parse) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"brightness\",\"brightness_mode\":\"set\",\"brightness_value\":75}");
+    ASSERT_STR(act.type, "brightness");
+    ASSERT_STR(act.brightness_mode, "set");
+    ASSERT_EQ(act.brightness_value, 75);
+}
+
+TEST(brightness_action_round_trip) {
+    ButtonAction act = round_trip(
+        "{\"type\":\"brightness\",\"brightness_mode\":\"up\",\"brightness_value\":20}");
+    ASSERT_STR(act.type, "brightness");
+    ASSERT_STR(act.brightness_mode, "up");
+    ASSERT_EQ(act.brightness_value, 20);
+}
+
+TEST(brightness_zero_value_not_serialized) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"brightness\",\"brightness_mode\":\"down\",\"brightness_value\":0}");
+    StaticJsonDocument<256> doc;
+    JsonObject obj = doc.to<JsonObject>();
+    action_to_json(act, obj);
+    ASSERT_TRUE(!obj.containsKey("brightness_value"));
+    ASSERT_TRUE(obj.containsKey("brightness_mode"));
+}
+
+// ============================================================================
 // Timer action
 // ============================================================================
 
@@ -320,7 +350,12 @@ TEST(all_fields_populated) {
         "{\"type\":\"mqtt\",\"target\":\"pad_1\",\"topic\":\"t\",\"payload\":\"p\","
         "\"sequence\":\"Ctrl+A\",\"beep_pattern\":\"500:100\",\"beep_volume\":42,"
         "\"volume_mode\":\"set\",\"volume_value\":55,"
-        "\"sound_file\":\"alert\",\"sound_volume\":90}";
+        "\"brightness_mode\":\"up\",\"brightness_value\":15,"
+        "\"sound_file\":\"alert\",\"sound_volume\":90,"
+        "\"notify_text\":\"hello\",\"notify_duration_ms\":\"5000\","
+        "\"notify_text_color\":\"#ff0000\",\"notify_bg_color\":\"#00ff00\","
+        "\"notify_border_color\":\"#0000ff\",\"notify_opacity\":90,"
+        "\"notify_font_size\":24,\"notify_location\":\"top\"}";
     ButtonAction act = round_trip(json);
     ASSERT_STR(act.type, "mqtt");
     ASSERT_STR(act.screen_id, "pad_1");
@@ -331,11 +366,110 @@ TEST(all_fields_populated) {
     ASSERT_EQ(act.beep_volume, 42);
     ASSERT_STR(act.volume_mode, "set");
     ASSERT_EQ(act.volume_value, 55);
+    ASSERT_STR(act.brightness_mode, "up");
+    ASSERT_EQ(act.brightness_value, 15);
     ASSERT_STR(act.sound_file, "alert");
     ASSERT_EQ(act.sound_volume, 90);
+    ASSERT_STR(act.notify_text, "hello");
+    ASSERT_STR(act.notify_duration_ms, "5000");
+    ASSERT_STR(act.notify_text_color, "#ff0000");
+    ASSERT_STR(act.notify_bg_color, "#00ff00");
+    ASSERT_STR(act.notify_border_color, "#0000ff");
+    ASSERT_EQ(act.notify_opacity, 90);
+    ASSERT_EQ(act.notify_font_size, 24);
+    ASSERT_STR(act.notify_location, "top");
 }
 
 // ============================================================================
+// Notify action
+// ============================================================================
+
+TEST(notify_action_parse) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"notify\",\"notify_text\":\"Power high!\","
+        "\"notify_duration_ms\":\"5000\",\"notify_text_color\":\"#ffa0a0\","
+        "\"notify_bg_color\":\"#2e1a1a\",\"notify_border_color\":\"#5a2a2a\","
+        "\"notify_opacity\":90,\"notify_font_size\":18,\"notify_location\":\"top\"}");
+    ASSERT_STR(act.type, "notify");
+    ASSERT_STR(act.notify_text, "Power high!");
+    ASSERT_STR(act.notify_duration_ms, "5000");
+    ASSERT_STR(act.notify_text_color, "#ffa0a0");
+    ASSERT_STR(act.notify_bg_color, "#2e1a1a");
+    ASSERT_STR(act.notify_border_color, "#5a2a2a");
+    ASSERT_EQ(act.notify_opacity, 90);
+    ASSERT_EQ(act.notify_font_size, 18);
+    ASSERT_STR(act.notify_location, "top");
+}
+
+TEST(notify_action_round_trip) {
+    ButtonAction act = round_trip(
+        "{\"type\":\"notify\",\"notify_text\":\"Test msg\","
+        "\"notify_duration_ms\":\"0\",\"notify_bg_color\":\"#333333\","
+        "\"notify_location\":\"center\"}");
+    ASSERT_STR(act.type, "notify");
+    ASSERT_STR(act.notify_text, "Test msg");
+    ASSERT_STR(act.notify_duration_ms, "0");
+    ASSERT_STR(act.notify_bg_color, "#333333");
+    ASSERT_STR(act.notify_location, "center");
+}
+
+TEST(notify_zero_opacity_not_serialized) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"notify\",\"notify_text\":\"hi\",\"notify_opacity\":0}");
+    StaticJsonDocument<512> doc;
+    JsonObject obj = doc.to<JsonObject>();
+    action_to_json(act, obj);
+    ASSERT_TRUE(obj.containsKey("notify_text"));
+    ASSERT_TRUE(!obj.containsKey("notify_opacity"));
+}
+
+TEST(notify_minimal_only_text) {
+    ButtonAction act = round_trip("{\"type\":\"notify\",\"notify_text\":\"hello\"}");
+    ASSERT_STR(act.type, "notify");
+    ASSERT_STR(act.notify_text, "hello");
+    ASSERT_STR(act.notify_duration_ms, "");
+    ASSERT_STR(act.notify_text_color, "");
+    ASSERT_STR(act.notify_bg_color, "");
+    ASSERT_EQ(act.notify_opacity, 0);
+    ASSERT_EQ(act.notify_font_size, 0);
+    ASSERT_STR(act.notify_location, "");
+}
+
+// ============================================================================
+
+// ============================================================================
+// System action
+// ============================================================================
+
+TEST(system_action_parse) {
+    ButtonAction act = parse_from_string("{\"type\":\"system\",\"system_command\":\"reboot\"}");
+    ASSERT_STR(act.type, "system");
+    ASSERT_STR(act.system_command, "reboot");
+}
+
+TEST(system_action_round_trip) {
+    ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"wifi_reconnect\"}");
+    ASSERT_STR(act.type, "system");
+    ASSERT_STR(act.system_command, "wifi_reconnect");
+}
+
+TEST(system_command_not_serialized_when_empty) {
+    ButtonAction act;
+    memset(&act, 0, sizeof(act));
+    strlcpy(act.type, "system", CONFIG_ACTION_TYPE_MAX_LEN);
+    // system_command is empty
+    StaticJsonDocument<256> doc;
+    JsonObject obj = doc.to<JsonObject>();
+    action_to_json(act, obj);
+    ASSERT_TRUE(obj.containsKey("type"));
+    ASSERT_TRUE(!obj.containsKey("system_command"));
+}
+
+TEST(system_action_screensaver) {
+    ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"screensaver\"}");
+    ASSERT_STR(act.type, "system");
+    ASSERT_STR(act.system_command, "screensaver");
+}
 
 int main() {
     printf("=== ButtonAction Parse/Serialize Tests ===\n\n");
@@ -371,6 +505,11 @@ int main() {
     RUN(volume_action_parse);
     RUN(volume_action_round_trip);
 
+    printf("\n--- Brightness action ---\n");
+    RUN(brightness_action_parse);
+    RUN(brightness_action_round_trip);
+    RUN(brightness_zero_value_not_serialized);
+
     printf("\n--- Timer action ---\n");
     RUN(timer_action_parse);
     RUN(timer_action_round_trip);
@@ -388,6 +527,18 @@ int main() {
     RUN(missing_optional_fields);
     RUN(compact_serialization);
     RUN(all_fields_populated);
+
+    printf("\n--- Notify action ---\n");
+    RUN(notify_action_parse);
+    RUN(notify_action_round_trip);
+    RUN(notify_zero_opacity_not_serialized);
+    RUN(notify_minimal_only_text);
+
+    printf("\n--- System action ---\n");
+    RUN(system_action_parse);
+    RUN(system_action_round_trip);
+    RUN(system_command_not_serialized_when_empty);
+    RUN(system_action_screensaver);
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

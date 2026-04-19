@@ -20,6 +20,8 @@ const padState = {
     buttonDefaults: {},  // Device-level button defaults (loaded from /api/button-defaults)
     templatePad: -1,     // Template pad index (-1 = none)
     templateButtons: [], // Buttons loaded from template pad (for ghost rendering)
+    placingBlock: null,  // Block being placed (from catalog), or null
+    dragSource: null,    // {col, row} of button being dragged, or null
 };
 
 let padDirty = false;
@@ -30,6 +32,148 @@ function padMarkDirty() {
 
 function padClearDirty() {
     padDirty = false;
+}
+
+// ===== BUILDING BLOCKS =====
+
+let padBlockCatalog = [];
+
+async function padLoadBlockCatalog() {
+    try {
+        const resp = await fetch('/api/pad/blocks');
+        if (resp.ok) padBlockCatalog = await resp.json();
+        else padBlockCatalog = [];
+    } catch (e) { padBlockCatalog = []; }
+    padRenderBlockMenuItems();
+}
+
+function padBuildOccupancySet() {
+    const occupied = new Set();
+    for (const b of padState.buttons) {
+        const cs = b.col_span || 1, rs = b.row_span || 1;
+        for (let dc = 0; dc < cs; dc++)
+            for (let dr = 0; dr < rs; dr++)
+                occupied.add((b.col + dc) + ',' + (b.row + dr));
+    }
+    return occupied;
+}
+
+function padCountFreeCells() {
+    const occupied = padBuildOccupancySet();
+    let free = 0;
+    for (let r = 0; r < padState.rows; r++)
+        for (let c = 0; c < padState.cols; c++)
+            if (!occupied.has(c + ',' + r)) free++;
+    return free;
+}
+
+function padCanPlaceBlock(block, anchorCol, anchorRow, occupied) {
+    if (!occupied) occupied = padBuildOccupancySet();
+    for (const btn of block.buttons) {
+        const c = anchorCol + btn.col_offset;
+        const r = anchorRow + btn.row_offset;
+        const cs = btn.col_span || 1, rs = btn.row_span || 1;
+        for (let dc = 0; dc < cs; dc++) {
+            for (let dr = 0; dr < rs; dr++) {
+                if (c + dc >= padState.cols || r + dr >= padState.rows) return false;
+                if (occupied.has((c + dc) + ',' + (r + dr))) return false;
+            }
+        }
+    }
+    return true;
+}
+
+function padBlockFootprintCells(block, anchorCol, anchorRow) {
+    const cells = new Set();
+    for (const btn of block.buttons) {
+        const c = anchorCol + btn.col_offset;
+        const r = anchorRow + btn.row_offset;
+        const cs = btn.col_span || 1, rs = btn.row_span || 1;
+        for (let dc = 0; dc < cs; dc++)
+            for (let dr = 0; dr < rs; dr++)
+                cells.add((c + dc) + ',' + (r + dr));
+    }
+    return cells;
+}
+
+function padRenderBlockMenuItems() {
+    const container = document.getElementById('pad-block-items');
+    const separator = document.getElementById('pad-block-separator');
+    if (!container) return;
+    container.innerHTML = '';
+    if (padBlockCatalog.length === 0) {
+        if (separator) separator.style.display = 'none';
+        return;
+    }
+    if (separator) separator.style.display = '';
+    for (const block of padBlockCatalog) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = block.icon + ' ' + block.name;
+        btn.addEventListener('click', () => padTryInsertBlock(block));
+        container.appendChild(btn);
+    }
+}
+
+function padTryInsertBlock(block) {
+    document.getElementById('pad-more-menu').style.display = 'none';
+
+    if (padState.cols < block.min_cols || padState.rows < block.min_rows) {
+        showMessage("Can't insert " + block.name + " — needs " +
+            block.min_cols + "×" + block.min_rows + " grid, pad is " +
+            padState.cols + "×" + padState.rows, 'error');
+        return;
+    }
+    const free = padCountFreeCells();
+    if (free < block.min_free) {
+        showMessage("Can't insert " + block.name + " — needs " +
+            block.min_free + " free cells, pad has " + free, 'error');
+        return;
+    }
+    if (padState.buttons.length + block.buttons.length > 64) {
+        showMessage("Can't insert " + block.name + " — would exceed 64 button limit", 'error');
+        return;
+    }
+    padEnterPlacementMode(block);
+}
+
+function padEnterPlacementMode(block) {
+    padState.placingBlock = block;
+    const banner = document.getElementById('pad-block-banner');
+    const bannerText = document.getElementById('pad-block-banner-text');
+    if (banner) banner.style.display = 'flex';
+    if (bannerText) bannerText.textContent = 'Click a cell to place ' + block.icon + ' ' + block.name + ' — Esc to cancel';
+    padRenderGrid();
+}
+
+function padExitPlacementMode() {
+    padState.placingBlock = null;
+    const banner = document.getElementById('pad-block-banner');
+    if (banner) banner.style.display = 'none';
+    padRenderGrid();
+}
+
+function padInsertBlock(block, anchorCol, anchorRow) {
+    for (const btn of block.buttons) {
+        const newBtn = JSON.parse(JSON.stringify(btn));
+        newBtn.col = anchorCol + btn.col_offset;
+        newBtn.row = anchorRow + btn.row_offset;
+        delete newBtn.col_offset;
+        delete newBtn.row_offset;
+        padState.buttons.push(newBtn);
+    }
+    if (block.bindings) {
+        for (const [name, value] of Object.entries(block.bindings)) {
+            if (!padState.bindings.find(b => b.name === name)) {
+                padState.bindings.push({ name, value });
+            }
+        }
+        padRenderBindings();
+    }
+    padExitPlacementMode();
+    padMarkDirty();
+    padRenderGrid();
+    showMessage('Building block "' + block.name + '" inserted (unsaved)', 'success');
 }
 
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
@@ -463,6 +607,16 @@ function padInit() {
         if (e.target.id === 'pad-edit-overlay') padDialogClose();
     });
 
+    // Block placement cancel + Escape key
+    const blockCancelBtn = document.getElementById('pad-block-cancel-btn');
+    if (blockCancelBtn) blockCancelBtn.addEventListener('click', padExitPlacementMode);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && padState.placingBlock) {
+            padExitPlacementMode();
+            e.stopImmediatePropagation();
+        }
+    });
+
     // Track unsaved changes on name and other inputs
     document.getElementById('pad-name').addEventListener('input', padMarkDirty);
 
@@ -483,11 +637,13 @@ function padInit() {
                 // Show button defaults section
                 var btnDefSec = document.getElementById('btn-defaults-section');
                 if (btnDefSec) btnDefSec.style.display = 'block';
+                padPopulateGridDropdowns();
                 padPopulatePadDropdown();
                 padPopulateScreenDropdown();
                 padFetchSoundList();
                 padLoadButtonDefaultsFromDevice();
                 padLoadPage(0);
+                padLoadBlockCatalog();
                 padRefreshDropdownLabels();
             } else {
                 const noDisp = document.getElementById('pad-no-display-section');
@@ -498,6 +654,29 @@ function padInit() {
         }
     };
     waitForInfo();
+}
+
+function padPopulateGridDropdowns() {
+    const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
+    const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
+    const colSel = document.getElementById('pad-cols');
+    const rowSel = document.getElementById('pad-rows');
+    if (colSel) {
+        colSel.innerHTML = '';
+        for (let i = 1; i <= maxCols; i++) {
+            const o = document.createElement('option');
+            o.value = i; o.textContent = i;
+            colSel.appendChild(o);
+        }
+    }
+    if (rowSel) {
+        rowSel.innerHTML = '';
+        for (let i = 1; i <= maxRows; i++) {
+            const o = document.createElement('option');
+            o.value = i; o.textContent = i;
+            rowSel.appendChild(o);
+        }
+    }
 }
 
 function padPopulatePadDropdown() {
@@ -633,7 +812,7 @@ function padUpdateAddLink(gesture) {
     if (link) link.style.display = (visibleCount >= 3) ? 'none' : '';
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table'];
+const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker'];
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
@@ -641,6 +820,34 @@ function padWidgetTypeChanged() {
         const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
         if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
     });
+
+    // Rocker widget: relabel Tap/LP action groups contextually
+    var isRocker = (wtype === 'rocker');
+    var axis = 'vertical';
+    if (isRocker) {
+        var axSel = document.getElementById('pad-edit-rocker-axis');
+        if (axSel) axis = axSel.value;
+    }
+    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
+        var tapLbl = document.querySelector('label[for="pad-edit-action-' + ai + '-type"]');
+        var lpLbl = document.querySelector('label[for="pad-edit-lp-action-' + ai + '-type"]');
+        if (tapLbl) {
+            if (isRocker) {
+                var zoneA = (axis === 'horizontal') ? 'Left' : 'Up';
+                tapLbl.textContent = ai === 0 ? zoneA + ' Action' : zoneA + ' Action ' + (ai + 1);
+            } else {
+                tapLbl.textContent = ai === 0 ? 'Tap Action' : 'Tap Action ' + (ai + 1);
+            }
+        }
+        if (lpLbl) {
+            if (isRocker) {
+                var zoneB = (axis === 'horizontal') ? 'Right' : 'Down';
+                lpLbl.textContent = ai === 0 ? zoneB + ' Action' : zoneB + ' Action ' + (ai + 1);
+            } else {
+                lpLbl.textContent = ai === 0 ? 'Long-Press Action' : 'Long-Press Action ' + (ai + 1);
+            }
+        }
+    }
 }
 
 async function padLoadPage(page) {
@@ -677,8 +884,10 @@ async function padLoadPage(page) {
 
         const json = await resp.json();
         padState.rawJson = json;
-        padState.cols = json.cols || 3;
-        padState.rows = json.rows || 2;
+        const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
+        const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
+        padState.cols = Math.min(json.cols || 3, maxCols);
+        padState.rows = Math.min(json.rows || 2, maxRows);
 
         document.getElementById('pad-cols').value = padState.cols;
         document.getElementById('pad-rows').value = padState.rows;
@@ -731,6 +940,120 @@ function padIsCellOccupied(col, row) {
         }
     }
     return null;
+}
+
+// ===== BUTTON RESIZE (DRAG HANDLES) =====
+
+function padGetGridGeometry() {
+    const grid = document.getElementById('pad-grid');
+    if (!grid) return null;
+    const rect = grid.getBoundingClientRect();
+    const gap = parseFloat(getComputedStyle(grid).gap) || 4;
+    const cellW = (rect.width - gap * (padState.cols - 1)) / padState.cols;
+    const cellH = (rect.height - gap * (padState.rows - 1)) / padState.rows;
+    return { rect, gap, cellW, cellH };
+}
+
+function padRenderResizeHandles(cell, btn, col, row) {
+    if (padState.placingBlock || padState.dragSource) return;
+    const sides = ['right', 'left', 'down', 'up'];
+    for (const side of sides) {
+        const handle = document.createElement('div');
+        handle.className = 'pad-resize-handle pad-resize-handle-' + side;
+        handle.addEventListener('mousedown', ((s) => (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            padResizeDragStart(col, row, s, e.clientX, e.clientY);
+        })(side));
+        handle.addEventListener('touchstart', ((s) => (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const t = e.touches[0];
+            padResizeDragStart(col, row, s, t.clientX, t.clientY);
+        })(side), { passive: false });
+        handle.draggable = false;
+        cell.appendChild(handle);
+    }
+}
+
+function padResizeDragStart(col, row, side, startX, startY) {
+    const btn = padFindButton(col, row);
+    if (!btn) return;
+    const geo = padGetGridGeometry();
+    if (!geo) return;
+
+    const origCol = btn.col, origRow = btn.row;
+    const origCs = btn.col_span || 1, origRs = btn.row_span || 1;
+    const axis = (side === 'left' || side === 'right') ? 'x' : 'y';
+    const cellSize = axis === 'x' ? geo.cellW + geo.gap : geo.cellH + geo.gap;
+
+    const occupied = padBuildOccupancySet();
+    // Remove this button's own cells from the occupancy set
+    for (let dc = 0; dc < origCs; dc++)
+        for (let dr = 0; dr < origRs; dr++)
+            occupied.delete((origCol + dc) + ',' + (origRow + dr));
+
+    let lastDelta = 0;
+
+    function onMove(clientX, clientY) {
+        const raw = axis === 'x' ? clientX - startX : clientY - startY;
+        const sign = (side === 'right' || side === 'down') ? 1 : -1;
+        // Snap at 20% into the next cell: 0.8 = 1.0 − 0.2, so floor triggers at frac ≥ 0.2
+        const frac = (raw * sign) / cellSize;
+        const delta = frac >= 0 ? Math.floor(frac + 0.8) : Math.ceil(frac - 0.8);
+        if (delta === lastDelta) return;
+        lastDelta = delta;
+
+        // Compute new col, row, col_span, row_span
+        let nc = origCol, nr = origRow, ncs = origCs, nrs = origRs;
+        if (side === 'right')     ncs = origCs + delta;
+        else if (side === 'left') { nc = origCol - delta; ncs = origCs + delta; }
+        else if (side === 'down') nrs = origRs + delta;
+        else if (side === 'up')   { nr = origRow - delta; nrs = origRs + delta; }
+
+        // Clamp to valid range
+        if (ncs < 1) { ncs = 1; nc = origCol + origCs - 1; }
+        if (nrs < 1) { nrs = 1; nr = origRow + origRs - 1; }
+        if (nc < 0) { ncs += nc; nc = 0; }
+        if (nr < 0) { nrs += nr; nr = 0; }
+        if (nc + ncs > padState.cols) ncs = padState.cols - nc;
+        if (nr + nrs > padState.rows) nrs = padState.rows - nr;
+
+        // Check occupancy for all new cells
+        for (let dc = 0; dc < ncs; dc++) {
+            for (let dr = 0; dr < nrs; dr++) {
+                if (occupied.has((nc + dc) + ',' + (nr + dr))) return;
+            }
+        }
+
+        // Apply preview
+        btn.col = nc; btn.row = nr;
+        btn.col_span = ncs; btn.row_span = nrs;
+        if (btn.col_span === 1) delete btn.col_span;
+        if (btn.row_span === 1) delete btn.row_span;
+        padRenderGrid();
+    }
+
+    function onMouseMove(e) { onMove(e.clientX, e.clientY); }
+    function onTouchMove(e) { if (e.touches.length) onMove(e.touches[0].clientX, e.touches[0].clientY); }
+
+    function onEnd() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onEnd);
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onEnd);
+        document.removeEventListener('touchcancel', onEnd);
+        const changed = btn.col !== origCol || btn.row !== origRow ||
+                        (btn.col_span || 1) !== origCs || (btn.row_span || 1) !== origRs;
+        if (changed) padMarkDirty();
+        padRenderGrid();
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+    document.addEventListener('touchcancel', onEnd);
 }
 
 // Find a template button whose origin is at (col, row)
@@ -794,6 +1117,9 @@ function padRenderGrid() {
         }
     }
 
+    // Build full occupancy set for resize handle validation
+    const occupied = padBuildOccupancySet();
+
     // Second pass: render cells
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -803,6 +1129,8 @@ function padRenderGrid() {
             const btn = padFindButton(c, r);
             const cell = document.createElement('div');
             cell.classList.add('pad-cell');
+            cell.dataset.col = c;
+            cell.dataset.row = r;
 
             if (btn) {
                 cell.classList.add('pad-cell-btn');
@@ -838,8 +1166,21 @@ function padRenderGrid() {
                     tbl.title = 'Table Widget';
                     cell.appendChild(tbl);
                 }
+                if (btn.widget_type === 'rocker') {
+                    const rk = document.createElement('div');
+                    rk.className = 'pad-cell-widget-rocker';
+                    rk.title = 'Rocker Widget';
+                    cell.appendChild(rk);
+                }
 
-                cell.addEventListener('click', () => padDialogOpen(c, r));
+                padRenderResizeHandles(cell, btn, c, r);
+
+                if (!padState.placingBlock) {
+                    cell.addEventListener('click', () => padDialogOpen(c, r));
+                    cell.draggable = true;
+                    cell.addEventListener('dragstart', (e) => padDragStart(e, c, r));
+                    cell.addEventListener('dragend', padDragEnd);
+                }
             } else {
                 // Check if a template button occupies this position
                 const tplBtn = padFindTemplateButton(c, r);
@@ -861,12 +1202,158 @@ function padRenderGrid() {
                 } else {
                     cell.classList.add('pad-cell-empty');
                     cell.textContent = '+';
+                    if (!padState.placingBlock) {
+                        cell.addEventListener('dragover', (e) => padDragOver(e, c, r));
+                        cell.addEventListener('dragleave', padDragLeave);
+                        cell.addEventListener('drop', (e) => padDrop(e, c, r));
+                    }
                 }
-                cell.addEventListener('click', () => padDialogOpen(c, r));
+                if (padState.placingBlock) {
+                    cell.addEventListener('click', () => padPlacementClick(c, r));
+                } else {
+                    cell.addEventListener('click', () => padDialogOpen(c, r));
+                }
             }
 
             grid.appendChild(cell);
         }
+    }
+
+    // Placement mode: add hover overlay behavior
+    if (padState.placingBlock) {
+        grid.addEventListener('mouseover', padPlacementHover);
+        grid.addEventListener('mouseleave', () => padPlacementClearGhosts(grid));
+    }
+}
+
+function padPlacementHover(e) {
+    const cell = e.target.closest('.pad-cell');
+    if (!cell || !cell.dataset.col) return;
+    const grid = document.getElementById('pad-grid');
+    padPlacementClearGhosts(grid);
+    const ac = parseInt(cell.dataset.col);
+    const ar = parseInt(cell.dataset.row);
+    const block = padState.placingBlock;
+    if (!block) return;
+    const occupied = padBuildOccupancySet();
+    const valid = padCanPlaceBlock(block, ac, ar, occupied);
+    const footprint = padBlockFootprintCells(block, ac, ar);
+    const allCells = grid.querySelectorAll('.pad-cell');
+    for (const c of allCells) {
+        const key = c.dataset.col + ',' + c.dataset.row;
+        if (footprint.has(key)) {
+            c.classList.add('pad-cell-ghost-block');
+            if (!valid) c.classList.add('invalid');
+        }
+    }
+}
+
+function padPlacementClearGhosts(grid) {
+    const cells = grid.querySelectorAll('.pad-cell-ghost-block');
+    for (const c of cells) {
+        c.classList.remove('pad-cell-ghost-block', 'invalid');
+    }
+}
+
+// ===== DRAG-AND-DROP MOVE =====
+
+function padDragStart(e, col, row) {
+    const btn = padFindButton(col, row);
+    if (!btn) { e.preventDefault(); return; }
+    padState.dragSource = { col: col, row: row };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', col + ',' + row);
+    // rAF so the browser captures the original cell as the drag image before dimming
+    requestAnimationFrame(() => {
+        const cell = e.target.closest('.pad-cell');
+        if (cell) cell.style.opacity = '0.3';
+    });
+}
+
+function padDragEnd(e) {
+    const cell = e.target.closest('.pad-cell');
+    if (cell) cell.style.opacity = '';
+    padState.dragSource = null;
+    const grid = document.getElementById('pad-grid');
+    if (grid) padPlacementClearGhosts(grid);
+}
+
+function padDragOver(e, col, row) {
+    if (!padState.dragSource) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const grid = document.getElementById('pad-grid');
+    padPlacementClearGhosts(grid);
+
+    const srcBtn = padFindButton(padState.dragSource.col, padState.dragSource.row);
+    if (!srcBtn) return;
+
+    const cs = srcBtn.col_span || 1;
+    const rs = srcBtn.row_span || 1;
+    const buttonsWithoutSrc = padState.buttons.filter(b =>
+        !(b.col === padState.dragSource.col && b.row === padState.dragSource.row)
+    );
+    const spanFits = (cs <= 1 && rs <= 1) || padCanSpanFit(col, row, cs, rs, buttonsWithoutSrc);
+    const effCs = spanFits ? cs : 1;
+    const effRs = spanFits ? rs : 1;
+
+    for (let dc = 0; dc < effCs; dc++) {
+        for (let dr = 0; dr < effRs; dr++) {
+            const target = grid.querySelector(
+                '.pad-cell[data-col="' + (col + dc) + '"][data-row="' + (row + dr) + '"]'
+            );
+            if (target) target.classList.add('pad-cell-ghost-block');
+        }
+    }
+}
+
+function padDragLeave(e) {
+    // Only clear when leaving the cell entirely (not entering a child element)
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    const grid = document.getElementById('pad-grid');
+    if (grid) padPlacementClearGhosts(grid);
+}
+
+function padDrop(e, col, row) {
+    e.preventDefault();
+    const grid = document.getElementById('pad-grid');
+    if (grid) padPlacementClearGhosts(grid);
+
+    if (!padState.dragSource) return;
+    const srcCol = padState.dragSource.col;
+    const srcRow = padState.dragSource.row;
+    padState.dragSource = null;
+
+    if (col === srcCol && row === srcRow) return;
+
+    const srcIdx = padState.buttons.findIndex(b => b.col === srcCol && b.row === srcRow);
+    if (srcIdx === -1) return;
+    const btn = padState.buttons.splice(srcIdx, 1)[0];
+
+    btn.col = col;
+    btn.row = row;
+
+    const cs = btn.col_span || 1;
+    const rs = btn.row_span || 1;
+    if (cs > 1 || rs > 1) {
+        if (!padCanSpanFit(col, row, cs, rs, padState.buttons)) {
+            delete btn.col_span;
+            delete btn.row_span;
+        }
+    }
+
+    padState.buttons.push(btn);
+    padMarkDirty();
+    padRenderGrid();
+    showMessage('Button moved', 'success');
+}
+
+function padPlacementClick(col, row) {
+    const block = padState.placingBlock;
+    if (!block) return;
+    if (padCanPlaceBlock(block, col, row)) {
+        padInsertBlock(block, col, row);
     }
 }
 
@@ -1336,6 +1823,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-gauge-arc-width-pct').value = (btn.widget_gauge_arc_width_pct !== undefined) ? btn.widget_gauge_arc_width_pct : 15;
     document.getElementById('pad-edit-gauge-ticks').value = (btn.widget_gauge_ticks !== undefined) ? btn.widget_gauge_ticks : 5;
     document.getElementById('pad-edit-gauge-needle-width').value = (btn.widget_gauge_needle_width !== undefined) ? btn.widget_gauge_needle_width : 2;
+    document.getElementById('pad-edit-gauge-needle-cutoff').value = (btn.widget_gauge_needle_cutoff_pct !== undefined) ? btn.widget_gauge_needle_cutoff_pct : 0;
     document.getElementById('pad-edit-gauge-tick-width').value = (btn.widget_gauge_tick_width !== undefined) ? btn.widget_gauge_tick_width : 1;
     document.getElementById('pad-edit-gauge-marker-value').value = btn.widget_gauge_marker_value || '';
     document.getElementById('pad-edit-gauge-marker-zone-deg').value = (btn.widget_gauge_marker_zone_deg !== undefined) ? btn.widget_gauge_marker_zone_deg : 0;
@@ -1387,6 +1875,11 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-table-data-binding').value = btn.widget_data_binding || '';
     document.getElementById('pad-edit-table-style').value = btn.widget_table_style || '';
     document.getElementById('pad-edit-table-scrollable').value = (btn.widget_table_scrollable === false) ? 'false' : 'true';
+
+    // Rocker widget fields
+    document.getElementById('pad-edit-rocker-axis').value = btn.widget_rocker_axis || 'vertical';
+    document.getElementById('pad-edit-rocker-color').value = btn.widget_rocker_color || '#FFFFFF';
+    document.getElementById('pad-edit-rocker-opacity').value = (btn.widget_rocker_opacity !== undefined) ? btn.widget_rocker_opacity : 80;
 
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
@@ -1555,6 +2048,8 @@ function padDialogOk(keepOpen) {
             btn.widget_gauge_ticks = (isNaN(gTicks) || gTicks < 0) ? 5 : (gTicks > 20) ? 20 : gTicks;
             const gNeedleW = parseInt(document.getElementById('pad-edit-gauge-needle-width').value);
             btn.widget_gauge_needle_width = (isNaN(gNeedleW) || gNeedleW < 0) ? 2 : (gNeedleW > 10) ? 10 : gNeedleW;
+            const gNeedleCut = parseInt(document.getElementById('pad-edit-gauge-needle-cutoff').value);
+            btn.widget_gauge_needle_cutoff_pct = (isNaN(gNeedleCut) || gNeedleCut < 0) ? 0 : (gNeedleCut > 99) ? 99 : gNeedleCut;
             const gTickW = parseInt(document.getElementById('pad-edit-gauge-tick-width').value);
             btn.widget_gauge_tick_width = (isNaN(gTickW) || gTickW < 1) ? 1 : (gTickW > 5) ? 5 : gTickW;
             btn.widget_gauge_marker_value = document.getElementById('pad-edit-gauge-marker-value').value.trim();
@@ -1635,6 +2130,14 @@ function padDialogOk(keepOpen) {
             const tStyle = document.getElementById('pad-edit-table-style').value.trim();
             if (tStyle) btn.widget_table_style = tStyle;
             btn.widget_table_scrollable = document.getElementById('pad-edit-table-scrollable').value === 'true';
+        }
+        if (wtype === 'rocker') {
+            const rAxis = document.getElementById('pad-edit-rocker-axis').value;
+            if (rAxis === 'horizontal') btn.widget_rocker_axis = 'horizontal';
+            const rColor = document.getElementById('pad-edit-rocker-color').value.trim();
+            if (rColor && rColor !== '#FFFFFF') btn.widget_rocker_color = rColor;
+            const rOpa = parseInt(document.getElementById('pad-edit-rocker-opacity').value);
+            if (!isNaN(rOpa) && rOpa !== 80) btn.widget_rocker_opacity = Math.max(0, Math.min(255, rOpa));
         }
     }
 

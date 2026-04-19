@@ -221,6 +221,7 @@ Real-time device health monitoring integrated as a header badge with expandable 
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
+  - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode — green/red ghost overlay shows valid/invalid positions. Blocks check grid dimensions, free cells, and 64-button limit. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
   - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
@@ -418,6 +419,9 @@ Returns comprehensive device information.
   "has_display": true,
   "has_audio": true,
   "has_sound_player": true,
+  "max_pads": 16,
+  "max_grid_cols": 8,
+  "max_grid_rows": 8,
   "display_coord_width": 480,
   "display_coord_height": 480,
   "available_screens": [
@@ -882,7 +886,7 @@ All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth whe
 
 Returns the current boot action configuration.
 
-- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, etc.).
+- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, etc.).
 - Default (no file saved): `{"actions": []}`.
 
 #### `POST /api/boot-actions`
@@ -1061,6 +1065,40 @@ Compute tile dimensions for a given grid layout. Used by the icon picker to rend
   "font_small_h": 16
 }
 ```
+
+
+#### `GET /api/pad/blocks`
+
+Return the building block catalog — pre-configured button groups that can be inserted into a pad. Each block contains positional button definitions (relative offsets), minimum grid requirements, and optional pad-level bindings.
+
+- **Response:**
+```json
+[
+  {
+    "id": "countdown_timer",
+    "name": "Countdown Timer",
+    "desc": "3 rockers (H/M/S) + timer display + start/pause/reset",
+    "icon": "⏱️",
+    "min_cols": 3,
+    "min_rows": 2,
+    "min_free": 6,
+    "buttons": [
+      {
+        "col_offset": 0, "row_offset": 0, "col_span": 1, "row_span": 1,
+        "label_center": "H",
+        "widget_type": "rocker"
+      }
+    ],
+    "bindings": {
+      "timer1": "[timer:1]",
+      "timer2": "[timer:2]",
+      "timer3": "[timer:3]"
+    }
+  }
+]
+```
+
+Each button's `col_offset` / `row_offset` is relative to the placement anchor cell. The editor adds the anchor position to compute absolute grid coordinates.
 
 
 ## Implementation Details

@@ -50,6 +50,9 @@ bool ha_discovery_publish_button_event_config(MqttManager &mqtt);
 // Publish HA select entity discovery for active screen control.
 bool ha_discovery_publish_screen_select_config(MqttManager &mqtt);
 
+// Publish HA notify text entity (message bubble remote trigger).
+bool ha_discovery_publish_notify_text_config(MqttManager &mqtt);
+
 // Publish HA audio entities (siren, volume number, beep buttons).
 bool ha_discovery_publish_audio_entities(MqttManager &mqtt);
 

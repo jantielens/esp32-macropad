@@ -244,3 +244,137 @@ actions:
 - **Volume override vs device volume**: The `volume_level` parameter on `siren.turn_on` is a temporary override (0.0–1.0). The `number.set_value` on the Volume entity changes the persistent device volume for all future playback. Volume changes from HA are immediately reflected in the web portal and vice versa.
 - **Duration**: When specified, the siren automatically stops after the given number of seconds and publishes an OFF state. Without a duration, the siren loops indefinitely until explicitly turned off.
 - **Touch feedback audio cues**: The device also supports configurable beep patterns for button tap and long-press events, configured in the web portal's Home page Audio section (not via HA entities). These use the same beep pattern DSL and respect the HA-controllable device volume. See the [Web Portal Guide](web-portal-guide.md#audio) and [Pad Editor Guide](pad-editor-guide.md#audio-feedback) for details.
+
+---
+
+## Notifications
+
+The notification integration lets you display floating message bubbles on the device screen from Home Assistant. This requires a board with a display (compile-time flag `HAS_DISPLAY`).
+
+### Entity
+
+| Entity | Type | Description |
+|--------|------|-------------|
+| **Notify** | `text` | Display a notification on the device screen. Accepts plain text or JSON. |
+
+### Usage
+
+The Notify text entity accepts two formats:
+
+**Plain text** — displays the message with default styling (white text, dark background, bottom position, 3-second duration):
+
+```yaml
+action: text.set_value
+target:
+  entity_id: text.esp32_macropad_keuken_notify
+data:
+  value: "Dryer finished!"
+```
+
+**JSON** — full control over appearance:
+
+```yaml
+action: text.set_value
+target:
+  entity_id: text.esp32_macropad_keuken_notify
+data:
+  value: '{"text": "Power high!", "duration_ms": 5000, "text_color": "#ffa0a0", "bg_color": "#2e1a1a", "location": "top"}'
+```
+
+**Dismiss** — send an empty string to dismiss the active notification:
+
+```yaml
+action: text.set_value
+target:
+  entity_id: text.esp32_macropad_keuken_notify
+data:
+  value: ""
+```
+
+### JSON Fields
+
+All fields are optional except `text`.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `text` | string | *(required)* | The notification message |
+| `duration_ms` | number | `3000` | Display duration in milliseconds. `0` = persistent (tap to dismiss) |
+| `text_color` | string | `#ffffff` | Hex color for the text |
+| `bg_color` | string | `#333333` | Hex color for the background |
+| `border_color` | string | *(none)* | Hex color for a border. Omit for no border |
+| `opacity` | number | `85` | Background opacity, 0–100 |
+| `font_size` | number | `0` (auto) | Font pixel size: 12, 14, 18, 24, 32, 36, or 48. `0` uses the scale-tier default |
+| `location` | string | `bottom` | `top`, `center`, or `bottom` |
+
+### MQTT Topics
+
+| Topic | Direction | Description |
+|-------|-----------|-------------|
+| `~/notify/set` | Subscribe | Receives plain text or JSON |
+| `~/notify/state` | Publish | Last notification text (retained) |
+
+### Automation Examples
+
+#### Washer Done Alert
+
+Show a persistent notification when the washing machine finishes:
+
+```yaml
+alias: Washer done notification
+triggers:
+  - trigger: state
+    entity_id: sensor.washing_machine_status
+    to: "idle"
+actions:
+  - action: text.set_value
+    target:
+      entity_id: text.esp32_macropad_keuken_notify
+    data:
+      value: '{"text": "Washer done! 🧺", "duration_ms": 0, "bg_color": "#1a3a1a", "location": "center"}'
+```
+
+#### Temperature Warning
+
+Flash a red warning at the top of the screen when temperature exceeds a threshold:
+
+```yaml
+alias: Temperature warning
+triggers:
+  - trigger: numeric_state
+    entity_id: sensor.living_room_temperature
+    above: 30
+actions:
+  - action: text.set_value
+    target:
+      entity_id: text.esp32_macropad_keuken_notify
+    data:
+      value: '{"text": "🔥 Temperature: {{ states(\"sensor.living_room_temperature\") }}°C", "duration_ms": 10000, "text_color": "#ff4444", "bg_color": "#3a1a1a", "border_color": "#5a2a2a", "location": "top"}'
+```
+
+#### Dismiss After Action
+
+Clear a persistent notification after the user acknowledges it in HA:
+
+```yaml
+alias: Clear macropad notification
+triggers:
+  - trigger: event
+    event_type: call_service
+    event_data:
+      domain: input_boolean
+      service: turn_on
+actions:
+  - action: text.set_value
+    target:
+      entity_id: text.esp32_macropad_keuken_notify
+    data:
+      value: ""
+```
+
+### Behavior Notes
+
+- **Re-trigger**: Sending a new notification while one is active replaces it immediately — the old bubble is destroyed and the new one fades in.
+- **Tap to dismiss**: Users can always tap the bubble to dismiss it, regardless of the configured duration.
+- **Persistent mode**: Set `duration_ms` to `0` for notifications that stay on screen until tapped or replaced. The bubble still responds to tap-to-dismiss.
+- **Screensaver**: Notifications display on `lv_layer_top()` — they appear above all screens including the screensaver overlay.
+- **State topic**: The device publishes the last notification text (retained) to `~/notify/state`. An empty state means no active notification.
