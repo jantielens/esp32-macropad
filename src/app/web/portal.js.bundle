@@ -36,7 +36,9 @@ portal_pad_grid.js
 portal_pad_dialog.js
 portal_pad_editor.js
 
-# Brews page (coffee-scale feature)
+# Brews page (charts and templates fragments before main brews)
+portal_brews_charts.js
+portal_brews_templates.js
 portal_brews.js
 
 # Entry point (must be last)
