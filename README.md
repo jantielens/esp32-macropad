@@ -6,44 +6,56 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 
 ## ✨ Features
 
-### Display & Touch
-- **LVGL-powered UI** — smooth, modern interface on all supported displays
-- **Customizable pad layouts** — up to 16 pads with configurable grids (board-dependent maximum, up to 8×8)
-- **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols), background images, and per-label style overrides (font size, alignment, text overflow mode)
-- **Multi-span buttons** — buttons can span multiple columns and rows
-- **Bar chart widgets** — visualize data with color-coded threshold bars
-- **Gauge widgets** — arc-based gauges with ticks, needle, labels and color thresholds
-- **Sparkline widgets** — mini trend lines with background data collection and auto-scaling
-- **Table widgets** — structured multi-column data views from binding payloads
-- **Screen saver** — automatic backlight fade with pixel-shift burn-in prevention
+### Pads, buttons & widgets
+- **Up to 16 pads** with configurable grids (up to 8×8, board-dependent), per-pad backgrounds, and multi-cell button spans
+- **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols), background images, and a per-label style DSL (font family, size, alignment, overflow)
+- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal), sparkline (multi-line with reference markers), table, and **rocker** (split-button up/down or left/right)
+- **Smooth animations** — gauges, bars, and needles ease into new values instead of jumping
+- **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
+- **Building blocks** — drop pre-built button groups (countdown timer, system info) into any pad with a single click
+- **Custom fonts** — DSEG7 (7-segment), Bebas, and Doto pixel font, in addition to the default Montserrat
+- **Screen saver** with backlight fade, pixel-shift burn-in prevention, and per-pad wake redirect
 
-### BLE Keyboard
-- **Bluetooth HID keyboard** — pair with any Bluetooth host and send keystrokes from your macropad (ESP32-P4 boards only; disabled on ESP32-S3 due to internal RAM constraints)
-- **Key sequences** — single keys, modifier combos (`ctrl+c`), media keys (`vol_up`), text literals, and multi-step sequences with delays
-- **One-tap pairing** — assign a `ble_pair` action to a button or start pairing from the web portal
-- **Single-owner security** — one bonded host at a time; unbonded devices are rejected outside the pairing window
+### Live data with bindings
+A simple `[scheme:params]` syntax pulls live data into any label, color, or widget — with format strings, fallbacks, and inline expressions.
 
-### Connectivity & Smart Home
-- **MQTT with Home Assistant Discovery** — auto-registers as an HA device, no YAML needed
-- **Live data bindings** — display MQTT topics, device health, or date/time directly on buttons
-- **Button actions** — tap or long-press to publish MQTT messages, navigate screens, send BLE keystrokes, or control timers
-- **On-device timers** — 3 independent count-up/countdown timers with live display bindings, countdown expiry beep, and quick-adjust buttons
-- **Toggle state** — buttons reflect on/off state from MQTT topics
-- **Remote screen control** — switch pads from Home Assistant
-- **Remote audio control** — trigger beeps, play siren tones, and adjust volume from HA automations
+- **`[mqtt:topic;path]`** — any MQTT topic, with JSON path extraction
+- **`[health:key]`** — CPU, memory, PSRAM, WiFi/BLE status, IP, uptime, and 30+ more device metrics
+- **`[time:format;tz]`** — NTP-synced clocks with timezone and sub-second precision
+- **`[expr:...]`** — math, comparisons, ternary, and a `threshold()` helper for multi-zone color logic
+- **`[pad:name]`** — name a binding once per pad and reuse it everywhere
+- **`[timer:N]`** — render on-device timer values in any format
+- **Dynamic colors** — background, text, border, and widget colors all accept binding expressions
+- **Dynamic state** — `enabled` / `disabled` / `hidden` per button via the same binding system
+- **Real-time syntax validator** in the pad editor catches typos and invalid expressions as you type
 
-### Web Configuration Portal
-- **Browser-based setup** — configure everything over Wi-Fi, no tools needed
-- **Visual pad editor** — drag-and-drop style grid editor with live preview
-- **Copy/paste & import/export** — clone buttons, pages, or entire device configs
-- **OTA firmware updates** — update over Wi-Fi from the portal or the online installer
-- **Real-time health dashboard** — CPU, memory, temperature, Wi-Fi signal, MQTT status
-- **HTTP Basic Auth** — optional password protection for the portal
+### Inputs & automation
+- **Multi-action buttons** — chain up to 3 actions per tap and per long-press (publish MQTT, play sound, navigate, send keystrokes, etc.)
+- **Swipe gestures** — configure left/right/up/down on any screen with the same actions as buttons
+- **Boot actions** — run a sequence of actions automatically when the device starts
+- **On-device timers** — 3 independent count-up / countdown timers with expire actions and live `[timer:N]` bindings
+- **Notification bubble** — display a floating message via a button action or remotely from Home Assistant
 
-### Background Images
-- **Live camera feeds** — display JPEG/PNG streams from security cameras or other sources
-- **Auto-refresh** — configurable refresh interval for dynamic images
-- **Letterbox or cover** — choose how images fit the button
+### Audio & feedback
+- **Beeps & sound files** — pattern DSL (`500:40 60 800:40`) for short cues and MP3 file playback (≤512 KB) for longer sounds
+- **Audio feedback** for taps, long-press, and timer expiry, with per-button or per-action overrides
+- **Volume & brightness actions** — adjust device volume or backlight from any button
+- **Hardware-accelerated audio** on ESP32-P4 boards via the ES8311 codec
+
+### Smart home & connectivity
+- **MQTT with Home Assistant auto-discovery** — registers as a full HA device with sensors, buttons, siren, volume, screen selector, and notification entities (no YAML needed)
+- **Bluetooth HID keyboard** (ESP32-P4) — send keystrokes, modifier combos, media keys, and multi-step sequences to any paired host with single-owner pairing
+- **Remote control from HA** — switch screens, trigger beeps, play tones, set volume, send notifications
+- **Resilient WiFi** — event-driven tiered reconnect keeps the display responsive through outages, with gateway-ping liveness detection
+- **Live camera feeds** — JPEG, PNG, and **MJPEG streaming** support (8–15 fps, with hardware JPEG decode + PPA scaling on ESP32-P4)
+- **OTA updates** with rollback protection — flash from the web portal or the online installer
+
+### Web configuration portal
+- **Visual pad editor** — drag-to-move and drag-to-resize buttons, live preview matching your device's aspect ratio
+- **Copy/paste & import/export** — clone buttons, pads, or entire device configurations to JSON
+- **Browser-based setup** — Wi-Fi, MQTT, security, and all device settings, no tools needed
+- **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status
+- **Optional HTTP Basic Auth** for portal access
 
 ## 💡 What Can You Build?
 

@@ -90,6 +90,31 @@ HTML_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.html" -not -name "_*.html" -t
 CSS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.css" -not -name "_*.css" -type f | sort))
 JS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.js" -not -name "_*.js" -type f | sort))
 
+# ---- Bundle support: detect JS bundle manifests ----
+# A .js.bundle file lists fragment files that should be concatenated into the
+# primary file (last entry) during minification.  Fragment files are excluded
+# from individual processing so they only appear in the bundled output.
+declare -A JS_SKIP_FILES  # fragment files to exclude from individual processing
+
+for bundle_manifest in $(find "$WEB_DIR" -maxdepth 1 -name "*.js.bundle" -type f 2>/dev/null); do
+    primary_name=$(basename "$bundle_manifest" .bundle)  # e.g. portal_pad_editor.js
+    while IFS= read -r bline || [[ -n "$bline" ]]; do
+        bline="${bline%%#*}"                     # strip comments
+        bline="$(echo "$bline" | xargs)"         # trim whitespace
+        [[ -z "$bline" ]] && continue
+        [[ "$bline" = "$primary_name" ]] && continue  # don't skip the primary
+        JS_SKIP_FILES["$WEB_DIR/$bline"]=1
+    done < "$bundle_manifest"
+done
+
+# Filter out JS files that are fragments of a bundle
+JS_FILES_FILTERED=()
+for f in "${JS_FILES[@]}"; do
+    [[ -n "${JS_SKIP_FILES[$f]}" ]] && continue
+    JS_FILES_FILTERED+=("$f")
+done
+JS_FILES=("${JS_FILES_FILTERED[@]}")
+
 # Read template fragments for HTML processing
 HEADER_TEMPLATE=""
 NAV_TEMPLATE=""
@@ -327,20 +352,43 @@ with open('$css_file', 'r') as f:
     GZIPPED_SIZES["css_$filename"]=$gzipped_size
 done
 
-# Process JS files (minify)
+# Process JS files (minify, with bundle support)
 for js_file in "${JS_FILES[@]}"; do
     filename=$(basename "$js_file" .js)
+
+    # Bundle support: if a .bundle manifest exists, concatenate fragments
+    bundle_manifest="${js_file}.bundle"
+    js_source="$js_file"
+    if [[ -f "$bundle_manifest" ]]; then
+        echo "Bundling JS: $filename.js (from $(basename "$bundle_manifest"))..."
+        js_source=$(mktemp)
+        while IFS= read -r bline || [[ -n "$bline" ]]; do
+            bline="${bline%%#*}"
+            bline="$(echo "$bline" | xargs)"
+            [[ -z "$bline" ]] && continue
+            if [[ -f "$WEB_DIR/$bline" ]]; then
+                cat "$WEB_DIR/$bline" >> "$js_source"
+                echo >> "$js_source"
+            else
+                echo "  Warning: bundle fragment not found: $bline"
+            fi
+        done < "$bundle_manifest"
+    fi
+
     echo "Minifying JS: $filename.js..."
-    content=$(cat "$js_file")
+    content=$(cat "$js_source")
     original_size=$(echo -n "$content" | wc -c)
     
     minified=$(python3 -c "
 import rjsmin
-with open('$js_file', 'r') as f:
+with open('$js_source', 'r') as f:
     js = f.read()
     minified = rjsmin.jsmin(js)
     print(minified, end='')
 ")
+
+    # Cleanup temp file if it was a bundle
+    [[ "$js_source" != "$js_file" ]] && rm -f "$js_source"
     
     JS_CONTENTS["$filename"]="$minified"
     minified_size=$(echo -n "$minified" | wc -c)

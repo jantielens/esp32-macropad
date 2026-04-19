@@ -1,0 +1,43 @@
+# Bundle manifest for portal.js
+#
+# All JS modules are concatenated (in order) into a single portal.js asset.
+# Fragment files are excluded from individual serving — only the combined
+# asset is embedded in web_assets.h and served via a single HTTP endpoint.
+#
+# Order: core → libraries → features → entry point
+# The last entry MUST be the primary file (portal.js).
+
+# Core infrastructure
+portal_core.js
+
+# Shared libraries (used by config and pad editor)
+portal_binding_validator.js
+portal_action_editor.js
+portal_action_editor_scale.js
+
+# Configuration (actions fragment before main config)
+portal_config_actions.js
+portal_config.js
+
+# Firmware page
+portal_firmware.js
+
+# Health monitoring (sparkline fragment before main health)
+portal_health_sparkline.js
+portal_health.js
+
+# Pad editor (fragments before main editor)
+portal_pad_colors.js
+portal_pad_io.js
+portal_pad_blocks.js
+portal_pad_icons.js
+portal_pad_defaults.js
+portal_pad_grid.js
+portal_pad_dialog.js
+portal_pad_editor.js
+
+# Brews page (coffee-scale feature)
+portal_brews.js
+
+# Entry point (must be last)
+portal.js
