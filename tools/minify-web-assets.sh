@@ -400,7 +400,7 @@ for js_file in "${JS_FILES[@]}"; do
     js_source="$js_file"
     if [[ -f "$bundle_manifest" ]]; then
         echo "Bundling JS: $filename.js (from $(basename "$bundle_manifest"))..."
-        js_source=$(mktemp)
+        js_source=$(mktemp /tmp/bundle_XXXXXX.js)
         while IFS= read -r bline || [[ -n "$bline" ]]; do
             bline="${bline%%#*}"
             bline="$(echo "$bline" | xargs)"
