@@ -69,6 +69,7 @@ void timer_clear_expire_actions(uint8_t id);
 void timer_engine_tick();
 
 // Format timer value into buffer. Returns number of chars written.
-// Formats: "mm:ss" (default), "hh:mm:ss", "ss", "mm:ss.d" (decisecond)
+// Default (NULL/empty): raw seconds with decisecond precision ("45.3")
+// Named formats: "mm:ss", "hh:mm:ss", "ss", "mm:ss.d"
 // For countdown timers past zero, output is prefixed with "-".
 int timer_format(uint8_t id, const char* fmt, char* out, size_t out_len);

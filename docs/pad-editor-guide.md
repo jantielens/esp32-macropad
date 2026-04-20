@@ -556,12 +556,12 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 | Widget | Numeric Rocker |
 | Direction | Horizontal |
 | Col Span | 2 |
-| Center label | `[timer:1]` |
+| Center label | `[timer:1;mm:ss]` |
 | Adjustment Action | Type: `timer`, Timer: `1`, Command: `Adjust Countdown`, Value: `{step}` |
 | Small Step | 1 |
 | Large Step | 10 |
 
-Tapping the inner-right zone sends an "Adjust Countdown" action with value `1` (add 1 second). Tapping the outer-left zone sends value `-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1]` binding.
+Tapping the inner-right zone sends an "Adjust Countdown" action with value `1` (add 1 second). Tapping the outer-left zone sends value `-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1;mm:ss]` binding.
 
 ### Bar Chart
 
@@ -1069,10 +1069,13 @@ Displays the value or state of one of the 3 on-device timers. Timer N is 1, 2, o
 
 | Format | Result | Example |
 |--------|--------|---------|
-| `mm:ss` (default) | Minutes and seconds | `4:05` or `-0:12` |
+| *(none)* (default) | Raw seconds with decisecond | `245.0` or `-5.3` |
+| `mm:ss` | Minutes and seconds | `4:05` or `-0:12` |
 | `hh:mm:ss` | Hours, minutes, seconds | `1:02:30` |
 | `ss` | Total seconds | `245` |
 | `mm:ss.d` | With deciseconds | `4:05.3` |
+
+The numeric default makes `[timer:N]` usable as a data source for gauge, bar chart, and sparkline widgets. For human-readable display on labels, use `[timer:N;mm:ss]` or another named format.
 
 **State keys:**
 
@@ -1087,10 +1090,11 @@ Countdown timers that run past zero show negative values (e.g., `-0:05`).
 **Examples:**
 
 ```
-[timer:1]                    → 4:05       (default mm:ss)
+[timer:1]                    → 245.0      (default: raw seconds)
+[timer:1;mm:ss]              → 4:05       (minutes:seconds)
 [timer:1;hh:mm:ss]           → 0:04:05
 [timer:2;mm:ss.d]            → 3:22.7     (with deciseconds)
-[timer:1;ss]                 → 245         (total seconds)
+[timer:1;ss]                 → 245         (integer seconds)
 [timer:1_state]              → running
 [timer:1_expired]            → OFF
 [timer:1_mode]               → down

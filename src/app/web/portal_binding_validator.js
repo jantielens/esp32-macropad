@@ -804,7 +804,11 @@ bindingRegisterScheme('timer', {
         }
         if (parts.length > 2) return 'Too many parameters for timer binding';
         if (opts && opts.isWidgetBinding && parts.length > 1) {
-            return 'Widget data bindings must not include a format parameter';
+            var fmt = parts[1].trim();
+            var numericFormats = ['ss'];
+            if (numericFormats.indexOf(fmt) === -1) {
+                return 'Widget data bindings only allow numeric formats (none or "ss"), got "' + fmt + '"';
+            }
         }
         return null;
     }

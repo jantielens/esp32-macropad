@@ -11,4 +11,13 @@
 #include <cstddef>
 #include <cstring>
 
+// Controllable millis() mock for timer tests
+#ifdef __cplusplus
+extern "C" {
+#endif
+unsigned long millis();
+#ifdef __cplusplus
+}
+#endif
+
 #endif // ARDUINO_H

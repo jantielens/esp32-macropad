@@ -121,4 +121,16 @@ echo "=== Running unit tests: wifi_reconnect ==="
 ./tests/bin/test_wifi_reconnect
 echo
 
+echo "=== Building unit tests: timer_format ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/board_config.h \
+    -I tests -I src/app \
+    tests/test_timer_format.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_timer_format
+
+echo "=== Running unit tests: timer_format ==="
+./tests/bin/test_timer_format
+echo
+
 echo "=== All tests passed ==="
