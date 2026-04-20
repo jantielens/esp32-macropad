@@ -239,6 +239,9 @@ void PadScreen::onTap(lv_event_t* e) {
 
         NRZoneLayout z = nr_compute_zones(span, cfg->small_step, cfg->large_step);
 
+        // For vertical orientation, invert sign: top = increase, bottom = decrease
+        float sign = cfg->horizontal ? 1.0f : -1.0f;
+
         if (rel < z.inner_end || rel >= z.inner2_start) {
             // Outer or inner zone — dispatch adjust_action with {step}
             float step;
@@ -246,22 +249,22 @@ void PadScreen::onTap(lv_event_t* e) {
             const char* nr_event;
             bool is_large = false;
             if (rel < z.outer_end) {
-                step = -cfg->large_step;
+                step = sign * -cfg->large_step;
                 flash_start = 0; flash_end = z.outer_end;
-                nr_event = "NRockerOuterDec";
+                nr_event = "NRockerOuterA";
                 is_large = true;
             } else if (rel < z.inner_end) {
-                step = -cfg->small_step;
+                step = sign * -cfg->small_step;
                 flash_start = z.outer_end; flash_end = z.inner_end;
-                nr_event = "NRockerInnerDec";
+                nr_event = "NRockerInnerA";
             } else if (rel < z.outer2_start) {
-                step = cfg->small_step;
+                step = sign * cfg->small_step;
                 flash_start = z.inner2_start; flash_end = z.outer2_start;
-                nr_event = "NRockerInnerInc";
+                nr_event = "NRockerInnerB";
             } else {
-                step = cfg->large_step;
+                step = sign * cfg->large_step;
                 flash_start = z.outer2_start; flash_end = span;
-                nr_event = "NRockerOuterInc";
+                nr_event = "NRockerOuterB";
                 is_large = true;
             }
 

@@ -211,45 +211,51 @@ TEST(sound_zero_volume_not_serialized) {
 // Volume action
 // ============================================================================
 
-TEST(volume_action_parse) {
+TEST(volume_set_action_parse) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"volume\",\"volume_mode\":\"set\",\"volume_value\":60}");
+        "{\"type\":\"volume\",\"volume_mode\":\"set\",\"volume_value\":\"60\"}");
     ASSERT_STR(act.type, "volume");
     ASSERT_STR(act.volume_mode, "set");
-    ASSERT_EQ(act.volume_value, 60);
+    ASSERT_STR(act.volume_value, "60");
 }
 
-TEST(volume_action_round_trip) {
+TEST(volume_adjust_action_round_trip) {
     ButtonAction act = round_trip(
-        "{\"type\":\"volume\",\"volume_mode\":\"up\",\"volume_value\":10}");
+        "{\"type\":\"volume\",\"volume_mode\":\"adjust\",\"volume_value\":\"-10\"}");
     ASSERT_STR(act.type, "volume");
-    ASSERT_STR(act.volume_mode, "up");
-    ASSERT_EQ(act.volume_value, 10);
+    ASSERT_STR(act.volume_mode, "adjust");
+    ASSERT_STR(act.volume_value, "-10");
+}
+
+TEST(volume_adjust_step_placeholder) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"volume\",\"volume_mode\":\"adjust\",\"volume_value\":\"{step}\"}");
+    ASSERT_STR(act.volume_value, "{step}");
 }
 
 // ============================================================================
 // Brightness action
 // ============================================================================
 
-TEST(brightness_action_parse) {
+TEST(brightness_set_action_parse) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"brightness\",\"brightness_mode\":\"set\",\"brightness_value\":75}");
+        "{\"type\":\"brightness\",\"brightness_mode\":\"set\",\"brightness_value\":\"75\"}");
     ASSERT_STR(act.type, "brightness");
     ASSERT_STR(act.brightness_mode, "set");
-    ASSERT_EQ(act.brightness_value, 75);
+    ASSERT_STR(act.brightness_value, "75");
 }
 
-TEST(brightness_action_round_trip) {
+TEST(brightness_adjust_action_round_trip) {
     ButtonAction act = round_trip(
-        "{\"type\":\"brightness\",\"brightness_mode\":\"up\",\"brightness_value\":20}");
+        "{\"type\":\"brightness\",\"brightness_mode\":\"adjust\",\"brightness_value\":\"-5\"}");
     ASSERT_STR(act.type, "brightness");
-    ASSERT_STR(act.brightness_mode, "up");
-    ASSERT_EQ(act.brightness_value, 20);
+    ASSERT_STR(act.brightness_mode, "adjust");
+    ASSERT_STR(act.brightness_value, "-5");
 }
 
-TEST(brightness_zero_value_not_serialized) {
+TEST(brightness_empty_value_not_serialized) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"brightness\",\"brightness_mode\":\"down\",\"brightness_value\":0}");
+        "{\"type\":\"brightness\",\"brightness_mode\":\"set\"}");
     StaticJsonDocument<256> doc;
     JsonObject obj = doc.to<JsonObject>();
     action_to_json(act, obj);
@@ -263,27 +269,40 @@ TEST(brightness_zero_value_not_serialized) {
 
 TEST(timer_action_parse) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"timer\",\"timer_command\":\"toggle 0\"}");
+        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"toggle\"}");
     ASSERT_STR(act.type, "timer");
-    ASSERT_STR(act.mqtt_payload, "toggle 0");  // timer_command maps to mqtt_payload
+    ASSERT_EQ(act.timer_id, 1);
+    ASSERT_STR(act.timer_command, "toggle");
 }
 
-TEST(timer_action_round_trip) {
+TEST(timer_adjust_action_round_trip) {
     ButtonAction act = round_trip(
-        "{\"type\":\"timer\",\"timer_command\":\"start 1\"}");
+        "{\"type\":\"timer\",\"timer_id\":2,\"timer_command\":\"adjust\",\"timer_value\":\"30\"}");
     ASSERT_STR(act.type, "timer");
-    ASSERT_STR(act.mqtt_payload, "start 1");
+    ASSERT_EQ(act.timer_id, 2);
+    ASSERT_STR(act.timer_command, "adjust");
+    ASSERT_STR(act.timer_value, "30");
 }
 
-TEST(timer_command_serialized_as_timer_command_not_payload) {
+TEST(timer_set_action_round_trip) {
+    ButtonAction act = round_trip(
+        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"set\",\"timer_value\":\"300\"}");
+    ASSERT_STR(act.type, "timer");
+    ASSERT_EQ(act.timer_id, 1);
+    ASSERT_STR(act.timer_command, "set");
+    ASSERT_STR(act.timer_value, "300");
+}
+
+TEST(timer_fields_serialized_properly) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"timer\",\"timer_command\":\"toggle 2\"}");
+        "{\"type\":\"timer\",\"timer_id\":3,\"timer_command\":\"start\"}");
     StaticJsonDocument<256> doc;
     JsonObject obj = doc.to<JsonObject>();
     action_to_json(act, obj);
+    ASSERT_TRUE(obj.containsKey("timer_id"));
     ASSERT_TRUE(obj.containsKey("timer_command"));
-    ASSERT_TRUE(!obj.containsKey("payload"));
-    ASSERT_STR(obj["timer_command"].as<const char*>(), "toggle 2");
+    ASSERT_EQ(obj["timer_id"].as<int>(), 3);
+    ASSERT_STR(obj["timer_command"].as<const char*>(), "start");
 }
 
 TEST(mqtt_payload_serialized_as_payload_not_timer_command) {
@@ -349,8 +368,9 @@ TEST(all_fields_populated) {
     const char* json =
         "{\"type\":\"mqtt\",\"target\":\"pad_1\",\"topic\":\"t\",\"payload\":\"p\","
         "\"sequence\":\"Ctrl+A\",\"beep_pattern\":\"500:100\",\"beep_volume\":42,"
-        "\"volume_mode\":\"set\",\"volume_value\":55,"
-        "\"brightness_mode\":\"up\",\"brightness_value\":15,"
+        "\"volume_mode\":\"set\",\"volume_value\":\"55\","
+        "\"brightness_mode\":\"adjust\",\"brightness_value\":\"-15\","
+        "\"timer_id\":2,\"timer_command\":\"adjust\",\"timer_value\":\"30\","
         "\"sound_file\":\"alert\",\"sound_volume\":90,"
         "\"notify_text\":\"hello\",\"notify_duration_ms\":\"5000\","
         "\"notify_text_color\":\"#ff0000\",\"notify_bg_color\":\"#00ff00\","
@@ -365,9 +385,12 @@ TEST(all_fields_populated) {
     ASSERT_STR(act.beep_pattern, "500:100");
     ASSERT_EQ(act.beep_volume, 42);
     ASSERT_STR(act.volume_mode, "set");
-    ASSERT_EQ(act.volume_value, 55);
-    ASSERT_STR(act.brightness_mode, "up");
-    ASSERT_EQ(act.brightness_value, 15);
+    ASSERT_STR(act.volume_value, "55");
+    ASSERT_STR(act.brightness_mode, "adjust");
+    ASSERT_STR(act.brightness_value, "-15");
+    ASSERT_EQ(act.timer_id, 2);
+    ASSERT_STR(act.timer_command, "adjust");
+    ASSERT_STR(act.timer_value, "30");
     ASSERT_STR(act.sound_file, "alert");
     ASSERT_EQ(act.sound_volume, 90);
     ASSERT_STR(act.notify_text, "hello");
@@ -502,18 +525,20 @@ int main() {
     RUN(sound_zero_volume_not_serialized);
 
     printf("\n--- Volume action ---\n");
-    RUN(volume_action_parse);
-    RUN(volume_action_round_trip);
+    RUN(volume_set_action_parse);
+    RUN(volume_adjust_action_round_trip);
+    RUN(volume_adjust_step_placeholder);
 
     printf("\n--- Brightness action ---\n");
-    RUN(brightness_action_parse);
-    RUN(brightness_action_round_trip);
-    RUN(brightness_zero_value_not_serialized);
+    RUN(brightness_set_action_parse);
+    RUN(brightness_adjust_action_round_trip);
+    RUN(brightness_empty_value_not_serialized);
 
     printf("\n--- Timer action ---\n");
     RUN(timer_action_parse);
-    RUN(timer_action_round_trip);
-    RUN(timer_command_serialized_as_timer_command_not_payload);
+    RUN(timer_adjust_action_round_trip);
+    RUN(timer_set_action_round_trip);
+    RUN(timer_fields_serialized_properly);
     RUN(mqtt_payload_serialized_as_payload_not_timer_command);
 
     printf("\n--- BLE pair action ---\n");

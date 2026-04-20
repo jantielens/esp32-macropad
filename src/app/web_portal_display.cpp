@@ -36,7 +36,7 @@ void handleSetDisplayBrightness(AsyncWebServerRequest *request, uint8_t *data, s
 
 		int brightness = doc["brightness"];
 
-		if (brightness < 0) brightness = 0;
+		if (brightness < MIN_USER_BRIGHTNESS) brightness = MIN_USER_BRIGHTNESS;
 		if (brightness > 100) brightness = 100;
 
 		LOGI("API", "PUT /api/display/brightness: %d%%", brightness);

@@ -21,7 +21,17 @@
 #include "wifi_manager.h"
 #include "screen_saver_manager.h"
 
+#include <math.h>
+
 #define TAG "Action"
+
+// Compute a clamped percentage value from a string, optionally as a delta from current.
+static uint8_t compute_clamped_percent(const char* value_str, uint8_t current, bool is_adjust, int floor) {
+    int v = is_adjust ? (int)current + lroundf(atof(value_str)) : lroundf(atof(value_str));
+    if (v > 100) v = 100;
+    if (v < floor) v = floor;
+    return (uint8_t)v;
+}
 
 void action_dispatch(const ButtonAction& act, const char* label) {
     if (!act.type[0]) return;
@@ -95,51 +105,22 @@ void action_dispatch(const ButtonAction& act, const char* label) {
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
 #if HAS_AUDIO
-        if (strcmp(act.volume_mode, "up") == 0) {
-            uint8_t v = audio_get_volume();
-            v = (v > 90) ? 100 : v + 10;
-            audio_set_volume(v);
-            LOGI(TAG, "%s volume up -> %u%%", label, v);
-        } else if (strcmp(act.volume_mode, "down") == 0) {
-            uint8_t v = audio_get_volume();
-            v = (v < 10) ? 0 : v - 10;
-            audio_set_volume(v);
-            LOGI(TAG, "%s volume down -> %u%%", label, v);
-        } else {
-            uint8_t v = act.volume_value;
-            if (v > 100) v = 100;
-            audio_set_volume(v);
-            LOGI(TAG, "%s volume set -> %u%%", label, v);
-        }
+        bool adj = strcmp(act.volume_mode, "adjust") == 0;
+        uint8_t nv = compute_clamped_percent(act.volume_value, audio_get_volume(), adj, 0);
+        audio_set_volume(nv);
+        LOGI(TAG, "%s volume %s %s -> %u%%", label, adj ? "adjust" : "set", act.volume_value, nv);
 #else
         LOGW(TAG, "%s volume: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        uint8_t step = act.brightness_value > 0 ? act.brightness_value : 10;
-        if (strcmp(act.brightness_mode, "up") == 0) {
-            uint8_t v = display_manager_get_backlight_brightness();
-            v = (v + step > 100) ? 100 : v + step;
-            display_manager_set_backlight_brightness(v);
-            LOGI(TAG, "%s brightness up -> %u%%", label, v);
-        } else if (strcmp(act.brightness_mode, "down") == 0) {
-            uint8_t v = display_manager_get_backlight_brightness();
-            v = (v < step) ? 0 : v - step;
-            display_manager_set_backlight_brightness(v);
-            LOGI(TAG, "%s brightness down -> %u%%", label, v);
-        } else {
-            uint8_t v = act.brightness_value;
-            if (v > 100) v = 100;
-            display_manager_set_backlight_brightness(v);
-            LOGI(TAG, "%s brightness set -> %u%%", label, v);
-        }
+        bool adj = strcmp(act.brightness_mode, "adjust") == 0;
+        uint8_t nv = compute_clamped_percent(act.brightness_value, display_manager_get_backlight_brightness(), adj, MIN_USER_BRIGHTNESS);
+        display_manager_set_backlight_brightness(nv);
+        LOGI(TAG, "%s brightness %s %s -> %u%%", label, adj ? "adjust" : "set", act.brightness_value, nv);
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
-        // Payload format: "N:command" or "N:command:arg"
-        // e.g. "1:toggle", "2:start", "1:adjust:30"
-        const char* p = act.mqtt_payload;
-        if (p && p[0] >= '1' && p[0] <= '0' + TIMER_COUNT && p[1] == ':') {
-            uint8_t tid = p[0] - '0';
-            const char* cmd = p + 2;
-
+        uint8_t tid = act.timer_id;
+        const char* cmd = act.timer_command;
+        if (tid >= 1 && tid <= TIMER_COUNT && cmd[0]) {
             if (strcmp(cmd, "start") == 0) {
                 timer_start(tid);
             } else if (strcmp(cmd, "stop") == 0) {
@@ -154,15 +135,18 @@ void action_dispatch(const ButtonAction& act, const char* label) {
                 timer_reset(tid);
             } else if (strcmp(cmd, "lap") == 0) {
                 timer_lap(tid);
-            } else if (strncmp(cmd, "adjust:", 7) == 0) {
-                int32_t delta = (int32_t)atoi(cmd + 7);
+            } else if (strcmp(cmd, "adjust") == 0) {
+                int32_t delta = lroundf(atof(act.timer_value));
                 timer_adjust(tid, delta);
+            } else if (strcmp(cmd, "set") == 0) {
+                uint32_t secs = (uint32_t)lroundf(atof(act.timer_value));
+                timer_set_countdown(tid, secs);
             } else {
                 LOGW(TAG, "%s timer: unknown cmd '%s'", label, cmd);
             }
-            LOGI(TAG, "%s timer: %c:%s", label, p[0], cmd);
+            LOGI(TAG, "%s timer: %u:%s", label, tid, cmd);
         } else {
-            LOGW(TAG, "%s timer: bad payload '%s'", label, p ? p : "(null)");
+            LOGW(TAG, "%s timer: bad id=%u cmd='%s'", label, tid, cmd);
         }
     } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
         // Resolve all bindable fields before building params struct

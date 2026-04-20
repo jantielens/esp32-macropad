@@ -191,6 +191,9 @@ static void substitute_step_in_field(char* field, size_t field_size, float step)
 void numericrocker_substitute_step(ButtonAction* act, float step) {
     substitute_step_in_field(act->mqtt_payload, sizeof(act->mqtt_payload), step);
     substitute_step_in_field(act->key_sequence, sizeof(act->key_sequence), step);
+    substitute_step_in_field(act->volume_value, sizeof(act->volume_value), step);
+    substitute_step_in_field(act->brightness_value, sizeof(act->brightness_value), step);
+    substitute_step_in_field(act->timer_value, sizeof(act->timer_value), step);
 }
 
 // ---- Registration ----
