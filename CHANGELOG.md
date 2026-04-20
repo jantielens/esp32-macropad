@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Numeric rocker widget** — a new widget type that splits a button into 4 tap zones for fine and coarse numeric adjustment (`«  ‹  center  ›  »`). Uses one action template with a `{step}` placeholder — the widget substitutes the correct signed step value at tap time. Supports both horizontal (default) and vertical axis. Zone widths are pixel-clamped (12%/15% of span, min 40 px, max 80 px) so zones stay usable on any button size. The center zone works as a normal button with full tap and long-press action support; outer/inner zones use a dedicated adjustment action. Step values support decimals (e.g. 0.1, 0.5) and setting a step to 0 disables that zone pair, with the remaining zone expanding to fill the freed space. Visual indicators (`<<`, `<`, `>`, `>>` or `▲▲`, `▲`, `▼`, `▼▼`) mark each zone with configurable color and opacity.
+
 ### Changed
 
 - **Per-board intermediate build cache** — `build.sh` now passes `--build-path build/<board>/intermediate/` to `arduino-cli compile`, giving each board its own persistent object cache. Switching between boards no longer invalidates the entire library cache, making incremental rebuilds seconds instead of minutes. Disk usage grows to ~170 MB per board (~1 GB for 6 boards). `clean.sh` already removes the full `build/` tree including intermediate caches. CI builds are unaffected. (Closes #25)

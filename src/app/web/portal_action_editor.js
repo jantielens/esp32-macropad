@@ -133,8 +133,8 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-adjust-group" style="display:none;">';
     h += '<label for="' + prefix + '-timer-adjust-sec">Adjust (seconds)</label>';
-    h += '<input type="number" id="' + prefix + '-timer-adjust-sec" min="-86400" max="86400" placeholder="e.g. 15 or -10">';
-    h += '<small>Positive adds time, negative subtracts. Applied to the countdown preset.</small>';
+    h += '<input type="text" id="' + prefix + '-timer-adjust-sec" placeholder="e.g. 15, -10, or {step}">';
+    h += '<small>Positive adds time, negative subtracts. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
     h += '</div>';
     h += '</div>';
     // Notify
@@ -408,8 +408,8 @@ function actionEditorBuild(prefix) {
             var cmd = parts[1] || '';
             if (cmd === 'adjust') {
                 var adjSec = document.getElementById(prefix + '-timer-adjust-sec');
-                var adj = adjSec ? parseInt(adjSec.value, 10) : 0;
-                if (adj !== 0 && !isNaN(adj)) val = val + ':' + adj;
+                var adjRaw = adjSec ? (adjSec.value || '').trim() : '';
+                if (adjRaw) val = val + ':' + adjRaw;
             }
             act.timer_command = val;
         }

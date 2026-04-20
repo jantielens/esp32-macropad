@@ -500,6 +500,55 @@ Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes
 
 Labels, icons, and colors work alongside the rocker widget. A typical rocker button uses the center label for an icon or the current value, with top/bottom labels for context.
 
+### Numeric Rocker
+
+The numeric rocker widget splits a button into 4 tap zones for fine and coarse numeric adjustment — think `«  ‹  5:00  ›  »` where inner arrows adjust by ±1 and outer arrows adjust by ±10. This gives you a single button that handles both small nudges and large jumps, ideal for timers, counters, and sliders.
+
+Unlike the regular rocker (which maps two zones to two separate action sets), the numeric rocker uses **one action template** with a `{step}` placeholder. The widget substitutes the correct signed step value at tap time, producing 4 distinct actions from a single configuration.
+
+**How it works:**
+
+- The button area is divided into 5 zones along the selected axis, with pixel-clamped widths that adapt to button size.
+- **Outer decrement** (far left / far top) → `{step}` = `-large_step`
+- **Inner decrement** → `{step}` = `-small_step`
+- **Center zone** → works as a normal button (tap and long-press actions)
+- **Inner increment** → `{step}` = `+small_step`
+- **Outer increment** (far right / far bottom) → `{step}` = `+large_step`
+- Zone widths target 12% (outer) and 15% (inner) of the button span, clamped to 40–80 px. The center zone gets whatever remains.
+- Double chevron indicators (`<<`/`>>` or `▲▲`/`▼▼`) mark the outer zones; single chevrons (`<`/`>` or `▲`/`▼`) mark the inner zones.
+- The tap flash covers only the tapped zone.
+- The center zone supports full tap and long-press actions (all 3+3 action slots). Outer and inner zones use the dedicated **Adjustment Action**.
+- The `{step}` placeholder is replaced in `mqtt_payload` and `key_sequence` fields.
+
+**Disabling zones:** Set a step value to **0** to disable that zone pair. The remaining zone expands to fill the freed space (from 15% to the full 27% per side). Setting both steps to 0 makes the entire button a center zone.
+
+> **Tip:** For best usability, use `col_span >= 2` in horizontal mode or `row_span >= 2` in vertical mode so the tap zones are easy to hit.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Direction** | Horizontal (left/right, default) or vertical (up/down) |
+| **Small Step** | Inner zone adjustment magnitude (default 1). Supports decimals (e.g. 0.1, 0.5). Set to 0 to disable inner zones |
+| **Large Step** | Outer zone adjustment magnitude (default 10). Supports decimals. Set to 0 to disable outer zones |
+| **Indicator Color** | Chevron color (default white) |
+| **Opacity** | Chevron visibility from 0 (invisible) to 255 (fully opaque). Default 80 (~31%) |
+| **Adjustment Action** | The action template dispatched for outer/inner zones. The `{step}` placeholder is replaced with the signed step value |
+
+**Example — Countdown timer adjustment:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | Numeric Rocker |
+| Direction | Horizontal |
+| Col Span | 2 |
+| Center label | `[timer:1]` |
+| Adjustment Action | Type: `timer`, Timer Command: `1:adjust:{step}` |
+| Small Step | 1 |
+| Large Step | 10 |
+
+Tapping the inner-right zone sends `1:adjust:1` (add 1 second). Tapping the outer-left zone sends `1:adjust:-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1]` binding.
+
 ### Bar Chart
 
 The bar chart widget draws a vertical or horizontal bar that fills based on a numeric value — perfect for power meters, CPU gauges, progress bars, or tank levels.

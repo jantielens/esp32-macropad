@@ -1,0 +1,41 @@
+                <!-- Numeric Rocker Settings (conditional, shown only for numericrocker widget type) -->
+                <details class="editor-group" id="pad-edit-numericrocker-section" style="display:none;">
+                    <summary>Numeric Rocker Settings</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Splits the button into 4 tap zones for fine and coarse adjustment. The center of the button works as a normal button with tap and long-press actions. Configure the adjustment action below using <code>{step}</code> as a placeholder for the signed step value.</small>
+                        <div class="form-group">
+                            <label for="pad-edit-numericrocker-axis">Direction</label>
+                            <select id="pad-edit-numericrocker-axis">
+                                <option value="horizontal">Left / Right</option>
+                                <option value="vertical">Up / Down</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-numericrocker-small-step">Small Step</label>
+                                <input type="number" id="pad-edit-numericrocker-small-step" min="0" step="any" value="1" placeholder="1">
+                                <small>Inner zone adjustment (±). 0 = disable inner zones.</small>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-numericrocker-large-step">Large Step</label>
+                                <input type="number" id="pad-edit-numericrocker-large-step" min="0" step="any" value="10" placeholder="10">
+                                <small>Outer zone adjustment (±). 0 = disable outer zones.</small>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-numericrocker-color">Indicator Color</label>
+                                <input type="text" id="pad-edit-numericrocker-color" maxlength="31" value="#FFFFFF" placeholder="#FFFFFF">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-numericrocker-opacity">Opacity (0-255)</label>
+                                <input type="number" id="pad-edit-numericrocker-opacity" min="0" max="255" value="80" placeholder="80">
+                                <small>0 = invisible, 255 = fully opaque</small>
+                            </div>
+                        </div>
+                        <hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">
+                        <div id="pad-edit-numericrocker-adjust-section">
+                            <div id="pad-edit-nr-adjust-container"></div>
+                        </div>
+                    </div>
+                </details>

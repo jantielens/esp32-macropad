@@ -229,6 +229,15 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-rocker-color').value = btn.widget_rocker_color || '#FFFFFF';
     document.getElementById('pad-edit-rocker-opacity').value = (btn.widget_rocker_opacity !== undefined) ? btn.widget_rocker_opacity : 80;
 
+    // Numeric Rocker widget fields
+    document.getElementById('pad-edit-numericrocker-axis').value = btn.widget_numericrocker_axis || 'horizontal';
+    document.getElementById('pad-edit-numericrocker-small-step').value = (btn.widget_numericrocker_small_step !== undefined) ? btn.widget_numericrocker_small_step : 1;
+    document.getElementById('pad-edit-numericrocker-large-step').value = (btn.widget_numericrocker_large_step !== undefined) ? btn.widget_numericrocker_large_step : 10;
+    document.getElementById('pad-edit-numericrocker-color').value = btn.widget_numericrocker_color || '#FFFFFF';
+    document.getElementById('pad-edit-numericrocker-opacity').value = (btn.widget_numericrocker_opacity !== undefined) ? btn.widget_numericrocker_opacity : 80;
+
+    // Numeric Rocker adjustment action
+    actionEditorLoad('pad-edit-nr-adjust', btn.widget_numericrocker_action || null);
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -486,6 +495,21 @@ function padDialogOk(keepOpen) {
             if (rColor && rColor !== '#FFFFFF') btn.widget_rocker_color = rColor;
             const rOpa = parseInt(document.getElementById('pad-edit-rocker-opacity').value);
             if (!isNaN(rOpa) && rOpa !== 80) btn.widget_rocker_opacity = Math.max(0, Math.min(255, rOpa));
+        }
+        if (wtype === 'numericrocker') {
+            const nrAxis = document.getElementById('pad-edit-numericrocker-axis').value;
+            if (nrAxis === 'vertical') btn.widget_numericrocker_axis = 'vertical';
+            const nrSmall = parseFloat(document.getElementById('pad-edit-numericrocker-small-step').value);
+            if (!isNaN(nrSmall) && nrSmall !== 1) btn.widget_numericrocker_small_step = Math.max(0, nrSmall);
+            const nrLarge = parseFloat(document.getElementById('pad-edit-numericrocker-large-step').value);
+            if (!isNaN(nrLarge) && nrLarge !== 10) btn.widget_numericrocker_large_step = Math.max(0, nrLarge);
+            const nrColor = document.getElementById('pad-edit-numericrocker-color').value.trim();
+            if (nrColor && nrColor !== '#FFFFFF') btn.widget_numericrocker_color = nrColor;
+            const nrOpa = parseInt(document.getElementById('pad-edit-numericrocker-opacity').value);
+            if (!isNaN(nrOpa) && nrOpa !== 80) btn.widget_numericrocker_opacity = Math.max(0, Math.min(255, nrOpa));
+            // Adjustment action (stored as nested object)
+            var adjAction = actionEditorBuild('pad-edit-nr-adjust');
+            if (adjAction.type) btn.widget_numericrocker_action = adjAction;
         }
     }
 

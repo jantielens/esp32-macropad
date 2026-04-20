@@ -77,6 +77,12 @@ function padInit() {
             lpHtml;
     }
 
+    // Generate numeric rocker adjustment action editor
+    var nrAdjContainer = document.getElementById('pad-edit-nr-adjust-container');
+    if (nrAdjContainer) {
+        nrAdjContainer.innerHTML = actionEditorHTML('pad-edit-nr-adjust', 'Adjustment Action', { showBleHint: true, showKeyHelp: true });
+    }
+
     document.getElementById('pad-page-select').addEventListener('change', (e) => {
         const newPage = parseInt(e.target.value);
         if (padDirty) {
@@ -291,6 +297,7 @@ function padPopulateScreenDropdown() {
         prefixes.push('pad-edit-action-' + i);
         prefixes.push('pad-edit-lp-action-' + i);
     }
+    prefixes.push('pad-edit-nr-adjust');
     actionEditorPopulateScreens(
         prefixes,
         deviceInfoCache ? deviceInfoCache.available_screens : null
@@ -326,6 +333,7 @@ function padPopulateSoundDropdown() {
         prefixes.push('pad-edit-action-' + i);
         prefixes.push('pad-edit-lp-action-' + i);
     }
+    prefixes.push('pad-edit-nr-adjust');
     actionEditorPopulateSounds(prefixes, padSoundListCache);
 }
 
@@ -368,7 +376,7 @@ function padUpdateAddLink(gesture) {
     if (link) link.style.display = (visibleCount >= 3) ? 'none' : '';
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker'];
+const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker'];
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
@@ -379,6 +387,7 @@ function padWidgetTypeChanged() {
 
     // Rocker widget: relabel Tap/LP action groups contextually
     var isRocker = (wtype === 'rocker');
+    var isNumericRocker = (wtype === 'numericrocker');
     var axis = 'vertical';
     if (isRocker) {
         var axSel = document.getElementById('pad-edit-rocker-axis');
@@ -403,7 +412,23 @@ function padWidgetTypeChanged() {
                 lpLbl.textContent = ai === 0 ? 'Long-Press Action' : 'Long-Press Action ' + (ai + 1);
             }
         }
+        // Show all LP action wraps for all widget types (numericrocker uses standard LP)
+        var lpWrap = document.getElementById('pad-edit-lp-action-' + ai + '-wrap');
+        if (lpWrap && !isNumericRocker) lpWrap.style.display = '';
     }
+    // Show LP add-action link for all types
+    var lpAddLink = document.getElementById('pad-add-lp-action');
+    if (lpAddLink) lpAddLink.style.display = '';
+    // Show all tap action slots and add link for all types
+    for (var ai2 = 1; ai2 < MAX_ACTIONS; ai2++) {
+        var tapWrap = document.getElementById('pad-edit-action-' + ai2 + '-wrap');
+        // Don't force-show — just don't force-hide (padAddAction handles progressive display)
+    }
+    var tapAddLink = document.getElementById('pad-add-tap-action');
+    if (tapAddLink) tapAddLink.style.display = '';
+    // Numeric rocker: show adjustment action editor in widget settings
+    var adjSection = document.getElementById('pad-edit-numericrocker-adjust-section');
+    if (adjSection) adjSection.style.display = isNumericRocker ? '' : 'none';
 }
 
 async function padLoadPage(page) {
