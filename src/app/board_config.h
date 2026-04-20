@@ -611,6 +611,12 @@
 #define TFT_BACKLIGHT_DUTY_MAX 255
 #endif
 
+// Minimum brightness (%) a user can set via buttons, web UI, or API.
+// The screen saver bypasses this floor to allow sleep (brightness 0).
+#ifndef MIN_USER_BRIGHTNESS
+#define MIN_USER_BRIGHTNESS 5
+#endif
+
 // ============================================================================
 // Touch Configuration
 // ============================================================================

@@ -798,7 +798,7 @@ These endpoints are only available when the firmware is compiled with `HAS_DISPL
 
 #### `PUT /api/display/brightness`
 
-Set backlight brightness immediately (does not persist to NVS).
+Set backlight brightness immediately (does not persist to NVS). Routes through the screen saver manager so the screensaver's internal brightness tracking stays consistent — the device wakes to this brightness after a sleep cycle. If the screensaver is active, this triggers a wake to the new level.
 
 **Request Body:**
 ```json
@@ -886,7 +886,7 @@ All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth whe
 
 Returns the current boot action configuration.
 
-- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, etc.).
+- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, `volume_mode`, `volume_value`, `brightness_mode`, `brightness_value`, `timer_id`, `timer_command`, `timer_value`, etc.).
 - Default (no file saved): `{"actions": []}`.
 
 #### `POST /api/boot-actions`

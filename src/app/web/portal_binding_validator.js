@@ -773,6 +773,7 @@ bindingRegisterScheme('health', {
         'chip', 'chip_rev', 'chip_cores', 'cpu_freq', 'flash_size',
         'firmware', 'board', 'mac', 'reset_reason',
         'wifi_connected', 'wifi_ssid', 'ip', 'hostname',
+        'brightness', 'volume',
         'ble_status', 'ble_state', 'ble_name', 'ble_pairing',
         'ble_bonded', 'ble_encrypted', 'ble_peer_addr', 'ble_peer_id_addr'
     ]
@@ -803,7 +804,11 @@ bindingRegisterScheme('timer', {
         }
         if (parts.length > 2) return 'Too many parameters for timer binding';
         if (opts && opts.isWidgetBinding && parts.length > 1) {
-            return 'Widget data bindings must not include a format parameter';
+            var fmt = parts[1].trim();
+            var numericFormats = ['ss'];
+            if (numericFormats.indexOf(fmt) === -1) {
+                return 'Widget data bindings only allow numeric formats (none or "ss"), got "' + fmt + '"';
+            }
         }
         return null;
     }

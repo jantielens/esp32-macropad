@@ -28,8 +28,6 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="ble_pair">Start BLE Pairing</option>';
     h += '<option value="beep">Play Beep</option>';
     h += '<option value="sound">Play Sound</option>';
-    h += '<option value="volume">Set Volume</option>';
-    h += '<option value="brightness">Set Brightness</option>';
     h += '<option value="timer">Timer Control</option>';
     h += '<option value="notify">Show Notification</option>';
     h += '<option value="system">System Command</option>';
@@ -89,35 +87,6 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<input type="number" id="' + prefix + '-sound-volume" min="0" max="100" placeholder="(use device volume)">';
     h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
     h += '</div></div>';
-    // Volume
-    h += '<div id="' + prefix + '-volume-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-volume-mode">Volume Action</label>';
-    h += '<select id="' + prefix + '-volume-mode" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
-    h += '<option value="set">Set to value</option>';
-    h += '<option value="up">Volume Up (+10%)</option>';
-    h += '<option value="down">Volume Down (&minus;10%)</option>';
-    h += '</select>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-volume-value-group">';
-    h += '<label for="' + prefix + '-volume-value">Volume (%)</label>';
-    h += '<input type="number" id="' + prefix + '-volume-value" min="0" max="100" placeholder="e.g. 50">';
-    h += '</div></div>';
-    // Brightness
-    h += '<div id="' + prefix + '-brightness-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-brightness-mode">Brightness Action</label>';
-    h += '<select id="' + prefix + '-brightness-mode" onchange="actionEditorTypeChanged(\'' + prefix + '\')">'; 
-    h += '<option value="set">Set to value</option>';
-    h += '<option value="up">Brightness Up (+10%)</option>';
-    h += '<option value="down">Brightness Down (&minus;10%)</option>';
-    h += '</select>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-brightness-value-group">';
-    h += '<label for="' + prefix + '-brightness-value">Brightness (%)</label>';
-    h += '<input type="number" id="' + prefix + '-brightness-value" min="0" max="100" placeholder="e.g. 50">';
-    h += '<small id="' + prefix + '-brightness-step-hint" style="display:none;">Step size (default 10 if empty).</small>';
-    h += '</div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
     h += '<div class="form-group">';
@@ -132,10 +101,16 @@ function actionEditorHTML(prefix, label, opts) {
         h += '<option value="' + t + ':resume">T' + t + ': Resume</option>';
         h += '<option value="' + t + ':reset">T' + t + ': Reset</option>';
         h += '<option value="' + t + ':lap">T' + t + ': Lap</option>';
+        h += '<option value="' + t + ':set">T' + t + ': Set Countdown</option>';
         h += '<option value="' + t + ':adjust">T' + t + ': Adjust Countdown</option>';
         h += '</optgroup>';
     }
     h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-set-group" style="display:none;">';
+    h += '<label for="' + prefix + '-timer-set-sec">Countdown (seconds)</label>';
+    h += '<input type="number" id="' + prefix + '-timer-set-sec" min="0" placeholder="e.g. 300">';
+    h += '<small>Set the countdown to this many seconds.</small>';
     h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-adjust-group" style="display:none;">';
     h += '<label for="' + prefix + '-timer-adjust-sec">Adjust (seconds)</label>';
@@ -197,11 +172,27 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div id="' + prefix + '-system-group" style="display:none;">';
     h += '<div class="form-group">';
     h += '<label for="' + prefix + '-system-command">Command</label>';
-    h += '<select id="' + prefix + '-system-command">';
+    h += '<select id="' + prefix + '-system-command" onchange="actionEditorSystemChanged(\'' + prefix + '\')">'; 
     h += '<option value="reboot">Reboot Device</option>';
     h += '<option value="wifi_reconnect">Reconnect WiFi</option>';
     h += '<option value="screensaver">Enable Screensaver</option>';
+    h += '<option value="volume_set">Set Volume</option>';
+    h += '<option value="volume_adjust">Adjust Volume</option>';
+    h += '<option value="brightness_set">Set Brightness</option>';
+    h += '<option value="brightness_adjust">Adjust Brightness</option>';
     h += '</select>';
+    h += '</div>';
+    // Set value sub-field (volume/brightness set)
+    h += '<div class="form-group" id="' + prefix + '-sys-set-group" style="display:none;">';
+    h += '<label for="' + prefix + '-sys-set-value" id="' + prefix + '-sys-set-label">Value (%)</label>';
+    h += '<input type="number" id="' + prefix + '-sys-set-value" min="0" max="100" placeholder="e.g. 50">';
+    h += '</div>';
+    // Adjust value sub-field (volume/brightness adjust)
+    h += '<div class="form-group" id="' + prefix + '-sys-adjust-group" style="display:none;">';
+    h += '<label for="' + prefix + '-sys-adjust-value" id="' + prefix + '-sys-adjust-label">Adjust (%)</label>';
+    h += '<input type="text" id="' + prefix + '-sys-adjust-value" placeholder="e.g. 10, -10, or {step}">';
+    h += '<small>Positive increases, negative decreases. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
+    h += '</div>';
     h += '</div></div>';
     // Extension form groups (e.g. scale, brew)
     _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
@@ -219,16 +210,12 @@ function actionEditorTypeChanged(prefix, skipBrewPopulate) {
     var bleHint = document.getElementById(prefix + '-ble-hint');
     var beepGrp = document.getElementById(prefix + '-beep-group');
     var soundGrp = document.getElementById(prefix + '-sound-group');
-    var volGrp = document.getElementById(prefix + '-volume-group');
     if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
     if (mqttGrp) mqttGrp.style.display = (type === 'mqtt') ? '' : 'none';
     if (keyGrp) keyGrp.style.display = (type === 'key') ? '' : 'none';
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
     if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
     if (soundGrp) soundGrp.style.display = (type === 'sound') ? '' : 'none';
-    if (volGrp) volGrp.style.display = (type === 'volume') ? '' : 'none';
-    var brightGrp = document.getElementById(prefix + '-brightness-group');
-    if (brightGrp) brightGrp.style.display = (type === 'brightness') ? '' : 'none';
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     var notifyGrp = document.getElementById(prefix + '-notify-group');
@@ -237,23 +224,33 @@ function actionEditorTypeChanged(prefix, skipBrewPopulate) {
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
     if (type === 'notify') actionEditorInitNotifyBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
+    if (type === 'system') actionEditorSystemChanged(prefix);
     // Extension type handlers (e.g. scale, brew)
     _actionEditorExtensions.forEach(function(ext) { if (ext.typeChanged) ext.typeChanged(prefix, type, skipBrewPopulate); });
-    // Show/hide volume value field depending on mode
-    if (type === 'volume') {
-        var modeEl = document.getElementById(prefix + '-volume-mode');
-        var valGrp = document.getElementById(prefix + '-volume-value-group');
-        if (modeEl && valGrp) valGrp.style.display = (modeEl.value === 'set') ? '' : 'none';
+}
+
+// Show/hide system command sub-fields based on the command dropdown.
+function actionEditorSystemChanged(prefix) {
+    var sel = document.getElementById(prefix + '-system-command');
+    if (!sel) return;
+    var cmd = sel.value;
+    var setGrp = document.getElementById(prefix + '-sys-set-group');
+    var adjustGrp = document.getElementById(prefix + '-sys-adjust-group');
+    var setLabel = document.getElementById(prefix + '-sys-set-label');
+    var setInput = document.getElementById(prefix + '-sys-set-value');
+    var adjustLabel = document.getElementById(prefix + '-sys-adjust-label');
+    var isSet = (cmd === 'volume_set' || cmd === 'brightness_set');
+    var isAdjust = (cmd === 'volume_adjust' || cmd === 'brightness_adjust');
+    if (setGrp) setGrp.style.display = isSet ? '' : 'none';
+    if (adjustGrp) adjustGrp.style.display = isAdjust ? '' : 'none';
+    if (isSet) {
+        var isBright = (cmd === 'brightness_set');
+        if (setInput) setInput.min = isBright ? '5' : '0';
+        if (setLabel) setLabel.textContent = isBright ? 'Brightness (%)' : 'Volume (%)';
     }
-    // Show/hide brightness value field and step hint depending on mode
-    if (type === 'brightness') {
-        var bModeEl = document.getElementById(prefix + '-brightness-mode');
-        var bValGrp = document.getElementById(prefix + '-brightness-value-group');
-        var bStepHint = document.getElementById(prefix + '-brightness-step-hint');
-        if (bModeEl && bValGrp) {
-            bValGrp.style.display = '';
-            if (bStepHint) bStepHint.style.display = (bModeEl.value !== 'set') ? '' : 'none';
-        }
+    if (isAdjust) {
+        var isBright = (cmd === 'brightness_adjust');
+        if (adjustLabel) adjustLabel.textContent = isBright ? 'Adjust Brightness (%)' : 'Adjust Volume (%)';
     }
 }
 
@@ -264,7 +261,9 @@ function actionEditorTimerChanged(prefix) {
     var val = sel.value; // e.g. "1:toggle", "2:adjust"
     var parts = val.split(':');
     var cmd = parts[1] || '';
+    var setGrp = document.getElementById(prefix + '-timer-set-group');
     var adjustGrp = document.getElementById(prefix + '-timer-adjust-group');
+    if (setGrp) setGrp.style.display = (cmd === 'set') ? '' : 'none';
     if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
 }
 
@@ -315,31 +314,23 @@ function actionEditorLoad(prefix, action) {
     }
     el = document.getElementById(prefix + '-sound-volume');
     if (el) el.value = (action.sound_volume > 0) ? action.sound_volume : '';
-    el = document.getElementById(prefix + '-volume-mode');
-    if (el) el.value = action.volume_mode || 'set';
-    el = document.getElementById(prefix + '-volume-value');
-    if (el) el.value = (action.volume_value !== undefined && action.volume_value > 0) ? action.volume_value : '';
+
     // Extension load handlers (e.g. scale, brew)
     _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
-    el = document.getElementById(prefix + '-brightness-mode');
-    if (el) el.value = action.brightness_mode || 'set';
-    el = document.getElementById(prefix + '-brightness-value');
-    if (el) el.value = (action.brightness_value !== undefined && action.brightness_value > 0) ? action.brightness_value : '';
-    // Timer: parse DSL string "N:command[:arg]" into structured fields
-    if (action.timer_command) {
-        var tc = action.timer_command;
-        var m = tc.match(/^(\d):(\w+)(?::(.+))?$/);
-        if (m) {
-            var tid = m[1], cmd = m[2], arg = m[3] || '';
-            el = document.getElementById(prefix + '-timer-action');
-            if (el) {
-                el.value = tid + ':' + cmd;
-                if (el.selectedIndex < 0) el.value = '1:toggle';
-            }
-            if (cmd === 'adjust') {
-                el = document.getElementById(prefix + '-timer-adjust-sec');
-                if (el) el.value = arg;
-            }
+
+    // Timer: load from proper fields
+    if (action.timer_id && action.timer_command) {
+        el = document.getElementById(prefix + '-timer-action');
+        if (el) {
+            el.value = action.timer_id + ':' + action.timer_command;
+            if (el.selectedIndex < 0) el.value = '1:toggle';
+        }
+        if (action.timer_command === 'set') {
+            el = document.getElementById(prefix + '-timer-set-sec');
+            if (el) el.value = action.timer_value || '';
+        } else if (action.timer_command === 'adjust') {
+            el = document.getElementById(prefix + '-timer-adjust-sec');
+            if (el) el.value = action.timer_value || '';
         }
     } else {
         el = document.getElementById(prefix + '-timer-action');
@@ -359,9 +350,26 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.notify_font_size > 0) ? action.notify_font_size : '';
     el = document.getElementById(prefix + '-notify-location');
     if (el) el.value = action.notify_location || 'bottom';
-    // System fields
-    el = document.getElementById(prefix + '-system-command');
-    if (el) el.value = action.system_command || 'reboot';
+    // System fields — also handles volume/brightness mapped into system command
+    if (action.type === 'volume' || action.type === 'brightness') {
+        // Map volume/brightness type into system command UI
+        el = document.getElementById(prefix + '-type');
+        if (el) el.value = 'system';
+        var mode = (action.type === 'volume') ? (action.volume_mode || 'set') : (action.brightness_mode || 'set');
+        el = document.getElementById(prefix + '-system-command');
+        if (el) el.value = action.type + '_' + mode;
+        var val = (action.type === 'volume') ? (action.volume_value || '') : (action.brightness_value || '');
+        if (mode === 'set') {
+            el = document.getElementById(prefix + '-sys-set-value');
+            if (el) el.value = val;
+        } else {
+            el = document.getElementById(prefix + '-sys-adjust-value');
+            if (el) el.value = val;
+        }
+    } else {
+        el = document.getElementById(prefix + '-system-command');
+        if (el) el.value = action.system_command || 'reboot';
+    }
     // Skip brew dropdown population — already handled above with the saved value
     actionEditorTypeChanged(prefix, action.type === 'brew');
 }
@@ -399,14 +407,7 @@ function actionEditorBuild(prefix) {
         var sv = document.getElementById(prefix + '-sound-volume');
         if (sv && sv.value !== '') act.sound_volume = parseInt(sv.value, 10);
     }
-    if (type === 'volume') {
-        var vm = document.getElementById(prefix + '-volume-mode');
-        if (vm) act.volume_mode = vm.value;
-        if (vm && vm.value === 'set') {
-            var vv = document.getElementById(prefix + '-volume-value');
-            if (vv && vv.value !== '') act.volume_value = parseInt(vv.value, 10);
-        }
-    }
+
     // Extension build handlers (e.g. scale, brew)
     _actionEditorExtensions.forEach(function(ext) {
         if (ext.build) {
@@ -414,24 +415,21 @@ function actionEditorBuild(prefix) {
             if (extra) { for (var k in extra) act[k] = extra[k]; }
         }
     });
-    if (type === 'brightness') {
-        var bm = document.getElementById(prefix + '-brightness-mode');
-        if (bm) act.brightness_mode = bm.value;
-        var bv = document.getElementById(prefix + '-brightness-value');
-        if (bv && bv.value !== '') act.brightness_value = parseInt(bv.value, 10);
-    }
+
     if (type === 'timer') {
         var sel = document.getElementById(prefix + '-timer-action');
         if (sel) {
-            var val = sel.value; // e.g. "1:toggle", "2:countdown"
+            var val = sel.value; // e.g. "1:toggle", "2:adjust"
             var parts = val.split(':');
-            var cmd = parts[1] || '';
-            if (cmd === 'adjust') {
+            act.timer_id = parseInt(parts[0], 10);
+            act.timer_command = parts[1] || '';
+            if (act.timer_command === 'set') {
+                var setSec = document.getElementById(prefix + '-timer-set-sec');
+                if (setSec && setSec.value !== '') act.timer_value = (setSec.value || '').trim();
+            } else if (act.timer_command === 'adjust') {
                 var adjSec = document.getElementById(prefix + '-timer-adjust-sec');
-                var adjRaw = adjSec ? (adjSec.value || '').trim() : '';
-                if (adjRaw) val = val + ':' + adjRaw;
+                if (adjSec && adjSec.value !== '') act.timer_value = (adjSec.value || '').trim();
             }
-            act.timer_command = val;
         }
     }
     if (type === 'notify') {
@@ -454,7 +452,22 @@ function actionEditorBuild(prefix) {
     }
     if (type === 'system') {
         var sc = document.getElementById(prefix + '-system-command');
-        if (sc) act.system_command = sc.value;
+        if (sc) {
+            var cmd = sc.value;
+            var sysMap = { volume_set: ['volume','set'], volume_adjust: ['volume','adjust'],
+                           brightness_set: ['brightness','set'], brightness_adjust: ['brightness','adjust'] };
+            var m = sysMap[cmd];
+            if (m) {
+                act.type = m[0];
+                var modeKey = m[0] + '_mode', valKey = m[0] + '_value';
+                act[modeKey] = m[1];
+                var inputId = prefix + (m[1] === 'set' ? '-sys-set-value' : '-sys-adjust-value');
+                var inp = document.getElementById(inputId);
+                if (inp && inp.value !== '') act[valKey] = (inp.value || '').trim();
+            } else {
+                act.system_command = cmd;
+            }
+        }
     }
     return act;
 }

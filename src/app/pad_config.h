@@ -34,6 +34,8 @@
 #define CONFIG_KEY_SEQ_MAX_LEN        256
 #define CONFIG_BEEP_PATTERN_MAX_LEN   128
 #define CONFIG_VOLUME_MODE_MAX_LEN     8
+#define CONFIG_VALUE_MAX_LEN          16
+#define CONFIG_TIMER_CMD_MAX_LEN      12
 #define CONFIG_ACTION_TYPE_MAX_LEN     20
 #define CONFIG_LAYOUT_NAME_MAX_LEN     16
 #define CONFIG_JSON_PATH_MAX_LEN       48
@@ -137,10 +139,14 @@ struct ButtonAction {
     char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // type="key": DSL key sequence
     char beep_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];  // type="beep": "freq:dur freq:dur" (empty = default)
     uint8_t beep_volume;                             // type="beep": 0 = use device volume, 1-100 = override
-    char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set", "up", or "down"
-    uint8_t volume_value;                            // type="volume": 0-100 (used with mode="set")
-    char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // type="brightness": "set", "up", or "down"
-    uint8_t brightness_value;                         // type="brightness": 0-100 (target or step size)
+    char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set" or "adjust"
+    char volume_value[CONFIG_VALUE_MAX_LEN];          // type="volume": absolute 0-100, signed delta, or {step}
+    char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // type="brightness": "set" or "adjust"
+    char brightness_value[CONFIG_VALUE_MAX_LEN];       // type="brightness": absolute 5-100, signed delta, or {step}
+    // Timer action fields
+    uint8_t timer_id;                                  // type="timer": 1-3
+    char timer_command[CONFIG_TIMER_CMD_MAX_LEN];      // type="timer": "toggle", "start", "stop", etc.
+    char timer_value[CONFIG_VALUE_MAX_LEN];             // type="timer": seconds for set/adjust (supports {step})
     char sound_file[32];                              // type="sound": filename (no path/extension)
     uint8_t sound_volume;                             // type="sound": 0 = device vol, 1-100 = override
     // Notify action fields

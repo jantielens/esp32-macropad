@@ -79,7 +79,7 @@ After placing a block, all its buttons become regular buttons — you can edit, 
 
 | Block | Size | Description |
 |-------|------|-------------|
-| **Countdown Timer** | 3×2 min | Three rocker buttons (hours, minutes, seconds) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Includes pad bindings for all three timers. |
+| **Countdown Timer** | 3×2 min | Three rocker buttons (1 min, 10 sec, 1 sec) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Uses Timer 1. |
 
 > **Tip**: Building blocks and template pads serve different purposes. Use **template pads** to share common buttons (like navigation) across many pads. Use **building blocks** to quickly add a self-contained functional group (like a timer control panel) to a specific pad.
 
@@ -338,11 +338,13 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
 | **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
 | **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
-| **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
-| **Set Brightness** | Adjust the display backlight brightness — set to a specific value, or step up/down (default 10%). Session-only, resets on reboot. |
+| **Set Volume** | Set the device audio volume to an absolute value (0–100). Sub-option of System Command. ESP32-P4 boards only. |
+| **Adjust Volume** | Step the device audio volume up or down by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). Sub-option of System Command. ESP32-P4 boards only. |
+| **Set Brightness** | Set the display backlight brightness to an absolute value (5–100). Sub-option of System Command. Session-only, resets on reboot. |
+| **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). Sub-option of System Command. Session-only, resets on reboot. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
-| **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, or **Enable Screensaver**. |
+| **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, **Enable Screensaver**, **Set/Adjust Volume**, or **Set/Adjust Brightness**. |
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -403,7 +405,8 @@ When you select a Timer action, a dropdown groups all actions by timer:
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
 | **Lap** | Reset the timer and start fresh (useful for step timing) |
-| **Adjust** | Add or subtract seconds from the countdown preset (e.g., +15 or -10). Only affects countdown-mode timers |
+| **Set Countdown** | Set the countdown preset to an absolute number of seconds. Only affects countdown-mode timers |
+| **Adjust** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). Only affects countdown-mode timers |
 
 #### Device-Level Timer Configuration
 
@@ -503,8 +506,8 @@ Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes
 | Widget | Rocker |
 | Direction | Vertical |
 | Center label | `☀️` or `[health:brightness]` |
-| Up Action | Brightness → Up |
-| Down Action | Brightness → Down |
+| Up Action | System Command → Adjust Brightness → `10` |
+| Down Action | System Command → Adjust Brightness → `-10` |
 
 Labels, icons, and colors work alongside the rocker widget. A typical rocker button uses the center label for an icon or the current value, with top/bottom labels for context.
 
@@ -517,17 +520,19 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 **How it works:**
 
 - The button area is divided into 5 zones along the selected axis, with pixel-clamped widths that adapt to button size.
-- **Outer decrement** (far left / far top) → `{step}` = `-large_step`
+- **Horizontal mode**: left = decrement, right = increment.
+- **Vertical mode**: bottom = decrement, top = increment (up = more).
+- **Outer decrement** (far left / bottom) → `{step}` = `-large_step`
 - **Inner decrement** → `{step}` = `-small_step`
 - **Center zone** → works as a normal button (tap and long-press actions)
 - **Inner increment** → `{step}` = `+small_step`
-- **Outer increment** (far right / far bottom) → `{step}` = `+large_step`
+- **Outer increment** (far right / top) → `{step}` = `+large_step`
 - Zone widths target 12% (outer) and 15% (inner) of the button span, clamped to 40–80 px. The center zone gets whatever remains.
 - Double chevron indicators (`<<`/`>>` or `▲▲`/`▼▼`) mark the outer zones; single chevrons (`<`/`>` or `▲`/`▼`) mark the inner zones.
 - The tap flash covers only the tapped zone.
 - Inner zones (small step) use the device's **Tap Beep** pattern; outer zones (large step) use the **Long-Press Beep** pattern for a distinct audio cue. Suppressed when the adjustment action itself produces audio.
 - The center zone supports full tap and long-press actions (all 3+3 action slots). Outer and inner zones use the dedicated **Adjustment Action**.
-- The `{step}` placeholder is replaced in `mqtt_payload` and `key_sequence` fields.
+- The `{step}` placeholder is replaced in `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value` fields.
 
 **Disabling zones:** Set a step value to **0** to disable that zone pair. The remaining zone expands to fill the freed space (from 15% to the full 27% per side). Setting both steps to 0 makes the entire button a center zone.
 
@@ -551,12 +556,12 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 | Widget | Numeric Rocker |
 | Direction | Horizontal |
 | Col Span | 2 |
-| Center label | `[timer:1]` |
-| Adjustment Action | Type: `timer`, Timer Command: `1:adjust:{step}` |
+| Center label | `[timer:1;mm:ss]` |
+| Adjustment Action | Type: `timer`, Timer: `1`, Command: `Adjust Countdown`, Value: `{step}` |
 | Small Step | 1 |
 | Large Step | 10 |
 
-Tapping the inner-right zone sends `1:adjust:1` (add 1 second). Tapping the outer-left zone sends `1:adjust:-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1]` binding.
+Tapping the inner-right zone sends an "Adjust Countdown" action with value `1` (add 1 second). Tapping the outer-left zone sends value `-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1;mm:ss]` binding.
 
 ### Bar Chart
 
@@ -900,6 +905,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `ble_encrypted` | Current connection is encrypted | `ON` / `OFF` |
 | `ble_peer_addr` | Connected peer's Bluetooth address | `AA:BB:CC:DD:EE:FF` |
 | `ble_peer_id_addr` | Connected peer's identity address | `AA:BB:CC:DD:EE:FF` |
+| `brightness` | Current backlight brightness (0–100) | `75` |
+| `volume` | Current audio volume (0–100) | `50` |
 
 Values are cached for up to 2 seconds to keep the CPU impact low.
 
@@ -1062,10 +1069,13 @@ Displays the value or state of one of the 3 on-device timers. Timer N is 1, 2, o
 
 | Format | Result | Example |
 |--------|--------|---------|
-| `mm:ss` (default) | Minutes and seconds | `4:05` or `-0:12` |
+| *(none)* (default) | Raw seconds with decisecond | `245.0` or `-5.3` |
+| `mm:ss` | Minutes and seconds | `4:05` or `-0:12` |
 | `hh:mm:ss` | Hours, minutes, seconds | `1:02:30` |
 | `ss` | Total seconds | `245` |
 | `mm:ss.d` | With deciseconds | `4:05.3` |
+
+The numeric default makes `[timer:N]` usable as a data source for gauge, bar chart, and sparkline widgets. For human-readable display on labels, use `[timer:N;mm:ss]` or another named format.
 
 **State keys:**
 
@@ -1080,10 +1090,11 @@ Countdown timers that run past zero show negative values (e.g., `-0:05`).
 **Examples:**
 
 ```
-[timer:1]                    → 4:05       (default mm:ss)
+[timer:1]                    → 245.0      (default: raw seconds)
+[timer:1;mm:ss]              → 4:05       (minutes:seconds)
 [timer:1;hh:mm:ss]           → 0:04:05
 [timer:2;mm:ss.d]            → 3:22.7     (with deciseconds)
-[timer:1;ss]                 → 245         (total seconds)
+[timer:1;ss]                 → 245         (integer seconds)
 [timer:1_state]              → running
 [timer:1_expired]            → OFF
 [timer:1_mode]               → down

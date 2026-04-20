@@ -473,6 +473,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 
 				if (brightness > 100) brightness = 100;
+				if (brightness < MIN_USER_BRIGHTNESS) brightness = MIN_USER_BRIGHTNESS;
 				current_config->backlight_brightness = brightness;
 
 				LOGI("Config", "Backlight brightness set to %d%%", brightness);
