@@ -1121,7 +1121,9 @@ Each button's `col_offset` / `row_offset` is relative to the placement anchor ce
 - `web/network.html` - Network configuration page
 - `web/firmware.html` - Firmware update and factory reset page
 - `web/portal.css` - Minimalist card-based design with gradients and responsive grid
-- `web/portal.js` - Vanilla JavaScript with multi-page support (no frameworks)
+- `web/portal.js.bundle` - Bundle manifest listing all JS modules in concatenation order
+- `web/portal.js` - Entry point (last in bundle); all JS served as a single bundled asset
+- `web/portal_*.js` - Feature modules and fragments (see [JavaScript Bundle System](#javascript-bundle-system))
 
 **Asset Compression:**
 - All web assets are automatically minified and gzip compressed during build
@@ -1191,7 +1193,9 @@ DNS server redirects all requests to device IP in AP mode:
      - `firmware.html` - Firmware update and reset
    - Styling and logic:
      - `portal.css` - Styles and responsive grid
-     - `portal.js` - Client logic with multi-page support
+     - `portal.js.bundle` - Bundle manifest (module load order)
+     - `portal_*.js` - JS feature modules and fragments
+     - `portal.js` - Entry point (must be last in bundle)
 
 2. Rebuild to embed assets:
    ```bash
@@ -1202,7 +1206,7 @@ DNS server redirects all requests to device IP in AP mode:
   - Replaces `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders in HTML pages
    - Minifies HTML (removes comments, collapses whitespace)
    - Minifies CSS using `csscompressor`
-   - Minifies JavaScript using `rjsmin`
+   - Concatenates JS modules per `portal.js.bundle` manifest, then minifies using `rjsmin`
    - Gzip compresses all assets (level 9)
   - Generates `src/app/web_assets.h` with embedded byte arrays
   - Generates `src/app/project_branding.h` with `PROJECT_NAME` / `PROJECT_DISPLAY_NAME` defines
@@ -1214,7 +1218,7 @@ DNS server redirects all requests to device IP in AP mode:
      HTML network.html:  8912 → 6543 → 1987 bytes (-78% total)
      HTML firmware.html: 4231 → 3124 → 1098 bytes (-74% total)
      CSS  portal.css:   14348 → 10539 → 2864 bytes (-81% total)
-     JS   portal.js:    32032 → 19700 → 4931 bytes (-85% total)
+     JS   portal.js:   329575 → 220746 → 50066 bytes (-85% total)
    ```
 
 3. Upload and test:
@@ -1222,6 +1226,44 @@ DNS server redirects all requests to device IP in AP mode:
    ./upload.sh
    ./monitor.sh
    ```
+
+### JavaScript Bundle System
+
+All JavaScript source files are concatenated into a single `portal.js` asset at build time. This means one HTTP request and one C++ route handler serve all JS, reducing flash usage and connection overhead on the ESP32.
+
+**How it works:**
+
+1. `src/app/web/portal.js.bundle` lists every JS module in dependency order (one filename per line, `#` comments ignored)
+2. `tools/minify-web-assets.sh` reads the manifest, concatenates the files, minifies the result, and gzip-compresses it into `web_assets.h`
+3. Every HTML page loads a single `<script src="/portal.js"></script>`
+4. One C++ handler (`handleJS`) serves the bundled asset
+
+**Module organization:**
+
+| Category | Files | Purpose |
+|---|---|---|
+| Core | `portal_core.js` | Navigation, mode detection, shared utilities |
+| Shared libraries | `portal_binding_validator.js`, `portal_action_editor.js` | Reusable components used by multiple pages |
+| Configuration | `portal_config_actions.js`, `portal_config.js` | Home page settings (fragments before main) |
+| Firmware | `portal_firmware.js` | Firmware update page |
+| Health | `portal_health_sparkline.js`, `portal_health.js` | Health widget (sparkline fragment before main) |
+| Pad editor | `portal_pad_colors.js`, `portal_pad_io.js`, `portal_pad_blocks.js`, `portal_pad_icons.js`, `portal_pad_defaults.js`, `portal_pad_grid.js`, `portal_pad_dialog.js`, `portal_pad_editor.js` | Visual pad editor (fragments before main) |
+| Entry point | `portal.js` | Must be last — bootstraps the application |
+
+**Adding a new JS module:**
+
+1. Create `src/app/web/portal_myfeature.js`
+2. Add the filename to `portal.js.bundle` in the correct dependency position (before any file that calls its functions, after any file it depends on)
+3. Run `./build.sh` — the module is automatically included in the bundle
+
+**Fragment pattern:** Large modules are split into a main file and one or more fragment files. Fragments are listed before the main file in the bundle manifest so their functions are available when the main file executes. For example, `portal_health_sparkline.js` (fragment) appears before `portal_health.js` (main).
+
+**Build-time validation:** The build automatically validates the bundle before minification:
+
+- **Manifest check** — every file listed in the `.js.bundle` manifest must exist; missing files cause a hard build error
+- **Syntax check** — every `.js` file is checked with `node --check` to catch missing braces, unterminated strings, and other parse errors before minification
+
+> **Feature branches** may add additional modules (e.g., `portal_action_editor_darkroom.js`, `portal_brews.js`). These follow the same pattern: add the file, add it to the bundle manifest, no C++ changes needed.
 
 ### Adding REST Endpoints
 

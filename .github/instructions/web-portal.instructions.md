@@ -14,6 +14,17 @@ applyTo: "**/web_portal*, **/web/*.html, **/web/*.js, **/web/*.css, **/web_asset
 - Template fragments: `_header.html`, `_nav.html`, `_footer.html`, `_binding_help.html` used via `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders
 - Build-time template replacement in `tools/minify-web-assets.sh`
 
+## JavaScript Bundle System
+
+- All JS source files are concatenated into a single `portal.js` asset at build time
+- `portal.js.bundle` is the manifest listing every JS module in dependency order
+- One `<script src="/portal.js">` per HTML page, one C++ handler (`handleJS`)
+- Adding a new JS file: create it, add the filename to `portal.js.bundle`, run `./build.sh`
+- No C++ changes needed when adding/removing JS modules
+- Fragment pattern: large modules split into fragments listed before the main file in the manifest
+- Build-time validation: manifest completeness check (missing files = hard error) and `node --check` syntax validation on every `.js` file
+- `portal.js` is always the last entry (entry point)
+
 ## Portal Modes
 
 - **Core Mode**: AP with captive portal (192.168.4.1) — WiFi not configured
