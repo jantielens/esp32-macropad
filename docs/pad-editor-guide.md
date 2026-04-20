@@ -905,6 +905,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `ble_encrypted` | Current connection is encrypted | `ON` / `OFF` |
 | `ble_peer_addr` | Connected peer's Bluetooth address | `AA:BB:CC:DD:EE:FF` |
 | `ble_peer_id_addr` | Connected peer's identity address | `AA:BB:CC:DD:EE:FF` |
+| `brightness` | Current backlight brightness (0–100) | `75` |
+| `volume` | Current audio volume (0–100) | `50` |
 
 Values are cached for up to 2 seconds to keep the CPU impact low.
 

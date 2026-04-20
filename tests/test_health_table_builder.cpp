@@ -201,12 +201,85 @@ static void test_extended_adds_chip_and_fw_rows() {
     check_eq_str(fw_row["metric"] | "", "FW", "extended firmware row present");
 }
 
+static void test_brightness_and_volume_rows() {
+    std::printf("--- brightness and volume rows ---\n");
+
+    static const KvPair kData[] = {
+        {"cpu", "30"},
+        {"heap_internal", "200000"},
+        {"psram_free", "1048576"},
+        {"psram_total", "2097152"},
+        {"wifi_connected", "ON"},
+        {"rssi", "-60"},
+        {"uptime", "120"},
+        {"ip", "192.168.1.10"},
+        {"brightness", "75"},
+        {"volume", "50"},
+        {nullptr, nullptr},
+    };
+    g_lookup_data = kData;
+
+    char out[2048];
+    bool ok = health_table_build(false, lookup_from_table, out, sizeof(out));
+    check_true(ok, "build payload with brightness+volume");
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, out);
+    check_true(!err, "parse brightness+volume JSON");
+
+    JsonArrayConst rows = doc["rows"].as<JsonArrayConst>();
+    check_true(rows.size() == 8, "standard + brightness + volume = 8 rows");
+
+    JsonObjectConst bright_row = row_by_metric(rows, "Backlight");
+    check_eq_str(cell_text(bright_row, "value"), "75%", "brightness value formatted");
+
+    JsonObjectConst vol_row = row_by_metric(rows, "Volume");
+    check_eq_str(cell_text(vol_row, "value"), "50%", "volume value formatted");
+}
+
+static void test_brightness_only_no_volume() {
+    std::printf("--- brightness only (no volume key) ---\n");
+
+    static const KvPair kData[] = {
+        {"cpu", "20"},
+        {"heap_internal", "250000"},
+        {"psram_free", "1048576"},
+        {"psram_total", "2097152"},
+        {"wifi_connected", "ON"},
+        {"rssi", "-50"},
+        {"uptime", "60"},
+        {"ip", "192.168.1.5"},
+        {"brightness", "100"},
+        {nullptr, nullptr},
+    };
+    g_lookup_data = kData;
+
+    char out[2048];
+    bool ok = health_table_build(false, lookup_from_table, out, sizeof(out));
+    check_true(ok, "build payload with brightness only");
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, out);
+    check_true(!err, "parse brightness-only JSON");
+
+    JsonArrayConst rows = doc["rows"].as<JsonArrayConst>();
+    check_true(rows.size() == 7, "standard + brightness = 7 rows (no volume)");
+
+    JsonObjectConst bright_row = row_by_metric(rows, "Backlight");
+    check_eq_str(cell_text(bright_row, "value"), "100%", "brightness 100% formatted");
+
+    JsonObjectConst vol_row = row_by_metric(rows, "Volume");
+    check_true(!vol_row, "no volume row when key absent");
+}
+
 int main() {
     std::printf("=== health_table_builder tests ===\n\n");
 
     test_standard_contract_and_shapes();
     test_threshold_and_fallback_behavior();
     test_extended_adds_chip_and_fw_rows();
+    test_brightness_and_volume_rows();
+    test_brightness_only_no_volume();
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

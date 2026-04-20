@@ -773,6 +773,7 @@ bindingRegisterScheme('health', {
         'chip', 'chip_rev', 'chip_cores', 'cpu_freq', 'flash_size',
         'firmware', 'board', 'mac', 'reset_reason',
         'wifi_connected', 'wifi_ssid', 'ip', 'hostname',
+        'brightness', 'volume',
         'ble_status', 'ble_state', 'ble_name', 'ble_pairing',
         'ble_bonded', 'ble_encrypted', 'ble_peer_addr', 'ble_peer_id_addr'
     ]

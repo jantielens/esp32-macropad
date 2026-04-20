@@ -243,6 +243,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/ha_discovery.cpp
+  - src/app/health_binding.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
   - src/app/screens/pad_screen_events.cpp
