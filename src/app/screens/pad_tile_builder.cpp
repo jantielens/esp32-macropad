@@ -220,6 +220,8 @@ void PadScreen::buildTiles() {
         }
 
         // Position icon + center label based on icon_position mode
+        // Widgets override layout, so clamp to ABOVE when a widget is active
+        const uint8_t effective_icon_pos = bcfg.widget.type[0] ? ICON_POS_ABOVE : bcfg.icon_position;
         if (icon_img && lbl_center) {
             // Force layout to get actual dimensions
             lv_obj_update_layout(icon_img);
@@ -234,9 +236,9 @@ void PadScreen::buildTiles() {
             const int16_t bot_h = bcfg.label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
             const int16_t label_bias = (top_h - bot_h) / 2;
 
-            if (bcfg.icon_position == ICON_POS_LEFT) {
+            if (effective_icon_pos == ICON_POS_LEFT) {
                 // Horizontal row: icon left, label right, vertically centered
-                const int16_t inset_x = 4;
+                const int16_t inset_x = TILE_PAD_PX;
                 const int16_t gap = 4;
                 // Shrink label so icon + gap + label fits inside the button
                 const int16_t lbl_max_w = r.w - 2 * inset_x - icon_w - gap;
@@ -254,7 +256,7 @@ void PadScreen::buildTiles() {
                 lv_obj_align(lbl_center, LV_ALIGN_CENTER,
                              lbl_cx + ui_ofs_x + bcfg.style_center.x_offset,
                              label_bias + bcfg.style_center.y_offset + ui_ofs_y);
-            } else if (bcfg.icon_position == ICON_POS_CENTER) {
+            } else if (effective_icon_pos == ICON_POS_CENTER) {
                 // Icon centered, label stays at its default position (no displacement)
                 lv_obj_align(icon_img, LV_ALIGN_CENTER, ui_ofs_x, label_bias + ui_ofs_y);
                 // lbl_center is already at LV_ALIGN_CENTER from initial creation above
