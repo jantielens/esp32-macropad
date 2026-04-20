@@ -231,6 +231,14 @@ Browse the full Material Symbols catalog at [fonts.google.com/icons](https://fon
 
 **Icon Size %** controls scaling. Leave at 0 for automatic sizing (recommended), or set 1–250 to force a specific percentage. When a bar chart widget is active, the icon automatically shares vertical space with the bar.
 
+**Icon Position** controls where the icon appears relative to the center label:
+
+- **Above label** (default) — icon stacked above the center label in a vertical layout
+- **Left of label** — icon and center label side by side in a horizontal row
+- **Centered** — icon centered on the button; the center label remains at its default position underneath
+
+> **Note:** When a gauge, bar chart, or sparkline widget is active, the widget controls icon and label placement. The Icon Position dropdown is hidden in this case.
+
 ### Colors and Borders
 
 The **Colors** section (collapsible) controls the button's appearance:
@@ -475,7 +483,7 @@ Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes
 - **Zone B** (bottom or right) dispatches the **Long-Press Action** set.
 - Small chevron indicators (▲▼ or ◄►) appear at the edges so the user knows the button is directional.
 - The tap flash overlay covers only the tapped half for clear visual feedback.
-- Zone B uses the device's **Long-Press Beep** pattern for a distinct audio cue (suppressed when the action itself produces audio).
+- Both zones use the device's **Tap Beep** pattern (suppressed when the action itself produces audio).
 - Long-press is disabled on rocker buttons since both action slots are used for the two zones.
 
 > **Note:** The action labels in the button editor change contextually when a rocker widget is selected — "Tap Action" becomes "Up Action" (or "Left Action") and "Long-Press Action" becomes "Down Action" (or "Right Action").
@@ -499,6 +507,56 @@ Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes
 | Down Action | Brightness → Down |
 
 Labels, icons, and colors work alongside the rocker widget. A typical rocker button uses the center label for an icon or the current value, with top/bottom labels for context.
+
+### Numeric Rocker
+
+The numeric rocker widget splits a button into 4 tap zones for fine and coarse numeric adjustment — think `«  ‹  5:00  ›  »` where inner arrows adjust by ±1 and outer arrows adjust by ±10. This gives you a single button that handles both small nudges and large jumps, ideal for timers, counters, and sliders.
+
+Unlike the regular rocker (which maps two zones to two separate action sets), the numeric rocker uses **one action template** with a `{step}` placeholder. The widget substitutes the correct signed step value at tap time, producing 4 distinct actions from a single configuration.
+
+**How it works:**
+
+- The button area is divided into 5 zones along the selected axis, with pixel-clamped widths that adapt to button size.
+- **Outer decrement** (far left / far top) → `{step}` = `-large_step`
+- **Inner decrement** → `{step}` = `-small_step`
+- **Center zone** → works as a normal button (tap and long-press actions)
+- **Inner increment** → `{step}` = `+small_step`
+- **Outer increment** (far right / far bottom) → `{step}` = `+large_step`
+- Zone widths target 12% (outer) and 15% (inner) of the button span, clamped to 40–80 px. The center zone gets whatever remains.
+- Double chevron indicators (`<<`/`>>` or `▲▲`/`▼▼`) mark the outer zones; single chevrons (`<`/`>` or `▲`/`▼`) mark the inner zones.
+- The tap flash covers only the tapped zone.
+- Inner zones (small step) use the device's **Tap Beep** pattern; outer zones (large step) use the **Long-Press Beep** pattern for a distinct audio cue. Suppressed when the adjustment action itself produces audio.
+- The center zone supports full tap and long-press actions (all 3+3 action slots). Outer and inner zones use the dedicated **Adjustment Action**.
+- The `{step}` placeholder is replaced in `mqtt_payload` and `key_sequence` fields.
+
+**Disabling zones:** Set a step value to **0** to disable that zone pair. The remaining zone expands to fill the freed space (from 15% to the full 27% per side). Setting both steps to 0 makes the entire button a center zone.
+
+> **Tip:** For best usability, use `col_span >= 2` in horizontal mode or `row_span >= 2` in vertical mode so the tap zones are easy to hit.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Direction** | Horizontal (left/right, default) or vertical (up/down) |
+| **Small Step** | Inner zone adjustment magnitude (default 1). Supports decimals (e.g. 0.1, 0.5). Set to 0 to disable inner zones |
+| **Large Step** | Outer zone adjustment magnitude (default 10). Supports decimals. Set to 0 to disable outer zones |
+| **Indicator Color** | Chevron color (default white) |
+| **Opacity** | Chevron visibility from 0 (invisible) to 255 (fully opaque). Default 80 (~31%) |
+| **Adjustment Action** | The action template dispatched for outer/inner zones. The `{step}` placeholder is replaced with the signed step value |
+
+**Example — Countdown timer adjustment:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | Numeric Rocker |
+| Direction | Horizontal |
+| Col Span | 2 |
+| Center label | `[timer:1]` |
+| Adjustment Action | Type: `timer`, Timer Command: `1:adjust:{step}` |
+| Small Step | 1 |
+| Large Step | 10 |
+
+Tapping the inner-right zone sends `1:adjust:1` (add 1 second). Tapping the outer-left zone sends `1:adjust:-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1]` binding.
 
 ### Bar Chart
 

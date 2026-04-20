@@ -69,6 +69,11 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define MAX_WIDGET_BINDINGS             4
 #define WIDGET_CONFIG_MAX_BYTES      1600
 
+// Icon position relative to center label
+#define ICON_POS_ABOVE   0   // Default: icon above center label
+#define ICON_POS_LEFT    1   // Icon left of center label (row)
+#define ICON_POS_CENTER  2   // Icon centered (no label displacement)
+
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
 // ============================================================================
@@ -182,6 +187,7 @@ struct ScreenButtonConfig {
     // Icon reference
     char icon_id[CONFIG_ICON_ID_MAX_LEN];
     uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
+    uint8_t icon_position;              // 0=above (default), 1=left, 2=center
     int16_t ui_offset_x;                // Optional visual nudge X in px (+right, -left)
     int16_t ui_offset_y;                // Optional visual nudge Y in px (+down, -up)
 
@@ -234,6 +240,7 @@ struct ButtonDefaults {
     char label_top_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];
+    uint8_t icon_position;                         // ICON_POS_ABOVE (0) = default
 };
 
 // Per-pad config

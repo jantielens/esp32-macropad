@@ -306,9 +306,11 @@ static void table_parse(const JsonObject& btn, uint8_t* data) {
 static void table_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                          const ScreenButtonConfig* btn,
                          const PadRect* rect, const UIScaleInfo* scale,
-                         lv_obj_t* icon_img, WidgetState* state) {
+                         lv_obj_t* icon_img, lv_obj_t* center_label,
+                         WidgetState* state) {
     (void)btn;
     (void)icon_img;
+    (void)center_label;
 
     auto* cfg = reinterpret_cast<const TableWidgetConfig*>(wcfg->data);
     auto* st = (TableWidgetState*)lv_malloc(sizeof(TableWidgetState));

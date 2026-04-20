@@ -24,6 +24,8 @@ void handleGetButtonDefaults(AsyncWebServerRequest *request) {
     if (d->label_top_style[0])   doc["label_top_style"]   = d->label_top_style;
     if (d->label_center_style[0]) doc["label_center_style"] = d->label_center_style;
     if (d->label_bottom_style[0]) doc["label_bottom_style"] = d->label_bottom_style;
+    if (d->icon_position == ICON_POS_LEFT)   doc["icon_position"] = "left";
+    else if (d->icon_position == ICON_POS_CENTER) doc["icon_position"] = "center";
 
     String output;
     serializeJson(doc, output);

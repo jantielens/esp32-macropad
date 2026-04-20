@@ -207,7 +207,8 @@ static inline void sparkline_get_line_colors(const SparklineConfig* cfg,
 static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                               const ScreenButtonConfig* btn,
                               const PadRect* rect, const UIScaleInfo* scale,
-                              lv_obj_t* icon_img, WidgetState* state) {
+                              lv_obj_t* icon_img, lv_obj_t* center_label,
+                              WidgetState* state) {
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     auto* st = reinterpret_cast<SparklineState*>(state->data);
     memset(st, 0, sizeof(SparklineState));
@@ -258,10 +259,27 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         icon_h = (int16_t)lv_obj_get_height(icon_img);
         if (icon_h <= 0) icon_h = rect->h / 4;
     }
-    int16_t gap = (icon_img) ? 4 : 0;
+    int16_t center_label_h = 0;
+    if (center_label) {
+        lv_obj_update_layout(center_label);
+        center_label_h = (int16_t)lv_obj_get_height(center_label);
+    }
+    int16_t header_h = icon_h;
+    if (center_label_h > 0) {
+        if (icon_h > 0) header_h += 4 + center_label_h;
+        else             header_h = center_label_h;
+    }
+    int16_t gap = (header_h > 0) ? 4 : 0;
 
     if (icon_img) {
         lv_obj_align(icon_img, LV_ALIGN_TOP_MID, ui_ofs_x, top_h + ui_ofs_y);
+    }
+    if (center_label && !icon_img) {
+        lv_obj_align(center_label, LV_ALIGN_TOP_MID, ui_ofs_x + btn->style_center.x_offset,
+                     top_h + btn->style_center.y_offset + ui_ofs_y);
+    } else if (center_label && icon_img) {
+        lv_obj_align(center_label, LV_ALIGN_TOP_MID, ui_ofs_x + btn->style_center.x_offset,
+                     top_h + icon_h + 4 + btn->style_center.y_offset + ui_ofs_y);
     }
 
     // Reserve margin for min/max labels above and below chart
@@ -270,7 +288,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         mm_margin = label_h + 3;  // label height + dot radius + gap
     }
 
-    int16_t chart_top = top_h + icon_h + gap + mm_margin;
+    int16_t chart_top = top_h + header_h + gap + mm_margin;
     int16_t bot_margin = bot_h + 4 + mm_margin;
     lv_obj_update_layout(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);

@@ -9,7 +9,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 ### Pads, buttons & widgets
 - **Up to 16 pads** with configurable grids (up to 8×8, board-dependent), per-pad backgrounds, and multi-cell button spans
 - **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols), background images, and a per-label style DSL (font family, size, alignment, overflow)
-- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal), sparkline (multi-line with reference markers), table, and **rocker** (split-button up/down or left/right)
+- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal), sparkline (multi-line with reference markers), table, **rocker** (split-button up/down or left/right), and **numeric rocker** (4-zone fine/coarse adjustment)
 - **Smooth animations** — gauges, bars, and needles ease into new values instead of jumping
 - **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
 - **Building blocks** — drop pre-built button groups (countdown timer, system info) into any pad with a single click

@@ -1123,6 +1123,14 @@ footer {
     line-height: 1;
 }
 
+.pad-cell-icon-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    max-width: 100%;
+}
+
 .pad-cell-label-bottom {
     font-size: 10px;
     opacity: 0.7;
@@ -1198,6 +1206,30 @@ footer {
 .pad-cell-widget-rocker::after {
     bottom: 0;
     border-top: 5px solid #fff;
+}
+
+.pad-cell-widget-numericrocker {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 14px;
+    height: 10px;
+    opacity: 0.6;
+}
+.pad-cell-widget-numericrocker::before, .pad-cell-widget-numericrocker::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+}
+.pad-cell-widget-numericrocker::before {
+    left: 0;
+    border-right: 5px solid #fff;
+}
+.pad-cell-widget-numericrocker::after {
+    right: 0;
+    border-left: 5px solid #fff;
 }
 
 /* Resize drag handles */

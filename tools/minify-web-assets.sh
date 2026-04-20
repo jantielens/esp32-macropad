@@ -135,6 +135,7 @@ WIDGET_GAUGE_TEMPLATE=""
 WIDGET_SPARKLINE_TEMPLATE=""
 WIDGET_TABLE_TEMPLATE=""
 WIDGET_ROCKER_TEMPLATE=""
+WIDGET_NUMERICROCKER_TEMPLATE=""
 STYLE_HELP_TEMPLATE=""
 HEALTH_WIDGET_TEMPLATE=""
 REBOOT_OVERLAY_TEMPLATE=""
@@ -173,6 +174,10 @@ fi
 
 if [ -f "$WEB_DIR/_widget_rocker.html" ]; then
     WIDGET_ROCKER_TEMPLATE=$(cat "$WEB_DIR/_widget_rocker.html")
+fi
+
+if [ -f "$WEB_DIR/_widget_numericrocker.html" ]; then
+    WIDGET_NUMERICROCKER_TEMPLATE=$(cat "$WEB_DIR/_widget_numericrocker.html")
 fi
 
 if [ -f "$WEB_DIR/_style_help.html" ]; then
@@ -314,6 +319,7 @@ widget_gauge_template = '''$WIDGET_GAUGE_TEMPLATE'''
 widget_sparkline_template = '''$WIDGET_SPARKLINE_TEMPLATE'''
 widget_table_template = '''$WIDGET_TABLE_TEMPLATE'''
 widget_rocker_template = '''$WIDGET_ROCKER_TEMPLATE'''
+widget_numericrocker_template = '''$WIDGET_NUMERICROCKER_TEMPLATE'''
 style_help_template = '''$STYLE_HELP_TEMPLATE'''
 health_widget_template = '''$HEALTH_WIDGET_TEMPLATE'''
 reboot_overlay_template = '''$REBOOT_OVERLAY_TEMPLATE'''
@@ -331,6 +337,7 @@ with open('$html_file', 'r') as f:
     html = html.replace('{{WIDGET_SPARKLINE}}', widget_sparkline_template)
     html = html.replace('{{WIDGET_TABLE}}', widget_table_template)
     html = html.replace('{{WIDGET_ROCKER}}', widget_rocker_template)
+    html = html.replace('{{WIDGET_NUMERICROCKER}}', widget_numericrocker_template)
     html = html.replace('{{STYLE_HELP}}', style_help_template)
     html = html.replace('{{HEALTH_WIDGET}}', health_widget_template)
     html = html.replace('{{REBOOT_OVERLAY}}', reboot_overlay_template)

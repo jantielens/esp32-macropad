@@ -49,11 +49,13 @@ struct WidgetType {
     // Create LVGL objects inside the tile container.
     // `rect` provides tile dimensions. `state` is zeroed on entry.
     // `icon_img` is the icon LVGL object (or nullptr if no icon).
+    // `center_label` is the center label LVGL object (or nullptr if no center label).
     // Standard labels (top/bottom) and icon are already created by PadScreen.
     void (*createUI)(lv_obj_t* tile, const WidgetConfig* cfg,
                      const struct ScreenButtonConfig* btn,
                      const PadRect* rect, const UIScaleInfo* scale,
-                     lv_obj_t* icon_img, WidgetState* state);
+                     lv_obj_t* icon_img, lv_obj_t* center_label,
+                     WidgetState* state);
 
     // Update widget visuals from a new MQTT value string.
     // Called from PadScreen::pollMqttBindings() when the bound topic changes.
