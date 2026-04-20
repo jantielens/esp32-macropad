@@ -1200,6 +1200,30 @@ footer {
     border-top: 5px solid #fff;
 }
 
+.pad-cell-widget-numericrocker {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    width: 14px;
+    height: 10px;
+    opacity: 0.6;
+}
+.pad-cell-widget-numericrocker::before, .pad-cell-widget-numericrocker::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+}
+.pad-cell-widget-numericrocker::before {
+    left: 0;
+    border-right: 5px solid #fff;
+}
+.pad-cell-widget-numericrocker::after {
+    right: 0;
+    border-left: 5px solid #fff;
+}
+
 /* Resize drag handles */
 .pad-resize-handle {
     position: absolute; background: rgba(100,180,255,0.45); border-radius: 2px;

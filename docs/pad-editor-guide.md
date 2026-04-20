@@ -475,7 +475,7 @@ Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes
 - **Zone B** (bottom or right) dispatches the **Long-Press Action** set.
 - Small chevron indicators (▲▼ or ◄►) appear at the edges so the user knows the button is directional.
 - The tap flash overlay covers only the tapped half for clear visual feedback.
-- Zone B uses the device's **Long-Press Beep** pattern for a distinct audio cue (suppressed when the action itself produces audio).
+- Both zones use the device's **Tap Beep** pattern (suppressed when the action itself produces audio).
 - Long-press is disabled on rocker buttons since both action slots are used for the two zones.
 
 > **Note:** The action labels in the button editor change contextually when a rocker widget is selected — "Tap Action" becomes "Up Action" (or "Left Action") and "Long-Press Action" becomes "Down Action" (or "Right Action").
@@ -517,6 +517,7 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 - Zone widths target 12% (outer) and 15% (inner) of the button span, clamped to 40–80 px. The center zone gets whatever remains.
 - Double chevron indicators (`<<`/`>>` or `▲▲`/`▼▼`) mark the outer zones; single chevrons (`<`/`>` or `▲`/`▼`) mark the inner zones.
 - The tap flash covers only the tapped zone.
+- Inner zones (small step) use the device's **Tap Beep** pattern; outer zones (large step) use the **Long-Press Beep** pattern for a distinct audio cue. Suppressed when the adjustment action itself produces audio.
 - The center zone supports full tap and long-press actions (all 3+3 action slots). Outer and inner zones use the dedicated **Adjustment Action**.
 - The `{step}` placeholder is replaced in `mqtt_payload` and `key_sequence` fields.
 

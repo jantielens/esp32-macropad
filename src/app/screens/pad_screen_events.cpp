@@ -244,10 +244,12 @@ void PadScreen::onTap(lv_event_t* e) {
             float step;
             int flash_start, flash_end;
             const char* nr_event;
+            bool is_large = false;
             if (rel < z.outer_end) {
                 step = -cfg->large_step;
                 flash_start = 0; flash_end = z.outer_end;
                 nr_event = "NRockerOuterDec";
+                is_large = true;
             } else if (rel < z.inner_end) {
                 step = -cfg->small_step;
                 flash_start = z.outer_end; flash_end = z.inner_end;
@@ -260,6 +262,7 @@ void PadScreen::onTap(lv_event_t* e) {
                 step = cfg->large_step;
                 flash_start = z.outer2_start; flash_end = span;
                 nr_event = "NRockerOuterInc";
+                is_large = true;
             }
 
             if (cfg->adjust_action.type[0] == '\0') return;
@@ -271,7 +274,7 @@ void PadScreen::onTap(lv_event_t* e) {
             do_tap_flash_px(tile, flash_start, flash_end, cfg->horizontal);
 #if HAS_AUDIO
             if (!has_audio_action(&local_nr, 1)) {
-                const char* pattern = device_config.tap_beep;
+                const char* pattern = is_large ? device_config.lp_beep : device_config.tap_beep;
                 if (pattern[0] && strcmp(pattern, "none") != 0) {
                     audio_beep(pattern, 0);
                 }
@@ -302,8 +305,7 @@ void PadScreen::onTap(lv_event_t* e) {
         do_tap_flash(tile, flash_zone, rocker_horizontal);
 #if HAS_AUDIO
         if (!has_audio_action(local, count)) {
-            // Rocker zone B uses the long-press beep pattern
-            const char* pattern = is_zone_b ? device_config.lp_beep : device_config.tap_beep;
+            const char* pattern = device_config.tap_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) {
                 audio_beep(pattern, 0);
             }
