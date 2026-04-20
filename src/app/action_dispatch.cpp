@@ -115,7 +115,7 @@ void action_dispatch(const ButtonAction& act, const char* label) {
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
         bool adj = strcmp(act.brightness_mode, "adjust") == 0;
         uint8_t nv = compute_clamped_percent(act.brightness_value, display_manager_get_backlight_brightness(), adj, MIN_USER_BRIGHTNESS);
-        display_manager_set_backlight_brightness(nv);
+        screen_saver_manager_set_brightness(nv);
         LOGI(TAG, "%s brightness %s %s -> %u%%", label, adj ? "adjust" : "set", act.brightness_value, nv);
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
         uint8_t tid = act.timer_id;

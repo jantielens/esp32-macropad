@@ -83,6 +83,8 @@ volatile bool g_pending_wake = false;
 volatile bool g_pending_sleep = false;
 volatile bool g_pending_activity = false;
 volatile bool g_pending_activity_wake = false;
+volatile bool g_pending_brightness = false;
+volatile uint8_t g_pending_brightness_value = 0;
 
 #if HAS_TOUCH
 bool g_prev_touch = false;
@@ -178,21 +180,33 @@ static void request_sleep() {
 		portEXIT_CRITICAL(&g_mux);
 }
 
+static void request_brightness(uint8_t brightness) {
+		portENTER_CRITICAL(&g_mux);
+		g_pending_brightness = true;
+		g_pending_brightness_value = brightness;
+		portEXIT_CRITICAL(&g_mux);
+}
+
 static void handle_pending_requests() {
 		bool doWake = false;
 		bool doSleep = false;
 		bool doActivity = false;
 		bool activityWake = false;
+		bool doBrightness = false;
+		uint8_t brightnessValue = 0;
 
 		portENTER_CRITICAL(&g_mux);
 		doWake = g_pending_wake;
 		doSleep = g_pending_sleep;
 		doActivity = g_pending_activity;
 		activityWake = g_pending_activity_wake;
+		doBrightness = g_pending_brightness;
+		brightnessValue = g_pending_brightness_value;
 		g_pending_wake = false;
 		g_pending_sleep = false;
 		g_pending_activity = false;
 		g_pending_activity_wake = false;
+		g_pending_brightness = false;
 		portEXIT_CRITICAL(&g_mux);
 
 		if (doActivity) {
@@ -200,6 +214,21 @@ static void handle_pending_requests() {
 				// Only escalate "activity" into a wake when we're actually asleep/dimming.
 				// When awake, touches should flow to LVGL without causing redundant wakes.
 				if (activityWake && (g_state == ScreenSaverState::Asleep || g_state == ScreenSaverState::FadingOut)) {
+						doWake = true;
+				}
+		}
+
+		if (doBrightness) {
+				// Update the in-RAM config so wake target stays consistent.
+				if (g_config) g_config->backlight_brightness = brightnessValue;
+
+				if (g_state == ScreenSaverState::Awake) {
+						g_current_brightness = brightnessValue;
+						g_target_brightness = brightnessValue;
+						apply_brightness(brightnessValue);
+						g_last_activity_ms = millis();
+				} else {
+						// Config updated; wake will fade to the new target.
 						doWake = true;
 				}
 		}
@@ -407,6 +436,11 @@ void screen_saver_manager_sleep_now() {
 
 void screen_saver_manager_wake() {
 		request_wake();
+}
+
+void screen_saver_manager_set_brightness(uint8_t brightness) {
+		if (brightness > 100) brightness = 100;
+		request_brightness(brightness);
 }
 
 bool screen_saver_manager_is_asleep() {

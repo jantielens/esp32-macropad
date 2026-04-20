@@ -79,7 +79,7 @@ After placing a block, all its buttons become regular buttons — you can edit, 
 
 | Block | Size | Description |
 |-------|------|-------------|
-| **Countdown Timer** | 3×2 min | Three rocker buttons (hours, minutes, seconds) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Includes pad bindings for all three timers. |
+| **Countdown Timer** | 3×2 min | Three rocker buttons (1 min, 10 sec, 1 sec) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Uses Timer 1. |
 
 > **Tip**: Building blocks and template pads serve different purposes. Use **template pads** to share common buttons (like navigation) across many pads. Use **building blocks** to quickly add a self-contained functional group (like a timer control panel) to a specific pad.
 

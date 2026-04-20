@@ -41,23 +41,9 @@ void handleSetDisplayBrightness(AsyncWebServerRequest *request, uint8_t *data, s
 
 		LOGI("API", "PUT /api/display/brightness: %d%%", brightness);
 
-		// Update the in-RAM target brightness (does not persist to NVS).
-		// This keeps the screen saver target consistent with what the user sees.
-		DeviceConfig *config = web_portal_get_current_config();
-		if (config) {
-				config->backlight_brightness = brightness;
-		}
-
-		// Edge case: if the screen saver is dimming/asleep/fading, directly setting the
-		// backlight would show the UI again without updating the screen saver state.
-		// Easiest fix: when not Awake, route through the screen saver wake path.
-		const ScreenSaverState state = screen_saver_manager_get_status().state;
-		if (state != ScreenSaverState::Awake) {
-				screen_saver_manager_wake();
-		} else {
-				display_manager_set_backlight_brightness(brightness);
-				screen_saver_manager_notify_activity(false);
-		}
+		// Route through the screen saver manager so internal tracking, config,
+		// and awake/asleep transitions are handled consistently.
+		screen_saver_manager_set_brightness(brightness);
 
 		char response[64];
 		snprintf(response, sizeof(response), "{\"success\":true,\"brightness\":%d}", brightness);

@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Brightness lost after screensaver wake** — runtime brightness changes (button actions, REST API) were written directly to the display driver, bypassing the screensaver's internal tracking. When the screensaver activated and then woke, the display reverted to the original NVS-configured brightness instead of the user-chosen level. The fade-out also jumped to the stale tracked value before animating. All brightness changes now route through `screen_saver_manager_set_brightness()` which updates the in-RAM config, internal tracking, and driver atomically. If the display is asleep, setting brightness triggers a wake to the new level.
 - **Vertical numeric rocker sign convention** — tapping the bottom zone of a vertical numeric rocker now correctly decreases the value (was increasing). Top zones increase, bottom zones decrease, matching the natural expectation of "up = more".
 
 ## [1.14.0] - 2026-04-19

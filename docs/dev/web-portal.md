@@ -798,7 +798,7 @@ These endpoints are only available when the firmware is compiled with `HAS_DISPL
 
 #### `PUT /api/display/brightness`
 
-Set backlight brightness immediately (does not persist to NVS).
+Set backlight brightness immediately (does not persist to NVS). Routes through the screen saver manager so the screensaver's internal brightness tracking stays consistent — the device wakes to this brightness after a sleep cycle. If the screensaver is active, this triggers a wake to the new level.
 
 **Request Body:**
 ```json
