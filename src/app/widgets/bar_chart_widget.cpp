@@ -84,7 +84,8 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
 static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                               const ScreenButtonConfig* btn,
                               const PadRect* rect, const UIScaleInfo* scale,
-                              lv_obj_t* icon_img, WidgetState* state) {
+                              lv_obj_t* icon_img, lv_obj_t* center_label,
+                              WidgetState* state) {
     auto* cfg = reinterpret_cast<const BarChartConfig*>(wcfg->data);
     auto* st = reinterpret_cast<BarChartState*>(state->data);
     memset(st, 0, sizeof(BarChartState));
@@ -110,11 +111,28 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         icon_h = (int16_t)lv_obj_get_height(icon_img);
         if (icon_h <= 0) icon_h = rect->h / 4;  // fallback: quarter tile
     }
-    int16_t gap = 6;  // margin between icon and bar
+    int16_t center_label_h = 0;
+    if (center_label) {
+        lv_obj_update_layout(center_label);
+        center_label_h = (int16_t)lv_obj_get_height(center_label);
+    }
+    int16_t header_h = icon_h;
+    if (center_label_h > 0) {
+        if (icon_h > 0) header_h += 4 + center_label_h;  // icon + gap + label
+        else             header_h = center_label_h;
+    }
+    int16_t gap = 6;  // margin between header and bar
 
     // Position icon right below the top label
     if (icon_img) {
         lv_obj_align(icon_img, LV_ALIGN_TOP_MID, ui_ofs_x, top_h + ui_ofs_y);
+    }
+    if (center_label && !icon_img) {
+        lv_obj_align(center_label, LV_ALIGN_TOP_MID, ui_ofs_x + btn->style_center.x_offset,
+                     top_h + btn->style_center.y_offset + ui_ofs_y);
+    } else if (center_label && icon_img) {
+        lv_obj_align(center_label, LV_ALIGN_TOP_MID, ui_ofs_x + btn->style_center.x_offset,
+                     top_h + icon_h + 4 + btn->style_center.y_offset + ui_ofs_y);
     }
 
     // Ask LVGL for the actual content dimensions (accounts for padding + border)
@@ -127,7 +145,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     if (cfg->horizontal) {
         // Horizontal: bar spans the full width, height controlled by bar_width_pct
-        int16_t bar_top_start = top_h + icon_h + (icon_img ? gap : 0);
+        int16_t bar_top_start = top_h + header_h + (header_h > 0 ? gap : 0);
         bar_bottom_margin = bot_h + 4;
         int16_t avail_h = content_h - bar_top_start - bar_bottom_margin;
         if (avail_h < 8) avail_h = 8;
@@ -137,7 +155,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         bar_top = bar_top_start + (avail_h - bar_h) / 2; // vertically center in available space
     } else {
         // Vertical (original): bar spans the full height, width controlled by bar_width_pct
-        bar_top = top_h + icon_h + gap;
+        bar_top = top_h + header_h + gap;
         bar_bottom_margin = bot_h + 4;
         bar_h = content_h - bar_top - bar_bottom_margin;
         if (bar_h < 8) bar_h = 8;

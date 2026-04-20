@@ -384,6 +384,8 @@ function padWidgetTypeChanged() {
         const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
         if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
     });
+    // Refresh icon position visibility (widgets may override layout)
+    padIconTypeChanged();
 
     // Rocker widget: relabel Tap/LP action groups contextually
     var isRocker = (wtype === 'rocker');

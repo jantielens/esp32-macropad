@@ -127,6 +127,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-icon-mi').value = (iconParsed.type === 'mi') ? iconParsed.value : '';
     document.getElementById('pad-edit-icon-section').open = !!btn.icon_id;
     document.getElementById('pad-edit-icon-scale').value = (btn.icon_scale_pct !== undefined) ? btn.icon_scale_pct : 0;
+    document.getElementById('pad-edit-icon-position').value = btn.icon_position || 'above';
     padIconTypeChanged();
 
     // Widget type
@@ -349,6 +350,12 @@ function padDialogOk(keepOpen) {
     // Icon scale
     const iconScale = parseInt(document.getElementById('pad-edit-icon-scale').value);
     if (!isNaN(iconScale) && iconScale > 0 && iconScale <= 250) btn.icon_scale_pct = iconScale;
+
+    // Icon position (only relevant when icon is set)
+    if (iconId) {
+        const iconPos = document.getElementById('pad-edit-icon-position').value;
+        if (iconPos && iconPos !== 'above') btn.icon_position = iconPos;
+    }
 
     // Widget type
     const wtype = document.getElementById('pad-edit-widget-type').value;

@@ -78,18 +78,53 @@ function padRenderCellContent(cell, btn) {
     }
     if (btn.icon_id) {
         const iconParsed = padIconIdToType(btn.icon_id);
-        if (iconParsed.type === 'emoji') {
-            const el = document.createElement('div');
-            el.className = 'pad-cell-icon';
-            el.textContent = iconParsed.value;
-            cell.appendChild(el);
-        } else if (iconParsed.type === 'mi') {
-            padEnsureMaterialSymbols();
-            const el = document.createElement('span');
-            el.className = 'material-symbols-outlined pad-cell-icon';
-            el.textContent = iconParsed.value;
-            el.style.color = fg;
-            cell.appendChild(el);
+        const hasCenter = !!btn.label_center;
+        const pos = btn.icon_position || 'above';
+        if (hasCenter && pos === 'left') {
+            // Horizontal row: icon left, label right
+            const row = document.createElement('div');
+            row.className = 'pad-cell-icon-row';
+            if (iconParsed.type === 'emoji') {
+                const ico = document.createElement('span');
+                ico.className = 'pad-cell-icon';
+                ico.textContent = iconParsed.value;
+                row.appendChild(ico);
+            } else if (iconParsed.type === 'mi') {
+                padEnsureMaterialSymbols();
+                const ico = document.createElement('span');
+                ico.className = 'material-symbols-outlined pad-cell-icon';
+                ico.textContent = iconParsed.value;
+                ico.style.color = fg;
+                row.appendChild(ico);
+            }
+            const lbl = document.createElement('span');
+            lbl.className = 'pad-cell-label-center';
+            lbl.style.fontSize = '12px';
+            lbl.textContent = padSimplifyBindings(btn.label_center);
+            row.appendChild(lbl);
+            cell.appendChild(row);
+        } else {
+            // Above (default) or Center: show icon, then label below if present
+            if (iconParsed.type === 'emoji') {
+                const el = document.createElement('div');
+                el.className = 'pad-cell-icon';
+                el.textContent = iconParsed.value;
+                cell.appendChild(el);
+            } else if (iconParsed.type === 'mi') {
+                padEnsureMaterialSymbols();
+                const el = document.createElement('span');
+                el.className = 'material-symbols-outlined pad-cell-icon';
+                el.textContent = iconParsed.value;
+                el.style.color = fg;
+                cell.appendChild(el);
+            }
+            if (hasCenter) {
+                const elc = document.createElement('div');
+                elc.className = 'pad-cell-label-center';
+                elc.style.fontSize = '11px';
+                elc.textContent = padSimplifyBindings(btn.label_center);
+                cell.appendChild(elc);
+            }
         }
     } else if (!btn.bg_image_url) {
         const centerText = btn.label_center || '\u2022';
@@ -130,6 +165,12 @@ function padIconTypeChanged() {
     const type = document.getElementById('pad-edit-icon-type').value;
     document.getElementById('pad-edit-icon-emoji-group').style.display = (type === 'emoji') ? '' : 'none';
     document.getElementById('pad-edit-icon-mi-group').style.display = (type === 'mi') ? '' : 'none';
+    var posGroup = document.getElementById('pad-edit-icon-position-group');
+    if (posGroup) {
+        var wt = document.getElementById('pad-edit-widget-type');
+        var widgetOverrides = wt && (wt.value === 'gauge' || wt.value === 'bar_chart' || wt.value === 'sparkline');
+        posGroup.style.display = (type && !widgetOverrides) ? '' : 'none';
+    }
     if (type === 'mi') padEnsureMaterialSymbols();
     padUpdateIconPreview();
 }

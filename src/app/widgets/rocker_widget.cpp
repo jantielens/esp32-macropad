@@ -65,7 +65,9 @@ static void rocker_parse(const JsonObject& btn, uint8_t* data) {
 static void rocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                            const ScreenButtonConfig* btn,
                            const PadRect* rect, const UIScaleInfo* scale,
-                           lv_obj_t* icon_img, WidgetState* state) {
+                           lv_obj_t* icon_img, lv_obj_t* center_label,
+                           WidgetState* state) {
+    (void)center_label;
     auto* cfg = reinterpret_cast<const RockerConfig*>(wcfg->data);
     auto* st = reinterpret_cast<RockerState*>(state->data);
     memset(st, 0, sizeof(RockerState));

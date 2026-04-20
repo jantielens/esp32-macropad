@@ -231,6 +231,14 @@ Browse the full Material Symbols catalog at [fonts.google.com/icons](https://fon
 
 **Icon Size %** controls scaling. Leave at 0 for automatic sizing (recommended), or set 1–250 to force a specific percentage. When a bar chart widget is active, the icon automatically shares vertical space with the bar.
 
+**Icon Position** controls where the icon appears relative to the center label:
+
+- **Above label** (default) — icon stacked above the center label in a vertical layout
+- **Left of label** — icon and center label side by side in a horizontal row
+- **Centered** — icon centered on the button; the center label remains at its default position underneath
+
+> **Note:** When a gauge, bar chart, or sparkline widget is active, the widget controls icon and label placement. The Icon Position dropdown is hidden in this case.
+
 ### Colors and Borders
 
 The **Colors** section (collapsible) controls the button's appearance:

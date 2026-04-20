@@ -97,6 +97,8 @@ function padLoadButtonDefaults(defs) {
     document.getElementById('pad-def-label-top-style').value = defs.label_top_style || '';
     document.getElementById('pad-def-label-center-style').value = defs.label_center_style || '';
     document.getElementById('pad-def-label-bottom-style').value = defs.label_bottom_style || '';
+    var ipSel = document.getElementById('pad-def-icon-position');
+    if (ipSel) ipSel.value = defs.icon_position || 'above';
 
 }
 
@@ -118,6 +120,8 @@ function padCollectButtonDefaults() {
     if (lcs) d.label_center_style = lcs;
     var lbs = document.getElementById('pad-def-label-bottom-style').value.trim();
     if (lbs) d.label_bottom_style = lbs;
+    var ip = document.getElementById('pad-def-icon-position');
+    if (ip && ip.value && ip.value !== 'above') d.icon_position = ip.value;
 
     return d;
 }

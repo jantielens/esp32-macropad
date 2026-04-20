@@ -253,6 +253,13 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
 
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
+    {
+        const char* ip = obj["icon_position"] | "";
+        if (ip[0] == 'l')      btn->icon_position = ICON_POS_LEFT;
+        else if (ip[0] == 'c') btn->icon_position = ICON_POS_CENTER;
+        else if (ip[0] == 'a') btn->icon_position = ICON_POS_ABOVE;
+        else                    btn->icon_position = defs ? defs->icon_position : ICON_POS_ABOVE;
+    }
     parse_ui_offset_field(obj["ui_offset"], &btn->ui_offset_x, &btn->ui_offset_y);
 
     // Appearance fields: button JSON → device button_defaults → hardcoded default

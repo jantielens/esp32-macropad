@@ -145,6 +145,15 @@
                     </div>
                 </div>
 
+                <div class="form-group" style="margin-top:8px;">
+                    <label for="pad-def-icon-position" style="font-size:13px;">Default Icon Position</label>
+                    <select id="pad-def-icon-position" style="max-width:200px;">
+                        <option value="above">Above label</option>
+                        <option value="left">Left of label</option>
+                        <option value="center">Centered (icon only)</option>
+                    </select>
+                </div>
+
                 <div style="margin-top:12px; text-align:right;">
                     <button type="button" id="btn-defaults-save-btn" class="btn btn-primary" style="min-width:160px;">Save Button Defaults</button>
                 </div>
@@ -323,6 +332,16 @@
                             <label for="pad-edit-icon-scale">Icon Size %</label>
                             <input type="number" id="pad-edit-icon-scale" min="0" max="250" step="1" value="0" placeholder="0 = auto">
                             <small>0 = auto (fits available space), 1‑250 = explicit scale %.</small>
+                        </div>
+
+                        <div class="form-group" id="pad-edit-icon-position-group">
+                            <label for="pad-edit-icon-position">Icon Position</label>
+                            <select id="pad-edit-icon-position">
+                                <option value="above">Above label</option>
+                                <option value="left">Left of label</option>
+                                <option value="center">Centered (icon only)</option>
+                            </select>
+                            <small>Controls how the icon relates to the center label.</small>
                         </div>
 
                         <div id="pad-edit-icon-preview-box" class="pad-icon-preview" style="display:none;">

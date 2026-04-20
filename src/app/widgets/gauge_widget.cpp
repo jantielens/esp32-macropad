@@ -461,7 +461,8 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
 static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                           const ScreenButtonConfig* btn,
                           const PadRect* rect, const UIScaleInfo* scale,
-                          lv_obj_t* icon_img, WidgetState* state) {
+                          lv_obj_t* icon_img, lv_obj_t* center_label,
+                          WidgetState* state) {
     auto* cfg = reinterpret_cast<const GaugeConfig*>(wcfg->data);
     auto* st = reinterpret_cast<GaugeState*>(state->data);
     memset(st, 0, sizeof(GaugeState));
@@ -774,30 +775,9 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 
     // ---- Reposition icon and center label to the needle pivot (cx, cy) ----
-    // The icon_img passed by PadScreen is either the lv_image icon or the
-    // center label (if no icon). Identify both objects so we can stack them
-    // centered on the needle origin.
-    lv_obj_t* real_icon = nullptr;
-    lv_obj_t* center_lbl = nullptr;
-
-    if (icon_img && lv_obj_check_type(icon_img, &lv_image_class)) {
-        real_icon = icon_img;
-        // Scan children to find the center label (uses larger font than top/bottom)
-        uint32_t cnt = lv_obj_get_child_count(tile);
-        for (uint32_t i = 0; i < cnt; i++) {
-            lv_obj_t* child = lv_obj_get_child(tile, i);
-            if (child == real_icon || child == st->arc_bg || child == st->arc_ring2 || child == st->arc_ring3
-                || child == st->arc_ring4 || child == st->arc_dual_1_neg || child == st->arc_dual_2_neg) continue;
-            if (!lv_obj_check_type(child, &lv_label_class)) continue;
-            const lv_font_t* f = lv_obj_get_style_text_font(child, LV_PART_MAIN);
-            if (f != scale->font_small) {
-                center_lbl = child;
-                break;
-            }
-        }
-    } else if (icon_img && lv_obj_check_type(icon_img, &lv_label_class)) {
-        center_lbl = icon_img;
-    }
+    // Use the explicit parameters passed by PadScreen.
+    lv_obj_t* real_icon = (icon_img && lv_obj_check_type(icon_img, &lv_image_class)) ? icon_img : nullptr;
+    lv_obj_t* center_lbl = center_label;
 
     // Total height of stacked elements (icon + label) so we can center them
     int16_t stack_h = 0;

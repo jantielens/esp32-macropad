@@ -1123,6 +1123,14 @@ footer {
     line-height: 1;
 }
 
+.pad-cell-icon-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    max-width: 100%;
+}
+
 .pad-cell-label-bottom {
     font-size: 10px;
     opacity: 0.7;

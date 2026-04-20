@@ -183,9 +183,9 @@ void PadScreen::buildTiles() {
             lv_obj_clear_flag(lbl_top, LV_OBJ_FLAG_CLICKABLE);
         }
 
-        // Center label (shown when no icon)
+        // Center label
         lv_obj_t* lbl_center = nullptr;
-        if (bcfg.label_center[0] && !bcfg.icon_id[0]) {
+        if (bcfg.label_center[0]) {
             lbl_center = lv_label_create(obj);
             lv_obj_set_style_text_color(lbl_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
             lv_obj_set_style_text_font(lbl_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
@@ -210,19 +210,6 @@ void PadScreen::buildTiles() {
             if (icon_store_lookup(icon_key, &ref)) {
                 icon_img = lv_image_create(obj);
                 lv_image_set_src(icon_img, ref.dsc);
-
-                // Center icon in the space between labels.
-                // LV_ALIGN_CENTER is the center of the full content area;
-                // offset by half the difference of top/bottom label heights.
-                const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small);
-                const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small);
-                const int16_t top_h = bcfg.label_top[0] ?
-                    lv_font_get_line_height(top_font) : 0;
-                const int16_t bot_h = bcfg.label_bottom[0] ?
-                    lv_font_get_line_height(bot_font) : 0;
-                const int16_t y_ofs = (top_h - bot_h) / 2;
-                lv_obj_align(icon_img, LV_ALIGN_CENTER, ui_ofs_x, y_ofs + ui_ofs_y);
-
                 lv_obj_clear_flag(icon_img, LV_OBJ_FLAG_CLICKABLE);
                 if (ref.kind == ICON_KIND_MONO) {
                     lv_obj_set_style_image_recolor(icon_img, fg, 0);
@@ -231,6 +218,69 @@ void PadScreen::buildTiles() {
                 }
             }
         }
+
+        // Position icon + center label based on icon_position mode
+        if (icon_img && lbl_center) {
+            // Force layout to get actual dimensions
+            lv_obj_update_layout(icon_img);
+            lv_obj_update_layout(lbl_center);
+            const int16_t icon_h = (int16_t)lv_obj_get_height(icon_img);
+            const int16_t icon_w = (int16_t)lv_obj_get_width(icon_img);
+            const int16_t lbl_h = (int16_t)lv_obj_get_height(lbl_center);
+
+            const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small);
+            const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small);
+            const int16_t top_h = bcfg.label_top[0] ? lv_font_get_line_height(top_font) : 0;
+            const int16_t bot_h = bcfg.label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
+            const int16_t label_bias = (top_h - bot_h) / 2;
+
+            if (bcfg.icon_position == ICON_POS_LEFT) {
+                // Horizontal row: icon left, label right, vertically centered
+                const int16_t inset_x = 4;
+                const int16_t gap = 4;
+                // Shrink label so icon + gap + label fits inside the button
+                const int16_t lbl_max_w = r.w - 2 * inset_x - icon_w - gap;
+                if (lbl_max_w > 0) {
+                    lv_obj_set_width(lbl_center, lbl_max_w);
+                    lv_obj_set_style_text_align(lbl_center, LV_TEXT_ALIGN_LEFT, 0);
+                }
+                // Position relative to button center (LV_ALIGN_CENTER offset 0 = middle)
+                const int16_t icon_cx = -r.w / 2 + inset_x + icon_w / 2;
+                const int16_t lbl_cx  = -r.w / 2 + inset_x + icon_w + gap
+                                        + (lbl_max_w > 0 ? lbl_max_w / 2 : 0);
+                lv_obj_align(icon_img, LV_ALIGN_CENTER,
+                             icon_cx + ui_ofs_x,
+                             label_bias + ui_ofs_y);
+                lv_obj_align(lbl_center, LV_ALIGN_CENTER,
+                             lbl_cx + ui_ofs_x + bcfg.style_center.x_offset,
+                             label_bias + bcfg.style_center.y_offset + ui_ofs_y);
+            } else if (bcfg.icon_position == ICON_POS_CENTER) {
+                // Icon centered, label stays at its default position (no displacement)
+                lv_obj_align(icon_img, LV_ALIGN_CENTER, ui_ofs_x, label_bias + ui_ofs_y);
+                // lbl_center is already at LV_ALIGN_CENTER from initial creation above
+            } else {
+                // ICON_POS_ABOVE (default): icon above label, both centered
+                const int16_t gap = 4;
+                const int16_t stack_h = icon_h + gap + lbl_h;
+                const int16_t stack_top_ofs = -stack_h / 2 + label_bias;
+                lv_obj_align(icon_img, LV_ALIGN_CENTER,
+                             ui_ofs_x,
+                             stack_top_ofs + icon_h / 2 + ui_ofs_y);
+                lv_obj_align(lbl_center, LV_ALIGN_CENTER,
+                             ui_ofs_x + bcfg.style_center.x_offset,
+                             stack_top_ofs + icon_h + gap + lbl_h / 2
+                                 + bcfg.style_center.y_offset + ui_ofs_y);
+            }
+        } else if (icon_img) {
+            // Icon only (no center label) — center in available space
+            const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small);
+            const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small);
+            const int16_t top_h = bcfg.label_top[0] ? lv_font_get_line_height(top_font) : 0;
+            const int16_t bot_h = bcfg.label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
+            const int16_t y_ofs = (top_h - bot_h) / 2;
+            lv_obj_align(icon_img, LV_ALIGN_CENTER, ui_ofs_x, y_ofs + ui_ofs_y);
+        }
+        // else: lbl_center only — already positioned at LV_ALIGN_CENTER above
 
         // Bottom label
         lv_obj_t* lbl_bottom = nullptr;
@@ -266,7 +316,7 @@ void PadScreen::buildTiles() {
 
         // Create MQTT-bound center label early so widgets can position it
 #if HAS_MQTT
-        if (binding_template_has_bindings(bcfg.label_center) && !tile.label_center && !bcfg.icon_id[0]) {
+        if (binding_template_has_bindings(bcfg.label_center) && !tile.label_center) {
             tile.label_center = lv_label_create(obj);
             lv_obj_set_style_text_color(tile.label_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
             lv_obj_set_style_text_font(tile.label_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
@@ -297,9 +347,8 @@ void PadScreen::buildTiles() {
                     strlcpy(tile.widget_binding[wb], bcfg.widget.data_binding[wb], CONFIG_LABEL_MAX_LEN);
                 }
                 if (wt->createUI) {
-                    // Pass icon or center label — widget positions it above the bar
-                    lv_obj_t* header_obj = tile.icon_img ? tile.icon_img : tile.label_center;
-                    wt->createUI(obj, &tile.widget_cfg, &bcfg, &r, &scale, header_obj, &tile.widget_state);
+                    wt->createUI(obj, &tile.widget_cfg, &bcfg, &r, &scale,
+                                 tile.icon_img, tile.label_center, &tile.widget_state);
                 }
             }
         }
