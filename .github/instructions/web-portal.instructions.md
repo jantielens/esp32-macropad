@@ -22,6 +22,7 @@ applyTo: "**/web_portal*, **/web/*.html, **/web/*.js, **/web/*.css, **/web_asset
 - Adding a new JS file: create it, add the filename to `portal.js.bundle`, run `./build.sh`
 - No C++ changes needed when adding/removing JS modules
 - Fragment pattern: large modules split into fragments listed before the main file in the manifest
+- Build-time validation: manifest completeness check (missing files = hard error) and `node --check` syntax validation on every `.js` file
 - `portal.js` is always the last entry (entry point)
 
 ## Portal Modes

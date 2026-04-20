@@ -1258,6 +1258,11 @@ All JavaScript source files are concatenated into a single `portal.js` asset at 
 
 **Fragment pattern:** Large modules are split into a main file and one or more fragment files. Fragments are listed before the main file in the bundle manifest so their functions are available when the main file executes. For example, `portal_health_sparkline.js` (fragment) appears before `portal_health.js` (main).
 
+**Build-time validation:** The build automatically validates the bundle before minification:
+
+- **Manifest check** — every file listed in the `.js.bundle` manifest must exist; missing files cause a hard build error
+- **Syntax check** — every `.js` file is checked with `node --check` to catch missing braces, unterminated strings, and other parse errors before minification
+
 > **Feature branches** may add additional modules (e.g., `portal_action_editor_darkroom.js`, `portal_brews.js`). These follow the same pattern: add the file, add it to the bundle manifest, no C++ changes needed.
 
 ### Adding REST Endpoints

@@ -98,13 +98,23 @@ declare -A JS_SKIP_FILES  # fragment files to exclude from individual processing
 
 for bundle_manifest in $(find "$WEB_DIR" -maxdepth 1 -name "*.js.bundle" -type f 2>/dev/null); do
     primary_name=$(basename "$bundle_manifest" .bundle)  # e.g. portal_pad_editor.js
+    bundle_missing=0
     while IFS= read -r bline || [[ -n "$bline" ]]; do
         bline="${bline%%#*}"                     # strip comments
         bline="$(echo "$bline" | xargs)"         # trim whitespace
         [[ -z "$bline" ]] && continue
+        # Validate that the listed file exists
+        if [[ ! -f "$WEB_DIR/$bline" ]]; then
+            echo "  Error: $(basename "$bundle_manifest") references missing file: $bline"
+            bundle_missing=$((bundle_missing + 1))
+        fi
         [[ "$bline" = "$primary_name" ]] && continue  # don't skip the primary
         JS_SKIP_FILES["$WEB_DIR/$bline"]=1
     done < "$bundle_manifest"
+    if [[ $bundle_missing -gt 0 ]]; then
+        echo "Error: $bundle_missing missing file(s) in bundle manifest $(basename "$bundle_manifest")"
+        exit 1
+    fi
 done
 
 # Filter out JS files that are fragments of a bundle
@@ -187,6 +197,35 @@ echo "  HTML: ${#HTML_FILES[@]} file(s)"
 echo "  CSS:  ${#CSS_FILES[@]} file(s)"
 echo "  JS:   ${#JS_FILES[@]} file(s)"
 echo
+
+# ---------------------------------------------------------------------------
+# JavaScript syntax validation
+# ---------------------------------------------------------------------------
+# Check all JS source files for syntax errors using Node.js. This catches
+# missing braces, unterminated strings, and other parse errors early, before
+# minification where error messages are less helpful.
+
+if command -v node &> /dev/null; then
+    echo "Validating JavaScript syntax..."
+    js_syntax_errors=0
+    for js_check_file in $(find "$WEB_DIR" -maxdepth 1 -name "*.js" -type f | sort); do
+        if ! node --check "$js_check_file" 2>/dev/null; then
+            echo "  ✗ $(basename "$js_check_file"):"
+            node --check "$js_check_file" 2>&1 | sed 's/^/    /'
+            js_syntax_errors=$((js_syntax_errors + 1))
+        fi
+    done
+    if [[ $js_syntax_errors -gt 0 ]]; then
+        echo
+        echo "Error: $js_syntax_errors JavaScript file(s) have syntax errors"
+        exit 1
+    fi
+    echo "  ✓ All JavaScript files passed syntax check"
+    echo
+else
+    echo "Note: node not found — skipping JavaScript syntax validation"
+    echo
+fi
 
 # Check for Python 3
 if ! command -v python3 &> /dev/null; then
@@ -366,13 +405,19 @@ for js_file in "${JS_FILES[@]}"; do
             bline="${bline%%#*}"
             bline="$(echo "$bline" | xargs)"
             [[ -z "$bline" ]] && continue
-            if [[ -f "$WEB_DIR/$bline" ]]; then
-                cat "$WEB_DIR/$bline" >> "$js_source"
-                echo >> "$js_source"
-            else
-                echo "  Warning: bundle fragment not found: $bline"
-            fi
+            cat "$WEB_DIR/$bline" >> "$js_source"
+            echo >> "$js_source"
         done < "$bundle_manifest"
+
+        # Syntax-check the concatenated bundle
+        if command -v node &> /dev/null; then
+            if ! node --check "$js_source" 2>/dev/null; then
+                echo "  ✗ Concatenated bundle $filename.js has syntax errors:"
+                node --check "$js_source" 2>&1 | sed 's/^/    /'
+                rm -f "$js_source"
+                exit 1
+            fi
+        fi
     fi
 
     echo "Minifying JS: $filename.js..."
