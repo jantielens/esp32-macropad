@@ -414,20 +414,24 @@ function padWidgetTypeChanged() {
                 lpLbl.textContent = ai === 0 ? 'Long-Press Action' : 'Long-Press Action ' + (ai + 1);
             }
         }
-        // Show all LP action wraps for all widget types (numericrocker uses standard LP)
         var lpWrap = document.getElementById('pad-edit-lp-action-' + ai + '-wrap');
-        if (lpWrap && !isNumericRocker) lpWrap.style.display = '';
+        if (isNumericRocker) {
+            // Numeric rocker: hide all LP action slots (uses adjustment action instead)
+            if (lpWrap) lpWrap.style.display = 'none';
+        } else {
+            // Non-numericrocker: ensure slot 0 is visible (restore after numericrocker switch)
+            // but don't force-show slots 1/2 — preserve dialog's progressive disclosure
+            if (lpWrap && ai === 0) lpWrap.style.display = '';
+        }
     }
-    // Show LP add-action link for all types
     var lpAddLink = document.getElementById('pad-add-lp-action');
-    if (lpAddLink) lpAddLink.style.display = '';
-    // Show all tap action slots and add link for all types
-    for (var ai2 = 1; ai2 < MAX_ACTIONS; ai2++) {
-        var tapWrap = document.getElementById('pad-edit-action-' + ai2 + '-wrap');
-        // Don't force-show — just don't force-hide (padAddAction handles progressive display)
+    if (isNumericRocker) {
+        if (lpAddLink) lpAddLink.style.display = 'none';
+    } else {
+        padUpdateAddLink('lp');
     }
-    var tapAddLink = document.getElementById('pad-add-tap-action');
-    if (tapAddLink) tapAddLink.style.display = '';
+    // Ensure tap add-action link visibility is correct
+    padUpdateAddLink('tap');
     // Numeric rocker: show adjustment action editor in widget settings
     var adjSection = document.getElementById('pad-edit-numericrocker-adjust-section');
     if (adjSection) adjSection.style.display = isNumericRocker ? '' : 'none';
