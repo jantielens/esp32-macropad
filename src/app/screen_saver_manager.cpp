@@ -53,20 +53,25 @@ static uint8_t g_pixel_shift_counter = 0;
 
 // Centralised state-entry helpers so sleep/wake side-effects live in one place.
 static void enter_asleep() {
-		g_state = ScreenSaverState::Asleep;
 		g_pixel_shift_counter = (g_pixel_shift_counter + 34) % 81;
 		create_sleep_overlay();
 
 		// Send panel sleep commands (Display Off + Sleep In) where supported.
-		// On boards without a runtime command channel this is a no-op.
+		// Lock serializes with the LVGL flush path on the display bus.
 		if (displayManager && displayManager->getDriver()) {
+				displayManager->lock();
 				displayManager->getDriver()->displaySleep();
+				displayManager->unlock();
 		}
 
 		// Navigate to wake screen while display is dark (invisible to user).
 		if (displayManager) {
 				displayManager->handleSleepScreenRedirect();
 		}
+
+		// Set state last so the LVGL task doesn't throttle until all
+		// transition work (overlay, panel sleep, redirect) is complete.
+		g_state = ScreenSaverState::Asleep;
 }
 
 static void enter_awake() {
@@ -287,9 +292,12 @@ static void handle_pending_requests() {
 
 				// Wake panel (Sleep Out + Display On) before fade-in so the panel
 				// is ready by the time the backlight starts ramping.
+				// Lock serializes with the LVGL flush path on the display bus.
 				if (g_state == ScreenSaverState::Asleep) {
 						if (displayManager && displayManager->getDriver()) {
+								displayManager->lock();
 								displayManager->getDriver()->displayWake();
+								displayManager->unlock();
 						}
 				}
 
