@@ -1,0 +1,3 @@
+# Auto-generated files: keep "ours" during merges to avoid trivial conflicts.
+# The next build regenerates the correct content; CI validates freshness.
+docs/compile-time-flags.md merge=ours

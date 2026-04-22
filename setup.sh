@@ -7,6 +7,9 @@ set -e
 
 echo "=== ESP32 Development Environment Setup ==="
 
+# Configure the 'ours' merge driver used by .gitattributes for auto-generated files.
+git config merge.ours.driver true
+
 # Download and install arduino-cli if not present
 if ! command -v arduino-cli &> /dev/null; then
     echo "Installing arduino-cli..."

@@ -41,6 +41,7 @@ declare -A FQBN_TARGETS=(
 ```
 
 **What it does:**
+- Configures the `ours` Git merge driver (used by `.gitattributes` for auto-generated files)
 - Downloads and installs `arduino-cli` to `./bin/`
 - Configures ESP32 board support
 - Installs ESP32 core platform
