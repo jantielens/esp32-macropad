@@ -112,7 +112,7 @@ Total flags: 162
 - **MAX_NON_PAD_SCREENS** default: `10` — Number of non-pad screens (info, test, fps, touch_test, + headroom).
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
-- **MIN_USER_BRIGHTNESS** default: `5` — The screen saver and transient brightness API (`PUT /api/display/brightness`) bypass this floor to allow sleep and blank-on-save (brightness 0).
+- **MIN_USER_BRIGHTNESS** default: `5` — The screen saver bypasses this floor to allow sleep (brightness 0).
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
