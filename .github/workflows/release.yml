@@ -306,7 +306,7 @@ jobs:
         cat SHA256SUMS.txt
     
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         name: Release v${{ needs.prepare-matrix.outputs.version }}
         body_path: release-notes.md
@@ -314,5 +314,4 @@ jobs:
         draft: false
         prerelease: ${{ needs.prepare-matrix.outputs.is_prerelease }}
         generate_release_notes: false # Keep release notes strictly from CHANGELOG.md
-      env:
-        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
