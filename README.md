@@ -28,6 +28,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Dynamic colors** — background, text, border, and widget colors all accept binding expressions
 - **Dynamic state** — `enabled` / `disabled` / `hidden` per button via the same binding system
 - **Real-time syntax validator** in the pad editor catches typos and invalid expressions as you type
+- **Action values** — MQTT payloads, BLE key sequences, beep patterns, volume/brightness values, and timer values all resolve bindings at dispatch time
 
 ### Inputs & automation
 - **Multi-action buttons** — chain up to 3 actions per tap and per long-press (publish MQTT, play sound, navigate, send keystrokes, etc.)
