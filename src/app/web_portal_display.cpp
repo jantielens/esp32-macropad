@@ -36,7 +36,10 @@ void handleSetDisplayBrightness(AsyncWebServerRequest *request, uint8_t *data, s
 
 		int brightness = doc["brightness"];
 
-		if (brightness < MIN_USER_BRIGHTNESS) brightness = MIN_USER_BRIGHTNESS;
+		// Allow 0 (blank) — the MIN_USER_BRIGHTNESS floor is enforced on the
+		// persisted config path (web_portal_config.cpp), not on this transient
+		// runtime endpoint which the browser uses for blank-on-save sequences.
+		if (brightness < 0) brightness = 0;
 		if (brightness > 100) brightness = 100;
 
 		LOGI("API", "PUT /api/display/brightness: %d%%", brightness);
