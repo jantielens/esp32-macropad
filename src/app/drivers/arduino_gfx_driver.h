@@ -78,6 +78,9 @@ public:
 		// Buffered render mode — present() flushes the full framebuffer to the panel.
 		RenderMode renderMode() const override { return RenderMode::Buffered; }
 		void present() override;
+
+		void displaySleep() override;
+		void displayWake() override;
 };
 
 #endif // ARDUINO_GFX_DRIVER_H

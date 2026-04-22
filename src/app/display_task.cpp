@@ -146,7 +146,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				}
 
 				// Update current screen (data refresh)
-				if (mgr->currentScreen) {
+				if (mgr->currentScreen && !screen_saver_manager_is_fully_asleep()) {
 						mgr->currentScreen->update();
 				}
 				
@@ -187,13 +187,34 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						}
 						mgr->flushPending = false;
 				}
-				
+
 				mgr->unlock();
 				
 				// Sleep based on LVGL's suggested next timer deadline.
 				// Clamp to keep UI responsive while avoiding busy looping on static screens.
 				if (delayMs < 1) delayMs = 1;
 				if (delayMs > 20) delayMs = 20;
+
+				// Throttle the render loop while the screensaver is fully asleep.
+				// The display is blanked and panel is sleeping — no need for fast ticks.
+				if (screen_saver_manager_is_fully_asleep()) {
+						delayMs = SCREENSAVER_SLEEP_TICK_MS;
+
+						// No rendering during sleep — publish fps=0 so /api/health
+						// doesn't show a stale value from before the screensaver.
+						portENTER_CRITICAL(&g_perf_mux);
+						g_perf.fps = 0;
+						g_perf.lv_timer_us = 0;
+						g_perf.present_us = 0;
+						g_perf_ready = true;
+						portEXIT_CRITICAL(&g_perf_mux);
+
+						// Reset the perf window so the first frame after wake
+						// starts a clean count (no partial-window spike).
+						g_perf_window_start_ms = 0;
+						g_perf_frames_in_window = 0;
+				}
+
 				vTaskDelay(pdMS_TO_TICKS(delayMs));
 		}
 }

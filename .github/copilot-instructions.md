@@ -17,7 +17,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Data Stream Registry** (`HAS_DISPLAY && HAS_MQTT`): Demand-driven per-widget ring buffers in PSRAM for history-based widgets.
 - **Binding Template Engine** (`HAS_MQTT`): Scheme-extensible `[scheme:params]` token resolver. Schemes: `mqtt`, `health`, `time`, `expr`, `pad`, `timer`. Pipe fallback: `[scheme:params|fallback]`. Called only from LVGL task.
 - **Timer Subsystem** (`HAS_DISPLAY`): 3 independent count-up/down timers with expire actions, `[timer:N]` binding scheme, REST API.
-- **Screen Saver** (`HAS_DISPLAY`): Inactivity-based display sleep with fade animation and per-screen wake redirect.
+- **Screen Saver** (`HAS_DISPLAY`): Inactivity-based display sleep with fade animation, per-screen wake redirect, panel hardware sleep (`displaySleep()`/`displayWake()` on `DisplayDriver`), and LVGL task throttle (`SCREENSAVER_SLEEP_TICK_MS`).
 - **MQTT Screen Control** (`HAS_MQTT && HAS_DISPLAY`): HA `select` entity for remote screen navigation.
 - **MQTT Wake** (`HAS_MQTT && HAS_DISPLAY`): Binding-driven screensaver wakeup with idle-timer keep-alive.
 - **Notification Bubble** (`HAS_DISPLAY`): Message overlay with fade animation, tap-to-dismiss, HA remote trigger, `ACTION_TYPE_NOTIFY`.

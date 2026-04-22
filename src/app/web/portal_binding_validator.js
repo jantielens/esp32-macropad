@@ -699,6 +699,23 @@ function bindingValidateDialog() {
         count += _bvCount(_BV_TABLE_DATA, { isWidgetBinding: true }, true);
     }
 
+    // Validate binding-capable action fields (tap, long-press, numeric rocker adjustment)
+    var actionPrefixes = [
+        'pad-edit-action-0', 'pad-edit-action-1', 'pad-edit-action-2',
+        'pad-edit-lp-action-0', 'pad-edit-lp-action-1', 'pad-edit-lp-action-2',
+        'pad-edit-nr-adjust'
+    ];
+    var actionSuffixes = (typeof _ACTION_BIND_SUFFIXES !== 'undefined') ? _ACTION_BIND_SUFFIXES : [
+        '-notify-text', '-notify-duration', '-topic', '-payload', '-sequence',
+        '-beep-pattern', '-timer-set-sec', '-timer-adjust-sec'
+    ];
+    for (var ai = 0; ai < actionPrefixes.length; ai++) {
+        for (var si = 0; si < actionSuffixes.length; si++) {
+            var el = document.getElementById(actionPrefixes[ai] + actionSuffixes[si]);
+            if (el && el.value.trim() && !bindingValidateInput(el)) count++;
+        }
+    }
+
     return { valid: count === 0, count: count };
 }
 

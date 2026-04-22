@@ -96,6 +96,13 @@ public:
 				// Override in buffered drivers (e.g., Arduino_GFX canvas)
 		}
 
+		// Panel-level sleep/wake.  Sends standard display sleep commands (0x10/0x11,
+		// 0x28/0x29) where supported.  Reduces panel power consumption and provides
+		// true panel protection beyond backlight-off.
+		// Default: no-op (boards without a runtime command channel, e.g. RGB interface).
+		virtual void displaySleep() {}
+		virtual void displayWake() {}
+
 		// LVGL configuration hook (override to customize LVGL display settings)
 		// Called during LVGL initialization to allow driver-specific configuration
 		// such as software rotation, full refresh mode, etc.

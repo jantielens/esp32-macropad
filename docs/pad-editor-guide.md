@@ -333,16 +333,16 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **None** | No action (display-only button) |
 | **Navigate to screen** | Jump to another pad or screen (e.g., `pad_1`, `info_screen`) |
 | **Go back** | Return to the previous screen |
-| **Publish MQTT** | Send a message to an MQTT topic |
-| **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). ESP32-P4 boards only. |
+| **Publish MQTT** | Send a message to an MQTT topic. Topic and payload fields support binding templates (e.g. `[health:cpu]`). |
+| **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). The sequence field supports binding templates. ESP32-P4 boards only. |
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
-| **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
+| **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. The pattern field supports binding templates. ESP32-P4 boards only. |
 | **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
-| **Set Volume** | Set the device audio volume to an absolute value (0–100). Sub-option of System Command. ESP32-P4 boards only. |
-| **Adjust Volume** | Step the device audio volume up or down by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). Sub-option of System Command. ESP32-P4 boards only. |
-| **Set Brightness** | Set the display backlight brightness to an absolute value (5–100). Sub-option of System Command. Session-only, resets on reboot. |
-| **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). Sub-option of System Command. Session-only, resets on reboot. |
-| **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
+| **Set Volume** | Set the device audio volume to an absolute value (0–100). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
+| **Adjust Volume** | Step the device audio volume up or down by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
+| **Set Brightness** | Set the display backlight brightness to an absolute value (5–100). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
+| **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
+| **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. Set and adjust countdown values support binding templates. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
 | **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, **Enable Screensaver**, **Set/Adjust Volume**, or **Set/Adjust Brightness**. |
 
@@ -756,7 +756,7 @@ For bindings that return structured payloads (for example `health:table` and `he
 
 ### Binding Validation
 
-The pad editor and Home page validate binding syntax **in real time** as you type. Any field that accepts a binding expression (labels, colors, data bindings, widget parameters, MQTT topics, wake binding, etc.) is checked automatically.
+The pad editor and Home page validate binding syntax **in real time** as you type. Any field that accepts a binding expression (labels, colors, data bindings, widget parameters, MQTT topics, action values, wake binding, etc.) is checked automatically. In the action editor, fields that support bindings are marked with an **fx** badge.
 
 **What gets validated:**
 

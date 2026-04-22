@@ -47,28 +47,28 @@ function actionEditorHTML(prefix, label, opts) {
     // MQTT
     h += '<div id="' + prefix + '-mqtt-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-topic">MQTT Topic</label>';
+    h += '<label for="' + prefix + '-topic">MQTT Topic <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
     h += '<input type="text" id="' + prefix + '-topic" maxlength="127" placeholder="e.g. home/light/toggle">';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-payload">MQTT Payload</label>';
-    h += '<input type="text" id="' + prefix + '-payload" maxlength="127" placeholder="e.g. ON">';
+    h += '<label for="' + prefix + '-payload">MQTT Payload <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" id="' + prefix + '-payload" maxlength="127" placeholder="e.g. ON or [health:cpu]">';
     h += '</div></div>';
     // Key sequence
     h += '<div id="' + prefix + '-key-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-sequence">Keys to Send</label>';
+    h += '<label for="' + prefix + '-sequence">Keys to Send <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
     h += '<input type="text" id="' + prefix + '-sequence" maxlength="255" placeholder=\'e.g. ctrl+c, "hello", 200ms\'>';
     if (opts.showKeyHelp) {
-        h += '<small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms</small>';
+        h += '<small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms. Supports bindings.</small>';
     }
     h += '</div></div>';
     // Beep
     h += '<div id="' + prefix + '-beep-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-beep-pattern">Beep Pattern</label>';
+    h += '<label for="' + prefix + '-beep-pattern">Beep Pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
     h += '<input type="text" id="' + prefix + '-beep-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200">';
-    h += '<small>Space-separated steps. <b>freq:dur</b> = tone, bare <b>dur</b> = silence gap (ms). E.g. <b>1000:200</b> (single beep), <b>1000:200 100 1000:200</b> (double beep), <b>800:100 50 1200:100</b> (two-tone chirp).</small>';
+    h += '<small>Space-separated steps. <b>freq:dur</b> = tone, bare <b>dur</b> = silence gap (ms). E.g. <b>1000:200</b> (single beep), <b>1000:200 100 1000:200</b> (double beep), <b>800:100 50 1200:100</b> (two-tone chirp). Supports bindings.</small>';
     h += '</div>';
     h += '<div class="form-group">';
     h += '<label for="' + prefix + '-beep-volume">Volume Override (%)</label>';
@@ -108,12 +108,12 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</select>';
     h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-set-group" style="display:none;">';
-    h += '<label for="' + prefix + '-timer-set-sec">Countdown (seconds)</label>';
-    h += '<input type="number" id="' + prefix + '-timer-set-sec" min="0" placeholder="e.g. 300">';
-    h += '<small>Set the countdown to this many seconds.</small>';
+    h += '<label for="' + prefix + '-timer-set-sec">Countdown (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" id="' + prefix + '-timer-set-sec" placeholder="e.g. 300">';
+    h += '<small>Set the countdown to this many seconds. Supports bindings.</small>';
     h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-adjust-group" style="display:none;">';
-    h += '<label for="' + prefix + '-timer-adjust-sec">Adjust (seconds)</label>';
+    h += '<label for="' + prefix + '-timer-adjust-sec">Adjust (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
     h += '<input type="text" id="' + prefix + '-timer-adjust-sec" placeholder="e.g. 15, -10, or {step}">';
     h += '<small>Positive adds time, negative subtracts. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
     h += '</div>';
@@ -222,7 +222,7 @@ function actionEditorTypeChanged(prefix, skipBrewPopulate) {
     if (notifyGrp) notifyGrp.style.display = (type === 'notify') ? '' : 'none';
     var systemGrp = document.getElementById(prefix + '-system-group');
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
-    if (type === 'notify') actionEditorInitNotifyBindings(prefix);
+    if (['notify', 'mqtt', 'key', 'beep', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
     if (type === 'system') actionEditorSystemChanged(prefix);
     // Extension type handlers (e.g. scale, brew)
@@ -267,21 +267,28 @@ function actionEditorTimerChanged(prefix) {
     if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
 }
 
-// Initialize bindable-color pickers and binding font toggles for notify fields.
+// Suffixes for binding-capable action text inputs (shared with binding validator).
+var _ACTION_BIND_SUFFIXES = [
+    '-notify-text', '-notify-duration', '-topic', '-payload', '-sequence',
+    '-beep-pattern', '-timer-set-sec', '-timer-adjust-sec'
+];
+
+// Initialize bindable-color pickers and binding font toggles for all bindable fields.
 // Idempotent — safe to call on every type-change.
-function actionEditorInitNotifyBindings(prefix) {
-    // Init color pickers
+function actionEditorInitBindings(prefix) {
+    // Init color pickers (notify only)
     ['-notify-text-color-wrap', '-notify-bg-color-wrap', '-notify-border-color-wrap'].forEach(function(suffix) {
         var wrap = document.getElementById(prefix + suffix);
         if (wrap) padInitBindableColor(wrap);
     });
-    // Wire monospace toggle on binding-capable text inputs
-    ['-notify-text', '-notify-duration'].forEach(function(suffix) {
+    // Wire monospace toggle + binding validation on all binding-capable text inputs
+    _ACTION_BIND_SUFFIXES.forEach(function(suffix) {
         var el = document.getElementById(prefix + suffix);
         if (el && !el.dataset.bcBind) {
             el.dataset.bcBind = '1';
             el.oninput = function() { padUpdateMixedBindingFont(el); };
             padUpdateMixedBindingFont(el);
+            if (typeof bindingAttachValidation === 'function') bindingAttachValidation(el);
         }
     });
 }

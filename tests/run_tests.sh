@@ -259,6 +259,19 @@ echo "=== Running unit tests: timer_format ==="
 ./tests/bin/test_timer_format
 echo
 
+echo "=== Building unit tests: action_bindings ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    tests/test_action_bindings.cpp \
+    src/app/binding_template.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_bindings -lm
+
+echo "=== Running unit tests: action_bindings ==="
+./tests/bin/test_action_bindings
+echo
+
 echo "=== All tests passed ==="
 
 # ---------------------------------------------------------------------------

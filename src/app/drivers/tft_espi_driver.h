@@ -35,6 +35,9 @@ public:
 		void endWrite() override;
 		void setAddrWindow(int16_t x, int16_t y, uint16_t w, uint16_t h) override;
 		void pushColors(uint16_t* data, uint32_t len, bool swap_bytes = true) override;
+
+		void displaySleep() override;
+		void displayWake() override;
 };
 
 #endif // TFT_ESPI_DRIVER_H

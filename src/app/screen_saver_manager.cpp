@@ -15,11 +15,12 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
+#include <atomic>
 
 namespace {
 
 DeviceConfig* g_config = nullptr;
-ScreenSaverState g_state = ScreenSaverState::Awake;
+std::atomic<ScreenSaverState> g_state{ScreenSaverState::Awake};
 
 // Sleep overlay: opaque black layer on lv_layer_top() while asleep.
 // Prevents stale content from showing through on displays without true backlight off.
@@ -52,14 +53,25 @@ static uint8_t g_pixel_shift_counter = 0;
 
 // Centralised state-entry helpers so sleep/wake side-effects live in one place.
 static void enter_asleep() {
-		g_state = ScreenSaverState::Asleep;
 		g_pixel_shift_counter = (g_pixel_shift_counter + 34) % 81;
 		create_sleep_overlay();
+
+		// Send panel sleep commands (Display Off + Sleep In) where supported.
+		// Lock serializes with the LVGL flush path on the display bus.
+		if (displayManager && displayManager->getDriver()) {
+				displayManager->lock();
+				displayManager->getDriver()->displaySleep();
+				displayManager->unlock();
+		}
 
 		// Navigate to wake screen while display is dark (invisible to user).
 		if (displayManager) {
 				displayManager->handleSleepScreenRedirect();
 		}
+
+		// Set state last so the LVGL task doesn't throttle until all
+		// transition work (overlay, panel sleep, redirect) is complete.
+		g_state = ScreenSaverState::Asleep;
 }
 
 static void enter_awake() {
@@ -278,6 +290,17 @@ static void handle_pending_requests() {
 				}
 				#endif
 
+				// Wake panel (Sleep Out + Display On) before fade-in so the panel
+				// is ready by the time the backlight starts ramping.
+				// Lock serializes with the LVGL flush path on the display bus.
+				if (g_state == ScreenSaverState::Asleep) {
+						if (displayManager && displayManager->getDriver()) {
+								displayManager->lock();
+								displayManager->getDriver()->displayWake();
+								displayManager->unlock();
+						}
+				}
+
 				start_fade(ScreenSaverState::FadingIn, from, target, fade_in_ms());
 				LOGI("SAVER", "Wake requested (pixel shift dx=%d dy=%d)", dx, dy);
 		}
@@ -445,6 +468,10 @@ void screen_saver_manager_set_brightness(uint8_t brightness) {
 
 bool screen_saver_manager_is_asleep() {
 		return g_state == ScreenSaverState::Asleep || g_state == ScreenSaverState::FadingOut;
+}
+
+bool screen_saver_manager_is_fully_asleep() {
+		return g_state == ScreenSaverState::Asleep;
 }
 
 ScreenSaverStatus screen_saver_manager_get_status() {

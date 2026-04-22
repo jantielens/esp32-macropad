@@ -2,13 +2,13 @@
 
 #if HAS_DISPLAY
 
+#include "binding_template.h"
 #include "display_manager.h"
 #include "log_manager.h"
 #include "message_bubble.h"
 
 #if HAS_MQTT
 #include "mqtt_manager.h"
-#include "binding_template.h"
 #endif
 #if HAS_BLE_HID
 #include "ble_hid.h"
@@ -35,8 +35,63 @@ static uint8_t compute_clamped_percent(const char* value_str, uint8_t current, b
     return (uint8_t)v;
 }
 
-void action_dispatch(const ButtonAction& act, const char* label) {
-    if (!act.type[0]) return;
+// Quick scan: return true if any data/content field might contain a binding token.
+// Checks only for '[' — avoids the ~1.2 KB ButtonAction copy for the common case.
+static bool action_has_any_binding(const ButtonAction& act) {
+    const char* fields[] = {
+        act.mqtt_topic, act.mqtt_payload, act.key_sequence, act.beep_pattern,
+        act.volume_value, act.brightness_value, act.timer_value,
+        act.notify_text, act.notify_duration_ms,
+        act.notify_text_color, act.notify_bg_color, act.notify_border_color
+    };
+    for (auto f : fields) {
+        if (f[0] && memchr(f, '[', strlen(f))) return true;
+    }
+    return false;
+}
+
+// Resolve binding templates in all data/content fields of a ButtonAction.
+// Structural fields (type, screen_id, commands, modes, etc.) are excluded.
+static void resolve_action_bindings(ButtonAction& act) {
+    auto try_resolve = [](char* field, size_t len) {
+        if (field[0] && binding_template_has_bindings(field)) {
+            char tmp[BINDING_TEMPLATE_MAX_LEN];
+            binding_template_resolve(field, tmp, sizeof(tmp));
+            strlcpy(field, tmp, len);
+        }
+    };
+
+    try_resolve(act.mqtt_topic,          sizeof(act.mqtt_topic));
+    try_resolve(act.mqtt_payload,        sizeof(act.mqtt_payload));
+    try_resolve(act.key_sequence,        sizeof(act.key_sequence));
+    try_resolve(act.beep_pattern,        sizeof(act.beep_pattern));
+    try_resolve(act.volume_value,        sizeof(act.volume_value));
+    try_resolve(act.brightness_value,    sizeof(act.brightness_value));
+    try_resolve(act.timer_value,         sizeof(act.timer_value));
+    try_resolve(act.notify_text,         sizeof(act.notify_text));
+    try_resolve(act.notify_duration_ms,  sizeof(act.notify_duration_ms));
+    try_resolve(act.notify_text_color,   sizeof(act.notify_text_color));
+    try_resolve(act.notify_bg_color,     sizeof(act.notify_bg_color));
+    try_resolve(act.notify_border_color, sizeof(act.notify_border_color));
+}
+
+static void action_dispatch_resolved(const ButtonAction& act, const char* label);
+
+void action_dispatch(const ButtonAction& act_in, const char* label) {
+    if (!act_in.type[0]) return;
+
+    // Resolve binding templates in value fields before dispatch.
+    // The early-out avoids a ~1.2 KB struct copy when no fields contain bindings.
+    if (action_has_any_binding(act_in)) {
+        ButtonAction act = act_in;
+        resolve_action_bindings(act);
+        action_dispatch_resolved(act, label);
+    } else {
+        action_dispatch_resolved(act_in, label);
+    }
+}
+
+static void action_dispatch_resolved(const ButtonAction& act, const char* label) {
 
     if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
         if (act.screen_id[0]) {
@@ -153,43 +208,27 @@ void action_dispatch(const ButtonAction& act, const char* label) {
             LOGW(TAG, "%s timer: bad id=%u cmd='%s'", label, tid, cmd);
         }
     } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
-        // Resolve all bindable fields before building params struct
         MessageBubbleParams params = {};
 
-        // Resolve a bindable string field: binding → resolve, plain → copy, empty → default.
-        auto resolve_field = [](const char* field, const char* def, char* out, size_t len) {
-#if HAS_MQTT
-            if (field[0] && binding_template_has_bindings(field)) {
-                binding_template_resolve(field, out, len);
-            } else
-#endif
-            {
-                strlcpy(out, field[0] ? field : def, len);
-            }
-        };
-
-        resolve_field(act.notify_text, "", params.text, sizeof(params.text));
+        strlcpy(params.text, act.notify_text, sizeof(params.text));
 
         if (!params.text[0]) {
             message_bubble_dismiss();
             LOGI(TAG, "%s notify: dismiss", label);
         } else {
-            // Duration
-            char buf[16];
-            resolve_field(act.notify_duration_ms, "3000", buf, sizeof(buf));
-            params.duration_ms = (uint16_t)atoi(buf);
+            // Duration — apply default for empty (already resolved by generic pass)
+            const char* dur = act.notify_duration_ms[0] ? act.notify_duration_ms : "3000";
+            params.duration_ms = (uint16_t)atoi(dur);
 
-            // Colors
-            char cbuf[CONFIG_BINDABLE_SHORT_LEN];
-            resolve_field(act.notify_text_color, "#ffffff", cbuf, sizeof(cbuf));
-            if (!parse_hex_color(cbuf, &params.text_color)) params.text_color = 0xFFFFFF;
+            // Colors — apply defaults for empty (already resolved by generic pass)
+            const char* tc = act.notify_text_color[0] ? act.notify_text_color : "#ffffff";
+            if (!parse_hex_color(tc, &params.text_color)) params.text_color = 0xFFFFFF;
 
-            resolve_field(act.notify_bg_color, "#333333", cbuf, sizeof(cbuf));
-            if (!parse_hex_color(cbuf, &params.bg_color)) params.bg_color = 0x333333;
+            const char* bg = act.notify_bg_color[0] ? act.notify_bg_color : "#333333";
+            if (!parse_hex_color(bg, &params.bg_color)) params.bg_color = 0x333333;
 
             if (act.notify_border_color[0]) {
-                resolve_field(act.notify_border_color, "", cbuf, sizeof(cbuf));
-                params.has_border = parse_hex_color(cbuf, &params.border_color);
+                params.has_border = parse_hex_color(act.notify_border_color, &params.border_color);
             }
 
             params.opacity = act.notify_opacity;
