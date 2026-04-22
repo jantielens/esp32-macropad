@@ -15,11 +15,12 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
+#include <atomic>
 
 namespace {
 
 DeviceConfig* g_config = nullptr;
-ScreenSaverState g_state = ScreenSaverState::Awake;
+std::atomic<ScreenSaverState> g_state{ScreenSaverState::Awake};
 
 // Sleep overlay: opaque black layer on lv_layer_top() while asleep.
 // Prevents stale content from showing through on displays without true backlight off.
@@ -55,6 +56,12 @@ static void enter_asleep() {
 		g_state = ScreenSaverState::Asleep;
 		g_pixel_shift_counter = (g_pixel_shift_counter + 34) % 81;
 		create_sleep_overlay();
+
+		// Send panel sleep commands (Display Off + Sleep In) where supported.
+		// On boards without a runtime command channel this is a no-op.
+		if (displayManager && displayManager->getDriver()) {
+				displayManager->getDriver()->displaySleep();
+		}
 
 		// Navigate to wake screen while display is dark (invisible to user).
 		if (displayManager) {
@@ -278,6 +285,14 @@ static void handle_pending_requests() {
 				}
 				#endif
 
+				// Wake panel (Sleep Out + Display On) before fade-in so the panel
+				// is ready by the time the backlight starts ramping.
+				if (g_state == ScreenSaverState::Asleep) {
+						if (displayManager && displayManager->getDriver()) {
+								displayManager->getDriver()->displayWake();
+						}
+				}
+
 				start_fade(ScreenSaverState::FadingIn, from, target, fade_in_ms());
 				LOGI("SAVER", "Wake requested (pixel shift dx=%d dy=%d)", dx, dy);
 		}
@@ -445,6 +460,10 @@ void screen_saver_manager_set_brightness(uint8_t brightness) {
 
 bool screen_saver_manager_is_asleep() {
 		return g_state == ScreenSaverState::Asleep || g_state == ScreenSaverState::FadingOut;
+}
+
+bool screen_saver_manager_is_fully_asleep() {
+		return g_state == ScreenSaverState::Asleep;
 }
 
 ScreenSaverStatus screen_saver_manager_get_status() {

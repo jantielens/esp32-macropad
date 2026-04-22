@@ -138,3 +138,14 @@ void TFT_eSPI_Driver::setAddrWindow(int16_t x, int16_t y, uint16_t w, uint16_t h
 void TFT_eSPI_Driver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
 		tft.pushColors(data, len, swap_bytes);
 }
+
+void TFT_eSPI_Driver::displaySleep() {
+		tft.writecommand(0x28);  // Display Off
+		tft.writecommand(0x10);  // Sleep In
+}
+
+void TFT_eSPI_Driver::displayWake() {
+		tft.writecommand(0x11);  // Sleep Out
+		delay(120);              // MIPI DCS spec minimum
+		tft.writecommand(0x29);  // Display On
+}

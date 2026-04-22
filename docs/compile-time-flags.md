@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 161
+Total flags: 162
 
 ### Features (HAS_*)
 
@@ -169,6 +169,7 @@ Total flags: 161
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
+- **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase worst-case wake latency.
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
 - **ST7701_DSI_HSYNC_BACK_PORCH** default: `42` — HSYNC back porch in pixel clocks.
 - **ST7701_DSI_HSYNC_FRONT_PORCH** default: `42` — HSYNC front porch in pixel clocks.
@@ -599,6 +600,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/power_manager.cpp
 - **PROJECT_DISPLAY_NAME**
+  - src/app/board_config.h
+- **SCREENSAVER_SLEEP_TICK_MS**
   - src/app/board_config.h
 - **SCREEN_HISTORY_MAX**
   - src/app/board_config.h

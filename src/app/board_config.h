@@ -653,9 +653,18 @@
 #endif
 
 // ============================================================================
+// Screensaver
+// ============================================================================
+// LVGL task loop delay while the screensaver is fully asleep (ms).
+// Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
+#ifndef SCREENSAVER_SLEEP_TICK_MS
+#define SCREENSAVER_SLEEP_TICK_MS 200
+#endif
+
+// ============================================================================
 // Pad & Screen Limits
 // ============================================================================
-// Maximum number of user-configurable pads (stored on LittleFS).
+// Maximum number of user-configurable pads the device supports.
 // Override per-board in board_overrides.h for memory-constrained targets.
 #ifndef MAX_PADS
 #define MAX_PADS 16

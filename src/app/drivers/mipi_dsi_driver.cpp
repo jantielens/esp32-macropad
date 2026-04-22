@@ -36,7 +36,8 @@ static bool IRAM_ATTR onColorTransDone(esp_lcd_panel_handle_t panel,
 }
 
 MipiDsiDriver::MipiDsiDriver()
-    : framebuffer(nullptr), panel_handle(nullptr), rotBuffer(nullptr), ppaClient(nullptr),
+    : framebuffer(nullptr), panel_handle(nullptr), ioHandle(nullptr),
+      rotBuffer(nullptr), ppaClient(nullptr),
       currentBrightness(100),
       displayWidth(DISPLAY_WIDTH), displayHeight(DISPLAY_HEIGHT), displayRotation(DISPLAY_ROTATION),
       backlightOn(false), flushX(0), flushY(0), flushW(0), flushH(0), lvglDisplay(nullptr),
@@ -139,6 +140,7 @@ void MipiDsiDriver::init() {
     };
     esp_lcd_panel_io_handle_t io_handle = NULL;
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_dbi(mipi_dsi_bus, &dbi_config, &io_handle));
+    ioHandle = io_handle;  // Store for runtime DCS commands (sleep/wake)
     
     // 4. Create DPI panel with disable_lp=true and use_dma2d=true
     //    disable_lp: keeps D-PHY in HS mode during blanking (avoids flicker)
@@ -417,4 +419,18 @@ void MipiDsiDriver::configureLVGL(lv_display_t* disp, uint8_t rotation) {
 
 bool MipiDsiDriver::asyncFlush() const {
     return true;
+}
+
+void MipiDsiDriver::displaySleep() {
+    if (!ioHandle) return;
+    esp_lcd_panel_io_tx_param(ioHandle, 0x28, NULL, 0);  // Display Off
+    delay(20);
+    esp_lcd_panel_io_tx_param(ioHandle, 0x10, NULL, 0);  // Sleep In
+}
+
+void MipiDsiDriver::displayWake() {
+    if (!ioHandle) return;
+    esp_lcd_panel_io_tx_param(ioHandle, 0x11, NULL, 0);  // Sleep Out
+    delay(120);                                           // MIPI DCS spec minimum
+    esp_lcd_panel_io_tx_param(ioHandle, 0x29, NULL, 0);  // Display On
 }
