@@ -1,7 +1,6 @@
-#include "web_portal_swipe.h"
+// Swipe Actions component — migrated from web_portal_swipe.cpp
 
-#if HAS_DISPLAY
-
+#include "component_registry.h"
 #include "action_parse.h"
 #include "board_config.h"
 #include "log_manager.h"
@@ -11,9 +10,7 @@
 
 #include <ArduinoJson.h>
 
-#define TAG "SwipeAPI"
-
-void handleGetSwipeActions(AsyncWebServerRequest *request) {
+static void swipe_actions_get_config(AsyncWebServerRequest *request) {
     const SwipeConfig* cfg = swipe_config_get();
 
     StaticJsonDocument<1024> doc;
@@ -32,7 +29,7 @@ void handleGetSwipeActions(AsyncWebServerRequest *request) {
     request->send(200, "application/json", output);
 }
 
-void handlePostSwipeActions(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+static void swipe_actions_save_config(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
 
     // Only handle final chunk (small payload, arrives in one piece)
@@ -43,7 +40,6 @@ void handlePostSwipeActions(AsyncWebServerRequest *request, uint8_t *data, size_
         return;
     }
 
-    // Save raw JSON directly (same pattern as pad config)
     bool ok = swipe_config_save_raw(data, total);
     if (ok) {
         request->send(200, "application/json", "{\"ok\":true}");
@@ -52,4 +48,18 @@ void handlePostSwipeActions(AsyncWebServerRequest *request, uint8_t *data, size_
     }
 }
 
-#endif // HAS_DISPLAY
+static ComponentDef swipe_actions_component = {
+    .id = "swipe-actions",
+    .category = "actions",
+    .display_name = "Swipe Actions",
+    .nav_order = 10,
+    .get_config = swipe_actions_get_config,
+    .save_config = nullptr,
+    .save_config_body = swipe_actions_save_config,
+    .delete_config = nullptr,
+    .custom_actions = nullptr,
+    .num_custom_actions = 0,
+    .fragment_id = "swipe-actions"
+};
+
+REGISTER_COMPONENT(swipe_actions);

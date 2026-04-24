@@ -1,7 +1,6 @@
-#include "web_portal_boot_actions.h"
+// Boot Actions component — migrated from web_portal_boot_actions.cpp
 
-#if HAS_DISPLAY
-
+#include "component_registry.h"
 #include "action_parse.h"
 #include "boot_actions.h"
 #include "log_manager.h"
@@ -10,9 +9,7 @@
 
 #include <ArduinoJson.h>
 
-#define TAG "BootActAPI"
-
-void handleGetBootActions(AsyncWebServerRequest *request) {
+static void boot_actions_get_config(AsyncWebServerRequest *request) {
     const BootActionsConfig* cfg = boot_actions_get();
 
     StaticJsonDocument<1024> doc;
@@ -28,7 +25,7 @@ void handleGetBootActions(AsyncWebServerRequest *request) {
     request->send(200, "application/json", output);
 }
 
-void handlePostBootActions(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+static void boot_actions_save_config(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
 
     // Only handle final chunk (small payload, arrives in one piece)
@@ -47,4 +44,18 @@ void handlePostBootActions(AsyncWebServerRequest *request, uint8_t *data, size_t
     }
 }
 
-#endif // HAS_DISPLAY
+static ComponentDef boot_actions_component = {
+    .id = "boot-actions",
+    .category = "actions",
+    .display_name = "Boot Actions",
+    .nav_order = 20,
+    .get_config = boot_actions_get_config,
+    .save_config = nullptr,
+    .save_config_body = boot_actions_save_config,
+    .delete_config = nullptr,
+    .custom_actions = nullptr,
+    .num_custom_actions = 0,
+    .fragment_id = "boot-actions"
+};
+
+REGISTER_COMPONENT(boot_actions);

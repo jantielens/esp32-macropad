@@ -1,7 +1,6 @@
-#include "web_portal_timers.h"
+// Timers component — migrated from web_portal_timers.cpp
 
-#if HAS_DISPLAY
-
+#include "component_registry.h"
 #include "action_parse.h"
 #include "board_config.h"
 #include "log_manager.h"
@@ -11,9 +10,7 @@
 
 #include <ArduinoJson.h>
 
-#define TAG "TimerAPI"
-
-void handleGetTimerConfig(AsyncWebServerRequest *request) {
+static void timers_get_config(AsyncWebServerRequest *request) {
     const TimerConfig* cfg = timer_config_get();
 
     StaticJsonDocument<3072> doc;
@@ -41,7 +38,7 @@ void handleGetTimerConfig(AsyncWebServerRequest *request) {
     request->send(200, "application/json", output);
 }
 
-void handlePostTimerConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+static void timers_save_config(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
 
     // Only handle final chunk (small payload, arrives in one piece)
@@ -60,4 +57,18 @@ void handlePostTimerConfig(AsyncWebServerRequest *request, uint8_t *data, size_t
     }
 }
 
-#endif // HAS_DISPLAY
+static ComponentDef timers_component = {
+    .id = "timers",
+    .category = "actions",
+    .display_name = "Timers",
+    .nav_order = 30,
+    .get_config = timers_get_config,
+    .save_config = nullptr,
+    .save_config_body = timers_save_config,
+    .delete_config = nullptr,
+    .custom_actions = nullptr,
+    .num_custom_actions = 0,
+    .fragment_id = "timers"
+};
+
+REGISTER_COMPONENT(timers);

@@ -1,7 +1,6 @@
-#include "web_portal_button_defaults.h"
+// Button Defaults component — migrated from web_portal_button_defaults.cpp
 
-#if HAS_DISPLAY
-
+#include "component_registry.h"
 #include "board_config.h"
 #include "button_defaults.h"
 #include "log_manager.h"
@@ -10,9 +9,7 @@
 
 #include <ArduinoJson.h>
 
-#define TAG "BtnDefAPI"
-
-void handleGetButtonDefaults(AsyncWebServerRequest *request) {
+static void button_defaults_get_config(AsyncWebServerRequest *request) {
     const ButtonDefaults* d = button_defaults_get();
 
     StaticJsonDocument<1024> doc;
@@ -32,7 +29,7 @@ void handleGetButtonDefaults(AsyncWebServerRequest *request) {
     request->send(200, "application/json", output);
 }
 
-void handlePostButtonDefaults(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+static void button_defaults_save_config(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
 
     // Only handle final chunk (small payload, arrives in one piece)
@@ -51,4 +48,18 @@ void handlePostButtonDefaults(AsyncWebServerRequest *request, uint8_t *data, siz
     }
 }
 
-#endif // HAS_DISPLAY
+static ComponentDef button_defaults_component = {
+    .id = "button-defaults",
+    .category = "pads",
+    .display_name = "Button Defaults",
+    .nav_order = 20,
+    .get_config = button_defaults_get_config,
+    .save_config = nullptr,
+    .save_config_body = button_defaults_save_config,
+    .delete_config = nullptr,
+    .custom_actions = nullptr,
+    .num_custom_actions = 0,
+    .fragment_id = "button-defaults"
+};
+
+REGISTER_COMPONENT(button_defaults);

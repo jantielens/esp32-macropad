@@ -146,4 +146,17 @@ echo "=== Running unit tests: action_bindings ==="
 ./tests/bin/test_action_bindings
 echo
 
+echo "=== Building unit tests: component_registry ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I tests -I src/app \
+    tests/test_component_registry.cpp \
+    src/app/component_registry.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_component_registry
+
+echo "=== Running unit tests: component_registry ==="
+./tests/bin/test_component_registry
+echo
+
 echo "=== All tests passed ==="

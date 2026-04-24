@@ -1,17 +1,13 @@
 #include "web_portal_routes.h"
 #include "web_portal_auth.h"
+#include "web_portal_component_api.h"
 #include "web_portal_cors.h"
 #include "web_portal_config.h"
 #include "web_portal_device_api.h"
-#include "web_portal_display.h"
 #include "web_portal_firmware.h"
 #include "web_portal_icons.h"
 #include "web_portal_ota.h"
 #include "web_portal_pad.h"
-#include "web_portal_swipe.h"
-#include "web_portal_boot_actions.h"
-#include "web_portal_button_defaults.h"
-#include "web_portal_timers.h"
 #include "web_portal_pages.h"
 
 #include "board_config.h"
@@ -94,41 +90,6 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		registerOptions("/api/firmware/update");
 
 #if HAS_DISPLAY
-		// Display API endpoints
-		server->on(
-				"/api/display/brightness",
-				HTTP_PUT,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handleSetDisplayBrightness
-		);
-		registerOptions("/api/display/brightness");
-
-		// Screen saver API endpoints
-		registerOptions("/api/display/sleep");
-		server->on("/api/display/sleep", HTTP_GET, handleGetDisplaySleep);
-		server->on("/api/display/sleep", HTTP_POST, handlePostDisplaySleep);
-
-		registerOptions("/api/display/wake");
-		server->on("/api/display/wake", HTTP_POST, handlePostDisplayWake);
-
-		registerOptions("/api/display/activity");
-		server->on("/api/display/activity", HTTP_POST, handlePostDisplayActivity);
-
-		// Runtime-only screen switch
-		server->on(
-				"/api/display/screen",
-				HTTP_PUT,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handleSetDisplayScreen
-		);
-		registerOptions("/api/display/screen");
-
 		// Pad button sizes (registered before /api/pad to avoid prefix match)
 		registerOptions("/api/pad/button_sizes");
 		server->on("/api/pad/button_sizes", HTTP_GET, handleGetButtonSizes);
@@ -151,57 +112,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		);
 		server->on("/api/pad", HTTP_DELETE, handleDeletePadConfig);
 
-		// Swipe actions API
-		registerOptions("/api/swipe-actions");
-		server->on("/api/swipe-actions", HTTP_GET, handleGetSwipeActions);
-		server->on(
-				"/api/swipe-actions",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostSwipeActions
-		);
 
-		// Button defaults API
-		registerOptions("/api/button-defaults");
-		server->on("/api/button-defaults", HTTP_GET, handleGetButtonDefaults);
-		server->on(
-				"/api/button-defaults",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostButtonDefaults
-		);
-
-		// Boot actions API
-		registerOptions("/api/boot-actions");
-		server->on("/api/boot-actions", HTTP_GET, handleGetBootActions);
-		server->on(
-				"/api/boot-actions",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostBootActions
-		);
-
-		// Timer config API
-		registerOptions("/api/timers");
-		server->on("/api/timers", HTTP_GET, handleGetTimerConfig);
-		server->on(
-				"/api/timers",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostTimerConfig
-		);
 
 		registerOptions("/api/icons/install");
 		server->on(
@@ -275,5 +186,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		registerOptions("/api/sounds/play");
 		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
 #endif
+
+		// Generic component API routes — MUST be registered LAST (first-match routing).
+		// Dispatches to any component registered via REGISTER_COMPONENT().
+		web_portal_register_component_routes(server);
 
 }
