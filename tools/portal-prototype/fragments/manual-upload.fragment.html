@@ -1,0 +1,13 @@
+<div class="section-header">
+  <h2>📦 Manual Upload</h2>
+  <p>Upload a firmware binary (.bin) directly to the device.</p>
+</div>
+    <div class="mb-3">
+      <label class="form-label" for="fw-file">Firmware File (.bin)</label>
+      <input class="form-control" type="file" id="fw-file" accept=".bin">
+      <div class="form-text">Select a compiled firmware binary. The device will reboot after flashing.</div>
+    </div>
+    <div class="progress mb-3" style="height: 6px; display: none;" id="fw-progress">
+      <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+    </div>
+    <button class="btn btn-warning btn-sm">Upload &amp; Flash</button>

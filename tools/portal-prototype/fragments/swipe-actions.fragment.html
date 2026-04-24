@@ -1,0 +1,37 @@
+<div class="section-header">
+  <h2>👆 Swipe Actions</h2>
+  <p>Configure what happens when you swipe in each direction. Works on all screens.</p>
+</div>
+    <div class="accordion" id="swipe-accordion">
+      <div class="accordion-item bg-transparent border-0 border-bottom">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed bg-transparent text-body" type="button" data-bs-toggle="collapse" data-bs-target="#swipe-left">
+            ▸ Swipe Left
+          </button>
+        </h2>
+        <div id="swipe-left" class="accordion-collapse collapse">
+          <div class="accordion-body py-2">
+            <select class="form-select form-select-sm mb-2"><option>Navigate to Pad</option><option>Key Sequence</option><option>MQTT Publish</option></select>
+            <input type="text" class="form-control form-control-sm" placeholder="Target pad or value">
+          </div>
+        </div>
+      </div>
+      <div class="accordion-item bg-transparent border-0 border-bottom">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed bg-transparent text-body" type="button">▸ Swipe Right</button>
+        </h2>
+      </div>
+      <div class="accordion-item bg-transparent border-0 border-bottom">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed bg-transparent text-body" type="button">▸ Swipe Up</button>
+        </h2>
+      </div>
+      <div class="accordion-item bg-transparent border-0">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed bg-transparent text-body" type="button">▸ Swipe Down</button>
+        </h2>
+      </div>
+    </div>
+    <div class="save-bar">
+      <button class="btn btn-primary btn-sm">Save Swipe Actions</button>
+    </div>

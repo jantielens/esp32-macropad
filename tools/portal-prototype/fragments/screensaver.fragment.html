@@ -1,0 +1,32 @@
+<div class="section-header">
+  <h2>🌙 Screen Saver</h2>
+  <p>Burn-in prevention — turn off backlight when idle.</p>
+</div>
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" type="checkbox" id="ss-enabled" checked>
+      <label class="form-check-label" for="ss-enabled">Enable screen saver</label>
+      <div class="form-text">When enabled, the backlight will fade out after inactivity.</div>
+    </div>
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label" for="ss-timeout">Idle Timeout (s)</label>
+        <input type="number" class="form-control" id="ss-timeout" value="300" min="0" max="65535">
+        <div class="form-text">0 disables auto sleep. 300 = 5 min.</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="ss-fadeout">Fade Out (ms)</label>
+        <input type="number" class="form-control" id="ss-fadeout" value="800" min="0">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="ss-fadein">Fade In (ms)</label>
+        <input type="number" class="form-control" id="ss-fadein" value="400" min="0">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="ss-wake-binding">Wake on MQTT Binding</label>
+      <input type="text" class="form-control font-monospace" id="ss-wake-binding" placeholder="[mqtt:devices/node/presence/state]">
+      <div class="form-text">Binding expression that keeps the screen awake while it resolves to ON.</div>
+    </div>
+    <div class="save-bar">
+      <button class="btn btn-primary btn-sm">Save &amp; Reboot</button>
+    </div>

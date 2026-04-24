@@ -1,0 +1,82 @@
+{
+  "categories": [
+    {
+      "id": "device",
+      "display_name": "Device",
+      "icon": "🔧",
+      "items": [
+        { "id": "wifi", "display_name": "WiFi Settings" },
+        { "id": "device-name", "display_name": "Device Name" },
+        { "id": "network", "display_name": "Network Config" },
+        { "id": "mode", "display_name": "Operating Mode" },
+        { "id": "factory-reset", "display_name": "Factory Reset" }
+      ]
+    },
+    {
+      "id": "display",
+      "display_name": "Display",
+      "icon": "🖥️",
+      "items": [
+        { "id": "brightness", "display_name": "Brightness" },
+        { "id": "screensaver", "display_name": "Screen Saver" }
+      ]
+    },
+    {
+      "id": "pads",
+      "display_name": "Pads",
+      "icon": "📱",
+      "items": [
+        { "id": "pad-editor", "display_name": "Pad Editor" },
+        { "id": "button-defaults", "display_name": "Button Defaults" }
+      ]
+    },
+    {
+      "id": "actions",
+      "display_name": "Actions",
+      "icon": "⚡",
+      "items": [
+        { "id": "swipe-actions", "display_name": "Swipe Actions" },
+        { "id": "boot-actions", "display_name": "Boot Actions" },
+        { "id": "timers", "display_name": "Timers" }
+      ]
+    },
+    {
+      "id": "connectivity",
+      "display_name": "Connectivity",
+      "icon": "🌐",
+      "items": [
+        { "id": "mqtt", "display_name": "MQTT" },
+        { "id": "ble", "display_name": "BLE Keyboard" },
+        { "id": "ha-discovery", "display_name": "HA Discovery" }
+      ]
+    },
+    {
+      "id": "audio",
+      "display_name": "Audio",
+      "icon": "🔊",
+      "items": [
+        { "id": "volume", "display_name": "Volume & Beep" },
+        { "id": "sounds", "display_name": "Sound Files" }
+      ]
+    },
+    {
+      "id": "sensors",
+      "display_name": "Sensors",
+      "icon": "📡",
+      "items": [
+        { "id": "sensor-data", "display_name": "Live Sensor Data" },
+        { "id": "thresholds", "display_name": "Thresholds" }
+      ]
+    },
+    {
+      "id": "firmware",
+      "display_name": "Firmware",
+      "icon": "💾",
+      "items": [
+        { "id": "ota-update", "display_name": "Online Update" },
+        { "id": "manual-upload", "display_name": "Manual Upload" },
+        { "id": "version-info", "display_name": "Version Info" }
+      ]
+    }
+  ]
+}

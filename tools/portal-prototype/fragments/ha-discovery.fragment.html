@@ -1,0 +1,17 @@
+<div class="section-header">
+  <h2>🏠 HA Discovery</h2>
+  <p>Home Assistant MQTT auto-discovery configuration.</p>
+</div>
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" type="checkbox" id="ha-enable" checked>
+      <label class="form-check-label" for="ha-enable">Enable HA Discovery</label>
+      <div class="form-text">Automatically registers device entities in Home Assistant via MQTT discovery.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="ha-prefix">Discovery Prefix</label>
+      <input type="text" class="form-control" id="ha-prefix" value="homeassistant">
+      <div class="form-text">Default: <code>homeassistant</code>. Change only if your HA uses a custom prefix.</div>
+    </div>
+    <div class="save-bar">
+      <button class="btn btn-primary btn-sm">Save &amp; Reboot</button>
+    </div>

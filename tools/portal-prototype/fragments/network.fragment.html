@@ -1,0 +1,31 @@
+<div class="section-header">
+  <h2>🌐 Network Config</h2>
+  <p>Configure static IP or use DHCP (default).</p>
+</div>
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" type="checkbox" id="static-ip-toggle">
+      <label class="form-check-label" for="static-ip-toggle">Use Static IP</label>
+    </div>
+    <fieldset id="static-ip-fields" disabled>
+      <div class="row g-3">
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="ip-addr">IP Address</label>
+          <input type="text" class="form-control" id="ip-addr" placeholder="192.168.1.100">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="subnet">Subnet Mask</label>
+          <input type="text" class="form-control" id="subnet" placeholder="255.255.255.0">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="gateway">Gateway</label>
+          <input type="text" class="form-control" id="gateway" placeholder="192.168.1.1">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="dns">DNS Server</label>
+          <input type="text" class="form-control" id="dns" placeholder="8.8.8.8">
+        </div>
+      </div>
+    </fieldset>
+    <div class="save-bar">
+      <button class="btn btn-primary btn-sm">Save &amp; Reboot</button>
+    </div>

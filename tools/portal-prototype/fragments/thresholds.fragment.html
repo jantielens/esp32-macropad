@@ -1,0 +1,30 @@
+<div class="section-header">
+  <h2>📏 Thresholds</h2>
+  <p>Configure sensor threshold alerts and actions.</p>
+</div>
+    <div class="mb-3 p-3 rounded" style="background: rgba(255,255,255,0.03);">
+      <strong class="small d-block mb-2">Temperature Alert</strong>
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label small">Warning Threshold</label>
+          <div class="input-group input-group-sm">
+            <input type="number" class="form-control" value="50">
+            <span class="input-group-text">°C</span>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Critical Threshold</label>
+          <div class="input-group input-group-sm">
+            <input type="number" class="form-control" value="70">
+            <span class="input-group-text">°C</span>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Action</label>
+          <select class="form-select form-select-sm"><option selected>Beep</option><option>MQTT Publish</option><option>None</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="save-bar">
+      <button class="btn btn-primary btn-sm">Save Thresholds</button>
+    </div>

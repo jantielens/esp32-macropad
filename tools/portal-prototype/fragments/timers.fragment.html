@@ -1,0 +1,67 @@
+<div class="section-header">
+  <h2>⏱️ Timers</h2>
+  <p>Configure 3 device-level timers. Use Timer Control actions on buttons to start/stop them.</p>
+</div>
+    <div class="mb-3 p-3 rounded" style="background: rgba(255,255,255,0.03);">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <strong>Timer 1</strong>
+        <span class="badge bg-success">Running — 02:34</span>
+      </div>
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label small">Mode</label>
+          <select class="form-select form-select-sm"><option>Count Up</option><option selected>Countdown</option></select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Duration (s)</label>
+          <input type="number" class="form-control form-control-sm" value="300">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Expire Action</label>
+          <select class="form-select form-select-sm"><option selected>Beep</option><option>MQTT Publish</option><option>None</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="mb-3 p-3 rounded" style="background: rgba(255,255,255,0.03);">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <strong>Timer 2</strong>
+        <span class="badge bg-secondary">Stopped</span>
+      </div>
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label small">Mode</label>
+          <select class="form-select form-select-sm"><option selected>Count Up</option><option>Countdown</option></select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Duration (s)</label>
+          <input type="number" class="form-control form-control-sm" value="0" disabled>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Expire Action</label>
+          <select class="form-select form-select-sm" disabled><option>None</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="mb-3 p-3 rounded" style="background: rgba(255,255,255,0.03);">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <strong>Timer 3</strong>
+        <span class="badge bg-secondary">Stopped</span>
+      </div>
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label small">Mode</label>
+          <select class="form-select form-select-sm"><option selected>Count Up</option><option>Countdown</option></select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Duration (s)</label>
+          <input type="number" class="form-control form-control-sm" value="0" disabled>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Expire Action</label>
+          <select class="form-select form-select-sm" disabled><option>None</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="save-bar">
+      <button class="btn btn-primary btn-sm">Save Timer Config</button>
+    </div>
