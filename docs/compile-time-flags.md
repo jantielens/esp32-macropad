@@ -326,6 +326,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_block.cpp
   - src/app/pad_block.h
   - src/app/pad_config.cpp
+  - src/app/portal_components.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp

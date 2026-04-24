@@ -51,9 +51,9 @@ static void timers_save_config(AsyncWebServerRequest *request, uint8_t *data, si
 
     bool ok = timer_config_save_raw(data, total);
     if (ok) {
-        request->send(200, "application/json", "{\"ok\":true}");
+        request->send(200, "application/json", "{\"success\":true}");
     } else {
-        request->send(500, "application/json", "{\"error\":\"save failed\"}");
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"save failed\"}");
     }
 }
 
