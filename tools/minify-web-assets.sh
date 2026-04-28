@@ -91,40 +91,82 @@ FRAGMENT_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.fragment.html" -type f | 
 CSS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.css" -not -name "_*.css" -type f | sort))
 JS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.js" -not -name "_*.js" -type f | sort))
 
-# ---- Bundle support: detect JS bundle manifests ----
-# A .js.bundle file lists fragment files that should be concatenated into the
-# primary file (last entry) during minification.  Fragment files are excluded
-# from individual processing so they only appear in the bundled output.
-declare -A JS_SKIP_FILES  # fragment files to exclude from individual processing
+# ---- Bundle support ----
+# A *.bundle manifest lists fragment files that should be concatenated into the
+# primary asset during minification.  Works for both JS (.js.bundle) and CSS
+# (.css.bundle).  Fragment files (prefixed with _) are excluded from individual
+# processing so they only appear in the bundled output.
+#
+# Concatenation order matters: JS bundles concatenate top-to-bottom, CSS bundles
+# follow CSS cascade rules (later entries override earlier ones at equal
+# specificity).
 
-for bundle_manifest in $(find "$WEB_DIR" -maxdepth 1 -name "*.js.bundle" -type f 2>/dev/null); do
-    primary_name=$(basename "$bundle_manifest" .bundle)  # e.g. portal_pad_editor.js
-    bundle_missing=0
-    while IFS= read -r bline || [[ -n "$bline" ]]; do
-        bline="${bline%%#*}"                     # strip comments
-        bline="$(echo "$bline" | xargs)"         # trim whitespace
-        [[ -z "$bline" ]] && continue
-        # Validate that the listed file exists
-        if [[ ! -f "$WEB_DIR/$bline" ]]; then
-            echo "  Error: $(basename "$bundle_manifest") references missing file: $bline"
-            bundle_missing=$((bundle_missing + 1))
+# discover_bundle_manifests <extension> <skip_array_name>
+#   Scans WEB_DIR for *.<ext>.bundle manifests, validates referenced files, and
+#   populates the named associative array with fragment paths to skip.
+discover_bundle_manifests() {
+    local ext="$1"
+    local -n _skip_map="$2"
+    for bundle_manifest in $(find "$WEB_DIR" -maxdepth 1 -name "*.$ext.bundle" -type f 2>/dev/null); do
+        local primary_name
+        primary_name=$(basename "$bundle_manifest" .bundle)  # e.g. portal.js
+        local bundle_missing=0
+        while IFS= read -r bline || [[ -n "$bline" ]]; do
+            bline="${bline%%#*}"                     # strip comments
+            bline="$(echo "$bline" | xargs)"         # trim whitespace
+            [[ -z "$bline" ]] && continue
+            # Validate that the listed file exists
+            if [[ ! -f "$WEB_DIR/$bline" ]]; then
+                echo "  Error: $(basename "$bundle_manifest") references missing file: $bline"
+                bundle_missing=$((bundle_missing + 1))
+            fi
+            [[ "$bline" = "$primary_name" ]] && continue  # don't skip the primary
+            _skip_map["$WEB_DIR/$bline"]=1
+        done < "$bundle_manifest"
+        if [[ $bundle_missing -gt 0 ]]; then
+            echo "Error: $bundle_missing missing file(s) in bundle manifest $(basename "$bundle_manifest")"
+            exit 1
         fi
-        [[ "$bline" = "$primary_name" ]] && continue  # don't skip the primary
-        JS_SKIP_FILES["$WEB_DIR/$bline"]=1
-    done < "$bundle_manifest"
-    if [[ $bundle_missing -gt 0 ]]; then
-        echo "Error: $bundle_missing missing file(s) in bundle manifest $(basename "$bundle_manifest")"
-        exit 1
-    fi
-done
+    done
+}
 
-# Filter out JS files that are fragments of a bundle
-JS_FILES_FILTERED=()
-for f in "${JS_FILES[@]}"; do
-    [[ -n "${JS_SKIP_FILES[$f]}" ]] && continue
-    JS_FILES_FILTERED+=("$f")
-done
-JS_FILES=("${JS_FILES_FILTERED[@]}")
+# filter_bundle_fragments <file_array_name> <skip_array_name>
+#   Removes entries present in the skip map from the file list (in-place).
+filter_bundle_fragments() {
+    local -n _files="$1"
+    local -n _skip="$2"
+    local filtered=()
+    for f in "${_files[@]}"; do
+        [[ -n "${_skip[$f]}" ]] && continue
+        filtered+=("$f")
+    done
+    _files=("${filtered[@]}")
+}
+
+# concatenate_bundle <bundle_manifest> <output_var_name>
+#   Reads a .bundle manifest and concatenates listed files into a temp file.
+#   Sets the named variable to the temp file path (caller must clean up).
+#   Returns 1 if the manifest does not exist (no bundle).
+concatenate_bundle() {
+    local manifest="$1"
+    local -n _out_path="$2"
+    [[ -f "$manifest" ]] || return 1
+    _out_path=$(mktemp /tmp/bundle_XXXXXX)
+    while IFS= read -r bline || [[ -n "$bline" ]]; do
+        bline="${bline%%#*}"
+        bline="$(echo "$bline" | xargs)"
+        [[ -z "$bline" ]] && continue
+        cat "$WEB_DIR/$bline" >> "$_out_path"
+        echo >> "$_out_path"
+    done < "$manifest"
+}
+
+declare -A JS_SKIP_FILES
+declare -A CSS_SKIP_FILES
+discover_bundle_manifests "js" JS_SKIP_FILES
+discover_bundle_manifests "css" CSS_SKIP_FILES
+filter_bundle_fragments JS_FILES JS_SKIP_FILES
+filter_bundle_fragments CSS_FILES CSS_SKIP_FILES
 
 # Read template fragments for HTML processing
 HEADER_TEMPLATE=""
@@ -436,21 +478,32 @@ with open('$fragment_file', 'r') as f:
     GZIPPED_SIZES["frag_$filename"]=$gzipped_size
 done
 
-# Process CSS files (minify)
+# Process CSS files (minify, with bundle support)
 for css_file in "${CSS_FILES[@]}"; do
     raw_name=$(basename "$css_file" .css)
     filename="${raw_name//[.-]/_}"
+
+    # Bundle support: if a .bundle manifest exists, concatenate fragments
+    bundle_manifest="${css_file}.bundle"
+    css_source="$css_file"
+    if concatenate_bundle "$bundle_manifest" css_source; then
+        echo "Bundling CSS: $raw_name.css (from $(basename "$bundle_manifest"))..."
+    fi
+
     echo "Minifying CSS: $raw_name.css..."
-    content=$(cat "$css_file")
+    content=$(cat "$css_source")
     original_size=$(echo -n "$content" | wc -c)
     
     minified=$(python3 -c "
 import csscompressor
-with open('$css_file', 'r') as f:
+with open('$css_source', 'r') as f:
     css = f.read()
     minified = csscompressor.compress(css)
     print(minified, end='')
 ")
+
+    # Cleanup temp file if it was a bundle
+    [[ "$css_source" != "$css_file" ]] && rm -f "$css_source"
     
     CSS_CONTENTS["$filename"]="$minified"
     minified_size=$(echo -n "$minified" | wc -c)
@@ -473,21 +526,13 @@ for js_file in "${JS_FILES[@]}"; do
     # Bundle support: if a .bundle manifest exists, concatenate fragments
     bundle_manifest="${js_file}.bundle"
     js_source="$js_file"
-    if [[ -f "$bundle_manifest" ]]; then
-        echo "Bundling JS: $filename.js (from $(basename "$bundle_manifest"))..."
-        js_source=$(mktemp /tmp/bundle_XXXXXX.js)
-        while IFS= read -r bline || [[ -n "$bline" ]]; do
-            bline="${bline%%#*}"
-            bline="$(echo "$bline" | xargs)"
-            [[ -z "$bline" ]] && continue
-            cat "$WEB_DIR/$bline" >> "$js_source"
-            echo >> "$js_source"
-        done < "$bundle_manifest"
+    if concatenate_bundle "$bundle_manifest" js_source; then
+        echo "Bundling JS: $raw_name.js (from $(basename "$bundle_manifest"))..."
 
         # Syntax-check the concatenated bundle
         if command -v node &> /dev/null; then
             if ! node --check "$js_source" 2>/dev/null; then
-                echo "  ✗ Concatenated bundle $filename.js has syntax errors:"
+                echo "  ✗ Concatenated bundle $raw_name.js has syntax errors:"
                 node --check "$js_source" 2>&1 | sed 's/^/    /'
                 rm -f "$js_source"
                 exit 1

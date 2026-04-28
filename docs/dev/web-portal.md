@@ -1124,7 +1124,9 @@ Each button's `col_offset` / `row_offset` is relative to the placement anchor ce
 - `web/portal-custom.css` - Custom portal styles and responsive overrides
 - `web/portal.js.bundle` - Bundle manifest listing all JS modules in concatenation order
 - `web/portal.js` - Entry point (last in bundle); all JS served as a single bundled asset
-- `web/portal_*.js` - Feature modules and fragments (see [JavaScript Bundle System](#javascript-bundle-system))
+- `web/portal_*.js` - Feature modules and fragments (see [Asset Bundle System](#asset-bundle-system))
+- `web/portal-custom.css.bundle` - Optional CSS bundle manifest (see [CSS Bundle](#css-bundle))
+- `web/_portal_*.css` - Feature CSS fragments (bundled into primary CSS at build time)
 
 **Asset Compression:**
 - All web assets are automatically minified and gzip compressed during build
@@ -1195,6 +1197,8 @@ DNS server redirects all requests to device IP in AP mode:
    - Styling and logic:
      - `bootstrap.min.css` - Bootstrap CSS framework (vendor)
      - `portal-custom.css` - Custom portal styles and overrides
+     - `portal-custom.css.bundle` - Optional CSS bundle manifest
+     - `_portal_*.css` - Feature CSS fragments (bundled into primary CSS)
      - `portal.js.bundle` - Bundle manifest (module load order)
      - `portal_*.js` - JS feature modules and fragments
      - `portal.js` - Entry point (must be last in bundle)
@@ -1209,6 +1213,7 @@ DNS server redirects all requests to device IP in AP mode:
    - Minifies HTML (removes comments, collapses whitespace)
    - Minifies CSS using `csscompressor`
    - Concatenates JS modules per `portal.js.bundle` manifest, then minifies using `rjsmin`
+   - Concatenates CSS fragments per `*.css.bundle` manifests (if present), then minifies using `csscompressor`
    - Gzip compresses all assets (level 9)
   - Generates `src/app/web_assets.h` with embedded byte arrays
   - Generates `src/app/project_branding.h` with `PROJECT_NAME` / `PROJECT_DISPLAY_NAME` defines
@@ -1229,9 +1234,15 @@ DNS server redirects all requests to device IP in AP mode:
    ./monitor.sh
    ```
 
-### JavaScript Bundle System
+### Asset Bundle System
 
-All JavaScript source files are concatenated into a single `portal.js` asset at build time. This means one HTTP request and one C++ route handler serve all JS, reducing flash usage and connection overhead on the ESP32.
+The minifier supports `.bundle` manifests for both JavaScript and CSS. A bundle manifest lists source files that should be concatenated into a single asset at build time, reducing HTTP requests, route handlers, and flash usage on the ESP32.
+
+The same three shared functions (`discover_bundle_manifests`, `filter_bundle_fragments`, `concatenate_bundle`) handle both JS and CSS bundles in `tools/minify-web-assets.sh`.
+
+#### JavaScript Bundle
+
+All JavaScript source files are concatenated into a single `portal.js` asset at build time.
 
 **How it works:**
 
@@ -1266,6 +1277,26 @@ All JavaScript source files are concatenated into a single `portal.js` asset at 
 - **Syntax check** — every `.js` file is checked with `node --check` to catch missing braces, unterminated strings, and other parse errors before minification
 
 > **Feature branches** may add additional modules (e.g., `portal_action_editor_darkroom.js`, `portal_brews.js`). These follow the same pattern: add the file, add it to the bundle manifest, no C++ changes needed.
+
+#### CSS Bundle
+
+CSS files can also be bundled using the same manifest pattern. This allows feature branches to keep their CSS in separate `_`-prefixed files that get concatenated into the primary stylesheet at build time — avoiding merge conflicts in shared CSS files.
+
+**How it works:**
+
+1. `src/app/web/portal-custom.css.bundle` lists CSS files in cascade order (one filename per line, `#` comments ignored)
+2. The minifier concatenates the listed files, minifies with `csscompressor`, and gzip-compresses the result into `web_assets.h`
+3. The primary CSS file (e.g., `portal-custom.css`) is served as a single asset — same as without a bundle
+
+**Concatenation order matters:** CSS cascade rules mean later entries override earlier ones at equal specificity. List base/shared styles first and feature-specific overrides last.
+
+**Adding feature CSS:**
+
+1. Create `src/app/web/_portal_myfeature.css` (underscore prefix excludes it from individual serving)
+2. Create or update `portal-custom.css.bundle` with the filename before the primary CSS file
+3. Run `./build.sh` — the feature CSS is automatically included in the bundle
+
+**Build-time validation:** Every file listed in a `.css.bundle` manifest must exist; missing files cause a hard build error.
 
 ### Adding REST Endpoints
 
