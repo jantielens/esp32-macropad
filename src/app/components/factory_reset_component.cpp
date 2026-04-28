@@ -4,7 +4,7 @@
 
 static ComponentDef factory_reset_component = {
     .id = "factory-reset",
-    .category = "firmware",
+    .category = "device",
     .display_name = "Factory Reset",
     .nav_order = 40,
     .get_config = nullptr,

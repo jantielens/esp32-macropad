@@ -94,6 +94,17 @@ async function saveFragmentConfig(reboot) {
     }
 }
 
+/**
+ * Wire loadConfig() + a save button for the common config-fragment pattern.
+ * @param {string} saveBtnId - ID of the save button element
+ * @param {boolean} reboot - Whether saving should trigger a device reboot
+ */
+function initConfigFragment(saveBtnId, reboot) {
+    loadConfig();
+    var btn = document.getElementById(saveBtnId);
+    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(reboot); });
+}
+
 // ============================================================================
 // Welcome
 // ============================================================================
@@ -134,9 +145,7 @@ window.init_welcome_fragment = function () {
 // ============================================================================
 
 window.init_wifi_fragment = function () {
-    loadConfig();
-    var btn = document.getElementById('wifi-save-btn');
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(true); });
+    initConfigFragment('wifi-save-btn', true);
     // Show setup notice if in AP mode
     if (typeof portalMode !== 'undefined' && portalMode === 'core') {
         var notice = document.getElementById('setup-notice');
@@ -149,9 +158,7 @@ window.init_wifi_fragment = function () {
 // ============================================================================
 
 window.init_device_name_fragment = function () {
-    loadConfig();
-    var btn = document.getElementById('device-name-save-btn');
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(true); });
+    initConfigFragment('device-name-save-btn', true);
 };
 
 // ============================================================================
@@ -159,9 +166,7 @@ window.init_device_name_fragment = function () {
 // ============================================================================
 
 window.init_network_fragment = function () {
-    loadConfig();
-    var btn = document.getElementById('network-save-btn');
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(true); });
+    initConfigFragment('network-save-btn', true);
     var secBtn = document.getElementById('security-save-btn');
     if (secBtn) secBtn.addEventListener('click', function () { saveFragmentConfig(true); });
 };
@@ -171,9 +176,7 @@ window.init_network_fragment = function () {
 // ============================================================================
 
 window.init_mode_fragment = function () {
-    loadConfig();
-    var btn = document.getElementById('mode-save-btn');
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(true); });
+    initConfigFragment('mode-save-btn', true);
 };
 
 // ============================================================================
@@ -192,13 +195,11 @@ window.init_factory_reset_fragment = function () {
 // ============================================================================
 
 window.init_brightness_fragment = function () {
-    loadConfig();
+    initConfigFragment('brightness-save-btn', false);
     var slider = document.getElementById('backlight_brightness');
     if (slider) slider.addEventListener('input', handleBrightnessChange);
     var screenSelect = document.getElementById('screen_selection');
     if (screenSelect) screenSelect.addEventListener('change', handleScreenChange);
-    var btn = document.getElementById('brightness-save-btn');
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(false); });
 
     // Load screen selection dropdown if available
     fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
@@ -225,9 +226,7 @@ window.init_brightness_fragment = function () {
 // ============================================================================
 
 window.init_screensaver_fragment = function () {
-    loadConfig();
-    var btn = document.getElementById('screensaver-save-btn');
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(false); });
+    initConfigFragment('screensaver-save-btn', false);
     // Initialize binding validator on inputs
     if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 };
@@ -239,6 +238,10 @@ window.init_screensaver_fragment = function () {
 window.init_swipe_actions_fragment = function () {
     if (typeof swipeInitEditors === 'function') swipeInitEditors();
     if (typeof loadSwipeActions === 'function') loadSwipeActions();
+    fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (sounds) {
+            if (typeof actionEditorPopulateSounds === 'function') actionEditorPopulateSounds(SWIPE_DIRECTIONS, sounds);
+        }).catch(function () {});
 };
 
 // ============================================================================
@@ -248,6 +251,10 @@ window.init_swipe_actions_fragment = function () {
 window.init_boot_actions_fragment = function () {
     if (typeof bootActionsInitEditors === 'function') bootActionsInitEditors();
     if (typeof loadBootActions === 'function') loadBootActions();
+    fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (sounds) {
+            if (typeof actionEditorPopulateSounds === 'function') actionEditorPopulateSounds(BOOT_ACTION_PREFIXES, sounds);
+        }).catch(function () {});
 };
 
 // ============================================================================
@@ -257,6 +264,10 @@ window.init_boot_actions_fragment = function () {
 window.init_timers_fragment = function () {
     if (typeof timerConfigInitEditors === 'function') timerConfigInitEditors();
     if (typeof loadTimerConfig === 'function') loadTimerConfig();
+    fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (sounds) {
+            if (typeof actionEditorPopulateSounds === 'function') actionEditorPopulateSounds(TIMER_EXPIRE_PREFIXES, sounds);
+        }).catch(function () {});
 };
 
 // ============================================================================
@@ -264,9 +275,7 @@ window.init_timers_fragment = function () {
 // ============================================================================
 
 window.init_mqtt_fragment = function () {
-    loadConfig();
-    var btn = document.getElementById('mqtt-save-btn');
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(true); });
+    initConfigFragment('mqtt-save-btn', true);
 };
 
 // ============================================================================
@@ -274,9 +283,7 @@ window.init_mqtt_fragment = function () {
 // ============================================================================
 
 window.init_ble_fragment = function () {
-    loadConfig();
-    var btn = document.getElementById('ble-save-btn');
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(true); });
+    initConfigFragment('ble-save-btn', true);
     // Start BLE status polling
     if (typeof loadBleStatus === 'function') loadBleStatus();
 };
@@ -294,9 +301,7 @@ window.init_ha_discovery_fragment = function () {
 // ============================================================================
 
 window.init_volume_fragment = function () {
-    loadConfig();
-    var btn = document.getElementById('volume-save-btn');
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(false); });
+    initConfigFragment('volume-save-btn', false);
 };
 
 // ============================================================================
@@ -314,6 +319,16 @@ window.init_sounds_fragment = function () {
 window.init_sensor_data_fragment = function () {
     // Sensor badges are populated by health widget polling
     if (typeof initHealthWidget === 'function') initHealthWidget();
+};
+
+// ============================================================================
+// Thresholds
+// ============================================================================
+
+window.init_thresholds_fragment = function () {
+    // Save button wired — backend API implementation pending
+    var btn = document.getElementById('thresholds-save-btn');
+    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(false); });
 };
 
 // ============================================================================

@@ -11,51 +11,6 @@ async function loadMode() {
         
         const mode = await response.json();
         portalMode = mode.mode || 'full';
-        
-        // Show/hide additional settings based on mode (only if element exists)
-        const additionalSettings = document.getElementById('additional-settings');
-        if (additionalSettings) {
-            if (portalMode === 'core') {
-                additionalSettings.style.display = 'none';
-            } else {
-                additionalSettings.style.display = 'block';
-            }
-        }
-        
-        // Hide Home and Firmware navigation buttons in AP mode (core mode)
-        if (portalMode === 'core') {
-            document.querySelectorAll('.nav-tab[data-page="home"], .nav-tab[data-page="pad"], .nav-tab[data-page="firmware"]').forEach(tab => {
-                tab.style.display = 'none';
-            });
-            
-            // Show setup notice on network page
-            const setupNotice = document.getElementById('setup-notice');
-            if (setupNotice) {
-                setupNotice.style.display = 'block';
-            }
-            
-            // Hide unnecessary buttons on network page (only "Save and Reboot" makes sense)
-            const saveOnlyBtn = document.getElementById('save-only-btn');
-            const rebootBtn = document.getElementById('reboot-btn');
-            if (saveOnlyBtn) saveOnlyBtn.style.display = 'none';
-            if (rebootBtn) rebootBtn.style.display = 'none';
-            
-            // Change primary button text to be more intuitive
-            const submitBtn = document.querySelector('#config-form button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.textContent = 'Save & Connect';
-            }
-
-            // Hide security settings in AP/core mode
-            // (auth is intentionally disabled during onboarding/recovery)
-            const securitySection = document.getElementById('security-section');
-            if (securitySection) {
-                securitySection.style.display = 'none';
-                securitySection.querySelectorAll('input, select, textarea').forEach(el => {
-                    el.disabled = true;
-                });
-            }
-        }
     } catch (error) {
         console.error('Error loading mode:', error);
     }
@@ -76,7 +31,7 @@ async function loadVersion() {
         healthConfigureFromDeviceInfo(deviceInfoCache);
         healthConfigureHistoryFromDeviceInfo(deviceInfoCache);
 
-        // Strategy B: Hide/disable MQTT settings if firmware was built without MQTT support
+        // Hide/disable MQTT settings if firmware was built without MQTT support
         const mqttSection = document.getElementById('mqtt-settings-section');
         if (mqttSection && version.has_mqtt === false) {
             mqttSection.style.display = 'none';
@@ -96,90 +51,6 @@ async function loadVersion() {
                     el.disabled = true;
                 });
             }
-        }
-
-        // Populate screen selection dropdown if device has display
-        const screenSelect = document.getElementById('screen_selection');
-        const screenGroup = document.getElementById('screen-selection-group');
-        if (screenSelect && screenGroup && version.has_display === true && version.available_screens) {
-            // Clear existing options
-            screenSelect.innerHTML = '';
-            
-            // Add option for each available screen
-            version.available_screens.forEach(screen => {
-                const option = document.createElement('option');
-                option.value = screen.id;
-                option.textContent = screen.name;
-                if (screen.id === version.current_screen) {
-                    option.selected = true;
-                }
-                screenSelect.appendChild(option);
-            });
-            
-            // Show screen selection group
-            screenGroup.style.display = 'block';
-        } else if (screenGroup) {
-            screenGroup.style.display = 'none';
-        }
-
-        // Show sound files section if device has sound player support
-        if (version.has_sound_player === true) {
-            const soundSection = document.getElementById('sound-files-section');
-            if (soundSection) {
-                soundSection.style.display = 'block';
-                loadSoundList();
-            }
-        }
-
-        // Show swipe actions section if device has display (touch)
-        const swipeSection = document.getElementById('swipe-actions-section');
-        if (swipeSection) {
-            if (version.has_display === true) {
-                swipeSection.style.display = 'block';
-                swipeInitEditors();
-                actionEditorPopulateScreens(SWIPE_DIRECTIONS, version.available_screens);
-                loadSwipeActions();
-            } else {
-                swipeSection.style.display = 'none';
-            }
-        }
-
-        // Show boot actions section if device has display
-        const bootSection = document.getElementById('boot-actions-section');
-        if (bootSection) {
-            if (version.has_display === true) {
-                bootSection.style.display = 'block';
-                bootActionsInitEditors();
-                actionEditorPopulateScreens(BOOT_ACTION_PREFIXES, version.available_screens);
-                loadBootActions();
-            } else {
-                bootSection.style.display = 'none';
-            }
-        }
-
-        // Show timer config section if device has display
-        const timerSection = document.getElementById('timer-config-section');
-        if (timerSection) {
-            if (version.has_display === true) {
-                timerSection.style.display = 'block';
-                timerConfigInitEditors();
-                actionEditorPopulateScreens(TIMER_EXPIRE_PREFIXES, version.available_screens);
-                loadTimerConfig();
-            } else {
-                timerSection.style.display = 'none';
-            }
-        }
-
-        // Single shared fetch for sound file dropdowns across all action editors
-        if (version.has_display === true) {
-            fetch('/api/sounds/list')
-                .then(function(r) { return r.ok ? r.json() : []; })
-                .then(function(sounds) {
-                    actionEditorPopulateSounds(SWIPE_DIRECTIONS, sounds);
-                    actionEditorPopulateSounds(BOOT_ACTION_PREFIXES, sounds);
-                    actionEditorPopulateSounds(TIMER_EXPIRE_PREFIXES, sounds);
-                })
-                .catch(function() {});
         }
 
         document.getElementById('firmware-version').textContent = `Firmware v${version.version}`;
@@ -373,50 +244,6 @@ async function loadConfig() {
 }
 
 /**
- * Extract form fields that exist on the current page
- * @param {FormData} formData - Form data to extract from
- * @returns {Object} Configuration object with only fields present on page
- */
-function extractFormFields(formData) {
-    // Helper to get value only if field exists
-    const getFieldValue = (name) => {
-        const element = document.querySelector(`[name="${name}"]`);
-        if (!element || element.disabled) return null;
-        return element ? formData.get(name) : null;
-    };
-
-    const getCheckboxValue = (name) => {
-        const element = document.querySelector(`[name="${name}"]`);
-        if (!element || element.disabled) return null;
-        if (element.type !== 'checkbox') return formData.get(name);
-        // Explicit boolean so unchecked can be persisted as false.
-        return element.checked;
-    };
-    
-    // Build config from only the fields that exist on this page
-    const config = {};
-    const fields = ['wifi_ssid', 'wifi_password', 'device_name', 'fixed_ip', 
-                    'subnet_mask', 'gateway', 'dns1', 'dns2',
-                    'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
-                    'power_mode', 'cycle_interval_seconds', 'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
-                    'mqtt_publish_scope',
-                    'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
-                    'ble_enabled',
-                    'audio_volume', 'tap_beep', 'lp_beep',
-                    'backlight_brightness',
-                    'screen_saver_enabled', 'screen_saver_timeout_seconds', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms', 'screen_saver_wake_on_touch',
-                    'screen_saver_wake_binding'];
-    
-    fields.forEach(field => {
-        const element = document.querySelector(`[name="${field}"]`);
-        const value = (element && element.type === 'checkbox') ? getCheckboxValue(field) : getFieldValue(field);
-        if (value !== null) config[field] = value;
-    });
-    
-    return config;
-}
-
-/**
  * Validate configuration fields
  * @param {Object} config - Configuration object to validate
  * @returns {Object} { valid: boolean, message: string }
@@ -457,125 +284,6 @@ function validateConfig(config) {
     }
     
     return { valid: true };
-}
-
-/**
- * Save configuration to device
- * @param {Event} event - Form submit event
- */
-async function saveConfig(event) {
-    event.preventDefault();
-    
-    // Check if in captive portal and show warning (only once)
-    if (isInCaptivePortal() && !window.captivePortalWarningShown) {
-        window.captivePortalWarningShown = true;
-        showCaptivePortalWarning();
-        return;
-    }
-    
-    const formData = new FormData(event.target);
-    const config = extractFormFields(formData);
-    
-    // Validate configuration
-    const validation = validateConfig(config);
-    if (!validation.valid) {
-        showMessage(validation.message, 'error');
-        return;
-    }
-
-    // Validate binding fields
-    if (typeof bindingValidateHomeConfig === 'function') {
-        var bvHome = bindingValidateHomeConfig();
-        if (!bvHome.valid) {
-            showMessage(bvHome.count + ' binding error' + (bvHome.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
-            return;
-        }
-    }
-    
-    const currentDeviceNameField = document.getElementById('device_name');
-    const currentDeviceName = currentDeviceNameField ? currentDeviceNameField.value : null;
-    
-    // Show overlay immediately
-    showRebootDialog({
-        title: 'Saving Configuration',
-        message: 'Saving configuration...',
-        context: 'save',
-        newDeviceName: currentDeviceName
-    });
-    
-    try {
-        const response = await fetch(API_CONFIG, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(config)
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to save configuration');
-        }
-        
-        const result = await response.json();
-        if (result.success) {
-            // Update dialog message
-            document.getElementById('reboot-message').textContent = 'Configuration saved. Device is rebooting...';
-        }
-    } catch (error) {
-        // If save request fails (e.g., device already rebooting), assume success
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            document.getElementById('reboot-message').textContent = 'Configuration saved. Device is rebooting...';
-        } else {
-            // Hide overlay and show error
-            document.getElementById('reboot-overlay').style.display = 'none';
-            showMessage('Error saving configuration: ' + error.message, 'error');
-            console.error('Save error:', error);
-        }
-    }
-}
-
-/**
- * Save configuration without rebooting
- */
-async function saveOnly(event) {
-    event.preventDefault();
-    
-    const formData = new FormData(document.getElementById('config-form'));
-    const config = extractFormFields(formData);
-    
-    // Validate configuration
-    const validation = validateConfig(config);
-    if (!validation.valid) {
-        showMessage(validation.message, 'error');
-        return;
-    }
-    
-    try {
-        showMessage('Saving configuration...', 'info');
-        
-        // Add no_reboot parameter to prevent automatic reboot
-        const response = await fetch(API_CONFIG + '?no_reboot=1', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(config)
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to save configuration');
-        }
-        
-        const result = await response.json();
-        if (result.success) {
-            showMessage('Configuration saved successfully!', 'success');
-        } else {
-            showMessage('Failed to save configuration', 'error');
-        }
-    } catch (error) {
-        showMessage('Error saving configuration: ' + error.message, 'error');
-        console.error('Save error:', error);
-    }
 }
 
 /**
