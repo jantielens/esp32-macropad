@@ -1,0 +1,4 @@
+# CSS bundle manifest for portal-custom.css
+# Concatenation order follows CSS cascade: base styles first, feature overrides last.
+# Feature branches add their _*.css fragment before the primary file.
+portal-custom.css
