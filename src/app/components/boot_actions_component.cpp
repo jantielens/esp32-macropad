@@ -4,7 +4,6 @@
 #include "action_parse.h"
 #include "boot_actions.h"
 #include "log_manager.h"
-#include "web_portal_auth.h"
 #include "web_portal_cors.h"
 
 #include <ArduinoJson.h>
@@ -26,22 +25,7 @@ static void boot_actions_get_config(AsyncWebServerRequest *request) {
 }
 
 static void boot_actions_save_config(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    if (!portal_auth_gate(request)) return;
-
-    // Only handle final chunk (small payload, arrives in one piece)
-    if (index + len < total) return;
-
-    if (total > 4096) {
-        request->send(413, "application/json", "{\"error\":\"payload too large\"}");
-        return;
-    }
-
-    bool ok = boot_actions_save_raw(data, total);
-    if (ok) {
-        request->send(200, "application/json", "{\"success\":true}");
-    } else {
-        request->send(500, "application/json", "{\"success\":false,\"error\":\"save failed\"}");
-    }
+    component_handle_save_body(request, data, len, index, total, boot_actions_save_raw);
 }
 
 static ComponentDef boot_actions_component = {

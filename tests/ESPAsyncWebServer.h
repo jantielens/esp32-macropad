@@ -10,7 +10,10 @@
 #include <cstddef>
 #include <functional>
 
-class AsyncWebServerRequest {};
+class AsyncWebServerRequest {
+public:
+    void send(int, const char* = nullptr, const char* = nullptr) {}
+};
 class AsyncWebServerResponse {};
 
 typedef std::function<void(AsyncWebServerRequest*)> ArRequestHandlerFunction;

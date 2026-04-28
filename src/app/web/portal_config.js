@@ -217,14 +217,7 @@ async function loadConfig() {
         setValueIfExists('screen_saver_fade_in_ms', config.screen_saver_fade_in_ms);
         setCheckedIfExists('screen_saver_wake_on_touch', config.screen_saver_wake_on_touch);
         setValueIfExists('screen_saver_wake_binding', config.screen_saver_wake_binding);
-        
-        // Hide loading overlay (silent load)
-        const overlay = document.getElementById('form-loading-overlay');
-        if (overlay) overlay.style.display = 'none';
     } catch (error) {
-        // Hide loading overlay even on error so form is usable
-        const overlay = document.getElementById('form-loading-overlay');
-        if (overlay) overlay.style.display = 'none';
         showMessage('Error loading configuration: ' + error.message, 'error');
         console.error('Load error:', error);
     }

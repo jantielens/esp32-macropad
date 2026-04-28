@@ -1120,7 +1120,8 @@ Each button's `col_offset` / `row_offset` is relative to the placement anchor ce
 - `web/home.html` - Home page (custom settings)
 - `web/network.html` - Network configuration page
 - `web/firmware.html` - Firmware update and factory reset page
-- `web/portal.css` - Minimalist card-based design with gradients and responsive grid
+- `web/bootstrap.min.css` - Bootstrap CSS framework (vendor)
+- `web/portal-custom.css` - Custom portal styles and responsive overrides
 - `web/portal.js.bundle` - Bundle manifest listing all JS modules in concatenation order
 - `web/portal.js` - Entry point (last in bundle); all JS served as a single bundled asset
 - `web/portal_*.js` - Feature modules and fragments (see [JavaScript Bundle System](#javascript-bundle-system))
@@ -1192,7 +1193,8 @@ DNS server redirects all requests to device IP in AP mode:
      - `network.html` - Network configuration
      - `firmware.html` - Firmware update and reset
    - Styling and logic:
-     - `portal.css` - Styles and responsive grid
+     - `bootstrap.min.css` - Bootstrap CSS framework (vendor)
+     - `portal-custom.css` - Custom portal styles and overrides
      - `portal.js.bundle` - Bundle manifest (module load order)
      - `portal_*.js` - JS feature modules and fragments
      - `portal.js` - Entry point (must be last in bundle)
@@ -1217,7 +1219,7 @@ DNS server redirects all requests to device IP in AP mode:
      HTML home.html:     5234 → 3891 → 1256 bytes (-76% total)
      HTML network.html:  8912 → 6543 → 1987 bytes (-78% total)
      HTML firmware.html: 4231 → 3124 → 1098 bytes (-74% total)
-     CSS  portal.css:   14348 → 10539 → 2864 bytes (-81% total)
+     CSS  portal-custom.css:   14348 → 10539 → 2864 bytes (-81% total)
      JS   portal.js:   329575 → 220746 → 50066 bytes (-85% total)
    ```
 

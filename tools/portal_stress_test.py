@@ -357,7 +357,7 @@ def queue_image_url(base_url: str, image_url: str, timeout_s: float, retries: in
 
 def fetch_portal_assets(base_url: str, timeout_s: float, retries: int, retry_sleep_s: float) -> None:
     # We don't need to parse/decompress; we just want the server to do the work.
-    for path in ("/network.html", "/home.html", "/firmware.html", "/portal.css", "/portal.js"):
+    for path in ("/network.html", "/home.html", "/firmware.html", "/bootstrap.min.css", "/portal-custom.css", "/portal.js"):
         status, _ = _http(
             base_url,
             method="GET",

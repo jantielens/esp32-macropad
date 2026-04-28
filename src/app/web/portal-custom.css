@@ -771,26 +771,6 @@ body {
   display: block;
 }
 
-/* Toast-style messages (showMessage) */
-.message {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 16px 24px;
-  border-radius: 12px;
-  font-size: 15px;
-  z-index: 1000;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  min-width: 320px;
-  max-width: 500px;
-  text-align: center;
-  font-weight: 500;
-}
-.message.success { background: #34c759; color: white; }
-.message.error { background: #ff3b30; color: white; }
-.message.info { background: #007aff; color: white; }
-
 /* Binding help button (small circle ? button) */
 .binding-help-btn {
   background: none;

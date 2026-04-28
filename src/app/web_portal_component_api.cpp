@@ -54,6 +54,7 @@ static const ComponentAction* find_action(const ComponentDef* comp,
 // ============================================================================
 
 static void handlePortalNav(AsyncWebServerRequest* request) {
+    if (!portal_auth_gate(request)) return;
     bool ap_mode = web_portal_is_ap_mode_active();
 
     auto doc = make_psram_json_doc(4096);
@@ -117,6 +118,7 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
 // ============================================================================
 
 static void handleComponentGetConfig(AsyncWebServerRequest* request) {
+    if (!portal_auth_gate(request)) return;
     String compId = request->pathArg(0);
     ComponentDef* comp = component_registry_find(compId.c_str());
     if (!comp || !comp->get_config) {
@@ -151,6 +153,7 @@ static void handleComponentSaveConfigRequest(AsyncWebServerRequest* request) {
 
 static void handleComponentSaveConfigBody(AsyncWebServerRequest* request,
     uint8_t* data, size_t len, size_t index, size_t total) {
+    if (!portal_auth_gate(request)) return;
     String compId = request->pathArg(0);
     ComponentDef* comp = component_registry_find(compId.c_str());
     if (!comp || !comp->save_config_body) return;
@@ -193,6 +196,8 @@ static void handleComponentActionRequest(AsyncWebServerRequest* request) {
         return;
     }
 
+    if (!portal_auth_gate(request)) return;
+
     // If action has a body handler, it already processed the request
     if (action->body_handler) return;
 
@@ -207,6 +212,7 @@ static void handleComponentActionRequest(AsyncWebServerRequest* request) {
 
 static void handleComponentActionBody(AsyncWebServerRequest* request,
     uint8_t* data, size_t len, size_t index, size_t total) {
+    if (!portal_auth_gate(request)) return;
     String compId = request->pathArg(0);
     String actionName = request->pathArg(1);
 

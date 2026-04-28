@@ -48,6 +48,13 @@ void component_registry_for_category(const char* category,
 // Reset registry (for tests only)
 void component_registry_reset();
 
+// Save-body helper — shared boilerplate for save_config_body handlers.
+// Handles chunk assembly, payload size check, and success/error response.
+typedef bool (*ComponentSaveRawFn)(const uint8_t* data, size_t len);
+void component_handle_save_body(AsyncWebServerRequest* request,
+    uint8_t* data, size_t len, size_t index, size_t total,
+    ComponentSaveRawFn save_fn, size_t max_size = 4096);
+
 // Auto-registration macro — mirrors REGISTER_WIDGET() pattern
 // Usage: REGISTER_COMPONENT(my_feature);
 // Requires a static ComponentDef named <name>_component in the same file

@@ -53,3 +53,22 @@ void component_registry_for_category(const char* category,
 void component_registry_reset() {
     _component_count = 0;
 }
+
+void component_handle_save_body(AsyncWebServerRequest* request,
+    uint8_t* data, size_t len, size_t index, size_t total,
+    ComponentSaveRawFn save_fn, size_t max_size) {
+    // Only handle final chunk (small payload, arrives in one piece)
+    if (index + len < total) return;
+
+    if (total > max_size) {
+        request->send(413, "application/json", "{\"error\":\"payload too large\"}");
+        return;
+    }
+
+    bool ok = save_fn(data, total);
+    if (ok) {
+        request->send(200, "application/json", "{\"success\":true}");
+    } else {
+        request->send(500, "application/json", "{\"success\":false,\"error\":\"save failed\"}");
+    }
+}

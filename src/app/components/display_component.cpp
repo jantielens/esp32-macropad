@@ -2,7 +2,6 @@
 // All handlers become custom actions dispatched by (name, method) pair.
 
 #include "component_registry.h"
-#include "web_portal_auth.h"
 #include "web_portal_state.h"
 
 #include "log_manager.h"
@@ -16,8 +15,6 @@
 // ---- brightness (PUT, body) ----
 
 static void display_brightness_body(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    if (!portal_auth_gate(request)) return;
-
     if (index != 0 || index + len != total) return;
 
     StaticJsonDocument<128> doc;
@@ -49,8 +46,6 @@ static void display_brightness_body(AsyncWebServerRequest *request, uint8_t *dat
 // ---- sleep (GET) ----
 
 static void display_sleep_get(AsyncWebServerRequest *request) {
-    if (!portal_auth_gate(request)) return;
-
     ScreenSaverStatus status = screen_saver_manager_get_status();
 
     StaticJsonDocument<256> doc;
@@ -68,8 +63,6 @@ static void display_sleep_get(AsyncWebServerRequest *request) {
 // ---- sleep (POST) ----
 
 static void display_sleep_post(AsyncWebServerRequest *request) {
-    if (!portal_auth_gate(request)) return;
-
     LOGI("API", "POST /api/component/display/sleep");
     screen_saver_manager_sleep_now();
     request->send(200, "application/json", "{\"success\":true}");
@@ -78,8 +71,6 @@ static void display_sleep_post(AsyncWebServerRequest *request) {
 // ---- wake (POST) ----
 
 static void display_wake_post(AsyncWebServerRequest *request) {
-    if (!portal_auth_gate(request)) return;
-
     LOGI("API", "POST /api/component/display/wake");
     screen_saver_manager_wake();
     request->send(200, "application/json", "{\"success\":true}");
@@ -88,8 +79,6 @@ static void display_wake_post(AsyncWebServerRequest *request) {
 // ---- activity (POST) ----
 
 static void display_activity_post(AsyncWebServerRequest *request) {
-    if (!portal_auth_gate(request)) return;
-
     bool wake = false;
     if (request->hasParam("wake")) {
         wake = (request->getParam("wake")->value() == "1");
@@ -103,8 +92,6 @@ static void display_activity_post(AsyncWebServerRequest *request) {
 // ---- screen (PUT, body) ----
 
 static void display_screen_body(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    if (!portal_auth_gate(request)) return;
-
     if (index != 0 || index + len != total) return;
 
     StaticJsonDocument<256> doc;
