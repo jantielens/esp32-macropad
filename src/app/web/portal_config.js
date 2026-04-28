@@ -40,19 +40,6 @@ async function loadVersion() {
             });
         }
 
-        // Hide/disable display settings if firmware was built without backlight support
-        const displaySection = document.getElementById('display-settings-section');
-        if (displaySection) {
-            if (version.has_backlight === true || version.has_display === true) {
-                displaySection.style.display = 'block';
-            } else {
-                displaySection.style.display = 'none';
-                displaySection.querySelectorAll('input').forEach(el => {
-                    el.disabled = true;
-                });
-            }
-        }
-
         document.getElementById('firmware-version').textContent = `Firmware v${version.version}`;
         document.getElementById('chip-info').textContent = 
             `${version.chip_model} rev ${version.chip_revision}`;
