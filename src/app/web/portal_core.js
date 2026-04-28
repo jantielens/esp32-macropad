@@ -88,6 +88,7 @@ function initNavigation() {
  */
 function showMessage(message, type = 'info') {
     const statusDiv = document.getElementById('status-message');
+    if (!statusDiv) return;
     statusDiv.textContent = message;
     statusDiv.className = `message ${type}`;
     statusDiv.style.display = 'block';

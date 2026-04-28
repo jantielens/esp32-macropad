@@ -85,8 +85,9 @@ if [ ! -d "$WEB_DIR" ]; then
     exit 1
 fi
 
-# Discover source files (exclude template fragments starting with _)
-HTML_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.html" -not -name "_*.html" -type f | sort))
+# Discover source files (exclude template fragments starting with _ and *.fragment.html)
+HTML_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.html" -not -name "_*.html" -not -name "*.fragment.html" -type f | sort))
+FRAGMENT_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.fragment.html" -type f | sort))
 CSS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.css" -not -name "_*.css" -type f | sort))
 JS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.js" -not -name "_*.js" -type f | sort))
 
@@ -192,15 +193,16 @@ if [ -f "$WEB_DIR/_reboot_overlay.html" ]; then
     REBOOT_OVERLAY_TEMPLATE=$(cat "$WEB_DIR/_reboot_overlay.html")
 fi
 
-if [ ${#HTML_FILES[@]} -eq 0 ] && [ ${#CSS_FILES[@]} -eq 0 ] && [ ${#JS_FILES[@]} -eq 0 ]; then
+if [ ${#HTML_FILES[@]} -eq 0 ] && [ ${#FRAGMENT_FILES[@]} -eq 0 ] && [ ${#CSS_FILES[@]} -eq 0 ] && [ ${#JS_FILES[@]} -eq 0 ]; then
     echo "Error: No HTML, CSS, or JS files found in $WEB_DIR"
     exit 1
 fi
 
 echo "Found files:"
-echo "  HTML: ${#HTML_FILES[@]} file(s)"
-echo "  CSS:  ${#CSS_FILES[@]} file(s)"
-echo "  JS:   ${#JS_FILES[@]} file(s)"
+echo "  HTML:      ${#HTML_FILES[@]} file(s)"
+echo "  Fragments: ${#FRAGMENT_FILES[@]} file(s)"
+echo "  CSS:       ${#CSS_FILES[@]} file(s)"
+echo "  JS:        ${#JS_FILES[@]} file(s)"
 echo
 
 # ---------------------------------------------------------------------------
@@ -272,6 +274,8 @@ format_size_savings() {
 # Arrays to store processed content and statistics
 declare -A HTML_CONTENTS
 declare -A HTML_GZIP_CONTENTS
+declare -A FRAGMENT_CONTENTS
+declare -A FRAGMENT_GZIP_CONTENTS
 declare -A CSS_CONTENTS
 declare -A CSS_GZIP_CONTENTS
 declare -A JS_CONTENTS
@@ -370,10 +374,73 @@ with open('$html_file', 'r') as f:
     GZIPPED_SIZES["html_$filename"]=$gzipped_size
 done
 
+# Process fragment HTML files (subset of template substitution + minification)
+# Fragments get: BINDING_HELP, WIDGET_*, STYLE_HELP, HEALTH_WIDGET, REBOOT_OVERLAY,
+# PROJECT_NAME, PROJECT_DISPLAY_NAME. They do NOT get HEADER, NAV, or FOOTER.
+for fragment_file in "${FRAGMENT_FILES[@]}"; do
+    stem=$(basename "$fragment_file" .fragment.html)
+    # C symbols: replace hyphens with underscores
+    c_stem="${stem//-/_}"
+    filename="${c_stem}_fragment"
+    echo "Processing fragment: $stem.fragment.html..."
+    content=$(cat "$fragment_file")
+    original_size=$(echo -n "$content" | wc -c)
+    
+    minified=$(python3 -c "
+import re
+
+binding_help_template = '''$BINDING_HELP_TEMPLATE'''
+widget_bar_chart_template = '''$WIDGET_BAR_CHART_TEMPLATE'''
+widget_gauge_template = '''$WIDGET_GAUGE_TEMPLATE'''
+widget_sparkline_template = '''$WIDGET_SPARKLINE_TEMPLATE'''
+widget_table_template = '''$WIDGET_TABLE_TEMPLATE'''
+widget_rocker_template = '''$WIDGET_ROCKER_TEMPLATE'''
+widget_numericrocker_template = '''$WIDGET_NUMERICROCKER_TEMPLATE'''
+style_help_template = '''$STYLE_HELP_TEMPLATE'''
+health_widget_template = '''$HEALTH_WIDGET_TEMPLATE'''
+reboot_overlay_template = '''$REBOOT_OVERLAY_TEMPLATE'''
+
+with open('$fragment_file', 'r') as f:
+    html = f.read()
+    
+    html = html.replace('{{BINDING_HELP}}', binding_help_template)
+    html = html.replace('{{WIDGET_BAR_CHART}}', widget_bar_chart_template)
+    html = html.replace('{{WIDGET_GAUGE}}', widget_gauge_template)
+    html = html.replace('{{WIDGET_SPARKLINE}}', widget_sparkline_template)
+    html = html.replace('{{WIDGET_TABLE}}', widget_table_template)
+    html = html.replace('{{WIDGET_ROCKER}}', widget_rocker_template)
+    html = html.replace('{{WIDGET_NUMERICROCKER}}', widget_numericrocker_template)
+    html = html.replace('{{STYLE_HELP}}', style_help_template)
+    html = html.replace('{{HEALTH_WIDGET}}', health_widget_template)
+    html = html.replace('{{REBOOT_OVERLAY}}', reboot_overlay_template)
+    
+    html = html.replace('{{PROJECT_NAME}}', '$PROJECT_NAME')
+    html = html.replace('{{PROJECT_DISPLAY_NAME}}', '$PROJECT_DISPLAY_NAME')
+    
+    html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
+    html = re.sub(r'\s+', ' ', html)
+    html = re.sub(r'>\s+<', '><', html)
+    html = html.strip()
+    print(html, end='')
+")
+    
+    FRAGMENT_CONTENTS["$filename"]="$minified"
+    minified_size=$(echo -n "$minified" | wc -c)
+    
+    gzipped=$(gzip_to_c_array "$minified")
+    FRAGMENT_GZIP_CONTENTS["$filename"]="$gzipped"
+    gzipped_size=$(echo -n "$minified" | gzip -9 -c | wc -c)
+    
+    ORIGINAL_SIZES["frag_$filename"]=$original_size
+    PROCESSED_SIZES["frag_$filename"]=$minified_size
+    GZIPPED_SIZES["frag_$filename"]=$gzipped_size
+done
+
 # Process CSS files (minify)
 for css_file in "${CSS_FILES[@]}"; do
-    filename=$(basename "$css_file" .css)
-    echo "Minifying CSS: $filename.css..."
+    raw_name=$(basename "$css_file" .css)
+    filename="${raw_name//[.-]/_}"
+    echo "Minifying CSS: $raw_name.css..."
     content=$(cat "$css_file")
     original_size=$(echo -n "$content" | wc -c)
     
@@ -400,7 +467,8 @@ done
 
 # Process JS files (minify, with bundle support)
 for js_file in "${JS_FILES[@]}"; do
-    filename=$(basename "$js_file" .js)
+    raw_name=$(basename "$js_file" .js)
+    filename="${raw_name//[.-]/_}"
 
     # Bundle support: if a .bundle manifest exists, concatenate fragments
     bundle_manifest="${js_file}.bundle"
@@ -427,7 +495,7 @@ for js_file in "${JS_FILES[@]}"; do
         fi
     fi
 
-    echo "Minifying JS: $filename.js..."
+    echo "Minifying JS: $raw_name.js..."
     content=$(cat "$js_source")
     original_size=$(echo -n "$content" | wc -c)
     
@@ -572,6 +640,17 @@ ${HTML_GZIP_CONTENTS[$filename]}
 EOF
 done
 
+# Generate fragment HTML sections (gzipped)
+for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+    cat >> "$OUTPUT_FILE" << EOF
+// Fragment from src/app/web/${filename%.fragment*}.fragment.html (gzipped)
+const uint8_t ${filename}_html_gz[] PROGMEM = {
+${FRAGMENT_GZIP_CONTENTS[$filename]}
+};
+
+EOF
+done
+
 # Generate CSS sections (gzipped)
 for filename in "${!CSS_CONTENTS[@]}"; do
     cat >> "$OUTPUT_FILE" << EOF
@@ -604,6 +683,10 @@ for filename in "${!HTML_CONTENTS[@]}"; do
     echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
 done
 
+for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+    echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
+done
+
 for filename in "${!CSS_CONTENTS[@]}"; do
     echo "const size_t ${filename}_css_gz_len = sizeof(${filename}_css_gz);" >> "$OUTPUT_FILE"
 done
@@ -611,6 +694,43 @@ done
 for filename in "${!JS_CONTENTS[@]}"; do
     echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
 done
+
+# Generate fragment lookup table for runtime dispatch
+if [ ${#FRAGMENT_CONTENTS[@]} -gt 0 ]; then
+    cat >> "$OUTPUT_FILE" << 'FRAG_TABLE_START'
+
+// Fragment lookup table for /api/section/{id} dispatch
+struct FragmentAsset {
+    const char* id;       // fragment_id from ComponentDef (hyphenated, e.g. "wifi")
+    const uint8_t* data;  // gzipped PROGMEM data
+    size_t len;           // gzipped data length
+};
+
+static const FragmentAsset fragment_assets[] = {
+FRAG_TABLE_START
+
+    for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+        # Convert symbol name back to fragment_id: wifi_fragment -> wifi, pad_editor_fragment -> pad-editor
+        frag_id="${filename%_fragment}"
+        frag_id="${frag_id//_/-}"
+        echo "    {\"$frag_id\", ${filename}_html_gz, sizeof(${filename}_html_gz)}," >> "$OUTPUT_FILE"
+    done
+
+    cat >> "$OUTPUT_FILE" << 'FRAG_TABLE_END'
+};
+
+static constexpr size_t fragment_assets_count = sizeof(fragment_assets) / sizeof(fragment_assets[0]);
+
+// Lookup a fragment by its id. Returns nullptr if not found.
+static inline const FragmentAsset* find_fragment_asset(const char* id) {
+    for (size_t i = 0; i < fragment_assets_count; i++) {
+        if (strcmp(fragment_assets[i].id, id) == 0) return &fragment_assets[i];
+    }
+    return nullptr;
+}
+
+FRAG_TABLE_END
+fi
 
 # Close header file
 cat >> "$OUTPUT_FILE" << 'HEADER_END'
@@ -635,6 +755,18 @@ for filename in "${!HTML_CONTENTS[@]}"; do
     gzip=${GZIPPED_SIZES[$key]}
     percent=$((100 - (gzip * 100 / orig)))
     echo "  HTML ${filename}.html: $orig → $proc → $gzip bytes (-${percent}% total)"
+    total_original=$((total_original + orig))
+    total_processed=$((total_processed + proc))
+    total_gzipped=$((total_gzipped + gzip))
+done
+
+for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+    key="frag_$filename"
+    orig=${ORIGINAL_SIZES[$key]}
+    proc=${PROCESSED_SIZES[$key]}
+    gzip=${GZIPPED_SIZES[$key]}
+    percent=$((100 - (gzip * 100 / orig)))
+    echo "  FRAG ${filename}: $orig → $proc → $gzip bytes (-${percent}% total)"
     total_original=$((total_original + orig))
     total_processed=$((total_processed + proc))
     total_gzipped=$((total_gzipped + gzip))

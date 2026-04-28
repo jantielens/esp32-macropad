@@ -68,7 +68,7 @@ const PAD_FIRMWARE_DEFAULTS = {
 // Load device-level button defaults from the REST API
 async function padLoadButtonDefaultsFromDevice() {
     try {
-        const resp = await fetch('/api/button-defaults');
+        const resp = await fetch('/api/component/button-defaults/config');
         if (resp.ok) {
             const defs = await resp.json();
             padState.buttonDefaults = defs || {};
@@ -84,6 +84,13 @@ async function padLoadButtonDefaultsFromDevice() {
 
 function padLoadButtonDefaults(defs) {
     padState.buttonDefaults = defs || {};
+    // NOTE: This function does double duty. It always caches button defaults in
+    // padState (used by the pad-editor grid renderer), and also populates the
+    // form fields below — but those fields only exist in the button-defaults
+    // fragment. When called from the pad-editor fragment, every getElementById
+    // returns null and the `if (el)` guards turn the form-population code into
+    // safe no-ops. This is intentional and harmless; splitting into two
+    // functions was considered but rejected as cosmetic-only churn.
     // Init bindable color controls
     ['pad-def-bg-color-wrap', 'pad-def-fg-color-wrap', 'pad-def-border-color-wrap'].forEach(id => {
         var el = document.getElementById(id);
@@ -92,11 +99,12 @@ function padLoadButtonDefaults(defs) {
     padSetBindableColor('pad-def-bg-color', defs.bg_color || '', PAD_FIRMWARE_DEFAULTS.bg_color);
     padSetBindableColor('pad-def-fg-color', defs.fg_color || '', PAD_FIRMWARE_DEFAULTS.fg_color);
     padSetBindableColor('pad-def-border-color', defs.border_color || '', PAD_FIRMWARE_DEFAULTS.border_color);
-    document.getElementById('pad-def-border-width').value = defs.border_width || '';
-    document.getElementById('pad-def-corner-radius').value = defs.corner_radius || '';
-    document.getElementById('pad-def-label-top-style').value = defs.label_top_style || '';
-    document.getElementById('pad-def-label-center-style').value = defs.label_center_style || '';
-    document.getElementById('pad-def-label-bottom-style').value = defs.label_bottom_style || '';
+    var el;
+    el = document.getElementById('pad-def-border-width'); if (el) el.value = defs.border_width || '';
+    el = document.getElementById('pad-def-corner-radius'); if (el) el.value = defs.corner_radius || '';
+    el = document.getElementById('pad-def-label-top-style'); if (el) el.value = defs.label_top_style || '';
+    el = document.getElementById('pad-def-label-center-style'); if (el) el.value = defs.label_center_style || '';
+    el = document.getElementById('pad-def-label-bottom-style'); if (el) el.value = defs.label_bottom_style || '';
     var ipSel = document.getElementById('pad-def-icon-position');
     if (ipSel) ipSel.value = defs.icon_position || 'above';
 
@@ -110,16 +118,12 @@ function padCollectButtonDefaults() {
     if (bgc) d.bg_color = bgc;
     if (fgc) d.fg_color = fgc;
     if (bdc) d.border_color = bdc;
-    var bw = document.getElementById('pad-def-border-width').value.trim();
-    if (bw) d.border_width = bw;
-    var cr = document.getElementById('pad-def-corner-radius').value.trim();
-    if (cr) d.corner_radius = cr;
-    var lts = document.getElementById('pad-def-label-top-style').value.trim();
-    if (lts) d.label_top_style = lts;
-    var lcs = document.getElementById('pad-def-label-center-style').value.trim();
-    if (lcs) d.label_center_style = lcs;
-    var lbs = document.getElementById('pad-def-label-bottom-style').value.trim();
-    if (lbs) d.label_bottom_style = lbs;
+    var el;
+    el = document.getElementById('pad-def-border-width'); if (el && el.value.trim()) d.border_width = el.value.trim();
+    el = document.getElementById('pad-def-corner-radius'); if (el && el.value.trim()) d.corner_radius = el.value.trim();
+    el = document.getElementById('pad-def-label-top-style'); if (el && el.value.trim()) d.label_top_style = el.value.trim();
+    el = document.getElementById('pad-def-label-center-style'); if (el && el.value.trim()) d.label_center_style = el.value.trim();
+    el = document.getElementById('pad-def-label-bottom-style'); if (el && el.value.trim()) d.label_bottom_style = el.value.trim();
     var ip = document.getElementById('pad-def-icon-position');
     if (ip && ip.value && ip.value !== 'above') d.icon_position = ip.value;
 
@@ -130,7 +134,7 @@ function padCollectButtonDefaults() {
 async function padSaveButtonDefaults() {
     var d = padCollectButtonDefaults();
     try {
-        var resp = await fetch('/api/button-defaults', {
+        var resp = await fetch('/api/component/button-defaults/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(d),

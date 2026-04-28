@@ -1,0 +1,56 @@
+<div class="section-header">
+  <h2>🌐 Network Configuration</h2>
+  <p>Optional static IP settings. Leave blank to use DHCP.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="fixed_ip">Fixed IP Address</label>
+        <input type="text" class="form-control" id="fixed_ip" name="fixed_ip" placeholder="e.g. 192.168.1.100">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="subnet_mask">Subnet Mask</label>
+        <input type="text" class="form-control" id="subnet_mask" name="subnet_mask" placeholder="e.g. 255.255.255.0">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="gateway">Gateway</label>
+        <input type="text" class="form-control" id="gateway" name="gateway" placeholder="e.g. 192.168.1.1">
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="dns1">DNS Server 1</label>
+        <input type="text" class="form-control" id="dns1" name="dns1" placeholder="e.g. 8.8.8.8">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="dns2">DNS Server 2</label>
+      <input type="text" class="form-control" id="dns2" name="dns2" placeholder="e.g. 8.8.4.4">
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="network-save-btn">Save &amp; Reboot</button>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">🔒 Security</h5></div>
+  <div class="card-body" id="security-section">
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" id="basic_auth_enabled" name="basic_auth_enabled">
+      <label class="form-check-label" for="basic_auth_enabled">Enable Basic Authentication</label>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="basic_auth_username">Username</label>
+      <input type="text" class="form-control" id="basic_auth_username" name="basic_auth_username">
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="basic_auth_password">Password</label>
+      <input type="password" class="form-control" id="basic_auth_password" name="basic_auth_password" placeholder="Leave empty to keep current">
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="security-save-btn">Save &amp; Reboot</button>
+    </div>
+  </div>
+</div>

@@ -25,7 +25,7 @@ function swipeInitEditors() {
 
 async function loadSwipeActions() {
     try {
-        const response = await fetch('/api/swipe-actions');
+        const response = await fetch('/api/component/swipe-actions/config');
         if (!response.ok) return;
         const data = await response.json();
         actionEditorLoad('swipe-left', data.swipe_left);
@@ -148,7 +148,7 @@ async function saveSwipeActions() {
         swipe_down: actionEditorBuild('swipe-down')
     };
     try {
-        const response = await fetch('/api/swipe-actions', {
+        const response = await fetch('/api/component/swipe-actions/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -187,7 +187,7 @@ function bootActionsInitEditors() {
 
 async function loadBootActions() {
     try {
-        const response = await fetch('/api/boot-actions');
+        const response = await fetch('/api/component/boot-actions/config');
         if (!response.ok) return;
         const data = await response.json();
         var actions = data.actions || [];
@@ -209,7 +209,7 @@ async function saveBootActions() {
         actions.pop();
     }
     try {
-        const response = await fetch('/api/boot-actions', {
+        const response = await fetch('/api/component/boot-actions/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ actions: actions })
@@ -289,7 +289,7 @@ function timerModeChanged(tid) {
 
 async function loadTimerConfig() {
     try {
-        const response = await fetch('/api/timers');
+        const response = await fetch('/api/component/timers/config');
         if (!response.ok) return;
         const data = await response.json();
         TIMER_IDS.forEach(function(tid) {
@@ -329,7 +329,7 @@ async function saveTimerConfig() {
         payload[String(tid)] = tcfg;
     });
     try {
-        const response = await fetch('/api/timers', {
+        const response = await fetch('/api/component/timers/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)

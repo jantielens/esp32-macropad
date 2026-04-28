@@ -1,0 +1,37 @@
+<div class="section-header">
+  <h2>⌨️ BLE Keyboard</h2>
+  <p>Bluetooth LE keyboard for sending key sequences.</p>
+</div>
+<div class="card mb-3" id="ble-section">
+  <div class="card-body">
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" id="ble_enabled" name="ble_enabled" onchange="toggleBleContent()">
+      <label class="form-check-label" for="ble_enabled">Enable BLE Keyboard</label>
+      <div class="form-text">Uses ~70 KB RAM when enabled. Requires reboot.</div>
+    </div>
+    <div id="ble-content" style="display:none;">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span id="ble-status-dot" class="status-dot"></span>
+        <span id="ble-status-text">—</span>
+      </div>
+      <div class="form-text mb-3">
+        <span id="ble-name-wrap" style="display:none;">Name: <code id="ble-name"></code></span>
+      </div>
+      <div id="ble-details" style="display:none;" class="mb-3">
+        <div class="d-flex gap-2 flex-wrap mb-1">
+          <span class="badge bg-secondary" id="ble-badge-bonded" style="display:none;"></span>
+          <span class="badge bg-secondary" id="ble-badge-encrypted" style="display:none;"></span>
+        </div>
+        <div class="form-text mt-1">
+          <span id="ble-peer-addr-wrap" style="display:none;">Peer: <code id="ble-peer-addr"></code></span>
+          <span id="ble-id-addr-wrap" style="display:none;margin-left:12px;">Identity: <code id="ble-peer-id-addr"></code></span>
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" id="ble-pair-btn" onclick="startBlePairing()">Pair New Device</button>
+      <div class="form-text mt-2">Clears existing bond, rotates identity, and opens a 60-second pairing window.</div>
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="ble-save-btn">Save &amp; Reboot</button>
+    </div>
+  </div>
+</div>

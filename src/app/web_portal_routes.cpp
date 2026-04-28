@@ -37,8 +37,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/firmware.html", HTTP_GET, handleFirmware);
 
 		// Asset routes
-		server->on("/portal.css", HTTP_GET, handleCSS);
 		server->on("/portal.js", HTTP_GET, handleJS);
+		server->on("/bootstrap.min.css", HTTP_GET, handleBootstrapCSS);
+		server->on("/portal-custom.css", HTTP_GET, handlePortalCustomCSS);
 
 		// API endpoints
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
@@ -186,6 +187,11 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		registerOptions("/api/sounds/play");
 		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
 #endif
+
+		// Fragment serving — /api/section/{id}
+		// Uses wildcard so /api/section/wifi, /api/section/pad-editor, etc. all match.
+		// Registered before generic component routes to avoid prefix-match conflicts.
+		server->on("/api/section/*", HTTP_GET, handleFragment);
 
 		// Generic component API routes — MUST be registered LAST (first-match routing).
 		// Dispatches to any component registered via REGISTER_COMPONENT().

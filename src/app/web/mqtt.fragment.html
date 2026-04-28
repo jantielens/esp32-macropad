@@ -1,0 +1,29 @@
+<div class="section-header">
+  <h2>📡 MQTT Transport</h2>
+  <p>Configure MQTT broker connection for Home Assistant integration.</p>
+</div>
+<div class="card mb-3" id="mqtt-settings-section">
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-8 mb-3">
+        <label class="form-label" for="mqtt_host">MQTT Host</label>
+        <input type="text" class="form-control" id="mqtt_host" name="mqtt_host" placeholder="e.g. homeassistant.local">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label class="form-label" for="mqtt_port">Port</label>
+        <input type="number" class="form-control" id="mqtt_port" name="mqtt_port" placeholder="1883">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="mqtt_username">Username</label>
+      <input type="text" class="form-control" id="mqtt_username" name="mqtt_username">
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="mqtt_password">Password</label>
+      <input type="password" class="form-control" id="mqtt_password" name="mqtt_password" placeholder="Leave empty to keep current">
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="mqtt-save-btn">Save &amp; Reboot</button>
+    </div>
+  </div>
+</div>

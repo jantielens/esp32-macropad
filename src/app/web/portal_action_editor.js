@@ -14,8 +14,8 @@ function actionEditorHTML(prefix, label, opts) {
     opts = opts || {};
     var h = '';
     h += '<div class="form-group">';
-    if (label) h += '<label for="' + prefix + '-type">' + label + '</label>';
-    h += '<select id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
+    if (label) h += '<label class="form-label" for="' + prefix + '-type">' + label + '</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">'; 
     h += '<option value="">(none)</option>';
     h += '<option value="screen">Navigate to Screen</option>';
     h += '<option value="back">Navigate Back</option>';
@@ -35,24 +35,24 @@ function actionEditorHTML(prefix, label, opts) {
     // Screen target
     h += '<div id="' + prefix + '-screen-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-target">Target Screen</label>';
-    h += '<select id="' + prefix + '-target"><option value="">(none)</option></select>';
+    h += '<label class="form-label" for="' + prefix + '-target">Target Screen</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-target"><option value="">(none)</option></select>';
     h += '</div></div>';
     // MQTT
     h += '<div id="' + prefix + '-mqtt-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-topic">MQTT Topic <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-topic" maxlength="127" placeholder="e.g. home/light/toggle">';
+    h += '<label class="form-label" for="' + prefix + '-topic">MQTT Topic <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-topic" maxlength="127" placeholder="e.g. home/light/toggle">';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-payload">MQTT Payload <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-payload" maxlength="127" placeholder="e.g. ON or [health:cpu]">';
+    h += '<label class="form-label" for="' + prefix + '-payload">MQTT Payload <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-payload" maxlength="127" placeholder="e.g. ON or [health:cpu]">';
     h += '</div></div>';
     // Key sequence
     h += '<div id="' + prefix + '-key-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-sequence">Keys to Send <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-sequence" maxlength="255" placeholder=\'e.g. ctrl+c, "hello", 200ms\'>';
+    h += '<label class="form-label" for="' + prefix + '-sequence">Keys to Send <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sequence" maxlength="255" placeholder=\'e.g. ctrl+c, "hello", 200ms\'>';
     if (opts.showKeyHelp) {
         h += '<small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms. Supports bindings.</small>';
     }
@@ -60,32 +60,32 @@ function actionEditorHTML(prefix, label, opts) {
     // Beep
     h += '<div id="' + prefix + '-beep-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-beep-pattern">Beep Pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-beep-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200">';
+    h += '<label class="form-label" for="' + prefix + '-beep-pattern">Beep Pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-beep-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200">';
     h += '<small>Space-separated steps. <b>freq:dur</b> = tone, bare <b>dur</b> = silence gap (ms). E.g. <b>1000:200</b> (single beep), <b>1000:200 100 1000:200</b> (double beep), <b>800:100 50 1200:100</b> (two-tone chirp). Supports bindings.</small>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-beep-volume">Volume Override (%)</label>';
-    h += '<input type="number" id="' + prefix + '-beep-volume" min="0" max="100" placeholder="(use device volume)">';
+    h += '<label class="form-label" for="' + prefix + '-beep-volume">Volume Override (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-beep-volume" min="0" max="100" placeholder="(use device volume)">';
     h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
     h += '</div></div>';
     // Sound file
     h += '<div id="' + prefix + '-sound-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-sound-file">Sound File</label>';
-    h += '<select id="' + prefix + '-sound-file"><option value="">(none)</option></select>';
+    h += '<label class="form-label" for="' + prefix + '-sound-file">Sound File</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-file"><option value="">(none)</option></select>';
     h += '<small>MP3 files uploaded via the web portal. Upload sounds in Home &rarr; Sound Files.</small>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-sound-volume">Volume Override (%)</label>';
-    h += '<input type="number" id="' + prefix + '-sound-volume" min="0" max="100" placeholder="(use device volume)">';
+    h += '<label class="form-label" for="' + prefix + '-sound-volume">Volume Override (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-sound-volume" min="0" max="100" placeholder="(use device volume)">';
     h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
     h += '</div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-timer-action">Timer Action</label>';
-    h += '<select id="' + prefix + '-timer-action" onchange="actionEditorTimerChanged(\'' + prefix + '\')">';
+    h += '<label class="form-label" for="' + prefix + '-timer-action">Timer Action</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-timer-action" onchange="actionEditorTimerChanged(\'' + prefix + '\')">'; 
     for (var t = 1; t <= 3; t++) {
         h += '<optgroup label="Timer ' + t + '">';
         h += '<option value="' + t + ':toggle">T' + t + ': Toggle</option>';
@@ -102,26 +102,26 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</select>';
     h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-set-group" style="display:none;">';
-    h += '<label for="' + prefix + '-timer-set-sec">Countdown (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-timer-set-sec" placeholder="e.g. 300">';
+    h += '<label class="form-label" for="' + prefix + '-timer-set-sec">Countdown (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-set-sec" placeholder="e.g. 300">';
     h += '<small>Set the countdown to this many seconds. Supports bindings.</small>';
     h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-adjust-group" style="display:none;">';
-    h += '<label for="' + prefix + '-timer-adjust-sec">Adjust (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-timer-adjust-sec" placeholder="e.g. 15, -10, or {step}">';
+    h += '<label class="form-label" for="' + prefix + '-timer-adjust-sec">Adjust (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-adjust-sec" placeholder="e.g. 15, -10, or {step}">';
     h += '<small>Positive adds time, negative subtracts. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
     h += '</div>';
     h += '</div>';
     // Notify
     h += '<div id="' + prefix + '-notify-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-text">Message <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-notify-text" maxlength="127" placeholder="e.g. Brightness is at 100%">';
+    h += '<label class="form-label" for="' + prefix + '-notify-text">Message <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-notify-text" maxlength="127" placeholder="e.g. Brightness is at 100%">';
     h += '<small>Supports binding templates. Empty = dismiss current notification.</small>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-duration">Duration (ms) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-notify-duration" value="3000" placeholder="3000">';
+    h += '<label class="form-label" for="' + prefix + '-notify-duration">Duration (ms) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-notify-duration" value="3000" placeholder="3000">';
     h += '<small>0 = persistent (tap to dismiss). Supports bindings.</small>';
     h += '</div>';
     h += '<div class="grid-2col">';
@@ -143,18 +143,18 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<input type="text" id="' + prefix + '-notify-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="Empty = no border"></div>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-opacity">Opacity (%)</label>';
-    h += '<input type="number" id="' + prefix + '-notify-opacity" min="0" max="100" placeholder="85">';
+    h += '<label class="form-label" for="' + prefix + '-notify-opacity">Opacity (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-notify-opacity" min="0" max="100" placeholder="85">';
     h += '</div>';
     h += '</div>';
     h += '<div class="grid-2col">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-font-size">Font Size</label>';
-    h += '<input type="number" id="' + prefix + '-notify-font-size" min="0" max="48" placeholder="0 = auto">';
+    h += '<label class="form-label" for="' + prefix + '-notify-font-size">Font Size</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-notify-font-size" min="0" max="48" placeholder="0 = auto">';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-location">Location</label>';
-    h += '<select id="' + prefix + '-notify-location">';
+    h += '<label class="form-label" for="' + prefix + '-notify-location">Location</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-notify-location">';
     h += '<option value="bottom" selected>Bottom</option>';
     h += '<option value="center">Center</option>';
     h += '<option value="top">Top</option>';
@@ -165,8 +165,8 @@ function actionEditorHTML(prefix, label, opts) {
     // System command
     h += '<div id="' + prefix + '-system-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-system-command">Command</label>';
-    h += '<select id="' + prefix + '-system-command" onchange="actionEditorSystemChanged(\'' + prefix + '\')">'; 
+    h += '<label class="form-label" for="' + prefix + '-system-command">Command</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-system-command" onchange="actionEditorSystemChanged(\'' + prefix + '\')">'; 
     h += '<option value="reboot">Reboot Device</option>';
     h += '<option value="wifi_reconnect">Reconnect WiFi</option>';
     h += '<option value="screensaver">Enable Screensaver</option>';
@@ -178,13 +178,13 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</div>';
     // Set value sub-field (volume/brightness set)
     h += '<div class="form-group" id="' + prefix + '-sys-set-group" style="display:none;">';
-    h += '<label for="' + prefix + '-sys-set-value" id="' + prefix + '-sys-set-label">Value (%)</label>';
-    h += '<input type="number" id="' + prefix + '-sys-set-value" min="0" max="100" placeholder="e.g. 50">';
+    h += '<label class="form-label" for="' + prefix + '-sys-set-value" id="' + prefix + '-sys-set-label">Value (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-sys-set-value" min="0" max="100" placeholder="e.g. 50">';
     h += '</div>';
     // Adjust value sub-field (volume/brightness adjust)
     h += '<div class="form-group" id="' + prefix + '-sys-adjust-group" style="display:none;">';
-    h += '<label for="' + prefix + '-sys-adjust-value" id="' + prefix + '-sys-adjust-label">Adjust (%)</label>';
-    h += '<input type="text" id="' + prefix + '-sys-adjust-value" placeholder="e.g. 10, -10, or {step}">';
+    h += '<label class="form-label" for="' + prefix + '-sys-adjust-value" id="' + prefix + '-sys-adjust-label">Adjust (%)</label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sys-adjust-value" placeholder="e.g. 10, -10, or {step}">';
     h += '<small>Positive increases, negative decreases. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
     h += '</div>';
     h += '</div>';

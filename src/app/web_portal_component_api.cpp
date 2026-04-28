@@ -83,7 +83,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         for (uint8_t i = 0; i < component_registry_count(); i++) {
             ComponentDef* comp = component_registry_get(i);
             if (strcmp(comp->category, cat.id) == 0) {
-                items[item_count++] = {comp->id, comp->display_name, comp->nav_order};
+                const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
+                items[item_count++] = {nav_id, comp->display_name, comp->nav_order};
             }
         }
 

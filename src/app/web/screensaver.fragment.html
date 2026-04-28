@@ -1,0 +1,47 @@
+<div class="section-header">
+  <h2>🌙 Screen Saver</h2>
+  <p>Burn-in prevention and idle display sleep.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" id="screen_saver_enabled" name="screen_saver_enabled">
+      <label class="form-check-label" for="screen_saver_enabled">Enable screen saver (turn off backlight when idle)</label>
+      <div class="form-text">When enabled, the backlight will fade out after inactivity.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="screen_saver_timeout_seconds">Idle Timeout (seconds)</label>
+      <input type="number" class="form-control" id="screen_saver_timeout_seconds" name="screen_saver_timeout_seconds" min="0" max="65535" placeholder="300">
+      <div class="form-text">0 disables automatic sleep. Example: 300 = 5 minutes.</div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="screen_saver_fade_out_ms">Fade Out (ms)</label>
+        <input type="number" class="form-control" id="screen_saver_fade_out_ms" name="screen_saver_fade_out_ms" min="0" max="60000" placeholder="800">
+        <div class="form-text">0 = instant off</div>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="screen_saver_fade_in_ms">Fade In (ms)</label>
+        <input type="number" class="form-control" id="screen_saver_fade_in_ms" name="screen_saver_fade_in_ms" min="0" max="60000" placeholder="400">
+        <div class="form-text">0 = instant on</div>
+      </div>
+    </div>
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" id="screen_saver_wake_on_touch" name="screen_saver_wake_on_touch">
+      <label class="form-check-label" for="screen_saver_wake_on_touch">Wake on touch press</label>
+      <div class="form-text">Only applies to touch-enabled boards.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="screen_saver_wake_binding">Wake on MQTT Binding</label>
+      <div class="input-group">
+        <input type="text" class="form-control binding-mono" id="screen_saver_wake_binding" name="screen_saver_wake_binding" maxlength="191" placeholder="[mqtt:devices/node/presence/state]">
+        <button type="button" class="btn btn-outline-secondary binding-help-btn" onclick="showBindingHelp()">?</button>
+      </div>
+      <div class="form-text">Binding expression that keeps the screen awake while it resolves to <strong>ON</strong>.</div>
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="screensaver-save-btn">Save</button>
+    </div>
+  </div>
+</div>
+{{BINDING_HELP}}

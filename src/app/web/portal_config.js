@@ -351,7 +351,6 @@ async function loadConfig() {
         const brightness = config.backlight_brightness !== undefined ? config.backlight_brightness : 100;
         setValueIfExists('backlight_brightness', brightness);
         setTextIfExists('brightness-value', brightness);
-        updateBrightnessSliderBackground(brightness);
 
         // Screen saver settings
         setCheckedIfExists('screen_saver_enabled', config.screen_saver_enabled);
@@ -668,13 +667,9 @@ async function resetConfig() {
  * Update brightness slider background gradient based on value
  * @param {number} brightness - Brightness value (0-100)
  */
-function updateBrightnessSliderBackground(brightness) {
-    const slider = document.getElementById('backlight_brightness');
-    if (slider) {
-        const percentage = brightness;
-        slider.style.background = `linear-gradient(to right, #007aff 0%, #007aff ${percentage}%, #e5e5e5 ${percentage}%, #e5e5e5 100%)`;
-    }
-}
+// Brightness slider uses Bootstrap's default .form-range styling (matches volume slider).
+// No custom background painting — that would paint the entire input element,
+// not just the track, producing a thick rectangular bar instead of a thin track.
 
 /**
  * Handle brightness slider changes - update device immediately
@@ -689,12 +684,9 @@ async function handleBrightnessChange(event) {
         valueDisplay.textContent = brightness;
     }
     
-    // Update slider background
-    updateBrightnessSliderBackground(brightness);
-    
     // Send brightness update to device immediately (no persist)
     try {
-        const response = await fetch('/api/display/brightness', {
+        const response = await fetch('/api/component/display/brightness', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -720,7 +712,7 @@ async function handleScreenChange(event) {
     if (!screenId) return;
     
     try {
-        const response = await fetch('/api/display/screen', {
+        const response = await fetch('/api/component/display/screen', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'

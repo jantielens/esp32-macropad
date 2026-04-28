@@ -306,7 +306,7 @@ async function deviceExportConfig() {
         // Fetch device-level button defaults
         let buttonDefaults = {};
         try {
-            const bdResp = await fetch('/api/button-defaults');
+            const bdResp = await fetch('/api/component/button-defaults/config');
             if (bdResp.ok) buttonDefaults = await bdResp.json();
         } catch (e) {}
 
@@ -360,7 +360,7 @@ async function deviceImportConfig(evt) {
 
         // Step 2: Import device-level button defaults
         if (data.button_defaults && typeof data.button_defaults === 'object') {
-            await fetch('/api/button-defaults', {
+            await fetch('/api/component/button-defaults/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data.button_defaults),
@@ -448,7 +448,7 @@ async function padDeletePage() {
 async function padShowOnDevice() {
     const screenId = 'pad_' + padState.page;
     try {
-        const resp = await fetch('/api/display/screen', {
+        const resp = await fetch('/api/component/display/screen', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ screen: screenId }),

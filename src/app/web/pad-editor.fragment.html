@@ -1,0 +1,397 @@
+<div id="pad-editor-root">
+
+    <!-- Pad Configuration Section -->
+    <section class="section" id="pad-config-section" style="display:none;">
+        <h2>🎛️ Pad Configuration</h2>
+
+        <!-- Controls rows -->
+        <div class="pad-controls">
+            <div class="pad-controls-row">
+                <div class="form-group" style="margin-bottom:0; flex:1;">
+                    <label for="pad-page-select">Pad</label>
+                    <select id="pad-page-select">
+                        <!-- Populated dynamically from /api/info max_pads -->
+                    </select>
+                </div>
+            </div>
+            <div class="pad-controls-row" style="margin-top:6px;">
+                <div class="form-group" style="margin-bottom:0; flex:1;">
+                    <label for="pad-name">Pad Name</label>
+                    <input type="text" id="pad-name" maxlength="31" placeholder="(optional)" style="padding:6px 10px;">
+                </div>
+            </div>
+            <div class="pad-controls-row" style="margin-top:6px;">
+                <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
+                    <label for="pad-cols">Columns</label>
+                    <select id="pad-cols"></select>
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:0 0 80px;">
+                    <label for="pad-rows">Rows</label>
+                    <select id="pad-rows"></select>
+                </div>
+                <div class="form-group" style="margin-bottom:0; flex:1;">
+                    <label for="pad-wake-screen">Screensaver wakes up screen</label>
+                    <select id="pad-wake-screen">
+                        <option value="">(stay on this screen)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Visual grid preview -->
+        <div id="pad-block-banner" class="pad-block-banner" style="display:none;">
+            <span id="pad-block-banner-text"></span>
+            <button type="button" class="btn btn-small" id="pad-block-cancel-btn">Cancel</button>
+        </div>
+        <div id="pad-grid" class="pad-grid"></div>
+
+        <!-- Empty state -->
+        <div id="pad-empty-state" class="pad-empty-state" style="display:none;">
+            <p>No configuration for this pad yet.</p>
+            <p><small>Adjust columns and rows above, then click empty buttons to configure them.</small></p>
+        </div>
+
+        <small style="margin-top:8px; display:block;">Click a button to edit it. Drag a button to an empty cell to move it.</small>
+
+        <!-- Background Color -->
+        <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
+            <div id="pad-page-bg-color-wrap">
+                <label style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Background Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                <div class="bindable-color">
+                    <div class="bc-swatch"></div>
+                    <input type="text" id="pad-edit-page-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                    
+                </div>
+            </div>
+        </div>
+
+        <!-- Template Pad -->
+        <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
+            <label for="pad-template-pad" style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Template Pad</label>
+            <select id="pad-template-pad" style="width:100%;">
+                <option value="-1">(none)</option>
+            </select>
+            <small style="display:block; margin-top:4px; color:#86868b;">Inherit buttons from another pad into empty grid positions.</small>
+        </div>
+
+        <!-- Pad Bindings -->
+        <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
+            <div id="pad-bindings-section">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                    <label style="font-weight:600; font-size:13px;">Pad Bindings</label>
+                    <button type="button" class="btn btn-small" id="pad-binding-add" style="padding:2px 10px; font-size:12px;">+ Add</button>
+                </div>
+                <div id="pad-bindings-list"></div>
+                <small style="display:block; color:#86868b; margin-top:2px;">Define named bindings to reuse across buttons via <code>[pad:name]</code>. Names must start with a letter and contain only letters, digits, or underscores.</small>
+            </div>
+        </div>
+    </section>
+
+    <!-- No-display fallback -->
+    <section class="section" id="pad-no-display-section" style="display:none;">
+        <h2>🎛️ Pad Configuration</h2>
+        <p style="color:#86868b;">Pad configuration requires a board with a display. This device does not have a display connected.</p>
+    </section>
+
+    <!-- Pad Action Bar -->
+    <div class="save-bar" id="pad-floating-footer" style="display:none;">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <button type="button" id="pad-save-btn" class="btn btn-primary btn-sm">Save Pad</button>
+            <button type="button" id="pad-show-btn" class="btn btn-outline-secondary btn-sm">Show on Device</button>
+            <div class="dropdown" style="position:relative;">
+                <button type="button" id="pad-more-btn" class="btn btn-outline-secondary btn-sm">More ▾</button>
+                <div id="pad-more-menu" class="pad-more-menu" style="display:none;">
+                    <button type="button" id="pad-fill-btn" disabled>Fill Pad</button>
+                    <button type="button" id="pad-copy-btn">Copy Pad</button>
+                    <button type="button" id="pad-paste-btn" disabled>Paste Pad</button>
+                    <div id="pad-block-separator" style="display:none;">
+                        <hr>
+                        <span class="pad-more-heading">━━ Blocks ━━</span>
+                    </div>
+                    <div id="pad-block-items"></div>
+                    <hr>
+                    <button type="button" id="pad-export-btn">Export Pad</button>
+                    <button type="button" id="pad-import-btn">Import Pad</button>
+                    <input type="file" id="pad-import-file" accept=".json" style="display:none;">
+                    <hr>
+                    <button type="button" id="device-export-btn">Export Device Config</button>
+                    <button type="button" id="device-import-btn">Import Device Config</button>
+                    <input type="file" id="device-import-file" accept=".json" style="display:none;">
+                    <hr>
+                    <button type="button" id="pad-delete-btn" style="color:#ff3b30;">Clear Pad</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pad Button Edit Dialog -->
+    <div id="pad-edit-overlay" class="reboot-overlay" style="display:none;">
+        <div class="reboot-modal pad-edit-modal portal-form">
+            <h2 id="pad-edit-title">Edit Button</h2>
+
+            <div class="pad-edit-body">
+
+                <!-- Layout group (open by default) -->
+                <details class="editor-group" open>
+                    <summary>Layout</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-widget-type">Widget</label>
+                            <select id="pad-edit-widget-type" onchange="padWidgetTypeChanged()">
+                                <option value="">None</option>
+                                <option value="bar_chart">Bar Chart</option>
+                                <option value="gauge">Gauge</option>
+                                <option value="sparkline">Sparkline</option>
+                                <option value="table">Table</option>
+                                <option value="rocker">Rocker</option>
+                                <option value="numericrocker">Numeric Rocker</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; gap:12px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-col-span">Col Span</label>
+                                <select id="pad-edit-col-span"></select>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-row-span">Row Span</label>
+                                <select id="pad-edit-row-span"></select>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Labels group (open by default) -->
+                <details class="editor-group" open>
+                    <summary>Labels</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-label-top">Top Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" id="pad-edit-label-top" maxlength="191" placeholder="e.g. Living Room or Power: [mqtt:topic;path;fmt] W">
+                                <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('top')" title="Label style override">Aa</button>
+                                
+                            </div>
+                            <div id="pad-edit-label-top-style-wrap" class="label-style-wrap" style="display:none;">
+                                <input type="text" id="pad-edit-label-top-style" class="label-style-input" maxlength="127" placeholder="font_size:24;align:left;mode:dot">
+                                <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-label-center">Center Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" id="pad-edit-label-center" maxlength="191" placeholder="e.g. 21.5°C or [mqtt:sensors/temp;temp;%.1f°C]">
+                                <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('center')" title="Label style override">Aa</button>
+                                
+                            </div>
+                            <div id="pad-edit-label-center-style-wrap" class="label-style-wrap" style="display:none;">
+                                <input type="text" id="pad-edit-label-center-style" class="label-style-input" maxlength="127" placeholder="font_size:24;align:left;mode:dot">
+                                <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-label-bottom">Bottom Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" id="pad-edit-label-bottom" maxlength="191" placeholder="e.g. Lights or [mqtt:topic;path;format]">
+                                <button type="button" class="style-toggle-btn" onclick="toggleLabelStyle('bottom')" title="Label style override">Aa</button>
+                                
+                            </div>
+                            <div id="pad-edit-label-bottom-style-wrap" class="label-style-wrap" style="display:none;">
+                                <input type="text" id="pad-edit-label-bottom-style" class="label-style-input" maxlength="127" placeholder="font_size:24;align:left;mode:dot">
+                                <button type="button" class="binding-help-btn" onclick="showStyleHelp()" title="Style reference">?</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                {{WIDGET_BAR_CHART}}
+
+                {{WIDGET_GAUGE}}
+
+                {{WIDGET_SPARKLINE}}
+
+                {{WIDGET_TABLE}}
+
+                {{WIDGET_ROCKER}}
+
+                {{WIDGET_NUMERICROCKER}}
+
+                <!-- Actions group (open by default) -->
+                <details class="editor-group" open>
+                    <summary>Actions</summary>
+                    <div class="editor-group-body" id="pad-action-editors"></div>
+                </details>
+
+                <!-- Icon -->
+                <details class="editor-group" id="pad-edit-icon-section">
+                    <summary>Icon</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Display an icon centered on the button.</small>
+
+                        <div class="form-group">
+                            <label for="pad-edit-icon-type">Icon Type</label>
+                            <select id="pad-edit-icon-type" onchange="padIconTypeChanged()">
+                                <option value="">(none)</option>
+                                <option value="emoji">Emoji</option>
+                                <option value="mi">Material Symbol</option>
+                            </select>
+                        </div>
+
+                        <div id="pad-edit-icon-emoji-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-icon-emoji">Emoji</label>
+                                <input type="text" id="pad-edit-icon-emoji" maxlength="15" placeholder="e.g. ☀️ 🔌 💡">
+                                <small>Paste or type an emoji character.</small>
+                            </div>
+                        </div>
+
+                        <div id="pad-edit-icon-mi-group" style="display:none;">
+                            <div class="form-group">
+                                <label for="pad-edit-icon-mi">Symbol Name</label>
+                                <input type="text" id="pad-edit-icon-mi" maxlength="31" placeholder="e.g. power_settings_new">
+                                <small>Name from <a href="https://fonts.google.com/icons" target="_blank" style="color:#007aff;">Material Symbols</a>.</small>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="pad-edit-icon-scale">Icon Size %</label>
+                            <input type="number" id="pad-edit-icon-scale" min="0" max="250" step="1" value="0" placeholder="0 = auto">
+                            <small>0 = auto (fits available space), 1‑250 = explicit scale %.</small>
+                        </div>
+
+                        <div class="form-group" id="pad-edit-icon-position-group">
+                            <label for="pad-edit-icon-position">Icon Position</label>
+                            <select id="pad-edit-icon-position">
+                                <option value="above">Above label</option>
+                                <option value="left">Left of label</option>
+                                <option value="center">Centered (icon only)</option>
+                            </select>
+                            <small>Controls how the icon relates to the center label.</small>
+                        </div>
+
+                        <div id="pad-edit-icon-preview-box" class="pad-icon-preview" style="display:none;">
+                            <canvas id="pad-edit-icon-canvas" width="64" height="64"></canvas>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Image Background -->
+                <details class="editor-group" id="pad-edit-image-section">
+                    <summary>Image / Camera Feed</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Fetch a JPEG, PNG, or MJPEG stream from a URL and display it as the button background. For live camera feeds, point the URL at an MJPEG stream for best performance.</small>
+
+                        <div class="form-group">
+                            <label for="pad-edit-bg-image-url">Image or Stream URL</label>
+                            <input type="text" id="pad-edit-bg-image-url" maxlength="255" placeholder="e.g. http://192.168.1.10/stream.mjpeg or /snap.jpg">
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-bg-image-user">Auth User</label>
+                                <input type="text" id="pad-edit-bg-image-user" maxlength="31" placeholder="(optional)">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-bg-image-password">Auth Password</label>
+                                <input type="password" id="pad-edit-bg-image-password" maxlength="63" placeholder="(optional)">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-bg-image-interval">Refresh Interval (ms)</label>
+                            <input type="number" id="pad-edit-bg-image-interval" min="0" max="86400000" value="0" placeholder="0 = fetch once / stream">
+                            <small>For MJPEG streams: set to <code>0</code> — the stream runs continuously. For snapshots: e.g. <code>5000</code> = refresh every 5 s.</small>
+                        </div>
+                        <div class="form-group" style="margin-top:8px;">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                <input type="checkbox" id="pad-edit-bg-image-letterbox" style="width:18px; height:18px;">
+                                Letterbox (fit image, black bars)
+                            </label>
+                            <small>When checked, the image fits inside the button area with black bars. Otherwise it fills and crops.</small>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Appearance -->
+                <details class="editor-group" id="pad-edit-colors-section">
+                    <summary>Appearance</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Enter a <code>#hex</code> color or a binding like <code>[expr:…]</code> for dynamic colors. </small>
+
+                        <div style="display:flex; gap:12px; margin-bottom:8px;">
+                            <div id="pad-edit-bg-color-wrap" style="flex:1;">
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-bg-color-reset" onclick="padResetAppearance('pad-edit-bg-color','bg_color')" title="Reset to default">↩</span></label>
+                                <div class="bindable-color">
+                                    <div class="bc-swatch"></div>
+                                    <input type="text" id="pad-edit-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                                </div>
+                            </div>
+                            <div id="pad-edit-fg-color-wrap" style="flex:1;">
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-fg-color-reset" onclick="padResetAppearance('pad-edit-fg-color','fg_color')" title="Reset to default">↩</span></label>
+                                <div class="bindable-color">
+                                    <div class="bc-swatch"></div>
+                                    <input type="text" id="pad-edit-fg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                                </div>
+                            </div>
+                            <div id="pad-edit-border-color-wrap" style="flex:1;">
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Border <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-border-color-reset" onclick="padResetAppearance('pad-edit-border-color','border_color')" title="Reset to default">↩</span></label>
+                                <div class="bindable-color">
+                                    <div class="bc-swatch"></div>
+                                    <input type="text" id="pad-edit-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; gap:12px; margin-top:4px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-border-width">Border Width <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-border-width-reset" onclick="padResetAppearance('pad-edit-border-width','border_width')" title="Reset to default">↩</span></label>
+                                <input type="text" id="pad-edit-border-width" value="0" maxlength="63" style="width:100%;" placeholder="0 or [binding]">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-corner-radius">Radius <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint" id="pad-edit-corner-radius-reset" onclick="padResetAppearance('pad-edit-corner-radius','corner_radius')" title="Reset to default">↩</span></label>
+                                <input type="text" id="pad-edit-corner-radius" value="8" maxlength="63" style="width:100%;" placeholder="8 or [binding]">
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="margin-top:4px;">
+                            <label for="pad-edit-ui-offset">UI Offset</label>
+                            <input type="text" id="pad-edit-ui-offset" class="binding-mono" maxlength="31" style="width:100%;" placeholder="x;y  (e.g. 20;-10)">
+                            <small>Visual content nudge in pixels: +x right, -x left, +y down, -y up.</small>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Button State -->
+                <details class="editor-group" id="pad-edit-btn-state-section">
+                    <summary>Button State</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Control button visibility and interactivity. Use a static value or a binding expression that resolves to <code>enabled</code>, <code>disabled</code>, or <code>hidden</code>.</small>
+                        <div class="form-group">
+                            <label for="pad-edit-btn-state">State <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" id="pad-edit-btn-state" class="binding-mono" maxlength="191" placeholder="e.g. enabled, disabled, hidden, or [expr:…]">
+                                
+                            </div>
+                            <small><b>enabled</b> = normal (default when empty), <b>disabled</b> = visible but no tap/hold, <b>hidden</b> = invisible.</small>
+                        </div>
+                    </div>
+                </details>
+
+            </div>
+
+            <div class="pad-edit-footer">
+                <button type="button" id="pad-edit-ok" class="btn btn-primary" style="flex:1;">OK</button>
+                <button type="button" id="pad-edit-copy" class="btn btn-secondary" style="flex:1;">Copy</button>
+                <button type="button" id="pad-edit-paste" class="btn btn-secondary" style="flex:1;" disabled>Paste</button>
+                <button type="button" id="pad-edit-clear" class="btn btn-secondary" style="flex:1; color:#ff3b30; border-color:#ff3b30;">Clear</button>
+                <button type="button" id="pad-edit-cancel" class="btn btn-secondary" style="flex:1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    {{BINDING_HELP}}
+
+    {{STYLE_HELP}}
+
+    {{HEALTH_WIDGET}}
+
+    {{REBOOT_OVERLAY}}
+
+</div>

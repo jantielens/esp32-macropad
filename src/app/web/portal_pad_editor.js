@@ -116,7 +116,8 @@ function padInit() {
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
     document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
     document.getElementById('pad-binding-add').addEventListener('click', padAddBinding);
-    document.getElementById('btn-defaults-save-btn').addEventListener('click', padSaveButtonDefaults);
+    var btnDefSaveBtn = document.getElementById('btn-defaults-save-btn');
+    if (btnDefSaveBtn) btnDefSaveBtn.addEventListener('click', padSaveButtonDefaults);
 
     // More menu toggle
     const moreBtn = document.getElementById('pad-more-btn');
@@ -594,7 +595,7 @@ async function padSavePage() {
                 const cfg = await cfgResp.json();
                 savedBrightness = cfg.backlight_brightness ?? 80;
             }
-            await fetch('/api/display/brightness', {
+            await fetch('/api/component/display/brightness', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ brightness: 0 }),
@@ -635,7 +636,7 @@ async function padSavePage() {
         showMessage('Save failed: ' + err.message, 'error');
     } finally {
         if (blankOnSave && savedBrightness > 0) {
-            fetch('/api/display/brightness', {
+            fetch('/api/component/display/brightness', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ brightness: savedBrightness }),
@@ -668,85 +669,15 @@ function padRefreshDropdownLabels() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize navigation highlighting
-    initNavigation();
-    
-    // Attach event handlers (check if elements exist for multi-page support)
-    const configForm = document.getElementById('config-form');
-    if (configForm) {
-        configForm.addEventListener('submit', saveConfig);
-    }
-    
-    const saveOnlyBtn = document.getElementById('save-only-btn');
-    if (saveOnlyBtn) {
-        saveOnlyBtn.addEventListener('click', saveOnly);
-    }
-    
-    const rebootBtn = document.getElementById('reboot-btn');
-    if (rebootBtn) {
-        rebootBtn.addEventListener('click', rebootDevice);
-    }
-    
-    const resetBtn = document.getElementById('reset-btn');
-    if (resetBtn) {
-        resetBtn.addEventListener('click', resetConfig);
-    }
-    
-    const firmwareFile = document.getElementById('firmware-file');
-    if (firmwareFile) {
-        firmwareFile.addEventListener('change', handleFileSelect);
-    }
-    
-    const uploadBtn = document.getElementById('upload-btn');
-    if (uploadBtn) {
-        uploadBtn.addEventListener('click', uploadFirmware);
-    }
+    // Shell-level initialization only.
+    // Fragment-level init is handled by portal_nav.js + portal_fragment_init.js.
 
-    // Firmware page: GitHub Pages link is populated in updateOnlineUpdateSection()
-    
-    const deviceName = document.getElementById('device_name');
-    if (deviceName) {
-        deviceName.addEventListener('input', updateSanitizedName);
-    }
-    
-    // Add focus handlers for all inputs to prevent keyboard from covering them
-    const inputs = document.querySelectorAll('input[type="text"], input[type="password"], textarea');
-    inputs.forEach(input => {
-        input.addEventListener('focus', handleInputFocus);
-    });
-    
-    // Add brightness slider event handler
-    const brightnessSlider = document.getElementById('backlight_brightness');
-    if (brightnessSlider) {
-        brightnessSlider.addEventListener('input', handleBrightnessChange);
-    }
-    
-    // Add screen selection dropdown event handler
-    const screenSelect = document.getElementById('screen_selection');
-    if (screenSelect) {
-        screenSelect.addEventListener('change', handleScreenChange);
-    }
-    
-    // Load initial data
-    loadMode();
-    
-    // Only load config if config form exists (home and network pages)
-    if (configForm) {
-        loadConfig();
-    } else {
-        // Hide loading overlay on pages without config form (firmware page)
-        const overlay = document.getElementById('form-loading-overlay');
-        if (overlay) overlay.style.display = 'none';
-    }
-    
+    // Load version info for shell header badges
     loadVersion();
-    
-    // Initialize health widget
+
+    // Initialize health widget (badge in shell header)
     initHealthWidget();
 
-    // Initialize binding validator on static inputs (all pages)
-    if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
-
-    // Initialize pad configuration UI
-    padInit();
+    // Load portal mode (AP vs full)
+    loadMode();
 });

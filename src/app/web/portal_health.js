@@ -571,14 +571,22 @@ function toggleHealthWidget() {
     }
 }
 
+let _healthWidgetWired = false;
 function initHealthWidget() {
-    const healthBadge = document.getElementById('health-badge');
-    if (healthBadge) {
-        healthBadge.addEventListener('click', toggleHealthWidget);
-    }
-    const closeBtn = document.getElementById('health-close');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', toggleHealthWidget);
+    // Idempotent: badge + close button live in the shell (not a fragment),
+    // so we only ever wire their click handlers once. Without this guard,
+    // re-entering pad-editor or sensor-data would attach duplicate listeners
+    // and an even number of toggles would cancel out (close button "broken").
+    if (!_healthWidgetWired) {
+        const healthBadge = document.getElementById('health-badge');
+        if (healthBadge) {
+            healthBadge.addEventListener('click', toggleHealthWidget);
+        }
+        const closeBtn = document.getElementById('health-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', toggleHealthWidget);
+        }
+        _healthWidgetWired = true;
     }
 
     // Configure polling based on device info if available.
