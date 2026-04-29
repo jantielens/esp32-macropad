@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 162
+Total flags: 166
 
 ### Features (HAS_*)
 
@@ -167,6 +167,10 @@ Total flags: 162
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
 - **LVGL_TASK_PRIORITY** default: `4` — Default 4 matches ESP-IDF BSP convention; keeps rendering above WiFi (pri 2-3).
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
+- **PORTAL_PRIMARY_CATEGORY** default: `""` — Custom nav category ID promoted to first position (empty = standard behavior).
+- **PORTAL_PRIMARY_FRAGMENT** default: `""` — Default startup fragment for board variants with a primary portal category.
+- **PORTAL_PRIMARY_ICON** default: `""` — Icon (UTF-8) for the primary portal category in the nav sidebar.
+- **PORTAL_PRIMARY_LABEL** default: `""` — Display name for the primary portal category in the nav sidebar.
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
@@ -590,6 +594,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **MAX_PAD_BUTTONS**
   - src/app/pad_config.h
 - **MIN_USER_BRIGHTNESS**
+  - src/app/board_config.h
+- **PORTAL_PRIMARY_CATEGORY**
+  - src/app/board_config.h
+- **PORTAL_PRIMARY_FRAGMENT**
+  - src/app/board_config.h
+- **PORTAL_PRIMARY_ICON**
+  - src/app/board_config.h
+- **PORTAL_PRIMARY_LABEL**
   - src/app/board_config.h
 - **POWERON_CONFIG_BURST_ENABLED**
   - src/app/board_config.h

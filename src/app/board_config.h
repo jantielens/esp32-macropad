@@ -642,6 +642,26 @@
 #define WEB_PORTAL_CONFIG_MAX_JSON_BYTES 4096
 #endif
 
+// Default startup fragment for board variants with a primary portal category.
+#ifndef PORTAL_PRIMARY_FRAGMENT
+#define PORTAL_PRIMARY_FRAGMENT ""
+#endif
+
+// Custom nav category ID promoted to first position (empty = standard behavior).
+#ifndef PORTAL_PRIMARY_CATEGORY
+#define PORTAL_PRIMARY_CATEGORY ""
+#endif
+
+// Display name for the primary portal category in the nav sidebar.
+#ifndef PORTAL_PRIMARY_LABEL
+#define PORTAL_PRIMARY_LABEL ""
+#endif
+
+// Icon (UTF-8) for the primary portal category in the nav sidebar.
+#ifndef PORTAL_PRIMARY_ICON
+#define PORTAL_PRIMARY_ICON ""
+#endif
+
 // Timeout for an incomplete /api/config upload (ms) before freeing the buffer.
 #ifndef WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS
 #define WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS 5000

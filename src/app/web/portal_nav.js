@@ -308,14 +308,23 @@
         return res.json();
       })
       .then(function (data) {
+        // Expose primary category data for welcome hero card
+        var primary = data.primary || null;
+        window._portalPrimary = primary;
+
         buildNav(data.categories || []);
 
-        // Load item from hash or default to first item of first category
+        // Startup fallback chain:
+        // 1. URL hash if present and exists in visible nav
+        // 2. Primary fragment if defined and exists in visible nav
+        // 3. #welcome
         var itemId = getItemFromHash();
-        if (!itemId) {
-          itemId = 'welcome';
+        if (itemId && !itemMap[itemId]) itemId = null;
+        if (!itemId && primary && primary.fragment && itemMap[primary.fragment]) {
+          itemId = primary.fragment;
         }
-        if (itemId) navigateTo(itemId);
+        if (!itemId) itemId = 'welcome';
+        navigateTo(itemId);
       })
       .catch(function (err) {
         navEl.innerHTML =

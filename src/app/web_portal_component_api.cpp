@@ -1,4 +1,5 @@
 #include "web_portal_component_api.h"
+#include "board_config.h"
 #include "component_registry.h"
 #include "web_portal_auth.h"
 #include "web_portal_cors.h"
@@ -50,6 +51,17 @@ static const ComponentAction* find_action(const ComponentDef* comp,
 }
 
 // ============================================================================
+// Helper: check if a string matches any hardcoded category ID
+// ============================================================================
+
+static bool is_hardcoded_category(const char* id) {
+    for (uint8_t c = 0; c < kNumCategories; c++) {
+        if (strcmp(id, kNavCategories[c].id) == 0) return true;
+    }
+    return false;
+}
+
+// ============================================================================
 // GET /api/portal/nav — build nav JSON from registered components
 // ============================================================================
 
@@ -73,6 +85,68 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
     };
     ItemEntry items[MAX_PORTAL_COMPONENTS];
 
+    // --- Primary category support ---
+    // Board variants can define PORTAL_PRIMARY_CATEGORY to promote a custom
+    // category to first position in the nav.  Suppressed in AP mode and when
+    // the primary category collides with a hardcoded category ID.
+    const bool has_primary = !ap_mode
+        && PORTAL_PRIMARY_CATEGORY[0] != '\0'
+        && !is_hardcoded_category(PORTAL_PRIMARY_CATEGORY);
+
+    bool primary_valid = false;  // set true once fragment validation passes
+
+    if (has_primary) {
+        // Collect components whose category matches the primary
+        uint8_t item_count = 0;
+        for (uint8_t i = 0; i < component_registry_count(); i++) {
+            ComponentDef* comp = component_registry_get(i);
+            if (strcmp(comp->category, PORTAL_PRIMARY_CATEGORY) == 0) {
+                const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
+                items[item_count++] = {nav_id, comp->display_name, comp->nav_order};
+            }
+        }
+
+        // Validate: PORTAL_PRIMARY_FRAGMENT must be among the collected items
+        if (item_count > 0 && PORTAL_PRIMARY_FRAGMENT[0] != '\0') {
+            for (uint8_t i = 0; i < item_count; i++) {
+                if (strcmp(items[i].id, PORTAL_PRIMARY_FRAGMENT) == 0) {
+                    primary_valid = true;
+                    break;
+                }
+            }
+        }
+
+        if (primary_valid) {
+            std::sort(items, items + item_count,
+                [](const ItemEntry& a, const ItemEntry& b) {
+                    return a.nav_order < b.nav_order;
+                });
+
+            JsonObject cat_obj = categories.createNestedObject();
+            cat_obj["id"] = PORTAL_PRIMARY_CATEGORY;
+            cat_obj["display_name"] = PORTAL_PRIMARY_LABEL[0] != '\0'
+                ? PORTAL_PRIMARY_LABEL : PORTAL_PRIMARY_CATEGORY;
+            cat_obj["icon"] = PORTAL_PRIMARY_ICON;
+
+            JsonArray items_arr = cat_obj.createNestedArray("items");
+            for (uint8_t i = 0; i < item_count; i++) {
+                JsonObject item = items_arr.createNestedObject();
+                item["id"] = items[i].id;
+                item["display_name"] = items[i].display_name;
+            }
+        }
+    }
+
+    // Emit top-level "primary" object when validation passed
+    if (primary_valid) {
+        JsonObject primary_obj = doc->createNestedObject("primary");
+        primary_obj["fragment"]  = PORTAL_PRIMARY_FRAGMENT;
+        primary_obj["category"]  = PORTAL_PRIMARY_CATEGORY;
+        primary_obj["label"]     = PORTAL_PRIMARY_LABEL;
+        primary_obj["icon"]      = PORTAL_PRIMARY_ICON;
+    }
+
+    // --- Hardcoded categories ---
     for (uint8_t c = 0; c < kNumCategories; c++) {
         const NavCategory& cat = kNavCategories[c];
 

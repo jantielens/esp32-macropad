@@ -110,6 +110,20 @@ function initConfigFragment(saveBtnId, reboot) {
 // ============================================================================
 
 window.init_welcome_fragment = function () {
+    // Render hero card when a board-defined primary category is active
+    var primary = window._portalPrimary;
+    var heroEl = document.getElementById('welcome-hero-card');
+    if (primary && primary.fragment && heroEl) {
+        heroEl.innerHTML =
+            '<div class="card mb-3 hero-card">' +
+            '<div class="card-body text-center">' +
+            '<span class="hero-icon">' + (primary.icon || '') + '</span>' +
+            '<h4>' + escAttr(primary.label || primary.category) + '</h4>' +
+            '<a href="#' + encodeURIComponent(primary.fragment) + '" class="btn btn-primary">Open</a>' +
+            '</div></div>';
+        heroEl.classList.remove('d-none');
+    }
+
     // Populate status cards from /api/health and /api/info
     fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
         var el;

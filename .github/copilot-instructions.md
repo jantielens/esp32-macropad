@@ -30,7 +30,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Sound Player** (`HAS_SOUND_PLAYER`): MP3 decode (minimp3) + resample + I2S playback from LittleFS.
 - **MQTT Audio** (`HAS_AUDIO && HAS_MQTT`): HA siren, volume, beep buttons, custom tone entities.
 - **Power + Transport**: Power modes, BLE/MQTT transport selection, duty-cycle runtime, WiFi manager, portal idle timeout.
-- **Web Portal**: Multi-page async web server with captive portal. See `.github/instructions/web-portal.instructions.md`.
+- **Web Portal**: Multi-page async web server with captive portal. Board variants can define `PORTAL_PRIMARY_*` flags in `board_overrides.h` to promote a custom nav category to first position with startup routing and a welcome hero card. See `.github/instructions/web-portal.instructions.md` and `docs/dev/web-portal.md`.
 - **Pad Config**: `pad_config.cpp/h` — JSON parser for pad/button/widget configuration, `LabelStyle` DSL, `ButtonAction` types, `ButtonDefaults` cascade, `template_pad` inheritance.
 - **Pad Building Blocks** (`HAS_DISPLAY`): Registration-based catalog of pre-configured button groups. `pad_block.h/cpp` — `pad_block_register()` API for feature branches to add blocks independently. REST endpoint `GET /api/pad/blocks`.
 - **Pad Layout**: `pad_layout.h` — Layout computation, UI scale tiers, label style resolver helpers.

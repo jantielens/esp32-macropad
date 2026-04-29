@@ -473,6 +473,27 @@ body {
   color: var(--portal-primary);
 }
 
+/* Hero card — board-defined primary category highlight on welcome page */
+.hero-card {
+  border: 2px solid rgba(var(--portal-primary-rgb), 0.35);
+  background: rgba(var(--portal-primary-rgb), 0.06);
+}
+
+.hero-card .card-body {
+  padding: 28px 18px;
+}
+
+.hero-icon {
+  font-size: 2.4rem;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.hero-card h4 {
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
 /* ================================================================
    Content Pane
    ================================================================ */

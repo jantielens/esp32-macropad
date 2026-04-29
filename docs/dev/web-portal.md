@@ -194,6 +194,40 @@ Real-time device health monitoring integrated as a header badge with expandable 
 - If the firmware exposes device-side history, the portal fetches it from `GET /api/health/history` (only while the overlay is expanded).
 - If device-side history is unavailable, the overlay shows point-in-time metrics only (no sparklines).
 
+### Primary Category (Board Variants)
+
+Board-specific firmware variants can promote a custom nav category to first position in the sidebar. This gives feature-specific content (e.g., a darkroom timer or coffee scale UI) top-level prominence instead of burying it inside a generic category like Actions or Sensors.
+
+**How it works:**
+
+1. Define four `PORTAL_PRIMARY_*` flags in the board's `board_overrides.h`:
+
+   ```c
+   #define PORTAL_PRIMARY_FRAGMENT "darkroom"       // Startup fragment ID
+   #define PORTAL_PRIMARY_CATEGORY "darkroom"       // Custom category ID
+   #define PORTAL_PRIMARY_LABEL    "Darkroom"       // Sidebar display name
+   #define PORTAL_PRIMARY_ICON     "\xf0\x9f\x94\xb4"  // UTF-8 emoji (🔴)
+   ```
+
+2. Set each component's `.category` to match `PORTAL_PRIMARY_CATEGORY` (e.g., `"darkroom"`).
+
+**Behavior when configured:**
+
+- `GET /api/portal/nav` includes a `primary` object and injects the custom category as the first entry in `categories[]`.
+- The SPA navigates to `#<primary_fragment>` on startup instead of `#welcome`.
+- The welcome page renders a hero card linking to the primary fragment.
+- The primary category section is expanded by default in the nav sidebar.
+
+**Validation rules:**
+
+- `PORTAL_PRIMARY_CATEGORY` must not collide with any hardcoded category ID (`device`, `display`, `pads`, `actions`, `connectivity`, `audio`, `sensors`, `firmware`). If it does, the primary configuration is ignored.
+- `PORTAL_PRIMARY_FRAGMENT` must resolve to an item inside `PORTAL_PRIMARY_CATEGORY`. If it doesn't, the entire primary configuration is ignored.
+- In AP mode, the primary category and `primary` object are suppressed entirely.
+
+**When not configured (default):** all four flags default to `""` and the portal behaves exactly as before — no hero card, `#welcome` on startup, no extra nav category.
+
+**Startup routing fallback chain:** URL hash (if present and item exists in nav) → primary fragment → `#welcome` → first visible item.
+
 ### Configuration Pages
 
 #### Home Page (`/` or `/home.html`)
@@ -677,6 +711,48 @@ Reset configuration to factory defaults. Device reboots after reset.
 **Notes:**
 - Device reboots into AP mode after reset
 - **No automatic reconnection** - user must manually reconnect to WiFi access point
+
+### Portal Navigation
+
+#### `GET /api/portal/nav`
+
+Returns the navigation tree used by the SPA sidebar. Categories contain sorted component items.
+
+**Response:**
+```json
+{
+  "categories": [
+    {
+      "id": "device",
+      "display_name": "Device",
+      "icon": "⚙️",
+      "items": [
+        { "id": "wifi", "display_name": "WiFi" },
+        { "id": "device-name", "display_name": "Device Name" }
+      ]
+    }
+  ]
+}
+```
+
+When a board defines `PORTAL_PRIMARY_CATEGORY` (non-empty), the response includes an additional `primary` object and the custom category appears first in `categories[]`:
+
+```json
+{
+  "primary": {
+    "fragment": "darkroom",
+    "category": "darkroom",
+    "label": "Darkroom",
+    "icon": "🔴"
+  },
+  "categories": [ ... ]
+}
+```
+
+**Notes:**
+- In AP mode, only the `device` category is returned; `primary` is omitted.
+- Empty categories are skipped.
+- Items within each category are sorted by `nav_order`.
 
 ### Portal Mode
 
