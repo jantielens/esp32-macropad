@@ -236,6 +236,39 @@ python3 tools/portal_stress_test.py --host 192.168.1.111 --no-reboot --cycles 10
 
 ---
 
+## tools/test-portal-api.sh
+
+**Purpose:** Curl-based HTTP integration tests for the web portal. Validates shell page, nav API, fragment endpoints, component config CRUD, CORS preflight, static assets, and error handling against a live device.
+
+**Usage:**
+```bash
+./tools/test-portal-api.sh 192.168.1.113
+DEVICE_IP=192.168.1.113 ./tools/test-portal-api.sh
+./tools/test-portal-api.sh --user admin:pass 192.168.1.113
+PORTAL_AUTH=admin:pass ./tools/test-portal-api.sh 192.168.1.113
+```
+
+**Test cases (12):**
+1. Shell page (GET `/`)
+2. Nav API (GET `/api/portal/nav`)
+3. Fragment endpoints (all known fragment IDs)
+4. Unknown fragment (404)
+5. Component config GET
+6. Config round-trip (POST then GET, verify match)
+7. CORS preflight (OPTIONS)
+8. DELETE config
+9. Custom action dispatch
+10. Unknown component (404)
+11. Malformed POST (empty, invalid JSON, oversized)
+12. Static assets
+
+**Notes:**
+- Requires a live ESP32 device — cannot run in CI.
+- Exit code 0 on all-pass, 1 on any failure.
+- Round-trip tests are idempotent (GET existing config, POST it back unchanged).
+
+---
+
 ## tools/install-custom-partitions.sh
 
 **Purpose:** Install/register template-provided custom partition tables into the Arduino ESP32 core.

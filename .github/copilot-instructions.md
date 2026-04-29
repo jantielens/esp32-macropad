@@ -108,6 +108,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution — they work from an
 | `tools/png2lvgl_assets.py` | Converts `assets/png/*.png` into LVGL `lv_img_dsc_t` symbols |
 | `tools/generate-fonts.sh` | Downloads TTF fonts and generates LVGL C source files (requires `npx lv_font_conv`) |
 | `tools/generate-board-driver-table.py` | Generates board→drivers table from board overrides |
+| `tools/test-portal-api.sh` | Curl-based HTTP integration tests for web portal (12 test cases, requires live device) |
 
 ### Tests
 
