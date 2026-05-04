@@ -2,12 +2,12 @@
 
 #if HAS_DISPLAY
 
-#include "binding_template.h"
 #include "display_manager.h"
 #include "log_manager.h"
 #include "message_bubble.h"
 
 #if HAS_MQTT
+#include "binding_template.h"
 #include "mqtt_manager.h"
 #endif
 #if HAS_BLE_HID
@@ -26,15 +26,17 @@
 #define TAG "Action"
 
 // Compute a clamped percentage value from a string, optionally as a delta from current.
-static uint8_t compute_clamped_percent(const char* value_str, uint8_t current, bool is_adjust, int floor) {
+static uint8_t compute_clamped_percent(const char* value_str, uint8_t current, bool is_adjust, int min_val) {
     int v = is_adjust ? (int)current + lroundf(atof(value_str)) : lroundf(atof(value_str));
     if (v > 100) v = 100;
-    if (v < floor) v = floor;
+    if (v < min_val) v = min_val;
     return (uint8_t)v;
 }
 
+#if HAS_MQTT
 // Quick scan: return true if any data/content field might contain a binding token.
 // Checks only for '[' — avoids the ~1.2 KB ButtonAction copy for the common case.
+// IMPORTANT: the field list here must exactly match the fields in resolve_action_bindings below.
 static bool action_has_any_binding(const ButtonAction& act) {
     const char* fields[] = {
         act.mqtt_topic, act.mqtt_payload, act.key_sequence, act.beep_pattern,
@@ -50,6 +52,7 @@ static bool action_has_any_binding(const ButtonAction& act) {
 
 // Resolve binding templates in all data/content fields of a ButtonAction.
 // Structural fields (type, screen_id, commands, modes, etc.) are excluded.
+// IMPORTANT: the field list here must exactly match the fields in action_has_any_binding above.
 static void resolve_action_bindings(ButtonAction& act) {
     auto try_resolve = [](char* field, size_t len) {
         if (field[0] && binding_template_has_bindings(field)) {
@@ -72,6 +75,7 @@ static void resolve_action_bindings(ButtonAction& act) {
     try_resolve(act.notify_bg_color,     sizeof(act.notify_bg_color));
     try_resolve(act.notify_border_color, sizeof(act.notify_border_color));
 }
+#endif // HAS_MQTT
 
 static void action_dispatch_resolved(const ButtonAction& act, const char* label);
 
@@ -79,7 +83,9 @@ void action_dispatch(const ButtonAction& act_in, const char* label) {
     if (!act_in.type[0]) return;
 
     // Resolve binding templates in value fields before dispatch.
-    // The early-out avoids a ~1.2 KB struct copy when no fields contain bindings.
+    // Must only be called from the LVGL task — binding_template_resolve
+    // accesses MQTT subscription state and may call LVGL APIs.
+#if HAS_MQTT
     if (action_has_any_binding(act_in)) {
         ButtonAction act = act_in;
         resolve_action_bindings(act);
@@ -87,6 +93,9 @@ void action_dispatch(const ButtonAction& act_in, const char* label) {
     } else {
         action_dispatch_resolved(act_in, label);
     }
+#else
+    action_dispatch_resolved(act_in, label);
+#endif
 }
 
 static void action_dispatch_resolved(const ButtonAction& act, const char* label) {

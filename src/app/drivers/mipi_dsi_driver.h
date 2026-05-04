@@ -151,6 +151,8 @@ public:
 
     void displaySleep() override;
     void displayWake() override;
+    void displayWakeSleepOut() override;
+    void displayWakeDisplayOn() override;
 };
 
 #endif // MIPI_DSI_DRIVER_H

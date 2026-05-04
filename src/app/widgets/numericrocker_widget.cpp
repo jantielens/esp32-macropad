@@ -23,16 +23,7 @@
 // Each outer/inner zone targets a percentage of the span but is clamped
 // to a min/max pixel range. The center (label) gets whatever remains.
 
-// ---- Config struct (packed into WidgetConfig.data[]) ----
-
-struct NumericRockerConfig {
-    bool horizontal;           // true = left/right (default), false = up/down
-    float small_step;          // default 1, 0 = disable inner zones
-    float large_step;          // default 10, 0 = disable outer zones
-    char indicator_color[CONFIG_COLOR_MAX_LEN];
-    uint8_t indicator_opa;     // default 80
-    ButtonAction adjust_action; // {step}-substituted action for outer/inner zones
-};
+// ---- Config struct — defined in numericrocker_zones.h ----
 
 static_assert(sizeof(NumericRockerConfig) <= WIDGET_CONFIG_MAX_BYTES,
               "NumericRockerConfig exceeds WIDGET_CONFIG_MAX_BYTES");

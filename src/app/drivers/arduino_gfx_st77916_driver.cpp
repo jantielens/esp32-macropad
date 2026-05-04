@@ -214,3 +214,11 @@ void Arduino_GFX_ST77916_Driver::displaySleep() {
 void Arduino_GFX_ST77916_Driver::displayWake() {
 		arduino_gfx_panel_wake(bus);
 }
+
+void Arduino_GFX_ST77916_Driver::displayWakeSleepOut() {
+		arduino_gfx_panel_sleep_out(bus);
+}
+
+void Arduino_GFX_ST77916_Driver::displayWakeDisplayOn() {
+		arduino_gfx_panel_display_on(bus);
+}

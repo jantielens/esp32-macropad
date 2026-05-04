@@ -149,3 +149,11 @@ void TFT_eSPI_Driver::displayWake() {
 		delay(120);              // MIPI DCS spec minimum
 		tft.writecommand(0x29);  // Display On
 }
+
+void TFT_eSPI_Driver::displayWakeSleepOut() {
+		tft.writecommand(0x11);  // Sleep Out
+}
+
+void TFT_eSPI_Driver::displayWakeDisplayOn() {
+		tft.writecommand(0x29);  // Display On
+}

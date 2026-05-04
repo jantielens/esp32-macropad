@@ -103,6 +103,19 @@ public:
 		virtual void displaySleep() {}
 		virtual void displayWake() {}
 
+		// Two-phase wake interface, used by screen_saver_manager to release the
+		// display lock during the mandatory 120 ms DCS delay between Sleep Out and
+		// Display On (MIPI DCS spec §4.2.4).
+		//
+		// Usage in screen_saver_manager:
+		//   lock(); displayWakeSleepOut(); unlock();
+		//   vTaskDelay(pdMS_TO_TICKS(120));
+		//   lock(); displayWakeDisplayOn(); unlock();
+		//
+		// Default: falls back to the combined displayWake() (single-phase, blocking).
+		virtual void displayWakeSleepOut()   { displayWake(); }
+		virtual void displayWakeDisplayOn()  {}
+
 		// LVGL configuration hook (override to customize LVGL display settings)
 		// Called during LVGL initialization to allow driver-specific configuration
 		// such as software rotation, full refresh mode, etc.
