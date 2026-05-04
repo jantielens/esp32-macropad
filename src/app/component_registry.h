@@ -64,3 +64,23 @@ void component_handle_save_body(AsyncWebServerRequest* request,
             component_registry_add(&name##_component); \
         } \
     } _component_registrar_##name;
+
+// Convenience macro for nav-only components (no config or custom action handlers).
+// Collapses the 18-line boilerplate into a single line.
+// Args: sym — C identifier, _id — JSON id string, _category — category string,
+//       _display_name — human-readable name, _nav_order — int, _fragment — fragment id string.
+#define REGISTER_NAV_COMPONENT(sym, _id, _category, _display_name, _nav_order, _fragment) \
+    static ComponentDef sym##_component = { \
+        .id               = _id, \
+        .category         = _category, \
+        .display_name     = _display_name, \
+        .nav_order        = _nav_order, \
+        .get_config       = nullptr, \
+        .save_config      = nullptr, \
+        .save_config_body = nullptr, \
+        .delete_config    = nullptr, \
+        .custom_actions   = nullptr, \
+        .num_custom_actions = 0, \
+        .fragment_id      = _fragment, \
+    }; \
+    REGISTER_COMPONENT(sym)

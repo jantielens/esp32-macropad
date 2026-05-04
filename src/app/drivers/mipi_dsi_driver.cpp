@@ -434,3 +434,13 @@ void MipiDsiDriver::displayWake() {
     delay(120);                                           // MIPI DCS spec minimum
     esp_lcd_panel_io_tx_param(ioHandle, 0x29, NULL, 0);  // Display On
 }
+
+void MipiDsiDriver::displayWakeSleepOut() {
+    if (!ioHandle) return;
+    esp_lcd_panel_io_tx_param(ioHandle, 0x11, NULL, 0);  // Sleep Out
+}
+
+void MipiDsiDriver::displayWakeDisplayOn() {
+    if (!ioHandle) return;
+    esp_lcd_panel_io_tx_param(ioHandle, 0x29, NULL, 0);  // Display On
+}

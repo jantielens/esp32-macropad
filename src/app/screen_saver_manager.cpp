@@ -15,6 +15,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
+#include <freertos/task.h>
 #include <atomic>
 
 namespace {
@@ -290,13 +291,20 @@ static void handle_pending_requests() {
 				}
 				#endif
 
-				// Wake panel (Sleep Out + Display On) before fade-in so the panel
-				// is ready by the time the backlight starts ramping.
-				// Lock serializes with the LVGL flush path on the display bus.
+				// Wake panel in two phases so the mandatory 120 ms DCS delay between
+				// Sleep Out (0x11) and Display On (0x29) does not block the display lock.
+				// Holding the lock across delay() would stall LVGL flush for 120 ms.
 				if (g_state == ScreenSaverState::Asleep) {
 						if (displayManager && displayManager->getDriver()) {
+								DisplayDriver* drv = displayManager->getDriver();
 								displayManager->lock();
-								displayManager->getDriver()->displayWake();
+								drv->displayWakeSleepOut();
+								displayManager->unlock();
+								// DCS spec: ≥120 ms between Sleep Out and Display On.
+								// vTaskDelay yields to other tasks during the wait.
+								vTaskDelay(pdMS_TO_TICKS(120));
+								displayManager->lock();
+								drv->displayWakeDisplayOn();
 								displayManager->unlock();
 						}
 				}

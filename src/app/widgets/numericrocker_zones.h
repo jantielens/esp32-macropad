@@ -3,6 +3,20 @@
 // Shared numeric rocker zone computation — included by both
 // numericrocker_widget.cpp and pad_screen_events.cpp.
 
+#include "../pad_config.h"  // ButtonAction, CONFIG_COLOR_MAX_LEN
+
+// Config struct (packed into WidgetConfig.data[]).
+// Defined here so pad_screen_events.cpp can read widget config without
+// introducing a cross-compilation-unit header dependency.
+struct NumericRockerConfig {
+    bool horizontal;           // true = left/right (default), false = up/down
+    float small_step;          // default 1, 0 = disable inner zones
+    float large_step;          // default 10, 0 = disable outer zones
+    char indicator_color[CONFIG_COLOR_MAX_LEN];
+    uint8_t indicator_opa;     // default 80
+    ButtonAction adjust_action; // {step}-substituted action for outer/inner zones
+};
+
 // Zone computation constants
 #define NR_OUTER_PCT   12   // target 12% of span for outer zones
 #define NR_INNER_PCT   15   // target 15% of span for inner zones

@@ -16,17 +16,6 @@ extern DeviceConfig device_config;
 // Forward declaration — defined in numericrocker_widget.cpp
 void numericrocker_substitute_step(ButtonAction* act, float step);
 
-// Layout-compatible copy of NumericRockerConfig from numericrocker_widget.cpp
-// for reading widget config in tap handler without cross-unit header dependency.
-struct NumericRockerConfig {
-    bool horizontal;
-    float small_step;
-    float large_step;
-    char indicator_color[CONFIG_COLOR_MAX_LEN];
-    uint8_t indicator_opa;
-    ButtonAction adjust_action;
-};
-
 #include "../widgets/numericrocker_zones.h"
 
 // TAG and TAP_FLASH_DURATION_MS are defined in pad_screen.cpp which is
