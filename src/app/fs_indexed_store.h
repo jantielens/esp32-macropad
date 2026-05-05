@@ -121,9 +121,10 @@ private:
     SemaphoreHandle_t  _mutex;
 
     // In-memory state — protected by _mutex.
-    // Allocated as BasicJsonDocument<PsramJsonAllocator>* (sized from manifest file
-    // on load, or 64 KB PSRAM-backed on rebuild) — stored via base pointer.
-    JsonDocument* _manifest_doc;
+    // Stored as the concrete PSRAM-backed type so that delete is well-defined
+    // (JsonDocument has no virtual destructor). Sized from manifest file on load,
+    // or MANIFEST_REBUILD_CAPACITY on rebuild.
+    BasicJsonDocument<PsramJsonAllocator>* _manifest_doc;
     String        _manifest_cache;
     bool          _loaded;
 };

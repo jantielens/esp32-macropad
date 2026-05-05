@@ -186,10 +186,12 @@ void FsIndexedStore::_rebuild_manifest() {
     delete _manifest_doc;
     _manifest_doc = new BasicJsonDocument<PsramJsonAllocator>(MANIFEST_REBUILD_CAPACITY);
 
-    // Build a small filter document containing only the configured index fields.
-    // This lets ArduinoJson skip waveform/payload arrays during file parsing,
-    // keeping data_doc small regardless of actual data file size.
+    // Build a small filter document for file parsing.
+    // created_at is always included (needed for sorting) even when not in
+    // the caller-configured index_fields list.
+    // All other configured fields are added so waveform/payload arrays are skipped.
     StaticJsonDocument<256> filter_doc;
+    filter_doc["created_at"] = true;  // always needed for sort
     for (size_t i = 0; i < _num_index_fields; i++) {
         filter_doc[_index_fields[i]] = true;
     }
@@ -244,7 +246,12 @@ void FsIndexedStore::_rebuild_manifest() {
         entry["id"] = id;
 
         if (!err) {
+            // created_at is always extracted for sorting, regardless of index_fields.
+            if (data_doc.containsKey("created_at")) {
+                entry["created_at"] = data_doc["created_at"];
+            }
             for (size_t fi = 0; fi < _num_index_fields; fi++) {
+                if (strcmp(_index_fields[fi], "created_at") == 0) continue; // already set
                 if (data_doc.containsKey(_index_fields[fi])) {
                     entry[_index_fields[fi]] = data_doc[_index_fields[fi]];
                 }
@@ -350,15 +357,44 @@ bool FsIndexedStore::add(const char* id, const String& json_content, const JsonO
 
     _ensure_loaded();
 
-    // Write data file atomically
+    // Determine created_at: use caller-provided value or auto-generate.
+    // Auto-generation is the uncommon path (firmware normally provides it).
+    uint32_t created_at = index_meta["created_at"] | (uint32_t)0;
+    bool auto_generated = false;
+    if (created_at == 0) {
+        created_at = (uint32_t)time(nullptr);
+        if (created_at < 1000000UL) created_at = (uint32_t)(millis() / 1000);
+        auto_generated = true;
+        LOGW(TAG, "add(): auto-generated created_at=%u for id '%s'", created_at, id);
+    }
+
+    // Write data file atomically.
+    // If created_at was auto-generated, inject it into the document so that a
+    // manifest rebuild (e.g. after power loss) recovers the same value from disk.
     char dp[256];
     _data_path(id, dp, sizeof(dp));
-    if (!_atomic_write(dp, json_content)) {
+    bool data_ok;
+    if (auto_generated) {
+        size_t cap = json_content.length() * 2 + 512;
+        BasicJsonDocument<PsramJsonAllocator> data_doc(cap);
+        DeserializationError err = deserializeJson(data_doc, json_content);
+        if (!err) {
+            data_doc["created_at"] = created_at;
+            data_ok = _atomic_write_from_doc(dp, data_doc);
+        } else {
+            LOGE(TAG, "add(): cannot inject created_at into '%s': %s — writing as-is", id, err.c_str());
+            data_ok = _atomic_write(dp, json_content);
+        }
+    } else {
+        data_ok = _atomic_write(dp, json_content);
+    }
+
+    if (!data_ok) {
         xSemaphoreGive(_mutex);
         return false;
     }
 
-    // Build manifest entry from configured index fields only
+    // Build manifest entry: created_at always present, then configured index fields.
     JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
     if (entries.isNull()) {
         entries = _manifest_doc->createNestedArray("entries");
@@ -366,21 +402,14 @@ bool FsIndexedStore::add(const char* id, const String& json_content, const JsonO
 
     JsonObject entry = entries.createNestedObject();
     entry["id"] = id;
+    entry["created_at"] = created_at;
     for (size_t i = 0; i < _num_index_fields; i++) {
+        if (strcmp(_index_fields[i], "created_at") == 0) continue;  // already set
         if (index_meta.containsKey(_index_fields[i])) {
             entry[_index_fields[i]] = index_meta[_index_fields[i]];
         }
     }
 
-    // Ensure created_at is always present so the sort contract is valid
-    if (!entry.containsKey("created_at") || entry["created_at"].as<uint32_t>() == 0) {
-        uint32_t now = (uint32_t)time(nullptr);
-        if (now < 1000000UL) now = (uint32_t)(millis() / 1000);
-        entry["created_at"] = now;
-        LOGW(TAG, "add(): auto-generated created_at for id '%s'", id);
-    }
-
-    // Sort descending by created_at
     _sort_entries();
 
     bool ok = _write_manifest();
@@ -466,13 +495,14 @@ bool FsIndexedStore::remove(const char* id) {
         return false;  // entry not found — caller should return 404
     }
 
+    // Write manifest first. Only delete the data file if the manifest was
+    // successfully committed — this prevents the store from losing track of
+    // the file if the flash write fails mid-operation.
     bool ok = _write_manifest();
-
-    // Delete data file (best-effort — manifest is already updated)
-    char dp[256];
-    _data_path(id, dp, sizeof(dp));
-    if (LittleFS.exists(dp)) {
-        LittleFS.remove(dp);
+    if (ok) {
+        char dp[256];
+        _data_path(id, dp, sizeof(dp));
+        LittleFS.remove(dp);  // best-effort; ignore error (orphan is harmless)
     }
 
     xSemaphoreGive(_mutex);
@@ -517,7 +547,7 @@ bool FsIndexedStore::patch_meta(const char* id, const JsonObject& fields) {
         }
     }
 
-    // Only commit manifest changes after the file write succeeded (rollback on failure).
+    // Only commit manifest changes after the data file write succeeded.
     if (ok) {
         JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
         if (!entries.isNull()) {
@@ -530,7 +560,17 @@ bool FsIndexedStore::patch_meta(const char* id, const JsonObject& fields) {
                 }
             }
         }
-        _write_manifest();
+        bool manifest_ok = _write_manifest();
+        if (!manifest_ok) {
+            // Manifest write failed — in-memory state no longer matches disk.
+            // Invalidate so the next access reloads from the on-disk manifest
+            // (which still has the pre-patch values), restoring consistency.
+            delete _manifest_doc;
+            _manifest_doc = nullptr;
+            _loaded = false;
+            _manifest_cache = "";
+        }
+        ok = manifest_ok;
     }
 
     xSemaphoreGive(_mutex);
