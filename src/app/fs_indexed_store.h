@@ -51,6 +51,26 @@
 //   // Or from a raw JSON string (web handler convenience):
 //   store.patch_meta("sess_1714900000", "{\"notes\":\"Updated\"}");
 
+// Descriptor for a root-level manifest field that lives alongside the entries array.
+//
+// Root fields are feature-defined and persist through load/rebuild/sort cycles.
+// Currently only TYPE_UINT32 is supported; extend the union and the switch statements
+// in fs_indexed_store.cpp when additional types are needed.
+//
+// Usage:
+//   static const FsIndexedStoreRootField kRootFields[] = {
+//       {"next_id", FsIndexedStoreRootField::TYPE_UINT32, {.default_uint32 = 1}},
+//   };
+struct FsIndexedStoreRootField {
+    const char* name;             // field name in the manifest root, e.g. "next_id"
+    enum Type : uint8_t {
+        TYPE_UINT32 = 0,
+    } type;
+    union {
+        uint32_t default_uint32;  // valid when type == TYPE_UINT32
+    };
+};
+
 class FsIndexedStore {
 public:
     // base_path:        LittleFS directory, e.g. "/storage/sessions" (no trailing slash).
@@ -59,9 +79,17 @@ public:
     //                   (use static string literals). "created_at" is always included
     //                   in every manifest entry regardless of this list.
     // num_index_fields: Number of entries in index_fields.
+    // root_fields:      Optional array of root-level manifest fields (feature-defined).
+    //                   These fields are stored at the manifest root alongside "entries".
+    //                   Defaults are injected when the manifest is rebuilt or when a
+    //                   field is absent from an existing manifest (backward compatibility).
+    //                   Must remain valid for the lifetime of this object.
+    // num_root_fields:  Number of entries in root_fields.
     FsIndexedStore(const char* base_path,
                    const char* const* index_fields,
-                   size_t num_index_fields);
+                   size_t num_index_fields,
+                   const FsIndexedStoreRootField* root_fields = nullptr,
+                   size_t num_root_fields = 0);
     ~FsIndexedStore() = default;
 
     // Call once after LittleFS.begin(). Creates the base directory if missing.
@@ -105,6 +133,15 @@ public:
     // Useful for AsyncFileResponse streaming in web handlers.
     String data_path(const char* id) const;
 
+    // Read a root-level manifest field (mutex-protected, copies value on exit).
+    // Returns false if the field is absent or has the wrong type.
+    bool get_root_uint32(const char* name, uint32_t& out);
+
+    // Write a root-level manifest field and flush the manifest to disk.
+    // Returns false on manifest write failure; in-memory state is invalidated
+    // on failure so the next access reloads from disk.
+    bool set_root_uint32(const char* name, uint32_t value);
+
 private:
     void _ensure_loaded();
     void _rebuild_manifest();
@@ -112,12 +149,15 @@ private:
     bool _atomic_write(const char* path, const String& content);
     bool _atomic_write_from_doc(const char* path, JsonDocument& doc);
     void _sort_entries();
+    void _inject_missing_root_fields();  // injects defaults for root fields absent from manifest
     void _data_path(const char* id, char* out, size_t out_len) const;
     void _manifest_path(char* out, size_t out_len) const;
 
     const char*        _base_path;
     const char* const* _index_fields;
     size_t             _num_index_fields;
+    const FsIndexedStoreRootField* _root_fields;
+    size_t             _num_root_fields;
     SemaphoreHandle_t  _mutex;
 
     // In-memory state — protected by _mutex.

@@ -44,10 +44,14 @@ static void sort_and_populate(JsonArray target,
 
 FsIndexedStore::FsIndexedStore(const char* base_path,
                                 const char* const* index_fields,
-                                size_t num_index_fields)
+                                size_t num_index_fields,
+                                const FsIndexedStoreRootField* root_fields,
+                                size_t num_root_fields)
     : _base_path(base_path),
       _index_fields(index_fields),
       _num_index_fields(num_index_fields),
+      _root_fields(root_fields),
+      _num_root_fields(num_root_fields),
       _mutex(nullptr),
       _manifest_doc(nullptr),
       _loaded(false)
@@ -198,6 +202,18 @@ void FsIndexedStore::_rebuild_manifest() {
 
     JsonArray entries = _manifest_doc->createNestedArray("entries");
 
+    // Inject root field defaults into the freshly-built manifest.
+    // Values will be overwritten by set_root_*() calls once the caller
+    // has performed any necessary recovery (e.g. scanning entries for max id).
+    if (_root_fields) {
+        for (size_t i = 0; i < _num_root_fields; i++) {
+            const FsIndexedStoreRootField& rf = _root_fields[i];
+            if (rf.type == FsIndexedStoreRootField::TYPE_UINT32) {
+                (*_manifest_doc)[rf.name] = rf.default_uint32;
+            }
+        }
+    }
+
     File dir = LittleFS.open(_base_path);
     if (!dir || !dir.isDirectory()) {
         LOGE(TAG, "Cannot open directory %s for rebuild", _base_path);
@@ -308,6 +324,9 @@ void FsIndexedStore::_ensure_loaded() {
                      _base_path, err ? err.c_str() : "missing entries");
                 do_rebuild = true;
             } else {
+                // Inject defaults for any root fields absent from an existing manifest
+                // (backward compatibility: manifests written before root fields were added).
+                _inject_missing_root_fields();
                 _manifest_cache = "";
                 serializeJson(*_manifest_doc, _manifest_cache);
             }
@@ -340,7 +359,9 @@ void FsIndexedStore::_sort_entries() {
         vec.push_back({e["created_at"].as<uint32_t>(), s});
     }
 
-    _manifest_doc->clear();
+    // Remove only the entries array, preserving all other root-level fields
+    // (e.g. next_id). Clearing the whole document would silently discard them.
+    _manifest_doc->as<JsonObject>().remove("entries");
     JsonArray sorted = _manifest_doc->createNestedArray("entries");
     DynamicJsonDocument tmp(1024);
     sort_and_populate(sorted, vec, tmp);
@@ -616,4 +637,84 @@ int FsIndexedStore::count() {
     }
     xSemaphoreGive(_mutex);
     return n;
+}
+
+// ---------------------------------------------------------------------------
+// Private: _inject_missing_root_fields
+// ---------------------------------------------------------------------------
+
+// Injects default values for any configured root fields not present in
+// _manifest_doc. Called after loading an existing manifest (backward compat)
+// and after rebuild (where all root fields start missing from the fresh doc).
+// Updates _manifest_cache if any field was injected.
+// Must be called with the mutex held (or from a path where _loaded is false).
+void FsIndexedStore::_inject_missing_root_fields() {
+    if (!_manifest_doc || !_root_fields || _num_root_fields == 0) return;
+
+    bool any_injected = false;
+    for (size_t i = 0; i < _num_root_fields; i++) {
+        const FsIndexedStoreRootField& rf = _root_fields[i];
+        if (_manifest_doc->containsKey(rf.name)) continue;
+        switch (rf.type) {
+            case FsIndexedStoreRootField::TYPE_UINT32:
+                (*_manifest_doc)[rf.name] = rf.default_uint32;
+                break;
+        }
+        LOGW(TAG, "Injected missing root field '%s' with default for %s",
+             rf.name, _base_path);
+        any_injected = true;
+    }
+
+    if (any_injected) {
+        // Re-serialise cache to include injected fields.
+        // No disk write here — the next _write_manifest() call persists them.
+        _manifest_cache = "";
+        serializeJson(*_manifest_doc, _manifest_cache);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// get_root_uint32()
+// ---------------------------------------------------------------------------
+
+bool FsIndexedStore::get_root_uint32(const char* name, uint32_t& out) {
+    if (!name || !name[0]) return false;
+    if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
+
+    _ensure_loaded();
+
+    bool found = false;
+    if (_manifest_doc && _manifest_doc->containsKey(name)) {
+        out   = (*_manifest_doc)[name].as<uint32_t>();
+        found = true;
+    }
+    xSemaphoreGive(_mutex);
+    return found;
+}
+
+// ---------------------------------------------------------------------------
+// set_root_uint32()
+// ---------------------------------------------------------------------------
+
+bool FsIndexedStore::set_root_uint32(const char* name, uint32_t value) {
+    if (!name || !name[0]) return false;
+    if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
+
+    _ensure_loaded();
+
+    bool ok = false;
+    if (_manifest_doc) {
+        (*_manifest_doc)[name] = value;
+        ok = _write_manifest();
+        if (!ok) {
+            // Manifest write failed — in-memory state diverged from disk.
+            // Invalidate so the next access reloads from the on-disk version.
+            delete _manifest_doc;
+            _manifest_doc = nullptr;
+            _loaded       = false;
+            _manifest_cache = "";
+        }
+    }
+    xSemaphoreGive(_mutex);
+    return ok;
 }
