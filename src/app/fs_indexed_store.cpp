@@ -1,31 +1,53 @@
 #include "fs_indexed_store.h"
 
 #include "log_manager.h"
+#include "psram_json_allocator.h"
 
 #include <LittleFS.h>
 #include <algorithm>
 #include <string.h>
+#include <time.h>
 #include <vector>
 
 #define TAG "FsStore"
 
-// Initial JSON document capacity for the manifest.  The manifest holds
-// metadata-only entries (no waveform data), so 8 KB covers ~40 entries at
-// ~200 bytes each with comfortable headroom.
-#define MANIFEST_DOC_CAPACITY (8 * 1024)
-
-// Maximum total size for a PATCH body (metadata fields only).
-// Callers should never need more than a handful of small string fields.
-#define PATCH_META_MAX_BODY 1024
+// PSRAM-backed manifest capacity used during rebuild (no existing file to size from).
+// 64 KB comfortably holds ~300 entries at ~200 bytes each with ArduinoJson overhead.
+#define MANIFEST_REBUILD_CAPACITY (64 * 1024)
 
 static const char* MANIFEST_FILENAME = "_index.json";
 
 // ---------------------------------------------------------------------------
-// Constructor / destructor
+// File-scope sort helpers (shared by _rebuild_manifest and _sort_entries)
 // ---------------------------------------------------------------------------
 
-FsIndexedStore::FsIndexedStore(const char* base_path)
+struct SortEntry { uint32_t ts; String s; };
+
+// Sort vec descending by ts and populate target JsonArray.
+// tmp is a caller-provided scratch document reused across iterations.
+static void sort_and_populate(JsonArray target,
+                               std::vector<SortEntry>& vec,
+                               DynamicJsonDocument& tmp) {
+    std::sort(vec.begin(), vec.end(),
+        [](const SortEntry& a, const SortEntry& b) { return a.ts > b.ts; });
+    for (const auto& item : vec) {
+        tmp.clear();
+        if (deserializeJson(tmp, item.s) == DeserializationError::Ok) {
+            target.add(tmp.as<JsonVariant>());
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Constructor
+// ---------------------------------------------------------------------------
+
+FsIndexedStore::FsIndexedStore(const char* base_path,
+                                const char* const* index_fields,
+                                size_t num_index_fields)
     : _base_path(base_path),
+      _index_fields(index_fields),
+      _num_index_fields(num_index_fields),
       _mutex(nullptr),
       _manifest_doc(nullptr),
       _loaded(false)
@@ -51,7 +73,7 @@ bool FsIndexedStore::begin() {
         LOGI(TAG, "Created directory %s", _base_path);
     }
 
-    // Manifest loading is deferred to the first list()/get()/count() call.
+    // Manifest loading is deferred to the first list()/get()/exists()/count() call.
     return true;
 }
 
@@ -67,8 +89,15 @@ void FsIndexedStore::_manifest_path(char* out, size_t out_len) const {
     snprintf(out, out_len, "%s/%s", _base_path, MANIFEST_FILENAME);
 }
 
+// Public path helper — returns LittleFS path for use in AsyncFileResponse
+String FsIndexedStore::data_path(const char* id) const {
+    char buf[256];
+    _data_path(id, buf, sizeof(buf));
+    return String(buf);
+}
+
 // ---------------------------------------------------------------------------
-// Private: atomic write
+// Private: atomic write (String content)
 // ---------------------------------------------------------------------------
 
 bool FsIndexedStore::_atomic_write(const char* path, const String& content) {
@@ -85,6 +114,38 @@ bool FsIndexedStore::_atomic_write(const char* path, const String& content) {
     if (written != content.length()) {
         LOGE(TAG, "Incomplete write to %s (%u/%u bytes)",
              tmp_path.c_str(), (unsigned)written, (unsigned)content.length());
+        LittleFS.remove(tmp_path.c_str());
+        return false;
+    }
+
+    if (!LittleFS.rename(tmp_path.c_str(), path)) {
+        LOGE(TAG, "Rename %s -> %s failed", tmp_path.c_str(), path);
+        LittleFS.remove(tmp_path.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Private: atomic write (JsonDocument — no intermediate String allocation)
+// ---------------------------------------------------------------------------
+
+bool FsIndexedStore::_atomic_write_from_doc(const char* path, JsonDocument& doc) {
+    String tmp_path = String(path) + ".tmp";
+
+    File f = LittleFS.open(tmp_path.c_str(), "w");
+    if (!f) {
+        LOGE(TAG, "Cannot open %s for writing", tmp_path.c_str());
+        return false;
+    }
+    size_t expected = measureJson(doc);
+    size_t written  = serializeJson(doc, f);
+    f.close();
+
+    if (written != expected) {
+        LOGE(TAG, "Incomplete write to %s (%u/%u bytes)",
+             tmp_path.c_str(), (unsigned)written, (unsigned)expected);
         LittleFS.remove(tmp_path.c_str());
         return false;
     }
@@ -122,10 +183,15 @@ bool FsIndexedStore::_write_manifest() {
 void FsIndexedStore::_rebuild_manifest() {
     LOGW(TAG, "Rebuilding manifest for %s", _base_path);
 
-    if (!_manifest_doc) {
-        _manifest_doc = new DynamicJsonDocument(MANIFEST_DOC_CAPACITY);
-    } else {
-        _manifest_doc->clear();
+    delete _manifest_doc;
+    _manifest_doc = new BasicJsonDocument<PsramJsonAllocator>(MANIFEST_REBUILD_CAPACITY);
+
+    // Build a small filter document containing only the configured index fields.
+    // This lets ArduinoJson skip waveform/payload arrays during file parsing,
+    // keeping data_doc small regardless of actual data file size.
+    StaticJsonDocument<256> filter_doc;
+    for (size_t i = 0; i < _num_index_fields; i++) {
+        filter_doc[_index_fields[i]] = true;
     }
 
     JsonArray entries = _manifest_doc->createNestedArray("entries");
@@ -136,11 +202,7 @@ void FsIndexedStore::_rebuild_manifest() {
         return;
     }
 
-    // Collect entries during scan, then sort before adding to JsonArray
-    // (JsonArrayIterator is not a random-access iterator so std::sort cannot
-    // be used directly on the array — we sort a std::vector instead).
-    struct RebuildEntry { uint32_t ts; String json_str; };
-    std::vector<RebuildEntry> collected;
+    std::vector<SortEntry> collected;
 
     File file = dir.openNextFile();
     while (file) {
@@ -155,46 +217,37 @@ void FsIndexedStore::_rebuild_manifest() {
 
         // Derive ID by stripping ".json" suffix
         const char* ext = strstr(fname, ".json");
-        if (!ext) {
-            file = dir.openNextFile();
-            continue;
-        }
+        if (!ext) { file = dir.openNextFile(); continue; }
 
-        // Build id from filename without extension
         size_t id_len = (size_t)(ext - fname);
-        if (id_len == 0 || id_len >= 128) {
-            file = dir.openNextFile();
-            continue;
-        }
+        if (id_len == 0 || id_len >= 128) { file = dir.openNextFile(); continue; }
 
         char id[128];
         memcpy(id, fname, id_len);
         id[id_len] = '\0';
 
-        // Parse the data file to extract metadata
         char full_path[256];
         snprintf(full_path, sizeof(full_path), "%s/%s", _base_path, fname);
         File df = LittleFS.open(full_path, "r");
-        if (!df) {
-            file = dir.openNextFile();
-            continue;
-        }
+        if (!df) { file = dir.openNextFile(); continue; }
 
-        DynamicJsonDocument data_doc(4096);
-        DeserializationError err = deserializeJson(data_doc, df);
+        // Parse only the configured index fields — skips waveform/payload data
+        // entirely, so data_doc stays small even for 30-50 KB session files.
+        DynamicJsonDocument data_doc(2048);
+        DeserializationError err = deserializeJson(data_doc, df,
+                                                    DeserializationOption::Filter(filter_doc));
         df.close();
 
-        // Build a temporary entry object and serialize it for deferred sorting
+        // Build the manifest entry for this file
         DynamicJsonDocument entry_doc(1024);
         JsonObject entry = entry_doc.to<JsonObject>();
         entry["id"] = id;
 
         if (!err) {
-            // Copy scalar fields from the data document root into the entry
-            for (JsonPair kv : data_doc.as<JsonObject>()) {
-                // Skip large nested objects/arrays (e.g. waveform data)
-                if (kv.value().is<JsonObject>() || kv.value().is<JsonArray>()) continue;
-                entry[kv.key()] = kv.value();
+            for (size_t fi = 0; fi < _num_index_fields; fi++) {
+                if (data_doc.containsKey(_index_fields[fi])) {
+                    entry[_index_fields[fi]] = data_doc[_index_fields[fi]];
+                }
             }
         } else {
             LOGW(TAG, "Cannot parse %s during rebuild: %s", full_path, err.c_str());
@@ -208,19 +261,8 @@ void FsIndexedStore::_rebuild_manifest() {
         file = dir.openNextFile();
     }
 
-    // Sort collected entries descending by created_at
-    std::sort(collected.begin(), collected.end(),
-        [](const RebuildEntry& a, const RebuildEntry& b) {
-            return a.ts > b.ts;
-        });
-
-    // Populate JsonArray in sorted order
-    for (const auto& ce : collected) {
-        DynamicJsonDocument tmp(ce.json_str.length() * 2 + 128);
-        if (deserializeJson(tmp, ce.json_str) == DeserializationError::Ok) {
-            entries.add(tmp.as<JsonVariant>());
-        }
-    }
+    DynamicJsonDocument tmp(1024);
+    sort_and_populate(entries, collected, tmp);
 
     _write_manifest();
     LOGI(TAG, "Rebuild complete: %u entries", (unsigned)entries.size());
@@ -239,24 +281,26 @@ void FsIndexedStore::_ensure_loaded() {
     bool do_rebuild = false;
 
     if (!LittleFS.exists(path)) {
-        LOGW(TAG, "Manifest missing for %s — will rebuild", _base_path);
+        LOGW(TAG, "Manifest missing for %s \u2014 will rebuild", _base_path);
         do_rebuild = true;
     } else {
-        if (!_manifest_doc) {
-            _manifest_doc = new DynamicJsonDocument(MANIFEST_DOC_CAPACITY);
-        }
         File f = LittleFS.open(path, "r");
         if (!f) {
             do_rebuild = true;
         } else {
+            // Size the manifest document dynamically from the actual file size.
+            size_t file_size = f.size();
+            size_t capacity  = (file_size < 1024) ? 4 * 1024 : file_size * 2 + 512;
+            delete _manifest_doc;
+            _manifest_doc = new BasicJsonDocument<PsramJsonAllocator>(capacity);
+
             DeserializationError err = deserializeJson(*_manifest_doc, f);
             f.close();
             if (err || !_manifest_doc->containsKey("entries")) {
-                LOGW(TAG, "Corrupt manifest for %s (%s) — rebuilding",
+                LOGW(TAG, "Corrupt manifest for %s (%s) \u2014 rebuilding",
                      _base_path, err ? err.c_str() : "missing entries");
                 do_rebuild = true;
             } else {
-                // Cache is the serialised form
                 _manifest_cache = "";
                 serializeJson(*_manifest_doc, _manifest_cache);
             }
@@ -279,11 +323,9 @@ void FsIndexedStore::_sort_entries() {
     JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
     if (entries.isNull() || entries.size() < 2) return;
 
-    // JsonArrayIterator is a forward-only iterator; std::sort requires random
-    // access.  Extract to a std::vector of (created_at, serialized_entry),
-    // sort the vector, then rebuild the JsonArray in sorted order.
-    struct SE { uint32_t ts; String s; };
-    std::vector<SE> vec;
+    // Serialize entries to strings BEFORE clearing the document, then
+    // rebuild in sorted order. Hoists the scratch doc outside the loop.
+    std::vector<SortEntry> vec;
     vec.reserve(entries.size());
     for (JsonVariant e : entries) {
         String s;
@@ -291,17 +333,10 @@ void FsIndexedStore::_sort_entries() {
         vec.push_back({e["created_at"].as<uint32_t>(), s});
     }
 
-    std::sort(vec.begin(), vec.end(),
-        [](const SE& a, const SE& b) { return a.ts > b.ts; });
-
     _manifest_doc->clear();
     JsonArray sorted = _manifest_doc->createNestedArray("entries");
-    for (const auto& item : vec) {
-        DynamicJsonDocument tmp(item.s.length() * 2 + 128);
-        if (deserializeJson(tmp, item.s) == DeserializationError::Ok) {
-            sorted.add(tmp.as<JsonVariant>());
-        }
-    }
+    DynamicJsonDocument tmp(1024);
+    sort_and_populate(sorted, vec, tmp);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,14 +351,14 @@ bool FsIndexedStore::add(const char* id, const String& json_content, const JsonO
     _ensure_loaded();
 
     // Write data file atomically
-    char data_path[256];
-    _data_path(id, data_path, sizeof(data_path));
-    if (!_atomic_write(data_path, json_content)) {
+    char dp[256];
+    _data_path(id, dp, sizeof(dp));
+    if (!_atomic_write(dp, json_content)) {
         xSemaphoreGive(_mutex);
         return false;
     }
 
-    // Build manifest entry
+    // Build manifest entry from configured index fields only
     JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
     if (entries.isNull()) {
         entries = _manifest_doc->createNestedArray("entries");
@@ -331,8 +366,18 @@ bool FsIndexedStore::add(const char* id, const String& json_content, const JsonO
 
     JsonObject entry = entries.createNestedObject();
     entry["id"] = id;
-    for (JsonPair kv : index_meta) {
-        entry[kv.key()] = kv.value();
+    for (size_t i = 0; i < _num_index_fields; i++) {
+        if (index_meta.containsKey(_index_fields[i])) {
+            entry[_index_fields[i]] = index_meta[_index_fields[i]];
+        }
+    }
+
+    // Ensure created_at is always present so the sort contract is valid
+    if (!entry.containsKey("created_at") || entry["created_at"].as<uint32_t>() == 0) {
+        uint32_t now = (uint32_t)time(nullptr);
+        if (now < 1000000UL) now = (uint32_t)(millis() / 1000);
+        entry["created_at"] = now;
+        LOGW(TAG, "add(): auto-generated created_at for id '%s'", id);
     }
 
     // Sort descending by created_at
@@ -350,36 +395,47 @@ bool FsIndexedStore::add(const char* id, const String& json_content, const JsonO
 String FsIndexedStore::get(const char* id) {
     if (!id || !id[0]) return "";
 
-    char data_path[256];
-    _data_path(id, data_path, sizeof(data_path));
-
-    // No need to hold mutex across the entire file read — we only need it to
-    // derive the path (done above without shared state).  But we should still
-    // confirm the entry exists in the manifest so that we don't accidentally
-    // serve orphaned files.
     if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return "";
     _ensure_loaded();
-    bool exists_in_manifest = false;
+    bool found = false;
     JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
     if (!entries.isNull()) {
         for (JsonVariant entry : entries) {
-            if (strcmp(entry["id"] | "", id) == 0) {
-                exists_in_manifest = true;
-                break;
-            }
+            if (strcmp(entry["id"] | "", id) == 0) { found = true; break; }
         }
     }
     xSemaphoreGive(_mutex);
 
-    if (!exists_in_manifest) return "";
-    if (!LittleFS.exists(data_path)) return "";
+    if (!found) return "";
 
-    File f = LittleFS.open(data_path, "r");
+    char dp[256];
+    _data_path(id, dp, sizeof(dp));
+    File f = LittleFS.open(dp, "r");
     if (!f) return "";
 
     String content = f.readString();
     f.close();
     return content;
+}
+
+// ---------------------------------------------------------------------------
+// exists()
+// ---------------------------------------------------------------------------
+
+bool FsIndexedStore::exists(const char* id) {
+    if (!id || !id[0]) return false;
+
+    if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
+    _ensure_loaded();
+    bool found = false;
+    JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
+    if (!entries.isNull()) {
+        for (JsonVariant entry : entries) {
+            if (strcmp(entry["id"] | "", id) == 0) { found = true; break; }
+        }
+    }
+    xSemaphoreGive(_mutex);
+    return found;
 }
 
 // ---------------------------------------------------------------------------
@@ -393,28 +449,34 @@ bool FsIndexedStore::remove(const char* id) {
 
     _ensure_loaded();
 
-    // Remove from manifest
+    bool found = false;
     JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
     if (!entries.isNull()) {
         for (size_t i = 0; i < entries.size(); i++) {
             if (strcmp(entries[i]["id"] | "", id) == 0) {
                 entries.remove(i);
+                found = true;
                 break;
             }
         }
     }
 
-    _write_manifest();
+    if (!found) {
+        xSemaphoreGive(_mutex);
+        return false;  // entry not found — caller should return 404
+    }
+
+    bool ok = _write_manifest();
 
     // Delete data file (best-effort — manifest is already updated)
-    char data_path[256];
-    _data_path(id, data_path, sizeof(data_path));
-    if (LittleFS.exists(data_path)) {
-        LittleFS.remove(data_path);
+    char dp[256];
+    _data_path(id, dp, sizeof(dp));
+    if (LittleFS.exists(dp)) {
+        LittleFS.remove(dp);
     }
 
     xSemaphoreGive(_mutex);
-    return true;
+    return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -428,46 +490,49 @@ bool FsIndexedStore::patch_meta(const char* id, const JsonObject& fields) {
 
     _ensure_loaded();
 
-    // Update manifest entry
-    JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
-    if (!entries.isNull()) {
-        for (JsonVariant entry : entries) {
-            if (strcmp(entry["id"] | "", id) == 0) {
-                for (JsonPair kv : fields) {
-                    entry.as<JsonObject>()[kv.key()] = kv.value();
-                }
-                break;
-            }
-        }
-    }
-
-    // Patch data file: load, merge, write back atomically
-    char data_path[256];
-    _data_path(id, data_path, sizeof(data_path));
+    // Patch the data file FIRST — only update the manifest if file write succeeds.
+    char dp[256];
+    _data_path(id, dp, sizeof(dp));
 
     bool ok = false;
-    if (LittleFS.exists(data_path)) {
-        File f = LittleFS.open(data_path, "r");
+    if (!LittleFS.exists(dp)) {
+        LOGW(TAG, "patch_meta: data file missing for id '%s'", id);
+    } else {
+        File f = LittleFS.open(dp, "r");
         if (f) {
-            DynamicJsonDocument data_doc(16 * 1024);
+            size_t file_size = f.size();
+            // Size doc from actual file; use PSRAM to avoid internal-RAM pressure.
+            BasicJsonDocument<PsramJsonAllocator> data_doc(file_size * 2 + 512);
             DeserializationError err = deserializeJson(data_doc, f);
             f.close();
             if (!err) {
                 for (JsonPair kv : fields) {
                     data_doc[kv.key()] = kv.value();
                 }
-                String updated;
-                serializeJson(data_doc, updated);
-                ok = _atomic_write(data_path, updated);
+                // Serialize directly to disk — no intermediate String allocation.
+                ok = _atomic_write_from_doc(dp, data_doc);
             } else {
-                LOGE(TAG, "patch_meta: cannot parse %s: %s", data_path, err.c_str());
+                LOGE(TAG, "patch_meta: cannot parse %s: %s", dp, err.c_str());
             }
         }
-    } else {
-        LOGW(TAG, "patch_meta: data file missing for id '%s'", id);
     }
 
-    _write_manifest();
+    // Only commit manifest changes after the file write succeeded (rollback on failure).
+    if (ok) {
+        JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
+        if (!entries.isNull()) {
+            for (JsonVariant entry : entries) {
+                if (strcmp(entry["id"] | "", id) == 0) {
+                    for (JsonPair kv : fields) {
+                        entry.as<JsonObject>()[kv.key()] = kv.value();
+                    }
+                    break;
+                }
+            }
+        }
+        _write_manifest();
+    }
+
     xSemaphoreGive(_mutex);
     return ok;
 }
@@ -475,7 +540,7 @@ bool FsIndexedStore::patch_meta(const char* id, const JsonObject& fields) {
 bool FsIndexedStore::patch_meta(const char* id, const String& json_patch) {
     if (json_patch.isEmpty()) return false;
 
-    DynamicJsonDocument patch_doc(PATCH_META_MAX_BODY);
+    DynamicJsonDocument patch_doc(FS_STORE_PATCH_MAX_BYTES);
     DeserializationError err = deserializeJson(patch_doc, json_patch);
     if (err) {
         LOGW(TAG, "patch_meta: invalid JSON patch for '%s': %s", id, err.c_str());

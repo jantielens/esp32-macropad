@@ -9,12 +9,9 @@
 
 #define TAG "FsStoreAPI"
 
-// Maximum PATCH body size accepted (metadata fields only).
-#define FS_STORE_PATCH_MAX_BYTES 1024
-
 // ---------------------------------------------------------------------------
 // Route context: each registered store gets its own handler closures that
-// capture the store pointer and base path via lambda captures.
+// capture the store reference via lambda captures.
 // ---------------------------------------------------------------------------
 
 void fs_indexed_store_register_routes(AsyncWebServer& server,
@@ -40,14 +37,15 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
 
     // -----------------------------------------------------------------------
     // GET {base_url}/{id} — stream full document from flash (no heap spike)
+    //
+    // Uses exists() for a manifest-only validation (no file I/O), then
+    // streams via AsyncFileResponse — avoids loading 30-50 KB into RAM.
     // -----------------------------------------------------------------------
-    // Build a regex pattern matching the base URL followed by "/<id>" where
-    // the id is any non-empty path component without slashes.
     String get_pattern = String("^") + base_url + "/([^/]+)$";
     server.on(
         AsyncURIMatcher::regex(get_pattern.c_str()),
         HTTP_GET,
-        [&store, base_url](AsyncWebServerRequest* request) {
+        [&store](AsyncWebServerRequest* request) {
             if (!portal_auth_gate(request)) return;
 
             String id = request->pathArg(0);
@@ -57,29 +55,19 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
                 return;
             }
 
-            // Validate that the entry exists in the manifest before serving
-            // the file — guards against directory traversal via path args.
-            String content = store.get(id.c_str());
-            if (content.isEmpty()) {
+            // Manifest-only existence check — guards against directory traversal;
+            // no file I/O, no heap allocation for the data payload.
+            if (!store.exists(id.c_str())) {
                 request->send(404, "application/json",
                               "{\"success\":false,\"message\":\"Not found\"}");
                 return;
             }
 
-            // Build the LittleFS path for AsyncFileResponse streaming.
-            // The path is: base_path + "/" + id + ".json".
-            // We derive base_path from the base_url (they share the same
-            // directory; feature code uses the same string for both).
-            // Rather than maintain a separate data-path helper here, we
-            // reconstruct from the known naming convention:
-            //   base_url == base_path  (e.g. "/storage/sessions")
-            //   data file  == base_url + "/" + id + ".json"
-            String file_path = String(base_url) + "/" + id + ".json";
-
+            String file_path = store.data_path(id.c_str());
             if (!LittleFS.exists(file_path.c_str())) {
-                // Manifest said it exists but the file is missing — serve
-                // the in-memory content as a fallback (already loaded above).
-                request->send(200, "application/json", content);
+                // Manifest has the entry but data file is gone (orphan).
+                request->send(404, "application/json",
+                              "{\"success\":false,\"message\":\"Not found\"}");
                 return;
             }
 
@@ -90,6 +78,7 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
 
     // -----------------------------------------------------------------------
     // DELETE {base_url}/{id} — delete document and update manifest
+    // Returns 404 if the entry does not exist.
     // -----------------------------------------------------------------------
     server.on(
         AsyncURIMatcher::regex(get_pattern.c_str()),
@@ -104,11 +93,10 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
                 return;
             }
 
-            bool ok = store.remove(id.c_str());
-            if (!ok) {
-                // remove() is best-effort; treat as success if entry was absent
-                LOGW(TAG, "DELETE: store.remove('%s') returned false (may not have existed)",
-                     id.c_str());
+            if (!store.remove(id.c_str())) {
+                request->send(404, "application/json",
+                              "{\"success\":false,\"message\":\"Not found\"}");
+                return;
             }
             request->send(200, "application/json", "{\"success\":true}");
         }
@@ -118,95 +106,89 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
     // PATCH {base_url}/{id} — update metadata fields
     //
     // Body: JSON object with fields to patch, e.g. {"notes":"new text"}
-    // Uses a simple inline accumulator — metadata bodies are small (≤1 KB).
+    //
+    // Per-request state is heap-allocated and attached to the request via
+    // _tempObject, so concurrent PATCH requests (or multiple store
+    // registrations) never share a buffer.
     // -----------------------------------------------------------------------
 
-    // Per-request accumulator for the PATCH body.  Because AsyncWebServer
-    // body handlers may be called from a single task sequentially, a static
-    // buffer is sufficient.  We guard concurrent access with a flag.
     struct PatchState {
-        bool in_progress;
-        bool errored;
+        bool   errored;
         size_t total;
         size_t received;
-        char buf[FS_STORE_PATCH_MAX_BYTES + 1];
-        char id[128];
-    };
-    static PatchState patch_state = {};
-
-    // Request handler (fires after body is complete or on error)
-    auto patch_request_handler = [&store](AsyncWebServerRequest* request) {
-        (void)request; // Final dispatch happens in the body handler
-    };
-
-    // Body handler
-    auto patch_body_handler = [&store](AsyncWebServerRequest* request,
-                                        uint8_t* data, size_t len,
-                                        size_t index, size_t total) {
-        if (!portal_auth_gate(request)) return;
-
-        if (index == 0) {
-            // Start of a new PATCH request
-            patch_state.in_progress = true;
-            patch_state.errored     = false;
-            patch_state.total       = total;
-            patch_state.received    = 0;
-            patch_state.id[0]       = '\0';
-
-            String id = request->pathArg(0);
-            if (id.isEmpty() || id.length() >= sizeof(patch_state.id)) {
-                patch_state.errored = true;
-                request->send(400, "application/json",
-                              "{\"success\":false,\"message\":\"Missing or invalid id\"}");
-                return;
-            }
-            strncpy(patch_state.id, id.c_str(), sizeof(patch_state.id) - 1);
-            patch_state.id[sizeof(patch_state.id) - 1] = '\0';
-
-            if (total == 0 || total > FS_STORE_PATCH_MAX_BYTES) {
-                patch_state.errored = true;
-                request->send(413, "application/json",
-                              "{\"success\":false,\"message\":\"PATCH body too large\"}");
-                return;
-            }
-        }
-
-        if (patch_state.errored) return;
-
-        // Accumulate chunk
-        if (patch_state.received + len > FS_STORE_PATCH_MAX_BYTES) {
-            patch_state.errored = true;
-            request->send(413, "application/json",
-                          "{\"success\":false,\"message\":\"PATCH body too large\"}");
-            return;
-        }
-        memcpy(patch_state.buf + patch_state.received, data, len);
-        patch_state.received += len;
-
-        if (patch_state.received < patch_state.total) {
-            return; // More chunks pending
-        }
-
-        // All chunks received — null-terminate and process
-        patch_state.buf[patch_state.received] = '\0';
-        patch_state.in_progress = false;
-
-        String json_patch = String(patch_state.buf);
-        bool ok = store.patch_meta(patch_state.id, json_patch);
-        if (ok) {
-            request->send(200, "application/json", "{\"success\":true}");
-        } else {
-            request->send(404, "application/json",
-                          "{\"success\":false,\"message\":\"Not found or patch failed\"}");
-        }
+        char   buf[FS_STORE_PATCH_MAX_BYTES + 1];
+        char   id[128];
     };
 
     server.on(
         AsyncURIMatcher::regex(get_pattern.c_str()),
         HTTP_PATCH,
-        patch_request_handler,
+        // Request handler fires after all body chunks — frees per-request state.
+        [](AsyncWebServerRequest* request) {
+            if (request->_tempObject) {
+                delete static_cast<PatchState*>(request->_tempObject);
+                request->_tempObject = nullptr;
+            }
+        },
         nullptr,
-        patch_body_handler
+        // Body handler — accumulates chunks into per-request heap state.
+        [&store](AsyncWebServerRequest* request,
+                 uint8_t* data, size_t len,
+                 size_t index, size_t total) {
+            if (index == 0) {
+                if (!portal_auth_gate(request)) return;
+
+                auto* state = new PatchState{};
+                state->errored  = false;
+                state->total    = total;
+                state->received = 0;
+                state->id[0]    = '\0';
+                request->_tempObject = state;
+
+                String id = request->pathArg(0);
+                if (id.isEmpty() || id.length() >= sizeof(state->id)) {
+                    state->errored = true;
+                    request->send(400, "application/json",
+                                  "{\"success\":false,\"message\":\"Missing or invalid id\"}");
+                    return;
+                }
+                strncpy(state->id, id.c_str(), sizeof(state->id) - 1);
+                state->id[sizeof(state->id) - 1] = '\0';
+
+                if (total == 0 || total > FS_STORE_PATCH_MAX_BYTES) {
+                    state->errored = true;
+                    request->send(413, "application/json",
+                                  "{\"success\":false,\"message\":\"PATCH body too large\"}");
+                    return;
+                }
+            }
+
+            auto* state = static_cast<PatchState*>(request->_tempObject);
+            if (!state || state->errored) return;
+
+            if (state->received + len > FS_STORE_PATCH_MAX_BYTES) {
+                state->errored = true;
+                request->send(413, "application/json",
+                              "{\"success\":false,\"message\":\"PATCH body too large\"}");
+                return;
+            }
+            memcpy(state->buf + state->received, data, len);
+            state->received += len;
+
+            if (state->received < state->total) return;
+
+            // All chunks received — process the patch.
+            state->buf[state->received] = '\0';
+            String json_patch(state->buf);
+            bool ok = store.patch_meta(state->id, json_patch);
+
+            if (ok) {
+                request->send(200, "application/json", "{\"success\":true}");
+            } else {
+                request->send(404, "application/json",
+                              "{\"success\":false,\"message\":\"Not found or patch failed\"}");
+            }
+        }
     );
 
     LOGI(TAG, "Registered routes for %s", base_url);

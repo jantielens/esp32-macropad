@@ -1,9 +1,15 @@
 #pragma once
 
+#include "psram_json_allocator.h"
+
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+
+// Maximum PATCH body size accepted (metadata fields only).
+// Shared between fs_indexed_store.cpp and web_portal_fs_store.cpp.
+#define FS_STORE_PATCH_MAX_BYTES 1024
 
 // FsIndexedStore — manifest-indexed JSON document collection on LittleFS.
 //
@@ -14,21 +20,26 @@
 // the web server task and the application task concurrently.
 //
 // Usage:
-//   static FsIndexedStore store("/storage/sessions");
+//   static const char* kFields[] = {"created_at", "duration_ms"};
+//   static FsIndexedStore store("/storage/sessions", kFields, 2);
 //
 //   // After LittleFS.begin():
 //   store.begin();
 //
 //   // Add a document (firmware writes data; portal never POSTs raw documents):
 //   DynamicJsonDocument meta(256);
+//   meta["created_at"] = (uint32_t)time(nullptr);
 //   meta["duration_ms"] = 1234;
 //   store.add("sess_1714900000", full_json_string, meta.as<JsonObject>());
 //
 //   // List (fast — returns cached manifest JSON):
 //   String manifest = store.list();
 //
-//   // Get full document (returns empty string on missing ID):
-//   String doc = store.get("sess_1714900000");
+//   // Check existence (manifest-only, no file I/O):
+//   if (store.exists("sess_1714900000")) { ... }
+//
+//   // Get the filesystem path for streaming via AsyncFileResponse:
+//   String path = store.data_path("sess_1714900000");
 //
 //   // Delete:
 //   store.remove("sess_1714900000");
@@ -42,30 +53,42 @@
 
 class FsIndexedStore {
 public:
-    // base_path: LittleFS directory, e.g. "/storage/sessions" (no trailing slash).
-    explicit FsIndexedStore(const char* base_path);
+    // base_path:        LittleFS directory, e.g. "/storage/sessions" (no trailing slash).
+    // index_fields:     Array of field names to extract from data documents into the
+    //                   manifest entry. Must remain valid for the lifetime of this object
+    //                   (use static string literals). "created_at" is always included
+    //                   in every manifest entry regardless of this list.
+    // num_index_fields: Number of entries in index_fields.
+    FsIndexedStore(const char* base_path,
+                   const char* const* index_fields,
+                   size_t num_index_fields);
     ~FsIndexedStore() = default;
 
-    // Call once after LittleFS.begin().  Creates the base directory if
-    // missing.  Manifest loading is deferred to the first list()/get() call.
+    // Call once after LittleFS.begin(). Creates the base directory if missing.
+    // Manifest loading is deferred to the first list(), get(), exists(), or count() call.
     bool begin();
 
     // Write a new document to disk and append its entry to the manifest.
-    // id          — unique document identifier (caller-managed, e.g. timestamp string).
+    // id           — unique document identifier (caller-managed, e.g. timestamp string).
     // json_content — full JSON body to write as the data file.
-    // index_meta  — metadata fields to store in the manifest entry
-    //               (must contain at least "created_at" as a uint32).
+    // index_meta   — metadata fields to store in the manifest entry. Only fields
+    //                matching index_fields[] are copied. "created_at" is auto-generated
+    //                from the system clock if the caller does not provide it.
     bool add(const char* id, const String& json_content, const JsonObject& index_meta);
 
-    // Return the full JSON content of a single document.
-    // Returns an empty string if the document does not exist.
+    // Return the full JSON content of a single document, or "" if not found.
     String get(const char* id);
 
+    // Return true if an entry with the given id exists in the manifest.
+    // Manifest-only lookup — no file I/O.
+    bool exists(const char* id);
+
     // Delete the data file and remove the entry from the manifest.
+    // Returns false if the entry was not found or the manifest write failed.
     bool remove(const char* id);
 
     // Update metadata fields in both the manifest entry and the data file.
-    // fields — JsonObject with the fields to merge/overwrite.
+    // Only commits manifest changes after the data file write succeeds (rollback on failure).
     bool patch_meta(const char* id, const JsonObject& fields);
 
     // Convenience overload for web handlers that have a raw JSON string.
@@ -75,41 +98,32 @@ public:
     // Triggers a rebuild if the manifest has not yet been loaded.
     String list();
 
-    // Return the number of entries in the manifest without full parsing.
+    // Return the number of entries in the manifest.
     int count();
 
+    // Return the LittleFS filesystem path for a data file given its id.
+    // Useful for AsyncFileResponse streaming in web handlers.
+    String data_path(const char* id) const;
+
 private:
-    // Ensure the manifest is loaded (or rebuilt) before any operation that
-    // reads it.  Must be called under the mutex.
     void _ensure_loaded();
-
-    // Rebuild the manifest by iterating data files on disk.  Adds orphaned
-    // files and removes entries referencing missing files.
     void _rebuild_manifest();
-
-    // Serialize the in-memory manifest document to _manifest_cache and flush
-    // to disk atomically.
     bool _write_manifest();
-
-    // Write content to path atomically via a .tmp rename.
     bool _atomic_write(const char* path, const String& content);
-
-    // Sort the in-memory manifest entries descending by created_at.
-    // Operates by extracting to a std::vector, sorting, and rebuilding the
-    // JsonArray (JsonArrayIterator is not a random-access iterator).
+    bool _atomic_write_from_doc(const char* path, JsonDocument& doc);
     void _sort_entries();
-
-    // Build the full path for a data file given its id.
     void _data_path(const char* id, char* out, size_t out_len) const;
-
-    // Build the full path for the manifest file.
     void _manifest_path(char* out, size_t out_len) const;
 
-    const char* _base_path;
-    SemaphoreHandle_t _mutex;
+    const char*        _base_path;
+    const char* const* _index_fields;
+    size_t             _num_index_fields;
+    SemaphoreHandle_t  _mutex;
 
-    // In-memory state — protected by _mutex
-    DynamicJsonDocument* _manifest_doc; // owning pointer; allocated in _ensure_loaded
-    String               _manifest_cache;
-    bool                 _loaded;
+    // In-memory state — protected by _mutex.
+    // Allocated as BasicJsonDocument<PsramJsonAllocator>* (sized from manifest file
+    // on load, or 64 KB PSRAM-backed on rebuild) — stored via base pointer.
+    JsonDocument* _manifest_doc;
+    String        _manifest_cache;
+    bool          _loaded;
 };
