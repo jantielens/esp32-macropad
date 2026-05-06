@@ -23,26 +23,19 @@ static const char* MANIFEST_FILENAME = "_index.json";
 
 struct SortEntry { uint32_t ts; String s; };
 
-// Sort vec descending by ts, then populate parent_doc[key] as a JsonArray
-// by parsing a single combined JSON string.  Deserializing into the parent
-// document (not into a JsonArray reference) is the only safe way to populate
-// the array: cross-document JsonVariant copies alias string pointers back
-// into the source pool, which become dangling as soon as the source
-// document is reused or destroyed — producing garbled values on next read.
-static void sort_and_populate(JsonDocument& parent_doc,
-                               const char* key,
-                               std::vector<SortEntry>& vec) {
+// Sort vec descending by ts and populate target JsonArray.
+// tmp is a caller-provided scratch document reused across iterations.
+static void sort_and_populate(JsonArray target,
+                               std::vector<SortEntry>& vec,
+                               DynamicJsonDocument& tmp) {
     std::sort(vec.begin(), vec.end(),
         [](const SortEntry& a, const SortEntry& b) { return a.ts > b.ts; });
-
-    String combined = "[";
-    for (size_t i = 0; i < vec.size(); i++) {
-        if (i > 0) combined += ",";
-        combined += vec[i].s;
+    for (const auto& item : vec) {
+        tmp.clear();
+        if (deserializeJson(tmp, item.s) == DeserializationError::Ok) {
+            target.add(tmp.as<JsonVariant>());
+        }
     }
-    combined += "]";
-
-    deserializeJson(parent_doc[key], combined);
 }
 
 // ---------------------------------------------------------------------------
@@ -291,14 +284,11 @@ void FsIndexedStore::_rebuild_manifest() {
         file = dir.openNextFile();
     }
 
-    // Remove the empty entries array we created above; sort_and_populate
-    // will recreate it with the sorted, freshly-deserialized contents whose
-    // strings live in _manifest_doc's own pool.
-    _manifest_doc->as<JsonObject>().remove("entries");
-    sort_and_populate(*_manifest_doc, "entries", collected);
+    DynamicJsonDocument tmp(1024);
+    sort_and_populate(entries, collected, tmp);
 
     _write_manifest();
-    LOGI(TAG, "Rebuild complete: %u entries", (unsigned)((*_manifest_doc)["entries"].as<JsonArray>().size()));
+    LOGI(TAG, "Rebuild complete: %u entries", (unsigned)entries.size());
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +362,9 @@ void FsIndexedStore::_sort_entries() {
     // Remove only the entries array, preserving all other root-level fields
     // (e.g. next_id). Clearing the whole document would silently discard them.
     _manifest_doc->as<JsonObject>().remove("entries");
-    sort_and_populate(*_manifest_doc, "entries", vec);
+    JsonArray sorted = _manifest_doc->createNestedArray("entries");
+    DynamicJsonDocument tmp(1024);
+    sort_and_populate(sorted, vec, tmp);
 }
 
 // ---------------------------------------------------------------------------
@@ -442,10 +434,39 @@ bool FsIndexedStore::add(const char* id, const String& json_content, const JsonO
     _sort_entries();
 
     bool ok = _write_manifest();
-    // Invalidate in-memory state: the entry we just inserted may hold pointers
-    // into the caller's buffers (zero-copy string storage).  Forcing a reload
-    // from disk on next access guarantees we never read those dangling pointers.
-    _loaded = false;
+    xSemaphoreGive(_mutex);
+    return ok;
+}
+
+// ---------------------------------------------------------------------------
+// register_pre_written()
+// ---------------------------------------------------------------------------
+
+bool FsIndexedStore::register_pre_written(const char* id, uint32_t created_at, const JsonObject& index_meta) {
+    if (!id || !id[0] || created_at == 0) return false;
+
+    if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
+
+    _ensure_loaded();
+
+    JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
+    if (entries.isNull()) {
+        entries = _manifest_doc->createNestedArray("entries");
+    }
+
+    JsonObject entry = entries.createNestedObject();
+    entry["id"] = id;
+    entry["created_at"] = created_at;
+    for (size_t i = 0; i < _num_index_fields; i++) {
+        if (strcmp(_index_fields[i], "created_at") == 0) continue;
+        if (index_meta.containsKey(_index_fields[i])) {
+            entry[_index_fields[i]] = index_meta[_index_fields[i]];
+        }
+    }
+
+    _sort_entries();
+
+    bool ok = _write_manifest();
     xSemaphoreGive(_mutex);
     return ok;
 }
@@ -537,9 +558,55 @@ bool FsIndexedStore::remove(const char* id) {
         _data_path(id, dp, sizeof(dp));
         LittleFS.remove(dp);  // best-effort; ignore error (orphan is harmless)
     }
-    // Invalidate in-memory state for safety — next read reloads from disk.
-    _loaded = false;
 
+    xSemaphoreGive(_mutex);
+    return ok;
+}
+
+// ---------------------------------------------------------------------------
+// clear_all()
+// ---------------------------------------------------------------------------
+
+bool FsIndexedStore::clear_all() {
+    if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
+
+    // Delete all data files in the store directory.
+    File dir = LittleFS.open(_base_path);
+    if (dir) {
+        File f = dir.openNextFile();
+        while (f) {
+            const char* fname = f.name();
+            // Skip the manifest itself; delete everything else.
+            if (strcmp(fname, MANIFEST_FILENAME) != 0) {
+                char full[256];
+                snprintf(full, sizeof(full), "%s/%s", _base_path, fname);
+                f.close();
+                LittleFS.remove(full);
+            } else {
+                f.close();
+            }
+            f = dir.openNextFile();
+        }
+        dir.close();
+    }
+
+    // Reset manifest to empty state with root fields at their defaults.
+    if (!_manifest_doc) {
+        xSemaphoreGive(_mutex);
+        return false;
+    }
+    _manifest_doc->clear();
+    JsonObject root = _manifest_doc->to<JsonObject>();
+    root.createNestedArray("entries");
+    for (size_t i = 0; i < _num_root_fields; i++) {
+        const FsIndexedStoreRootField& rf = _root_fields[i];
+        if (rf.type == FsIndexedStoreRootField::TYPE_UINT32) {
+            root[rf.name] = rf.default_uint32;
+        }
+    }
+    _loaded = true;
+
+    bool ok = _write_manifest();
     xSemaphoreGive(_mutex);
     return ok;
 }
@@ -604,10 +671,6 @@ bool FsIndexedStore::patch_meta(const char* id, const JsonObject& fields) {
             _manifest_doc = nullptr;
             _loaded = false;
             _manifest_cache = "";
-        } else {
-            // Patch fields may alias caller's string buffers (zero-copy storage).
-            // Force reload from disk on next access so we never read dangling pointers.
-            _loaded = false;
         }
         ok = manifest_ok;
     }
