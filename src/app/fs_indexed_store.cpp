@@ -23,19 +23,26 @@ static const char* MANIFEST_FILENAME = "_index.json";
 
 struct SortEntry { uint32_t ts; String s; };
 
-// Sort vec descending by ts and populate target JsonArray.
-// tmp is a caller-provided scratch document reused across iterations.
-static void sort_and_populate(JsonArray target,
-                               std::vector<SortEntry>& vec,
-                               DynamicJsonDocument& tmp) {
+// Sort vec descending by ts, then populate parent_doc[key] as a JsonArray
+// by parsing a single combined JSON string.  Deserializing into the parent
+// document (not into a JsonArray reference) is the only safe way to populate
+// the array: cross-document JsonVariant copies alias string pointers back
+// into the source pool, which become dangling as soon as the source
+// document is reused or destroyed — producing garbled values on next read.
+static void sort_and_populate(JsonDocument& parent_doc,
+                               const char* key,
+                               std::vector<SortEntry>& vec) {
     std::sort(vec.begin(), vec.end(),
         [](const SortEntry& a, const SortEntry& b) { return a.ts > b.ts; });
-    for (const auto& item : vec) {
-        tmp.clear();
-        if (deserializeJson(tmp, item.s) == DeserializationError::Ok) {
-            target.add(tmp.as<JsonVariant>());
-        }
+
+    String combined = "[";
+    for (size_t i = 0; i < vec.size(); i++) {
+        if (i > 0) combined += ",";
+        combined += vec[i].s;
     }
+    combined += "]";
+
+    deserializeJson(parent_doc[key], combined);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,11 +291,14 @@ void FsIndexedStore::_rebuild_manifest() {
         file = dir.openNextFile();
     }
 
-    DynamicJsonDocument tmp(1024);
-    sort_and_populate(entries, collected, tmp);
+    // Remove the empty entries array we created above; sort_and_populate
+    // will recreate it with the sorted, freshly-deserialized contents whose
+    // strings live in _manifest_doc's own pool.
+    _manifest_doc->as<JsonObject>().remove("entries");
+    sort_and_populate(*_manifest_doc, "entries", collected);
 
     _write_manifest();
-    LOGI(TAG, "Rebuild complete: %u entries", (unsigned)entries.size());
+    LOGI(TAG, "Rebuild complete: %u entries", (unsigned)((*_manifest_doc)["entries"].as<JsonArray>().size()));
 }
 
 // ---------------------------------------------------------------------------
@@ -362,9 +372,7 @@ void FsIndexedStore::_sort_entries() {
     // Remove only the entries array, preserving all other root-level fields
     // (e.g. next_id). Clearing the whole document would silently discard them.
     _manifest_doc->as<JsonObject>().remove("entries");
-    JsonArray sorted = _manifest_doc->createNestedArray("entries");
-    DynamicJsonDocument tmp(1024);
-    sort_and_populate(sorted, vec, tmp);
+    sort_and_populate(*_manifest_doc, "entries", vec);
 }
 
 // ---------------------------------------------------------------------------
@@ -434,6 +442,10 @@ bool FsIndexedStore::add(const char* id, const String& json_content, const JsonO
     _sort_entries();
 
     bool ok = _write_manifest();
+    // Invalidate in-memory state: the entry we just inserted may hold pointers
+    // into the caller's buffers (zero-copy string storage).  Forcing a reload
+    // from disk on next access guarantees we never read those dangling pointers.
+    _loaded = false;
     xSemaphoreGive(_mutex);
     return ok;
 }
@@ -525,6 +537,8 @@ bool FsIndexedStore::remove(const char* id) {
         _data_path(id, dp, sizeof(dp));
         LittleFS.remove(dp);  // best-effort; ignore error (orphan is harmless)
     }
+    // Invalidate in-memory state for safety — next read reloads from disk.
+    _loaded = false;
 
     xSemaphoreGive(_mutex);
     return ok;
@@ -590,6 +604,10 @@ bool FsIndexedStore::patch_meta(const char* id, const JsonObject& fields) {
             _manifest_doc = nullptr;
             _loaded = false;
             _manifest_cache = "";
+        } else {
+            // Patch fields may alias caller's string buffers (zero-copy storage).
+            // Force reload from disk on next access so we never read dangling pointers.
+            _loaded = false;
         }
         ok = manifest_ok;
     }
