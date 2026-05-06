@@ -630,6 +630,52 @@ bool FsIndexedStore::patch_meta(const char* id, const String& json_patch) {
 }
 
 // ---------------------------------------------------------------------------
+// patch_entry()
+// ---------------------------------------------------------------------------
+
+bool FsIndexedStore::patch_entry(const char* id, const JsonObject& fields) {
+    if (!id || !id[0]) return false;
+
+    if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
+
+    _ensure_loaded();
+
+    bool found = false;
+    JsonArray entries = (*_manifest_doc)["entries"].as<JsonArray>();
+    if (!entries.isNull()) {
+        for (JsonVariant entry : entries) {
+            if (strcmp(entry["id"] | "", id) == 0) {
+                for (JsonPair kv : fields) {
+                    entry.as<JsonObject>()[kv.key()] = kv.value();
+                }
+                found = true;
+                break;
+            }
+        }
+    }
+
+    if (!found) {
+        xSemaphoreGive(_mutex);
+        return false;
+    }
+
+    bool ok = _write_manifest();
+    if (!ok) {
+        delete _manifest_doc;
+        _manifest_doc = nullptr;
+        _loaded = false;
+        _manifest_cache = "";
+    } else {
+        // Patch fields may alias caller's string buffers (zero-copy storage).
+        // Force reload from disk on next access so we never read dangling pointers.
+        _loaded = false;
+    }
+
+    xSemaphoreGive(_mutex);
+    return ok;
+}
+
+// ---------------------------------------------------------------------------
 // list()
 // ---------------------------------------------------------------------------
 

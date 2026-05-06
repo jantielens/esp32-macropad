@@ -122,6 +122,12 @@ public:
     // Convenience overload for web handlers that have a raw JSON string.
     bool patch_meta(const char* id, const String& json_patch);
 
+    // Update fields in the manifest entry without touching the data file.
+    // Use for metadata that lives only in the manifest (i.e. not duplicated in
+    // the data file).  Returns false if the entry was not found or the
+    // manifest write failed.
+    bool patch_entry(const char* id, const JsonObject& fields);
+
     // Return the manifest JSON as a string (fast — serves from RAM cache).
     // Triggers a rebuild if the manifest has not yet been loaded.
     String list();
