@@ -148,6 +148,27 @@ public:
     // on failure so the next access reloads from disk.
     bool set_root_uint32(const char* name, uint32_t value);
 
+    // Atomically reserve and return the next auto-increment ID.
+    // Reads the root field `field_name` (must be TYPE_UINT32), increments it
+    // in the in-memory manifest, and persists to disk.  Returns 0 on failure.
+    // Thread-safe — callers do not need external synchronization.
+    // The `prefix` is prepended to form the full string id written into buf:
+    //   e.g. prefix="sess_" → buf="sess_42"
+    // buf must be at least 32 bytes.
+    uint32_t allocate_id(const char* field_name, const char* prefix, char* buf, size_t buf_size);
+
+    // Register an already-written data file in the manifest without touching its content.
+    // Use when the caller writes the data file directly (e.g. via streaming serialization)
+    // and only needs the manifest entry to be created.
+    // created_at must be provided by the caller; it is NOT auto-generated.
+    // Returns false if the manifest write fails.
+    bool register_pre_written(const char* id, uint32_t created_at, const JsonObject& index_meta);
+
+    // Delete all data files and reset the manifest to an empty state.
+    // Preserves root fields (e.g. next_id is reset to default).
+    // Returns false if the manifest write failed.
+    bool clear_all();
+
 private:
     void _ensure_loaded();
     void _rebuild_manifest();

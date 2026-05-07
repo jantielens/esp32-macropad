@@ -845,3 +845,39 @@ bool FsIndexedStore::set_root_uint32(const char* name, uint32_t value) {
     xSemaphoreGive(_mutex);
     return ok;
 }
+
+// ---------------------------------------------------------------------------
+// allocate_id()
+// ---------------------------------------------------------------------------
+
+uint32_t FsIndexedStore::allocate_id(const char* field_name, const char* prefix,
+                                      char* buf, size_t buf_size) {
+    if (!field_name || !field_name[0] || !buf || buf_size < 16) return 0;
+    if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return 0;
+
+    _ensure_loaded();
+
+    if (!_manifest_doc || !_manifest_doc->containsKey(field_name)) {
+        xSemaphoreGive(_mutex);
+        return 0;
+    }
+
+    uint32_t id = (*_manifest_doc)[field_name].as<uint32_t>();
+    (*_manifest_doc)[field_name] = id + 1;
+
+    bool ok = _write_manifest();
+    if (!ok) {
+        // Rollback in-memory state on disk failure.
+        delete _manifest_doc;
+        _manifest_doc = nullptr;
+        _loaded       = false;
+        _manifest_cache = "";
+        xSemaphoreGive(_mutex);
+        return 0;
+    }
+
+    xSemaphoreGive(_mutex);
+
+    snprintf(buf, buf_size, "%s%lu", prefix ? prefix : "", (unsigned long)id);
+    return id;
+}
