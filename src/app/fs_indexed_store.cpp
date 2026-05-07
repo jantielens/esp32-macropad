@@ -422,7 +422,7 @@ bool FsIndexedStore::add(const char* id, const String& json_content, const JsonO
     }
 
     JsonObject entry = entries.createNestedObject();
-    entry["id"] = id;
+    entry["id"] = String(id);  // Force copy — caller buffer may be transient
     entry["created_at"] = created_at;
     for (size_t i = 0; i < _num_index_fields; i++) {
         if (strcmp(_index_fields[i], "created_at") == 0) continue;  // already set
@@ -455,7 +455,7 @@ bool FsIndexedStore::register_pre_written(const char* id, uint32_t created_at, c
     }
 
     JsonObject entry = entries.createNestedObject();
-    entry["id"] = id;
+    entry["id"] = String(id);  // Force copy — caller buffer may be transient
     entry["created_at"] = created_at;
     for (size_t i = 0; i < _num_index_fields; i++) {
         if (strcmp(_index_fields[i], "created_at") == 0) continue;
