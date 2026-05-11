@@ -159,4 +159,17 @@ echo "=== Running unit tests: component_registry ==="
 ./tests/bin/test_component_registry
 echo
 
+echo "=== Building unit tests: list_provider ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/board_config.h \
+    -I src/app \
+    tests/test_list_provider.cpp \
+    src/app/list_provider.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_list_provider
+
+echo "=== Running unit tests: list_provider ==="
+./tests/bin/test_list_provider
+echo
+
 echo "=== All tests passed ==="

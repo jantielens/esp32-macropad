@@ -83,6 +83,12 @@ function padInit() {
         nrAdjContainer.innerHTML = actionEditorHTML('pad-edit-nr-adjust', 'Adjustment Action', { showBleHint: true, showKeyHelp: true });
     }
 
+    // Generate list widget select action editor
+    var listSelContainer = document.getElementById('pad-edit-list-select-container');
+    if (listSelContainer) {
+        listSelContainer.innerHTML = actionEditorHTML('pad-edit-list-select', 'Select Action', { showBleHint: true, showKeyHelp: true });
+    }
+
     document.getElementById('pad-page-select').addEventListener('change', (e) => {
         const newPage = parseInt(e.target.value);
         if (padDirty) {
@@ -299,6 +305,7 @@ function padPopulateScreenDropdown() {
         prefixes.push('pad-edit-lp-action-' + i);
     }
     prefixes.push('pad-edit-nr-adjust');
+    prefixes.push('pad-edit-list-select');
     actionEditorPopulateScreens(
         prefixes,
         deviceInfoCache ? deviceInfoCache.available_screens : null
@@ -335,6 +342,7 @@ function padPopulateSoundDropdown() {
         prefixes.push('pad-edit-lp-action-' + i);
     }
     prefixes.push('pad-edit-nr-adjust');
+    prefixes.push('pad-edit-list-select');
     actionEditorPopulateSounds(prefixes, padSoundListCache);
 }
 
@@ -377,7 +385,7 @@ function padUpdateAddLink(gesture) {
     if (link) link.style.display = (visibleCount >= 3) ? 'none' : '';
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker'];
+const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list'];
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;

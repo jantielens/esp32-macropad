@@ -563,6 +563,43 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 
 Tapping the inner-right zone sends an "Adjust Countdown" action with value `1` (add 1 second). Tapping the outer-left zone sends value `-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1;mm:ss]` binding.
 
+### List
+
+The list widget renders a scrollable, tappable list of items inside a button. Unlike other widgets that visualize MQTT data, the list gets its items from a registered **data provider** — a pluggable module that supplies a set of labeled items at screen load time.
+
+Tapping a list item dispatches a configurable action template with `{id}` substitution — the same pattern as the numeric rocker's `{step}`. This makes the widget fully generic: the provider supplies data, the action template defines behavior.
+
+**How it works:**
+
+- The **Data Binding** field specifies the provider ID (not an MQTT topic). For example, `shutter_tests` or `brew_definitions`.
+- On screen enter, the widget calls the provider to get the current list of items.
+- Each item has an **ID** (used in action substitution) and a **label** (displayed in the list).
+- Tapping an item copies the action template, replaces all `{id}` occurrences with the item's ID, and dispatches the action.
+- If no action is configured, tapping is a no-op.
+- If the provider ID is not found (e.g., feature module not compiled), the widget shows "Source not found".
+- If the provider returns 0 items, the widget shows "No items".
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Data Binding** | The provider ID string (e.g., `shutter_tests`). Not an MQTT topic |
+| **Select Action** | The action template dispatched when a list item is tapped. Use `{id}` as a placeholder for the selected item's ID |
+
+The `{id}` placeholder is replaced in `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value` fields.
+
+**Example — Select a test script:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | List |
+| Data Binding | `shutter_tests` |
+| Select Action | Type: `mqtt`, Topic: `macropad/test/start`, Payload: `{id}` |
+
+When the user taps "Full Range Test" (id: `full-range`), the widget dispatches an MQTT publish to `macropad/test/start` with payload `full-range`.
+
+> **Tip:** The list refreshes its content each time the screen is entered. No reboot needed to pick up new items added by the provider.
+
 ### Bar Chart
 
 The bar chart widget draws a vertical or horizontal bar that fills based on a numeric value — perfect for power meters, CPU gauges, progress bars, or tank levels.

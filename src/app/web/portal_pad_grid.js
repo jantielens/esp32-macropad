@@ -254,6 +254,12 @@ function padRenderGrid() {
                     nr.title = 'Numeric Rocker Widget';
                     cell.appendChild(nr);
                 }
+                if (btn.widget_type === 'list') {
+                    const ls = document.createElement('div');
+                    ls.className = 'pad-cell-widget-list';
+                    ls.title = 'List Widget';
+                    cell.appendChild(ls);
+                }
 
                 padRenderResizeHandles(cell, btn, c, r);
 

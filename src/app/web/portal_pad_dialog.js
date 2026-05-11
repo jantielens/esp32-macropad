@@ -240,6 +240,9 @@ function padDialogOpen(col, row) {
     // Numeric Rocker adjustment action
     actionEditorLoad('pad-edit-nr-adjust', btn.widget_numericrocker_action || null);
 
+    // List widget select action
+    actionEditorLoad('pad-edit-list-select', btn.widget_list_action || null);
+
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
@@ -517,6 +520,10 @@ function padDialogOk(keepOpen) {
             // Adjustment action (stored as nested object)
             var adjAction = actionEditorBuild('pad-edit-nr-adjust');
             if (adjAction.type) btn.widget_numericrocker_action = adjAction;
+        }
+        if (wtype === 'list') {
+            var listAction = actionEditorBuild('pad-edit-list-select');
+            if (listAction.type) btn.widget_list_action = listAction;
         }
     }
 
