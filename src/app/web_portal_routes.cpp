@@ -12,6 +12,10 @@
 
 #include "board_config.h"
 
+#if HAS_DISPLAY
+#include "web_portal_screenshot.h"
+#endif
+
 #if HAS_BLE_HID
 #include "web_portal_ble.h"
 #endif
@@ -114,6 +118,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/pad", HTTP_DELETE, handleDeletePadConfig);
 
 
+
+		registerOptions("/api/screenshot");
+		server->on("/api/screenshot", HTTP_GET, handleGetScreenshot);
 
 		registerOptions("/api/icons/install");
 		server->on(

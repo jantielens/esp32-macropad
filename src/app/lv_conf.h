@@ -307,7 +307,7 @@
 #define LV_USE_FRAGMENT 0
 
 /* Snapshot (capture widget to image) */
-#define LV_USE_SNAPSHOT 0
+#define LV_USE_SNAPSHOT 1
 
 /* Monkey test */
 #define LV_USE_MONKEY 0

@@ -931,6 +931,33 @@ Switch the active runtime screen (no persistence).
 - When the screen saver is dimming/asleep/fading in, touch input is intentionally suppressed to avoid “wake gestures” clicking through into the UI. A second tap may be required after wake.
 
 
+
+---
+
+### Screenshot API
+
+Requires `HAS_DISPLAY`. Gated by Basic Auth when enabled.
+
+#### `GET /api/screenshot`
+
+Capture the current display contents as a 24-bit BMP image.
+
+- **Response:** `image/bmp` — 24-bit uncompressed BMP (RGB888, bottom-up row order)
+- **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary PSRAM buffer, converts from RGB565 to BGR888, and streams the result as a chunked HTTP response.
+- **Memory:** The snapshot buffer is allocated on demand and freed after the response completes. No persistent memory cost.
+- **Thread safety:** Acquires the LVGL mutex with a 1-second timeout. Returns `503 Display busy` if the mutex cannot be acquired.
+
+**Example:**
+
+```bash
+curl -u user:pass http://<device-ip>/api/screenshot -o screenshot.bmp
+```
+
+**Notes:**
+
+- Image dimensions match the device's display resolution.
+- The BMP is uncompressed, so file sizes range from ~253 KB (360×360) to ~1.2 MB (1024×600) depending on the board.
+
 ---
 
 ### Swipe Actions API
