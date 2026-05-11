@@ -47,6 +47,12 @@ static void pads_cache_rebuild() {
 
 static const ListProvider pads_provider = { "pads", "Select Pad", pads_provide };
 
+// Rebuild the cached pads list. Safe to call from any task with a flash-safe
+// stack (web server, setup) — NOT from the LVGL task (PSRAM stack).
+void list_provider_pads_invalidate() {
+    pads_cache_rebuild();
+}
+
 void list_provider_pads_init() {
     pads_cache_rebuild();
     list_provider_register(&pads_provider);

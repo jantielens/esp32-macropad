@@ -318,8 +318,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
+  - src/app/list_binding.cpp
   - src/app/list_provider.cpp
   - src/app/list_provider.h
+  - src/app/list_provider_pads.cpp
   - src/app/lv_conf.h
   - src/app/message_bubble.cpp
   - src/app/message_bubble.h
