@@ -8,5 +8,10 @@
                             <input type="text" id="pad-edit-list-provider-id" maxlength="63" placeholder="e.g. pads" oninput="if(typeof listRefreshSyntheticOptions==='function')listRefreshSyntheticOptions()">
                             <small class="form-text text-muted">The registered provider ID (not an MQTT topic).</small>
                         </div>
+                        <div class="form-group">
+                            <label for="pad-edit-list-filter">Filter</label>
+                            <input type="text" id="pad-edit-list-filter" maxlength="191" placeholder="e.g. #0-3 or pad_*,!pad_5">
+                            <small class="form-text text-muted">Optional. Comma-separated rules to include/exclude items. <code>*</code>/<code>?</code> = glob, <code>#N</code>/<code>#N-M</code> = index, <code>!</code> = exclude.</small>
+                        </div>
                     </div>
                 </details>

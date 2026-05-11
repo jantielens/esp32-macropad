@@ -26,4 +26,12 @@ struct ListProvider {
 bool list_provider_register(const ListProvider* provider);
 const ListProvider* list_provider_find(const char* id);
 
+// Apply a comma-separated filter expression to an item list, compacting in place.
+// Returns the new count. Empty filter or NULL = pass-through (returns count).
+// Rules: glob (case-insensitive */?, matched against id then label), index (#N or
+// #N-M), or exclusion (! prefix). Item passes if any positive rule matches AND no
+// exclusion rule matches. If only exclusion rules are given, items default to
+// included. See docs/pad-editor-guide.md for full syntax.
+uint8_t list_filter_items(ListItem* items, uint8_t count, const char* filter);
+
 #endif // HAS_DISPLAY

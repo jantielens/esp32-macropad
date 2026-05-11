@@ -242,6 +242,7 @@ function padDialogOpen(col, row) {
 
     // List widget fields
     document.getElementById('pad-edit-list-provider-id').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-list-filter').value = btn.widget_data_binding_2 || '';
     // Provider ID was just set — refresh synthetic "Selected … Item" options in
     // action screen dropdowns (which were populated earlier with empty provider).
     if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
@@ -527,6 +528,8 @@ function padDialogOk(keepOpen) {
         if (wtype === 'list') {
             const listProvider = document.getElementById('pad-edit-list-provider-id').value.trim();
             if (listProvider) btn.widget_data_binding = listProvider;
+            const listFilter = document.getElementById('pad-edit-list-filter').value.trim();
+            if (listFilter) btn.widget_data_binding_2 = listFilter;
         }
     }
 

@@ -587,8 +587,29 @@ Tapping a list item dispatches the button's configured **Tap Actions** with `[li
 | Setting | Description |
 |---------|-------------|
 | **Data Binding** | The provider ID string (e.g., `shutter_tests`). Not an MQTT topic |
+| **Filter** | Optional comma-separated rules that include or exclude items returned by the provider. Plain text — binding tokens like `[mqtt:...]` are **not** resolved here. Empty = all items. See syntax below |
 | **Select Action** (tap) | The button's normal tap action(s), dispatched when a list item is tapped. Use `[list:provider_id.selected]` as the screen target to navigate to the selected item |
 | **Long-Press Action** | Optional long-press action(s), dispatched on item long-press |
+
+**Filter syntax:**
+
+| Rule | Meaning |
+|------|---------|
+| *(empty)* or `*` | Match everything (default) |
+| `pad_3` | Exact match against item ID or label (case-insensitive) |
+| `pad_*` | Glob match against ID or label (`*` = any sequence, `?` = single char) |
+| `*Home*` | Substring-style glob |
+| `#5` | Item at index 5 (0-based position in provider's original list) |
+| `#0-3` | Index range 0, 1, 2, 3 |
+| `!pad_5` | Exclusion — negate any rule type with leading `!` |
+
+An item passes if **any** positive rule matches **and no** exclusion rule matches. If only exclusion rules are given, items default to included. To list specific indices, use separate rules like `#0,#2,#4` (commas separate rules; `#` does not accept comma-lists).
+
+**Examples:**
+- `pad_*,!pad_5` — every `pad_` item except `pad_5`
+- `#0-3` — first four items
+- `*Home*,*Office*` — labels containing "Home" or "Office"
+- `!pad_0` — all items except `pad_0`
 
 The `[list:provider_id.selected]` binding token is scoped per provider — each list widget tracks its own selected item independently. The token is resolved in all action fields including `screen_id`, `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value`.
 

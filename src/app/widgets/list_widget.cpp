@@ -119,6 +119,12 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     ListItem items[LIST_MAX_ITEMS];
     uint8_t count = provider->provide(items, LIST_MAX_ITEMS);
 
+    // Apply optional filter from data_binding[1]
+    const char* filter = wcfg->data_binding[1];
+    if (filter[0] != '\0') {
+        count = list_filter_items(items, count, filter);
+    }
+
     if (count == 0) {
         lv_obj_t* lbl = lv_label_create(tile);
         lv_label_set_text(lbl, "No items");

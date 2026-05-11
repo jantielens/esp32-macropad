@@ -192,6 +192,103 @@ TEST(binding_in_template) {
 // Main
 // ============================================================================
 
+// ============================================================================
+// list_filter_items tests
+// ============================================================================
+
+static void make_items(ListItem* items, uint8_t n) {
+    static const char* labels[] = { "Home", "Office", "Garage", "Garden", "Bedroom", "Kitchen" };
+    for (uint8_t i = 0; i < n; i++) {
+        snprintf(items[i].id, LIST_ITEM_ID_MAX, "pad_%u", i);
+        snprintf(items[i].label, LIST_ITEM_LABEL_MAX, "%s", labels[i % 6]);
+    }
+}
+
+TEST(filter_empty_passes_all) {
+    ListItem items[6]; make_items(items, 6);
+    ASSERT_EQ(list_filter_items(items, 6, ""), 6);
+}
+
+TEST(filter_null_passes_all) {
+    ListItem items[6]; make_items(items, 6);
+    ASSERT_EQ(list_filter_items(items, 6, nullptr), 6);
+}
+
+TEST(filter_star_passes_all) {
+    ListItem items[6]; make_items(items, 6);
+    ASSERT_EQ(list_filter_items(items, 6, "*"), 6);
+}
+
+TEST(filter_exact_id_match) {
+    ListItem items[6]; make_items(items, 6);
+    uint8_t n = list_filter_items(items, 6, "pad_3");
+    ASSERT_EQ(n, 1);
+    ASSERT_STR(items[0].id, "pad_3");
+}
+
+TEST(filter_glob_id_prefix) {
+    ListItem items[6]; make_items(items, 6);
+    ASSERT_EQ(list_filter_items(items, 6, "pad_*"), 6);
+}
+
+TEST(filter_glob_label_substring) {
+    ListItem items[6]; make_items(items, 6);
+    uint8_t n = list_filter_items(items, 6, "*Gar*");
+    ASSERT_EQ(n, 2);
+    ASSERT_STR(items[0].label, "Garage");
+    ASSERT_STR(items[1].label, "Garden");
+}
+
+TEST(filter_index_single) {
+    ListItem items[6]; make_items(items, 6);
+    uint8_t n = list_filter_items(items, 6, "#2");
+    ASSERT_EQ(n, 1);
+    ASSERT_STR(items[0].id, "pad_2");
+}
+
+TEST(filter_index_range) {
+    ListItem items[6]; make_items(items, 6);
+    uint8_t n = list_filter_items(items, 6, "#1-3");
+    ASSERT_EQ(n, 3);
+    ASSERT_STR(items[0].id, "pad_1");
+    ASSERT_STR(items[2].id, "pad_3");
+}
+
+TEST(filter_exclusion_only) {
+    ListItem items[6]; make_items(items, 6);
+    uint8_t n = list_filter_items(items, 6, "!pad_0");
+    ASSERT_EQ(n, 5);
+    ASSERT_STR(items[0].id, "pad_1");
+}
+
+TEST(filter_mixed_include_exclude) {
+    ListItem items[6]; make_items(items, 6);
+    uint8_t n = list_filter_items(items, 6, "pad_*,!pad_5");
+    ASSERT_EQ(n, 5);
+    ASSERT_STR(items[4].id, "pad_4");
+}
+
+TEST(filter_case_insensitive) {
+    ListItem items[6]; make_items(items, 6);
+    uint8_t n = list_filter_items(items, 6, "home");
+    ASSERT_EQ(n, 1);
+    ASSERT_STR(items[0].label, "Home");
+}
+
+TEST(filter_no_match_returns_zero) {
+    ListItem items[6]; make_items(items, 6);
+    ASSERT_EQ(list_filter_items(items, 6, "nonexistent"), 0);
+}
+
+TEST(filter_multi_index_rules) {
+    ListItem items[6]; make_items(items, 6);
+    uint8_t n = list_filter_items(items, 6, "#0,#2,#4");
+    ASSERT_EQ(n, 3);
+    ASSERT_STR(items[0].id, "pad_0");
+    ASSERT_STR(items[1].id, "pad_2");
+    ASSERT_STR(items[2].id, "pad_4");
+}
+
 int main() {
     printf("ListProvider registry tests:\n");
     RUN(register_and_find);
@@ -211,6 +308,21 @@ int main() {
     RUN(binding_no_dot_returns_placeholder);
     RUN(binding_bad_key_returns_placeholder);
     RUN(binding_in_template);
+
+    printf("\nlist_filter_items tests:\n");
+    RUN(filter_empty_passes_all);
+    RUN(filter_null_passes_all);
+    RUN(filter_star_passes_all);
+    RUN(filter_exact_id_match);
+    RUN(filter_glob_id_prefix);
+    RUN(filter_glob_label_substring);
+    RUN(filter_index_single);
+    RUN(filter_index_range);
+    RUN(filter_exclusion_only);
+    RUN(filter_mixed_include_exclude);
+    RUN(filter_case_insensitive);
+    RUN(filter_no_match_returns_zero);
+    RUN(filter_multi_index_rules);
 
     printf("\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
