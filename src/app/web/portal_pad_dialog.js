@@ -240,8 +240,11 @@ function padDialogOpen(col, row) {
     // Numeric Rocker adjustment action
     actionEditorLoad('pad-edit-nr-adjust', btn.widget_numericrocker_action || null);
 
-    // List widget select action
-    actionEditorLoad('pad-edit-list-select', btn.widget_list_action || null);
+    // List widget fields
+    document.getElementById('pad-edit-list-provider-id').value = btn.widget_data_binding || '';
+    // Provider ID was just set — refresh synthetic "Selected … Item" options in
+    // action screen dropdowns (which were populated earlier with empty provider).
+    if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -522,8 +525,8 @@ function padDialogOk(keepOpen) {
             if (adjAction.type) btn.widget_numericrocker_action = adjAction;
         }
         if (wtype === 'list') {
-            var listAction = actionEditorBuild('pad-edit-list-select');
-            if (listAction.type) btn.widget_list_action = listAction;
+            const listProvider = document.getElementById('pad-edit-list-provider-id').value.trim();
+            if (listProvider) btn.widget_data_binding = listProvider;
         }
     }
 

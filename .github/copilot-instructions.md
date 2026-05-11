@@ -15,7 +15,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Custom Fonts** (`HAS_CUSTOM_FONTS`): 3 font families (DSEG7, Bebas, Doto) × 7 sizes. LabelStyle DSL: `font_family:dseg7`, `font_family:bebas`, `font_family:doto`.
 - **Widget Subsystem** (`HAS_DISPLAY`): Extensible widget types — gauge, sparkline, bar chart, table, rocker, numeric rocker, list. Each widget renders inside a button.
 - **Data Stream Registry** (`HAS_DISPLAY && HAS_MQTT`): Demand-driven per-widget ring buffers in PSRAM for history-based widgets.
-- **Binding Template Engine** (`HAS_MQTT`): Scheme-extensible `[scheme:params]` token resolver. Schemes: `mqtt`, `health`, `time`, `expr`, `pad`, `timer`. Pipe fallback: `[scheme:params|fallback]`. Called only from LVGL task.
+- **Binding Template Engine** (`HAS_MQTT`): Scheme-extensible `[scheme:params]` token resolver. Schemes: `mqtt`, `health`, `time`, `expr`, `pad`, `timer`, `list`. Pipe fallback: `[scheme:params|fallback]`. Called only from LVGL task.
 - **Timer Subsystem** (`HAS_DISPLAY`): 3 independent count-up/down timers with expire actions, `[timer:N]` binding scheme, REST API.
 - **Screen Saver** (`HAS_DISPLAY`): Inactivity-based display sleep with fade animation, per-screen wake redirect, panel hardware sleep (`displaySleep()`/`displayWake()` on `DisplayDriver`), and LVGL task throttle (`SCREENSAVER_SLEEP_TICK_MS`).
 - **MQTT Screen Control** (`HAS_MQTT && HAS_DISPLAY`): HA `select` entity for remote screen navigation.
@@ -33,7 +33,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Web Portal**: Multi-page async web server with captive portal. Board variants can define `PORTAL_PRIMARY_*` flags in `board_overrides.h` to promote a custom nav category to first position with startup routing and a welcome hero card. See `.github/instructions/web-portal.instructions.md` and `docs/dev/web-portal.md`.
 - **Pad Config**: `pad_config.cpp/h` — JSON parser for pad/button/widget configuration, `LabelStyle` DSL, `ButtonAction` types, `ButtonDefaults` cascade, `template_pad` inheritance.
 - **Pad Building Blocks** (`HAS_DISPLAY`): Registration-based catalog of pre-configured button groups. `pad_block.h/cpp` — `pad_block_register()` API for feature branches to add blocks independently. REST endpoint `GET /api/pad/blocks`.
-- **ListProvider Registry** (`HAS_DISPLAY`): Pluggable data source registry for list widgets. `list_provider.h/cpp` — `list_provider_register()` / `list_provider_find()`. Feature branches register providers from their own init functions.
+- **ListProvider Registry** (`HAS_DISPLAY`): Pluggable data source registry for list widgets. `list_provider.h/cpp` — `list_provider_register()` / `list_provider_find()`. Feature branches register providers from their own init functions. Built-in provider: `pads` (lists configured pads with custom names, item IDs `pad_N`).
 - **Pad Layout**: `pad_layout.h` — Layout computation, UI scale tiers, label style resolver helpers.
 - **Output**: Compiled binaries in `./build/<board-name>/`
 
@@ -124,7 +124,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution — they work from an
 - `tests/test_health_table_builder.cpp` — Health table builder tests
 - `tests/test_wifi_reconnect.cpp` — WiFi reconnect backoff and tier escalation tests
 - `tests/test_timer_format.cpp` — Timer format output tests
-- `tests/test_list_provider.cpp` — ListProvider registry and {id} substitution tests
+- `tests/test_list_provider.cpp` — ListProvider registry and [list:provider_id.selected] binding tests
 
 ### Documentation
 

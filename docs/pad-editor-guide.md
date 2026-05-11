@@ -567,26 +567,30 @@ Tapping the inner-right zone sends an "Adjust Countdown" action with value `1` (
 
 The list widget renders a scrollable, tappable list of items inside a button. Unlike other widgets that visualize MQTT data, the list gets its items from a registered **data provider** — a pluggable module that supplies a set of labeled items at screen load time.
 
-Tapping a list item dispatches a configurable action template with `{id}` substitution — the same pattern as the numeric rocker's `{step}`. This makes the widget fully generic: the provider supplies data, the action template defines behavior.
+Tapping a list item dispatches the button's configured **Tap Actions** with `[list:provider_id.selected]` binding resolution — the binding engine resolves the selected item's ID at dispatch time. Long-pressing dispatches **Long-Press Actions** the same way. This makes the widget fully generic: the provider supplies data, the button's action configuration defines behavior.
 
 **How it works:**
 
 - The **Data Binding** field specifies the provider ID (not an MQTT topic). For example, `shutter_tests` or `brew_definitions`.
 - On screen enter, the widget calls the provider to get the current list of items.
-- Each item has an **ID** (used in action substitution) and a **label** (displayed in the list).
-- Tapping an item copies the action template, replaces all `{id}` occurrences with the item's ID, and dispatches the action.
-- If no action is configured, tapping is a no-op.
+- Each item has an **ID** (used in binding resolution) and a **label** (displayed in the list).
+- Tapping an item sets the selected ID for that provider, then dispatches the button's tap actions through the binding engine which resolves `[list:provider_id.selected]` to the item's ID.
+- Long-pressing an item dispatches the button's long-press actions (with the same binding resolution).
+- If no tap action is configured, tapping is a no-op.
 - If the provider ID is not found (e.g., feature module not compiled), the widget shows "Source not found".
 - If the provider returns 0 items, the widget shows "No items".
+
+> **Note:** Tap and long-press events are handled by the list items themselves and do not propagate up to the button — only one of "tap an item" or "long-press an item" fires per interaction. The button's own tap/long-press handlers are not invoked separately when the list widget is active; the widget reuses the same action slots.
 
 **Configuration:**
 
 | Setting | Description |
 |---------|-------------|
 | **Data Binding** | The provider ID string (e.g., `shutter_tests`). Not an MQTT topic |
-| **Select Action** | The action template dispatched when a list item is tapped. Use `{id}` as a placeholder for the selected item's ID |
+| **Select Action** (tap) | The button's normal tap action(s), dispatched when a list item is tapped. Use `[list:provider_id.selected]` as the screen target to navigate to the selected item |
+| **Long-Press Action** | Optional long-press action(s), dispatched on item long-press |
 
-The `{id}` placeholder is replaced in `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value` fields.
+The `[list:provider_id.selected]` binding token is scoped per provider — each list widget tracks its own selected item independently. The token is resolved in all action fields including `screen_id`, `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value`.
 
 **Example — Select a test script:**
 
@@ -594,9 +598,25 @@ The `{id}` placeholder is replaced in `mqtt_payload`, `key_sequence`, `volume_va
 |---------|-------|
 | Widget | List |
 | Data Binding | `shutter_tests` |
-| Select Action | Type: `mqtt`, Topic: `macropad/test/start`, Payload: `{id}` |
+| Tap Action | Type: `mqtt`, Topic: `macropad/test/start`, Payload: `[list:shutter_tests.selected]` |
 
 When the user taps "Full Range Test" (id: `full-range`), the widget dispatches an MQTT publish to `macropad/test/start` with payload `full-range`.
+
+**Built-in providers:**
+
+| Provider ID | Title | Description |
+|-------------|-------|-------------|
+| `pads` | Select Pad | Lists all configured pads with their custom names. Item IDs are `pad_0`, `pad_1`, etc. Useful for building a pad navigation menu |
+
+**Example — Pad navigation list:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | List |
+| Data Binding | `pads` |
+| Tap Action | Type: `screen`, Screen: `[list:pads.selected]` |
+
+Tapping "Pad 2: Home Assistant" (id: `pad_2`) navigates to that pad screen.
 
 > **Tip:** The list refreshes its content each time the screen is entered. No reboot needed to pick up new items added by the provider.
 

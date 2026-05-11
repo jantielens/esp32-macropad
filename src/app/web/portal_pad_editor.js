@@ -83,12 +83,6 @@ function padInit() {
         nrAdjContainer.innerHTML = actionEditorHTML('pad-edit-nr-adjust', 'Adjustment Action', { showBleHint: true, showKeyHelp: true });
     }
 
-    // Generate list widget select action editor
-    var listSelContainer = document.getElementById('pad-edit-list-select-container');
-    if (listSelContainer) {
-        listSelContainer.innerHTML = actionEditorHTML('pad-edit-list-select', 'Select Action', { showBleHint: true, showKeyHelp: true });
-    }
-
     document.getElementById('pad-page-select').addEventListener('change', (e) => {
         const newPage = parseInt(e.target.value);
         if (padDirty) {
@@ -404,6 +398,7 @@ function padWidgetTypeChanged() {
         var axSel = document.getElementById('pad-edit-rocker-axis');
         if (axSel) axis = axSel.value;
     }
+    var isList = (wtype === 'list');
     for (var ai = 0; ai < MAX_ACTIONS; ai++) {
         var tapLbl = document.querySelector('label[for="pad-edit-action-' + ai + '-type"]');
         var lpLbl = document.querySelector('label[for="pad-edit-lp-action-' + ai + '-type"]');
@@ -411,6 +406,8 @@ function padWidgetTypeChanged() {
             if (isRocker) {
                 var zoneA = (axis === 'horizontal') ? 'Left' : 'Up';
                 tapLbl.textContent = ai === 0 ? zoneA + ' Action' : zoneA + ' Action ' + (ai + 1);
+            } else if (isList) {
+                tapLbl.textContent = ai === 0 ? 'Select Action' : 'Select Action ' + (ai + 1);
             } else {
                 tapLbl.textContent = ai === 0 ? 'Tap Action' : 'Tap Action ' + (ai + 1);
             }
@@ -444,6 +441,8 @@ function padWidgetTypeChanged() {
     // Numeric rocker: show adjustment action editor in widget settings
     var adjSection = document.getElementById('pad-edit-numericrocker-adjust-section');
     if (adjSection) adjSection.style.display = isNumericRocker ? '' : 'none';
+    // List widget: inject/remove synthetic [list:provider.selected] option in tap/lp dropdowns
+    if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
 }
 
 async function padLoadPage(page) {

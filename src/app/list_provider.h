@@ -26,8 +26,4 @@ struct ListProvider {
 bool list_provider_register(const ListProvider* provider);
 const ListProvider* list_provider_find(const char* id);
 
-// Replace all "{id}" occurrences in a char buffer with the given id string.
-// Stops substitution if the result would overflow field_size.
-void list_substitute_id_in_field(char* field, size_t field_size, const char* id);
-
 #endif // HAS_DISPLAY

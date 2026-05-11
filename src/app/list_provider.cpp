@@ -25,18 +25,4 @@ const ListProvider* list_provider_find(const char* id) {
     return nullptr;
 }
 
-void list_substitute_id_in_field(char* field, size_t field_size, const char* id) {
-    const char* token = "{id}";
-    const size_t token_len = 4;
-    size_t repl_len = strlen(id);
-    char* pos = strstr(field, token);
-    while (pos) {
-        size_t tail_len = strlen(pos + token_len);
-        if ((size_t)(pos - field) + repl_len + tail_len >= field_size) return;
-        memmove(pos + repl_len, pos + token_len, tail_len + 1);
-        memcpy(pos, id, repl_len);
-        pos = strstr(pos + repl_len, token);
-    }
-}
-
 #endif // HAS_DISPLAY

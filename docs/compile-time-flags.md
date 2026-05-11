@@ -318,6 +318,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
+  - src/app/list_provider.cpp
+  - src/app/list_provider.h
   - src/app/lv_conf.h
   - src/app/message_bubble.cpp
   - src/app/message_bubble.h
@@ -357,6 +359,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/gauge_widget.cpp
+  - src/app/widgets/list_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
   - src/app/widgets/sparkline_widget.cpp

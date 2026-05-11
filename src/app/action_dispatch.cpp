@@ -39,6 +39,7 @@ static uint8_t compute_clamped_percent(const char* value_str, uint8_t current, b
 // IMPORTANT: the field list here must exactly match the fields in resolve_action_bindings below.
 static bool action_has_any_binding(const ButtonAction& act) {
     const char* fields[] = {
+        act.screen_id,
         act.mqtt_topic, act.mqtt_payload, act.key_sequence, act.beep_pattern,
         act.volume_value, act.brightness_value, act.timer_value,
         act.notify_text, act.notify_duration_ms,
@@ -50,8 +51,8 @@ static bool action_has_any_binding(const ButtonAction& act) {
     return false;
 }
 
-// Resolve binding templates in all data/content fields of a ButtonAction.
-// Structural fields (type, screen_id, commands, modes, etc.) are excluded.
+// Resolve binding templates in all resolvable fields of a ButtonAction.
+// Structural fields (type, commands, modes, etc.) are excluded.
 // IMPORTANT: the field list here must exactly match the fields in action_has_any_binding above.
 static void resolve_action_bindings(ButtonAction& act) {
     auto try_resolve = [](char* field, size_t len) {
@@ -62,6 +63,7 @@ static void resolve_action_bindings(ButtonAction& act) {
         }
     };
 
+    try_resolve(act.screen_id,           sizeof(act.screen_id));
     try_resolve(act.mqtt_topic,          sizeof(act.mqtt_topic));
     try_resolve(act.mqtt_payload,        sizeof(act.mqtt_payload));
     try_resolve(act.key_sequence,        sizeof(act.key_sequence));

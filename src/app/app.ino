@@ -30,6 +30,8 @@
 #include "sound_store.h"
 #include "boot_actions.h"
 #include "pad_block.h"
+#include "list_provider.h"
+#include "list_binding.h"
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "timer_config.h"
@@ -291,6 +293,10 @@ void setup()
 	// Register core building blocks (feature branches add their own via pad_block_register)
 	pad_block_init();
 
+	// Register built-in list providers
+	void list_provider_pads_init();
+	list_provider_pads_init();
+
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
@@ -368,6 +374,7 @@ void setup()
 	expr_binding_init();
 	pad_binding_init();
 	timer_binding_init();
+	list_binding_init();
 	timer_config_init();
 	#endif
 

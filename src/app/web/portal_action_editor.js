@@ -203,6 +203,19 @@ function actionEditorTypeChanged(prefix) {
     var beepGrp = document.getElementById(prefix + '-beep-group');
     var soundGrp = document.getElementById(prefix + '-sound-group');
     if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
+    // List widget: inject synthetic "Selected … Item" option in screen dropdown
+    if (type === 'screen') {
+        listInjectSyntheticScreenOption(prefix);
+        // Re-apply pending target value (deferred when option didn't exist).
+        // Only clear pending if the value was actually applied — otherwise the
+        // option may be injected later (after widget type / provider id is set).
+        var tgt = document.getElementById(prefix + '-target');
+        if (tgt && tgt.hasAttribute('data-pending-value')) {
+            var pv = tgt.getAttribute('data-pending-value');
+            tgt.value = pv;
+            if (tgt.value === pv) tgt.removeAttribute('data-pending-value');
+        }
+    }
     if (mqttGrp) mqttGrp.style.display = (type === 'mqtt') ? '' : 'none';
     if (keyGrp) keyGrp.style.display = (type === 'key') ? '' : 'none';
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
@@ -292,7 +305,12 @@ function actionEditorLoad(prefix, action) {
     el = document.getElementById(prefix + '-target');
     if (el) {
         el.value = action.target || '';
-        if (el.selectedIndex < 0) el.value = '';
+        // If the option doesn't exist (e.g., synthetic [list:…] not yet injected),
+        // defer the value until the option is added.
+        if (action.target && el.value !== action.target) {
+            el.setAttribute('data-pending-value', action.target);
+            el.value = '';
+        }
     }
     el = document.getElementById(prefix + '-topic');
     if (el) el.value = action.topic || '';
@@ -455,6 +473,61 @@ function actionEditorBuild(prefix) {
         }
     }
     return act;
+}
+
+// Inject a synthetic "Selected {Title} Item" option into a screen target dropdown.
+// Only injects when the current widget type is "list" and a provider ID is set.
+function listInjectSyntheticScreenOption(prefix) {
+    var sel = document.getElementById(prefix + '-target');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    // Capture the current value so we can restore it after removing the old
+    // synthetic option (which may itself be the currently selected option,
+    // since removing a selected <option> resets the dropdown to the first item).
+    var prevValue = sel.value;
+    // Helper: restore the previous value if it still maps to an existing option.
+    var restorePrev = function() {
+        if (prevValue && sel.value !== prevValue) sel.value = prevValue;
+    };
+    // Remove any previously injected synthetic option
+    var existing = sel.querySelector('option[data-synthetic]');
+    if (existing) existing.remove();
+    // Only inject for list widget with a provider ID
+    var wtEl = document.getElementById('pad-edit-widget-type');
+    var provInput = document.getElementById('pad-edit-list-provider-id');
+    var provId = provInput ? provInput.value.trim() : '';
+    if (!wtEl || wtEl.value !== 'list' || !provId) {
+        restorePrev();
+        return;
+    }
+    var title = provId.charAt(0).toUpperCase() + provId.slice(1);
+    var opt = document.createElement('option');
+    opt.value = '[list:' + provId + '.selected]';
+    opt.textContent = 'Selected ' + title + ' Item';
+    opt.setAttribute('data-synthetic', '1');
+    // Insert after "(none)" option
+    if (sel.options.length > 1) {
+        sel.insertBefore(opt, sel.options[1]);
+    } else {
+        sel.appendChild(opt);
+    }
+    // Re-apply pending value if it matches the newly injected synthetic option
+    if (sel.hasAttribute('data-pending-value') &&
+        sel.getAttribute('data-pending-value') === opt.value) {
+        sel.value = opt.value;
+        sel.removeAttribute('data-pending-value');
+    } else {
+        // Restore the previous selection (may be the just-injected synthetic option)
+        restorePrev();
+    }
+}
+
+// Refresh synthetic options in all tap and long-press action screen dropdowns.
+// Called when widget type changes to/from "list" or when provider ID changes.
+function listRefreshSyntheticOptions() {
+    for (var i = 0; i < (typeof MAX_ACTIONS !== 'undefined' ? MAX_ACTIONS : 3); i++) {
+        listInjectSyntheticScreenOption('pad-edit-action-' + i);
+        listInjectSyntheticScreenOption('pad-edit-lp-action-' + i);
+    }
 }
 
 // Populate the screen target dropdown(s) for one or more action editor prefixes.

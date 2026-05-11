@@ -1,11 +1,13 @@
 // ============================================================================
-// Unit tests for ListProvider registry and {id} substitution
+// Unit tests for ListProvider registry and [list:provider_id.selected] binding
 // ============================================================================
 
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include "list_provider.h"
+#include "list_binding.h"
+#include "binding_template.h"
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -120,59 +122,70 @@ TEST(register_null_returns_false) {
 }
 
 // ============================================================================
-// {id} Substitution Tests
+// [list:provider_id.selected] Binding Tests
 // ============================================================================
 
-TEST(substitute_simple) {
-    char buf[64] = "value={id}";
-    list_substitute_id_in_field(buf, sizeof(buf), "test-1");
-    ASSERT_STR(buf, "value=test-1");
+TEST(binding_resolve_scoped) {
+    list_binding_init();
+    list_binding_set_selected("pads", "pad_3");
+    char buf[64];
+    bool ok = binding_template_resolve("[list:pads.selected]", buf, sizeof(buf));
+    ASSERT_TRUE(ok);
+    ASSERT_STR(buf, "pad_3");
 }
 
-TEST(substitute_multiple) {
-    char buf[64] = "{id}:{id}";
-    list_substitute_id_in_field(buf, sizeof(buf), "x");
-    ASSERT_STR(buf, "x:x");
+TEST(binding_resolve_different_provider) {
+    list_binding_set_selected("shutter_tests", "test_7");
+    char buf[64];
+    bool ok = binding_template_resolve("[list:shutter_tests.selected]", buf, sizeof(buf));
+    ASSERT_TRUE(ok);
+    ASSERT_STR(buf, "test_7");
 }
 
-TEST(substitute_no_token) {
-    char buf[64] = "no token here";
-    list_substitute_id_in_field(buf, sizeof(buf), "anything");
-    ASSERT_STR(buf, "no token here");
+TEST(binding_providers_independent) {
+    // "pads" should still have its own selection, not affected by "shutter_tests"
+    char buf[64];
+    bool ok = binding_template_resolve("[list:pads.selected]", buf, sizeof(buf));
+    ASSERT_TRUE(ok);
+    ASSERT_STR(buf, "pad_3");
 }
 
-TEST(substitute_empty_id) {
-    char buf[64] = "prefix-{id}-suffix";
-    list_substitute_id_in_field(buf, sizeof(buf), "");
-    ASSERT_STR(buf, "prefix--suffix");
+TEST(binding_resolve_empty_returns_placeholder) {
+    list_binding_set_selected("empty_prov", "");
+    char buf[64];
+    binding_template_resolve("[list:empty_prov.selected]", buf, sizeof(buf));
+    ASSERT_STR(buf, "---");
 }
 
-TEST(substitute_longer_id) {
-    char buf[64] = "id={id}!";
-    list_substitute_id_in_field(buf, sizeof(buf), "long-identifier");
-    ASSERT_STR(buf, "id=long-identifier!");
+TEST(binding_resolve_null_item_returns_placeholder) {
+    list_binding_set_selected("null_prov", nullptr);
+    char buf[64];
+    binding_template_resolve("[list:null_prov.selected]", buf, sizeof(buf));
+    ASSERT_STR(buf, "---");
 }
 
-TEST(substitute_overflow_protection) {
-    char buf[16] = "{id}";
-    // "abcdefghijklmnop" is 16 chars — with null terminator would need 17 bytes,
-    // which exceeds buf size. Substitution should be skipped.
-    list_substitute_id_in_field(buf, sizeof(buf), "abcdefghijklmnop");
-    // Original should be preserved since replacement doesn't fit
-    ASSERT_STR(buf, "{id}");
+TEST(binding_unknown_provider_returns_placeholder) {
+    char buf[64];
+    binding_template_resolve("[list:unknown.selected]", buf, sizeof(buf));
+    ASSERT_STR(buf, "---");
 }
 
-TEST(substitute_exact_fit) {
-    char buf[16] = "{id}";
-    // "123456789ab" is 11 chars. Replacing 4-char token: need 11+1=12 bytes. Fits in 16.
-    list_substitute_id_in_field(buf, sizeof(buf), "123456789ab");
-    ASSERT_STR(buf, "123456789ab");
+TEST(binding_no_dot_returns_placeholder) {
+    char buf[64];
+    binding_template_resolve("[list:selected]", buf, sizeof(buf));
+    ASSERT_STR(buf, "---");
 }
 
-TEST(substitute_in_middle) {
-    char buf[64] = "start-{id}-end";
-    list_substitute_id_in_field(buf, sizeof(buf), "MID");
-    ASSERT_STR(buf, "start-MID-end");
+TEST(binding_bad_key_returns_placeholder) {
+    char buf[64];
+    binding_template_resolve("[list:pads.count]", buf, sizeof(buf));
+    ASSERT_STR(buf, "---");
+}
+
+TEST(binding_in_template) {
+    char buf[64];
+    binding_template_resolve("go to [list:pads.selected]!", buf, sizeof(buf));
+    ASSERT_STR(buf, "go to pad_3!");
 }
 
 // ============================================================================
@@ -188,15 +201,16 @@ int main() {
     RUN(register_full);
     RUN(register_null_returns_false);
 
-    printf("\n{id} substitution tests:\n");
-    RUN(substitute_simple);
-    RUN(substitute_multiple);
-    RUN(substitute_no_token);
-    RUN(substitute_empty_id);
-    RUN(substitute_longer_id);
-    RUN(substitute_overflow_protection);
-    RUN(substitute_exact_fit);
-    RUN(substitute_in_middle);
+    printf("\n[list:provider_id.selected] binding tests:\n");
+    RUN(binding_resolve_scoped);
+    RUN(binding_resolve_different_provider);
+    RUN(binding_providers_independent);
+    RUN(binding_resolve_empty_returns_placeholder);
+    RUN(binding_resolve_null_item_returns_placeholder);
+    RUN(binding_unknown_provider_returns_placeholder);
+    RUN(binding_no_dot_returns_placeholder);
+    RUN(binding_bad_key_returns_placeholder);
+    RUN(binding_in_template);
 
     printf("\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;

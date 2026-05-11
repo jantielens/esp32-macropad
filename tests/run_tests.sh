@@ -161,10 +161,12 @@ echo
 
 echo "=== Building unit tests: list_provider ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
-    -include tests/board_config.h \
+    -include tests/log_manager.h -include tests/board_config.h \
     -I src/app \
     tests/test_list_provider.cpp \
     src/app/list_provider.cpp \
+    src/app/list_binding.cpp \
+    src/app/binding_template.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_list_provider
 
