@@ -15,5 +15,7 @@
 #include "widgets/sparkline_widget.cpp"
 #include "widgets/table_widget.cpp"
 #include "widgets/rocker_widget.cpp"
+#include "widgets/numericrocker_widget.cpp"
+#include "widgets/list_widget.cpp"
 
 #endif // HAS_DISPLAY

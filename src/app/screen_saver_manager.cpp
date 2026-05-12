@@ -15,11 +15,13 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
+#include <freertos/task.h>
+#include <atomic>
 
 namespace {
 
 DeviceConfig* g_config = nullptr;
-ScreenSaverState g_state = ScreenSaverState::Awake;
+std::atomic<ScreenSaverState> g_state{ScreenSaverState::Awake};
 
 // Sleep overlay: opaque black layer on lv_layer_top() while asleep.
 // Prevents stale content from showing through on displays without true backlight off.
@@ -52,14 +54,25 @@ static uint8_t g_pixel_shift_counter = 0;
 
 // Centralised state-entry helpers so sleep/wake side-effects live in one place.
 static void enter_asleep() {
-		g_state = ScreenSaverState::Asleep;
 		g_pixel_shift_counter = (g_pixel_shift_counter + 34) % 81;
 		create_sleep_overlay();
+
+		// Send panel sleep commands (Display Off + Sleep In) where supported.
+		// Lock serializes with the LVGL flush path on the display bus.
+		if (displayManager && displayManager->getDriver()) {
+				displayManager->lock();
+				displayManager->getDriver()->displaySleep();
+				displayManager->unlock();
+		}
 
 		// Navigate to wake screen while display is dark (invisible to user).
 		if (displayManager) {
 				displayManager->handleSleepScreenRedirect();
 		}
+
+		// Set state last so the LVGL task doesn't throttle until all
+		// transition work (overlay, panel sleep, redirect) is complete.
+		g_state = ScreenSaverState::Asleep;
 }
 
 static void enter_awake() {
@@ -83,6 +96,8 @@ volatile bool g_pending_wake = false;
 volatile bool g_pending_sleep = false;
 volatile bool g_pending_activity = false;
 volatile bool g_pending_activity_wake = false;
+volatile bool g_pending_brightness = false;
+volatile uint8_t g_pending_brightness_value = 0;
 
 #if HAS_TOUCH
 bool g_prev_touch = false;
@@ -178,21 +193,33 @@ static void request_sleep() {
 		portEXIT_CRITICAL(&g_mux);
 }
 
+static void request_brightness(uint8_t brightness) {
+		portENTER_CRITICAL(&g_mux);
+		g_pending_brightness = true;
+		g_pending_brightness_value = brightness;
+		portEXIT_CRITICAL(&g_mux);
+}
+
 static void handle_pending_requests() {
 		bool doWake = false;
 		bool doSleep = false;
 		bool doActivity = false;
 		bool activityWake = false;
+		bool doBrightness = false;
+		uint8_t brightnessValue = 0;
 
 		portENTER_CRITICAL(&g_mux);
 		doWake = g_pending_wake;
 		doSleep = g_pending_sleep;
 		doActivity = g_pending_activity;
 		activityWake = g_pending_activity_wake;
+		doBrightness = g_pending_brightness;
+		brightnessValue = g_pending_brightness_value;
 		g_pending_wake = false;
 		g_pending_sleep = false;
 		g_pending_activity = false;
 		g_pending_activity_wake = false;
+		g_pending_brightness = false;
 		portEXIT_CRITICAL(&g_mux);
 
 		if (doActivity) {
@@ -200,6 +227,21 @@ static void handle_pending_requests() {
 				// Only escalate "activity" into a wake when we're actually asleep/dimming.
 				// When awake, touches should flow to LVGL without causing redundant wakes.
 				if (activityWake && (g_state == ScreenSaverState::Asleep || g_state == ScreenSaverState::FadingOut)) {
+						doWake = true;
+				}
+		}
+
+		if (doBrightness) {
+				// Update the in-RAM config so wake target stays consistent.
+				if (g_config) g_config->backlight_brightness = brightnessValue;
+
+				if (g_state == ScreenSaverState::Awake) {
+						g_current_brightness = brightnessValue;
+						g_target_brightness = brightnessValue;
+						apply_brightness(brightnessValue);
+						g_last_activity_ms = millis();
+				} else {
+						// Config updated; wake will fade to the new target.
 						doWake = true;
 				}
 		}
@@ -248,6 +290,24 @@ static void handle_pending_requests() {
 						touch_manager_suppress_lvgl_input(windowMs);
 				}
 				#endif
+
+				// Wake panel in two phases so the mandatory 120 ms DCS delay between
+				// Sleep Out (0x11) and Display On (0x29) does not block the display lock.
+				// Holding the lock across delay() would stall LVGL flush for 120 ms.
+				if (g_state == ScreenSaverState::Asleep) {
+						if (displayManager && displayManager->getDriver()) {
+								DisplayDriver* drv = displayManager->getDriver();
+								displayManager->lock();
+								drv->displayWakeSleepOut();
+								displayManager->unlock();
+								// DCS spec: ≥120 ms between Sleep Out and Display On.
+								// vTaskDelay yields to other tasks during the wait.
+								vTaskDelay(pdMS_TO_TICKS(120));
+								displayManager->lock();
+								drv->displayWakeDisplayOn();
+								displayManager->unlock();
+						}
+				}
 
 				start_fade(ScreenSaverState::FadingIn, from, target, fade_in_ms());
 				LOGI("SAVER", "Wake requested (pixel shift dx=%d dy=%d)", dx, dy);
@@ -409,8 +469,17 @@ void screen_saver_manager_wake() {
 		request_wake();
 }
 
+void screen_saver_manager_set_brightness(uint8_t brightness) {
+		if (brightness > 100) brightness = 100;
+		request_brightness(brightness);
+}
+
 bool screen_saver_manager_is_asleep() {
 		return g_state == ScreenSaverState::Asleep || g_state == ScreenSaverState::FadingOut;
+}
+
+bool screen_saver_manager_is_fully_asleep() {
+		return g_state == ScreenSaverState::Asleep;
 }
 
 ScreenSaverStatus screen_saver_manager_get_status() {

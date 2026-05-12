@@ -14,8 +14,8 @@ function actionEditorHTML(prefix, label, opts) {
     opts = opts || {};
     var h = '';
     h += '<div class="form-group">';
-    if (label) h += '<label for="' + prefix + '-type">' + label + '</label>';
-    h += '<select id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
+    if (label) h += '<label class="form-label" for="' + prefix + '-type">' + label + '</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">'; 
     h += '<option value="">(none)</option>';
     h += '<option value="screen">Navigate to Screen</option>';
     h += '<option value="back">Navigate Back</option>';
@@ -24,8 +24,6 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="ble_pair">Start BLE Pairing</option>';
     h += '<option value="beep">Play Beep</option>';
     h += '<option value="sound">Play Sound</option>';
-    h += '<option value="volume">Set Volume</option>';
-    h += '<option value="brightness">Set Brightness</option>';
     h += '<option value="timer">Timer Control</option>';
     h += '<option value="notify">Show Notification</option>';
     h += '<option value="system">System Command</option>';
@@ -37,86 +35,57 @@ function actionEditorHTML(prefix, label, opts) {
     // Screen target
     h += '<div id="' + prefix + '-screen-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-target">Target Screen</label>';
-    h += '<select id="' + prefix + '-target"><option value="">(none)</option></select>';
+    h += '<label class="form-label" for="' + prefix + '-target">Target Screen</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-target"><option value="">(none)</option></select>';
     h += '</div></div>';
     // MQTT
     h += '<div id="' + prefix + '-mqtt-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-topic">MQTT Topic</label>';
-    h += '<input type="text" id="' + prefix + '-topic" maxlength="127" placeholder="e.g. home/light/toggle">';
+    h += '<label class="form-label" for="' + prefix + '-topic">MQTT Topic <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-topic" maxlength="127" placeholder="e.g. home/light/toggle">';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-payload">MQTT Payload</label>';
-    h += '<input type="text" id="' + prefix + '-payload" maxlength="127" placeholder="e.g. ON">';
+    h += '<label class="form-label" for="' + prefix + '-payload">MQTT Payload <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-payload" maxlength="127" placeholder="e.g. ON or [health:cpu]">';
     h += '</div></div>';
     // Key sequence
     h += '<div id="' + prefix + '-key-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-sequence">Keys to Send</label>';
-    h += '<input type="text" id="' + prefix + '-sequence" maxlength="255" placeholder=\'e.g. ctrl+c, "hello", 200ms\'>';
+    h += '<label class="form-label" for="' + prefix + '-sequence">Keys to Send <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sequence" maxlength="255" placeholder=\'e.g. ctrl+c, "hello", 200ms\'>';
     if (opts.showKeyHelp) {
-        h += '<small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms</small>';
+        h += '<small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms. Supports bindings.</small>';
     }
     h += '</div></div>';
     // Beep
     h += '<div id="' + prefix + '-beep-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-beep-pattern">Beep Pattern</label>';
-    h += '<input type="text" id="' + prefix + '-beep-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200">';
-    h += '<small>Space-separated steps. <b>freq:dur</b> = tone, bare <b>dur</b> = silence gap (ms). E.g. <b>1000:200</b> (single beep), <b>1000:200 100 1000:200</b> (double beep), <b>800:100 50 1200:100</b> (two-tone chirp).</small>';
+    h += '<label class="form-label" for="' + prefix + '-beep-pattern">Beep Pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-beep-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200">';
+    h += '<small>Space-separated steps. <b>freq:dur</b> = tone, bare <b>dur</b> = silence gap (ms). E.g. <b>1000:200</b> (single beep), <b>1000:200 100 1000:200</b> (double beep), <b>800:100 50 1200:100</b> (two-tone chirp). Supports bindings.</small>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-beep-volume">Volume Override (%)</label>';
-    h += '<input type="number" id="' + prefix + '-beep-volume" min="0" max="100" placeholder="(use device volume)">';
+    h += '<label class="form-label" for="' + prefix + '-beep-volume">Volume Override (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-beep-volume" min="0" max="100" placeholder="(use device volume)">';
     h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
     h += '</div></div>';
     // Sound file
     h += '<div id="' + prefix + '-sound-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-sound-file">Sound File</label>';
-    h += '<select id="' + prefix + '-sound-file"><option value="">(none)</option></select>';
+    h += '<label class="form-label" for="' + prefix + '-sound-file">Sound File</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-file"><option value="">(none)</option></select>';
     h += '<small>MP3 files uploaded via the web portal. Upload sounds in Home &rarr; Sound Files.</small>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-sound-volume">Volume Override (%)</label>';
-    h += '<input type="number" id="' + prefix + '-sound-volume" min="0" max="100" placeholder="(use device volume)">';
+    h += '<label class="form-label" for="' + prefix + '-sound-volume">Volume Override (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-sound-volume" min="0" max="100" placeholder="(use device volume)">';
     h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
-    h += '</div></div>';
-    // Volume
-    h += '<div id="' + prefix + '-volume-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-volume-mode">Volume Action</label>';
-    h += '<select id="' + prefix + '-volume-mode" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
-    h += '<option value="set">Set to value</option>';
-    h += '<option value="up">Volume Up (+10%)</option>';
-    h += '<option value="down">Volume Down (&minus;10%)</option>';
-    h += '</select>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-volume-value-group">';
-    h += '<label for="' + prefix + '-volume-value">Volume (%)</label>';
-    h += '<input type="number" id="' + prefix + '-volume-value" min="0" max="100" placeholder="e.g. 50">';
-    h += '</div></div>';
-    // Brightness
-    h += '<div id="' + prefix + '-brightness-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-brightness-mode">Brightness Action</label>';
-    h += '<select id="' + prefix + '-brightness-mode" onchange="actionEditorTypeChanged(\'' + prefix + '\')">'; 
-    h += '<option value="set">Set to value</option>';
-    h += '<option value="up">Brightness Up (+10%)</option>';
-    h += '<option value="down">Brightness Down (&minus;10%)</option>';
-    h += '</select>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-brightness-value-group">';
-    h += '<label for="' + prefix + '-brightness-value">Brightness (%)</label>';
-    h += '<input type="number" id="' + prefix + '-brightness-value" min="0" max="100" placeholder="e.g. 50">';
-    h += '<small id="' + prefix + '-brightness-step-hint" style="display:none;">Step size (default 10 if empty).</small>';
     h += '</div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-timer-action">Timer Action</label>';
-    h += '<select id="' + prefix + '-timer-action" onchange="actionEditorTimerChanged(\'' + prefix + '\')">';
+    h += '<label class="form-label" for="' + prefix + '-timer-action">Timer Action</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-timer-action" onchange="actionEditorTimerChanged(\'' + prefix + '\')">'; 
     for (var t = 1; t <= 3; t++) {
         h += '<optgroup label="Timer ' + t + '">';
         h += '<option value="' + t + ':toggle">T' + t + ': Toggle</option>';
@@ -126,27 +95,33 @@ function actionEditorHTML(prefix, label, opts) {
         h += '<option value="' + t + ':resume">T' + t + ': Resume</option>';
         h += '<option value="' + t + ':reset">T' + t + ': Reset</option>';
         h += '<option value="' + t + ':lap">T' + t + ': Lap</option>';
+        h += '<option value="' + t + ':set">T' + t + ': Set Countdown</option>';
         h += '<option value="' + t + ':adjust">T' + t + ': Adjust Countdown</option>';
         h += '</optgroup>';
     }
     h += '</select>';
     h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-set-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-timer-set-sec">Countdown (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-set-sec" placeholder="e.g. 300">';
+    h += '<small>Set the countdown to this many seconds. Supports bindings.</small>';
+    h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-adjust-group" style="display:none;">';
-    h += '<label for="' + prefix + '-timer-adjust-sec">Adjust (seconds)</label>';
-    h += '<input type="number" id="' + prefix + '-timer-adjust-sec" min="-86400" max="86400" placeholder="e.g. 15 or -10">';
-    h += '<small>Positive adds time, negative subtracts. Applied to the countdown preset.</small>';
+    h += '<label class="form-label" for="' + prefix + '-timer-adjust-sec">Adjust (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-adjust-sec" placeholder="e.g. 15, -10, or {step}">';
+    h += '<small>Positive adds time, negative subtracts. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
     h += '</div>';
     h += '</div>';
     // Notify
     h += '<div id="' + prefix + '-notify-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-text">Message <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-notify-text" maxlength="127" placeholder="e.g. Brightness is at 100%">';
+    h += '<label class="form-label" for="' + prefix + '-notify-text">Message <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-notify-text" maxlength="127" placeholder="e.g. Brightness is at 100%">';
     h += '<small>Supports binding templates. Empty = dismiss current notification.</small>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-duration">Duration (ms) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" id="' + prefix + '-notify-duration" value="3000" placeholder="3000">';
+    h += '<label class="form-label" for="' + prefix + '-notify-duration">Duration (ms) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-notify-duration" value="3000" placeholder="3000">';
     h += '<small>0 = persistent (tap to dismiss). Supports bindings.</small>';
     h += '</div>';
     h += '<div class="grid-2col">';
@@ -168,18 +143,18 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<input type="text" id="' + prefix + '-notify-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="Empty = no border"></div>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-opacity">Opacity (%)</label>';
-    h += '<input type="number" id="' + prefix + '-notify-opacity" min="0" max="100" placeholder="85">';
+    h += '<label class="form-label" for="' + prefix + '-notify-opacity">Opacity (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-notify-opacity" min="0" max="100" placeholder="85">';
     h += '</div>';
     h += '</div>';
     h += '<div class="grid-2col">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-font-size">Font Size</label>';
-    h += '<input type="number" id="' + prefix + '-notify-font-size" min="0" max="48" placeholder="0 = auto">';
+    h += '<label class="form-label" for="' + prefix + '-notify-font-size">Font Size</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-notify-font-size" min="0" max="48" placeholder="0 = auto">';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-notify-location">Location</label>';
-    h += '<select id="' + prefix + '-notify-location">';
+    h += '<label class="form-label" for="' + prefix + '-notify-location">Location</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-notify-location">';
     h += '<option value="bottom" selected>Bottom</option>';
     h += '<option value="center">Center</option>';
     h += '<option value="top">Top</option>';
@@ -190,13 +165,29 @@ function actionEditorHTML(prefix, label, opts) {
     // System command
     h += '<div id="' + prefix + '-system-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label for="' + prefix + '-system-command">Command</label>';
-    h += '<select id="' + prefix + '-system-command">';
+    h += '<label class="form-label" for="' + prefix + '-system-command">Command</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-system-command" onchange="actionEditorSystemChanged(\'' + prefix + '\')">'; 
     h += '<option value="reboot">Reboot Device</option>';
     h += '<option value="wifi_reconnect">Reconnect WiFi</option>';
     h += '<option value="screensaver">Enable Screensaver</option>';
+    h += '<option value="volume_set">Set Volume</option>';
+    h += '<option value="volume_adjust">Adjust Volume</option>';
+    h += '<option value="brightness_set">Set Brightness</option>';
+    h += '<option value="brightness_adjust">Adjust Brightness</option>';
     h += '</select>';
-    h += '</div></div>';
+    h += '</div>';
+    // Set value sub-field (volume/brightness set)
+    h += '<div class="form-group" id="' + prefix + '-sys-set-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-sys-set-value" id="' + prefix + '-sys-set-label">Value (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-sys-set-value" min="0" max="100" placeholder="e.g. 50">';
+    h += '</div>';
+    // Adjust value sub-field (volume/brightness adjust)
+    h += '<div class="form-group" id="' + prefix + '-sys-adjust-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-sys-adjust-value" id="' + prefix + '-sys-adjust-label">Adjust (%)</label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sys-adjust-value" placeholder="e.g. 10, -10, or {step}">';
+    h += '<small>Positive increases, negative decreases. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
+    h += '</div>';
+    h += '</div>';
     return h;
 }
 
@@ -211,39 +202,58 @@ function actionEditorTypeChanged(prefix) {
     var bleHint = document.getElementById(prefix + '-ble-hint');
     var beepGrp = document.getElementById(prefix + '-beep-group');
     var soundGrp = document.getElementById(prefix + '-sound-group');
-    var volGrp = document.getElementById(prefix + '-volume-group');
     if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
+    // List widget: inject synthetic "Selected … Item" option in screen dropdown
+    if (type === 'screen') {
+        listInjectSyntheticScreenOption(prefix);
+        // Re-apply pending target value (deferred when option didn't exist).
+        // Only clear pending if the value was actually applied — otherwise the
+        // option may be injected later (after widget type / provider id is set).
+        var tgt = document.getElementById(prefix + '-target');
+        if (tgt && tgt.hasAttribute('data-pending-value')) {
+            var pv = tgt.getAttribute('data-pending-value');
+            tgt.value = pv;
+            if (tgt.value === pv) tgt.removeAttribute('data-pending-value');
+        }
+    }
     if (mqttGrp) mqttGrp.style.display = (type === 'mqtt') ? '' : 'none';
     if (keyGrp) keyGrp.style.display = (type === 'key') ? '' : 'none';
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
     if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
     if (soundGrp) soundGrp.style.display = (type === 'sound') ? '' : 'none';
-    if (volGrp) volGrp.style.display = (type === 'volume') ? '' : 'none';
-    var brightGrp = document.getElementById(prefix + '-brightness-group');
-    if (brightGrp) brightGrp.style.display = (type === 'brightness') ? '' : 'none';
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     var notifyGrp = document.getElementById(prefix + '-notify-group');
     if (notifyGrp) notifyGrp.style.display = (type === 'notify') ? '' : 'none';
     var systemGrp = document.getElementById(prefix + '-system-group');
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
-    if (type === 'notify') actionEditorInitNotifyBindings(prefix);
+    if (['notify', 'mqtt', 'key', 'beep', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
-    // Show/hide volume value field depending on mode
-    if (type === 'volume') {
-        var modeEl = document.getElementById(prefix + '-volume-mode');
-        var valGrp = document.getElementById(prefix + '-volume-value-group');
-        if (modeEl && valGrp) valGrp.style.display = (modeEl.value === 'set') ? '' : 'none';
+    if (type === 'system') actionEditorSystemChanged(prefix);
+}
+
+// Show/hide system command sub-fields based on the command dropdown.
+function actionEditorSystemChanged(prefix) {
+    var sel = document.getElementById(prefix + '-system-command');
+    if (!sel) return;
+    var cmd = sel.value;
+    var setGrp = document.getElementById(prefix + '-sys-set-group');
+    var adjustGrp = document.getElementById(prefix + '-sys-adjust-group');
+    var setLabel = document.getElementById(prefix + '-sys-set-label');
+    var setInput = document.getElementById(prefix + '-sys-set-value');
+    var adjustLabel = document.getElementById(prefix + '-sys-adjust-label');
+    var isSet = (cmd === 'volume_set' || cmd === 'brightness_set');
+    var isAdjust = (cmd === 'volume_adjust' || cmd === 'brightness_adjust');
+    if (setGrp) setGrp.style.display = isSet ? '' : 'none';
+    if (adjustGrp) adjustGrp.style.display = isAdjust ? '' : 'none';
+    if (isSet) {
+        var isBright = (cmd === 'brightness_set');
+        if (setInput) setInput.min = isBright ? '5' : '0';
+        if (setLabel) setLabel.textContent = isBright ? 'Brightness (%)' : 'Volume (%)';
     }
-    // Show/hide brightness value field and step hint depending on mode
-    if (type === 'brightness') {
-        var bModeEl = document.getElementById(prefix + '-brightness-mode');
-        var bValGrp = document.getElementById(prefix + '-brightness-value-group');
-        var bStepHint = document.getElementById(prefix + '-brightness-step-hint');
-        if (bModeEl && bValGrp) {
-            bValGrp.style.display = '';
-            if (bStepHint) bStepHint.style.display = (bModeEl.value !== 'set') ? '' : 'none';
-        }
+    if (isAdjust) {
+        var isBright = (cmd === 'brightness_adjust');
+        if (adjustLabel) adjustLabel.textContent = isBright ? 'Adjust Brightness (%)' : 'Adjust Volume (%)';
     }
 }
 
@@ -254,25 +264,34 @@ function actionEditorTimerChanged(prefix) {
     var val = sel.value; // e.g. "1:toggle", "2:adjust"
     var parts = val.split(':');
     var cmd = parts[1] || '';
+    var setGrp = document.getElementById(prefix + '-timer-set-group');
     var adjustGrp = document.getElementById(prefix + '-timer-adjust-group');
+    if (setGrp) setGrp.style.display = (cmd === 'set') ? '' : 'none';
     if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
 }
 
-// Initialize bindable-color pickers and binding font toggles for notify fields.
+// Suffixes for binding-capable action text inputs (shared with binding validator).
+var _ACTION_BIND_SUFFIXES = [
+    '-notify-text', '-notify-duration', '-topic', '-payload', '-sequence',
+    '-beep-pattern', '-timer-set-sec', '-timer-adjust-sec'
+];
+
+// Initialize bindable-color pickers and binding font toggles for all bindable fields.
 // Idempotent — safe to call on every type-change.
-function actionEditorInitNotifyBindings(prefix) {
-    // Init color pickers
+function actionEditorInitBindings(prefix) {
+    // Init color pickers (notify only)
     ['-notify-text-color-wrap', '-notify-bg-color-wrap', '-notify-border-color-wrap'].forEach(function(suffix) {
         var wrap = document.getElementById(prefix + suffix);
         if (wrap) padInitBindableColor(wrap);
     });
-    // Wire monospace toggle on binding-capable text inputs
-    ['-notify-text', '-notify-duration'].forEach(function(suffix) {
+    // Wire monospace toggle + binding validation on all binding-capable text inputs
+    _ACTION_BIND_SUFFIXES.forEach(function(suffix) {
         var el = document.getElementById(prefix + suffix);
         if (el && !el.dataset.bcBind) {
             el.dataset.bcBind = '1';
             el.oninput = function() { padUpdateMixedBindingFont(el); };
             padUpdateMixedBindingFont(el);
+            if (typeof bindingAttachValidation === 'function') bindingAttachValidation(el);
         }
     });
 }
@@ -286,7 +305,12 @@ function actionEditorLoad(prefix, action) {
     el = document.getElementById(prefix + '-target');
     if (el) {
         el.value = action.target || '';
-        if (el.selectedIndex < 0) el.value = '';
+        // If the option doesn't exist (e.g., synthetic [list:…] not yet injected),
+        // defer the value until the option is added.
+        if (action.target && el.value !== action.target) {
+            el.setAttribute('data-pending-value', action.target);
+            el.value = '';
+        }
     }
     el = document.getElementById(prefix + '-topic');
     if (el) el.value = action.topic || '';
@@ -305,29 +329,20 @@ function actionEditorLoad(prefix, action) {
     }
     el = document.getElementById(prefix + '-sound-volume');
     if (el) el.value = (action.sound_volume > 0) ? action.sound_volume : '';
-    el = document.getElementById(prefix + '-volume-mode');
-    if (el) el.value = action.volume_mode || 'set';
-    el = document.getElementById(prefix + '-volume-value');
-    if (el) el.value = (action.volume_value !== undefined && action.volume_value > 0) ? action.volume_value : '';
-    el = document.getElementById(prefix + '-brightness-mode');
-    if (el) el.value = action.brightness_mode || 'set';
-    el = document.getElementById(prefix + '-brightness-value');
-    if (el) el.value = (action.brightness_value !== undefined && action.brightness_value > 0) ? action.brightness_value : '';
-    // Timer: parse DSL string "N:command[:arg]" into structured fields
-    if (action.timer_command) {
-        var tc = action.timer_command;
-        var m = tc.match(/^(\d):(\w+)(?::(.+))?$/);
-        if (m) {
-            var tid = m[1], cmd = m[2], arg = m[3] || '';
-            el = document.getElementById(prefix + '-timer-action');
-            if (el) {
-                el.value = tid + ':' + cmd;
-                if (el.selectedIndex < 0) el.value = '1:toggle';
-            }
-            if (cmd === 'adjust') {
-                el = document.getElementById(prefix + '-timer-adjust-sec');
-                if (el) el.value = arg;
-            }
+
+    // Timer: load from proper fields
+    if (action.timer_id && action.timer_command) {
+        el = document.getElementById(prefix + '-timer-action');
+        if (el) {
+            el.value = action.timer_id + ':' + action.timer_command;
+            if (el.selectedIndex < 0) el.value = '1:toggle';
+        }
+        if (action.timer_command === 'set') {
+            el = document.getElementById(prefix + '-timer-set-sec');
+            if (el) el.value = action.timer_value || '';
+        } else if (action.timer_command === 'adjust') {
+            el = document.getElementById(prefix + '-timer-adjust-sec');
+            if (el) el.value = action.timer_value || '';
         }
     } else {
         el = document.getElementById(prefix + '-timer-action');
@@ -347,9 +362,26 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.notify_font_size > 0) ? action.notify_font_size : '';
     el = document.getElementById(prefix + '-notify-location');
     if (el) el.value = action.notify_location || 'bottom';
-    // System fields
-    el = document.getElementById(prefix + '-system-command');
-    if (el) el.value = action.system_command || 'reboot';
+    // System fields — also handles volume/brightness mapped into system command
+    if (action.type === 'volume' || action.type === 'brightness') {
+        // Map volume/brightness type into system command UI
+        el = document.getElementById(prefix + '-type');
+        if (el) el.value = 'system';
+        var mode = (action.type === 'volume') ? (action.volume_mode || 'set') : (action.brightness_mode || 'set');
+        el = document.getElementById(prefix + '-system-command');
+        if (el) el.value = action.type + '_' + mode;
+        var val = (action.type === 'volume') ? (action.volume_value || '') : (action.brightness_value || '');
+        if (mode === 'set') {
+            el = document.getElementById(prefix + '-sys-set-value');
+            if (el) el.value = val;
+        } else {
+            el = document.getElementById(prefix + '-sys-adjust-value');
+            if (el) el.value = val;
+        }
+    } else {
+        el = document.getElementById(prefix + '-system-command');
+        if (el) el.value = action.system_command || 'reboot';
+    }
     actionEditorTypeChanged(prefix);
 }
 
@@ -386,32 +418,21 @@ function actionEditorBuild(prefix) {
         var sv = document.getElementById(prefix + '-sound-volume');
         if (sv && sv.value !== '') act.sound_volume = parseInt(sv.value, 10);
     }
-    if (type === 'volume') {
-        var vm = document.getElementById(prefix + '-volume-mode');
-        if (vm) act.volume_mode = vm.value;
-        if (vm && vm.value === 'set') {
-            var vv = document.getElementById(prefix + '-volume-value');
-            if (vv && vv.value !== '') act.volume_value = parseInt(vv.value, 10);
-        }
-    }
-    if (type === 'brightness') {
-        var bm = document.getElementById(prefix + '-brightness-mode');
-        if (bm) act.brightness_mode = bm.value;
-        var bv = document.getElementById(prefix + '-brightness-value');
-        if (bv && bv.value !== '') act.brightness_value = parseInt(bv.value, 10);
-    }
+
     if (type === 'timer') {
         var sel = document.getElementById(prefix + '-timer-action');
         if (sel) {
-            var val = sel.value; // e.g. "1:toggle", "2:countdown"
+            var val = sel.value; // e.g. "1:toggle", "2:adjust"
             var parts = val.split(':');
-            var cmd = parts[1] || '';
-            if (cmd === 'adjust') {
+            act.timer_id = parseInt(parts[0], 10);
+            act.timer_command = parts[1] || '';
+            if (act.timer_command === 'set') {
+                var setSec = document.getElementById(prefix + '-timer-set-sec');
+                if (setSec && setSec.value !== '') act.timer_value = (setSec.value || '').trim();
+            } else if (act.timer_command === 'adjust') {
                 var adjSec = document.getElementById(prefix + '-timer-adjust-sec');
-                var adj = adjSec ? parseInt(adjSec.value, 10) : 0;
-                if (adj !== 0 && !isNaN(adj)) val = val + ':' + adj;
+                if (adjSec && adjSec.value !== '') act.timer_value = (adjSec.value || '').trim();
             }
-            act.timer_command = val;
         }
     }
     if (type === 'notify') {
@@ -434,9 +455,79 @@ function actionEditorBuild(prefix) {
     }
     if (type === 'system') {
         var sc = document.getElementById(prefix + '-system-command');
-        if (sc) act.system_command = sc.value;
+        if (sc) {
+            var cmd = sc.value;
+            var sysMap = { volume_set: ['volume','set'], volume_adjust: ['volume','adjust'],
+                           brightness_set: ['brightness','set'], brightness_adjust: ['brightness','adjust'] };
+            var m = sysMap[cmd];
+            if (m) {
+                act.type = m[0];
+                var modeKey = m[0] + '_mode', valKey = m[0] + '_value';
+                act[modeKey] = m[1];
+                var inputId = prefix + (m[1] === 'set' ? '-sys-set-value' : '-sys-adjust-value');
+                var inp = document.getElementById(inputId);
+                if (inp && inp.value !== '') act[valKey] = (inp.value || '').trim();
+            } else {
+                act.system_command = cmd;
+            }
+        }
     }
     return act;
+}
+
+// Inject a synthetic "Selected {Title} Item" option into a screen target dropdown.
+// Only injects when the current widget type is "list" and a provider ID is set.
+function listInjectSyntheticScreenOption(prefix) {
+    var sel = document.getElementById(prefix + '-target');
+    if (!sel || sel.tagName !== 'SELECT') return;
+    // Capture the current value so we can restore it after removing the old
+    // synthetic option (which may itself be the currently selected option,
+    // since removing a selected <option> resets the dropdown to the first item).
+    var prevValue = sel.value;
+    // Helper: restore the previous value if it still maps to an existing option.
+    var restorePrev = function() {
+        if (prevValue && sel.value !== prevValue) sel.value = prevValue;
+    };
+    // Remove any previously injected synthetic option
+    var existing = sel.querySelector('option[data-synthetic]');
+    if (existing) existing.remove();
+    // Only inject for list widget with a provider ID
+    var wtEl = document.getElementById('pad-edit-widget-type');
+    var provInput = document.getElementById('pad-edit-list-provider-id');
+    var provId = provInput ? provInput.value.trim() : '';
+    if (!wtEl || wtEl.value !== 'list' || !provId) {
+        restorePrev();
+        return;
+    }
+    var title = provId.charAt(0).toUpperCase() + provId.slice(1);
+    var opt = document.createElement('option');
+    opt.value = '[list:' + provId + '.selected]';
+    opt.textContent = 'Selected ' + title + ' Item';
+    opt.setAttribute('data-synthetic', '1');
+    // Insert after "(none)" option
+    if (sel.options.length > 1) {
+        sel.insertBefore(opt, sel.options[1]);
+    } else {
+        sel.appendChild(opt);
+    }
+    // Re-apply pending value if it matches the newly injected synthetic option
+    if (sel.hasAttribute('data-pending-value') &&
+        sel.getAttribute('data-pending-value') === opt.value) {
+        sel.value = opt.value;
+        sel.removeAttribute('data-pending-value');
+    } else {
+        // Restore the previous selection (may be the just-injected synthetic option)
+        restorePrev();
+    }
+}
+
+// Refresh synthetic options in all tap and long-press action screen dropdowns.
+// Called when widget type changes to/from "list" or when provider ID changes.
+function listRefreshSyntheticOptions() {
+    for (var i = 0; i < (typeof MAX_ACTIONS !== 'undefined' ? MAX_ACTIONS : 3); i++) {
+        listInjectSyntheticScreenOption('pad-edit-action-' + i);
+        listInjectSyntheticScreenOption('pad-edit-lp-action-' + i);
+    }
 }
 
 // Populate the screen target dropdown(s) for one or more action editor prefixes.

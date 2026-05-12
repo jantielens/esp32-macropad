@@ -205,7 +205,10 @@ int timer_format(uint8_t id, const char* fmt, char* out, size_t out_len) {
     uint32_t ds = (ms % 1000) / 100;  // deciseconds
     const char* sign = overtime ? "-" : "";
 
-    if (!fmt || !fmt[0] || strcmp(fmt, "mm:ss") == 0) {
+    if (!fmt || !fmt[0]) {
+        // Raw numeric default: seconds with decisecond precision
+        return snprintf(out, out_len, "%s%u.%u", sign, (unsigned)total_s, (unsigned)ds);
+    } else if (strcmp(fmt, "mm:ss") == 0) {
         return snprintf(out, out_len, "%s%u:%02u", sign, (unsigned)(h * 60 + m), (unsigned)s);
     } else if (strcmp(fmt, "hh:mm:ss") == 0) {
         return snprintf(out, out_len, "%s%u:%02u:%02u", sign, (unsigned)h, (unsigned)m, (unsigned)s);

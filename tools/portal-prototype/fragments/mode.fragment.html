@@ -1,0 +1,30 @@
+<div class="section-header">
+  <h2>⚡ Operating Mode</h2>
+  <p>Controls how the device runs and how often it publishes.</p>
+</div>
+    <div class="mb-3">
+      <label class="form-label" for="op-mode">Operating Mode</label>
+      <select class="form-select" id="op-mode">
+        <option selected>Always-On</option>
+        <option>Duty-Cycle</option>
+      </select>
+      <div class="form-text">Always-On keeps services running. Duty-Cycle wakes, publishes, then sleeps.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="cycle-interval">Cycle Interval (seconds)</label>
+      <input type="number" class="form-control" id="cycle-interval" value="120" min="10" max="86400">
+      <div class="form-text">Duty-Cycle sleep interval and MQTT publish cadence.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="portal-timeout">Portal Idle Timeout (seconds)</label>
+      <input type="number" class="form-control" id="portal-timeout" value="0" min="0">
+      <div class="form-text">Auto-sleep after inactivity in Config/AP modes only. 0 = disabled.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="wifi-backoff">WiFi Backoff Max (seconds)</label>
+      <input type="number" class="form-control" id="wifi-backoff" value="20" min="5" max="300">
+      <div class="form-text">Exponential backoff cap on repeated Wi-Fi failures.</div>
+    </div>
+    <div class="save-bar">
+      <button class="btn btn-primary btn-sm">Save &amp; Reboot</button>
+    </div>

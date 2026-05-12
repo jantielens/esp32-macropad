@@ -109,6 +109,10 @@ void boot_actions_dispatch() {
     const BootActionsConfig* cfg = boot_actions_get();
     if (cfg->action_count == 0) return;
 
+    // Note: runs from setup() on the Arduino main task, not the LVGL task.
+    // binding_template_resolve() uses internal buffers that are not thread-safe,
+    // but this is safe at boot because the LVGL task is not yet processing
+    // user-driven events that could trigger concurrent binding resolution.
     LOGI(TAG, "Dispatching %u boot action(s)", cfg->action_count);
     for (uint8_t i = 0; i < cfg->action_count; i++) {
         action_dispatch(cfg->actions[i], "Boot");

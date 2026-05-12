@@ -100,7 +100,7 @@ build_board() {
     # see macros defined only in board_overrides.h.
     # Keep this allowlisted to avoid arbitrary #define injection.
     EXTRA_GLOBAL_DEFINES=""
-    EXTRA_GLOBAL_FLAGS=""
+    EXTRA_GLOBAL_FLAGS=" -DASYNCWEBSERVER_REGEX"
     if [[ -f "$board_overrides_file" ]]; then
         # Numeric-valued defines (exported as -DNAME=value)
         # NOTE: Keep this allowlist tight; only export values needed by libraries.
@@ -193,6 +193,11 @@ build_board() {
         fi
     fi
 
+    # Per-board intermediate build path so switching boards does not thrash the
+    # shared arduino-cli sketch cache (see GitHub issue #25).
+    local board_intermediate_path="$board_build_path/intermediate"
+    mkdir -p "$board_intermediate_path"
+
     # Compile the sketch with optional board-specific includes and build props
     # Run compile and capture exit code (disable set -e temporarily to capture output even on failure)
     local build_output
@@ -200,6 +205,7 @@ build_board() {
     set +e
     build_output=$("$ARDUINO_CLI" compile \
         --fqbn "$fqbn" \
+        --build-path "$board_intermediate_path" \
         "${EXTRA_FLAGS[@]}" \
         "${BUILD_PROPS_ARR[@]}" \
         --output-dir "$board_build_path" \

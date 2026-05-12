@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESP32 Macropad — Configuration Portal</title>
+  <link rel="stylesheet" href="/bootstrap.min.css">
+  <link rel="stylesheet" href="/portal-custom.css">
+  <script>
+    // Apply theme immediately to prevent flash
+    (function() {
+      var saved = localStorage.getItem('portal-theme');
+      var theme = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-bs-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="portal-header">
+    <div class="portal-header-top">
+      <button id="hamburger" class="portal-hamburger d-md-none" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+      <h1 class="portal-title">ESP32 Macropad</h1>
+      <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
+        <span class="theme-icon-sun">☀️</span>
+        <span class="theme-icon-moon">🌙</span>
+      </button>
+    </div>
+    <div class="portal-badges">
+      <span class="portal-badge badge-firmware">Firmware v1.14.0</span>
+      <span class="portal-badge badge-chip">ESP32-P4 rev 100</span>
+      <span class="portal-badge badge-cores">2 Cores</span>
+      <span class="portal-badge badge-freq">360 MHz</span>
+      <span class="portal-badge badge-flash">16 MB Flash</span>
+      <span class="portal-badge badge-psram">32 MB PSRAM</span>
+      <span class="portal-badge badge-health" id="health-badge" role="button" tabindex="0">
+        <span class="health-dot breathing" id="health-dot"></span>
+        <span id="health-cpu-text">CPU 3%</span>
+        <span class="health-expand-icon">⋮</span>
+      </span>
+    </div>
+  </header>
+
+  <div class="portal-layout">
+    <nav id="portal-nav" class="portal-nav"></nav>
+    <main id="content-pane" class="content-pane"></main>
+  </div>
+
+  <!-- Health expanded overlay -->
+  <div id="health-panel" class="health-panel" style="display:none;">
+    <div class="health-panel-header">
+      <span class="health-dot breathing"></span>
+      <span class="health-panel-title">System Health</span>
+      <button id="health-close" class="health-close-btn" aria-label="Close">&times;</button>
+    </div>
+    <div class="health-panel-body">
+      <div class="health-stat">
+        <div class="health-stat-row">
+          <span class="health-stat-label">CPU Usage</span>
+          <span class="health-stat-value text-success">3%</span>
+        </div>
+        <div class="health-bar"><div class="health-bar-fill bg-success" style="width:3%"></div></div>
+      </div>
+      <div class="health-stat">
+        <div class="health-stat-row">
+          <span class="health-stat-label">Free Heap</span>
+          <span class="health-stat-value text-info">245 KB</span>
+        </div>
+        <div class="health-bar"><div class="health-bar-fill bg-info" style="width:76%"></div></div>
+      </div>
+      <div class="health-stat">
+        <div class="health-stat-row">
+          <span class="health-stat-label">Free PSRAM</span>
+          <span class="health-stat-value text-info">28.4 MB</span>
+        </div>
+        <div class="health-bar"><div class="health-bar-fill bg-info" style="width:89%"></div></div>
+      </div>
+      <div class="health-stat">
+        <div class="health-stat-row">
+          <span class="health-stat-label">WiFi RSSI</span>
+          <span class="health-stat-value text-success">-42 dBm</span>
+        </div>
+        <div class="health-bar"><div class="health-bar-fill bg-success" style="width:82%"></div></div>
+      </div>
+      <div class="health-stat">
+        <div class="health-stat-row">
+          <span class="health-stat-label">Temperature</span>
+          <span class="health-stat-value text-warning">38.2°C</span>
+        </div>
+        <div class="health-bar"><div class="health-bar-fill bg-warning" style="width:38%"></div></div>
+      </div>
+      <div class="health-stat">
+        <div class="health-stat-row">
+          <span class="health-stat-label">Uptime</span>
+          <span class="health-stat-value">2d 14h 32m</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+  <noscript>
+    <div class="container p-4">
+      <div class="alert alert-warning">
+        <h4>JavaScript Required</h4>
+        <p>This configuration portal requires JavaScript to function. Please enable JavaScript in your browser settings.</p>
+      </div>
+    </div>
+  </noscript>
+  <script src="/portal_nav.js"></script>
+</body>
+</html>

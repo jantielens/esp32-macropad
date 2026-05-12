@@ -49,6 +49,11 @@ public:
 
 		// Direct render mode — each LVGL strip sent immediately to panel.
 		RenderMode renderMode() const override { return RenderMode::Direct; }
+
+		void displaySleep() override;
+		void displayWake() override;
+		void displayWakeSleepOut() override;
+		void displayWakeDisplayOn() override;
 };
 
 #endif // ARDUINO_GFX_ST77916_DRIVER_H

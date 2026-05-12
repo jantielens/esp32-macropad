@@ -8,6 +8,7 @@
  */
 
 #include "arduino_gfx_st77916_driver.h"
+#include "arduino_gfx_panel_sleep.h"
 #include "../log_manager.h"
 
 #ifndef TFT_SPI_FREQ_HZ
@@ -204,4 +205,20 @@ void Arduino_GFX_ST77916_Driver::pushColors(uint16_t* data, uint32_t len, bool s
 		// byte order internally, so swap_bytes is not needed here.
 		(void)swap_bytes;
 		gfx->draw16bitRGBBitmap(currentX, currentY, data, currentW, currentH);
+}
+
+void Arduino_GFX_ST77916_Driver::displaySleep() {
+		arduino_gfx_panel_sleep(bus);
+}
+
+void Arduino_GFX_ST77916_Driver::displayWake() {
+		arduino_gfx_panel_wake(bus);
+}
+
+void Arduino_GFX_ST77916_Driver::displayWakeSleepOut() {
+		arduino_gfx_panel_sleep_out(bus);
+}
+
+void Arduino_GFX_ST77916_Driver::displayWakeDisplayOn() {
+		arduino_gfx_panel_display_on(bus);
 }

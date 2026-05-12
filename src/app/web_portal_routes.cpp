@@ -1,20 +1,20 @@
 #include "web_portal_routes.h"
 #include "web_portal_auth.h"
+#include "web_portal_component_api.h"
 #include "web_portal_cors.h"
 #include "web_portal_config.h"
 #include "web_portal_device_api.h"
-#include "web_portal_display.h"
 #include "web_portal_firmware.h"
 #include "web_portal_icons.h"
 #include "web_portal_ota.h"
 #include "web_portal_pad.h"
-#include "web_portal_swipe.h"
-#include "web_portal_boot_actions.h"
-#include "web_portal_button_defaults.h"
-#include "web_portal_timers.h"
 #include "web_portal_pages.h"
 
 #include "board_config.h"
+
+#if HAS_DISPLAY
+#include "web_portal_screenshot.h"
+#endif
 
 #if HAS_BLE_HID
 #include "web_portal_ble.h"
@@ -41,19 +41,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/firmware.html", HTTP_GET, handleFirmware);
 
 		// Asset routes
-		server->on("/portal.css", HTTP_GET, handleCSS);
 		server->on("/portal.js", HTTP_GET, handleJS);
-
-		// Split JS module routes
-		server->on("/portal_core.js", HTTP_GET, handleCoreJS);
-		server->on("/portal_config.js", HTTP_GET, handleConfigJS);
-		server->on("/portal_firmware.js", HTTP_GET, handleFirmwareJS);
-		server->on("/portal_health.js", HTTP_GET, handleHealthJS);
-		server->on("/portal_pad_colors.js", HTTP_GET, handlePadColorsJS);
-		server->on("/portal_pad_io.js", HTTP_GET, handlePadIOJS);
-		server->on("/portal_pad_editor.js", HTTP_GET, handlePadEditorJS);
-		server->on("/portal_action_editor.js", HTTP_GET, handleActionEditorJS);
-		server->on("/portal_binding_validator.js", HTTP_GET, handleBindingValidatorJS);
+		server->on("/bootstrap.min.css", HTTP_GET, handleBootstrapCSS);
+		server->on("/portal-custom.css", HTTP_GET, handlePortalCustomCSS);
 
 		// API endpoints
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
@@ -105,41 +95,6 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		registerOptions("/api/firmware/update");
 
 #if HAS_DISPLAY
-		// Display API endpoints
-		server->on(
-				"/api/display/brightness",
-				HTTP_PUT,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handleSetDisplayBrightness
-		);
-		registerOptions("/api/display/brightness");
-
-		// Screen saver API endpoints
-		registerOptions("/api/display/sleep");
-		server->on("/api/display/sleep", HTTP_GET, handleGetDisplaySleep);
-		server->on("/api/display/sleep", HTTP_POST, handlePostDisplaySleep);
-
-		registerOptions("/api/display/wake");
-		server->on("/api/display/wake", HTTP_POST, handlePostDisplayWake);
-
-		registerOptions("/api/display/activity");
-		server->on("/api/display/activity", HTTP_POST, handlePostDisplayActivity);
-
-		// Runtime-only screen switch
-		server->on(
-				"/api/display/screen",
-				HTTP_PUT,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handleSetDisplayScreen
-		);
-		registerOptions("/api/display/screen");
-
 		// Pad button sizes (registered before /api/pad to avoid prefix match)
 		registerOptions("/api/pad/button_sizes");
 		server->on("/api/pad/button_sizes", HTTP_GET, handleGetButtonSizes);
@@ -162,57 +117,10 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		);
 		server->on("/api/pad", HTTP_DELETE, handleDeletePadConfig);
 
-		// Swipe actions API
-		registerOptions("/api/swipe-actions");
-		server->on("/api/swipe-actions", HTTP_GET, handleGetSwipeActions);
-		server->on(
-				"/api/swipe-actions",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostSwipeActions
-		);
 
-		// Button defaults API
-		registerOptions("/api/button-defaults");
-		server->on("/api/button-defaults", HTTP_GET, handleGetButtonDefaults);
-		server->on(
-				"/api/button-defaults",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostButtonDefaults
-		);
 
-		// Boot actions API
-		registerOptions("/api/boot-actions");
-		server->on("/api/boot-actions", HTTP_GET, handleGetBootActions);
-		server->on(
-				"/api/boot-actions",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostBootActions
-		);
-
-		// Timer config API
-		registerOptions("/api/timers");
-		server->on("/api/timers", HTTP_GET, handleGetTimerConfig);
-		server->on(
-				"/api/timers",
-				HTTP_POST,
-				[](AsyncWebServerRequest *request) {
-						if (!portal_auth_gate(request)) return;
-				},
-				NULL,
-				handlePostTimerConfig
-		);
+		registerOptions("/api/screenshot");
+		server->on("/api/screenshot", HTTP_GET, handleGetScreenshot);
 
 		registerOptions("/api/icons/install");
 		server->on(
@@ -286,5 +194,14 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		registerOptions("/api/sounds/play");
 		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
 #endif
+
+		// Fragment serving — /api/section/{id}
+		// Uses wildcard so /api/section/wifi, /api/section/pad-editor, etc. all match.
+		// Registered before generic component routes to avoid prefix-match conflicts.
+		server->on("/api/section/*", HTTP_GET, handleFragment);
+
+		// Generic component API routes — MUST be registered LAST (first-match routing).
+		// Dispatches to any component registered via REGISTER_COMPONENT().
+		web_portal_register_component_routes(server);
 
 }

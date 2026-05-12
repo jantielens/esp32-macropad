@@ -7,8 +7,8 @@
 #include "message_bubble.h"
 
 #if HAS_MQTT
-#include "mqtt_manager.h"
 #include "binding_template.h"
+#include "mqtt_manager.h"
 #endif
 #if HAS_BLE_HID
 #include "ble_hid.h"
@@ -21,10 +21,86 @@
 #include "wifi_manager.h"
 #include "screen_saver_manager.h"
 
+#include <math.h>
+
 #define TAG "Action"
 
-void action_dispatch(const ButtonAction& act, const char* label) {
-    if (!act.type[0]) return;
+// Compute a clamped percentage value from a string, optionally as a delta from current.
+static uint8_t compute_clamped_percent(const char* value_str, uint8_t current, bool is_adjust, int min_val) {
+    int v = is_adjust ? (int)current + lroundf(atof(value_str)) : lroundf(atof(value_str));
+    if (v > 100) v = 100;
+    if (v < min_val) v = min_val;
+    return (uint8_t)v;
+}
+
+#if HAS_MQTT
+// Quick scan: return true if any data/content field might contain a binding token.
+// Checks only for '[' — avoids the ~1.2 KB ButtonAction copy for the common case.
+// IMPORTANT: the field list here must exactly match the fields in resolve_action_bindings below.
+static bool action_has_any_binding(const ButtonAction& act) {
+    const char* fields[] = {
+        act.screen_id,
+        act.mqtt_topic, act.mqtt_payload, act.key_sequence, act.beep_pattern,
+        act.volume_value, act.brightness_value, act.timer_value,
+        act.notify_text, act.notify_duration_ms,
+        act.notify_text_color, act.notify_bg_color, act.notify_border_color
+    };
+    for (auto f : fields) {
+        if (f[0] && memchr(f, '[', strlen(f))) return true;
+    }
+    return false;
+}
+
+// Resolve binding templates in all resolvable fields of a ButtonAction.
+// Structural fields (type, commands, modes, etc.) are excluded.
+// IMPORTANT: the field list here must exactly match the fields in action_has_any_binding above.
+static void resolve_action_bindings(ButtonAction& act) {
+    auto try_resolve = [](char* field, size_t len) {
+        if (field[0] && binding_template_has_bindings(field)) {
+            char tmp[BINDING_TEMPLATE_MAX_LEN];
+            binding_template_resolve(field, tmp, sizeof(tmp));
+            strlcpy(field, tmp, len);
+        }
+    };
+
+    try_resolve(act.screen_id,           sizeof(act.screen_id));
+    try_resolve(act.mqtt_topic,          sizeof(act.mqtt_topic));
+    try_resolve(act.mqtt_payload,        sizeof(act.mqtt_payload));
+    try_resolve(act.key_sequence,        sizeof(act.key_sequence));
+    try_resolve(act.beep_pattern,        sizeof(act.beep_pattern));
+    try_resolve(act.volume_value,        sizeof(act.volume_value));
+    try_resolve(act.brightness_value,    sizeof(act.brightness_value));
+    try_resolve(act.timer_value,         sizeof(act.timer_value));
+    try_resolve(act.notify_text,         sizeof(act.notify_text));
+    try_resolve(act.notify_duration_ms,  sizeof(act.notify_duration_ms));
+    try_resolve(act.notify_text_color,   sizeof(act.notify_text_color));
+    try_resolve(act.notify_bg_color,     sizeof(act.notify_bg_color));
+    try_resolve(act.notify_border_color, sizeof(act.notify_border_color));
+}
+#endif // HAS_MQTT
+
+static void action_dispatch_resolved(const ButtonAction& act, const char* label);
+
+void action_dispatch(const ButtonAction& act_in, const char* label) {
+    if (!act_in.type[0]) return;
+
+    // Resolve binding templates in value fields before dispatch.
+    // Must only be called from the LVGL task — binding_template_resolve
+    // accesses MQTT subscription state and may call LVGL APIs.
+#if HAS_MQTT
+    if (action_has_any_binding(act_in)) {
+        ButtonAction act = act_in;
+        resolve_action_bindings(act);
+        action_dispatch_resolved(act, label);
+    } else {
+        action_dispatch_resolved(act_in, label);
+    }
+#else
+    action_dispatch_resolved(act_in, label);
+#endif
+}
+
+static void action_dispatch_resolved(const ButtonAction& act, const char* label) {
 
     if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
         if (act.screen_id[0]) {
@@ -95,51 +171,22 @@ void action_dispatch(const ButtonAction& act, const char* label) {
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
 #if HAS_AUDIO
-        if (strcmp(act.volume_mode, "up") == 0) {
-            uint8_t v = audio_get_volume();
-            v = (v > 90) ? 100 : v + 10;
-            audio_set_volume(v);
-            LOGI(TAG, "%s volume up -> %u%%", label, v);
-        } else if (strcmp(act.volume_mode, "down") == 0) {
-            uint8_t v = audio_get_volume();
-            v = (v < 10) ? 0 : v - 10;
-            audio_set_volume(v);
-            LOGI(TAG, "%s volume down -> %u%%", label, v);
-        } else {
-            uint8_t v = act.volume_value;
-            if (v > 100) v = 100;
-            audio_set_volume(v);
-            LOGI(TAG, "%s volume set -> %u%%", label, v);
-        }
+        bool adj = strcmp(act.volume_mode, "adjust") == 0;
+        uint8_t nv = compute_clamped_percent(act.volume_value, audio_get_volume(), adj, 0);
+        audio_set_volume(nv);
+        LOGI(TAG, "%s volume %s %s -> %u%%", label, adj ? "adjust" : "set", act.volume_value, nv);
 #else
         LOGW(TAG, "%s volume: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        uint8_t step = act.brightness_value > 0 ? act.brightness_value : 10;
-        if (strcmp(act.brightness_mode, "up") == 0) {
-            uint8_t v = display_manager_get_backlight_brightness();
-            v = (v + step > 100) ? 100 : v + step;
-            display_manager_set_backlight_brightness(v);
-            LOGI(TAG, "%s brightness up -> %u%%", label, v);
-        } else if (strcmp(act.brightness_mode, "down") == 0) {
-            uint8_t v = display_manager_get_backlight_brightness();
-            v = (v < step) ? 0 : v - step;
-            display_manager_set_backlight_brightness(v);
-            LOGI(TAG, "%s brightness down -> %u%%", label, v);
-        } else {
-            uint8_t v = act.brightness_value;
-            if (v > 100) v = 100;
-            display_manager_set_backlight_brightness(v);
-            LOGI(TAG, "%s brightness set -> %u%%", label, v);
-        }
+        bool adj = strcmp(act.brightness_mode, "adjust") == 0;
+        uint8_t nv = compute_clamped_percent(act.brightness_value, display_manager_get_backlight_brightness(), adj, MIN_USER_BRIGHTNESS);
+        screen_saver_manager_set_brightness(nv);
+        LOGI(TAG, "%s brightness %s %s -> %u%%", label, adj ? "adjust" : "set", act.brightness_value, nv);
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
-        // Payload format: "N:command" or "N:command:arg"
-        // e.g. "1:toggle", "2:start", "1:adjust:30"
-        const char* p = act.mqtt_payload;
-        if (p && p[0] >= '1' && p[0] <= '0' + TIMER_COUNT && p[1] == ':') {
-            uint8_t tid = p[0] - '0';
-            const char* cmd = p + 2;
-
+        uint8_t tid = act.timer_id;
+        const char* cmd = act.timer_command;
+        if (tid >= 1 && tid <= TIMER_COUNT && cmd[0]) {
             if (strcmp(cmd, "start") == 0) {
                 timer_start(tid);
             } else if (strcmp(cmd, "stop") == 0) {
@@ -154,54 +201,41 @@ void action_dispatch(const ButtonAction& act, const char* label) {
                 timer_reset(tid);
             } else if (strcmp(cmd, "lap") == 0) {
                 timer_lap(tid);
-            } else if (strncmp(cmd, "adjust:", 7) == 0) {
-                int32_t delta = (int32_t)atoi(cmd + 7);
+            } else if (strcmp(cmd, "adjust") == 0) {
+                int32_t delta = lroundf(atof(act.timer_value));
                 timer_adjust(tid, delta);
+            } else if (strcmp(cmd, "set") == 0) {
+                uint32_t secs = (uint32_t)lroundf(atof(act.timer_value));
+                timer_set_countdown(tid, secs);
             } else {
                 LOGW(TAG, "%s timer: unknown cmd '%s'", label, cmd);
             }
-            LOGI(TAG, "%s timer: %c:%s", label, p[0], cmd);
+            LOGI(TAG, "%s timer: %u:%s", label, tid, cmd);
         } else {
-            LOGW(TAG, "%s timer: bad payload '%s'", label, p ? p : "(null)");
+            LOGW(TAG, "%s timer: bad id=%u cmd='%s'", label, tid, cmd);
         }
     } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
-        // Resolve all bindable fields before building params struct
         MessageBubbleParams params = {};
 
-        // Resolve a bindable string field: binding → resolve, plain → copy, empty → default.
-        auto resolve_field = [](const char* field, const char* def, char* out, size_t len) {
-#if HAS_MQTT
-            if (field[0] && binding_template_has_bindings(field)) {
-                binding_template_resolve(field, out, len);
-            } else
-#endif
-            {
-                strlcpy(out, field[0] ? field : def, len);
-            }
-        };
-
-        resolve_field(act.notify_text, "", params.text, sizeof(params.text));
+        strlcpy(params.text, act.notify_text, sizeof(params.text));
 
         if (!params.text[0]) {
             message_bubble_dismiss();
             LOGI(TAG, "%s notify: dismiss", label);
         } else {
-            // Duration
-            char buf[16];
-            resolve_field(act.notify_duration_ms, "3000", buf, sizeof(buf));
-            params.duration_ms = (uint16_t)atoi(buf);
+            // Duration — apply default for empty (already resolved by generic pass)
+            const char* dur = act.notify_duration_ms[0] ? act.notify_duration_ms : "3000";
+            params.duration_ms = (uint16_t)atoi(dur);
 
-            // Colors
-            char cbuf[CONFIG_BINDABLE_SHORT_LEN];
-            resolve_field(act.notify_text_color, "#ffffff", cbuf, sizeof(cbuf));
-            if (!parse_hex_color(cbuf, &params.text_color)) params.text_color = 0xFFFFFF;
+            // Colors — apply defaults for empty (already resolved by generic pass)
+            const char* tc = act.notify_text_color[0] ? act.notify_text_color : "#ffffff";
+            if (!parse_hex_color(tc, &params.text_color)) params.text_color = 0xFFFFFF;
 
-            resolve_field(act.notify_bg_color, "#333333", cbuf, sizeof(cbuf));
-            if (!parse_hex_color(cbuf, &params.bg_color)) params.bg_color = 0x333333;
+            const char* bg = act.notify_bg_color[0] ? act.notify_bg_color : "#333333";
+            if (!parse_hex_color(bg, &params.bg_color)) params.bg_color = 0x333333;
 
             if (act.notify_border_color[0]) {
-                resolve_field(act.notify_border_color, "", cbuf, sizeof(cbuf));
-                params.has_border = parse_hex_color(cbuf, &params.border_color);
+                params.has_border = parse_hex_color(act.notify_border_color, &params.border_color);
             }
 
             params.opacity = act.notify_opacity;

@@ -18,82 +18,42 @@ const API_VERSION = '/api/info'; // Used for connection polling
 
 let selectedFile = null;
 let portalMode = 'full'; // 'core' or 'full'
-let currentPage = 'home'; // Current page: 'home', 'network', or 'firmware'
 
 let deviceInfoCache = null;
 
 /**
- * Scroll input into view when focused (prevents mobile keyboard from covering it)
- * @param {Event} event - Focus event
- */
-function handleInputFocus(event) {
-    // Small delay to let the keyboard animation start
-    setTimeout(() => {
-        const input = event.target;
-        const rect = input.getBoundingClientRect();
-        const viewportHeight = window.innerHeight;
-        
-        // Estimate keyboard height (typically 40-50% of viewport on mobile)
-        const estimatedKeyboardHeight = viewportHeight * 0.45;
-        const availableHeight = viewportHeight - estimatedKeyboardHeight;
-        
-        // Calculate if input would be covered by keyboard
-        const inputBottom = rect.bottom;
-        
-        // Only scroll if the input would be covered by the keyboard
-        if (inputBottom > availableHeight) {
-            // Scroll just enough to show the input with some padding
-            const padding = 20; // 20px padding above input
-            const scrollAmount = inputBottom - availableHeight + padding;
-            
-            window.scrollTo({
-                top: window.scrollY + scrollAmount,
-                behavior: 'smooth'
-            });
-        }
-    }, 300); // Wait for keyboard animation
-}
-
-/**
- * Detect current page and highlight active navigation tab
- */
-function initNavigation() {
-    const path = window.location.pathname;
-    
-    if (path === '/' || path === '/home.html') {
-        currentPage = 'home';
-    } else if (path === '/pads.html') {
-        currentPage = 'pad';
-    } else if (path === '/network.html') {
-        currentPage = 'network';
-    } else if (path === '/firmware.html') {
-        currentPage = 'firmware';
-    }
-    
-    // Highlight active tab
-    document.querySelectorAll('.nav-tab').forEach(tab => {
-        const page = tab.getAttribute('data-page');
-        if (page === currentPage) {
-            tab.classList.add('active');
-        } else {
-            tab.classList.remove('active');
-        }
-    });
-}
-
-/**
- * Display a message to the user
+ * Show a Bootstrap-styled toast notification.
+ * Appends a toast div to #toast-container and auto-removes it after 5s.
+ * No Bootstrap JS required — uses CSS classes + setTimeout for animation.
  * @param {string} message - Message text
- * @param {string} type - Message type: 'info', 'success', or 'error'
+ * @param {string} type - 'info', 'success', or 'error'
  */
-function showMessage(message, type = 'info') {
-    const statusDiv = document.getElementById('status-message');
-    statusDiv.textContent = message;
-    statusDiv.className = `message ${type}`;
-    statusDiv.style.display = 'block';
-    
-    setTimeout(() => {
-        statusDiv.style.display = 'none';
+function showMessage(message, type) {
+    type = type || 'info';
+    var container = document.getElementById('toast-container');
+    if (!container) { console.warn('showMessage:', message); return; }
+
+    var bgClass = type === 'success' ? 'bg-success'
+                : type === 'error'   ? 'bg-danger'
+                :                      'bg-secondary';
+
+    var toast = document.createElement('div');
+    toast.className = 'toast align-items-center text-white border-0 show ' + bgClass;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.innerHTML =
+        '<div class="d-flex">' +
+        '<div class="toast-body">' + message + '</div>' +
+        '<button type="button" class="btn-close btn-close-white me-2 m-auto" aria-label="Close"></button>' +
+        '</div>';
+
+    toast.querySelector('button').addEventListener('click', function () {
+        container.removeChild(toast);
+    });
+
+    container.appendChild(toast);
+    setTimeout(function () {
+        if (toast.parentNode) container.removeChild(toast);
     }, 5000);
 }
 
@@ -218,46 +178,6 @@ function isInCaptivePortal() {
     }
     
     return false;
-}
-
-/**
- * Generate sanitized mDNS name from device name
- * @param {string} deviceName - Device name to sanitize
- * @returns {string} Sanitized mDNS hostname
- */
-function sanitizeForMDNS(deviceName) {
-    return deviceName.toLowerCase()
-        .replace(/[^a-z0-9\s\-_]/g, '')
-        .replace(/[\s_]+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-}
-
-/**
- * Show captive portal warning with device address and handle user response
- */
-function showCaptivePortalWarning() {
-    const modal = document.getElementById('captive-portal-warning');
-    const deviceName = document.getElementById('device_name').value.trim();
-    const mdnsName = sanitizeForMDNS(deviceName);
-    const deviceUrl = `http://${mdnsName}.local`;
-    
-    // Show the device address
-    document.getElementById('device-mdns-address').textContent = deviceUrl;
-    modal.style.display = 'flex';
-    
-    // Continue button - proceed with save
-    document.getElementById('continue-save-btn').onclick = () => {
-        modal.style.display = 'none';
-        // Re-trigger the save (flag already set, so it will proceed)
-        document.getElementById('config-form').dispatchEvent(new Event('submit'));
-    };
-    
-    // Cancel button
-    document.getElementById('cancel-save-btn').onclick = () => {
-        modal.style.display = 'none';
-        window.captivePortalWarningShown = false; // Reset flag if cancelled
-    };
 }
 
 /**

@@ -41,6 +41,7 @@ declare -A FQBN_TARGETS=(
 ```
 
 **What it does:**
+- Configures the `ours` Git merge driver (used by `.gitattributes` for auto-generated files)
 - Downloads and installs `arduino-cli` to `./bin/`
 - Configures ESP32 board support
 - Installs ESP32 core platform
@@ -72,6 +73,7 @@ BOARD_PROFILE=psram ./build.sh esp32-nodisplay  # Optional build profile (if def
 - Prints a per-board "Compile-time flags summary" (active `HAS_*` features + key selectors) to make it clear what the build will include
 - Compiles `src/app/app.ino` for specified board(s)
 - Creates board-specific directories: `./build/esp32-nodisplay/`, `./build/cyd-v2/`, etc.
+- Uses a per-board `intermediate/` subdirectory for `arduino-cli`'s object cache, so switching between boards does not invalidate the build cache
 - Generates `.bin`, `.bootloader.bin`, `.merged.bin`, and `.partitions.bin` files per board
 - Detects build errors including:
   - Compilation failures (exit code ≠ 0)
@@ -111,8 +113,11 @@ graph LR
     Board1 --> F2[app.ino.bootloader.bin]
     Board1 --> F3[app.ino.merged.bin]
     Board1 --> F4[app.ino.partitions.bin]
+    Board1 --> I1[intermediate/]
+    I1 --> IC[core/ libraries/ sketch/]
     Board2 --> F5[app.ino.bin]
     Board2 --> F6[...]
+    Board2 --> I2[intermediate/]
 ```
 
 **Requirements:** Must run `setup.sh` first.
@@ -231,6 +236,39 @@ python3 tools/portal_stress_test.py --host 192.168.1.111 --no-reboot --cycles 10
 
 ---
 
+## tools/test-portal-api.sh
+
+**Purpose:** Curl-based HTTP integration tests for the web portal. Validates shell page, nav API, fragment endpoints, component config CRUD, CORS preflight, static assets, and error handling against a live device.
+
+**Usage:**
+```bash
+./tools/test-portal-api.sh 192.168.1.113
+DEVICE_IP=192.168.1.113 ./tools/test-portal-api.sh
+./tools/test-portal-api.sh --user admin:pass 192.168.1.113
+PORTAL_AUTH=admin:pass ./tools/test-portal-api.sh 192.168.1.113
+```
+
+**Test cases (12):**
+1. Shell page (GET `/`)
+2. Nav API (GET `/api/portal/nav`)
+3. Fragment endpoints (all known fragment IDs)
+4. Unknown fragment (404)
+5. Component config GET
+6. Config round-trip (POST then GET, verify match)
+7. CORS preflight (OPTIONS)
+8. DELETE config
+9. Custom action dispatch
+10. Unknown component (404)
+11. Malformed POST (empty, invalid JSON, oversized)
+12. Static assets
+
+**Notes:**
+- Requires a live ESP32 device — cannot run in CI.
+- Exit code 0 on all-pass, 1 on any failure.
+- Round-trip tests are idempotent (GET existing config, POST it back unchanged).
+
+---
+
 ## tools/install-custom-partitions.sh
 
 **Purpose:** Install/register template-provided custom partition tables into the Arduino ESP32 core.
@@ -333,7 +371,7 @@ This script automates both steps.
 ```
 
 **What it does:**
-- Removes the `./build/` directory and all board subdirectories
+- Removes the `./build/` directory and all board subdirectories (including per-board `intermediate/` object caches)
 - Lists board directories being removed
 - Cleans up temporary files (*.tmp, *.bak, *~)
 - Prepares for a fresh build

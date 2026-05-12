@@ -1,0 +1,47 @@
+<div class="section-header">
+  <h2>⚡ Operating Mode</h2>
+  <p>Controls how the device runs and how often it publishes.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="power_mode">Operating Mode</label>
+        <select class="form-select" id="power_mode" name="power_mode">
+          <option value="always_on">Always-On</option>
+          <option value="duty_cycle">Duty-Cycle</option>
+        </select>
+        <div class="form-text">Always-On keeps services running. Duty-Cycle wakes, publishes, then sleeps.</div>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="cycle_interval_seconds">Cycle Interval (seconds)</label>
+        <input type="number" class="form-control" id="cycle_interval_seconds" name="cycle_interval_seconds" min="1" max="65535" placeholder="120">
+        <div class="form-text">Duty-Cycle sleep interval and MQTT publish cadence.</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="portal_idle_timeout_seconds">Portal Idle Timeout (seconds)</label>
+        <input type="number" class="form-control" id="portal_idle_timeout_seconds" name="portal_idle_timeout_seconds" min="0" max="65535" placeholder="120">
+        <div class="form-text">Auto-sleep after inactivity in Config/AP modes only.</div>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="wifi_backoff_max_seconds">WiFi Backoff Max (seconds)</label>
+        <input type="number" class="form-control" id="wifi_backoff_max_seconds" name="wifi_backoff_max_seconds" min="1" max="65535" placeholder="900">
+        <div class="form-text">Exponential backoff cap on repeated Wi-Fi failures.</div>
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="mqtt_publish_scope">MQTT Payload Scope</label>
+      <select class="form-select" id="mqtt_publish_scope" name="mqtt_publish_scope">
+        <option value="sensors_only">Sensors only</option>
+        <option value="diagnostics_only">Diagnostics only</option>
+        <option value="all">All (sensors + diagnostics)</option>
+      </select>
+      <div class="form-text">Controls which fields are included in the MQTT state payload.</div>
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="mode-save-btn">Save &amp; Reboot</button>
+    </div>
+  </div>
+</div>

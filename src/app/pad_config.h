@@ -28,12 +28,14 @@
 
 #define CONFIG_LABEL_MAX_LEN          192
 #define CONFIG_ICON_ID_MAX_LEN         32
-#define CONFIG_SCREEN_ID_MAX_LEN       16
+#define CONFIG_SCREEN_ID_MAX_LEN       32
 #define CONFIG_MQTT_TOPIC_MAX_LEN     128
 #define CONFIG_MQTT_PAYLOAD_MAX_LEN   128
 #define CONFIG_KEY_SEQ_MAX_LEN        256
 #define CONFIG_BEEP_PATTERN_MAX_LEN   128
 #define CONFIG_VOLUME_MODE_MAX_LEN     8
+#define CONFIG_VALUE_MAX_LEN          16
+#define CONFIG_TIMER_CMD_MAX_LEN      12
 #define CONFIG_ACTION_TYPE_MAX_LEN     16
 #define CONFIG_LAYOUT_NAME_MAX_LEN     16
 #define CONFIG_JSON_PATH_MAX_LEN       48
@@ -68,6 +70,11 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define CONFIG_WIDGET_TYPE_MAX_LEN     16
 #define MAX_WIDGET_BINDINGS             4
 #define WIDGET_CONFIG_MAX_BYTES      1600
+
+// Icon position relative to center label
+#define ICON_POS_ABOVE   0   // Default: icon above center label
+#define ICON_POS_LEFT    1   // Icon left of center label (row)
+#define ICON_POS_CENTER  2   // Icon centered (no label displacement)
 
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
@@ -130,10 +137,14 @@ struct ButtonAction {
     char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // type="key": DSL key sequence
     char beep_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];  // type="beep": "freq:dur freq:dur" (empty = default)
     uint8_t beep_volume;                             // type="beep": 0 = use device volume, 1-100 = override
-    char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set", "up", or "down"
-    uint8_t volume_value;                            // type="volume": 0-100 (used with mode="set")
-    char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // type="brightness": "set", "up", or "down"
-    uint8_t brightness_value;                         // type="brightness": 0-100 (target or step size)
+    char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set" or "adjust"
+    char volume_value[CONFIG_VALUE_MAX_LEN];          // type="volume": absolute 0-100, signed delta, or {step}
+    char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // type="brightness": "set" or "adjust"
+    char brightness_value[CONFIG_VALUE_MAX_LEN];       // type="brightness": absolute 5-100, signed delta, or {step}
+    // Timer action fields
+    uint8_t timer_id;                                  // type="timer": 1-3
+    char timer_command[CONFIG_TIMER_CMD_MAX_LEN];      // type="timer": "toggle", "start", "stop", etc.
+    char timer_value[CONFIG_VALUE_MAX_LEN];             // type="timer": seconds for set/adjust (supports {step})
     char sound_file[32];                              // type="sound": filename (no path/extension)
     uint8_t sound_volume;                             // type="sound": 0 = device vol, 1-100 = override
     // Notify action fields
@@ -180,6 +191,7 @@ struct ScreenButtonConfig {
     // Icon reference
     char icon_id[CONFIG_ICON_ID_MAX_LEN];
     uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
+    uint8_t icon_position;              // 0=above (default), 1=left, 2=center
     int16_t ui_offset_x;                // Optional visual nudge X in px (+right, -left)
     int16_t ui_offset_y;                // Optional visual nudge Y in px (+down, -up)
 
@@ -232,6 +244,7 @@ struct ButtonDefaults {
     char label_top_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];
+    uint8_t icon_position;                         // ICON_POS_ABOVE (0) = default
 };
 
 // Per-pad config

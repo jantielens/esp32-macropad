@@ -79,7 +79,7 @@ After placing a block, all its buttons become regular buttons — you can edit, 
 
 | Block | Size | Description |
 |-------|------|-------------|
-| **Countdown Timer** | 3×2 min | Three rocker buttons (hours, minutes, seconds) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Includes pad bindings for all three timers. |
+| **Countdown Timer** | 3×2 min | Three rocker buttons (1 min, 10 sec, 1 sec) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Uses Timer 1. |
 
 > **Tip**: Building blocks and template pads serve different purposes. Use **template pads** to share common buttons (like navigation) across many pads. Use **building blocks** to quickly add a self-contained functional group (like a timer control panel) to a specific pad.
 
@@ -231,6 +231,14 @@ Browse the full Material Symbols catalog at [fonts.google.com/icons](https://fon
 
 **Icon Size %** controls scaling. Leave at 0 for automatic sizing (recommended), or set 1–250 to force a specific percentage. When a bar chart widget is active, the icon automatically shares vertical space with the bar.
 
+**Icon Position** controls where the icon appears relative to the center label:
+
+- **Above label** (default) — icon stacked above the center label in a vertical layout
+- **Left of label** — icon and center label side by side in a horizontal row
+- **Centered** — icon centered on the button; the center label remains at its default position underneath
+
+> **Note:** When a gauge, bar chart, or sparkline widget is active, the widget controls icon and label placement. The Icon Position dropdown is hidden in this case.
+
 ### Colors and Borders
 
 The **Colors** section (collapsible) controls the button's appearance:
@@ -325,16 +333,18 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **None** | No action (display-only button) |
 | **Navigate to screen** | Jump to another pad or screen (e.g., `pad_1`, `info_screen`) |
 | **Go back** | Return to the previous screen |
-| **Publish MQTT** | Send a message to an MQTT topic |
-| **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). ESP32-P4 boards only. |
+| **Publish MQTT** | Send a message to an MQTT topic. Topic and payload fields support binding templates (e.g. `[health:cpu]`). |
+| **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). The sequence field supports binding templates. ESP32-P4 boards only. |
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
-| **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. ESP32-P4 boards only. |
+| **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. The pattern field supports binding templates. ESP32-P4 boards only. |
 | **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
-| **Set Volume** | Adjust the device audio volume — set to a specific value, or step up/down by 10%. ESP32-P4 boards only. |
-| **Set Brightness** | Adjust the display backlight brightness — set to a specific value, or step up/down (default 10%). Session-only, resets on reboot. |
-| **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. See [Timer Actions](#timer-actions) below. |
+| **Set Volume** | Set the device audio volume to an absolute value (0–100). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
+| **Adjust Volume** | Step the device audio volume up or down by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
+| **Set Brightness** | Set the display backlight brightness to an absolute value (5–100). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
+| **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
+| **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. Set and adjust countdown values support binding templates. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
-| **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, or **Enable Screensaver**. |
+| **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, **Enable Screensaver**, **Set/Adjust Volume**, or **Set/Adjust Brightness**. |
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -395,7 +405,8 @@ When you select a Timer action, a dropdown groups all actions by timer:
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
 | **Lap** | Reset the timer and start fresh (useful for step timing) |
-| **Adjust** | Add or subtract seconds from the countdown preset (e.g., +15 or -10). Only affects countdown-mode timers |
+| **Set Countdown** | Set the countdown preset to an absolute number of seconds. Only affects countdown-mode timers |
+| **Adjust** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). Only affects countdown-mode timers |
 
 #### Device-Level Timer Configuration
 
@@ -475,7 +486,7 @@ Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes
 - **Zone B** (bottom or right) dispatches the **Long-Press Action** set.
 - Small chevron indicators (▲▼ or ◄►) appear at the edges so the user knows the button is directional.
 - The tap flash overlay covers only the tapped half for clear visual feedback.
-- Zone B uses the device's **Long-Press Beep** pattern for a distinct audio cue (suppressed when the action itself produces audio).
+- Both zones use the device's **Tap Beep** pattern (suppressed when the action itself produces audio).
 - Long-press is disabled on rocker buttons since both action slots are used for the two zones.
 
 > **Note:** The action labels in the button editor change contextually when a rocker widget is selected — "Tap Action" becomes "Up Action" (or "Left Action") and "Long-Press Action" becomes "Down Action" (or "Right Action").
@@ -495,10 +506,140 @@ Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes
 | Widget | Rocker |
 | Direction | Vertical |
 | Center label | `☀️` or `[health:brightness]` |
-| Up Action | Brightness → Up |
-| Down Action | Brightness → Down |
+| Up Action | System Command → Adjust Brightness → `10` |
+| Down Action | System Command → Adjust Brightness → `-10` |
 
 Labels, icons, and colors work alongside the rocker widget. A typical rocker button uses the center label for an icon or the current value, with top/bottom labels for context.
+
+### Numeric Rocker
+
+The numeric rocker widget splits a button into 4 tap zones for fine and coarse numeric adjustment — think `«  ‹  5:00  ›  »` where inner arrows adjust by ±1 and outer arrows adjust by ±10. This gives you a single button that handles both small nudges and large jumps, ideal for timers, counters, and sliders.
+
+Unlike the regular rocker (which maps two zones to two separate action sets), the numeric rocker uses **one action template** with a `{step}` placeholder. The widget substitutes the correct signed step value at tap time, producing 4 distinct actions from a single configuration.
+
+**How it works:**
+
+- The button area is divided into 5 zones along the selected axis, with pixel-clamped widths that adapt to button size.
+- **Horizontal mode**: left = decrement, right = increment.
+- **Vertical mode**: bottom = decrement, top = increment (up = more).
+- **Outer decrement** (far left / bottom) → `{step}` = `-large_step`
+- **Inner decrement** → `{step}` = `-small_step`
+- **Center zone** → works as a normal button (tap and long-press actions)
+- **Inner increment** → `{step}` = `+small_step`
+- **Outer increment** (far right / top) → `{step}` = `+large_step`
+- Zone widths target 12% (outer) and 15% (inner) of the button span, clamped to 40–80 px. The center zone gets whatever remains.
+- Double chevron indicators (`<<`/`>>` or `▲▲`/`▼▼`) mark the outer zones; single chevrons (`<`/`>` or `▲`/`▼`) mark the inner zones.
+- The tap flash covers only the tapped zone.
+- Inner zones (small step) use the device's **Tap Beep** pattern; outer zones (large step) use the **Long-Press Beep** pattern for a distinct audio cue. Suppressed when the adjustment action itself produces audio.
+- The center zone supports full tap and long-press actions (all 3+3 action slots). Outer and inner zones use the dedicated **Adjustment Action**.
+- The `{step}` placeholder is replaced in `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value` fields.
+
+**Disabling zones:** Set a step value to **0** to disable that zone pair. The remaining zone expands to fill the freed space (from 15% to the full 27% per side). Setting both steps to 0 makes the entire button a center zone.
+
+> **Tip:** For best usability, use `col_span >= 2` in horizontal mode or `row_span >= 2` in vertical mode so the tap zones are easy to hit.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Direction** | Horizontal (left/right, default) or vertical (up/down) |
+| **Small Step** | Inner zone adjustment magnitude (default 1). Supports decimals (e.g. 0.1, 0.5). Set to 0 to disable inner zones |
+| **Large Step** | Outer zone adjustment magnitude (default 10). Supports decimals. Set to 0 to disable outer zones |
+| **Indicator Color** | Chevron color (default white) |
+| **Opacity** | Chevron visibility from 0 (invisible) to 255 (fully opaque). Default 80 (~31%) |
+| **Adjustment Action** | The action template dispatched for outer/inner zones. The `{step}` placeholder is replaced with the signed step value |
+
+**Example — Countdown timer adjustment:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | Numeric Rocker |
+| Direction | Horizontal |
+| Col Span | 2 |
+| Center label | `[timer:1;mm:ss]` |
+| Adjustment Action | Type: `timer`, Timer: `1`, Command: `Adjust Countdown`, Value: `{step}` |
+| Small Step | 1 |
+| Large Step | 10 |
+
+Tapping the inner-right zone sends an "Adjust Countdown" action with value `1` (add 1 second). Tapping the outer-left zone sends value `-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1;mm:ss]` binding.
+
+### List
+
+The list widget renders a scrollable, tappable list of items inside a button. Unlike other widgets that visualize MQTT data, the list gets its items from a registered **data provider** — a pluggable module that supplies a set of labeled items at screen load time.
+
+Tapping a list item dispatches the button's configured **Tap Actions** with `[list:provider_id.selected]` binding resolution — the binding engine resolves the selected item's ID at dispatch time. Long-pressing dispatches **Long-Press Actions** the same way. This makes the widget fully generic: the provider supplies data, the button's action configuration defines behavior.
+
+**How it works:**
+
+- The **Data Binding** field specifies the provider ID (not an MQTT topic). For example, `shutter_tests` or `brew_definitions`.
+- On screen enter, the widget calls the provider to get the current list of items.
+- Each item has an **ID** (used in binding resolution) and a **label** (displayed in the list).
+- Tapping an item sets the selected ID for that provider, then dispatches the button's tap actions through the binding engine which resolves `[list:provider_id.selected]` to the item's ID.
+- Long-pressing an item dispatches the button's long-press actions (with the same binding resolution).
+- If no tap action is configured, tapping is a no-op.
+- If the provider ID is not found (e.g., feature module not compiled), the widget shows "Source not found".
+- If the provider returns 0 items, the widget shows "No items".
+
+> **Note:** Tap and long-press events are handled by the list items themselves and do not propagate up to the button — only one of "tap an item" or "long-press an item" fires per interaction. The button's own tap/long-press handlers are not invoked separately when the list widget is active; the widget reuses the same action slots.
+
+**Configuration:**
+
+| Setting | Description |
+|---------|-------------|
+| **Data Binding** | The provider ID string (e.g., `shutter_tests`). Not an MQTT topic |
+| **Filter** | Optional comma-separated rules that include or exclude items returned by the provider. Plain text — binding tokens like `[mqtt:...]` are **not** resolved here. Empty = all items. See syntax below |
+| **Select Action** (tap) | The button's normal tap action(s), dispatched when a list item is tapped. Use `[list:provider_id.selected]` as the screen target to navigate to the selected item |
+| **Long-Press Action** | Optional long-press action(s), dispatched on item long-press |
+
+**Filter syntax:**
+
+| Rule | Meaning |
+|------|---------|
+| *(empty)* or `*` | Match everything (default) |
+| `pad_3` | Exact match against item ID or label (case-insensitive) |
+| `pad_*` | Glob match against ID or label (`*` = any sequence, `?` = single char) |
+| `*Home*` | Substring-style glob |
+| `#5` | Item at index 5 (0-based position in provider's original list) |
+| `#0-3` | Index range 0, 1, 2, 3 |
+| `!pad_5` | Exclusion — negate any rule type with leading `!` |
+
+An item passes if **any** positive rule matches **and no** exclusion rule matches. If only exclusion rules are given, items default to included. To list specific indices, use separate rules like `#0,#2,#4` (commas separate rules; `#` does not accept comma-lists).
+
+**Examples:**
+- `pad_*,!pad_5` — every `pad_` item except `pad_5`
+- `#0-3` — first four items
+- `*Home*,*Office*` — labels containing "Home" or "Office"
+- `!pad_0` — all items except `pad_0`
+
+The `[list:provider_id.selected]` binding token is scoped per provider — each list widget tracks its own selected item independently. The token is resolved in all action fields including `screen_id`, `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value`.
+
+**Example — Select a test script:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | List |
+| Data Binding | `shutter_tests` |
+| Tap Action | Type: `mqtt`, Topic: `macropad/test/start`, Payload: `[list:shutter_tests.selected]` |
+
+When the user taps "Full Range Test" (id: `full-range`), the widget dispatches an MQTT publish to `macropad/test/start` with payload `full-range`.
+
+**Built-in providers:**
+
+| Provider ID | Title | Description |
+|-------------|-------|-------------|
+| `pads` | Select Pad | Lists all configured pads with their custom names. Item IDs are `pad_0`, `pad_1`, etc. Useful for building a pad navigation menu |
+
+**Example — Pad navigation list:**
+
+| Setting | Value |
+|---------|-------|
+| Widget | List |
+| Data Binding | `pads` |
+| Tap Action | Type: `screen`, Screen: `[list:pads.selected]` |
+
+Tapping "Pad 2: Home Assistant" (id: `pad_2`) navigates to that pad screen.
+
+> **Tip:** The list refreshes its content each time the screen is entered. No reboot needed to pick up new items added by the provider.
 
 ### Bar Chart
 
@@ -693,7 +834,7 @@ For bindings that return structured payloads (for example `health:table` and `he
 
 ### Binding Validation
 
-The pad editor and Home page validate binding syntax **in real time** as you type. Any field that accepts a binding expression (labels, colors, data bindings, widget parameters, MQTT topics, wake binding, etc.) is checked automatically.
+The pad editor and Home page validate binding syntax **in real time** as you type. Any field that accepts a binding expression (labels, colors, data bindings, widget parameters, MQTT topics, action values, wake binding, etc.) is checked automatically. In the action editor, fields that support bindings are marked with an **fx** badge.
 
 **What gets validated:**
 
@@ -842,6 +983,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `ble_encrypted` | Current connection is encrypted | `ON` / `OFF` |
 | `ble_peer_addr` | Connected peer's Bluetooth address | `AA:BB:CC:DD:EE:FF` |
 | `ble_peer_id_addr` | Connected peer's identity address | `AA:BB:CC:DD:EE:FF` |
+| `brightness` | Current backlight brightness (0–100) | `75` |
+| `volume` | Current audio volume (0–100) | `50` |
 
 Values are cached for up to 2 seconds to keep the CPU impact low.
 
@@ -1004,10 +1147,13 @@ Displays the value or state of one of the 3 on-device timers. Timer N is 1, 2, o
 
 | Format | Result | Example |
 |--------|--------|---------|
-| `mm:ss` (default) | Minutes and seconds | `4:05` or `-0:12` |
+| *(none)* (default) | Raw seconds with decisecond | `245.0` or `-5.3` |
+| `mm:ss` | Minutes and seconds | `4:05` or `-0:12` |
 | `hh:mm:ss` | Hours, minutes, seconds | `1:02:30` |
 | `ss` | Total seconds | `245` |
 | `mm:ss.d` | With deciseconds | `4:05.3` |
+
+The numeric default makes `[timer:N]` usable as a data source for gauge, bar chart, and sparkline widgets. For human-readable display on labels, use `[timer:N;mm:ss]` or another named format.
 
 **State keys:**
 
@@ -1022,10 +1168,11 @@ Countdown timers that run past zero show negative values (e.g., `-0:05`).
 **Examples:**
 
 ```
-[timer:1]                    → 4:05       (default mm:ss)
+[timer:1]                    → 245.0      (default: raw seconds)
+[timer:1;mm:ss]              → 4:05       (minutes:seconds)
 [timer:1;hh:mm:ss]           → 0:04:05
 [timer:2;mm:ss.d]            → 3:22.7     (with deciseconds)
-[timer:1;ss]                 → 245         (total seconds)
+[timer:1;ss]                 → 245         (integer seconds)
 [timer:1_state]              → running
 [timer:1_expired]            → OFF
 [timer:1_mode]               → down

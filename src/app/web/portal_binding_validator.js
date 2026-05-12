@@ -699,6 +699,23 @@ function bindingValidateDialog() {
         count += _bvCount(_BV_TABLE_DATA, { isWidgetBinding: true }, true);
     }
 
+    // Validate binding-capable action fields (tap, long-press, numeric rocker adjustment)
+    var actionPrefixes = [
+        'pad-edit-action-0', 'pad-edit-action-1', 'pad-edit-action-2',
+        'pad-edit-lp-action-0', 'pad-edit-lp-action-1', 'pad-edit-lp-action-2',
+        'pad-edit-nr-adjust'
+    ];
+    var actionSuffixes = (typeof _ACTION_BIND_SUFFIXES !== 'undefined') ? _ACTION_BIND_SUFFIXES : [
+        '-notify-text', '-notify-duration', '-topic', '-payload', '-sequence',
+        '-beep-pattern', '-timer-set-sec', '-timer-adjust-sec'
+    ];
+    for (var ai = 0; ai < actionPrefixes.length; ai++) {
+        for (var si = 0; si < actionSuffixes.length; si++) {
+            var el = document.getElementById(actionPrefixes[ai] + actionSuffixes[si]);
+            if (el && el.value.trim() && !bindingValidateInput(el)) count++;
+        }
+    }
+
     return { valid: count === 0, count: count };
 }
 
@@ -773,6 +790,7 @@ bindingRegisterScheme('health', {
         'chip', 'chip_rev', 'chip_cores', 'cpu_freq', 'flash_size',
         'firmware', 'board', 'mac', 'reset_reason',
         'wifi_connected', 'wifi_ssid', 'ip', 'hostname',
+        'brightness', 'volume',
         'ble_status', 'ble_state', 'ble_name', 'ble_pairing',
         'ble_bonded', 'ble_encrypted', 'ble_peer_addr', 'ble_peer_id_addr'
     ]
@@ -803,7 +821,11 @@ bindingRegisterScheme('timer', {
         }
         if (parts.length > 2) return 'Too many parameters for timer binding';
         if (opts && opts.isWidgetBinding && parts.length > 1) {
-            return 'Widget data bindings must not include a format parameter';
+            var fmt = parts[1].trim();
+            var numericFormats = ['ss'];
+            if (numericFormats.indexOf(fmt) === -1) {
+                return 'Widget data bindings only allow numeric formats (none or "ss"), got "' + fmt + '"';
+            }
         }
         return null;
     }

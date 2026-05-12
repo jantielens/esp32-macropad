@@ -1,0 +1,17 @@
+                <!-- List Widget Settings (conditional, shown only for list widget type) -->
+                <details class="editor-group" id="pad-edit-list-section" style="display:none;">
+                    <summary>List Settings</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Renders a scrollable list from a data provider. Tapping an item dispatches the button's <strong>Tap Actions</strong>; long-pressing dispatches <strong>Long-Press Actions</strong>. Use <code>[list:provider_id.selected]</code> in action fields (e.g. screen target) to reference the selected item's ID.</small>
+                        <div class="form-group">
+                            <label for="pad-edit-list-provider-id">Data Provider</label>
+                            <input type="text" id="pad-edit-list-provider-id" maxlength="63" placeholder="e.g. pads" oninput="if(typeof listRefreshSyntheticOptions==='function')listRefreshSyntheticOptions()">
+                            <small class="form-text text-muted">The registered provider ID (not an MQTT topic).</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-list-filter">Filter</label>
+                            <input type="text" id="pad-edit-list-filter" maxlength="191" placeholder="e.g. #0-3 or pad_*,!pad_5">
+                            <small class="form-text text-muted">Optional. Comma-separated rules to include/exclude items. <code>*</code>/<code>?</code> = glob, <code>#N</code>/<code>#N-M</code> = index, <code>!</code> = exclude.</small>
+                        </div>
+                    </div>
+                </details>

@@ -9,6 +9,7 @@
  */
 
 #include "arduino_gfx_driver.h"
+#include "arduino_gfx_panel_sleep.h"
 #include "../log_manager.h"
 #include <esp_heap_caps.h>
 
@@ -321,4 +322,20 @@ void Arduino_GFX_Driver::present() {
 		// We always start at row 0 because the panel ignores address windows,
 		// but we limit the height to rowCount to reduce transfer size.
 		gfx->draw16bitRGBBitmap(0, 0, framebuffer, displayWidth, rowCount);
+}
+
+void Arduino_GFX_Driver::displaySleep() {
+		arduino_gfx_panel_sleep(bus);
+}
+
+void Arduino_GFX_Driver::displayWake() {
+		arduino_gfx_panel_wake(bus);
+}
+
+void Arduino_GFX_Driver::displayWakeSleepOut() {
+		arduino_gfx_panel_sleep_out(bus);
+}
+
+void Arduino_GFX_Driver::displayWakeDisplayOn() {
+		arduino_gfx_panel_display_on(bus);
 }

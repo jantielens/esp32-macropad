@@ -588,6 +588,12 @@
 #define TFT_BACKLIGHT_DUTY_MAX 255
 #endif
 
+// Minimum brightness (%) a user can set via buttons, web UI, or API.
+// The screen saver bypasses this floor to allow sleep (brightness 0).
+#ifndef MIN_USER_BRIGHTNESS
+#define MIN_USER_BRIGHTNESS 5
+#endif
+
 // ============================================================================
 // Touch Configuration
 // ============================================================================
@@ -636,6 +642,26 @@
 #define WEB_PORTAL_CONFIG_MAX_JSON_BYTES 4096
 #endif
 
+// Default startup fragment for board variants with a primary portal category.
+#ifndef PORTAL_PRIMARY_FRAGMENT
+#define PORTAL_PRIMARY_FRAGMENT ""
+#endif
+
+// Custom nav category ID promoted to first position (empty = standard behavior).
+#ifndef PORTAL_PRIMARY_CATEGORY
+#define PORTAL_PRIMARY_CATEGORY ""
+#endif
+
+// Display name for the primary portal category in the nav sidebar.
+#ifndef PORTAL_PRIMARY_LABEL
+#define PORTAL_PRIMARY_LABEL ""
+#endif
+
+// Icon (UTF-8) for the primary portal category in the nav sidebar.
+#ifndef PORTAL_PRIMARY_ICON
+#define PORTAL_PRIMARY_ICON ""
+#endif
+
 // Timeout for an incomplete /api/config upload (ms) before freeing the buffer.
 #ifndef WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS
 #define WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS 5000
@@ -647,9 +673,18 @@
 #endif
 
 // ============================================================================
+// Screensaver
+// ============================================================================
+// LVGL task loop delay while the screensaver is fully asleep (ms).
+// Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
+#ifndef SCREENSAVER_SLEEP_TICK_MS
+#define SCREENSAVER_SLEEP_TICK_MS 200
+#endif
+
+// ============================================================================
 // Pad & Screen Limits
 // ============================================================================
-// Maximum number of user-configurable pads (stored on LittleFS).
+// Maximum number of user-configurable pads the device supports.
 // Override per-board in board_overrides.h for memory-constrained targets.
 #ifndef MAX_PADS
 #define MAX_PADS 16

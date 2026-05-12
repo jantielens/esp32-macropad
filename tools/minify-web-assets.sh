@@ -85,10 +85,88 @@ if [ ! -d "$WEB_DIR" ]; then
     exit 1
 fi
 
-# Discover source files (exclude template fragments starting with _)
-HTML_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.html" -not -name "_*.html" -type f | sort))
+# Discover source files (exclude template fragments starting with _ and *.fragment.html)
+HTML_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.html" -not -name "_*.html" -not -name "*.fragment.html" -type f | sort))
+FRAGMENT_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.fragment.html" -type f | sort))
 CSS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.css" -not -name "_*.css" -type f | sort))
 JS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.js" -not -name "_*.js" -type f | sort))
+
+# ---- Bundle support ----
+# A *.bundle manifest lists fragment files that should be concatenated into the
+# primary asset during minification.  Works for both JS (.js.bundle) and CSS
+# (.css.bundle).  Fragment files (prefixed with _) are excluded from individual
+# processing so they only appear in the bundled output.
+#
+# Concatenation order matters: JS bundles concatenate top-to-bottom, CSS bundles
+# follow CSS cascade rules (later entries override earlier ones at equal
+# specificity).
+
+# discover_bundle_manifests <extension> <skip_array_name>
+#   Scans WEB_DIR for *.<ext>.bundle manifests, validates referenced files, and
+#   populates the named associative array with fragment paths to skip.
+discover_bundle_manifests() {
+    local ext="$1"
+    local -n _skip_map="$2"
+    for bundle_manifest in $(find "$WEB_DIR" -maxdepth 1 -name "*.$ext.bundle" -type f 2>/dev/null); do
+        local primary_name
+        primary_name=$(basename "$bundle_manifest" .bundle)  # e.g. portal.js
+        local bundle_missing=0
+        while IFS= read -r bline || [[ -n "$bline" ]]; do
+            bline="${bline%%#*}"                     # strip comments
+            bline="$(echo "$bline" | xargs)"         # trim whitespace
+            [[ -z "$bline" ]] && continue
+            # Validate that the listed file exists
+            if [[ ! -f "$WEB_DIR/$bline" ]]; then
+                echo "  Error: $(basename "$bundle_manifest") references missing file: $bline"
+                bundle_missing=$((bundle_missing + 1))
+            fi
+            [[ "$bline" = "$primary_name" ]] && continue  # don't skip the primary
+            _skip_map["$WEB_DIR/$bline"]=1
+        done < "$bundle_manifest"
+        if [[ $bundle_missing -gt 0 ]]; then
+            echo "Error: $bundle_missing missing file(s) in bundle manifest $(basename "$bundle_manifest")"
+            exit 1
+        fi
+    done
+}
+
+# filter_bundle_fragments <file_array_name> <skip_array_name>
+#   Removes entries present in the skip map from the file list (in-place).
+filter_bundle_fragments() {
+    local -n _files="$1"
+    local -n _skip="$2"
+    local filtered=()
+    for f in "${_files[@]}"; do
+        [[ -n "${_skip[$f]}" ]] && continue
+        filtered+=("$f")
+    done
+    _files=("${filtered[@]}")
+}
+
+# concatenate_bundle <bundle_manifest> <output_var_name>
+#   Reads a .bundle manifest and concatenates listed files into a temp file.
+#   Sets the named variable to the temp file path (caller must clean up).
+#   Returns 1 if the manifest does not exist (no bundle).
+concatenate_bundle() {
+    local manifest="$1"
+    local -n _out_path="$2"
+    [[ -f "$manifest" ]] || return 1
+    _out_path=$(mktemp /tmp/bundle_XXXXXX)
+    while IFS= read -r bline || [[ -n "$bline" ]]; do
+        bline="${bline%%#*}"
+        bline="$(echo "$bline" | xargs)"
+        [[ -z "$bline" ]] && continue
+        cat "$WEB_DIR/$bline" >> "$_out_path"
+        echo >> "$_out_path"
+    done < "$manifest"
+}
+
+declare -A JS_SKIP_FILES
+declare -A CSS_SKIP_FILES
+discover_bundle_manifests "js" JS_SKIP_FILES
+discover_bundle_manifests "css" CSS_SKIP_FILES
+filter_bundle_fragments JS_FILES JS_SKIP_FILES
+filter_bundle_fragments CSS_FILES CSS_SKIP_FILES
 
 # Read template fragments for HTML processing
 HEADER_TEMPLATE=""
@@ -100,6 +178,8 @@ WIDGET_GAUGE_TEMPLATE=""
 WIDGET_SPARKLINE_TEMPLATE=""
 WIDGET_TABLE_TEMPLATE=""
 WIDGET_ROCKER_TEMPLATE=""
+WIDGET_NUMERICROCKER_TEMPLATE=""
+WIDGET_LIST_TEMPLATE=""
 STYLE_HELP_TEMPLATE=""
 HEALTH_WIDGET_TEMPLATE=""
 REBOOT_OVERLAY_TEMPLATE=""
@@ -140,6 +220,14 @@ if [ -f "$WEB_DIR/_widget_rocker.html" ]; then
     WIDGET_ROCKER_TEMPLATE=$(cat "$WEB_DIR/_widget_rocker.html")
 fi
 
+if [ -f "$WEB_DIR/_widget_numericrocker.html" ]; then
+    WIDGET_NUMERICROCKER_TEMPLATE=$(cat "$WEB_DIR/_widget_numericrocker.html")
+fi
+
+if [ -f "$WEB_DIR/_widget_list.html" ]; then
+    WIDGET_LIST_TEMPLATE=$(cat "$WEB_DIR/_widget_list.html")
+fi
+
 if [ -f "$WEB_DIR/_style_help.html" ]; then
     STYLE_HELP_TEMPLATE=$(cat "$WEB_DIR/_style_help.html")
 fi
@@ -152,16 +240,46 @@ if [ -f "$WEB_DIR/_reboot_overlay.html" ]; then
     REBOOT_OVERLAY_TEMPLATE=$(cat "$WEB_DIR/_reboot_overlay.html")
 fi
 
-if [ ${#HTML_FILES[@]} -eq 0 ] && [ ${#CSS_FILES[@]} -eq 0 ] && [ ${#JS_FILES[@]} -eq 0 ]; then
+if [ ${#HTML_FILES[@]} -eq 0 ] && [ ${#FRAGMENT_FILES[@]} -eq 0 ] && [ ${#CSS_FILES[@]} -eq 0 ] && [ ${#JS_FILES[@]} -eq 0 ]; then
     echo "Error: No HTML, CSS, or JS files found in $WEB_DIR"
     exit 1
 fi
 
 echo "Found files:"
-echo "  HTML: ${#HTML_FILES[@]} file(s)"
-echo "  CSS:  ${#CSS_FILES[@]} file(s)"
-echo "  JS:   ${#JS_FILES[@]} file(s)"
+echo "  HTML:      ${#HTML_FILES[@]} file(s)"
+echo "  Fragments: ${#FRAGMENT_FILES[@]} file(s)"
+echo "  CSS:       ${#CSS_FILES[@]} file(s)"
+echo "  JS:        ${#JS_FILES[@]} file(s)"
 echo
+
+# ---------------------------------------------------------------------------
+# JavaScript syntax validation
+# ---------------------------------------------------------------------------
+# Check all JS source files for syntax errors using Node.js. This catches
+# missing braces, unterminated strings, and other parse errors early, before
+# minification where error messages are less helpful.
+
+if command -v node &> /dev/null; then
+    echo "Validating JavaScript syntax..."
+    js_syntax_errors=0
+    for js_check_file in $(find "$WEB_DIR" -maxdepth 1 -name "*.js" -type f | sort); do
+        if ! node --check "$js_check_file" 2>/dev/null; then
+            echo "  ✗ $(basename "$js_check_file"):"
+            node --check "$js_check_file" 2>&1 | sed 's/^/    /'
+            js_syntax_errors=$((js_syntax_errors + 1))
+        fi
+    done
+    if [[ $js_syntax_errors -gt 0 ]]; then
+        echo
+        echo "Error: $js_syntax_errors JavaScript file(s) have syntax errors"
+        exit 1
+    fi
+    echo "  ✓ All JavaScript files passed syntax check"
+    echo
+else
+    echo "Note: node not found — skipping JavaScript syntax validation"
+    echo
+fi
 
 # Check for Python 3
 if ! command -v python3 &> /dev/null; then
@@ -203,6 +321,8 @@ format_size_savings() {
 # Arrays to store processed content and statistics
 declare -A HTML_CONTENTS
 declare -A HTML_GZIP_CONTENTS
+declare -A FRAGMENT_CONTENTS
+declare -A FRAGMENT_GZIP_CONTENTS
 declare -A CSS_CONTENTS
 declare -A CSS_GZIP_CONTENTS
 declare -A JS_CONTENTS
@@ -250,6 +370,8 @@ widget_gauge_template = '''$WIDGET_GAUGE_TEMPLATE'''
 widget_sparkline_template = '''$WIDGET_SPARKLINE_TEMPLATE'''
 widget_table_template = '''$WIDGET_TABLE_TEMPLATE'''
 widget_rocker_template = '''$WIDGET_ROCKER_TEMPLATE'''
+widget_numericrocker_template = '''$WIDGET_NUMERICROCKER_TEMPLATE'''
+widget_list_template = '''$WIDGET_LIST_TEMPLATE'''
 style_help_template = '''$STYLE_HELP_TEMPLATE'''
 health_widget_template = '''$HEALTH_WIDGET_TEMPLATE'''
 reboot_overlay_template = '''$REBOOT_OVERLAY_TEMPLATE'''
@@ -267,6 +389,8 @@ with open('$html_file', 'r') as f:
     html = html.replace('{{WIDGET_SPARKLINE}}', widget_sparkline_template)
     html = html.replace('{{WIDGET_TABLE}}', widget_table_template)
     html = html.replace('{{WIDGET_ROCKER}}', widget_rocker_template)
+    html = html.replace('{{WIDGET_NUMERICROCKER}}', widget_numericrocker_template)
+    html = html.replace('{{WIDGET_LIST}}', widget_list_template)
     html = html.replace('{{STYLE_HELP}}', style_help_template)
     html = html.replace('{{HEALTH_WIDGET}}', health_widget_template)
     html = html.replace('{{REBOOT_OVERLAY}}', reboot_overlay_template)
@@ -299,20 +423,96 @@ with open('$html_file', 'r') as f:
     GZIPPED_SIZES["html_$filename"]=$gzipped_size
 done
 
-# Process CSS files (minify)
+# Process fragment HTML files (subset of template substitution + minification)
+# Fragments get: BINDING_HELP, WIDGET_*, STYLE_HELP, HEALTH_WIDGET, REBOOT_OVERLAY,
+# PROJECT_NAME, PROJECT_DISPLAY_NAME. They do NOT get HEADER, NAV, or FOOTER.
+for fragment_file in "${FRAGMENT_FILES[@]}"; do
+    stem=$(basename "$fragment_file" .fragment.html)
+    # C symbols: replace hyphens with underscores
+    c_stem="${stem//-/_}"
+    filename="${c_stem}_fragment"
+    echo "Processing fragment: $stem.fragment.html..."
+    content=$(cat "$fragment_file")
+    original_size=$(echo -n "$content" | wc -c)
+    
+    minified=$(python3 -c "
+import re
+
+binding_help_template = '''$BINDING_HELP_TEMPLATE'''
+widget_bar_chart_template = '''$WIDGET_BAR_CHART_TEMPLATE'''
+widget_gauge_template = '''$WIDGET_GAUGE_TEMPLATE'''
+widget_sparkline_template = '''$WIDGET_SPARKLINE_TEMPLATE'''
+widget_table_template = '''$WIDGET_TABLE_TEMPLATE'''
+widget_rocker_template = '''$WIDGET_ROCKER_TEMPLATE'''
+widget_numericrocker_template = '''$WIDGET_NUMERICROCKER_TEMPLATE'''
+widget_list_template = '''$WIDGET_LIST_TEMPLATE'''
+style_help_template = '''$STYLE_HELP_TEMPLATE'''
+health_widget_template = '''$HEALTH_WIDGET_TEMPLATE'''
+reboot_overlay_template = '''$REBOOT_OVERLAY_TEMPLATE'''
+
+with open('$fragment_file', 'r') as f:
+    html = f.read()
+    
+    html = html.replace('{{BINDING_HELP}}', binding_help_template)
+    html = html.replace('{{WIDGET_BAR_CHART}}', widget_bar_chart_template)
+    html = html.replace('{{WIDGET_GAUGE}}', widget_gauge_template)
+    html = html.replace('{{WIDGET_SPARKLINE}}', widget_sparkline_template)
+    html = html.replace('{{WIDGET_TABLE}}', widget_table_template)
+    html = html.replace('{{WIDGET_ROCKER}}', widget_rocker_template)
+    html = html.replace('{{WIDGET_NUMERICROCKER}}', widget_numericrocker_template)
+    html = html.replace('{{WIDGET_LIST}}', widget_list_template)
+    html = html.replace('{{STYLE_HELP}}', style_help_template)
+    html = html.replace('{{HEALTH_WIDGET}}', health_widget_template)
+    html = html.replace('{{REBOOT_OVERLAY}}', reboot_overlay_template)
+    
+    html = html.replace('{{PROJECT_NAME}}', '$PROJECT_NAME')
+    html = html.replace('{{PROJECT_DISPLAY_NAME}}', '$PROJECT_DISPLAY_NAME')
+    
+    html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
+    html = re.sub(r'\s+', ' ', html)
+    html = re.sub(r'>\s+<', '><', html)
+    html = html.strip()
+    print(html, end='')
+")
+    
+    FRAGMENT_CONTENTS["$filename"]="$minified"
+    minified_size=$(echo -n "$minified" | wc -c)
+    
+    gzipped=$(gzip_to_c_array "$minified")
+    FRAGMENT_GZIP_CONTENTS["$filename"]="$gzipped"
+    gzipped_size=$(echo -n "$minified" | gzip -9 -c | wc -c)
+    
+    ORIGINAL_SIZES["frag_$filename"]=$original_size
+    PROCESSED_SIZES["frag_$filename"]=$minified_size
+    GZIPPED_SIZES["frag_$filename"]=$gzipped_size
+done
+
+# Process CSS files (minify, with bundle support)
 for css_file in "${CSS_FILES[@]}"; do
-    filename=$(basename "$css_file" .css)
-    echo "Minifying CSS: $filename.css..."
-    content=$(cat "$css_file")
+    raw_name=$(basename "$css_file" .css)
+    filename="${raw_name//[.-]/_}"
+
+    # Bundle support: if a .bundle manifest exists, concatenate fragments
+    bundle_manifest="${css_file}.bundle"
+    css_source="$css_file"
+    if concatenate_bundle "$bundle_manifest" css_source; then
+        echo "Bundling CSS: $raw_name.css (from $(basename "$bundle_manifest"))..."
+    fi
+
+    echo "Minifying CSS: $raw_name.css..."
+    content=$(cat "$css_source")
     original_size=$(echo -n "$content" | wc -c)
     
     minified=$(python3 -c "
 import csscompressor
-with open('$css_file', 'r') as f:
+with open('$css_source', 'r') as f:
     css = f.read()
     minified = csscompressor.compress(css)
     print(minified, end='')
 ")
+
+    # Cleanup temp file if it was a bundle
+    [[ "$css_source" != "$css_file" ]] && rm -f "$css_source"
     
     CSS_CONTENTS["$filename"]="$minified"
     minified_size=$(echo -n "$minified" | wc -c)
@@ -327,20 +527,42 @@ with open('$css_file', 'r') as f:
     GZIPPED_SIZES["css_$filename"]=$gzipped_size
 done
 
-# Process JS files (minify)
+# Process JS files (minify, with bundle support)
 for js_file in "${JS_FILES[@]}"; do
-    filename=$(basename "$js_file" .js)
-    echo "Minifying JS: $filename.js..."
-    content=$(cat "$js_file")
+    raw_name=$(basename "$js_file" .js)
+    filename="${raw_name//[.-]/_}"
+
+    # Bundle support: if a .bundle manifest exists, concatenate fragments
+    bundle_manifest="${js_file}.bundle"
+    js_source="$js_file"
+    if concatenate_bundle "$bundle_manifest" js_source; then
+        echo "Bundling JS: $raw_name.js (from $(basename "$bundle_manifest"))..."
+
+        # Syntax-check the concatenated bundle
+        if command -v node &> /dev/null; then
+            if ! node --check "$js_source" 2>/dev/null; then
+                echo "  ✗ Concatenated bundle $raw_name.js has syntax errors:"
+                node --check "$js_source" 2>&1 | sed 's/^/    /'
+                rm -f "$js_source"
+                exit 1
+            fi
+        fi
+    fi
+
+    echo "Minifying JS: $raw_name.js..."
+    content=$(cat "$js_source")
     original_size=$(echo -n "$content" | wc -c)
     
     minified=$(python3 -c "
 import rjsmin
-with open('$js_file', 'r') as f:
+with open('$js_source', 'r') as f:
     js = f.read()
     minified = rjsmin.jsmin(js)
     print(minified, end='')
 ")
+
+    # Cleanup temp file if it was a bundle
+    [[ "$js_source" != "$js_file" ]] && rm -f "$js_source"
     
     JS_CONTENTS["$filename"]="$minified"
     minified_size=$(echo -n "$minified" | wc -c)
@@ -472,6 +694,17 @@ ${HTML_GZIP_CONTENTS[$filename]}
 EOF
 done
 
+# Generate fragment HTML sections (gzipped)
+for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+    cat >> "$OUTPUT_FILE" << EOF
+// Fragment from src/app/web/${filename%.fragment*}.fragment.html (gzipped)
+const uint8_t ${filename}_html_gz[] PROGMEM = {
+${FRAGMENT_GZIP_CONTENTS[$filename]}
+};
+
+EOF
+done
+
 # Generate CSS sections (gzipped)
 for filename in "${!CSS_CONTENTS[@]}"; do
     cat >> "$OUTPUT_FILE" << EOF
@@ -504,6 +737,10 @@ for filename in "${!HTML_CONTENTS[@]}"; do
     echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
 done
 
+for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+    echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
+done
+
 for filename in "${!CSS_CONTENTS[@]}"; do
     echo "const size_t ${filename}_css_gz_len = sizeof(${filename}_css_gz);" >> "$OUTPUT_FILE"
 done
@@ -511,6 +748,43 @@ done
 for filename in "${!JS_CONTENTS[@]}"; do
     echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
 done
+
+# Generate fragment lookup table for runtime dispatch
+if [ ${#FRAGMENT_CONTENTS[@]} -gt 0 ]; then
+    cat >> "$OUTPUT_FILE" << 'FRAG_TABLE_START'
+
+// Fragment lookup table for /api/section/{id} dispatch
+struct FragmentAsset {
+    const char* id;       // fragment_id from ComponentDef (hyphenated, e.g. "wifi")
+    const uint8_t* data;  // gzipped PROGMEM data
+    size_t len;           // gzipped data length
+};
+
+static const FragmentAsset fragment_assets[] = {
+FRAG_TABLE_START
+
+    for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+        # Convert symbol name back to fragment_id: wifi_fragment -> wifi, pad_editor_fragment -> pad-editor
+        frag_id="${filename%_fragment}"
+        frag_id="${frag_id//_/-}"
+        echo "    {\"$frag_id\", ${filename}_html_gz, sizeof(${filename}_html_gz)}," >> "$OUTPUT_FILE"
+    done
+
+    cat >> "$OUTPUT_FILE" << 'FRAG_TABLE_END'
+};
+
+static constexpr size_t fragment_assets_count = sizeof(fragment_assets) / sizeof(fragment_assets[0]);
+
+// Lookup a fragment by its id. Returns nullptr if not found.
+static inline const FragmentAsset* find_fragment_asset(const char* id) {
+    for (size_t i = 0; i < fragment_assets_count; i++) {
+        if (strcmp(fragment_assets[i].id, id) == 0) return &fragment_assets[i];
+    }
+    return nullptr;
+}
+
+FRAG_TABLE_END
+fi
 
 # Close header file
 cat >> "$OUTPUT_FILE" << 'HEADER_END'
@@ -535,6 +809,18 @@ for filename in "${!HTML_CONTENTS[@]}"; do
     gzip=${GZIPPED_SIZES[$key]}
     percent=$((100 - (gzip * 100 / orig)))
     echo "  HTML ${filename}.html: $orig → $proc → $gzip bytes (-${percent}% total)"
+    total_original=$((total_original + orig))
+    total_processed=$((total_processed + proc))
+    total_gzipped=$((total_gzipped + gzip))
+done
+
+for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+    key="frag_$filename"
+    orig=${ORIGINAL_SIZES[$key]}
+    proc=${PROCESSED_SIZES[$key]}
+    gzip=${GZIPPED_SIZES[$key]}
+    percent=$((100 - (gzip * 100 / orig)))
+    echo "  FRAG ${filename}: $orig → $proc → $gzip bytes (-${percent}% total)"
     total_original=$((total_original + orig))
     total_processed=$((total_processed + proc))
     total_gzipped=$((total_gzipped + gzip))

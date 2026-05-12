@@ -99,6 +99,12 @@ public:
     // Buffered drivers override this to push the accumulated framebuffer/canvas to the panel.
     virtual void present() {}
     
+    // Panel sleep/wake (optional — called by screen saver manager)
+    // Put the panel controller into low-power mode and wake it back up.
+    // Default: no-op (backlight-only sleep for drivers that lack panel sleep).
+    virtual void displaySleep() {}
+    virtual void displayWake() {}
+
     // LVGL configuration hook (override for driver-specific behavior)
     // Called during LVGL initialization to allow driver-specific settings
     // such as software rotation, full refresh mode, etc.
@@ -224,6 +230,8 @@ When `HAS_DISPLAY` is enabled, the firmware includes a screen saver manager that
 - While dimming/asleep/fading in, touch input is suppressed so “wake gestures” can’t click through into LVGL UI navigation.
 - **Sleep overlay**: When entering `Asleep`, a full-screen black LVGL object is created on `lv_layer_top()` so RGB panels physically drive black pixels (reduces LC stress). The overlay is removed *before* the backlight rises during wake.
 - **Pixel shift**: Each sleep cycle advances a counter through 81 unique positions in a 9×9 grid (±4 px on each axis) using coprime stride 34. On wake (and on screen switch), `lv_obj_set_style_translate_x/y` is applied to `lv_scr_act()`. Pad layouts reserve `PIXEL_SHIFT_MARGIN` (4 px) insets to prevent clipping.
+- **Panel sleep**: When entering `Asleep`, the screen saver calls `displaySleep()` on the active `DisplayDriver` to put the panel controller into hardware low-power mode (MIPI-DSI DCS sleep-in, TFT_eSPI command 0x10, Arduino_GFX bus command). On wake, `displayWake()` is called before the backlight fade-in begins. Drivers that do not override these methods fall back to backlight-only sleep.
+- **LVGL throttle**: While fully asleep, the LVGL task loop delay increases from the normal 1–20 ms to `SCREENSAVER_SLEEP_TICK_MS` (default 200 ms, board-overridable). `screen->update()` is gated so widgets stop refreshing. FPS is reported as 0 during sleep. This reduces CPU usage from ~30% to ~2%.
 
 **Configuration / APIs:**
 - Config fields are exposed via `GET/POST /api/config` (only when `HAS_DISPLAY`).
@@ -696,6 +704,13 @@ public:
     
     void applyDisplayFixes() override {
         // Board-specific fixes (inversion, gamma, etc.)
+    }
+
+    void displaySleep() override {
+        // Put panel controller into low-power mode (optional)
+    }
+    void displayWake() override {
+        // Wake panel controller from low-power mode (optional)
     }
     
     void configureLVGL(lv_display_t* disp, uint8_t rotation) override {

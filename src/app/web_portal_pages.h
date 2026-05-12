@@ -3,23 +3,22 @@
 
 #include <ESPAsyncWebServer.h>
 
+// Legacy page handlers (kept for backward-compatible redirects)
 void handleRoot(AsyncWebServerRequest *request);
 void handleHome(AsyncWebServerRequest *request);
 void handlePad(AsyncWebServerRequest *request);
 void handleNetwork(AsyncWebServerRequest *request);
 void handleFirmware(AsyncWebServerRequest *request);
-void handleCSS(AsyncWebServerRequest *request);
-void handleJS(AsyncWebServerRequest *request);
 
-// Split JS module handlers
-void handleCoreJS(AsyncWebServerRequest *request);
-void handleConfigJS(AsyncWebServerRequest *request);
-void handleFirmwareJS(AsyncWebServerRequest *request);
-void handleHealthJS(AsyncWebServerRequest *request);
-void handlePadColorsJS(AsyncWebServerRequest *request);
-void handlePadIOJS(AsyncWebServerRequest *request);
-void handlePadEditorJS(AsyncWebServerRequest *request);
-void handleActionEditorJS(AsyncWebServerRequest *request);
-void handleBindingValidatorJS(AsyncWebServerRequest *request);
+// Asset handlers
+void handleJS(AsyncWebServerRequest *request);
+void handleBootstrapCSS(AsyncWebServerRequest *request);
+void handlePortalCustomCSS(AsyncWebServerRequest *request);
+
+// Shell handler (new single-page root)
+void handleShell(AsyncWebServerRequest *request);
+
+// Fragment handler — serves gzipped fragment HTML by id
+void handleFragment(AsyncWebServerRequest *request);
 
 #endif // WEB_PORTAL_PAGES_H

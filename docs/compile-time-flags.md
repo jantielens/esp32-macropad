@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 160
+Total flags: 166
 
 ### Features (HAS_*)
 
@@ -112,6 +112,7 @@ Total flags: 160
 - **MAX_NON_PAD_SCREENS** default: `10` — Number of non-pad screens (info, test, fps, touch_test, + headroom).
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
+- **MIN_USER_BRIGHTNESS** default: `5` — The screen saver bypasses this floor to allow sleep (brightness 0).
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
@@ -166,8 +167,13 @@ Total flags: 160
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
 - **LVGL_TASK_PRIORITY** default: `4` — Default 4 matches ESP-IDF BSP convention; keeps rendering above WiFi (pri 2-3).
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
+- **PORTAL_PRIMARY_CATEGORY** default: `""` — Custom nav category ID promoted to first position (empty = standard behavior).
+- **PORTAL_PRIMARY_FRAGMENT** default: `""` — Default startup fragment for board variants with a primary portal category.
+- **PORTAL_PRIMARY_ICON** default: `""` — Icon (UTF-8) for the primary portal category in the nav sidebar.
+- **PORTAL_PRIMARY_LABEL** default: `""` — Display name for the primary portal category in the nav sidebar.
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
+- **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
 - **ST7701_DSI_HSYNC_BACK_PORCH** default: `42` — HSYNC back porch in pixel clocks.
 - **ST7701_DSI_HSYNC_FRONT_PORCH** default: `42` — HSYNC front porch in pixel clocks.
@@ -242,8 +248,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/ha_discovery.cpp
+  - src/app/health_binding.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
+  - src/app/portal_components.cpp
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
   - src/app/web_portal_config.cpp
@@ -266,6 +274,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
   - src/app/health_binding.cpp
+  - src/app/portal_components.cpp
   - src/app/web_portal_ble.cpp
   - src/app/web_portal_ble.h
   - src/app/web_portal_config.cpp
@@ -309,6 +318,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
+  - src/app/list_binding.cpp
+  - src/app/list_provider.cpp
+  - src/app/list_provider.h
+  - src/app/list_provider_pads.cpp
   - src/app/lv_conf.h
   - src/app/message_bubble.cpp
   - src/app/message_bubble.h
@@ -323,6 +336,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_block.cpp
   - src/app/pad_block.h
   - src/app/pad_config.cpp
+  - src/app/portal_components.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
@@ -337,26 +351,20 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/timer_engine.cpp
   - src/app/touch_manager.cpp
   - src/app/web_portal.cpp
-  - src/app/web_portal_boot_actions.cpp
-  - src/app/web_portal_boot_actions.h
-  - src/app/web_portal_button_defaults.cpp
-  - src/app/web_portal_button_defaults.h
   - src/app/web_portal_config.cpp
   - src/app/web_portal_device_api.cpp
-  - src/app/web_portal_display.cpp
-  - src/app/web_portal_display.h
   - src/app/web_portal_icons.cpp
   - src/app/web_portal_icons.h
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp
-  - src/app/web_portal_swipe.cpp
-  - src/app/web_portal_swipe.h
-  - src/app/web_portal_timers.cpp
-  - src/app/web_portal_timers.h
+  - src/app/web_portal_screenshot.cpp
+  - src/app/web_portal_screenshot.h
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/gauge_widget.cpp
+  - src/app/widgets/list_widget.cpp
+  - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
@@ -404,6 +412,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_wake.h
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
+  - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen_events.cpp
   - src/app/screens/pad_screen_poll.cpp
@@ -440,6 +449,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/ha_discovery.cpp
   - src/app/mqtt_audio.cpp
+  - src/app/portal_components.cpp
   - src/app/sound_player.cpp
   - src/app/sound_player.h
   - src/app/sound_store.cpp
@@ -590,10 +600,22 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **MAX_PAD_BUTTONS**
   - src/app/pad_config.h
+- **MIN_USER_BRIGHTNESS**
+  - src/app/board_config.h
+- **PORTAL_PRIMARY_CATEGORY**
+  - src/app/board_config.h
+- **PORTAL_PRIMARY_FRAGMENT**
+  - src/app/board_config.h
+- **PORTAL_PRIMARY_ICON**
+  - src/app/board_config.h
+- **PORTAL_PRIMARY_LABEL**
+  - src/app/board_config.h
 - **POWERON_CONFIG_BURST_ENABLED**
   - src/app/board_config.h
   - src/app/power_manager.cpp
 - **PROJECT_DISPLAY_NAME**
+  - src/app/board_config.h
+- **SCREENSAVER_SLEEP_TICK_MS**
   - src/app/board_config.h
 - **SCREEN_HISTORY_MAX**
   - src/app/board_config.h

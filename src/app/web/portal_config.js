@@ -11,51 +11,6 @@ async function loadMode() {
         
         const mode = await response.json();
         portalMode = mode.mode || 'full';
-        
-        // Show/hide additional settings based on mode (only if element exists)
-        const additionalSettings = document.getElementById('additional-settings');
-        if (additionalSettings) {
-            if (portalMode === 'core') {
-                additionalSettings.style.display = 'none';
-            } else {
-                additionalSettings.style.display = 'block';
-            }
-        }
-        
-        // Hide Home and Firmware navigation buttons in AP mode (core mode)
-        if (portalMode === 'core') {
-            document.querySelectorAll('.nav-tab[data-page="home"], .nav-tab[data-page="pad"], .nav-tab[data-page="firmware"]').forEach(tab => {
-                tab.style.display = 'none';
-            });
-            
-            // Show setup notice on network page
-            const setupNotice = document.getElementById('setup-notice');
-            if (setupNotice) {
-                setupNotice.style.display = 'block';
-            }
-            
-            // Hide unnecessary buttons on network page (only "Save and Reboot" makes sense)
-            const saveOnlyBtn = document.getElementById('save-only-btn');
-            const rebootBtn = document.getElementById('reboot-btn');
-            if (saveOnlyBtn) saveOnlyBtn.style.display = 'none';
-            if (rebootBtn) rebootBtn.style.display = 'none';
-            
-            // Change primary button text to be more intuitive
-            const submitBtn = document.querySelector('#config-form button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.textContent = 'Save & Connect';
-            }
-
-            // Hide security settings in AP/core mode
-            // (auth is intentionally disabled during onboarding/recovery)
-            const securitySection = document.getElementById('security-section');
-            if (securitySection) {
-                securitySection.style.display = 'none';
-                securitySection.querySelectorAll('input, select, textarea').forEach(el => {
-                    el.disabled = true;
-                });
-            }
-        }
     } catch (error) {
         console.error('Error loading mode:', error);
     }
@@ -76,110 +31,13 @@ async function loadVersion() {
         healthConfigureFromDeviceInfo(deviceInfoCache);
         healthConfigureHistoryFromDeviceInfo(deviceInfoCache);
 
-        // Strategy B: Hide/disable MQTT settings if firmware was built without MQTT support
+        // Hide/disable MQTT settings if firmware was built without MQTT support
         const mqttSection = document.getElementById('mqtt-settings-section');
         if (mqttSection && version.has_mqtt === false) {
             mqttSection.style.display = 'none';
             mqttSection.querySelectorAll('input, select, textarea').forEach(el => {
                 el.disabled = true;
             });
-        }
-
-        // Hide/disable display settings if firmware was built without backlight support
-        const displaySection = document.getElementById('display-settings-section');
-        if (displaySection) {
-            if (version.has_backlight === true || version.has_display === true) {
-                displaySection.style.display = 'block';
-            } else {
-                displaySection.style.display = 'none';
-                displaySection.querySelectorAll('input').forEach(el => {
-                    el.disabled = true;
-                });
-            }
-        }
-
-        // Populate screen selection dropdown if device has display
-        const screenSelect = document.getElementById('screen_selection');
-        const screenGroup = document.getElementById('screen-selection-group');
-        if (screenSelect && screenGroup && version.has_display === true && version.available_screens) {
-            // Clear existing options
-            screenSelect.innerHTML = '';
-            
-            // Add option for each available screen
-            version.available_screens.forEach(screen => {
-                const option = document.createElement('option');
-                option.value = screen.id;
-                option.textContent = screen.name;
-                if (screen.id === version.current_screen) {
-                    option.selected = true;
-                }
-                screenSelect.appendChild(option);
-            });
-            
-            // Show screen selection group
-            screenGroup.style.display = 'block';
-        } else if (screenGroup) {
-            screenGroup.style.display = 'none';
-        }
-
-        // Show sound files section if device has sound player support
-        if (version.has_sound_player === true) {
-            const soundSection = document.getElementById('sound-files-section');
-            if (soundSection) {
-                soundSection.style.display = 'block';
-                loadSoundList();
-            }
-        }
-
-        // Show swipe actions section if device has display (touch)
-        const swipeSection = document.getElementById('swipe-actions-section');
-        if (swipeSection) {
-            if (version.has_display === true) {
-                swipeSection.style.display = 'block';
-                swipeInitEditors();
-                actionEditorPopulateScreens(SWIPE_DIRECTIONS, version.available_screens);
-                loadSwipeActions();
-            } else {
-                swipeSection.style.display = 'none';
-            }
-        }
-
-        // Show boot actions section if device has display
-        const bootSection = document.getElementById('boot-actions-section');
-        if (bootSection) {
-            if (version.has_display === true) {
-                bootSection.style.display = 'block';
-                bootActionsInitEditors();
-                actionEditorPopulateScreens(BOOT_ACTION_PREFIXES, version.available_screens);
-                loadBootActions();
-            } else {
-                bootSection.style.display = 'none';
-            }
-        }
-
-        // Show timer config section if device has display
-        const timerSection = document.getElementById('timer-config-section');
-        if (timerSection) {
-            if (version.has_display === true) {
-                timerSection.style.display = 'block';
-                timerConfigInitEditors();
-                actionEditorPopulateScreens(TIMER_EXPIRE_PREFIXES, version.available_screens);
-                loadTimerConfig();
-            } else {
-                timerSection.style.display = 'none';
-            }
-        }
-
-        // Single shared fetch for sound file dropdowns across all action editors
-        if (version.has_display === true) {
-            fetch('/api/sounds/list')
-                .then(function(r) { return r.ok ? r.json() : []; })
-                .then(function(sounds) {
-                    actionEditorPopulateSounds(SWIPE_DIRECTIONS, sounds);
-                    actionEditorPopulateSounds(BOOT_ACTION_PREFIXES, sounds);
-                    actionEditorPopulateSounds(TIMER_EXPIRE_PREFIXES, sounds);
-                })
-                .catch(function() {});
         }
 
         document.getElementById('firmware-version').textContent = `Firmware v${version.version}`;
@@ -351,7 +209,6 @@ async function loadConfig() {
         const brightness = config.backlight_brightness !== undefined ? config.backlight_brightness : 100;
         setValueIfExists('backlight_brightness', brightness);
         setTextIfExists('brightness-value', brightness);
-        updateBrightnessSliderBackground(brightness);
 
         // Screen saver settings
         setCheckedIfExists('screen_saver_enabled', config.screen_saver_enabled);
@@ -360,61 +217,10 @@ async function loadConfig() {
         setValueIfExists('screen_saver_fade_in_ms', config.screen_saver_fade_in_ms);
         setCheckedIfExists('screen_saver_wake_on_touch', config.screen_saver_wake_on_touch);
         setValueIfExists('screen_saver_wake_binding', config.screen_saver_wake_binding);
-        
-        // Hide loading overlay (silent load)
-        const overlay = document.getElementById('form-loading-overlay');
-        if (overlay) overlay.style.display = 'none';
     } catch (error) {
-        // Hide loading overlay even on error so form is usable
-        const overlay = document.getElementById('form-loading-overlay');
-        if (overlay) overlay.style.display = 'none';
         showMessage('Error loading configuration: ' + error.message, 'error');
         console.error('Load error:', error);
     }
-}
-
-/**
- * Extract form fields that exist on the current page
- * @param {FormData} formData - Form data to extract from
- * @returns {Object} Configuration object with only fields present on page
- */
-function extractFormFields(formData) {
-    // Helper to get value only if field exists
-    const getFieldValue = (name) => {
-        const element = document.querySelector(`[name="${name}"]`);
-        if (!element || element.disabled) return null;
-        return element ? formData.get(name) : null;
-    };
-
-    const getCheckboxValue = (name) => {
-        const element = document.querySelector(`[name="${name}"]`);
-        if (!element || element.disabled) return null;
-        if (element.type !== 'checkbox') return formData.get(name);
-        // Explicit boolean so unchecked can be persisted as false.
-        return element.checked;
-    };
-    
-    // Build config from only the fields that exist on this page
-    const config = {};
-    const fields = ['wifi_ssid', 'wifi_password', 'device_name', 'fixed_ip', 
-                    'subnet_mask', 'gateway', 'dns1', 'dns2',
-                    'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
-                    'power_mode', 'cycle_interval_seconds', 'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
-                    'mqtt_publish_scope',
-                    'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
-                    'ble_enabled',
-                    'audio_volume', 'tap_beep', 'lp_beep',
-                    'backlight_brightness',
-                    'screen_saver_enabled', 'screen_saver_timeout_seconds', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms', 'screen_saver_wake_on_touch',
-                    'screen_saver_wake_binding'];
-    
-    fields.forEach(field => {
-        const element = document.querySelector(`[name="${field}"]`);
-        const value = (element && element.type === 'checkbox') ? getCheckboxValue(field) : getFieldValue(field);
-        if (value !== null) config[field] = value;
-    });
-    
-    return config;
 }
 
 /**
@@ -458,125 +264,6 @@ function validateConfig(config) {
     }
     
     return { valid: true };
-}
-
-/**
- * Save configuration to device
- * @param {Event} event - Form submit event
- */
-async function saveConfig(event) {
-    event.preventDefault();
-    
-    // Check if in captive portal and show warning (only once)
-    if (isInCaptivePortal() && !window.captivePortalWarningShown) {
-        window.captivePortalWarningShown = true;
-        showCaptivePortalWarning();
-        return;
-    }
-    
-    const formData = new FormData(event.target);
-    const config = extractFormFields(formData);
-    
-    // Validate configuration
-    const validation = validateConfig(config);
-    if (!validation.valid) {
-        showMessage(validation.message, 'error');
-        return;
-    }
-
-    // Validate binding fields
-    if (typeof bindingValidateHomeConfig === 'function') {
-        var bvHome = bindingValidateHomeConfig();
-        if (!bvHome.valid) {
-            showMessage(bvHome.count + ' binding error' + (bvHome.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
-            return;
-        }
-    }
-    
-    const currentDeviceNameField = document.getElementById('device_name');
-    const currentDeviceName = currentDeviceNameField ? currentDeviceNameField.value : null;
-    
-    // Show overlay immediately
-    showRebootDialog({
-        title: 'Saving Configuration',
-        message: 'Saving configuration...',
-        context: 'save',
-        newDeviceName: currentDeviceName
-    });
-    
-    try {
-        const response = await fetch(API_CONFIG, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(config)
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to save configuration');
-        }
-        
-        const result = await response.json();
-        if (result.success) {
-            // Update dialog message
-            document.getElementById('reboot-message').textContent = 'Configuration saved. Device is rebooting...';
-        }
-    } catch (error) {
-        // If save request fails (e.g., device already rebooting), assume success
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            document.getElementById('reboot-message').textContent = 'Configuration saved. Device is rebooting...';
-        } else {
-            // Hide overlay and show error
-            document.getElementById('reboot-overlay').style.display = 'none';
-            showMessage('Error saving configuration: ' + error.message, 'error');
-            console.error('Save error:', error);
-        }
-    }
-}
-
-/**
- * Save configuration without rebooting
- */
-async function saveOnly(event) {
-    event.preventDefault();
-    
-    const formData = new FormData(document.getElementById('config-form'));
-    const config = extractFormFields(formData);
-    
-    // Validate configuration
-    const validation = validateConfig(config);
-    if (!validation.valid) {
-        showMessage(validation.message, 'error');
-        return;
-    }
-    
-    try {
-        showMessage('Saving configuration...', 'info');
-        
-        // Add no_reboot parameter to prevent automatic reboot
-        const response = await fetch(API_CONFIG + '?no_reboot=1', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(config)
-        });
-        
-        if (!response.ok) {
-            throw new Error('Failed to save configuration');
-        }
-        
-        const result = await response.json();
-        if (result.success) {
-            showMessage('Configuration saved successfully!', 'success');
-        } else {
-            showMessage('Failed to save configuration', 'error');
-        }
-    } catch (error) {
-        showMessage('Error saving configuration: ' + error.message, 'error');
-        console.error('Save error:', error);
-    }
 }
 
 /**
@@ -668,13 +355,9 @@ async function resetConfig() {
  * Update brightness slider background gradient based on value
  * @param {number} brightness - Brightness value (0-100)
  */
-function updateBrightnessSliderBackground(brightness) {
-    const slider = document.getElementById('backlight_brightness');
-    if (slider) {
-        const percentage = brightness;
-        slider.style.background = `linear-gradient(to right, #007aff 0%, #007aff ${percentage}%, #e5e5e5 ${percentage}%, #e5e5e5 100%)`;
-    }
-}
+// Brightness slider uses Bootstrap's default .form-range styling (matches volume slider).
+// No custom background painting — that would paint the entire input element,
+// not just the track, producing a thick rectangular bar instead of a thin track.
 
 /**
  * Handle brightness slider changes - update device immediately
@@ -689,12 +372,9 @@ async function handleBrightnessChange(event) {
         valueDisplay.textContent = brightness;
     }
     
-    // Update slider background
-    updateBrightnessSliderBackground(brightness);
-    
     // Send brightness update to device immediately (no persist)
     try {
-        const response = await fetch('/api/display/brightness', {
+        const response = await fetch('/api/component/display/brightness', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -720,7 +400,7 @@ async function handleScreenChange(event) {
     if (!screenId) return;
     
     try {
-        const response = await fetch('/api/display/screen', {
+        const response = await fetch('/api/component/display/screen', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -743,345 +423,3 @@ async function handleScreenChange(event) {
     }
 }
 
-// ============================================================================
-// Swipe Actions (uses shared portal_action_editor.js)
-// ============================================================================
-
-const SWIPE_DIRECTIONS = ['swipe-left', 'swipe-right', 'swipe-up', 'swipe-down'];
-const SWIPE_LABELS = { 'swipe-right': 'Swipe Right', 'swipe-left': 'Swipe Left', 'swipe-up': 'Swipe Up', 'swipe-down': 'Swipe Down' };
-
-function swipeInitEditors() {
-    var container = document.getElementById('swipe-editors');
-    if (!container) return;
-    var html = '';
-    SWIPE_DIRECTIONS.forEach(function(dir) {
-        html += '<details class="editor-group" id="' + dir + '-group">';
-        html += '<summary>' + SWIPE_LABELS[dir] + '</summary>';
-        html += '<div class="editor-group-body">';
-        html += actionEditorHTML(dir);
-        html += '</div></details>';
-    });
-    container.innerHTML = html;
-}
-
-async function loadSwipeActions() {
-    try {
-        const response = await fetch('/api/swipe-actions');
-        if (!response.ok) return;
-        const data = await response.json();
-        actionEditorLoad('swipe-left', data.swipe_left);
-        actionEditorLoad('swipe-right', data.swipe_right);
-        actionEditorLoad('swipe-up', data.swipe_up);
-        actionEditorLoad('swipe-down', data.swipe_down);
-    } catch (err) {
-        console.error('Failed to load swipe actions:', err);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Sound file management
-// ---------------------------------------------------------------------------
-function soundEsc(s) {
-    var d = document.createElement('span');
-    d.textContent = s;
-    return d.innerHTML;
-}
-
-async function loadSoundList() {
-    const container = document.getElementById('sound-list');
-    if (!container) return;
-    try {
-        const resp = await fetch('/api/sounds/list');
-        if (!resp.ok) { container.innerHTML = '<small style="color:#86868b;">Could not load sounds.</small>'; return; }
-        const names = await resp.json();
-        if (!names.length) {
-            container.innerHTML = '<small style="color:#86868b;">No sound files uploaded yet.</small>';
-            return;
-        }
-        let html = '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
-        html += '<tr style="border-bottom:1px solid #e5e5ea;"><th style="text-align:left;padding:4px 8px;">Name</th><th style="width:120px;"></th></tr>';
-        names.forEach(function(name) {
-            html += '<tr style="border-bottom:1px solid #f0f0f0;">';
-            html += '<td style="padding:6px 8px;"><code>' + soundEsc(name) + '</code></td>';
-            html += '<td style="text-align:right; padding:4px 8px; white-space:nowrap;">';
-            html += '<button type="button" class="btn" style="font-size:12px; padding:2px 10px; margin-right:4px;" onclick="playSound(\'' + soundEsc(name) + '\')">\u25B6 Play</button>';
-            html += '<button type="button" class="btn" style="font-size:12px; padding:2px 10px; color:#ff3b30;" onclick="deleteSound(\'' + soundEsc(name) + '\')">&times; Delete</button>';
-            html += '</td></tr>';
-        });
-        html += '</table>';
-        container.innerHTML = html;
-    } catch (err) {
-        container.innerHTML = '<small style="color:#ff3b30;">Error loading sounds.</small>';
-    }
-}
-
-async function uploadSound() {
-    const nameInput = document.getElementById('sound-upload-name');
-    const fileInput = document.getElementById('sound-upload-file');
-    const statusEl = document.getElementById('sound-upload-status');
-    const name = (nameInput.value || '').trim();
-    if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
-        statusEl.innerHTML = '<span style="color:#ff3b30;">Invalid name (letters, digits, _ and - only).</span>';
-        return;
-    }
-    if (!fileInput.files || !fileInput.files.length) {
-        statusEl.innerHTML = '<span style="color:#ff3b30;">Select an MP3 file first.</span>';
-        return;
-    }
-    const file = fileInput.files[0];
-    if (file.size > 512 * 1024) {
-        statusEl.innerHTML = '<span style="color:#ff3b30;">File too large (max 512 KB).</span>';
-        return;
-    }
-    const btn = document.getElementById('sound-upload-btn');
-    btn.disabled = true;
-    statusEl.innerHTML = '<span style="color:#007aff;">Uploading…</span>';
-    try {
-        const resp = await fetch('/api/sounds/upload?name=' + encodeURIComponent(name), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': file.size },
-            body: file
-        });
-        if (resp.ok) {
-            statusEl.innerHTML = '<span style="color:#34c759;">Uploaded successfully.</span>';
-            nameInput.value = '';
-            fileInput.value = '';
-            loadSoundList();
-        } else {
-            const err = await resp.json().catch(function() { return {}; });
-            statusEl.innerHTML = '<span style="color:#ff3b30;">' + soundEsc(err.error || 'Upload failed') + '</span>';
-        }
-    } catch (err) {
-        statusEl.innerHTML = '<span style="color:#ff3b30;">Upload error: ' + soundEsc(err.message) + '</span>';
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-function soundFileSelected(input) {
-    if (!input.files || !input.files.length) return;
-    var nameInput = document.getElementById('sound-upload-name');
-    if (nameInput && !nameInput.value) {
-        var raw = input.files[0].name.replace(/\.mp3$/i, '');
-        nameInput.value = raw.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 31);
-    }
-}
-
-async function playSound(name) {
-    try {
-        await fetch('/api/sounds/play?name=' + encodeURIComponent(name), { method: 'POST' });
-    } catch (err) { /* ignore */ }
-}
-
-async function deleteSound(name) {
-    if (!confirm('Delete sound "' + name + '"?')) return;
-    try {
-        const resp = await fetch('/api/sounds?name=' + encodeURIComponent(name), { method: 'DELETE' });
-        if (resp.ok) loadSoundList();
-    } catch (err) { /* ignore */ }
-}
-
-async function saveSwipeActions() {
-    const payload = {
-        swipe_left: actionEditorBuild('swipe-left'),
-        swipe_right: actionEditorBuild('swipe-right'),
-        swipe_up: actionEditorBuild('swipe-up'),
-        swipe_down: actionEditorBuild('swipe-down')
-    };
-    try {
-        const response = await fetch('/api/swipe-actions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (response.ok) {
-            showMessage('Swipe actions saved', 'success');
-        } else {
-            showMessage('Failed to save swipe actions', 'error');
-        }
-    } catch (err) {
-        console.error('Error saving swipe actions:', err);
-        showMessage('Error saving swipe actions: ' + err.message, 'error');
-    }
-}
-
-// ============================================================================
-// Boot Actions
-// ============================================================================
-
-const BOOT_ACTION_PREFIXES = ['boot-action-1', 'boot-action-2', 'boot-action-3'];
-const BOOT_ACTION_LABELS = { 'boot-action-1': 'Action 1', 'boot-action-2': 'Action 2', 'boot-action-3': 'Action 3' };
-
-function bootActionsInitEditors() {
-    var container = document.getElementById('boot-action-editors');
-    if (!container) return;
-    var html = '';
-    BOOT_ACTION_PREFIXES.forEach(function(prefix) {
-        html += '<details class="editor-group" id="' + prefix + '-group">';
-        html += '<summary>' + BOOT_ACTION_LABELS[prefix] + '</summary>';
-        html += '<div class="editor-group-body">';
-        html += actionEditorHTML(prefix);
-        html += '</div></details>';
-    });
-    container.innerHTML = html;
-}
-
-async function loadBootActions() {
-    try {
-        const response = await fetch('/api/boot-actions');
-        if (!response.ok) return;
-        const data = await response.json();
-        var actions = data.actions || [];
-        BOOT_ACTION_PREFIXES.forEach(function(prefix, i) {
-            actionEditorLoad(prefix, actions[i] || {});
-        });
-    } catch (err) {
-        console.error('Failed to load boot actions:', err);
-    }
-}
-
-async function saveBootActions() {
-    var actions = [];
-    BOOT_ACTION_PREFIXES.forEach(function(prefix) {
-        actions.push(actionEditorBuild(prefix));
-    });
-    // Trim trailing empty actions
-    while (actions.length > 0 && !actions[actions.length - 1].type) {
-        actions.pop();
-    }
-    try {
-        const response = await fetch('/api/boot-actions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actions: actions })
-        });
-        if (response.ok) {
-            showMessage('Boot actions saved', 'success');
-        } else {
-            showMessage('Failed to save boot actions', 'error');
-        }
-    } catch (err) {
-        console.error('Error saving boot actions:', err);
-        showMessage('Error saving boot actions: ' + err.message, 'error');
-    }
-}
-
-// ============================================================================
-// Timer Config (device-level, uses shared portal_action_editor.js)
-// ============================================================================
-
-const TIMER_IDS = [1, 2, 3];
-const TIMER_EXPIRE_PREFIXES = [];
-for (var _ti = 1; _ti <= 3; _ti++) {
-    for (var _ai = 1; _ai <= 3; _ai++) {
-        TIMER_EXPIRE_PREFIXES.push('timer-' + _ti + '-expire-' + _ai);
-    }
-}
-
-function timerConfigInitEditors() {
-    var container = document.getElementById('timer-config-editors');
-    if (!container) return;
-    var html = '';
-    TIMER_IDS.forEach(function(tid) {
-        html += '<details class="editor-group" id="timer-' + tid + '-group">';
-        html += '<summary>Timer ' + tid + '</summary>';
-        html += '<div class="editor-group-body">';
-        // Mode dropdown
-        html += '<div class="form-group">';
-        html += '<label for="timer-' + tid + '-mode">Mode</label>';
-        html += '<select id="timer-' + tid + '-mode" onchange="timerModeChanged(' + tid + ')">';
-        html += '<option value="up">Stopwatch (Count Up)</option>';
-        html += '<option value="down">Countdown</option>';
-        html += '</select>';
-        html += '</div>';
-        // Countdown duration (visible only in countdown mode)
-        html += '<div class="form-group" id="timer-' + tid + '-countdown-group" style="display:none;">';
-        html += '<label for="timer-' + tid + '-countdown">Countdown Duration (seconds)</label>';
-        html += '<input type="number" id="timer-' + tid + '-countdown" min="1" max="86400" placeholder="e.g. 300">';
-        html += '<small>Duration in seconds. The timer will count down from this value.</small>';
-        html += '</div>';
-        // Expire actions (visible only in countdown mode)
-        html += '<div id="timer-' + tid + '-expire-section" style="display:none;">';
-        html += '<h4 style="margin: 12px 0 8px;">On Expire Actions</h4>';
-        html += '<small style="display:block; margin-bottom:12px;">Actions to run when the countdown reaches zero (e.g. play a sound, send MQTT message).</small>';
-        for (var ai = 1; ai <= 3; ai++) {
-            var prefix = 'timer-' + tid + '-expire-' + ai;
-            html += '<details class="editor-group" id="' + prefix + '-group">';
-            html += '<summary>Action ' + ai + '</summary>';
-            html += '<div class="editor-group-body">';
-            html += actionEditorHTML(prefix);
-            html += '</div></details>';
-        }
-        html += '</div>';
-        html += '</div></details>';
-    });
-    container.innerHTML = html;
-}
-
-function timerModeChanged(tid) {
-    var modeEl = document.getElementById('timer-' + tid + '-mode');
-    if (!modeEl) return;
-    var isDown = (modeEl.value === 'down');
-    var cdGrp = document.getElementById('timer-' + tid + '-countdown-group');
-    var expSec = document.getElementById('timer-' + tid + '-expire-section');
-    if (cdGrp) cdGrp.style.display = isDown ? '' : 'none';
-    if (expSec) expSec.style.display = isDown ? '' : 'none';
-}
-
-async function loadTimerConfig() {
-    try {
-        const response = await fetch('/api/timers');
-        if (!response.ok) return;
-        const data = await response.json();
-        TIMER_IDS.forEach(function(tid) {
-            var tcfg = data[String(tid)] || {};
-            var modeEl = document.getElementById('timer-' + tid + '-mode');
-            if (modeEl) modeEl.value = tcfg.mode || 'up';
-            var cdEl = document.getElementById('timer-' + tid + '-countdown');
-            if (cdEl) cdEl.value = (tcfg.countdown > 0) ? tcfg.countdown : '';
-            var expireActions = tcfg.expire_actions || [];
-            for (var ai = 1; ai <= 3; ai++) {
-                var prefix = 'timer-' + tid + '-expire-' + ai;
-                actionEditorLoad(prefix, expireActions[ai - 1] || {});
-            }
-            timerModeChanged(tid);
-        });
-    } catch (err) {
-        console.error('Failed to load timer config:', err);
-    }
-}
-
-async function saveTimerConfig() {
-    var payload = {};
-    TIMER_IDS.forEach(function(tid) {
-        var modeEl = document.getElementById('timer-' + tid + '-mode');
-        var cdEl = document.getElementById('timer-' + tid + '-countdown');
-        var tcfg = { mode: modeEl ? modeEl.value : 'up' };
-        if (tcfg.mode === 'down' && cdEl && cdEl.value !== '' && parseInt(cdEl.value, 10) > 0) {
-            tcfg.countdown = parseInt(cdEl.value, 10);
-        }
-        // Collect expire actions
-        var actions = [];
-        for (var ai = 1; ai <= 3; ai++) {
-            var a = actionEditorBuild('timer-' + tid + '-expire-' + ai);
-            if (a.type) actions.push(a);
-        }
-        if (actions.length > 0) tcfg.expire_actions = actions;
-        payload[String(tid)] = tcfg;
-    });
-    try {
-        const response = await fetch('/api/timers', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (response.ok) {
-            showMessage('Timer config saved', 'success');
-        } else {
-            showMessage('Failed to save timer config', 'error');
-        }
-    } catch (err) {
-        console.error('Error saving timer config:', err);
-        showMessage('Error saving timer config: ' + err.message, 'error');
-    }
-}

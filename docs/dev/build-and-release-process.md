@@ -94,6 +94,28 @@ The build system automatically applies project branding during compilation:
 6. `build.sh` also embeds the board name as a compile-time string define (`BUILD_BOARD_NAME`) so the portal can report the active board
 7. Firmware compiles with branded values embedded
 
+### Build Directory Layout
+
+Each board gets its own isolated build tree under `build/`. Final binaries (`.bin` files) are placed directly in `build/<board>/`, while `arduino-cli`'s intermediate object cache lives in a separate `intermediate/` subdirectory per board. This prevents cache thrashing when switching between boards — building board A, then board B, then board A again is incremental (seconds) rather than a full rebuild.
+
+```text
+build/
+├── esp32-p4-lcd4b/
+│   ├── app.ino.bin              # Final firmware binary
+│   ├── app.ino.bootloader.bin
+│   ├── app.ino.partitions.bin
+│   └── intermediate/            # arduino-cli object cache (per-board)
+│       ├── core/
+│       ├── libraries/
+│       └── sketch/
+├── jc4880p433/
+│   ├── app.ino.bin
+│   └── intermediate/
+└── ...
+```
+
+> **Disk usage**: each board's intermediate cache is ~170 MB, so 6 boards use ~1 GB total. `./clean.sh` removes the entire `build/` tree including all intermediate caches.
+
 ### Board-Specific Configuration
 
 The build system supports optional board-specific configuration using compile-time defines and conditional compilation.

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{PROJECT_DISPLAY_NAME}} — Configuration Portal</title>
+  <link rel="stylesheet" href="/bootstrap.min.css">
+  <link rel="stylesheet" href="/portal-custom.css">
+  <script>
+    /* Apply theme immediately to prevent flash */
+    (function() {
+      var saved = localStorage.getItem('portal-theme');
+      var theme = saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-bs-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="portal-header">
+    <div class="portal-header-top">
+      <button id="hamburger" class="portal-hamburger d-md-none" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+      <h1 class="portal-title">{{PROJECT_DISPLAY_NAME}}</h1>
+      <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
+        <span class="theme-icon-sun">☀️</span>
+        <span class="theme-icon-moon">🌙</span>
+      </button>
+    </div>
+    <div class="portal-badges">
+      <span class="portal-badge badge-firmware" id="firmware-version">Firmware v-.-.-</span>
+      <span class="portal-badge badge-chip" id="chip-info">--- rev -</span>
+      <span class="portal-badge badge-cores" id="cpu-cores">- Cores</span>
+      <span class="portal-badge badge-freq" id="cpu-freq">--- MHz</span>
+      <span class="portal-badge badge-flash" id="flash-size">-- MB Flash</span>
+      <span class="portal-badge badge-psram" id="psram-status">-- PSRAM</span>
+      <span class="portal-badge badge-health" id="health-badge" role="button" tabindex="0">
+        <span class="health-dot breathing" id="health-dot"></span>
+        <span id="health-cpu">CPU --</span>
+        <span class="health-expand-icon">⋮</span>
+      </span>
+    </div>
+  </header>
+
+  <div class="portal-layout">
+    <nav id="portal-nav" class="portal-nav"></nav>
+    <main id="content-pane" class="content-pane"></main>
+  </div>
+
+  {{HEALTH_WIDGET}}
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+  <noscript>
+    <div class="container p-4">
+      <div class="alert alert-warning">
+        <h4>JavaScript Required</h4>
+        <p>This configuration portal requires JavaScript to function. Please enable JavaScript in your browser settings.</p>
+      </div>
+    </div>
+  </noscript>
+  <script src="/portal.js"></script>
+</body>
+</html>

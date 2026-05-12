@@ -5,6 +5,8 @@
 
 #include "web_assets.h"
 
+#include <string.h>
+
 static AsyncWebServerResponse *begin_gzipped_asset_response(
 		AsyncWebServerRequest *request,
 		const char *content_type,
@@ -12,8 +14,6 @@ static AsyncWebServerResponse *begin_gzipped_asset_response(
 		size_t content_gz_len,
 		const char *cache_control
 ) {
-		// Prefer the PROGMEM-aware response helper to avoid accidental heap copies.
-		// All generated assets live in flash as `const uint8_t[] PROGMEM`.
 		AsyncWebServerResponse *response = request->beginResponse_P(
 				200,
 				content_type,
@@ -29,105 +29,110 @@ static AsyncWebServerResponse *begin_gzipped_asset_response(
 		return response;
 }
 
+// ---- Shell (new single-page root) ----
+
+void handleShell(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"text/html",
+				shell_html_gz,
+				shell_html_gz_len,
+				"no-store"
+		);
+		request->send(response);
+}
+
+// ---- Fragment handler ----
+
+void handleFragment(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+
+		// URL: /api/section/{id}  — id is the last path segment
+		const String& url = request->url();
+		int last_slash = url.lastIndexOf('/');
+		if (last_slash < 0) {
+				request->send(404, "text/plain", "Not found");
+				return;
+		}
+		String frag_id = url.substring(last_slash + 1);
+
+		const FragmentAsset* asset = find_fragment_asset(frag_id.c_str());
+		if (!asset) {
+				request->send(404, "text/plain", "Fragment not found");
+				return;
+		}
+
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"text/html",
+				asset->data,
+				asset->len,
+				"no-store"
+		);
+		request->send(response);
+}
+
+// ---- Legacy page handlers (redirect to shell with hash) ----
+
 void handleRoot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 
 		if (web_portal_is_ap_mode_active()) {
-				// In AP mode, redirect to network configuration page
-				request->redirect("/network.html");
+				// In AP mode, serve shell which will show WiFi setup
+				handleShell(request);
 				return;
 		}
 
-		// In full mode, serve home page
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"text/html",
-				home_html_gz,
-				home_html_gz_len,
-				"no-store"
-		);
-		request->send(response);
+		handleShell(request);
 }
 
 void handleHome(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
-
-		if (web_portal_is_ap_mode_active()) {
-				// In AP mode, redirect to network configuration page
-				request->redirect("/network.html");
-				return;
-		}
-
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"text/html",
-				home_html_gz,
-				home_html_gz_len,
-				"no-store"
-		);
-		request->send(response);
+		request->redirect("/#welcome");
 }
 
 void handlePad(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
-
-		if (web_portal_is_ap_mode_active()) {
-				request->redirect("/network.html");
-				return;
-		}
-
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"text/html",
-				pads_html_gz,
-				pads_html_gz_len,
-				"no-store"
-		);
-		request->send(response);
+		request->redirect("/#pad-editor");
 }
 
 void handleNetwork(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
-
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"text/html",
-				network_html_gz,
-				network_html_gz_len,
-				"no-store"
-		);
-		request->send(response);
+		request->redirect("/#wifi");
 }
 
 void handleFirmware(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
+		request->redirect("/#ota-update");
+}
 
-		if (web_portal_is_ap_mode_active()) {
-				// In AP mode, redirect to network configuration page
-				request->redirect("/network.html");
-				return;
-		}
+// ---- CSS asset handlers ----
 
+void handleBootstrapCSS(AsyncWebServerRequest *request) {
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
 				request,
-				"text/html",
-				firmware_html_gz,
-				firmware_html_gz_len,
-				"no-store"
+				"text/css",
+				bootstrap_min_css_gz,
+				bootstrap_min_css_gz_len,
+				"public, max-age=86400"
 		);
 		request->send(response);
 }
 
-void handleCSS(AsyncWebServerRequest *request) {
+void handlePortalCustomCSS(AsyncWebServerRequest *request) {
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
 				request,
 				"text/css",
-				portal_css_gz,
-				portal_css_gz_len,
+				portal_custom_css_gz,
+				portal_custom_css_gz_len,
 				"public, max-age=600"
 		);
 		request->send(response);
 }
+
+// ---- JS asset handler ----
 
 void handleJS(AsyncWebServerRequest *request) {
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
@@ -135,105 +140,6 @@ void handleJS(AsyncWebServerRequest *request) {
 				"application/javascript",
 				portal_js_gz,
 				portal_js_gz_len,
-				"public, max-age=600"
-		);
-		request->send(response);
-}
-
-void handleCoreJS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"application/javascript",
-				portal_core_js_gz,
-				portal_core_js_gz_len,
-				"public, max-age=600"
-		);
-		request->send(response);
-}
-
-void handleConfigJS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"application/javascript",
-				portal_config_js_gz,
-				portal_config_js_gz_len,
-				"public, max-age=600"
-		);
-		request->send(response);
-}
-
-void handleFirmwareJS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"application/javascript",
-				portal_firmware_js_gz,
-				portal_firmware_js_gz_len,
-				"public, max-age=600"
-		);
-		request->send(response);
-}
-
-void handleHealthJS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"application/javascript",
-				portal_health_js_gz,
-				portal_health_js_gz_len,
-				"public, max-age=600"
-		);
-		request->send(response);
-}
-
-void handlePadColorsJS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"application/javascript",
-				portal_pad_colors_js_gz,
-				portal_pad_colors_js_gz_len,
-				"public, max-age=600"
-		);
-		request->send(response);
-}
-
-void handlePadIOJS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"application/javascript",
-				portal_pad_io_js_gz,
-				portal_pad_io_js_gz_len,
-				"public, max-age=600"
-		);
-		request->send(response);
-}
-
-void handlePadEditorJS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"application/javascript",
-				portal_pad_editor_js_gz,
-				portal_pad_editor_js_gz_len,
-				"public, max-age=600"
-		);
-		request->send(response);
-}
-
-void handleActionEditorJS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"application/javascript",
-				portal_action_editor_js_gz,
-				portal_action_editor_js_gz_len,
-				"public, max-age=600"
-		);
-		request->send(response);
-}
-
-void handleBindingValidatorJS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"application/javascript",
-				portal_binding_validator_js_gz,
-				portal_binding_validator_js_gz_len,
 				"public, max-age=600"
 		);
 		request->send(response);

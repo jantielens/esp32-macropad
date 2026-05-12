@@ -1,0 +1,24 @@
+<div class="section-header">
+  <h2>🔊 Volume &amp; Beep</h2>
+  <p>Device audio volume and beep pattern configuration.</p>
+</div>
+    <div class="mb-3">
+      <label class="form-label" for="vol-slider">
+        Volume: <strong id="vol-val">30</strong>%
+      </label>
+      <input type="range" class="form-range" id="vol-slider" min="0" max="100" value="30">
+      <div class="form-text">Device audio volume (0–100%). Used for beep actions and touch feedback.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="tap-beep">Tap Beep</label>
+      <input type="text" class="form-control font-monospace" id="tap-beep" value="800:100">
+      <div class="form-text">Beep pattern on button tap. <code>freq:duration</code> pairs (Hz:ms). Leave empty for no sound.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="lp-beep">Long-Press Beep</label>
+      <input type="text" class="form-control font-monospace" id="lp-beep" value="600:100">
+      <div class="form-text">Beep pattern on long-press.</div>
+    </div>
+    <div class="save-bar">
+      <button class="btn btn-primary btn-sm">Save &amp; Reboot</button>
+    </div>

@@ -19,4 +19,4 @@ Pre-commit code review driven by the full panel of expert reviewers. Every exper
 1. Auto-engage all expert reviewers — no scope selection needed.
 2. Present all findings in a single numbered table with a Recommended column.
 3. Accept batch selection commands (`fix recommended`, `fix 1,3,5-8`, `skip all`, `details N`).
-4. Apply selected fixes directly. Summarize all actions at the end.
+4. This review is read-only. For any `fix ...` selection, build a structured handoff package and instruct the user to paste it into the default coding agent (Agent mode); do not attempt to edit files from the Code Review agent. Summarize all actions at the end.

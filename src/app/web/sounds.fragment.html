@@ -1,0 +1,24 @@
+<div class="section-header">
+  <h2>🎵 Sound Files</h2>
+  <p>Upload MP3 files to play as button actions or via MQTT.</p>
+</div>
+<div class="card mb-3" id="sound-files-section">
+  <div class="card-body">
+    <div id="sound-list" class="mb-3"></div>
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-4">
+        <label class="form-label" for="sound-upload-name">Name</label>
+        <input type="text" class="form-control" id="sound-upload-name" placeholder="my-sound" maxlength="31" pattern="[a-zA-Z0-9_-]+">
+      </div>
+      <div class="col-sm-5">
+        <label class="form-label" for="sound-upload-file">MP3 File</label>
+        <input type="file" class="form-control" id="sound-upload-file" accept=".mp3,audio/mpeg" onchange="soundFileSelected(this)">
+      </div>
+      <div class="col-sm-3">
+        <button type="button" class="btn btn-primary w-100" onclick="uploadSound()" id="sound-upload-btn">Upload</button>
+      </div>
+    </div>
+    <div id="sound-upload-status" class="form-text mt-2"></div>
+    <div class="form-text mt-1">Max 512 KB per file.</div>
+  </div>
+</div>

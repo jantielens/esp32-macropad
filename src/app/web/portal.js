@@ -1,3 +1,3 @@
-// portal.js has been split into focused modules:
-// portal_core.js, portal_config.js, portal_firmware.js,
-// portal_health.js, portal_pad_colors.js, portal_pad_io.js, portal_pad_editor.js
+// portal.js - Single bundled entry point for the ESP32 Macropad web portal.
+// During minification, all JS modules are concatenated into this file via
+// portal.js.bundle.  The source files remain split for maintainability.

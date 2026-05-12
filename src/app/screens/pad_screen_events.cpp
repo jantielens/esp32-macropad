@@ -13,6 +13,11 @@ extern DeviceConfig device_config;
 #include <ArduinoJson.h>
 #endif
 
+// Forward declaration — defined in numericrocker_widget.cpp
+void numericrocker_substitute_step(ButtonAction* act, float step);
+
+#include "../widgets/numericrocker_zones.h"
+
 // TAG and TAP_FLASH_DURATION_MS are defined in pad_screen.cpp which is
 // #included before this file in screens.cpp.
 
@@ -106,6 +111,36 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
     }
 }
 
+// Pixel-based tap flash: resize overlay to a pixel band of the tile.
+// px_start/px_end are pixel offsets along the given axis.
+static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool horizontal) {
+    if (!tile->tap_overlay) return;
+
+    lv_obj_t* ov = tile->tap_overlay;
+    auto* ctx = new TapFlashCtx();
+    ctx->overlay = ov;
+    ctx->orig_x = lv_obj_get_x(ov);
+    ctx->orig_y = lv_obj_get_y(ov);
+    ctx->orig_w = lv_obj_get_width(ov);
+    ctx->orig_h = lv_obj_get_height(ov);
+
+    if (horizontal) {
+        lv_obj_set_pos(ov, ctx->orig_x + px_start, ctx->orig_y);
+        lv_obj_set_size(ov, px_end - px_start, ctx->orig_h);
+    } else {
+        lv_obj_set_pos(ov, ctx->orig_x, ctx->orig_y + px_start);
+        lv_obj_set_size(ov, ctx->orig_w, px_end - px_start);
+    }
+
+    lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
+    lv_timer_t* t = lv_timer_create(PadScreen::tapFlashTimerCb, TAP_FLASH_DURATION_MS, ctx);
+    if (!t) {
+        lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(ov, ctx->orig_x, ctx->orig_y);
+        lv_obj_set_size(ov, ctx->orig_w, ctx->orig_h);
+        delete ctx;
+    }
+}
 
 
 // Publish HA event entity payload for a button press/hold
@@ -177,6 +212,75 @@ void PadScreen::onTap(lv_event_t* e) {
             event_label = rocker_horizontal ? "RockerL" : "RockerU";
             flash_zone = 1;
         }
+    } else if (tile->widget_type && strcmp(tile->widget_type->name, "numericrocker") == 0) {
+        // Numeric rocker: outer/inner zones use adjust_action with {step} substitution;
+        // center zone falls through to standard tap dispatch (actions[0-2]).
+        auto* cfg = reinterpret_cast<const NumericRockerConfig*>(tile->widget_cfg.data);
+
+        lv_point_t point;
+        lv_indev_get_point(lv_indev_active(), &point);
+        lv_area_t area;
+        lv_obj_get_coords(tile->obj, &area);
+
+        int span = cfg->horizontal ? (area.x2 - area.x1) : (area.y2 - area.y1);
+        if (span <= 0) return;
+        int rel = cfg->horizontal ? (point.x - area.x1) : (point.y - area.y1);
+
+        NRZoneLayout z = nr_compute_zones(span, cfg->small_step, cfg->large_step);
+
+        // For vertical orientation, invert sign: top = increase, bottom = decrease
+        float sign = cfg->horizontal ? 1.0f : -1.0f;
+
+        if (rel < z.inner_end || rel >= z.inner2_start) {
+            // Outer or inner zone — dispatch adjust_action with {step}
+            float step;
+            int flash_start, flash_end;
+            const char* nr_event;
+            bool is_large = false;
+            if (rel < z.outer_end) {
+                step = sign * -cfg->large_step;
+                flash_start = 0; flash_end = z.outer_end;
+                nr_event = "NRockerOuterA";
+                is_large = true;
+            } else if (rel < z.inner_end) {
+                step = sign * -cfg->small_step;
+                flash_start = z.outer_end; flash_end = z.inner_end;
+                nr_event = "NRockerInnerA";
+            } else if (rel < z.outer2_start) {
+                step = sign * cfg->small_step;
+                flash_start = z.inner2_start; flash_end = z.outer2_start;
+                nr_event = "NRockerInnerB";
+            } else {
+                step = sign * cfg->large_step;
+                flash_start = z.outer2_start; flash_end = span;
+                nr_event = "NRockerOuterB";
+                is_large = true;
+            }
+
+            if (cfg->adjust_action.type[0] == '\0') return;
+
+            ButtonAction local_nr;
+            memcpy(&local_nr, &cfg->adjust_action, sizeof(ButtonAction));
+            numericrocker_substitute_step(&local_nr, step);
+
+            do_tap_flash_px(tile, flash_start, flash_end, cfg->horizontal);
+#if HAS_AUDIO
+            if (!has_audio_action(&local_nr, 1)) {
+                const char* pattern = is_large ? device_config.lp_beep : device_config.tap_beep;
+                if (pattern[0] && strcmp(pattern, "none") != 0) {
+                    audio_beep(pattern, 0);
+                }
+            }
+#endif
+            action_dispatch(local_nr, nr_event);
+#if HAS_MQTT
+            publish_button_event(tile, "press");
+#endif
+            return;
+        }
+        // Center zone — fall through to standard tap dispatch
+        src_actions = tile->actions;
+        src_count = tile->action_count;
     } else {
         src_actions = tile->actions;
         src_count = tile->action_count;
@@ -193,8 +297,7 @@ void PadScreen::onTap(lv_event_t* e) {
         do_tap_flash(tile, flash_zone, rocker_horizontal);
 #if HAS_AUDIO
         if (!has_audio_action(local, count)) {
-            // Rocker zone B uses the long-press beep pattern
-            const char* pattern = is_zone_b ? device_config.lp_beep : device_config.tap_beep;
+            const char* pattern = device_config.tap_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) {
                 audio_beep(pattern, 0);
             }
@@ -215,8 +318,26 @@ void PadScreen::onLongPress(lv_event_t* e) {
     ButtonTile* tile = (ButtonTile*)lv_event_get_user_data(e);
     if (!tile || !tile->obj) return;
 
-    // Rocker widget uses lp_actions for the second zone — suppress long-press
-    if (tile->widget_type && strcmp(tile->widget_type->name, "rocker") == 0) return;
+    // Rocker use tap zones — suppress long-press
+    if (tile->widget_type &&
+        strcmp(tile->widget_type->name, "rocker") == 0) return;
+
+    // Numeric rocker: suppress long-press on outer/inner zones, allow center
+    if (tile->widget_type &&
+        strcmp(tile->widget_type->name, "numericrocker") == 0) {
+        auto* cfg = reinterpret_cast<const NumericRockerConfig*>(tile->widget_cfg.data);
+        lv_point_t point;
+        lv_indev_get_point(lv_indev_active(), &point);
+        lv_area_t area;
+        lv_obj_get_coords(tile->obj, &area);
+        int span = cfg->horizontal ? (area.x2 - area.x1) : (area.y2 - area.y1);
+        if (span > 0) {
+            int rel = cfg->horizontal ? (point.x - area.x1) : (point.y - area.y1);
+            NRZoneLayout z = nr_compute_zones(span, cfg->small_step, cfg->large_step);
+            if (rel < z.inner_end || rel >= z.inner2_start) return; // outer/inner zone
+        }
+        // Center zone — fall through to standard LP dispatch
+    }
 
     // Suppress long-press that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;

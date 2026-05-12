@@ -104,6 +104,7 @@ class MipiDsiDriver : public DisplayDriver {
 protected:
     uint16_t* framebuffer;                   // DPI panel PSRAM framebuffer (from ESP-IDF)
     esp_lcd_panel_handle_t panel_handle;      // DPI panel handle
+    esp_lcd_panel_io_handle_t ioHandle;       // DBI command channel (for runtime DCS commands)
     uint16_t* rotBuffer;                     // PPA rotation output buffer (PSRAM, cache-aligned)
     ppa_client_handle_t ppaClient;           // PPA SRM client for hardware rotation
     uint8_t currentBrightness;               // Current brightness level (0-100%)
@@ -147,6 +148,11 @@ public:
 
     void configureLVGL(lv_display_t* disp, uint8_t rotation) override;
     bool asyncFlush() const override;
+
+    void displaySleep() override;
+    void displayWake() override;
+    void displayWakeSleepOut() override;
+    void displayWakeDisplayOn() override;
 };
 
 #endif // MIPI_DSI_DRIVER_H

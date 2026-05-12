@@ -5,8 +5,13 @@
 
 #include "binding_template.h"
 #include "device_telemetry.h"
+#include "display_manager.h"
 #include "health_table_builder.h"
 #include "log_manager.h"
+
+#if HAS_AUDIO
+#include "audio.h"
+#endif
 
 #if HAS_BLE_HID
 #include "config_manager.h"
@@ -261,6 +266,17 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         strlcpy(out, h ? h : "?", out_len);
         return true;
     }
+    // --- Display & audio ---
+    if (strcmp(key, "brightness") == 0) {
+        snprintf(out, out_len, "%d", (int)display_manager_get_backlight_brightness());
+        return true;
+    }
+#if HAS_AUDIO
+    if (strcmp(key, "volume") == 0) {
+        snprintf(out, out_len, "%d", (int)audio_get_volume());
+        return true;
+    }
+#endif
 #if HAS_BLE_HID
     if (strcmp(key, "ble_status") == 0) {
         strlcpy(out, device_config.ble_enabled ? ble_hid_status() : "disabled", out_len);

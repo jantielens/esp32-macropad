@@ -14,8 +14,9 @@
  * - Core portal mode (AP) vs Full portal mode (WiFi connected)
  * 
  * ENDPOINTS:
- *   GET  /              -> Portal HTML page
- *   GET  /portal.css    -> CSS stylesheet
+ *   GET  /                   -> Portal HTML page
+ *   GET  /bootstrap.min.css  -> Bootstrap CSS framework
+ *   GET  /portal-custom.css  -> Custom portal stylesheet
  *   GET  /portal.js     -> JavaScript
  *   GET  /api/config    -> Get current config (JSON)
  *   POST /api/config    -> Save new config (JSON)
