@@ -166,15 +166,15 @@ bool health_table_build(bool extended, HealthTableLookupFn lookup, char* out, si
 
     char bright_val[16];
     if (lookup("brightness", raw, sizeof(raw))) {
-        long bright = parse_long_or(raw, -1);
-        snprintf(bright_val, sizeof(bright_val), "%ld%%", bright >= 0 ? bright : 0);
+        int bright = (int)parse_long_or(raw, -1);
+        snprintf(bright_val, sizeof(bright_val), "%d%%", bright >= 0 ? bright : 0);
         add_health_table_row(rows, "Backlight", bright_val, kBgNeutral, kFgNeutral);
     }
 
     char vol_val[16];
     if (lookup("volume", raw, sizeof(raw))) {
-        long vol = parse_long_or(raw, -1);
-        snprintf(vol_val, sizeof(vol_val), "%ld%%", vol >= 0 ? vol : 0);
+        int vol = (int)parse_long_or(raw, -1);
+        snprintf(vol_val, sizeof(vol_val), "%d%%", vol >= 0 ? vol : 0);
         add_health_table_row(rows, "Volume", vol_val, kBgNeutral, kFgNeutral);
     }
 
