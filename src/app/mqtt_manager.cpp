@@ -258,18 +258,23 @@ void MqttManager::onConnected(bool publish_availability) {
 		if (power_manager_should_publish_mqtt_discovery()) {
 				publishDiscoveryOncePerBoot();
 		}
+		delay(1);  // yield — let SDIO transport drain
 
 		// Re-subscribe to all tracked subscription topics.
 		mqtt_sub_store_subscribe_all();
+		delay(1);
 
 		// Screen control subscribe + initial state publish.
 		mqtt_screen_on_connected();
+		delay(1);
 
 		// Audio control subscribe + initial state publish.
 		mqtt_audio_on_connected();
+		delay(1);
 
 		// Notify control subscribe + initial state publish.
 		mqtt_notify_on_connected();
+		delay(1);
 
 		// Publish a single retained state after connect so HA entities have values,
 		// even when periodic publishing is disabled (interval = 0).

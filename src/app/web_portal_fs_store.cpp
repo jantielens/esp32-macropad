@@ -3,6 +3,7 @@
 #include "log_manager.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
+#include "web_portal_utils.h"
 
 #include <LittleFS.h>
 #include <string.h>
@@ -71,8 +72,9 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
                 return;
             }
 
-            // Stream from flash — no large heap allocation.
-            request->send(LittleFS, file_path.c_str(), "application/json");
+            // Stream from flash — throttled to prevent WiFi TX buffer
+            // exhaustion on ESP-Hosted (SDIO).
+            sendFileThrottled(request, file_path.c_str(), "application/json");
         }
     );
 
