@@ -8,8 +8,8 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 
 ### Pads, buttons & widgets
 - **Up to 16 pads** with configurable grids (up to 8×8, board-dependent), per-pad backgrounds, and multi-cell button spans
-- **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols), background images, and a per-label style DSL (font family, size, alignment, overflow)
-- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal), sparkline (multi-line with reference markers), table, **rocker** (split-button up/down or left/right), and **numeric rocker** (4-zone fine/coarse adjustment)
+- **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols) with configurable icon position, background images, icon + center label co-display, and a per-label style DSL (font family, size, alignment, overflow)
+- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal), sparkline (multi-line with reference markers), table, list (scrollable item picker), **rocker** (split-button up/down or left/right), and **numeric rocker** (4-zone fine/coarse adjustment)
 - **Smooth animations** — gauges, bars, and needles ease into new values instead of jumping
 - **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
 - **Building blocks** — drop pre-built button groups (countdown timer, system info) into any pad with a single click
@@ -113,14 +113,18 @@ After flashing, the device creates its own Wi-Fi hotspot for initial configurati
 
 ## 🎛️ Web Configuration Portal
 
-Everything is configured from your browser — no flashing or coding needed after the initial install.
+Everything is configured from your browser — no flashing or coding needed after the initial install. The portal is a single-page app with a responsive sidebar organizing settings into 8 categories:
 
-- **Home page** — operating mode, display settings, and sensor configuration
-- **Pads page** — visual pad editor for designing button layouts
-- **Network page** — Wi-Fi, MQTT, device name, static IP, and security
-- **Firmware page** — OTA updates, manual upload, and factory reset
+- **Device** — operating mode, boot actions, timers, and swipe gestures
+- **Display** — brightness, screensaver, and button defaults
+- **Pads** — visual pad editor for designing button layouts
+- **Actions** — boot actions and swipe gesture configuration
+- **Connectivity** — Wi-Fi, MQTT, BLE, device name, static IP, and security
+- **Audio** — volume, beep patterns, and sound files
+- **Sensors** — sensor configuration for boards with sensor hardware
+- **Firmware** — OTA updates, manual upload, and factory reset
 
-The pad editor lets you design button layouts visually: pick icons, set colors, add MQTT bindings for live data, configure tap actions — then save and see it instantly on your device.
+The pad editor lets you design button layouts visually: drag-to-move and drag-to-resize buttons, pick icons, set colors, add MQTT bindings for live data, configure tap actions — then save and see it instantly on your device. Dark and light mode follow your OS preference.
 
 **📖 [Full web portal guide →](docs/web-portal-guide.md)**
 
