@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **WiFi TX buffer exhaustion prevention** — prevent `transport_drv_sta_tx` assert crashes on ESP32-P4 (ESP-Hosted SDIO) caused by outbound traffic bursts. Large file downloads (session data, FsIndexedStore documents) now stream through a chunked `AwsResponseFiller` callback with a 4 KB cap (`HTTP_STREAM_CHUNK_SIZE`) instead of `request->send(LittleFS, ...)`, letting the async TCP event loop yield between chunks. MQTT post-connect burst (HA discovery, subscribes, state publishes) is paced with `delay(1)` yield points between handler groups in `onConnected()` and between batches of discovery publishes in `ha_discovery_publish_health()`. Total added latency is ~10 ms — imperceptible on connect time. Applies to all boards (non-P4 boards also benefit from reduced lwIP buffer pressure).
+
 ## [1.15.0] - 2026-05-12
 
 ### Added
