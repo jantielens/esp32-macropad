@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 166
+Total flags: 169
 
 ### Features (HAS_*)
 
@@ -34,6 +34,7 @@ Total flags: 166
 - **HAS_DISPLAY** default: `false` — Enable display + LVGL UI support.
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
+- **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
 - **HAS_SENSOR_DUMMY** default: `false` — Enable dummy sensor adapter (synthetic values for testing).
 - **HAS_SENSOR_LD2410_OUT** default: `false` — Enable LD2410 OUT pin presence sensor adapter.
@@ -175,6 +176,7 @@ Total flags: 166
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
+- **SD_PROBE_ON_BOOT** default: `false` — listing, write/read round-trip). Intended for new-board bring-up only.
 - **ST7701_DSI_HSYNC_BACK_PORCH** default: `42` — HSYNC back porch in pixel clocks.
 - **ST7701_DSI_HSYNC_FRONT_PORCH** default: `42` — HSYNC front porch in pixel clocks.
 - **ST7701_DSI_HSYNC_PULSE_WIDTH** default: `12` — HSYNC pulse width in pixel clocks.
@@ -202,6 +204,7 @@ Total flags: 166
 - **TOUCH_I2C_BUS** default: `1` — ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
 - **TOUCH_I2C_PORT** default: `(no default)` — I2C controller index.
 - **UI_SCALE_TIER** default: `UI_SCALE_MEDIUM` — Default UI scale tier (boards override in board_overrides.h)
+- **USE_SD_STORAGE** default: `false` — flash cache-disable starving the framebuffer DMA.
 - **WIFI_REBOOT_AFTER_MS** default: `600000` — Total outage before controlled device reboot.
 - **WIFI_TIER1_DURATION_MS** default: `60000` — Tier 1: SDK auto-reconnect window — device takes no active reconnect action.
 - **WIFI_TIER2_BACKOFF_BASE_MS** default: `10000` — Tier 2 exponential backoff: initial retry interval.
@@ -213,14 +216,14 @@ Total flags: 166
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
-| jc1060p470c | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  | ? | ✅ |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_SOUND_PLAYER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| jc3636w518 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| jc1060p470c | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -428,6 +431,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/widget.h
+- **HAS_SD_CARD**
+  - src/app/board_config.h
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp
@@ -619,6 +624,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SCREEN_HISTORY_MAX**
   - src/app/board_config.h
+- **SD_PROBE_ON_BOOT**
+  - src/app/app.ino
+  - src/app/board_config.h
 - **SENSOR_I2C_FREQUENCY**
   - src/app/board_config.h
 - **SENSOR_I2C_SCL**
@@ -711,6 +719,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/wire_cst816s_touch_driver.cpp
 - **UI_SCALE_TIER**
   - src/app/board_config.h
+- **USE_SD_STORAGE**
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/pad_config.cpp
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS**
   - src/app/board_config.h
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES**

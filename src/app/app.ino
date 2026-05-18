@@ -56,6 +56,8 @@
 #endif
 
 #include "i2c_bus.h"
+#include "sd_probe.h"
+#include "sd_storage.h"
 
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
@@ -189,9 +191,30 @@ void setup()
 	digitalWrite(LED_PIN, LED_ACTIVE_HIGH ? LOW : HIGH); // LED off initially
 	#endif
 
+	#if SD_PROBE_ON_BOOT
+	// Diagnostic-only: runs before display init so its serial output is the
+	// first thing visible during new-board bring-up. No-op when the flag is off.
+	sd_probe_run();
+	#endif
+
 	#if HAS_DISPLAY
 	display_manager_init(&device_config);
 	display_manager_set_splash_status("Loading config...");
+	#endif
+
+	#if USE_SD_STORAGE
+	// Mount SD card now that the splash screen is up — on failure the halt
+	// message below is visible to the user. There is no fallback storage.
+	if (!sd_storage_mount()) {
+		#if HAS_DISPLAY
+		display_manager_set_splash_status("SD CARD MISSING");
+		#endif
+		LOGE("SYS", "SD card mount failed — halting boot");
+		while (true) {
+			delay(1000);
+			yield();
+		}
+	}
 	#endif
 
 	#if HAS_TOUCH

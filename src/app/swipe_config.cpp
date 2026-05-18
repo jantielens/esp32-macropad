@@ -7,7 +7,7 @@
 #include "fs_health.h"
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
+#include "storage.h"
 #include <string.h>
 
 #define TAG "SwipeCfg"
@@ -33,12 +33,12 @@ static void apply_defaults(SwipeConfig* cfg) {
 static bool load_from_flash(SwipeConfig* cfg) {
     apply_defaults(cfg);
 
-    if (!LittleFS.exists(SWIPE_CONFIG_PATH)) {
+    if (!Storage.exists(SWIPE_CONFIG_PATH)) {
         LOGD(TAG, "No swipe config file, using defaults");
         return false;
     }
 
-    File f = LittleFS.open(SWIPE_CONFIG_PATH, "r");
+    File f = Storage.open(SWIPE_CONFIG_PATH, "r");
     if (!f) {
         LOGW(TAG, "Failed to open swipe config");
         return false;
@@ -89,7 +89,7 @@ const SwipeConfig* swipe_config_get() {
 bool swipe_config_save_raw(const uint8_t* json, size_t len) {
     if (!json || len == 0) return false;
 
-    File f = LittleFS.open(SWIPE_CONFIG_PATH, "w");
+    File f = Storage.open(SWIPE_CONFIG_PATH, "w");
     if (!f) {
         LOGE(TAG, "Failed to open for write");
         return false;
@@ -105,7 +105,7 @@ bool swipe_config_save_raw(const uint8_t* json, size_t len) {
 
     // Update RAM cache
     load_from_flash(&g_config);
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage(false);
 
     LOGI(TAG, "Saved (%u bytes)", (unsigned)len);
     return true;

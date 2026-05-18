@@ -10,7 +10,7 @@
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
 
-#include <LittleFS.h>
+#include "storage.h"
 #include <esp_heap_caps.h>
 #include <string.h>
 
@@ -208,7 +208,7 @@ void handleGetInstalledIcons(AsyncWebServerRequest *request) {
     AsyncResponseStream *response = request->beginResponseStream("application/json");
     response->print("{\"icons\":[");
 
-    File dir = LittleFS.open("/icons");
+    File dir = Storage.open("/icons");
     bool first = true;
     if (dir && dir.isDirectory()) {
         File entry = dir.openNextFile();
@@ -251,7 +251,7 @@ void handleGetIconFiles(AsyncWebServerRequest *request) {
     AsyncResponseStream *response = request->beginResponseStream("application/json");
     response->print("{\"files\":[");
 
-    File dir = LittleFS.open("/icons");
+    File dir = Storage.open("/icons");
     bool first = true;
     if (dir && dir.isDirectory()) {
         File entry = dir.openNextFile();
@@ -317,7 +317,7 @@ void handleGetIconFile(AsyncWebServerRequest *request) {
     char path[64];
     snprintf(path, sizeof(path), "/icons/%s", name.c_str());
 
-    if (!LittleFS.exists(path)) {
+    if (!Storage.exists(path)) {
         web_portal_send_json_error(request, 404, "File not found");
         return;
     }
@@ -326,7 +326,7 @@ void handleGetIconFile(AsyncWebServerRequest *request) {
     const char* ct = "application/octet-stream";
     if (name.endsWith(".png")) ct = "image/png";
 
-    request->send(LittleFS, path, ct);
+    request->send(Storage, path, ct);
 }
 
 // DELETE /api/icons/file?name=<filename> — delete a specific file
@@ -349,12 +349,12 @@ void handleDeleteIconFile(AsyncWebServerRequest *request) {
     char path[64];
     snprintf(path, sizeof(path), "/icons/%s", name.c_str());
 
-    if (!LittleFS.exists(path)) {
+    if (!Storage.exists(path)) {
         web_portal_send_json_error(request, 404, "File not found");
         return;
     }
 
-    LittleFS.remove(path);
+    Storage.remove(path);
     LOGI(TAG, "Deleted: %s", path);
     request->send(200, "application/json", "{\"success\":true}");
 }

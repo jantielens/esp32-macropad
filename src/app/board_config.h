@@ -195,6 +195,29 @@
 #endif
 
 // ============================================================================
+// SD Card Storage (optional)
+// ============================================================================
+// Board has a physical MicroSD card slot wired to SDMMC.
+#ifndef HAS_SD_CARD
+#define HAS_SD_CARD false
+#endif
+
+// Route all persistent file I/O through the SD card instead of internal
+// LittleFS. Implies HAS_SD_CARD. When true, the device halts at boot if
+// the SD card is missing or unreadable — there is no runtime fallback.
+// Eliminates display flicker on MIPI-DSI / RGB panels caused by internal
+// flash cache-disable starving the framebuffer DMA.
+#ifndef USE_SD_STORAGE
+#define USE_SD_STORAGE false
+#endif
+
+// Run a diagnostic SD probe early in setup() (mount, card info, directory
+// listing, write/read round-trip). Intended for new-board bring-up only.
+#ifndef SD_PROBE_ON_BOOT
+#define SD_PROBE_ON_BOOT false
+#endif
+
+// ============================================================================
 // User Button (optional)
 // ============================================================================
 #ifndef HAS_BUTTON

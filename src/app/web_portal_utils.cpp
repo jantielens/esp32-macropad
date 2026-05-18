@@ -1,6 +1,6 @@
 #include "web_portal_utils.h"
 
-#include <LittleFS.h>
+#include "storage.h"
 #include <memory>
 
 struct FileStreamContext {
@@ -14,7 +14,7 @@ void sendFileThrottled(AsyncWebServerRequest *request,
 		if (!request) return;
 
 		auto ctx = std::make_shared<FileStreamContext>();
-		ctx->file = LittleFS.open(path, "r");
+		ctx->file = Storage.open(path, "r");
 		if (!ctx->file) {
 				request->send(404, "application/json",
 				              "{\"success\":false,\"message\":\"File read error\"}");

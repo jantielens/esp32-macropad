@@ -5,7 +5,7 @@
 #include "web_portal_json.h"
 #include "web_portal_utils.h"
 
-#include <LittleFS.h>
+#include "storage.h"
 #include <string.h>
 
 #define TAG "FsStoreAPI"
@@ -65,7 +65,7 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
             }
 
             String file_path = store.data_path(id.c_str());
-            if (!LittleFS.exists(file_path.c_str())) {
+            if (!Storage.exists(file_path.c_str())) {
                 // Manifest has the entry but data file is gone (orphan).
                 request->send(404, "application/json",
                               "{\"success\":false,\"message\":\"Not found\"}");

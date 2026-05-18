@@ -8,7 +8,7 @@
 #include "log_manager.h"
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
+#include "storage.h"
 #include <string.h>
 
 #define TAG "BootAct"
@@ -26,12 +26,12 @@ static void apply_defaults(BootActionsConfig* cfg) {
 static bool load_from_flash(BootActionsConfig* cfg) {
     apply_defaults(cfg);
 
-    if (!LittleFS.exists(BOOT_ACTIONS_PATH)) {
+    if (!Storage.exists(BOOT_ACTIONS_PATH)) {
         LOGD(TAG, "No boot actions file, using defaults");
         return false;
     }
 
-    File f = LittleFS.open(BOOT_ACTIONS_PATH, "r");
+    File f = Storage.open(BOOT_ACTIONS_PATH, "r");
     if (!f) {
         LOGW(TAG, "Failed to open boot actions");
         return false;
@@ -83,7 +83,7 @@ const BootActionsConfig* boot_actions_get() {
 bool boot_actions_save_raw(const uint8_t* json, size_t len) {
     if (!json || len == 0) return false;
 
-    File f = LittleFS.open(BOOT_ACTIONS_PATH, "w");
+    File f = Storage.open(BOOT_ACTIONS_PATH, "w");
     if (!f) {
         LOGE(TAG, "Failed to open for write");
         return false;
@@ -99,7 +99,7 @@ bool boot_actions_save_raw(const uint8_t* json, size_t len) {
 
     // Update RAM cache
     load_from_flash(&g_config);
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage(false);
 
     LOGI(TAG, "Saved (%u bytes)", (unsigned)len);
     return true;

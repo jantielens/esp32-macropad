@@ -11,7 +11,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Board Configuration**: `src/app/board_config.h` (defaults) + `src/boards/[board-name]/board_overrides.h` (per-board overrides). Uses `#if HAS_xxx` conditional compilation.
 - **Display & Touch**: HAL-based architecture with LVGL. See `docs/dev/display-touch-architecture.md` and `.github/instructions/display-touch.instructions.md`.
 - **Image Fetch** (`HAS_IMAGE_FETCH`): Slot-based FreeRTOS background HTTP(S) image fetcher with JPEG/PNG decode, bilinear scaling, and MJPEG streaming.
-- **Icon Store** (`HAS_DISPLAY`): PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers.
+- **Storage Facade** (`storage.h`): Compile-time `Storage` macro resolves to `LittleFS` (default) or `SD_MMC` when `USE_SD_STORAGE` is enabled. All persistent file I/O (pad configs, icons, sounds, boot/swipe/timer/button-default configs, indexed stores) goes through this facade. SD card path mounts SDMMC Slot 0 in `sd_storage_mount()` and halts boot with a splash if the card is missing. Throttled usage publish via `storage_publish_usage()`.
+- **Icon Store** (`HAS_DISPLAY`): PNG icon storage on the `Storage` facade (LittleFS or SD) with PSRAM-cached ARGB8888 draw buffers.
 - **Custom Fonts** (`HAS_CUSTOM_FONTS`): 3 font families (DSEG7, Bebas, Doto) × 7 sizes. LabelStyle DSL: `font_family:dseg7`, `font_family:bebas`, `font_family:doto`.
 - **Widget Subsystem** (`HAS_DISPLAY`): Extensible widget types — gauge, sparkline, bar chart, table, rocker, numeric rocker, list. Each widget renders inside a button.
 - **Data Stream Registry** (`HAS_DISPLAY && HAS_MQTT`): Demand-driven per-widget ring buffers in PSRAM for history-based widgets.

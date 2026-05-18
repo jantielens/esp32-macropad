@@ -7,7 +7,7 @@
 #include "pad_config.h"
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
+#include "storage.h"
 #include <string.h>
 
 #define TAG "BtnDef"
@@ -42,12 +42,12 @@ static void parse_bindable(JsonVariant v, char* out, size_t out_len, const char*
 static bool load_from_flash(ButtonDefaults* d) {
     memset(d, 0, sizeof(ButtonDefaults));
 
-    if (!LittleFS.exists(BTN_DEFAULTS_PATH)) {
+    if (!Storage.exists(BTN_DEFAULTS_PATH)) {
         LOGD(TAG, "No button defaults file, using empty defaults");
         return false;
     }
 
-    File f = LittleFS.open(BTN_DEFAULTS_PATH, "r");
+    File f = Storage.open(BTN_DEFAULTS_PATH, "r");
     if (!f) {
         LOGW(TAG, "Failed to open button defaults");
         return false;
@@ -110,7 +110,7 @@ const ButtonDefaults* button_defaults_get() {
 bool button_defaults_save_raw(const uint8_t* json, size_t len) {
     if (!json || len == 0) return false;
 
-    File f = LittleFS.open(BTN_DEFAULTS_PATH, "w");
+    File f = Storage.open(BTN_DEFAULTS_PATH, "w");
     if (!f) {
         LOGE(TAG, "Failed to open for write");
         return false;
@@ -126,7 +126,7 @@ bool button_defaults_save_raw(const uint8_t* json, size_t len) {
 
     // Update RAM cache
     load_from_flash(&g_defaults);
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage(false);
 
     // Rebuild all pad caches so they pick up the new defaults
     pad_config_rebuild_all_caches();
