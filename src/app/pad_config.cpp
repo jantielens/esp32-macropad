@@ -359,6 +359,9 @@ bool pad_config_init() {
     if (!Storage.exists("/config")) {
         Storage.mkdir("/config");
     }
+    if (!Storage.exists("/storage")) {
+        Storage.mkdir("/storage");
+    }
 #else
     // Find storage partition by subtype (label may vary across boards)
     const esp_partition_t* part = esp_partition_find_first(
