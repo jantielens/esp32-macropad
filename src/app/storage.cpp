@@ -19,7 +19,7 @@ void storage_publish_usage(bool force) {
     }
     const uint64_t used = Storage.usedBytes();
     const uint64_t total = Storage.totalBytes();
-    fs_health_set_storage_usage((uint32_t)used, (uint32_t)total);
+    fs_health_set_storage_usage(used, total);
     s_last_publish_ms = now;
     s_have_published = true;
 }

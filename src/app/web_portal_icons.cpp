@@ -9,6 +9,7 @@
 #include "pad_layout.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
+#include "web_portal_utils.h"
 
 #include "storage.h"
 #include <esp_heap_caps.h>
@@ -326,7 +327,9 @@ void handleGetIconFile(AsyncWebServerRequest *request) {
     const char* ct = "application/octet-stream";
     if (name.endsWith(".png")) ct = "image/png";
 
-    request->send(Storage, path, ct);
+    // Use throttled streamer to avoid WiFi TX buffer exhaustion on ESP-Hosted
+    // (same pattern as the FsIndexedStore JSON path).
+    sendFileThrottled(request, path, ct);
 }
 
 // DELETE /api/icons/file?name=<filename> — delete a specific file

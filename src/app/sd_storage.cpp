@@ -60,11 +60,4 @@ bool sd_storage_mount() {
     return true;
 }
 
-#else  // !USE_SD_STORAGE
-
-bool sd_storage_mount() {
-    // Storage facade resolves to LittleFS on this build; nothing to do.
-    return true;
-}
-
-#endif
+#endif  // USE_SD_STORAGE

@@ -115,7 +115,9 @@ static bool try_mount(bool one_bit, bool use_power_pin, const char* label) {
     SD_MMC.setPowerChannel(SD_LDO_CHANNEL);
     if (!SD_MMC.begin("/sdcard", one_bit, false)) {
         LOGE(TAG, "  begin() failed");
+#if !USE_SD_STORAGE
         if (use_power_pin) digitalWrite(SD_PIN_POWER, HIGH);
+#endif
         return false;
     }
     LOGI(TAG, "  mount OK");
@@ -123,9 +125,13 @@ static bool try_mount(bool one_bit, bool use_power_pin, const char* label) {
     list_root();
     write_read_roundtrip();
     SD_MMC.end();
+#if !USE_SD_STORAGE
+    // When USE_SD_STORAGE is enabled the subsequent sd_storage_mount() call
+    // will reuse the powered card; only power down when no mount follows.
     if (use_power_pin) {
         digitalWrite(SD_PIN_POWER, HIGH);  // Power back off
     }
+#endif
     return true;
 }
 

@@ -34,7 +34,7 @@ void fs_health_init() {
 		detect_partitions();
 }
 
-void fs_health_set_storage_usage(uint32_t used_bytes, uint32_t total_bytes) {
+void fs_health_set_storage_usage(uint64_t used_bytes, uint64_t total_bytes) {
 		// Treat this as a one-way latch: once mounted, keep reporting mounted.
 		g_stats.storage_mounted = true;
 		g_stats.storage_used_bytes = used_bytes;

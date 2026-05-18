@@ -627,6 +627,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **SD_PROBE_ON_BOOT**
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/sd_probe.cpp
 - **SENSOR_I2C_FREQUENCY**
   - src/app/board_config.h
 - **SENSOR_I2C_SCL**
@@ -723,6 +724,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/pad_config.cpp
+  - src/app/sd_probe.cpp
+  - src/app/sd_storage.cpp
+  - src/app/sd_storage.h
+  - src/app/storage.h
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS**
   - src/app/board_config.h
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES**
