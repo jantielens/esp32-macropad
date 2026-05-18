@@ -122,6 +122,12 @@ bool FsIndexedStore::_atomic_write(const char* path, const String& content) {
         return false;
     }
 
+    // Both LittleFS and SD/FAT rename() fail if the destination exists.
+    // Remove any prior file at the target path so the rename is idempotent.
+    if (Storage.exists(path)) {
+        Storage.remove(path);
+    }
+
     if (!Storage.rename(tmp_path.c_str(), path)) {
         LOGE(TAG, "Rename %s -> %s failed", tmp_path.c_str(), path);
         Storage.remove(tmp_path.c_str());
@@ -152,6 +158,12 @@ bool FsIndexedStore::_atomic_write_from_doc(const char* path, JsonDocument& doc)
              tmp_path.c_str(), (unsigned)written, (unsigned)expected);
         Storage.remove(tmp_path.c_str());
         return false;
+    }
+
+    // Both LittleFS and SD/FAT rename() fail if the destination exists.
+    // Remove any prior file at the target path so the rename is idempotent.
+    if (Storage.exists(path)) {
+        Storage.remove(path);
     }
 
     if (!Storage.rename(tmp_path.c_str(), path)) {

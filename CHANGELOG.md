@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Atomic rename idempotency on SD/FAT and LittleFS** — `FsIndexedStore::_atomic_write*()` now removes any pre-existing destination file before calling `rename()`. Both LittleFS and SD/FAT `rename()` fail if the destination already exists, which broke manifest writes (`_index.json`) on SD-backed boards whenever a prior manifest was present. The temp-file-then-rename crash-safety guarantee is unchanged; the extra `remove()` only fires when a stale destination is present.
 - **WiFi TX buffer exhaustion prevention** — prevent `transport_drv_sta_tx` assert crashes on ESP32-P4 (ESP-Hosted SDIO) caused by outbound traffic bursts. Large file downloads (session data, FsIndexedStore documents) now stream through a chunked `AwsResponseFiller` callback with a 4 KB cap (`HTTP_STREAM_CHUNK_SIZE`) instead of `request->send(LittleFS, ...)`, letting the async TCP event loop yield between chunks. MQTT post-connect burst (HA discovery, subscribes, state publishes) is paced with `delay(1)` yield points between handler groups in `onConnected()` and between batches of discovery publishes in `ha_discovery_publish_health()`. Total added latency is ~10 ms — imperceptible on connect time. Applies to all boards (non-P4 boards also benefit from reduced lwIP buffer pressure).
 
 ## [1.15.0] - 2026-05-12
