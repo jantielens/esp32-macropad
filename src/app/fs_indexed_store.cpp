@@ -25,15 +25,16 @@ struct SortEntry { uint32_t ts; String s; };
 
 // Sort vec descending by ts and populate target JsonArray.
 // tmp is a caller-provided scratch document reused across iterations.
+template <typename TDoc>
 static void sort_and_populate(JsonArray target,
                                std::vector<SortEntry>& vec,
-                               DynamicJsonDocument& tmp) {
+                               TDoc& tmp) {
     std::sort(vec.begin(), vec.end(),
         [](const SortEntry& a, const SortEntry& b) { return a.ts > b.ts; });
     for (const auto& item : vec) {
         tmp.clear();
         if (deserializeJson(tmp, item.s) == DeserializationError::Ok) {
-            target.add(tmp.as<JsonVariant>());
+            target.add(tmp.template as<JsonVariant>());
         }
     }
 }
@@ -296,7 +297,7 @@ void FsIndexedStore::_rebuild_manifest() {
         file = dir.openNextFile();
     }
 
-    DynamicJsonDocument tmp(1024);
+    BasicJsonDocument<PsramJsonAllocator> tmp(1024);
     sort_and_populate(entries, collected, tmp);
 
     _write_manifest();
@@ -375,7 +376,7 @@ void FsIndexedStore::_sort_entries() {
     // (e.g. next_id). Clearing the whole document would silently discard them.
     _manifest_doc->as<JsonObject>().remove("entries");
     JsonArray sorted = _manifest_doc->createNestedArray("entries");
-    DynamicJsonDocument tmp(1024);
+    BasicJsonDocument<PsramJsonAllocator> tmp(1024);
     sort_and_populate(sorted, vec, tmp);
 }
 

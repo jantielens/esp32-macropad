@@ -5,6 +5,7 @@
 #include "action_parse.h"
 #include "fs_health.h"
 #include "log_manager.h"
+#include "psram_json_allocator.h"
 #include "timer_engine.h"
 
 #include <ArduinoJson.h>
@@ -62,7 +63,7 @@ static bool load_from_flash(TimerConfig* cfg) {
         return false;
     }
 
-    StaticJsonDocument<3072> doc;
+    BasicJsonDocument<PsramJsonAllocator> doc(3072);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 

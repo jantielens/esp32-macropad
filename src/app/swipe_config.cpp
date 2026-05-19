@@ -5,6 +5,7 @@
 #include "action_parse.h"
 #include "log_manager.h"
 #include "fs_health.h"
+#include "psram_json_allocator.h"
 
 #include <ArduinoJson.h>
 #include "storage.h"
@@ -51,7 +52,7 @@ static bool load_from_flash(SwipeConfig* cfg) {
         return false;
     }
 
-    StaticJsonDocument<2048> doc;
+    BasicJsonDocument<PsramJsonAllocator> doc(2048);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 

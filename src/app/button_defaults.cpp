@@ -5,6 +5,7 @@
 #include "log_manager.h"
 #include "fs_health.h"
 #include "pad_config.h"
+#include "psram_json_allocator.h"
 
 #include <ArduinoJson.h>
 #include "storage.h"
@@ -60,7 +61,7 @@ static bool load_from_flash(ButtonDefaults* d) {
         return false;
     }
 
-    StaticJsonDocument<2048> doc;
+    BasicJsonDocument<PsramJsonAllocator> doc(2048);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 
