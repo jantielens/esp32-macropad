@@ -2,11 +2,23 @@
 
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
+#include "web_portal_utils.h"
 
 #include "web_assets.h"
 
 #include <string.h>
 
+// Serve a gzipped PROGMEM asset as a length-aware chunked stream rather than a
+// single beginResponse_P() blob. AsyncTCP only calls the filler when LWIP TX
+// buffer space is available, so the response is naturally paced and
+// DMA-internal SRAM pbufs recycle between chunks. This matters on ESP-Hosted
+// SDIO boards (ESP32-P4 + ESP32-C6) where a parallel burst of large static
+// asset responses (e.g. browser-issued /portal-all.css + /portal.js on a
+// fresh portal load) can otherwise exhaust the DMA-internal pbuf pool and
+// trigger a `copy_buff` NULL assert in `transport_drv_sta_tx`.
+//
+// HTTP_STREAM_CHUNK_SIZE (4 KB) matches the cap already used for file-backed
+// streamed responses in web_portal_utils.cpp::sendFileThrottled().
 static AsyncWebServerResponse *begin_gzipped_asset_response(
 		AsyncWebServerRequest *request,
 		const char *content_type,
@@ -14,11 +26,18 @@ static AsyncWebServerResponse *begin_gzipped_asset_response(
 		size_t content_gz_len,
 		const char *cache_control
 ) {
-		AsyncWebServerResponse *response = request->beginResponse_P(
-				200,
+		AsyncWebServerResponse *response = request->beginResponse(
 				content_type,
-				content_gz,
-				content_gz_len
+				content_gz_len,
+				[content_gz, content_gz_len](uint8_t *buffer, size_t max_len, size_t index) -> size_t {
+						if (index >= content_gz_len) return 0;
+						size_t remain = content_gz_len - index;
+						size_t to_copy = (max_len < HTTP_STREAM_CHUNK_SIZE)
+						                 ? max_len : HTTP_STREAM_CHUNK_SIZE;
+						if (to_copy > remain) to_copy = remain;
+						memcpy_P(buffer, content_gz + index, to_copy);
+						return to_copy;
+				}
 		);
 
 		response->addHeader("Content-Encoding", "gzip");
