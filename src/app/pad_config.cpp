@@ -11,6 +11,7 @@
 #endif
 
 #include <ArduinoJson.h>
+#include "psram_json_allocator.h"
 #include "storage.h"
 
 #include <esp_heap_caps.h>
@@ -566,7 +567,7 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     f.close();
     buf[read] = '\0';
 
-    DynamicJsonDocument doc(file_size * 2 + 256);
+    BasicJsonDocument<PsramJsonAllocator> doc(file_size * 2 + 256);
     DeserializationError err = deserializeJson(doc, buf, read);
     free(buf);
 

@@ -263,13 +263,13 @@ void FsIndexedStore::_rebuild_manifest() {
 
         // Parse only the configured index fields — skips waveform/payload data
         // entirely, so data_doc stays small even for 30-50 KB session files.
-        DynamicJsonDocument data_doc(2048);
+        BasicJsonDocument<PsramJsonAllocator> data_doc(2048);
         DeserializationError err = deserializeJson(data_doc, df,
                                                     DeserializationOption::Filter(filter_doc));
         df.close();
 
         // Build the manifest entry for this file
-        DynamicJsonDocument entry_doc(1024);
+        BasicJsonDocument<PsramJsonAllocator> entry_doc(1024);
         JsonObject entry = entry_doc.to<JsonObject>();
         entry["id"] = id;
 
@@ -694,7 +694,7 @@ bool FsIndexedStore::patch_meta(const char* id, const JsonObject& fields) {
 bool FsIndexedStore::patch_meta(const char* id, const String& json_patch) {
     if (json_patch.isEmpty()) return false;
 
-    DynamicJsonDocument patch_doc(FS_STORE_PATCH_MAX_BYTES);
+    BasicJsonDocument<PsramJsonAllocator> patch_doc(FS_STORE_PATCH_MAX_BYTES);
     DeserializationError err = deserializeJson(patch_doc, json_patch);
     if (err) {
         LOGW(TAG, "patch_meta: invalid JSON patch for '%s': %s", id, err.c_str());

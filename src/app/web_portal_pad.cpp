@@ -7,6 +7,7 @@
 #include "log_manager.h"
 #include "pad_block.h"
 #include "pad_config.h"
+#include "psram_json_allocator.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
 #if HAS_MQTT
@@ -60,7 +61,7 @@ static int parse_page_param(AsyncWebServerRequest *request) {
 // Validate grid JSON: cols/rows in range, button placement within grid bounds.
 // Returns error message or nullptr on success.
 static const char* validate_pad_json(const uint8_t* json, size_t len) {
-    DynamicJsonDocument doc(len * 2 + 512);
+    BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 512);
     DeserializationError err = deserializeJson(doc, json, len);
     if (err) return "Invalid JSON";
 
