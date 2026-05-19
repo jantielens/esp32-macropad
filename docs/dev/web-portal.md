@@ -1236,9 +1236,10 @@ To keep concurrent in-flight HTTP requests bounded, the frontend applies several
 
 1. **`window.fetch` cap of 2** — `portal_core.js` wraps the native `fetch` with a small queue (`MAX_INFLIGHT = 2`). Excess calls wait until an in-flight request completes.
 2. **`getDeviceInfo()` session cache** — `portal_core.js` exposes `getDeviceInfo(forceRefresh)` that issues at most one `GET /api/info` per page session and caches the result in `deviceInfoCache`. Concurrent first-time callers share a single in-flight promise. Pass `forceRefresh = true` after writes that change reported fields (e.g., saving a pad changes `available_screens`).
-3. **Single CSS asset** — `bootstrap.min.css` + `portal-custom.css` are concatenated into `/portal-all.css` at build time (see [CSS Bundle](#css-bundle)), saving one request and ~1.5 KB through shared gzip dictionary.
-4. **Inline favicon** — `shell.html` sets `<link rel="icon" href="data:,">` to suppress the browser's automatic `/favicon.ico` lookup (no extra request, no 404).
-5. **`/api/mode` folded into `/api/info`** — the legacy mode endpoint was removed; portal JS derives `portalMode` from `ap_active` on the cached `/api/info` response.
+3. **`fetchHealthOnce()` shared snapshot** — `portal_health.js` keeps the most recent `/api/health` response in `latestHealth` (updated by every widget poll) and exposes `fetchHealthOnce()` for other fragments. The welcome and version-info fragments call it instead of issuing their own `/api/health` request: if a snapshot exists they get it immediately, otherwise concurrent first-time callers share a single in-flight promise. The widget's periodic poll loop is unchanged and continues to issue `GET /api/health` at the configured interval.
+4. **Single CSS asset** — `bootstrap.min.css` + `portal-custom.css` are concatenated into `/portal-all.css` at build time (see [CSS Bundle](#css-bundle)), saving one request and ~1.5 KB through shared gzip dictionary.
+5. **Inline favicon** — `shell.html` sets `<link rel="icon" href="data:,">` to suppress the browser's automatic `/favicon.ico` lookup (no extra request, no 404).
+6. **`/api/mode` folded into `/api/info`** — the legacy mode endpoint was removed; portal JS derives `portalMode` from `ap_active` on the cached `/api/info` response.
 
 The result of these measures is that a fresh portal load on the `release/1.16.0` baseline issues approximately: `GET /`, `GET /portal-all.css`, `GET /portal.js`, `GET /api/info`, `GET /api/health`, `GET /api/portal/nav`, `GET /api/section/welcome` — plus the periodic `GET /api/health` poll. With the fetch cap, at most two are in flight at any moment.
 

@@ -134,7 +134,8 @@ window.init_welcome_fragment = function () {
         if (el) el.textContent = info.chip_model || '';
     });
 
-    fetch('/api/health').then(function (r) { return r.json(); }).then(function (h) {
+    fetchHealthOnce().then(function (h) {
+        if (!h) return;
         var el;
         el = document.getElementById('welcome-wifi-status');
         if (el) el.textContent = h.ip_address ? 'Connected' : 'Disconnected';
@@ -152,7 +153,7 @@ window.init_welcome_fragment = function () {
             var m = Math.floor(s / 60);
             el.textContent = (d > 0 ? d + 'd ' : '') + hr + 'h ' + m + 'm';
         }
-    }).catch(function () {});
+    });
 };
 
 // ============================================================================
@@ -387,9 +388,10 @@ window.init_version_info_fragment = function () {
         set('vi-sdk', info.idf_version);
         set('vi-device-name', info.hostname);
     });
-    fetch('/api/health').then(function (r) { return r.json(); }).then(function (h) {
+    fetchHealthOnce().then(function (h) {
+        if (!h) return;
         set('vi-ip', h.ip_address);
-    }).catch(function () {});
+    });
 };
 
 // ============================================================================
