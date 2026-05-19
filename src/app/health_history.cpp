@@ -77,6 +77,29 @@ static void hist_timer_cb(TimerHandle_t) {
 		s.heap_internal_largest = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 		s.psram_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
+		// DMA-capable internal heap watermark. This is the pool that backs
+		// AsyncTCP/LWIP TX pbufs on ESP-Hosted SDIO; transport_drv copy_buff
+		// NULL asserts are preceded by exhaustion or heavy fragmentation here.
+		// Emit a single throttled warning when it drops below the threshold so
+		// post-crash serial logs contain a proximate marker.
+#if ESP32
+		{
+			constexpr uint32_t kDmaInternalLowThreshold = 8 * 1024; // bytes
+			constexpr uint32_t kDmaInternalWarnIntervalMs = 5000;
+			static uint32_t s_last_dma_warn_ms = 0;
+			const uint32_t dma_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+			const uint32_t dma_largest = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+			if (dma_free < kDmaInternalLowThreshold) {
+				const uint32_t now_ms = (uint32_t)millis();
+				if (s_last_dma_warn_ms == 0 || (now_ms - s_last_dma_warn_ms) >= kDmaInternalWarnIntervalMs) {
+					s_last_dma_warn_ms = now_ms;
+					LOGW("HealthHist", "DMA-internal heap low: free=%u largest=%u (threshold=%u)",
+						(unsigned)dma_free, (unsigned)dma_largest, (unsigned)kDmaInternalLowThreshold);
+				}
+			}
+		}
+#endif
+
 		DeviceHealthWindowBands bands = {};
 		if (device_telemetry_get_health_window_bands(&bands)) {
 				s.heap_internal_free_min_window = bands.heap_internal_free_min_window;

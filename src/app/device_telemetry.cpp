@@ -680,6 +680,19 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 		doc["heap_internal_min"] = internal_min;
 		doc["heap_internal_largest"] = internal_largest;
 
+		// DMA-capable internal heap subset. On ESP-Hosted SDIO boards (ESP32-P4)
+		// AsyncTCP/LWIP TX pbufs are allocated from this pool; exhaustion or
+		// fragmentation here is what triggers transport_drv copy_buff NULL asserts
+		// under portal load. Expose separately so the actual failure signal is
+		// observable (the broader internal heap can look healthy while this pool
+		// is empty).
+		const size_t dma_internal_free = heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		const size_t dma_internal_min = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		const size_t dma_internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		doc["heap_dma_internal_free"] = dma_internal_free;
+		doc["heap_dma_internal_min"] = dma_internal_min;
+		doc["heap_dma_internal_largest"] = dma_internal_largest;
+
 		// Heap fragmentation (internal only)
 		float heap_frag = 0;
 		if (internal_free > 0 && internal_largest <= internal_free) {
