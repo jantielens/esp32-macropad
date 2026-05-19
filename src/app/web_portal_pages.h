@@ -12,8 +12,7 @@ void handleFirmware(AsyncWebServerRequest *request);
 
 // Asset handlers
 void handleJS(AsyncWebServerRequest *request);
-void handleBootstrapCSS(AsyncWebServerRequest *request);
-void handlePortalCustomCSS(AsyncWebServerRequest *request);
+void handlePortalAllCSS(AsyncWebServerRequest *request);
 
 // Shell handler (new single-page root)
 void handleShell(AsyncWebServerRequest *request);

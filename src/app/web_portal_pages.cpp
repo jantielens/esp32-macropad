@@ -108,25 +108,19 @@ void handleFirmware(AsyncWebServerRequest *request) {
 		request->redirect("/#ota-update");
 }
 
-// ---- CSS asset handlers ----
-
-void handleBootstrapCSS(AsyncWebServerRequest *request) {
+// ---- CSS asset handler ----
+//
+// Bootstrap + portal-custom are bundled into a single portal-all.css asset to
+// reduce parallel HTTP requests at portal load. Fewer concurrent in-flight
+// responses keeps DMA-internal SRAM fragmentation low on ESP-Hosted SDIO
+// platforms (ESP32-P4 + ESP32-C6) where AsyncTCP TX buffers must come from
+// MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL.
+void handlePortalAllCSS(AsyncWebServerRequest *request) {
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
 				request,
 				"text/css",
-				bootstrap_min_css_gz,
-				bootstrap_min_css_gz_len,
-				"public, max-age=86400"
-		);
-		request->send(response);
-}
-
-void handlePortalCustomCSS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"text/css",
-				portal_custom_css_gz,
-				portal_custom_css_gz_len,
+				portal_all_css_gz,
+				portal_all_css_gz_len,
 				"public, max-age=600"
 		);
 		request->send(response);

@@ -8,10 +8,49 @@
  * Multi-page support: home, network, firmware
  */
 
+// ---------------------------------------------------------------------------
+// Fetch concurrency limiter
+// ---------------------------------------------------------------------------
+// ESP-Hosted SDIO transports (ESP32-P4 + external ESP32-C6) allocate AsyncTCP
+// TX buffers from MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL. Concurrent responses
+// fragment that pool and can drive copy_buff allocations to NULL, asserting
+// inside transport_drv_sta_tx. Capping browser-side concurrency to 2 keeps
+// the largest free DMA-internal block above safe-water-mark in practice.
+// Applies to all window.fetch callers in the portal; navigations and image
+// loads are not affected.
+(function () {
+    var MAX_INFLIGHT = 2;
+    var inflight = 0;
+    var queue = [];
+    var originalFetch = window.fetch.bind(window);
+
+    function pump() {
+        while (inflight < MAX_INFLIGHT && queue.length > 0) {
+            var job = queue.shift();
+            inflight++;
+            originalFetch(job.input, job.init).then(function (res) {
+                inflight--;
+                job.resolve(res);
+                pump();
+            }, function (err) {
+                inflight--;
+                job.reject(err);
+                pump();
+            });
+        }
+    }
+
+    window.fetch = function (input, init) {
+        return new Promise(function (resolve, reject) {
+            queue.push({ input: input, init: init, resolve: resolve, reject: reject });
+            pump();
+        });
+    };
+})();
+
 // API endpoints
 const API_CONFIG = '/api/config';
 const API_INFO = '/api/info';
-const API_MODE = '/api/mode';
 const API_UPDATE = '/api/update';
 const API_REBOOT = '/api/reboot';
 const API_VERSION = '/api/info'; // Used for connection polling
@@ -20,6 +59,41 @@ let selectedFile = null;
 let portalMode = 'full'; // 'core' or 'full'
 
 let deviceInfoCache = null;
+let deviceInfoInflight = null;
+
+/**
+ * Fetch /api/info with session-scope caching.
+ *
+ * Multiple fragments and helpers need device info; on a cold portal load
+ * up to six independent fetch('/api/info') calls would race, each consuming
+ * AsyncTCP TX buffers from the same DMA-internal heap. This helper returns
+ * the cached payload after the first successful fetch and coalesces
+ * concurrent first-time callers into a single network request.
+ *
+ * @param {boolean} forceRefresh - Bypass the cache and refetch.
+ * @returns {Promise<object|null>} Parsed /api/info JSON, or null on error.
+ */
+function getDeviceInfo(forceRefresh) {
+    if (!forceRefresh && deviceInfoCache) {
+        return Promise.resolve(deviceInfoCache);
+    }
+    if (deviceInfoInflight) {
+        return deviceInfoInflight;
+    }
+    deviceInfoInflight = fetch(API_INFO)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (info) {
+            deviceInfoInflight = null;
+            if (info) deviceInfoCache = info;
+            return info;
+        })
+        .catch(function (err) {
+            deviceInfoInflight = null;
+            console.error('getDeviceInfo:', err);
+            return null;
+        });
+    return deviceInfoInflight;
+}
 
 /**
  * Show a Bootstrap-styled toast notification.

@@ -1,0 +1,7 @@
+# CSS bundle manifest for portal-all.css
+# Combines vendor framework + portal styles into a single asset to reduce
+# parallel HTTP requests at portal load (mitigates ESP-Hosted SDIO DMA pressure).
+# Order follows CSS cascade: framework first, custom overrides last.
+bootstrap.min.css
+portal-custom.css
+portal-all.css

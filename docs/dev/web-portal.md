@@ -427,6 +427,7 @@ Returns comprehensive device information.
 ```json
 {
   "version": "0.0.1",
+  "ap_active": false,
   "build_date": "Nov 25 2025",
   "build_time": "14:30:00",
   "board_name": "esp32-nodisplay",
@@ -472,6 +473,9 @@ Returns comprehensive device information.
 - `wifi_hostname`: WiFi/DHCP hostname
 - `mdns_name`: Full mDNS name (hostname + `.local`)
 - `hostname`: Short hostname
+
+**Portal Mode Field:**
+- `ap_active`: `true` when the device is running in AP / captive-portal mode, `false` in full STA mode. Portal JS derives `portalMode` (`"core"` vs `"full"`) from this flag. (Replaces the removed `GET /api/mode` endpoint.)
 
 **Display Fields** (only when `has_display` is `true`):
 - `display_coord_width` / `display_coord_height`: Display resolution
@@ -756,21 +760,7 @@ When a board defines `PORTAL_PRIMARY_CATEGORY` (non-empty), the response include
 
 ### Portal Mode
 
-#### `GET /api/mode`
-
-Returns current portal operating mode.
-
-**Response:**
-```json
-{
-  "mode": "core",
-  "ap_active": true
-}
-```
-
-**Modes:**
-- `"core"`: AP mode with captive portal
-- `"full"`: WiFi connected mode
+Portal mode is exposed via the `ap_active` field on [`GET /api/info`](#get-apiinfo). The standalone `GET /api/mode` endpoint was removed to reduce HTTP request count during portal boot (see [Concurrent Request Throttling](#concurrent-request-throttling)).
 
 ### System Control
 - `width`/`height` must match the device's display coordinate-space resolution (see `GET /api/info` fields `display_coord_width`/`display_coord_height`)
@@ -1223,12 +1213,13 @@ Each button's `col_offset` / `row_offset` is relative to the placement anchor ce
 - `web/home.html` - Home page (custom settings)
 - `web/network.html` - Network configuration page
 - `web/firmware.html` - Firmware update and factory reset page
-- `web/bootstrap.min.css` - Bootstrap CSS framework (vendor)
-- `web/portal-custom.css` - Custom portal styles and responsive overrides
+- `web/bootstrap.min.css` - Bootstrap CSS framework (vendor, bundled into `portal-all.css`)
+- `web/portal-custom.css` - Custom portal styles and responsive overrides (bundled into `portal-all.css`)
 - `web/portal.js.bundle` - Bundle manifest listing all JS modules in concatenation order
 - `web/portal.js` - Entry point (last in bundle); all JS served as a single bundled asset
 - `web/portal_*.js` - Feature modules and fragments (see [Asset Bundle System](#asset-bundle-system))
-- `web/portal-custom.css.bundle` - Optional CSS bundle manifest (see [CSS Bundle](#css-bundle))
+- `web/portal-all.css` - Primary CSS file (bundle target) — served at `/portal-all.css`
+- `web/portal-all.css.bundle` - CSS bundle manifest (see [CSS Bundle](#css-bundle))
 - `web/_portal_*.css` - Feature CSS fragments (bundled into primary CSS at build time)
 
 **Asset Compression:**
@@ -1236,6 +1227,20 @@ Each button's `col_offset` / `row_offset` is relative to the placement anchor ce
 - Reduces flash storage and bandwidth by ~80%
 - Assets served with `Content-Encoding: gzip` header
 - Browser automatically decompresses (transparent to user)
+
+### Concurrent Request Throttling
+
+The portal is served by ESPAsyncWebServer / AsyncTCP, whose TX buffers come from DMA-internal SRAM. On boards using ESP-Hosted SDIO (ESP32-P4 + ESP32-C6 co-processor) this pool is small and fragments easily — a parallel storm of large HTTP responses can cause a `copy_buff` NULL assert (`transport_drv_sta_tx`).
+
+To keep concurrent in-flight HTTP requests bounded, the frontend applies several measures:
+
+1. **`window.fetch` cap of 2** — `portal_core.js` wraps the native `fetch` with a small queue (`MAX_INFLIGHT = 2`). Excess calls wait until an in-flight request completes.
+2. **`getDeviceInfo()` session cache** — `portal_core.js` exposes `getDeviceInfo(forceRefresh)` that issues at most one `GET /api/info` per page session and caches the result in `deviceInfoCache`. Concurrent first-time callers share a single in-flight promise. Pass `forceRefresh = true` after writes that change reported fields (e.g., saving a pad changes `available_screens`).
+3. **Single CSS asset** — `bootstrap.min.css` + `portal-custom.css` are concatenated into `/portal-all.css` at build time (see [CSS Bundle](#css-bundle)), saving one request and ~1.5 KB through shared gzip dictionary.
+4. **Inline favicon** — `shell.html` sets `<link rel="icon" href="data:,">` to suppress the browser's automatic `/favicon.ico` lookup (no extra request, no 404).
+5. **`/api/mode` folded into `/api/info`** — the legacy mode endpoint was removed; portal JS derives `portalMode` from `ap_active` on the cached `/api/info` response.
+
+The result of these measures is that a fresh portal load on the `release/1.16.0` baseline issues approximately: `GET /`, `GET /portal-all.css`, `GET /portal.js`, `GET /api/info`, `GET /api/health`, `GET /api/portal/nav`, `GET /api/section/welcome` — plus the periodic `GET /api/health` poll. With the fetch cap, at most two are in flight at any moment.
 
 ### CPU Usage Calculation
 
@@ -1298,9 +1303,10 @@ DNS server redirects all requests to device IP in AP mode:
      - `network.html` - Network configuration
      - `firmware.html` - Firmware update and reset
    - Styling and logic:
-     - `bootstrap.min.css` - Bootstrap CSS framework (vendor)
-     - `portal-custom.css` - Custom portal styles and overrides
-     - `portal-custom.css.bundle` - Optional CSS bundle manifest
+     - `bootstrap.min.css` - Bootstrap CSS framework (vendor, bundled)
+     - `portal-custom.css` - Custom portal styles and overrides (bundled)
+     - `portal-all.css` - Primary CSS file served by the device (bundle output)
+     - `portal-all.css.bundle` - CSS bundle manifest
      - `_portal_*.css` - Feature CSS fragments (bundled into primary CSS)
      - `portal.js.bundle` - Bundle manifest (module load order)
      - `portal_*.js` - JS feature modules and fragments
@@ -1327,7 +1333,7 @@ DNS server redirects all requests to device IP in AP mode:
      HTML home.html:     5234 → 3891 → 1256 bytes (-76% total)
      HTML network.html:  8912 → 6543 → 1987 bytes (-78% total)
      HTML firmware.html: 4231 → 3124 → 1098 bytes (-74% total)
-     CSS  portal-custom.css:   14348 → 10539 → 2864 bytes (-81% total)
+     CSS  portal-all.css:      287228 → 274208 → 38475 bytes (-87% total)
      JS   portal.js:   329575 → 220746 → 50066 bytes (-85% total)
    ```
 
@@ -1387,16 +1393,16 @@ CSS files can also be bundled using the same manifest pattern. This allows featu
 
 **How it works:**
 
-1. `src/app/web/portal-custom.css.bundle` lists CSS files in cascade order (one filename per line, `#` comments ignored)
+1. `src/app/web/portal-all.css.bundle` lists CSS files in cascade order (one filename per line, `#` comments ignored)
 2. The minifier concatenates the listed files, minifies with `csscompressor`, and gzip-compresses the result into `web_assets.h`
-3. The primary CSS file (e.g., `portal-custom.css`) is served as a single asset — same as without a bundle
+3. The primary CSS file (e.g., `portal-all.css`) is served as a single asset — same as without a bundle
 
 **Concatenation order matters:** CSS cascade rules mean later entries override earlier ones at equal specificity. List base/shared styles first and feature-specific overrides last.
 
 **Adding feature CSS:**
 
 1. Create `src/app/web/_portal_myfeature.css` (underscore prefix excludes it from individual serving)
-2. Create or update `portal-custom.css.bundle` with the filename before the primary CSS file
+2. Create or update `portal-all.css.bundle` with the filename before the primary CSS file
 3. Run `./build.sh` — the feature CSS is automatically included in the bundle
 
 **Build-time validation:** Every file listed in a `.css.bundle` manifest must exist; missing files cause a hard build error.

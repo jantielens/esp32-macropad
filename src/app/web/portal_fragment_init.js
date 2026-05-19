@@ -125,13 +125,14 @@ window.init_welcome_fragment = function () {
     }
 
     // Populate status cards from /api/health and /api/info
-    fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
+    getDeviceInfo().then(function (info) {
+        if (!info) return;
         var el;
         el = document.getElementById('welcome-firmware');
         if (el) el.textContent = info.version || '—';
         el = document.getElementById('welcome-firmware-detail');
         if (el) el.textContent = info.chip_model || '';
-    }).catch(function () {});
+    });
 
     fetch('/api/health').then(function (r) { return r.json(); }).then(function (h) {
         var el;
@@ -216,23 +217,22 @@ window.init_brightness_fragment = function () {
     if (screenSelect) screenSelect.addEventListener('change', handleScreenChange);
 
     // Load screen selection dropdown if available
-    fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
-        if (info.screens && info.screens.length > 0) {
-            var group = document.getElementById('screen-selection-group');
-            var sel = document.getElementById('screen_selection');
-            if (group && sel) {
-                group.style.display = '';
-                sel.innerHTML = '';
-                info.screens.forEach(function (s) {
-                    var opt = document.createElement('option');
-                    opt.value = s.index;
-                    opt.textContent = s.name;
-                    if (s.active) opt.selected = true;
-                    sel.appendChild(opt);
-                });
-            }
+    getDeviceInfo().then(function (info) {
+        if (!info || !info.screens || info.screens.length === 0) return;
+        var group = document.getElementById('screen-selection-group');
+        var sel = document.getElementById('screen_selection');
+        if (group && sel) {
+            group.style.display = '';
+            sel.innerHTML = '';
+            info.screens.forEach(function (s) {
+                var opt = document.createElement('option');
+                opt.value = s.index;
+                opt.textContent = s.name;
+                if (s.active) opt.selected = true;
+                sel.appendChild(opt);
+            });
         }
-    }).catch(function () {});
+    });
 };
 
 // ============================================================================
@@ -351,9 +351,9 @@ window.init_thresholds_fragment = function () {
 
 window.init_ota_update_fragment = function () {
     // Populate GitHub Pages link
-    fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
+    getDeviceInfo().then(function (info) {
         if (typeof updateOnlineUpdateSection === 'function') updateOnlineUpdateSection(info);
-    }).catch(function () {});
+    });
 };
 
 // ============================================================================
@@ -376,7 +376,8 @@ window.init_version_info_fragment = function () {
         var el = document.getElementById(id);
         if (el) el.textContent = val || '—';
     };
-    fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
+    getDeviceInfo().then(function (info) {
+        if (!info) return;
         set('vi-firmware', info.version);
         set('vi-chip', info.chip_model);
         set('vi-cores', info.chip_cores);
@@ -385,7 +386,7 @@ window.init_version_info_fragment = function () {
         set('vi-psram', info.psram_size ? (info.psram_size / 1048576).toFixed(1) + ' MB' : null);
         set('vi-sdk', info.idf_version);
         set('vi-device-name', info.hostname);
-    }).catch(function () {});
+    });
     fetch('/api/health').then(function (r) { return r.json(); }).then(function (h) {
         set('vi-ip', h.ip_address);
     }).catch(function () {});

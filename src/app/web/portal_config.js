@@ -2,30 +2,16 @@
 // Part of the ESP32 Macropad configuration portal.
 
 /**
- * Load portal mode (core vs full)
- */
-async function loadMode() {
-    try {
-        const response = await fetch(API_MODE);
-        if (!response.ok) return;
-        
-        const mode = await response.json();
-        portalMode = mode.mode || 'full';
-    } catch (error) {
-        console.error('Error loading mode:', error);
-    }
-}
-
-/**
  * Load and display version information
  */
 async function loadVersion() {
     try {
-        const response = await fetch(API_INFO);
-        if (!response.ok) return;
-        
-        const version = await response.json();
-        deviceInfoCache = version;
+        const version = await getDeviceInfo(true);
+        if (!version) return;
+
+        // portalMode is derived from /api/info ap_active flag (previously a
+        // separate /api/mode endpoint — removed to halve boot HTTP requests).
+        portalMode = version.ap_active ? 'core' : 'full';
 
         // Health widget tuning + optional device-side history support
         healthConfigureFromDeviceInfo(deviceInfoCache);

@@ -42,15 +42,11 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		// Asset routes
 		server->on("/portal.js", HTTP_GET, handleJS);
-		server->on("/bootstrap.min.css", HTTP_GET, handleBootstrapCSS);
-		server->on("/portal-custom.css", HTTP_GET, handlePortalCustomCSS);
+		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 
 		// API endpoints
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
 		// Some AsyncWebServer matchers can behave like prefix matches depending on configuration.
-		registerOptions("/api/mode");
-		server->on("/api/mode", HTTP_GET, handleGetMode);
-
 		registerOptions("/api/config");
 		server->on("/api/config", HTTP_GET, handleGetConfig);
 
