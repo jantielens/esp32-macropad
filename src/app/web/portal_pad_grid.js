@@ -434,7 +434,6 @@ function padDrop(e, col, row) {
     padState.buttons.push(btn);
     padMarkDirty();
     padRenderGrid();
-    showMessage('Button moved', 'success');
 }
 
 function padPlacementClick(col, row) {

@@ -78,7 +78,7 @@ async function saveFragmentConfig(reboot) {
                 var msg = document.getElementById('reboot-message');
                 if (msg) msg.textContent = 'Configuration saved. Device is rebooting...';
             } else {
-                showMessage('Configuration saved successfully!', 'success');
+                showMessage('Configuration saved', 'success');
             }
         } else {
             showMessage('Failed to save configuration', 'error');

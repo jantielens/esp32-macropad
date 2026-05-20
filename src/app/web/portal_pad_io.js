@@ -107,7 +107,6 @@ function padDialogPasteBtn() {
 
     // Reopen dialog to show pasted content
     padDialogOpen(col, row);
-    showMessage('Button pasted', 'success');
 }
 
 // --- Fill pad with clipboard ---
@@ -269,7 +268,7 @@ async function padImportPad(evt) {
 
 async function deviceExportConfig() {
     try {
-        showMessage('Exporting device config...', 'success');
+        showMessage('Exporting device config...', 'info');
 
         // Fetch device config
         const cfgResp = await fetch('/api/config');
@@ -325,7 +324,6 @@ async function deviceExportConfig() {
         a.download = deviceName.replace(/[^a-zA-Z0-9_-]/g, '_') + '_config.json';
         a.click();
         URL.revokeObjectURL(a.href);
-        showMessage('Device config exported', 'success');
     } catch (err) {
         showMessage('Export failed: ' + err.message, 'error');
     }
@@ -346,7 +344,7 @@ async function deviceImportConfig(evt) {
 
         if (!confirm('Import device configuration? This will overwrite current settings and all pad configs. The device will reboot.')) return;
 
-        showMessage('Importing device config...', 'success');
+        showMessage('Importing device config...', 'info');
 
         // Step 1: Import device settings (excl. network fields which were stripped on export)
         if (data.config && typeof data.config === 'object') {
@@ -401,8 +399,6 @@ async function deviceImportConfig(evt) {
             }
         }
 
-        showMessage('Import complete — rebooting device...', 'success');
-
         // Reboot to apply NVS config
         setTimeout(() => {
             fetch('/api/reboot', { method: 'POST' }).catch(() => {});
@@ -454,7 +450,7 @@ async function padShowOnDevice() {
             body: JSON.stringify({ screen: screenId }),
         });
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        showMessage('Showing ' + screenId + ' on device', 'success');
+        showMessage('Showing ' + screenId + ' on device', 'info');
     } catch (err) {
         console.error('padShowOnDevice error:', err);
         showMessage('Failed to switch screen', 'error');

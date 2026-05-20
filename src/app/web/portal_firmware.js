@@ -11,7 +11,6 @@ function handleFileSelect(event) {
     
     if (selectedFile && selectedFile.name.endsWith('.bin')) {
         uploadBtn.disabled = false;
-        showMessage(`Selected: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`, 'info');
     } else {
         uploadBtn.disabled = true;
         if (selectedFile) {

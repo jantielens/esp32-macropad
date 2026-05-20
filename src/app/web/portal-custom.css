@@ -1817,3 +1817,14 @@ input[type="text"].label-style-input {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ================================================================
+   Toast container — anchor to top-right, just below the page header.
+   The header is not sticky; --portal-header-height-desktop is published
+   by JS on load/resize so this stays correct on mobile (badges wrap)
+   and desktop. Keeps toasts clear of the pad-editor toolbar at bottom.
+   ================================================================ */
+#toast-container.toast-container {
+  top: calc(var(--portal-header-height-desktop, 120px) + 12px);
+  bottom: auto;
+}
