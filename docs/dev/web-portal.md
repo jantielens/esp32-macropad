@@ -235,7 +235,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
 **Available In:** Full Mode only (redirects to Network page in AP mode)
 
 **Sections:**
-- **⚡ Operating Mode & Cadence**: Mode selection, transport, cycle interval, portal idle timeout, WiFi backoff cap, and MQTT payload scope
+- **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
 - **Sensor & Display settings**: Threshold and display configuration sections
 
@@ -287,7 +287,8 @@ Board-specific firmware variants can promote a custom nav category to first posi
 - **📡 MQTT Settings (Optional)**: MQTT broker settings
   - Only shown when MQTT support is enabled in firmware (`HAS_MQTT`)
   - Host, port, username/password
-  - Periodic publish cadence follows `cycle_interval_seconds` in Power Settings
+  - Publish interval and payload scope
+  - Periodic publish cadence follows `mqtt_publish_interval_seconds` (Always-On mode only; in Duty-Cycle, one publish per wake)
 
 **Layout:** 
 - WiFi + Device Settings side-by-side on desktop
@@ -616,7 +617,8 @@ Returns current device configuration (passwords excluded).
   "dns2": "",
 
   "power_mode": "always_on",
-  "cycle_interval_seconds": 120,
+  "duty_cycle_wake_seconds": 120,
+  "mqtt_publish_interval_seconds": 120,
   "portal_idle_timeout_seconds": 120,
   "wifi_backoff_max_seconds": 900,
   "mqtt_publish_scope": "sensors_only",
@@ -663,7 +665,8 @@ Save new configuration. Device reboots after successful save.
   "dns2": "8.8.4.4",
 
   "power_mode": "duty_cycle",
-  "cycle_interval_seconds": 120,
+  "duty_cycle_wake_seconds": 120,
+  "mqtt_publish_interval_seconds": 120,
   "portal_idle_timeout_seconds": 120,
   "wifi_backoff_max_seconds": 900,
   "mqtt_publish_scope": "sensors_only",

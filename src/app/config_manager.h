@@ -72,9 +72,10 @@ struct DeviceConfig {
 
 		// Power settings
 		char power_mode[CONFIG_POWER_MODE_MAX_LEN];            // always_on | duty_cycle | config | ap
-		uint16_t cycle_interval_seconds;                       // default 120
-		uint16_t portal_idle_timeout_seconds;                  // default 120
-		uint16_t wifi_backoff_max_seconds;                     // default 900
+		uint16_t duty_cycle_wake_seconds;                      // default 120; deep-sleep duration in Duty-Cycle mode (0 = wake immediately)
+		uint16_t mqtt_publish_interval_seconds;                // default 120; periodic MQTT publish cadence in Always-On (0 = disabled)
+		uint16_t portal_idle_timeout_seconds;                  // default 120; auto-sleep timeout in Config/AP mode
+		uint16_t wifi_backoff_max_seconds;                     // default 900; max exponential backoff in Duty-Cycle
 
 		// MQTT scope
 		char mqtt_publish_scope[CONFIG_MQTT_SCOPE_MAX_LEN];    // sensors_only | diagnostics_only | all

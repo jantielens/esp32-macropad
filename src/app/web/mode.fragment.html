@@ -1,45 +1,55 @@
 <div class="section-header">
   <h2>⚡ Operating Mode</h2>
-  <p>Controls how the device runs and how often it publishes.</p>
+  <p>Controls how the device runs.</p>
 </div>
 <div class="card mb-3">
   <div class="card-body">
-    <div class="row">
-      <div class="col-md-6 mb-3">
-        <label class="form-label" for="power_mode">Operating Mode</label>
-        <select class="form-select" id="power_mode" name="power_mode">
-          <option value="always_on">Always-On</option>
-          <option value="duty_cycle">Duty-Cycle</option>
-        </select>
-        <div class="form-text">Always-On keeps services running. Duty-Cycle wakes, publishes, then sleeps.</div>
-      </div>
-      <div class="col-md-6 mb-3">
-        <label class="form-label" for="cycle_interval_seconds">Cycle Interval (seconds)</label>
-        <input type="number" class="form-control" id="cycle_interval_seconds" name="cycle_interval_seconds" min="1" max="65535" placeholder="120">
-        <div class="form-text">Duty-Cycle sleep interval and MQTT publish cadence.</div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="col-md-6 mb-3">
-        <label class="form-label" for="portal_idle_timeout_seconds">Portal Idle Timeout (seconds)</label>
-        <input type="number" class="form-control" id="portal_idle_timeout_seconds" name="portal_idle_timeout_seconds" min="0" max="65535" placeholder="120">
-        <div class="form-text">Auto-sleep after inactivity in Config/AP modes only.</div>
-      </div>
-      <div class="col-md-6 mb-3">
-        <label class="form-label" for="wifi_backoff_max_seconds">WiFi Backoff Max (seconds)</label>
-        <input type="number" class="form-control" id="wifi_backoff_max_seconds" name="wifi_backoff_max_seconds" min="1" max="65535" placeholder="900">
-        <div class="form-text">Exponential backoff cap on repeated Wi-Fi failures.</div>
-      </div>
-    </div>
     <div class="mb-3">
-      <label class="form-label" for="mqtt_publish_scope">MQTT Payload Scope</label>
-      <select class="form-select" id="mqtt_publish_scope" name="mqtt_publish_scope">
-        <option value="sensors_only">Sensors only</option>
-        <option value="diagnostics_only">Diagnostics only</option>
-        <option value="all">All (sensors + diagnostics)</option>
+      <label class="form-label" for="power_mode">Operating Mode</label>
+      <select class="form-select" id="power_mode" name="power_mode">
+        <option value="always_on">Always-On</option>
+        <option value="duty_cycle">Duty-Cycle</option>
       </select>
-      <div class="form-text">Controls which fields are included in the MQTT state payload.</div>
+      <div class="form-text" id="power_mode_hint_always_on">
+        Device runs continuously with display, touch, web portal, BLE, audio, and screen saver enabled.
+        MQTT publishing is configured on the <a href="#mqtt">Network &rarr; MQTT</a> page.
+      </div>
+      <div class="form-text" id="power_mode_hint_duty_cycle" style="display:none;">
+        Device wakes from deep sleep, publishes to MQTT once, then sleeps again.
+        Display, touch, web portal, BLE, audio, and screen saver are <b>disabled</b> in this mode.
+        The publish interval on the Network &rarr; MQTT page is ignored &mdash; publishes happen once per wake.
+      </div>
     </div>
+
+    <div id="duty-cycle-settings" style="display:none;">
+      <hr>
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="duty_cycle_wake_seconds">Wake Interval (seconds)</label>
+          <input type="number" class="form-control" id="duty_cycle_wake_seconds" name="duty_cycle_wake_seconds" min="0" max="65535" placeholder="120">
+          <div class="form-text">Deep-sleep duration between wake cycles. 0 = wake immediately after each publish (~1 s).</div>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="wifi_backoff_max_seconds">Wi-Fi Backoff Max (seconds)</label>
+          <input type="number" class="form-control" id="wifi_backoff_max_seconds" name="wifi_backoff_max_seconds" min="1" max="65535" placeholder="900">
+          <div class="form-text">Cap on exponential backoff when Wi-Fi connect fails. Uses the wake interval as the base.</div>
+        </div>
+      </div>
+    </div>
+
+    <details class="mb-3">
+      <summary class="form-label" style="cursor:pointer;">Recovery Portal Auto-Sleep</summary>
+      <div class="mt-2">
+        <label class="form-label" for="portal_idle_timeout_seconds">Auto-Sleep Delay (seconds)</label>
+        <input type="number" class="form-control" id="portal_idle_timeout_seconds" name="portal_idle_timeout_seconds" min="0" max="65535" placeholder="120">
+        <div class="form-text">
+          Active only in Config / AP recovery mode (when Wi-Fi can't connect).
+          After this many seconds of no portal activity, the device deep-sleeps for the
+          same duration, then wakes to retry Wi-Fi. <code>0</code> = disabled (portal stays up indefinitely).
+        </div>
+      </div>
+    </details>
+
     <div class="save-bar">
       <button type="button" class="btn btn-primary btn-sm" id="mode-save-btn">Save &amp; Reboot</button>
     </div>

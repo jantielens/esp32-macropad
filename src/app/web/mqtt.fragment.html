@@ -1,6 +1,6 @@
 <div class="section-header">
-  <h2>📡 MQTT Transport</h2>
-  <p>Configure MQTT broker connection for Home Assistant integration.</p>
+  <h2>📡 MQTT</h2>
+  <p>Broker connection and publish behavior for Home Assistant integration.</p>
 </div>
 <div class="card mb-3" id="mqtt-settings-section">
   <div class="card-body">
@@ -21,6 +21,23 @@
     <div class="mb-3">
       <label class="form-label" for="mqtt_password">Password</label>
       <input type="password" class="form-control" id="mqtt_password" name="mqtt_password" placeholder="Leave empty to keep current">
+    </div>
+    <hr>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="mqtt_publish_interval_seconds">Publish Interval (seconds)</label>
+        <input type="number" class="form-control" id="mqtt_publish_interval_seconds" name="mqtt_publish_interval_seconds" min="0" max="65535" placeholder="120">
+        <div class="form-text">Used only in Always-On mode. 0 = disabled (no periodic publish). In Duty-Cycle mode, publish happens once per wake.</div>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label" for="mqtt_publish_scope">Payload Scope</label>
+        <select class="form-select" id="mqtt_publish_scope" name="mqtt_publish_scope">
+          <option value="sensors_only">Sensors only</option>
+          <option value="diagnostics_only">Diagnostics only</option>
+          <option value="all">All (sensors + diagnostics)</option>
+        </select>
+        <div class="form-text">Which fields are included in the MQTT state payload. Applies to both modes.</div>
+      </div>
     </div>
     <div class="save-bar">
       <button type="button" class="btn btn-primary btn-sm" id="mqtt-save-btn">Save &amp; Reboot</button>

@@ -110,7 +110,8 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				// Power settings
 				(*doc)["power_mode"] = current_config->power_mode;
-				(*doc)["cycle_interval_seconds"] = current_config->cycle_interval_seconds;
+				(*doc)["duty_cycle_wake_seconds"] = current_config->duty_cycle_wake_seconds;
+				(*doc)["mqtt_publish_interval_seconds"] = current_config->mqtt_publish_interval_seconds;
 				(*doc)["portal_idle_timeout_seconds"] = current_config->portal_idle_timeout_seconds;
 				(*doc)["wifi_backoff_max_seconds"] = current_config->wifi_backoff_max_seconds;
 
@@ -361,16 +362,23 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				strlcpy(current_config->power_mode, doc["power_mode"] | "always_on", CONFIG_POWER_MODE_MAX_LEN);
 		}
 
-		// Cycle interval (legacy mqtt_interval_seconds supported as alias)
-		const bool has_cycle_interval = doc.containsKey("cycle_interval_seconds");
-		const bool has_mqtt_interval = doc.containsKey("mqtt_interval_seconds");
-		if (has_cycle_interval || has_mqtt_interval) {
-				const JsonVariant value = has_cycle_interval ? doc["cycle_interval_seconds"] : doc["mqtt_interval_seconds"];
-				if (value.is<const char*>()) {
-						const char* v = value;
-						current_config->cycle_interval_seconds = (uint16_t)atoi(v ? v : "0");
+		// Duty-Cycle wake interval
+		if (doc.containsKey("duty_cycle_wake_seconds")) {
+				if (doc["duty_cycle_wake_seconds"].is<const char*>()) {
+						const char* v = doc["duty_cycle_wake_seconds"];
+						current_config->duty_cycle_wake_seconds = (uint16_t)atoi(v ? v : "0");
 				} else {
-						current_config->cycle_interval_seconds = (uint16_t)(value | 0);
+						current_config->duty_cycle_wake_seconds = (uint16_t)(doc["duty_cycle_wake_seconds"] | 0);
+				}
+		}
+
+		// MQTT publish interval (Always-On periodic publish; 0 = disabled)
+		if (doc.containsKey("mqtt_publish_interval_seconds")) {
+				if (doc["mqtt_publish_interval_seconds"].is<const char*>()) {
+						const char* v = doc["mqtt_publish_interval_seconds"];
+						current_config->mqtt_publish_interval_seconds = (uint16_t)atoi(v ? v : "0");
+				} else {
+						current_config->mqtt_publish_interval_seconds = (uint16_t)(doc["mqtt_publish_interval_seconds"] | 0);
 				}
 		}
 

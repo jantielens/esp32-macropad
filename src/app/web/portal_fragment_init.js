@@ -17,7 +17,8 @@ async function saveFragmentConfig(reboot) {
         'wifi_ssid', 'wifi_password', 'device_name', 'fixed_ip',
         'subnet_mask', 'gateway', 'dns1', 'dns2',
         'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
-        'power_mode', 'cycle_interval_seconds', 'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
+        'power_mode', 'duty_cycle_wake_seconds', 'mqtt_publish_interval_seconds',
+        'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
         'mqtt_publish_scope',
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
         'ble_enabled',
@@ -193,6 +194,34 @@ window.init_network_fragment = function () {
 
 window.init_mode_fragment = function () {
     initConfigFragment('mode-save-btn', true);
+
+    // Show/hide Duty-Cycle-only settings and the mode-specific hint based on power_mode.
+    function updateModeVisibility() {
+        var modeEl = document.getElementById('power_mode');
+        if (!modeEl) return;
+        var isDuty = (modeEl.value === 'duty_cycle');
+        var dc = document.getElementById('duty-cycle-settings');
+        if (dc) dc.style.display = isDuty ? '' : 'none';
+        var hintAlways = document.getElementById('power_mode_hint_always_on');
+        if (hintAlways) hintAlways.style.display = isDuty ? 'none' : '';
+        var hintDuty = document.getElementById('power_mode_hint_duty_cycle');
+        if (hintDuty) hintDuty.style.display = isDuty ? '' : 'none';
+    }
+    var modeEl = document.getElementById('power_mode');
+    if (modeEl) modeEl.addEventListener('change', updateModeVisibility);
+    // loadConfig() runs asynchronously; observe the field's value to apply visibility after it populates.
+    if (modeEl) {
+        var initial = modeEl.value;
+        var attempts = 0;
+        var timer = setInterval(function () {
+            attempts++;
+            if (modeEl.value !== initial || attempts > 40) {
+                clearInterval(timer);
+                updateModeVisibility();
+            }
+        }, 50);
+    }
+    updateModeVisibility();
 };
 
 // ============================================================================

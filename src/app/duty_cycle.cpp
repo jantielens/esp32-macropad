@@ -34,7 +34,7 @@ bool duty_cycle_run(const DeviceConfig *config) {
 		} else {
 				const bool connected = wifi_manager_connect(config, true);
 				if (!connected) {
-						const uint32_t backoff = power_manager_note_wifi_failure(config->cycle_interval_seconds, config->wifi_backoff_max_seconds);
+						const uint32_t backoff = power_manager_note_wifi_failure(config->duty_cycle_wake_seconds, config->wifi_backoff_max_seconds);
 						power_manager_sleep_for(backoff);
 						return false;
 				}
@@ -59,6 +59,6 @@ bool duty_cycle_run(const DeviceConfig *config) {
 				#endif
 		}
 
-		power_manager_sleep_for(config->cycle_interval_seconds);
+		power_manager_sleep_for(config->duty_cycle_wake_seconds);
 		return true;
 }

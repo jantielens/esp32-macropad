@@ -148,7 +148,8 @@ async function loadConfig() {
 
         // Power settings
         setValueIfExists('power_mode', config.power_mode);
-        setValueIfExists('cycle_interval_seconds', config.cycle_interval_seconds);
+        setValueIfExists('duty_cycle_wake_seconds', config.duty_cycle_wake_seconds);
+        setValueIfExists('mqtt_publish_interval_seconds', config.mqtt_publish_interval_seconds);
         setValueIfExists('portal_idle_timeout_seconds', config.portal_idle_timeout_seconds);
         setValueIfExists('wifi_backoff_max_seconds', config.wifi_backoff_max_seconds);
 

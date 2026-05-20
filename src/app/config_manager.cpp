@@ -29,9 +29,9 @@
 #define KEY_MQTT_PORT      "mqtt_port"
 #define KEY_MQTT_USER      "mqtt_user"
 #define KEY_MQTT_PASS      "mqtt_pass"
-#define KEY_MQTT_INTERVAL  "mqtt_int" // legacy (pre-cycle interval)
 #define KEY_POWER_MODE     "pwr_mode"
-#define KEY_CYCLE_INTERVAL "cycle_s"
+#define KEY_DC_WAKE        "dc_wake_s"
+#define KEY_MQTT_PUB       "mqtt_pub_s"
 #define KEY_PORTAL_IDLE    "portal_idle"
 #define KEY_WIFI_BACKOFF_MAX "wifi_bomax"
 #define KEY_MQTT_SCOPE     "mqtt_scope"
@@ -149,7 +149,8 @@ bool config_manager_load(DeviceConfig *config) {
 				config->mqtt_port = 0;
 
 				strlcpy(config->power_mode, "always_on", CONFIG_POWER_MODE_MAX_LEN);
-				config->cycle_interval_seconds = 120;
+				config->duty_cycle_wake_seconds = 120;
+				config->mqtt_publish_interval_seconds = 120;
 				config->portal_idle_timeout_seconds = 120;
 				config->wifi_backoff_max_seconds = 900;
 
@@ -204,7 +205,6 @@ bool config_manager_load(DeviceConfig *config) {
 		config->mqtt_port = preferences.getUShort(KEY_MQTT_PORT, 0);
 		preferences.getString(KEY_MQTT_USER, config->mqtt_username, CONFIG_MQTT_USERNAME_MAX_LEN);
 		preferences.getString(KEY_MQTT_PASS, config->mqtt_password, CONFIG_MQTT_PASSWORD_MAX_LEN);
-		const uint16_t legacy_mqtt_interval_seconds = preferences.getUShort(KEY_MQTT_INTERVAL, 0);
 
 		// Load power settings
 		preferences.getString(KEY_POWER_MODE, config->power_mode, CONFIG_POWER_MODE_MAX_LEN);
@@ -212,10 +212,8 @@ bool config_manager_load(DeviceConfig *config) {
 				strlcpy(config->power_mode, "always_on", CONFIG_POWER_MODE_MAX_LEN);
 		}
 
-		config->cycle_interval_seconds = preferences.getUShort(KEY_CYCLE_INTERVAL, 120);
-		if (config->cycle_interval_seconds == 0 && legacy_mqtt_interval_seconds > 0) {
-				config->cycle_interval_seconds = legacy_mqtt_interval_seconds;
-		}
+		config->duty_cycle_wake_seconds = preferences.getUShort(KEY_DC_WAKE, 120);
+		config->mqtt_publish_interval_seconds = preferences.getUShort(KEY_MQTT_PUB, 120);
 		config->portal_idle_timeout_seconds = preferences.getUShort(KEY_PORTAL_IDLE, 120);
 		config->wifi_backoff_max_seconds = preferences.getUShort(KEY_WIFI_BACKOFF_MAX, 900);
 
@@ -316,7 +314,8 @@ bool config_manager_save(const DeviceConfig *config) {
 
 		// Save power settings
 		preferences.putString(KEY_POWER_MODE, config->power_mode);
-		preferences.putUShort(KEY_CYCLE_INTERVAL, config->cycle_interval_seconds);
+		preferences.putUShort(KEY_DC_WAKE, config->duty_cycle_wake_seconds);
+		preferences.putUShort(KEY_MQTT_PUB, config->mqtt_publish_interval_seconds);
 		preferences.putUShort(KEY_PORTAL_IDLE, config->portal_idle_timeout_seconds);
 		preferences.putUShort(KEY_WIFI_BACKOFF_MAX, config->wifi_backoff_max_seconds);
 
@@ -464,9 +463,9 @@ void config_manager_print(const DeviceConfig *config) {
 				LOGI("Config", "IP: DHCP");
 		}
 
-LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
+LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 			config->power_mode,
-			(unsigned)config->cycle_interval_seconds,
+			(unsigned)config->duty_cycle_wake_seconds,
 			(unsigned)config->portal_idle_timeout_seconds,
 			(unsigned)config->wifi_backoff_max_seconds
 		);
@@ -476,8 +475,8 @@ LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
 #if HAS_MQTT
 		if (strlen(config->mqtt_host) > 0) {
 				uint16_t port = config->mqtt_port > 0 ? config->mqtt_port : 1883;
-				if (config->cycle_interval_seconds > 0) {
-						LOGI("Config", "MQTT: %s:%d (interval %us)", config->mqtt_host, port, (unsigned)config->cycle_interval_seconds);
+				if (config->mqtt_publish_interval_seconds > 0) {
+						LOGI("Config", "MQTT: %s:%d (publish interval %us)", config->mqtt_host, port, (unsigned)config->mqtt_publish_interval_seconds);
 				} else {
 						LOGI("Config", "MQTT: %s:%d (publish disabled)", config->mqtt_host, port);
 				}
