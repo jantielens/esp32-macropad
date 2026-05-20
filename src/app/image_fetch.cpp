@@ -40,9 +40,14 @@ struct ImageSlot {
     bool fetched_once;         // true after first successful fetch
     ImageScaleMode scale_mode; // Cover or letterbox
 
-    // Double-buffered pixel data
-    uint16_t* front_buf;       // Read by LVGL (stable pointer)
-    uint16_t* back_buf;        // Written by fetch task
+    // Triple-buffered pixel data — fetch task rotates front/back;
+    // image_fetch_get_frame() swaps front<->lvgl under g_mutex so LVGL has
+    // sole, stable ownership of lvgl_buf until its next get_frame call.
+    // The fetch task never touches lvgl_buf, so LVGL can render from it
+    // without holding the mutex and without copying.
+    uint16_t* front_buf;       // Most-recent decode (handed to LVGL on next get_frame)
+    uint16_t* back_buf;        // Scratch — fetch task writes new decode here
+    uint16_t* lvgl_buf;        // Owned by LVGL between get_frame calls
     size_t buf_size;           // Byte size of each buffer
 
     volatile bool new_frame;   // Set by fetch task, cleared by ack
@@ -488,8 +493,11 @@ static void fetch_task(void* param) {
                 next = idx;
                 break;
             }
-            // MJPEG streaming slots are always ready — the server controls frame rate.
-            if (g_conn[idx].is_streaming) {
+            // For MJPEG streams with interval_ms == 0, the server controls frame
+            // rate (real-time mode). With interval_ms > 0, throttle the same way
+            // as snapshots — TCP backpressure stalls the server between reads,
+            // which reduces PSRAM bandwidth and frees the LVGL task to render.
+            if (g_conn[idx].is_streaming && s.interval_ms == 0) {
                 next = idx;
                 break;
             }
@@ -503,6 +511,9 @@ static void fetch_task(void* param) {
                 uint32_t remaining = s.interval_ms - elapsed;
                 if (remaining < min_wait_ms) min_wait_ms = remaining;
             }
+            // Snapshot slots with interval_ms == 0 that have already fetched
+            // once stay idle ("fetch once" mode). Streaming + interval_ms == 0
+            // was handled by the earlier real-time branch.
         }
 
         xSemaphoreGive(g_mutex);
@@ -537,11 +548,6 @@ static void fetch_task(void* param) {
         strlcpy(user, slot.user, sizeof(user));
         strlcpy(pass, slot.pass, sizeof(pass));
         xSemaphoreGive(g_mutex);
-
-        // --- Heap integrity checkpoint: BEFORE download ---
-        if (!heap_caps_check_integrity_all(true)) {
-            LOGE(TAG, "HEAP CORRUPT before download (slot %d)", next);
-        }
 
         // Persistent connection: ensure client exists, then fetch a frame.
         // MJPEG streaming: if the server responds with multipart/x-mixed-replace,
@@ -606,11 +612,6 @@ static void fetch_task(void* param) {
         uint16_t* pixels = nullptr;
         size_t pixel_size = 0;
 
-        // --- Heap integrity checkpoint: AFTER download, BEFORE decode ---
-        if (!heap_caps_check_integrity_all(true)) {
-            LOGE(TAG, "HEAP CORRUPT after download (slot %d, %u bytes)", next, (unsigned)raw_len);
-        }
-
         bool decoded = image_decode_to_rgb565(raw_data, raw_len, tw, th, sm, &pixels, &pixel_size);
         heap_caps_free(raw_data);
 
@@ -651,16 +652,12 @@ static void fetch_task(void* param) {
         }
         xSemaphoreGive(g_mutex);
 
-        // --- Heap integrity checkpoint: AFTER decode + swap ---
-        if (!heap_caps_check_integrity_all(true)) {
-            LOGE(TAG, "HEAP CORRUPT after decode/swap (slot %d)", next);
-        }
-
-        // Brief yield after each successful decode so other tasks get CPU time.
-        // In MJPEG streaming mode the server controls frame rate, so we yield
-        // just 1 ms to allow higher-priority tasks to run.
-        // In snapshot mode 5 ms gives other tasks CPU between HTTP round-trips.
-        vTaskDelay(pdMS_TO_TICKS(g_conn[next].is_streaming ? 1 : 5));
+        // Yield after each successful decode so other tasks (especially LVGL)
+        // get CPU time. MJPEG streaming previously yielded only 1 ms, which
+        // could starve the LVGL render task on the same core and saturate
+        // PSRAM bandwidth on P4 boards. 10 ms is a safe floor that still
+        // allows ~100 fps if the server pushes that fast.
+        vTaskDelay(pdMS_TO_TICKS(g_conn[next].is_streaming ? 10 : 5));
     }
 }
 
@@ -686,11 +683,15 @@ void image_fetch_init() {
 
     g_mutex = xSemaphoreCreateMutex();
 
+    // Pin the fetch task to core 0 (PRO_CPU). The LVGL render task runs on
+    // core 1 (APP_CPU); isolating image fetch+decode to core 0 prevents CPU
+    // contention with LVGL flushes. PSRAM bandwidth is still shared, but at
+    // least the cores no longer fight for compute time.
     bool ok = rtos_create_task_psram_stack_pinned(
         fetch_task, "img_fetch",
         FETCH_TASK_STACK_WORDS, nullptr,
         FETCH_TASK_PRIORITY, &g_task, &g_task_alloc,
-        tskNO_AFFINITY);
+        0);
 
     if (!ok) {
         LOGE(TAG, "Failed to create fetch task");
@@ -752,6 +753,7 @@ void image_fetch_cancel(image_slot_t slot) {
     if (s.active) {
         if (s.front_buf) { heap_caps_free(s.front_buf); s.front_buf = nullptr; }
         if (s.back_buf) { heap_caps_free(s.back_buf); s.back_buf = nullptr; }
+        if (s.lvgl_buf) { heap_caps_free(s.lvgl_buf); s.lvgl_buf = nullptr; }
         s.active = false;
         LOGD(TAG, "Slot %d cancelled", slot);
     }
@@ -766,6 +768,7 @@ void image_fetch_cancel_all() {
         if (s.active) {
             if (s.front_buf) { heap_caps_free(s.front_buf); s.front_buf = nullptr; }
             if (s.back_buf) { heap_caps_free(s.back_buf); s.back_buf = nullptr; }
+            if (s.lvgl_buf) { heap_caps_free(s.lvgl_buf); s.lvgl_buf = nullptr; }
             s.active = false;
         }
     }
@@ -781,8 +784,8 @@ void image_fetch_pause_slot(image_slot_t slot) {
     ImageSlot& s = g_slots[slot];
     s.paused = true;
     // Free double-buffers to reclaim PSRAM while the page is hidden.
-    // owned_pixels in PadScreen is unaffected, so LVGL keeps showing
-    // the last frame.  Buffers are re-allocated on next fetch after resume.
+    // lvgl_buf is unaffected, so LVGL keeps showing the last frame.
+    // Buffers are re-allocated on next fetch after resume.
     size_t freed = 0;
     if (s.front_buf) { freed += s.buf_size; heap_caps_free(s.front_buf); s.front_buf = nullptr; }
     if (s.back_buf)  { freed += s.buf_size; heap_caps_free(s.back_buf);  s.back_buf  = nullptr; }
@@ -828,29 +831,36 @@ bool image_fetch_has_new_frame(image_slot_t slot) {
     return g_slots[slot].active && g_slots[slot].new_frame;
 }
 
-// Thread-safety note: get_frame / ack_frame deliberately omit the mutex.
-// This is safe because:
-//  1. Pointer reads/writes are atomic on 32-bit ESP32.
-//  2. The fetch task never mutates front_buf's *data* — it decodes into a
-//     fresh allocation, then swaps front_buf under mutex.  The old front
-//     (now back_buf) survives until the *next* network round-trip (seconds),
-//     while the LVGL-side memcpy in pollImageFrames() takes microseconds.
-//  3. cancel() only runs from clearTiles() in the LVGL task — the same
-//     task that calls pollImageFrames() — so no concurrent free is possible.
-//  4. The caller (pollImageFrames) copies the data into its own owned_pixels
-//     buffer immediately, so it never holds the front_buf pointer long-term.
+// Thread-safety contract for the returned pointer:
+//  * Under g_mutex, swap front_buf <-> lvgl_buf when a new frame is ready.
+//    The returned pointer is lvgl_buf, which the fetch task never touches.
+//    LVGL can safely render from it (no memcpy, no lock held during render)
+//    until the next image_fetch_get_frame() call for the same slot.
+//  * If no new frame is ready, the previous lvgl_buf is returned again.
+//  * cancel()/cancel_all() may free lvgl_buf, but they only run from the
+//    LVGL task (clearTiles), which is the same task that calls get_frame,
+//    so there is no concurrent free.
 const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16_t* out_h) {
     if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return nullptr;
-    const ImageSlot& s = g_slots[slot];
-    if (!s.active || !s.front_buf) return nullptr;
+    if (!g_mutex) return nullptr;
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    ImageSlot& s = g_slots[slot];
+    if (!s.active) {
+        xSemaphoreGive(g_mutex);
+        return nullptr;
+    }
+    // Promote the freshly-decoded front_buf to LVGL ownership.
+    if (s.new_frame && s.front_buf) {
+        uint16_t* prev_lvgl = s.lvgl_buf;
+        s.lvgl_buf = s.front_buf;
+        s.front_buf = prev_lvgl;   // may be nullptr on first hand-off
+        s.new_frame = false;
+    }
+    uint16_t* result = s.lvgl_buf;
     if (out_w) *out_w = s.target_w;
     if (out_h) *out_h = s.target_h;
-    return s.front_buf;
-}
-
-void image_fetch_ack_frame(image_slot_t slot) {
-    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX) return;
-    g_slots[slot].new_frame = false;
+    xSemaphoreGive(g_mutex);
+    return result;
 }
 
 uint32_t image_fetch_get_drops(image_slot_t slot) {

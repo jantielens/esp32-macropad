@@ -297,6 +297,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_DISPLAY**
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
+  - src/app/action_list.cpp
+  - src/app/action_list.h
   - src/app/action_parse.cpp
   - src/app/action_parse.h
   - src/app/app.ino

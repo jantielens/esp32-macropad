@@ -31,7 +31,7 @@ typedef int8_t image_slot_t;
 // ---- PSRAM memory budget per slot ----
 // Each active slot holds 3 copies of the tile's RGB565 frame:
 //   front_buf + back_buf  (fetch task double-buffer)  = 2 × W×H×2
-//   owned_pixels          (LVGL-side stable copy)     = 1 × W×H×2
+//   lvgl_buf              (LVGL-owned, zero-copy)     = 1 × W×H×2
 //
 // Transient peak during decode (one slot at a time):
 //   download buffer  ≈ size of compressed image (e.g. ~50 KB JPEG)
@@ -86,10 +86,6 @@ bool image_fetch_has_new_frame(image_slot_t slot);
 // Returns the pixel buffer pointer; sets out_w, out_h to dimensions.
 // Returns nullptr if no frame is available yet.
 const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16_t* out_h);
-
-// Acknowledge that the caller has consumed the latest frame for this slot.
-// Clears the new_frame flag.
-void image_fetch_ack_frame(image_slot_t slot);
 
 // Get the cumulative count of frames silently dropped for this slot.
 // A drop occurs when the fetch task writes a new frame before LVGL has

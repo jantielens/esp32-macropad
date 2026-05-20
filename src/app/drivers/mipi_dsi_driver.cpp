@@ -30,6 +30,7 @@ bool onPpaDone(ppa_client_handle_t client,
 static bool IRAM_ATTR onColorTransDone(esp_lcd_panel_handle_t panel,
                                        esp_lcd_dpi_panel_event_data_t* edata,
                                        void* user_ctx) {
+    g_displayFlushBusy = false;
     lv_display_t* disp = (lv_display_t*)user_ctx;
     lv_display_flush_ready(disp);
     return false;
@@ -145,12 +146,16 @@ void MipiDsiDriver::init() {
     // 4. Create DPI panel with disable_lp=true and use_dma2d=true
     //    disable_lp: keeps D-PHY in HS mode during blanking (avoids flicker)
     //    use_dma2d: hardware-accelerated async pixel copy (avoids blocking CPU)
+    //    num_fbs=2: double-buffered framebuffer. ESP-IDF mirrors draw_bitmap
+    //      writes across both FBs so partial flushes stay coherent, and
+    //      scanout reads one FB while draw_bitmap writes the other —
+    //      eliminates the tear/flicker window inherent to single-FB mode.
     esp_lcd_dpi_panel_config_t dpi_config = {
         .virtual_channel = 0,
         .dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
         .dpi_clock_freq_mhz = (uint32_t)(timing.dpi_clock_hz / 1000000),
         .pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB565,
-        .num_fbs = 1,
+        .num_fbs = 2,
         .video_timing = {
             .h_size = displayWidth,
             .v_size = displayHeight,
@@ -184,13 +189,15 @@ void MipiDsiDriver::init() {
     // 6. Initialize DPI panel — starts continuous DMA refresh from PSRAM
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     
-    // 7. Get PSRAM framebuffer pointer (allocated by ESP-IDF during panel creation)
-    void* fb = nullptr;
-    ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 1, &fb));
-    framebuffer = (uint16_t*)fb;
+    // 7. Get PSRAM framebuffer pointers (allocated by ESP-IDF during panel creation).
+    //    With num_fbs=2 the driver ping-pongs between fb0 and fb1 internally.
+    void* fb0 = nullptr;
+    void* fb1 = nullptr;
+    ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 2, &fb0, &fb1));
+    framebuffer = (uint16_t*)fb0;
     
-    LOGI(tag, "DSI initialized: %dx%d, disable_lp=%s, use_dma2d=true, single FB @ %p",
-         displayWidth, displayHeight, timing.disable_lp ? "true" : "false", framebuffer);
+    LOGI(tag, "DSI initialized: %dx%d, disable_lp=%s, use_dma2d=true, dual FB @ %p / %p",
+         displayWidth, displayHeight, timing.disable_lp ? "true" : "false", fb0, fb1);
     
     delay(50);
     setBacklightBrightness(currentBrightness);
@@ -305,7 +312,9 @@ bool onPpaDone(ppa_client_handle_t client,
                ppa_event_data_t* event_data,
                void* user_ctx) {
     MipiDsiDriver* driver = (MipiDsiDriver*)user_ctx;
-    // Issue DMA2D copy of rotated buffer to framebuffer
+    // Issue DMA2D copy of rotated buffer to framebuffer.
+    // g_displayFlushBusy was already set at the top of pushColors() and
+    // remains true until onColorTransDone clears it.
     esp_lcd_panel_draw_bitmap(driver->panel_handle,
                               driver->physX, driver->physY,
                               driver->physX + driver->physW,
@@ -319,6 +328,11 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
     if (!panel_handle || !data || flushW == 0 || flushH == 0) {
         return;
     }
+
+    // Mark flush in-flight for the entire duration of the push, covering both
+    // the non-rotated direct DMA2D path and the rotated PPA→DMA2D chain.
+    // Cleared by onColorTransDone ISR after the final DMA2D copy completes.
+    g_displayFlushBusy = true;
 
     if (displayRotation == 0 || !rotBuffer || !ppaClient) {
         // No rotation — direct DMA2D async copy

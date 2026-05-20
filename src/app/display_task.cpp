@@ -21,6 +21,11 @@ extern bool g_perf_ready;
 extern uint32_t g_perf_window_start_ms;
 extern uint16_t g_perf_frames_in_window;
 
+// Definition for the async-flush-busy flag declared in display_driver.h.
+// Set true by async drivers (e.g. MIPI-DSI DMA2D) while a pixel transfer
+// is in flight; cleared from the completion ISR.
+volatile bool g_displayFlushBusy = false;
+
 // LVGL v9 flush callback
 void DisplayManager::flushCallback(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
 		DisplayManager* mgr = (DisplayManager*)lv_display_get_user_data(disp);

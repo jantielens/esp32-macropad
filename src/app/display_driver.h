@@ -131,4 +131,14 @@ public:
 		virtual bool asyncFlush() const { return false; }
 };
 
+// True while an async flush is actively transferring pixels to the panel
+// (e.g. DMA2D copy from LVGL buffer to MIPI-DSI framebuffer in progress).
+// Synchronous drivers leave this false because the LVGL task is already
+// blocked inside the flush callback.
+//
+// Use to defer non-essential PSRAM-heavy work (image frame swaps, large
+// invalidations) until the bandwidth-contended window closes.
+extern volatile bool g_displayFlushBusy;
+inline bool displayDriverIsFlushBusy() { return g_displayFlushBusy; }
+
 #endif // DISPLAY_DRIVER_H
