@@ -545,6 +545,13 @@ function actionEditorPopulateScreens(prefixes, screens) {
             opt.textContent = s.name;
             sel.appendChild(opt);
         });
+        // Apply pending value deferred by actionEditorLoad() when the option
+        // did not yet exist at load time.
+        if (sel.hasAttribute('data-pending-value')) {
+            var pv = sel.getAttribute('data-pending-value');
+            sel.value = pv;
+            if (sel.value === pv) sel.removeAttribute('data-pending-value');
+        }
     });
 }
 

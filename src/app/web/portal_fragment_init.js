@@ -253,6 +253,11 @@ window.init_screensaver_fragment = function () {
 window.init_swipe_actions_fragment = function () {
     if (typeof swipeInitEditors === 'function') swipeInitEditors();
     if (typeof loadSwipeActions === 'function') loadSwipeActions();
+    getDeviceInfo().then(function (info) {
+        if (info && typeof actionEditorPopulateScreens === 'function') {
+            actionEditorPopulateScreens(SWIPE_DIRECTIONS, info.available_screens);
+        }
+    });
     fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })
         .then(function (sounds) {
             if (typeof actionEditorPopulateSounds === 'function') actionEditorPopulateSounds(SWIPE_DIRECTIONS, sounds);
@@ -266,6 +271,11 @@ window.init_swipe_actions_fragment = function () {
 window.init_boot_actions_fragment = function () {
     if (typeof bootActionsInitEditors === 'function') bootActionsInitEditors();
     if (typeof loadBootActions === 'function') loadBootActions();
+    getDeviceInfo().then(function (info) {
+        if (info && typeof actionEditorPopulateScreens === 'function') {
+            actionEditorPopulateScreens(BOOT_ACTION_PREFIXES, info.available_screens);
+        }
+    });
     fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })
         .then(function (sounds) {
             if (typeof actionEditorPopulateSounds === 'function') actionEditorPopulateSounds(BOOT_ACTION_PREFIXES, sounds);
@@ -279,6 +289,11 @@ window.init_boot_actions_fragment = function () {
 window.init_timers_fragment = function () {
     if (typeof timerConfigInitEditors === 'function') timerConfigInitEditors();
     if (typeof loadTimerConfig === 'function') loadTimerConfig();
+    getDeviceInfo().then(function (info) {
+        if (info && typeof actionEditorPopulateScreens === 'function') {
+            actionEditorPopulateScreens(TIMER_EXPIRE_PREFIXES, info.available_screens);
+        }
+    });
     fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })
         .then(function (sounds) {
             if (typeof actionEditorPopulateSounds === 'function') actionEditorPopulateSounds(TIMER_EXPIRE_PREFIXES, sounds);
