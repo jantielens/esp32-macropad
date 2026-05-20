@@ -253,43 +253,6 @@ function validateConfig(config) {
 }
 
 /**
- * Reboot device without saving
- */
-async function rebootDevice() {
-    if (!confirm('Reboot the device without saving any changes?')) {
-        return;
-    }
-
-    // Show unified dialog immediately (do not wait on network)
-    showRebootDialog({
-        title: 'Device Rebooting',
-        message: 'Device is rebooting...',
-        context: 'reboot'
-    });
-    
-    try {
-        const response = await fetch(API_REBOOT, {
-            method: 'POST',
-            signal: AbortSignal.timeout(1500)
-        });
-
-        // If the device responds with an explicit error, surface it.
-        if (!response.ok) {
-            throw new Error('Failed to reboot device');
-        }
-    } catch (error) {
-        // Network failure/timeout is expected when the device reboots quickly.
-        // Only surface errors that clearly indicate the reboot request was rejected.
-        if (error.message && error.message.includes('Failed to reboot device')) {
-            const overlay = document.getElementById('reboot-overlay');
-            if (overlay) overlay.style.display = 'none';
-            showMessage('Error rebooting device: ' + error.message, 'error');
-            console.error('Reboot error:', error);
-        }
-    }
-}
-
-/**
  * Reset configuration to defaults
  */
 async function resetConfig() {
