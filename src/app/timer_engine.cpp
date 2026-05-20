@@ -3,7 +3,7 @@
 
 #if HAS_DISPLAY
 
-#include "action_dispatch.h"
+#include "action_list.h"
 #include "pad_config.h"
 
 #include <Arduino.h>
@@ -232,9 +232,7 @@ void timer_engine_tick() {
             t.expire_fired = true;
             char label[12];
             snprintf(label, sizeof(label), "T%u Expire", i + 1);
-            for (uint8_t a = 0; a < t.expire_action_count; a++) {
-                action_dispatch(t.expire_actions[a], label);
-            }
+            action_list_dispatch(t.expire_actions, t.expire_action_count, label);
         }
     }
 }

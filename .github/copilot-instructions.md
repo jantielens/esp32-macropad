@@ -25,7 +25,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Swipe Actions** (`HAS_DISPLAY`): 4-direction configurable swipe gestures with full ButtonAction parity.
 - **Boot Actions** (`HAS_DISPLAY`): Device-level actions dispatched once at boot after first screen.
 - **Button Defaults** (`HAS_DISPLAY`): Device-wide default button appearance (colors, border, radius, label styles).
-- **Action System** (`HAS_DISPLAY`): Shared `action_dispatch()` for buttons, swipe, boot, timer expire. `action_parse()` for DRY JSON serialization.
+- **Action System** (`HAS_DISPLAY`): Shared `action_dispatch()` for buttons, swipe, boot, timer expire. `action_parse()` for DRY JSON serialization. `action_list_parse()` / `action_list_dispatch()` for array-of-N-actions consumers (boot, timer, future).
 - **BLE HID** (`HAS_BLE_HID`): NimBLE keyboard with key sequence DSL, single-owner pairing, auto-re-pair. Runtime-toggled.
 - **Audio** (`HAS_AUDIO`): ES8311 codec + I2S, beep pattern DSL, volume control, async FreeRTOS playback.
 - **Sound Player** (`HAS_SOUND_PLAYER`): MP3 decode (minimp3) + resample + I2S playback from LittleFS.

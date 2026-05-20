@@ -2,7 +2,7 @@
 
 #if HAS_DISPLAY
 
-#include "action_parse.h"
+#include "action_list.h"
 #include "fs_health.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -90,17 +90,7 @@ static bool load_from_flash(TimerConfig* cfg) {
         ts.countdown = tobj["countdown"] | 0;
 
         // Expire actions
-        JsonVariant ea = tobj["expire_actions"];
-        if (ea.is<JsonArray>()) {
-            JsonArray arr = ea.as<JsonArray>();
-            for (size_t a = 0; a < arr.size() && ts.expire_action_count < TIMER_MAX_EXPIRE_ACTIONS; a++) {
-                if (!arr[a].is<JsonObject>()) continue;
-                action_parse(arr[a].as<JsonObject>(), ts.expire_actions[ts.expire_action_count]);
-                if (ts.expire_actions[ts.expire_action_count].type[0]) {
-                    ts.expire_action_count++;
-                }
-            }
-        }
+        ts.expire_action_count = action_list_parse(tobj["expire_actions"], ts.expire_actions, TIMER_MAX_EXPIRE_ACTIONS);
 
         LOGI(TAG, "Timer %u: mode=%s countdown=%us expire_actions=%u",
              i + 1, ts.mode == TIMER_MODE_DOWN ? "down" : "up",

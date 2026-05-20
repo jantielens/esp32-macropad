@@ -2,8 +2,7 @@
 
 #if HAS_DISPLAY
 
-#include "action_dispatch.h"
-#include "action_parse.h"
+#include "action_list.h"
 #include "fs_health.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -54,15 +53,7 @@ static bool load_from_flash(BootActionsConfig* cfg) {
         return false;
     }
 
-    JsonVariant v = doc["actions"];
-    if (v.is<JsonArray>()) {
-        JsonArray arr = v.as<JsonArray>();
-        for (size_t i = 0; i < arr.size() && cfg->action_count < MAX_BUTTON_ACTIONS; i++) {
-            if (!arr[i].is<JsonObject>()) continue;
-            action_parse(arr[i].as<JsonObject>(), cfg->actions[cfg->action_count]);
-            if (cfg->actions[cfg->action_count].type[0]) cfg->action_count++;
-        }
-    }
+    cfg->action_count = action_list_parse(doc["actions"], cfg->actions, MAX_BUTTON_ACTIONS);
 
     LOGI(TAG, "Loaded %u boot action(s)", cfg->action_count);
     return true;
@@ -115,9 +106,7 @@ void boot_actions_dispatch() {
     // but this is safe at boot because the LVGL task is not yet processing
     // user-driven events that could trigger concurrent binding resolution.
     LOGI(TAG, "Dispatching %u boot action(s)", cfg->action_count);
-    for (uint8_t i = 0; i < cfg->action_count; i++) {
-        action_dispatch(cfg->actions[i], "Boot");
-    }
+    action_list_dispatch(cfg->actions, cfg->action_count, "Boot");
 }
 
 #endif // HAS_DISPLAY
