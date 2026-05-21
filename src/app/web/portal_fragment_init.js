@@ -8,9 +8,19 @@
 
 /**
  * Gather config fields from the current DOM and save to /api/config.
- * @param {boolean} reboot - If true, device reboots after save.
+ *
+ * Saves are always sent with no_reboot=1 — the device never reboots from
+ * a per-fragment Save click. Settings that require a reboot to take effect
+ * surface a global pending-reboot banner via setPendingReboot(); the user
+ * can batch several changes and click "Reboot Now" once at the end.
+ *
+ * @param {boolean} requiresReboot - True if this fragment's settings need a
+ *                                   reboot to take effect (wifi, network,
+ *                                   device name, mode, mqtt, ble, auth).
+ *                                   When true, the pending-reboot banner is
+ *                                   shown after a successful save.
  */
-async function saveFragmentConfig(reboot) {
+async function saveFragmentConfig(requiresReboot) {
     // Build config from DOM elements that exist in the current fragment
     var config = {};
     var fields = [
@@ -54,19 +64,8 @@ async function saveFragmentConfig(reboot) {
         }
     }
 
-    if (reboot) {
-        var currentDeviceName = document.getElementById('device_name');
-        showRebootDialog({
-            title: 'Saving Configuration',
-            message: 'Saving configuration...',
-            context: 'save',
-            newDeviceName: currentDeviceName ? currentDeviceName.value : null
-        });
-    }
-
     try {
-        var url = '/api/config' + (reboot ? '' : '?no_reboot=1');
-        var response = await fetch(url, {
+        var response = await fetch('/api/config?no_reboot=1', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
@@ -74,9 +73,10 @@ async function saveFragmentConfig(reboot) {
         if (!response.ok) throw new Error('Failed to save configuration');
         var result = await response.json();
         if (result.success) {
-            if (reboot) {
-                var msg = document.getElementById('reboot-message');
-                if (msg) msg.textContent = 'Configuration saved. Device is rebooting...';
+            if (requiresReboot) {
+                // Banner is the user feedback — skip the toast so it doesn't
+                // cover the freshly-appeared "reboot required" banner.
+                if (typeof setPendingReboot === 'function') setPendingReboot();
             } else {
                 showMessage('Configuration saved', 'success');
             }
@@ -84,26 +84,20 @@ async function saveFragmentConfig(reboot) {
             showMessage('Failed to save configuration', 'error');
         }
     } catch (error) {
-        if (reboot && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-            var msg = document.getElementById('reboot-message');
-            if (msg) msg.textContent = 'Configuration saved. Device is rebooting...';
-        } else {
-            var overlay = document.getElementById('reboot-overlay');
-            if (overlay) overlay.style.display = 'none';
-            showMessage('Error saving: ' + error.message, 'error');
-        }
+        showMessage('Error saving: ' + error.message, 'error');
     }
 }
 
 /**
  * Wire loadConfig() + a save button for the common config-fragment pattern.
  * @param {string} saveBtnId - ID of the save button element
- * @param {boolean} reboot - Whether saving should trigger a device reboot
+ * @param {boolean} requiresReboot - True if this fragment's settings need a
+ *   reboot to take effect; false for live-apply settings (brightness, etc.).
  */
-function initConfigFragment(saveBtnId, reboot) {
+function initConfigFragment(saveBtnId, requiresReboot) {
     loadConfig();
     var btn = document.getElementById(saveBtnId);
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(reboot); });
+    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(requiresReboot); });
 }
 
 // ============================================================================

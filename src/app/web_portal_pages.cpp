@@ -99,8 +99,12 @@ void handleRoot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 
 		if (web_portal_is_ap_mode_active()) {
-				// In AP mode, serve shell which will show WiFi setup
-				handleShell(request);
+				// First-boot AP mode: land directly on the WiFi setup fragment so
+				// the user sees credentials entry, not the generic welcome page.
+				// Other reboot-required settings (device name, static IP, auth)
+				// can be filled in afterwards and saved without rebooting; the
+				// pending-reboot banner lets the user apply them all in one go.
+				request->redirect("/#wifi");
 				return;
 		}
 

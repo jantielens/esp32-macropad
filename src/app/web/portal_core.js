@@ -334,6 +334,23 @@ async function startReconnection(options) {
 }
 
 /**
+ * Sanitize a device name into a valid mDNS hostname label.
+ * Mirrors the backend logic in config_manager_sanitize_device_name():
+ * lowercase, alphanumeric + hyphens only, collapse whitespace/underscores
+ * to a single hyphen, strip leading/trailing hyphens.
+ *
+ * @param {string} name - Raw device name from the user
+ * @returns {string} mDNS-safe hostname label (without the .local suffix)
+ */
+function sanitizeForMDNS(name) {
+    return (name || '').toLowerCase()
+        .replace(/[^a-z0-9\s\-_]/g, '')
+        .replace(/[\s_]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+}
+
+/**
  * Update sanitized device name field
  */
 function updateSanitizedName() {
@@ -343,18 +360,81 @@ function updateSanitizedName() {
     // Only proceed if both elements exist
     if (!deviceNameField || !sanitizedField) return;
     
-    const deviceName = deviceNameField.value;
-    
-    // Sanitize: lowercase, alphanumeric + hyphens
-    let sanitized = deviceName.toLowerCase()
-        .replace(/[^a-z0-9\s\-_]/g, '')
-        .replace(/[\s_]+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-    
+    const sanitized = sanitizeForMDNS(deviceNameField.value);
     sanitizedField.textContent = (sanitized || 'esp32-xxxx') + '.local';
 }
 
 function escAttr(s) {
     return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ---------------------------------------------------------------------------
+// Pending-reboot banner
+// ---------------------------------------------------------------------------
+// Fragments that change reboot-required settings (wifi, network including
+// the security/auth card, device name, mode, mqtt, ble) save with
+// no_reboot=1 and call setPendingReboot().
+// The banner survives fragment navigation (the shell is a SPA, fragments load
+// via XHR so JS state persists) but is intentionally NOT persisted to
+// sessionStorage: a full page reload (Ctrl+R) clears it. That gives the user
+// a trivial escape hatch when the device was rebooted out-of-band (CLI
+// deploy, power cycle, factory reset from another tab) and the banner has
+// become stale.
+let pendingRebootFlag = false;
+
+function setPendingReboot() {
+    var wasPending = pendingRebootFlag;
+    pendingRebootFlag = true;
+    updatePendingRebootBanner();
+    // If the banner was already visible, pulse it so the user gets feedback
+    // that another change was accepted (we suppressed the toast for these).
+    if (wasPending) {
+        var el = document.getElementById('reboot-pending-banner');
+        if (el) {
+            el.classList.remove('pulse');
+            // Force reflow so re-adding the class restarts the animation.
+            void el.offsetWidth;
+            el.classList.add('pulse');
+        }
+    }
+}
+
+function clearPendingReboot() {
+    pendingRebootFlag = false;
+    updatePendingRebootBanner();
+}
+
+function updatePendingRebootBanner() {
+    var el = document.getElementById('reboot-pending-banner');
+    if (!el) return;
+    el.style.display = pendingRebootFlag ? 'flex' : 'none';
+}
+
+function initPendingRebootBanner() {
+    updatePendingRebootBanner();
+    var btn = document.getElementById('reboot-pending-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        // Don't pass newDeviceName: it's meant for "device was renamed,
+        // redirect to new mDNS hostname" flows. From the banner we're just
+        // applying pending changes on the same network/host, so the dialog's
+        // default (window.location.origin) is correct.
+        showRebootDialog({
+            title: 'Rebooting Device',
+            message: 'Applying configuration changes...',
+            context: 'save'
+        });
+        clearPendingReboot();
+        fetch(API_REBOOT, { method: 'POST' }).catch(function () {
+            // The TCP connection often drops mid-response when the device
+            // reboots; the reboot dialog's reconnection poller handles the
+            // wait-and-redirect, so swallow this error.
+        });
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPendingRebootBanner);
+} else {
+    initPendingRebootBanner();
 }
