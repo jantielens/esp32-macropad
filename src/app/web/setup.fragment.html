@@ -1,0 +1,80 @@
+<div class="section-header">
+  <h2>👋 Welcome — first let's get this device connected</h2>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+
+    <!-- WiFi (required) -->
+    <div class="mb-3">
+      <label class="form-label" for="wifi_ssid">WiFi network name (SSID)</label>
+      <input type="text" class="form-control" id="wifi_ssid" name="wifi_ssid" autocomplete="off" required>
+    </div>
+    <div class="mb-4">
+      <label class="form-label" for="wifi_password">WiFi password</label>
+      <input type="password" class="form-control" id="wifi_password" name="wifi_password" autocomplete="new-password">
+    </div>
+
+    <!-- Friendly name -->
+    <div class="mb-4">
+      <label class="form-label" for="device_name">Friendly name (optional)</label>
+      <input type="text" class="form-control" id="device_name" name="device_name" oninput="updateSanitizedName()">
+      <div class="form-text">Used as the mDNS hostname: <code id="device_name_sanitized">esp32-xxxx.local</code></div>
+    </div>
+
+    <!-- Optional: portal auth -->
+    <div class="form-check mb-2">
+      <input type="checkbox" class="form-check-input" id="setup_enable_auth">
+      <label class="form-check-label" for="setup_enable_auth">Require login for the portal</label>
+    </div>
+    <div id="setup-auth-fields" class="mb-4" style="display:none;">
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="basic_auth_username">Username</label>
+          <input type="text" class="form-control" id="basic_auth_username" name="basic_auth_username" autocomplete="off">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="basic_auth_password">Password</label>
+          <input type="password" class="form-control" id="basic_auth_password" name="basic_auth_password" autocomplete="new-password">
+        </div>
+      </div>
+    </div>
+
+    <!-- Optional: static IP -->
+    <div class="form-check mb-2">
+      <input type="checkbox" class="form-check-input" id="setup_use_static_ip">
+      <label class="form-check-label" for="setup_use_static_ip">Use a static IP address</label>
+    </div>
+    <div id="setup-static-ip-fields" class="mb-4" style="display:none;">
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="fixed_ip">IP address</label>
+          <input type="text" class="form-control" id="fixed_ip" name="fixed_ip" placeholder="e.g. 192.168.1.100">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="subnet_mask">Subnet mask</label>
+          <input type="text" class="form-control" id="subnet_mask" name="subnet_mask" placeholder="e.g. 255.255.255.0">
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="gateway">Gateway</label>
+          <input type="text" class="form-control" id="gateway" name="gateway" placeholder="e.g. 192.168.1.1">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="dns1">DNS 1</label>
+          <input type="text" class="form-control" id="dns1" name="dns1" placeholder="e.g. 8.8.8.8">
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="dns2">DNS 2 (optional)</label>
+        <input type="text" class="form-control" id="dns2" name="dns2" placeholder="e.g. 8.8.4.4">
+      </div>
+    </div>
+
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary" id="setup-save-btn">Save &amp; Connect</button>
+    </div>
+
+  </div>
+</div>

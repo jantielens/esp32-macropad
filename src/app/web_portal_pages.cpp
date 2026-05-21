@@ -98,16 +98,13 @@ void handleFragment(AsyncWebServerRequest *request) {
 void handleRoot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 
-		if (web_portal_is_ap_mode_active()) {
-				// First-boot AP mode: land directly on the WiFi setup fragment so
-				// the user sees credentials entry, not the generic welcome page.
-				// Other reboot-required settings (device name, static IP, auth)
-				// can be filled in afterwards and saved without rebooting; the
-				// pending-reboot banner lets the user apply them all in one go.
-				request->redirect("/#wifi");
-				return;
-		}
-
+		// In AP mode we deliberately do NOT 302-redirect to /#setup here:
+		// captive-portal probes (Android's connectivitycheck.gstatic.com,
+		// iOS's hotspot-detect.html) follow the redirect under the probe's
+		// own hostname and end up looping. Serving the shell with HTTP 200
+		// is what the captive-portal detector expects (non-204 = portal).
+		// Routing to the setup wizard happens client-side via the nav API's
+		// `primary.fragment` field, which portal_nav.js applies on init.
 		handleShell(request);
 }
 

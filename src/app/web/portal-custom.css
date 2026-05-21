@@ -255,11 +255,19 @@ select { color-scheme: light; }
 .portal-layout {
   display: flex;
   height: calc(100vh - var(--portal-header-height-desktop, 120px));
-  /* fallback height; JS sets --portal-header-height-desktop on load */
+  height: calc(100dvh - var(--portal-header-height-desktop, 120px));
+  /* fallback height; JS sets --portal-header-height-desktop on load.
+     dvh tracks dynamic mobile browser chrome (URL bar) so the bottom
+     of the content pane stays visible above Android's address bar. */
 }
 
 body {
   overflow: hidden; /* layout handles scroll per pane */
+  /* Prevent Android Chrome/Edge pull-to-refresh gesture from triggering
+     when the user scrolls up inside .content-pane. The internal scroller
+     never bubbles a top-of-page event, but mobile browsers attach PTR to
+     the document, so we must opt out at the body level. */
+  overscroll-behavior-y: contain;
 }
 
 /* ================================================================
@@ -500,6 +508,7 @@ body {
 .content-pane {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding: 24px 28px;
   min-height: 0;
   scrollbar-width: thin;
@@ -815,6 +824,7 @@ body {
 
   .portal-layout {
     height: calc(100vh - var(--portal-header-height-desktop, 100px));
+    height: calc(100dvh - var(--portal-header-height-desktop, 100px));
   }
 
   .content-pane {

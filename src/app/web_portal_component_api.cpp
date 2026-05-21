@@ -75,6 +75,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         return;
     }
 
+    if (ap_mode) (*doc)["ap_mode"] = true;
+
     JsonArray categories = doc->createNestedArray("categories");
 
     // Temp buffer for sorting items within a category
@@ -87,8 +89,9 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
 
     // --- Primary category support ---
     // Board variants can define PORTAL_PRIMARY_CATEGORY to promote a custom
-    // category to first position in the nav.  Suppressed in AP mode and when
-    // the primary category collides with a hardcoded category ID.
+    // category to first position in the nav.  Suppressed in AP mode (where
+    // the first-boot setup wizard is the only landing target) and when the
+    // primary category collides with a hardcoded category ID.
     const bool has_primary = !ap_mode
         && PORTAL_PRIMARY_CATEGORY[0] != '\0'
         && !is_hardcoded_category(PORTAL_PRIMARY_CATEGORY);
@@ -144,6 +147,13 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         primary_obj["category"]  = PORTAL_PRIMARY_CATEGORY;
         primary_obj["label"]     = PORTAL_PRIMARY_LABEL;
         primary_obj["icon"]      = PORTAL_PRIMARY_ICON;
+    } else if (ap_mode) {
+        // First-boot AP mode: route the SPA to the setup wizard on init.
+        // Server-side redirects break Android/iOS captive-portal probes, so
+        // landing-fragment selection happens client-side via this field.
+        JsonObject primary_obj = doc->createNestedObject("primary");
+        primary_obj["fragment"] = "setup";
+        primary_obj["category"] = "device";
     }
 
     // --- Hardcoded categories ---
@@ -154,13 +164,24 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         if (ap_mode && strcmp(cat.id, "device") != 0) continue;
 
         // Collect items for this category
+        //
+        // First-boot wizard ("setup" component): visible ONLY in AP mode, and
+        // when visible it is the *only* item in the device category — the
+        // wifi / device-name / network entries are suppressed so the wizard
+        // is the single hand-off path. In STA mode the wizard is hidden and
+        // the normal entries take over.
         uint8_t item_count = 0;
         for (uint8_t i = 0; i < component_registry_count(); i++) {
             ComponentDef* comp = component_registry_get(i);
-            if (strcmp(comp->category, cat.id) == 0) {
-                const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
-                items[item_count++] = {nav_id, comp->display_name, comp->nav_order};
-            }
+            if (strcmp(comp->category, cat.id) != 0) continue;
+            bool is_setup = (strcmp(comp->id, "setup") == 0);
+            if (is_setup && !ap_mode) continue;  // hide wizard outside AP mode
+            // In AP mode the outer loop has already restricted us to the
+            // device category, so suppressing every non-setup item here
+            // leaves the wizard as the single hand-off path.
+            if (!is_setup && ap_mode) continue;
+            const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
+            items[item_count++] = {nav_id, comp->display_name, comp->nav_order};
         }
 
         if (item_count == 0) continue;  // skip empty categories

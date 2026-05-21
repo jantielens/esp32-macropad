@@ -280,9 +280,14 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		// Partial update: only update fields that are present in the request
 		// This allows different pages to update only their relevant fields
 
-		// Security hardening: never allow changing Basic Auth settings in AP/core mode.
-		// Otherwise, an attacker near the device could wait for fallback AP mode and lock out the owner.
-		if (web_portal_is_ap_mode_active() && (doc.containsKey("basic_auth_enabled") || doc.containsKey("basic_auth_username") || doc.containsKey("basic_auth_password"))) {
+		// Security hardening: never allow changing Basic Auth settings in AP/core
+		// mode AFTER initial setup. Otherwise, an attacker near the device could
+		// wait for fallback AP mode and lock out the owner. EXCEPTION: during
+		// true first-boot (no WiFi configured yet) the wizard legitimately needs
+		// to set auth, so we only enforce the guard when an SSID is already on
+		// file (i.e., this is a fallback AP session, not first-boot).
+		bool first_boot = (current_config->wifi_ssid[0] == '\0');
+		if (web_portal_is_ap_mode_active() && !first_boot && (doc.containsKey("basic_auth_enabled") || doc.containsKey("basic_auth_username") || doc.containsKey("basic_auth_password"))) {
 				request->send(403, "application/json", "{\"success\":false,\"message\":\"Basic Auth settings cannot be changed in AP mode\"}");
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();

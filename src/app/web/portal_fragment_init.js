@@ -165,6 +165,110 @@ window.init_wifi_fragment = function () {
 };
 
 // ============================================================================
+// Setup wizard (AP-mode first-boot onboarding)
+// ============================================================================
+//
+// Single-card form that combines wifi credentials with optional friendly
+// name, portal auth, and static IP. Submits everything in one POST and
+// reboots immediately — the deferred-reboot banner is not used here because
+// onboarding is a one-shot hand-off, not iterative tweaking.
+
+window.init_setup_fragment = function () {
+    loadConfig();  // pre-fill device_name (and ssid if already set)
+
+    // Checkbox → reveal/hide the corresponding field group.
+    function wireToggle(checkboxId, groupId) {
+        var cb = document.getElementById(checkboxId);
+        var group = document.getElementById(groupId);
+        if (!cb || !group) return;
+        cb.addEventListener('change', function () {
+            group.style.display = cb.checked ? '' : 'none';
+        });
+    }
+    wireToggle('setup_enable_auth', 'setup-auth-fields');
+    wireToggle('setup_use_static_ip', 'setup-static-ip-fields');
+
+    var btn = document.getElementById('setup-save-btn');
+    if (btn) btn.addEventListener('click', saveSetupWizard);
+};
+
+async function saveSetupWizard() {
+    var ssid = (document.getElementById('wifi_ssid') || {}).value || '';
+    if (!ssid.trim()) {
+        showMessage('WiFi network name is required', 'error');
+        return;
+    }
+
+    var authOn = !!(document.getElementById('setup_enable_auth') || {}).checked;
+    var staticIpOn = !!(document.getElementById('setup_use_static_ip') || {}).checked;
+    var nameEl = document.getElementById('device_name');
+    var newDeviceName = nameEl ? nameEl.value : null;
+
+    // Build payload: always include wifi + device_name; include auth / static
+    // IP fields only when their gating checkbox is on. Unchecked groups are
+    // simply omitted so the server keeps its existing defaults rather than
+    // forcing us to send no-op clearing values (which would also trip the
+    // AP-mode basic-auth security guard for non-first-boot sessions).
+    var config = {
+        wifi_ssid: ssid,
+        wifi_password: (document.getElementById('wifi_password') || {}).value || '',
+        device_name: newDeviceName || ''
+    };
+    if (authOn) {
+        config.basic_auth_enabled = true;
+        config.basic_auth_username = (document.getElementById('basic_auth_username') || {}).value || '';
+        config.basic_auth_password = (document.getElementById('basic_auth_password') || {}).value || '';
+    }
+    if (staticIpOn) {
+        config.fixed_ip    = (document.getElementById('fixed_ip')    || {}).value || '';
+        config.subnet_mask = (document.getElementById('subnet_mask') || {}).value || '';
+        config.gateway     = (document.getElementById('gateway')     || {}).value || '';
+        config.dns1        = (document.getElementById('dns1')        || {}).value || '';
+        config.dns2        = (document.getElementById('dns2')        || {}).value || '';
+    }
+
+    // Show reboot dialog up-front; if a friendly name was set, the dialog
+    // will direct the user to http://<sanitized>.local after the device
+    // comes back on the configured WiFi.
+    showRebootDialog({
+        title: 'Saving Configuration',
+        message: 'Connecting to WiFi...',
+        context: 'save',
+        newDeviceName: newDeviceName
+    });
+
+    try {
+        // No no_reboot=1 — we want the device to reboot now.
+        var response = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        if (!response.ok) {
+            // Try to surface the server-provided message (e.g. the AP-mode
+            // basic-auth guard's 403) rather than a generic fallback.
+            var serverMsg = null;
+            try {
+                var body = await response.json();
+                if (body && body.message) serverMsg = body.message;
+            } catch (_) { /* non-JSON body — fall through */ }
+            throw new Error(serverMsg || ('HTTP ' + response.status));
+        }
+        // Success path: the reboot dialog's reconnection poller handles the
+        // rest (network switch + redirect to mDNS hostname).
+    } catch (error) {
+        // In AP mode the TCP connection often drops mid-response as the
+        // device starts rebooting — that's normal and the reboot dialog
+        // already shows the manual reconnect instructions for that case.
+        if (!String(error.message).match(/Failed to fetch|NetworkError/)) {
+            var overlay = document.getElementById('reboot-overlay');
+            if (overlay) overlay.style.display = 'none';
+            showMessage('Error saving: ' + error.message, 'error');
+        }
+    }
+}
+
+// ============================================================================
 // Device Name
 // ============================================================================
 

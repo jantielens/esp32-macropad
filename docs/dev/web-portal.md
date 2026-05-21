@@ -27,6 +27,7 @@ The web portal provides:
 - Captive portal auto-redirects to configuration page
 
 **Features:**
+- One-page setup wizard (`setup` component, fragment `setup.fragment.html`) that handles WiFi SSID + password (required), friendly name, optional portal basic auth, and optional static IP. The wizard is the only Device-category nav item visible in AP mode and is selected automatically via the `ap_mode` + `primary.fragment` fields on `/api/portal/nav`.
 - WiFi SSID and password setup
 - Device name configuration
 - Fixed IP settings (optional)
