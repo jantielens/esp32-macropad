@@ -566,13 +566,15 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 void handleDeleteConfig(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 
-		if (config_manager_reset()) {
-				request->send(200, "application/json", "{\"success\":true,\"message\":\"Configuration reset\"}");
+		// Send the success response FIRST so the client receives it before the
+		// long blocking wipe (NVS erase + LittleFS.format() / SD rmrf, several
+		// seconds total) starves the AsyncTCP task. The client interprets a
+		// network failure here as success too, but delivering the JSON is the
+		// happy path and makes debugging much easier.
+		request->send(200, "application/json", "{\"success\":true,\"message\":\"Configuration reset\"}");
+		// Give AsyncWebServer time to flush the response before we block.
+		delay(100);
 
-				// Schedule reboot after response is sent
-				delay(100);
-				ESP.restart();
-		} else {
-				request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to reset\"}");
-		}
+		config_manager_factory_reset();
+		ESP.restart();
 }

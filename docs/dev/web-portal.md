@@ -307,7 +307,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
   - Select .bin file from build directory
   - Upload progress bar
   - Automatic reboot and reconnection
-- **🔄 Factory Reset**: Reset all configuration to defaults
+- **🔄 Factory Reset**: Full wipe of NVS partition + filesystem (pads, icons, sounds, indexed stores, BLE pairings)
   - Confirmation required
   - Device reboots in AP mode after reset
 

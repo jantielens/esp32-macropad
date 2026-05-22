@@ -10,6 +10,7 @@
 #include "web_assets.h"
 #include "log_manager.h"
 #include "power_config.h"
+#include "storage.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 
@@ -360,21 +361,93 @@ bool config_manager_save(const DeviceConfig *config) {
 		return true;
 }
 
-// Reset configuration (erase from NVS)
-bool config_manager_reset() {
-		LOGI("Config", "Reset start");
-		
-		preferences.begin(CONFIG_NAMESPACE, false);
-		bool success = preferences.clear();
-		preferences.end();
-		
-		if (success) {
-				LOGI("Config", "Reset complete");
-		} else {
-				LOGE("Config", "Failed to reset");
+// Recursively remove a directory tree on the active Storage backend.
+// Returns true if `path` no longer exists (or never did) after the call.
+// Individual remove/rmdir failures are logged.
+static bool factory_reset_rmrf(const char* path) {
+		if (!path || !*path) return true;
+		if (!Storage.exists(path)) return true;
+
+		File root = Storage.open(path);
+		if (!root) {
+				LOGW("Config", "rmrf: cannot open %s", path);
+				return false;
 		}
-		
-		return success;
+		if (!root.isDirectory()) {
+				root.close();
+				if (Storage.remove(path)) return true;
+				LOGW("Config", "rmrf: failed to remove file %s", path);
+				return false;
+		}
+
+		bool ok = true;
+		File entry = root.openNextFile();
+		while (entry) {
+				// Build the child's full path. Some FS impls return absolute names
+				// from entry.name(); strip a leading slash so we don't get "//foo".
+				const char* name = entry.name();
+				if (name && name[0] == '/') name++;
+				String child(path);
+				if (!child.endsWith("/")) child += "/";
+				child += (name ? name : "");
+
+				bool is_dir = entry.isDirectory();
+				entry.close();
+				if (is_dir) {
+						if (!factory_reset_rmrf(child.c_str())) ok = false;
+				} else {
+						if (!Storage.remove(child.c_str())) {
+								LOGW("Config", "rmrf: failed to remove %s", child.c_str());
+								ok = false;
+						}
+				}
+				entry = root.openNextFile();
+		}
+		root.close();
+
+		if (!Storage.rmdir(path)) {
+				LOGW("Config", "rmrf: failed to rmdir %s", path);
+				ok = false;
+		}
+		return ok;
+}
+
+// Factory reset: erase the entire NVS partition and wipe user data on the
+// filesystem (pad configs, button defaults, timer/swipe/boot actions, icons,
+// sounds, indexed stores). Caller is expected to reboot immediately after.
+// Returns true only if BOTH the NVS erase and the filesystem wipe succeeded.
+bool config_manager_factory_reset() {
+		LOGI("Config", "Factory reset: erasing NVS partition");
+		esp_err_t err = nvs_flash_erase();
+		if (err != ESP_OK) {
+				LOGE("Config", "nvs_flash_erase failed (%d)", (int)err);
+		}
+		// Re-init NVS so any code path that runs before the imminent reboot
+		// (logging, BLE deinit, etc.) does not crash on a closed partition.
+		nvs_flash_init();
+
+		LOGI("Config", "Factory reset: wiping filesystem");
+		bool fs_ok = true;
+#if USE_SD_STORAGE
+		// SD: cannot safely format from firmware. Selectively remove the
+		// directories the firmware owns; leave any user files at root alone.
+		fs_ok &= factory_reset_rmrf("/config");
+		fs_ok &= factory_reset_rmrf("/icons");
+		fs_ok &= factory_reset_rmrf("/sounds");
+		fs_ok &= factory_reset_rmrf("/storage");
+#else
+		// LittleFS: format wipes everything in the data partition cleanly.
+		if (!LittleFS.format()) {
+				LOGE("Config", "LittleFS.format() failed");
+				fs_ok = false;
+		} else {
+				LOGI("Config", "LittleFS formatted");
+		}
+#endif
+
+		const bool ok = (err == ESP_OK) && fs_ok;
+		LOGI("Config", "Factory reset %s", ok ? "complete" : "FAILED (partial wipe)");
+		return ok;
 }
 
 #if HAS_BLE_HID

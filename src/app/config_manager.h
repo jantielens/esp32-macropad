@@ -12,7 +12,7 @@
  *       // No config found, need to configure
  *   }
  *   config_manager_save();           // Save after user configures
- *   config_manager_reset();          // Erase all config
+ *   config_manager_factory_reset();  // Erase all config + filesystem data
  */
 
 #ifndef CONFIG_MANAGER_H
@@ -120,7 +120,7 @@ struct DeviceConfig {
 void config_manager_init();                           // Initialize NVS
 bool config_manager_load(DeviceConfig *config);       // Load config from NVS
 bool config_manager_save(const DeviceConfig *config); // Save config to NVS
-bool config_manager_reset();                          // Erase config from NVS
+bool config_manager_factory_reset();                  // Erase entire NVS partition + wipe user filesystem (pads, icons, sounds, indexed stores)
 bool config_manager_is_valid(const DeviceConfig *config); // Check if config is valid
 void config_manager_print(const DeviceConfig *config); // Debug print config
 void config_manager_sanitize_device_name(const char *input, char *output, size_t max_len); // Sanitize name for mDNS

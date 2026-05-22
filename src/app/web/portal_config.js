@@ -257,7 +257,7 @@ function validateConfig(config) {
  * Reset configuration to defaults
  */
 async function resetConfig() {
-    if (!confirm('Factory reset will erase all settings and reboot the device into AP mode. Continue?')) {
+    if (!confirm('Factory reset will erase ALL settings, pads, button defaults, icons, sounds, timers, swipe/boot actions, indexed stores (e.g. sessions), and BLE pairings. The device will reboot into AP mode. Continue?')) {
         return;
     }
     

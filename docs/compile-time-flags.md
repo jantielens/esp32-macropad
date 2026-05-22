@@ -725,6 +725,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **USE_SD_STORAGE**
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/config_manager.cpp
   - src/app/pad_config.cpp
   - src/app/sd_probe.cpp
   - src/app/sd_storage.cpp
