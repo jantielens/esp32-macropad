@@ -676,12 +676,41 @@ cat > "$OUTPUT_FILE" << 'HEADER_START'
 
 #include <Arduino.h>
 
+// Board feature flags — gate display/audio/MQTT-only fragments away when
+// the corresponding subsystem is disabled at compile time. Without this
+// the linker pulls in every PROGMEM fragment array even though headless
+// builds never call find_fragment_asset() for them.
+#include "board_config.h"
+
 // Project branding (from config.sh)
 // Kept in a tiny header so non-web code can include branding without pulling
 // in the large embedded asset arrays.
 #include "project_branding.h"
 
 HEADER_START
+
+# Map a fragment filename stem (e.g. "pad_editor_fragment") to the
+# compile-time feature flag that must be true for the fragment to be
+# included in the build. Echoes nothing for always-on fragments.
+fragment_feature_flag() {
+    local stem="$1"
+    # Strip trailing _fragment suffix
+    stem="${stem%_fragment}"
+    case "$stem" in
+        pad_editor|swipe_actions|boot_actions|button_defaults|timers|brightness|screensaver|welcome)
+            echo "HAS_DISPLAY" ;;
+        mqtt|ha_discovery)
+            echo "HAS_MQTT" ;;
+        ble)
+            echo "HAS_BLE_HID" ;;
+        volume)
+            echo "HAS_AUDIO" ;;
+        sounds)
+            echo "HAS_SOUND_PLAYER" ;;
+        *)
+            echo "" ;;
+    esac
+}
 
 # Generate HTML sections (gzipped)
 for filename in "${!HTML_CONTENTS[@]}"; do
@@ -696,6 +725,10 @@ done
 
 # Generate fragment HTML sections (gzipped)
 for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+    flag=$(fragment_feature_flag "$filename")
+    if [[ -n "$flag" ]]; then
+        echo "#if $flag" >> "$OUTPUT_FILE"
+    fi
     cat >> "$OUTPUT_FILE" << EOF
 // Fragment from src/app/web/${filename%.fragment*}.fragment.html (gzipped)
 const uint8_t ${filename}_html_gz[] PROGMEM = {
@@ -703,6 +736,10 @@ ${FRAGMENT_GZIP_CONTENTS[$filename]}
 };
 
 EOF
+    if [[ -n "$flag" ]]; then
+        echo "#endif // $flag" >> "$OUTPUT_FILE"
+        echo >> "$OUTPUT_FILE"
+    fi
 done
 
 # Generate CSS sections (gzipped)
@@ -738,7 +775,14 @@ for filename in "${!HTML_CONTENTS[@]}"; do
 done
 
 for filename in "${!FRAGMENT_CONTENTS[@]}"; do
-    echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
+    flag=$(fragment_feature_flag "$filename")
+    if [[ -n "$flag" ]]; then
+        echo "#if $flag" >> "$OUTPUT_FILE"
+        echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
+        echo "#endif // $flag" >> "$OUTPUT_FILE"
+    else
+        echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
+    fi
 done
 
 for filename in "${!CSS_CONTENTS[@]}"; do
@@ -767,7 +811,14 @@ FRAG_TABLE_START
         # Convert symbol name back to fragment_id: wifi_fragment -> wifi, pad_editor_fragment -> pad-editor
         frag_id="${filename%_fragment}"
         frag_id="${frag_id//_/-}"
-        echo "    {\"$frag_id\", ${filename}_html_gz, sizeof(${filename}_html_gz)}," >> "$OUTPUT_FILE"
+        flag=$(fragment_feature_flag "$filename")
+        if [[ -n "$flag" ]]; then
+            echo "#if $flag" >> "$OUTPUT_FILE"
+            echo "    {\"$frag_id\", ${filename}_html_gz, sizeof(${filename}_html_gz)}," >> "$OUTPUT_FILE"
+            echo "#endif // $flag" >> "$OUTPUT_FILE"
+        else
+            echo "    {\"$frag_id\", ${filename}_html_gz, sizeof(${filename}_html_gz)}," >> "$OUTPUT_FILE"
+        fi
     done
 
     cat >> "$OUTPUT_FILE" << 'FRAG_TABLE_END'

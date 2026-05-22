@@ -1,14 +1,14 @@
 #include "pad_config.h"
+#include "board_config.h"
+
+#if HAS_DISPLAY
 
 #include "action_parse.h"
-#include "board_config.h"
 #include "button_defaults.h"
 #include "fs_health.h"
 #include "icon_store.h"
 #include "log_manager.h"
-#if HAS_DISPLAY
 #include "widgets/widget.h"
-#endif
 
 #include <ArduinoJson.h>
 #include "psram_json_allocator.h"
@@ -830,3 +830,5 @@ char* pad_config_read_raw(uint8_t page, size_t* out_len) {
 uint32_t pad_config_get_generation() {
     return g_generation;
 }
+
+#endif // HAS_DISPLAY

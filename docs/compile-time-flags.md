@@ -274,6 +274,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/tft_espi_driver.cpp
 - **HAS_BLE**
   - src/app/app.ino
+  - src/app/ble_telemetry.cpp
+  - src/app/ble_telemetry.h
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
@@ -331,6 +333,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_screen_nav.cpp
   - src/app/display_task.cpp
   - src/app/expr_binding.cpp
+  - src/app/fs_indexed_store.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/health_table_builder.cpp
@@ -347,6 +350,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
   - src/app/mqtt_screen.h
+  - src/app/mqtt_sub_store.cpp
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
   - src/app/pad_binding.cpp
@@ -371,6 +375,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_device_api.cpp
+  - src/app/web_portal_fs_store.cpp
   - src/app/web_portal_icons.cpp
   - src/app/web_portal_icons.h
   - src/app/web_portal_pad.cpp

@@ -1,4 +1,7 @@
 #include "fs_indexed_store.h"
+#include "board_config.h"
+
+#if HAS_DISPLAY
 
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -894,3 +897,5 @@ uint32_t FsIndexedStore::allocate_id(const char* field_name, const char* prefix,
     snprintf(buf, buf_size, "%s%lu", prefix ? prefix : "", (unsigned long)id);
     return id;
 }
+
+#endif // HAS_DISPLAY

@@ -1,4 +1,7 @@
 #include "web_portal_fs_store.h"
+#include "board_config.h"
+
+#if HAS_DISPLAY
 
 #include "log_manager.h"
 #include "web_portal_auth.h"
@@ -195,3 +198,5 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
 
     LOGI(TAG, "Registered routes for %s", base_url);
 }
+
+#endif // HAS_DISPLAY
