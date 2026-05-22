@@ -326,14 +326,3 @@ function padGetBindableColor(id) {
     const el = document.getElementById(id);
     return el ? el.value.trim() : '';
 }
-
-/**
- * Toggle monospace font on mixed-binding inputs based on whether they contain a binding token.
- */
-function padUpdateMixedBindingFont(input) {
-    if (input.value.indexOf('[') !== -1) {
-        input.classList.add('has-binding');
-    } else {
-        input.classList.remove('has-binding');
-    }
-}

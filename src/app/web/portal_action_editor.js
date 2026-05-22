@@ -284,13 +284,11 @@ function actionEditorInitBindings(prefix) {
         var wrap = document.getElementById(prefix + suffix);
         if (wrap) padInitBindableColor(wrap);
     });
-    // Wire monospace toggle + binding validation on all binding-capable text inputs
+    // Wire binding validation on all binding-capable text inputs
     _ACTION_BIND_SUFFIXES.forEach(function(suffix) {
         var el = document.getElementById(prefix + suffix);
         if (el && !el.dataset.bcBind) {
             el.dataset.bcBind = '1';
-            el.oninput = function() { padUpdateMixedBindingFont(el); };
-            padUpdateMixedBindingFont(el);
             if (typeof bindingAttachValidation === 'function') bindingAttachValidation(el);
         }
     });
@@ -350,9 +348,9 @@ function actionEditorLoad(prefix, action) {
     }
     // Notify fields
     el = document.getElementById(prefix + '-notify-text');
-    if (el) { el.value = action.notify_text || ''; padUpdateMixedBindingFont(el); }
+    if (el) { el.value = action.notify_text || ''; }
     el = document.getElementById(prefix + '-notify-duration');
-    if (el) { el.value = action.notify_duration_ms || '3000'; padUpdateMixedBindingFont(el); }
+    if (el) { el.value = action.notify_duration_ms || '3000'; }
     padSetBindableColor(prefix + '-notify-text-color', action.notify_text_color || '', '#ffffff');
     padSetBindableColor(prefix + '-notify-bg-color', action.notify_bg_color || '', '#333333');
     padSetBindableColor(prefix + '-notify-border-color', action.notify_border_color || '', '');
