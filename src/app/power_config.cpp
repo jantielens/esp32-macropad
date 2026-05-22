@@ -17,12 +17,14 @@ static bool equals_ignore_case(const char *a, const char *b) {
 }
 
 PowerMode power_config_parse_power_mode(const DeviceConfig *config) {
-		if (!config || strlen(config->power_mode) == 0) return PowerMode::AlwaysOn;
+		if (!config || strlen(config->operating_mode) == 0) return PowerMode::AlwaysOn;
 
-		if (equals_ignore_case(config->power_mode, "always_on")) return PowerMode::AlwaysOn;
-		if (equals_ignore_case(config->power_mode, "duty_cycle")) return PowerMode::DutyCycle;
-		if (equals_ignore_case(config->power_mode, "config")) return PowerMode::Config;
-		if (equals_ignore_case(config->power_mode, "ap")) return PowerMode::Ap;
+		if (equals_ignore_case(config->operating_mode, "always_on")) return PowerMode::AlwaysOn;
+		if (equals_ignore_case(config->operating_mode, "duty_cycle_mqtt")) return PowerMode::DutyCycle;
+		if (equals_ignore_case(config->operating_mode, "duty_cycle_ble")) return PowerMode::DutyCycleBle;
+		// Internal/runtime-only values (not user-selectable but kept for completeness).
+		if (equals_ignore_case(config->operating_mode, "config")) return PowerMode::Config;
+		if (equals_ignore_case(config->operating_mode, "ap")) return PowerMode::Ap;
 
 		return PowerMode::AlwaysOn;
 }
@@ -40,7 +42,8 @@ MqttPublishScope power_config_parse_mqtt_publish_scope(const DeviceConfig *confi
 const char *power_config_power_mode_to_string(PowerMode mode) {
 		switch (mode) {
 				case PowerMode::AlwaysOn: return "always_on";
-				case PowerMode::DutyCycle: return "duty_cycle";
+				case PowerMode::DutyCycle: return "duty_cycle_mqtt";
+				case PowerMode::DutyCycleBle: return "duty_cycle_ble";
 				case PowerMode::Config: return "config";
 				case PowerMode::Ap: return "ap";
 				default: return "always_on";

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "board_config.h"
+#include "config_manager.h"
 
 // ============================================================================
 // MQTT Wake — binding-driven screensaver wakeup
@@ -12,8 +13,6 @@
 // Supports any binding scheme: [mqtt:...], [expr:...], etc.
 
 #if HAS_MQTT && HAS_DISPLAY
-
-#include "config_manager.h"
 
 // Initialize with config (must remain valid). Call after binding schemes are registered.
 void mqtt_wake_init(const DeviceConfig* config);

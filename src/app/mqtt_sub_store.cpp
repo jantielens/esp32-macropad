@@ -225,7 +225,9 @@ void mqtt_sub_store_subscribe_all() {
     for (uint8_t page = 0; page < MAX_PADS; page++) {
         if (!pad_config_load(page, cfg)) continue;
         // Set page context so [pad:] collector can resolve named bindings
+        #if HAS_DISPLAY
         pad_binding_set_page(cfg);
+        #endif
         // Scan page-level background color for binding tokens
         binding_template_collect_topics(cfg->bg_color, &ctx);
         for (uint8_t b = 0; b < cfg->button_count; b++) {
@@ -243,17 +245,21 @@ void mqtt_sub_store_subscribe_all() {
             }
         }
     }
+    #if HAS_DISPLAY
     pad_binding_set_page(nullptr);
+    #endif
 
     free(cfg);
 
     // Scan screen saver wake binding for MQTT topics
+    #if HAS_DISPLAY
     {
         const DeviceConfig* dcfg = mqtt_manager.config();
         if (dcfg && strlen(dcfg->screen_saver_wake_binding) > 0) {
             binding_template_collect_topics(dcfg->screen_saver_wake_binding, &ctx);
         }
     }
+    #endif
 
     // Update store entries and subscribe
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {

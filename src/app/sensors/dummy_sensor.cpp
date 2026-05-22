@@ -5,6 +5,7 @@
 #include "log_manager.h"
 #include "ha_discovery.h"
 #include "sensor_manager.h"
+#include "../ble_telemetry.h"
 #include <esp_system.h>
 
 static DummySensor g_dummy_sensor;
@@ -25,6 +26,11 @@ void DummySensor::update() {
 		// Generate a synthetic value in a stable range for dashboards.
 		const long r = random(0, 10000); // 0..9999
 		_value = (float)r / 100.0f;      // 0.00..99.99
+
+		#if HAS_BLE
+		// Publish as BTHome v2 temperature (object id 0x02, sint16 in 0.01 C units).
+		ble_telemetry_set_s16(0x02, (int16_t)(_value * 100.0f));
+		#endif
 }
 
 void DummySensor::appendJson(JsonObject &doc) {

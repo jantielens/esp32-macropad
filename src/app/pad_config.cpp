@@ -206,7 +206,9 @@ static void parse_pad_action(JsonVariant v, ButtonAction* act, const char* legac
     memset(act, 0, sizeof(ButtonAction));
 
     if (v.is<JsonObject>()) {
+#if HAS_DISPLAY
         action_parse(v.as<JsonObject>(), *act);
+#endif
         return;
     }
 
@@ -616,7 +618,11 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     if (out->rows > MAX_GRID_ROWS) out->rows = MAX_GRID_ROWS;
 
     // Use device-level button defaults for cascading to buttons
+#if HAS_DISPLAY
     const ButtonDefaults* defs = button_defaults_get();
+#else
+    const ButtonDefaults* defs = nullptr;
+#endif
 
     JsonArray buttons = doc["buttons"];
     out->button_count = 0;
@@ -714,14 +720,18 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
 
     // Preload icons for this pad (picks up template button icons that
     // aren't yet in the PSRAM icon cache, e.g. after template_pad change).
+#if HAS_DISPLAY
     icon_store_preload_pad(page);
+#endif
 
     // Also refresh any pad that references this page as its template_pad
     for (uint8_t i = 0; i < MAX_PADS; i++) {
         if (i == page) continue;
         if (g_cache[i] && g_cache[i]->template_pad == (int8_t)page) {
             cache_update(i);
+#if HAS_DISPLAY
             icon_store_preload_pad(i);
+#endif
         }
     }
 

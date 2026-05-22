@@ -16,6 +16,9 @@
 #include "portal_idle.h"
 #include "wifi_manager.h"
 #include "duty_cycle.h"
+#if HAS_BLE
+#include "ble_telemetry.h"
+#endif
 #if HEALTH_HISTORY_ENABLED
 #include "health_history.h"
 #endif
@@ -289,6 +292,18 @@ void setup()
 		return;
 	}
 
+	#if HAS_BLE
+	if (boot_mode == PowerMode::DutyCycleBle) {
+		// Initialize sensors (their update path buffers BLE telemetry values)
+		sensor_manager_init();
+
+		ble_telemetry_init(device_config.device_name);
+
+		duty_cycle_run(&device_config);
+		return;
+	}
+	#endif
+
 	// Re-apply brightness from loaded config (display was initialized before config load)
 	#if HAS_DISPLAY && HAS_BACKLIGHT
 	LOGI("Main", "Applying loaded brightness: %d%%", device_config.backlight_brightness);
@@ -350,7 +365,9 @@ void setup()
 				wifi_manager_start_mdns(&device_config);
 				device_telemetry_cache_rssi();
 				wifi_manager_register_events();
+				#if HAS_DISPLAY
 				time_binding_start_ntp();
+				#endif
 			} else {
 				LOGW("Main", "WiFi failed - fallback to AP");
 				power_manager_set_current_mode(PowerMode::Ap);

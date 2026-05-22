@@ -102,6 +102,8 @@ async function loadConfig() {
         const config = await response.json();
         // Cache for validation logic (e.g., whether passwords are already set)
         window.deviceConfig = config;
+        // Cache compile-time capability map for fragments that gate UI on it.
+        window.__device_caps = config.caps || {};
         const hasConfig = config.wifi_ssid && config.wifi_ssid !== '';
         
         // Helper to safely set element value
@@ -115,6 +117,14 @@ async function loadConfig() {
             if (element && element.type === 'checkbox') {
                 element.checked = !!checked;
             }
+        };
+
+        const setRadioIfExists = (name, value) => {
+            if (value === undefined || value === null) return;
+            const el = document.querySelector(
+                'input[type="radio"][name="' + name + '"][value="' + value + '"]'
+            );
+            if (el) el.checked = true;
         };
         
         const setTextIfExists = (id, text) => {
@@ -147,11 +157,19 @@ async function loadConfig() {
         setValueIfExists('mqtt_username', config.mqtt_username);
 
         // Power settings
-        setValueIfExists('power_mode', config.power_mode);
+        setRadioIfExists('operating_mode', config.operating_mode);
         setValueIfExists('duty_cycle_wake_seconds', config.duty_cycle_wake_seconds);
         setValueIfExists('mqtt_publish_interval_seconds', config.mqtt_publish_interval_seconds);
         setValueIfExists('portal_idle_timeout_seconds', config.portal_idle_timeout_seconds);
         setValueIfExists('wifi_backoff_max_seconds', config.wifi_backoff_max_seconds);
+
+        // BLE telemetry settings (only present when firmware has HAS_BLE)
+        if (config.ble_burst_count !== undefined) {
+            setValueIfExists('ble_burst_count', config.ble_burst_count);
+        }
+        if (config.ble_adv_interval_ms !== undefined) {
+            setValueIfExists('ble_adv_interval_ms', config.ble_adv_interval_ms);
+        }
 
         // MQTT scope
         setValueIfExists('mqtt_publish_scope', config.mqtt_publish_scope);

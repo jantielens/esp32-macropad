@@ -4,8 +4,17 @@
 // Board Overrides: esp32c3-withsensors
 // ==========================================================================
 
-// Enable MQTT (required for HA discovery in this sample)
+// Enable MQTT (required for HA discovery in this sample when always-on or duty_cycle_mqtt)
 #define HAS_MQTT true
+
+// Headless board: no display, touch, audio, or BLE HID keyboard.
+#define HAS_DISPLAY false
+#define HAS_TOUCH false
+#define HAS_AUDIO false
+#define HAS_BLE_HID false
+
+// Enable BTHome v2 BLE telemetry as an alternative transport (duty_cycle_ble mode).
+#define HAS_BLE true
 
 // Enable user button (GPIO9 on ESP32-C3 Super Mini)
 #define HAS_BUTTON true

@@ -27,8 +27,9 @@ async function saveFragmentConfig(requiresReboot) {
         'wifi_ssid', 'wifi_password', 'device_name', 'fixed_ip',
         'subnet_mask', 'gateway', 'dns1', 'dns2',
         'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
-        'power_mode', 'duty_cycle_wake_seconds', 'mqtt_publish_interval_seconds',
+        'operating_mode', 'duty_cycle_wake_seconds', 'mqtt_publish_interval_seconds',
         'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
+        'ble_burst_count', 'ble_adv_interval_ms',
         'mqtt_publish_scope',
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
         'ble_enabled',
@@ -39,6 +40,13 @@ async function saveFragmentConfig(requiresReboot) {
         'screen_saver_wake_on_touch', 'screen_saver_wake_binding'
     ];
     fields.forEach(function (name) {
+        // Radio groups: pick the checked option (if any).
+        var radios = document.querySelectorAll('input[type="radio"][name="' + name + '"]');
+        if (radios.length > 0) {
+            var checked = document.querySelector('input[type="radio"][name="' + name + '"]:checked');
+            if (checked && !checked.disabled) config[name] = checked.value;
+            return;
+        }
         var el = document.querySelector('[name="' + name + '"]');
         if (!el || el.disabled) return;
         if (el.type === 'checkbox') {
@@ -293,32 +301,59 @@ window.init_network_fragment = function () {
 window.init_mode_fragment = function () {
     initConfigFragment('mode-save-btn', true);
 
-    // Show/hide Duty-Cycle-only settings and the mode-specific hint based on power_mode.
-    function updateModeVisibility() {
-        var modeEl = document.getElementById('power_mode');
-        if (!modeEl) return;
-        var isDuty = (modeEl.value === 'duty_cycle');
-        var dc = document.getElementById('duty-cycle-settings');
-        if (dc) dc.style.display = isDuty ? '' : 'none';
-        var hintAlways = document.getElementById('power_mode_hint_always_on');
-        if (hintAlways) hintAlways.style.display = isDuty ? 'none' : '';
-        var hintDuty = document.getElementById('power_mode_hint_duty_cycle');
-        if (hintDuty) hintDuty.style.display = isDuty ? '' : 'none';
-    }
-    var modeEl = document.getElementById('power_mode');
-    if (modeEl) modeEl.addEventListener('change', updateModeVisibility);
-    // loadConfig() runs asynchronously; observe the field's value to apply visibility after it populates.
-    if (modeEl) {
-        var initial = modeEl.value;
-        var attempts = 0;
-        var timer = setInterval(function () {
-            attempts++;
-            if (modeEl.value !== initial || attempts > 40) {
-                clearInterval(timer);
-                updateModeVisibility();
+    // Hide the BLE option unless the firmware build advertises BLE telemetry.
+    function applyCapsVisibility() {
+        var caps = (window.__device_caps || {});
+        var bleOpt = document.getElementById('mode_opt_duty_cycle_ble');
+        if (bleOpt) bleOpt.style.display = caps.ble ? '' : 'none';
+        // If BLE was the persisted choice but the build no longer supports it,
+        // fall back to always_on.
+        if (!caps.ble) {
+            var bleRadio = document.getElementById('operating_mode_duty_cycle_ble');
+            if (bleRadio && bleRadio.checked) {
+                var alwaysOn = document.getElementById('operating_mode_always_on');
+                if (alwaysOn) alwaysOn.checked = true;
             }
-        }, 50);
+        }
     }
+
+    function getSelectedMode() {
+        var checked = document.querySelector('input[type="radio"][name="operating_mode"]:checked');
+        return checked ? checked.value : 'always_on';
+    }
+
+    function updateModeVisibility() {
+        var mode = getSelectedMode();
+        var isDutyMqtt = (mode === 'duty_cycle_mqtt');
+        var isDutyBle = (mode === 'duty_cycle_ble');
+        var isAnyDuty = isDutyMqtt || isDutyBle;
+
+        var dc = document.getElementById('duty-cycle-settings');
+        if (dc) dc.style.display = isAnyDuty ? '' : 'none';
+        // Wi-Fi backoff is meaningless for BLE.
+        var backoff = document.getElementById('wifi-backoff-row');
+        if (backoff) backoff.style.display = isDutyMqtt ? '' : 'none';
+        var ble = document.getElementById('ble-telemetry-settings');
+        if (ble) ble.style.display = isDutyBle ? '' : 'none';
+    }
+
+    var radios = document.querySelectorAll('input[type="radio"][name="operating_mode"]');
+    radios.forEach(function (r) { r.addEventListener('change', updateModeVisibility); });
+
+    // loadConfig() runs asynchronously; observe selection until the populated
+    // value differs from the initial DOM state (or we time out).
+    var initial = getSelectedMode();
+    var attempts = 0;
+    var timer = setInterval(function () {
+        attempts++;
+        if (getSelectedMode() !== initial || (window.__device_caps && Object.keys(window.__device_caps).length) || attempts > 40) {
+            clearInterval(timer);
+            applyCapsVisibility();
+            updateModeVisibility();
+        }
+    }, 50);
+
+    applyCapsVisibility();
     updateModeVisibility();
 };
 
