@@ -127,6 +127,10 @@ protected:
     virtual const char* getLogTag() const = 0;
     virtual MipiDsiTimingConfig getTimingConfig() const = 0;
 
+    // Zero both DPI framebuffers and flush PSRAM cache. Used by displaySleep()
+    // so the scanout (if it ever resumes) reads black, not stale UI content.
+    void blankFramebuffers();
+
 public:
     MipiDsiDriver();
     ~MipiDsiDriver() override;

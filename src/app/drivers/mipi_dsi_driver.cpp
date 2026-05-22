@@ -435,8 +435,43 @@ bool MipiDsiDriver::asyncFlush() const {
     return true;
 }
 
+// Zero both DPI framebuffers and flush PSRAM cache so the scanout sees black.
+// The ESP-IDF DPI peripheral keeps streaming the framebuffer over the MIPI
+// lanes at 60 Hz even after DCS Sleep In, so the only reliable way to
+// protect IPS cells from hours of identical content (image-persistence /
+// ghosting) is to make sure that ongoing scanout reads all-zeros.
+// (Note: esp_lcd_panel_disp_on_off() on the DPI panel handle is not
+// implemented in our ESP-IDF version — it returns ESP_ERR_NOT_SUPPORTED
+// and logs an error — so framebuffer blanking is the actual mitigation.)
+void MipiDsiDriver::blankFramebuffers() {
+    if (!panel_handle) return;
+    void* fb0 = nullptr;
+    void* fb1 = nullptr;
+    if (esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 2, &fb0, &fb1) != ESP_OK) {
+        return;
+    }
+    const size_t fb_bytes = (size_t)displayWidth * (size_t)displayHeight * sizeof(uint16_t);
+    if (fb0) {
+        memset(fb0, 0, fb_bytes);
+        esp_cache_msync(fb0, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    }
+    if (fb1 && fb1 != fb0) {
+        memset(fb1, 0, fb_bytes);
+        esp_cache_msync(fb1, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    }
+}
+
 void MipiDsiDriver::displaySleep() {
     if (!ioHandle) return;
+
+    // Blank framebuffers so the DPI peripheral's continuous scanout reads
+    // black for the entire sleep period (image-retention mitigation).
+    // We intentionally do NOT call esp_lcd_panel_disp_on_off(panel, false)
+    // here — the DPI panel driver in our ESP-IDF version doesn't implement
+    // it and would just log "disp_on_off is not supported by this panel".
+    blankFramebuffers();
+
+    // Standard DCS power-down: Display Off → Sleep In.
     esp_lcd_panel_io_tx_param(ioHandle, 0x28, NULL, 0);  // Display Off
     delay(20);
     esp_lcd_panel_io_tx_param(ioHandle, 0x10, NULL, 0);  // Sleep In
