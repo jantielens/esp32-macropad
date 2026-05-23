@@ -282,6 +282,7 @@ This template includes an **optional** custom partition scheme that:
 ### What’s Included
 
 - Partition CSV: `partitions/partitions_ota_1_9mb.csv`
+- Partition CSV: `partitions/partitions_ota_2mb.csv` — for headless boards (`HAS_DISPLAY=false`). Drops the unused SPIFFS slot and grows each OTA slot to `0x1F0000` (~1.94 MB, +64 KB headroom vs `ota_1_9mb`). Used by `esp32c3-withsensors`.
 - Board example in `config.sh`: `esp32c3_ota_1_9mb` (uses `PartitionScheme=ota_1_9mb`)
 - Installer script: `tools/install-custom-partitions.sh`
 
