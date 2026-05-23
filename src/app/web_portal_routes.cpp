@@ -41,7 +41,12 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/firmware.html", HTTP_GET, handleFirmware);
 
 		// Asset routes
-		server->on("/portal.js", HTTP_GET, handleJS);
+		// /portal.js with no query param returns a tiny bootstrap that chain-loads
+		// enabled chunks one at a time (see handlePortalJS). /portal.js?name=NAME
+		// returns the corresponding gzipped chunk. This keeps boot to a single
+		// in-flight HTTP request — matches the original ESP-Hosted DMA budget.
+		server->on("/portal.js", HTTP_GET, handlePortalJS);
+		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 
 		// API endpoints
