@@ -161,6 +161,74 @@ concatenate_bundle() {
     done < "$manifest"
 }
 
+# concatenate_bundle_chunked <manifest> <chunks_array_name> <flags_array_name>
+#   Parses a .bundle manifest with optional `# [HAS_FLAG]` / `# [/HAS_FLAG]`
+#   markers and emits one temp file per chunk (in order). Populates:
+#     chunks: list of temp file paths (caller must rm)
+#     flags:  list of feature flag strings (empty for always-on chunks)
+#   Always produces at least one chunk; empty chunks are pruned. Returns 1
+#   if the manifest does not exist.
+concatenate_bundle_chunked() {
+    local manifest="$1"
+    local -n _chunks="$2"
+    local -n _flags="$3"
+    [[ -f "$manifest" ]] || return 1
+    _chunks=()
+    _flags=()
+
+    local current_flag=""
+    local current_tmp=""
+    local has_content=0
+    current_tmp=$(mktemp /tmp/bundle_chunk_XXXXXX)
+
+    while IFS= read -r bline || [[ -n "$bline" ]]; do
+        # Detect [HAS_FLAG] / [/HAS_FLAG] markers BEFORE comment stripping
+        local trimmed
+        trimmed=$(echo "$bline" | xargs)
+        if [[ "$trimmed" =~ ^#[[:space:]]*\[(/?)(HAS_[A-Z_0-9]+)\][[:space:]]*$ ]]; then
+            # Flush current chunk
+            if [[ $has_content -eq 1 ]]; then
+                _chunks+=("$current_tmp")
+                _flags+=("$current_flag")
+            else
+                rm -f "$current_tmp"
+            fi
+            # Update flag context
+            if [[ "${BASH_REMATCH[1]}" == "/" ]]; then
+                current_flag=""
+            else
+                current_flag="${BASH_REMATCH[2]}"
+            fi
+            # Open new chunk
+            current_tmp=$(mktemp /tmp/bundle_chunk_XXXXXX)
+            has_content=0
+            continue
+        fi
+        bline="${bline%%#*}"
+        bline="$(echo "$bline" | xargs)"
+        [[ -z "$bline" ]] && continue
+        cat "$WEB_DIR/$bline" >> "$current_tmp"
+        echo >> "$current_tmp"
+        has_content=1
+    done < "$manifest"
+
+    # Flush trailing chunk
+    if [[ $has_content -eq 1 ]]; then
+        _chunks+=("$current_tmp")
+        _flags+=("$current_flag")
+    else
+        rm -f "$current_tmp"
+    fi
+}
+
+# bundle_has_chunk_markers <manifest>
+#   Returns 0 if the manifest contains any `# [HAS_*]` markers, 1 otherwise.
+bundle_has_chunk_markers() {
+    local manifest="$1"
+    [[ -f "$manifest" ]] || return 1
+    grep -qE '^[[:space:]]*#[[:space:]]*\[/?HAS_[A-Z_0-9]+\][[:space:]]*$' "$manifest"
+}
+
 declare -A JS_SKIP_FILES
 declare -A CSS_SKIP_FILES
 discover_bundle_manifests "js" JS_SKIP_FILES
@@ -527,13 +595,74 @@ with open('$css_source', 'r') as f:
     GZIPPED_SIZES["css_$filename"]=$gzipped_size
 done
 
+# Per-chunk feature-flag map for chunked JS bundles. Keys are JS_CONTENTS keys
+# (e.g. "portal_chunk0"); values are HAS_* macro names (or empty for always-on).
+declare -A JS_CHUNK_FLAGS
+# Map from bundle primary key (e.g. "portal") to space-separated chunk keys
+# in concatenation order. Used during header emission to write the chunks table.
+declare -A JS_BUNDLE_CHUNKS
+
 # Process JS files (minify, with bundle support)
 for js_file in "${JS_FILES[@]}"; do
     raw_name=$(basename "$js_file" .js)
     filename="${raw_name//[.-]/_}"
 
-    # Bundle support: if a .bundle manifest exists, concatenate fragments
     bundle_manifest="${js_file}.bundle"
+
+    # --- Chunked bundle path (manifest contains [HAS_*] markers) ---
+    if bundle_has_chunk_markers "$bundle_manifest"; then
+        echo "Bundling JS (chunked): $raw_name.js (from $(basename "$bundle_manifest"))..."
+
+        chunk_paths=()
+        chunk_flags=()
+        concatenate_bundle_chunked "$bundle_manifest" chunk_paths chunk_flags
+
+        chunk_keys=""
+        for ci in "${!chunk_paths[@]}"; do
+            chunk_path="${chunk_paths[$ci]}"
+            chunk_flag="${chunk_flags[$ci]}"
+            chunk_key="${filename}_chunk${ci}"
+
+            # Syntax-check the chunk independently
+            if command -v node &> /dev/null; then
+                if ! node --check "$chunk_path" 2>/dev/null; then
+                    echo "  ✗ Bundle chunk ${ci} (${chunk_flag:-always}) has syntax errors:"
+                    node --check "$chunk_path" 2>&1 | sed 's/^/    /'
+                    rm -f "${chunk_paths[@]}"
+                    exit 1
+                fi
+            fi
+
+            echo "  Minifying chunk ${ci} (${chunk_flag:-always})..."
+            chunk_orig_size=$(wc -c <"$chunk_path")
+
+            chunk_minified=$(python3 -c "
+import rjsmin
+with open('$chunk_path', 'r') as f:
+    js = f.read()
+    print(rjsmin.jsmin(js), end='')
+")
+            rm -f "$chunk_path"
+
+            JS_CONTENTS["$chunk_key"]="$chunk_minified"
+            JS_CHUNK_FLAGS["$chunk_key"]="$chunk_flag"
+            chunk_min_size=$(echo -n "$chunk_minified" | wc -c)
+
+            chunk_gzipped=$(gzip_to_c_array "$chunk_minified")
+            JS_GZIP_CONTENTS["$chunk_key"]="$chunk_gzipped"
+            chunk_gz_size=$(echo -n "$chunk_minified" | gzip -9 -c | wc -c)
+
+            ORIGINAL_SIZES["js_$chunk_key"]=$chunk_orig_size
+            PROCESSED_SIZES["js_$chunk_key"]=$chunk_min_size
+            GZIPPED_SIZES["js_$chunk_key"]=$chunk_gz_size
+
+            chunk_keys+="$chunk_key "
+        done
+        JS_BUNDLE_CHUNKS["$filename"]="${chunk_keys% }"
+        continue
+    fi
+
+    # --- Plain bundle / single-file path ---
     js_source="$js_file"
     if concatenate_bundle "$bundle_manifest" js_source; then
         echo "Bundling JS: $raw_name.js (from $(basename "$bundle_manifest"))..."
@@ -753,8 +882,13 @@ ${CSS_GZIP_CONTENTS[$filename]}
 EOF
 done
 
-# Generate JS sections (gzipped)
+# Generate JS sections (gzipped). Chunk entries are wrapped in #if guards
+# so headless builds drop disabled chunks at compile time.
 for filename in "${!JS_CONTENTS[@]}"; do
+    js_flag="${JS_CHUNK_FLAGS[$filename]:-}"
+    if [[ -n "$js_flag" ]]; then
+        echo "#if $js_flag" >> "$OUTPUT_FILE"
+    fi
     cat >> "$OUTPUT_FILE" << EOF
 // JavaScript from src/app/web/${filename}.js (minified + gzipped)
 const uint8_t ${filename}_js_gz[] PROGMEM = {
@@ -762,6 +896,10 @@ ${JS_GZIP_CONTENTS[$filename]}
 };
 
 EOF
+    if [[ -n "$js_flag" ]]; then
+        echo "#endif // $js_flag" >> "$OUTPUT_FILE"
+        echo >> "$OUTPUT_FILE"
+    fi
 done
 
 # Add size constants (gzipped sizes)
@@ -790,7 +928,60 @@ for filename in "${!CSS_CONTENTS[@]}"; do
 done
 
 for filename in "${!JS_CONTENTS[@]}"; do
-    echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
+    js_flag="${JS_CHUNK_FLAGS[$filename]:-}"
+    if [[ -n "$js_flag" ]]; then
+        echo "#if $js_flag" >> "$OUTPUT_FILE"
+        echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
+        echo "#endif // $js_flag" >> "$OUTPUT_FILE"
+    else
+        echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
+    fi
+done
+
+# Generate JS bundle chunks tables. For each chunked bundle (e.g. portal_js),
+# emit an array of {data, len} chunks in concatenation order, with per-entry
+# #if guards. The runtime serves enabled chunks as a multi-member gzip stream
+# (RFC 1952; supported by all major browsers natively).
+for bundle_name in "${!JS_BUNDLE_CHUNKS[@]}"; do
+    chunks="${JS_BUNDLE_CHUNKS[$bundle_name]}"
+    cat >> "$OUTPUT_FILE" << EOF
+
+// JS bundle chunks table for ${bundle_name}.js (multi-member gzip stream)
+struct JsBundleChunk {
+    const uint8_t* data;
+    size_t len;
+};
+
+static const JsBundleChunk ${bundle_name}_js_chunks[] = {
+EOF
+    for ckey in $chunks; do
+        cflag="${JS_CHUNK_FLAGS[$ckey]:-}"
+        if [[ -n "$cflag" ]]; then
+            echo "#if $cflag" >> "$OUTPUT_FILE"
+            echo "    {${ckey}_js_gz, sizeof(${ckey}_js_gz)}," >> "$OUTPUT_FILE"
+            echo "#endif // $cflag" >> "$OUTPUT_FILE"
+        else
+            echo "    {${ckey}_js_gz, sizeof(${ckey}_js_gz)}," >> "$OUTPUT_FILE"
+        fi
+    done
+    cat >> "$OUTPUT_FILE" << EOF
+};
+
+static constexpr size_t ${bundle_name}_js_chunks_count =
+    sizeof(${bundle_name}_js_chunks) / sizeof(${bundle_name}_js_chunks[0]);
+
+// Total gzipped length across enabled chunks (compile-time constant — each
+// chunk's sizeof() is a compile-time value and #if-disabled chunks are not
+// in the array).
+static inline size_t ${bundle_name}_js_total_len() {
+    size_t total = 0;
+    for (size_t i = 0; i < ${bundle_name}_js_chunks_count; i++) {
+        total += ${bundle_name}_js_chunks[i].len;
+    }
+    return total;
+}
+
+EOF
 done
 
 # Generate fragment lookup table for runtime dispatch
