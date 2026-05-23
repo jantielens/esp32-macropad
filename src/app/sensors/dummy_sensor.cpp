@@ -47,10 +47,10 @@ void DummySensor::publishHaDiscovery(MqttManager &mqtt) {
 				"dummy_value",
 				"Dummy Value",
 				"{{ value_json.dummy_value }}",
-				"",
-				nullptr,
-				nullptr,
-				"diagnostic"
+				"",            // unit (synthetic, unitless)
+				nullptr,       // device_class
+				"measurement", // state_class — required for HA to treat as numeric / graphable
+				nullptr        // entity_category — main UI (not "diagnostic")
 		);
 }
 #endif
