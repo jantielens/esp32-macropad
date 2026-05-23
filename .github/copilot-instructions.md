@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devices with touch screens. Built with `arduino-cli` for headless builds. Designed for WSL2/Linux environments with local toolchain installation (no system dependencies). All supported boards have a display and touch input.
+ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devices with touch screens. Built with `arduino-cli` for headless builds. Designed for WSL2/Linux environments with local toolchain installation (no system dependencies). The primary boards target display + touch hardware; a small set of headless reference boards (e.g. `esp32c3-withsensors`) also build against the same firmware for BTHome / MQTT sensor-node use cases.
 
 ## Architecture
 
