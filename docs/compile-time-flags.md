@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 172
+Total flags: 174
 
 ### Features (HAS_*)
 
@@ -101,9 +101,11 @@ Total flags: 172
 
 ### Limits & Tuning
 
+- **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
+- **HTTP_STREAM_CHUNK_SIZE** default: `(no default)` — failures (size ~2.3 KB requested vs ~1.6 KB largest free).
 - **JD9165_DSI_DPI_CLK_HZ** default: `51200000L` — DPI pixel clock in Hz.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
@@ -504,6 +506,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/touch_drivers.cpp
   - src/app/touch_manager.cpp
+- **AP_MAX_CONNECTIONS**
+  - src/app/web_portal_ap.cpp
 - **AUDIO_CODEC_ADDR**
   - src/app/board_config.h
 - **AUDIO_I2S_BCLK**
@@ -562,6 +566,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS**
   - src/app/board_config.h
+- **HTTP_STREAM_CHUNK_SIZE**
+  - src/app/web_portal_utils.h
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **JD9165_DSI_HSYNC_BACK_PORCH**
