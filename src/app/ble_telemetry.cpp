@@ -93,8 +93,15 @@ void ble_telemetry_init(const char *device_name) {
         LOGE(TAG, "BLE stack init failed");
         return;
     }
+    // Crank TX power to the max (+9 dBm). Default is ~0 dBm which is too weak
+    // for boards with poor PCB antennas (e.g. ESP32-C3 Super Mini) to reliably
+    // reach a BLE proxy like a Shelly across the room. ESP_PWR_LVL_P9 adds
+    // ~9 dB → roughly 2.5x range improvement and dramatically better odds of
+    // landing in a passive scanner's listen window.
+    BLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_ADV);
+    BLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
     g_initialized = true;
-    LOGI(TAG, "BLE telemetry initialized as '%s'", g_device_name);
+    LOGI(TAG, "BLE telemetry initialized as '%s' (TX +9 dBm)", g_device_name);
 }
 
 void ble_telemetry_deinit() {
@@ -146,9 +153,13 @@ bool ble_telemetry_advertise_burst(uint8_t burst_count, uint16_t interval_ms) {
         return false;
     }
 
+    // Primary advertisement: flags + BTHome service data only. The 31-byte BLE
+    // adv budget fills fast (flags = 3 bytes, service-data overhead = 4 bytes),
+    // so the device name is intentionally moved to the scan response. Without
+    // this split, a long device name silently squeezes out the BTHome payload
+    // and the device becomes invisible to BTHome receivers.
     BLEAdvertisementData adv_data;
     adv_data.setFlags(0x06);  // LE General Discoverable | BR/EDR Not Supported
-    adv_data.setName(String(g_device_name));
     // Arduino-ESP32 BLE API expects String; use concat(buf, len) to preserve
     // binary bytes (including embedded NULs) in the service data blob.
     String svc_data;
@@ -156,11 +167,18 @@ bool ble_telemetry_advertise_burst(uint8_t burst_count, uint16_t interval_ms) {
     adv_data.setServiceData(BLEUUID((uint16_t)BTHOME_SERVICE_UUID), svc_data);
     adv->setAdvertisementData(adv_data);
 
+    // Scan response carries the human-readable name for nRF Connect / phones.
+    // HA's BTHome integration identifies the device by MAC, so this is purely
+    // cosmetic on the receive side.
+    BLEAdvertisementData scan_resp;
+    scan_resp.setName(String(g_device_name));
+    adv->setScanResponseData(scan_resp);
+
     // Convert ms to BLE adv interval units (0.625 ms each).
     const uint16_t interval_units = (uint16_t)((interval_ms * 1000UL) / 625UL);
     adv->setMinInterval(interval_units);
     adv->setMaxInterval(interval_units);
-    adv->setScanResponse(false);
+    adv->setScanResponse(true);
 
     LOGI(TAG, "Advertising BTHome burst: %u packets @ %u ms (payload %u bytes, %u objects)",
          (unsigned)burst_count, (unsigned)interval_ms,
