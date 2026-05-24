@@ -18,6 +18,7 @@ extern "C" unsigned long millis() { return s_millis; }
 // ---------------------------------------------------------------------------
 #include "pad_config.h"
 void action_dispatch(const ButtonAction&, const char*) {}
+void action_list_dispatch(const ButtonAction*, uint8_t, const char*) {}
 
 // ---------------------------------------------------------------------------
 // Unit under test
