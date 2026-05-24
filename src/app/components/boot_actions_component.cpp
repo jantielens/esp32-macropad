@@ -5,23 +5,22 @@
 #include "boot_actions.h"
 #include "log_manager.h"
 #include "web_portal_cors.h"
+#include "web_portal_json.h"
 
 #include <ArduinoJson.h>
 
 static void boot_actions_get_config(AsyncWebServerRequest *request) {
     const BootActionsConfig* cfg = boot_actions_get();
 
-    StaticJsonDocument<1024> doc;
-    JsonArray arr = doc.createNestedArray("actions");
+    auto doc = make_psram_json_doc(1024);
+    JsonArray arr = doc->createNestedArray("actions");
 
     for (uint8_t i = 0; i < cfg->action_count; i++) {
         JsonObject obj = arr.createNestedObject();
         action_to_json(cfg->actions[i], obj);
     }
 
-    String output;
-    serializeJson(doc, output);
-    request->send(200, "application/json", output);
+    web_portal_send_json_chunked(request, doc);
 }
 
 static void boot_actions_save_config(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {

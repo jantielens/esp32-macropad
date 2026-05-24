@@ -40,8 +40,11 @@
 #define DISPLAY_ROTATION 1    // Portrait: 90° CW software rotation in flush path
 
 // LVGL draw buffer: PSRAM is fine — DMA2D handles the copy to the framebuffer.
+// 80 rows × 600 px ≈ 96 KB per buffer. 120 rows pushed per-flush DMA bursts
+// to ~144 KB, increasing PSRAM bandwidth contention with the DPI scanout and
+// the image-fetch task. 80 rows is the same value the other P4 boards use.
 #define LVGL_BUFFER_PREFER_INTERNAL false
-#define LVGL_BUFFER_SIZE (DISPLAY_HEIGHT * 120) // portrait logical width × 120 rows
+#define LVGL_BUFFER_SIZE (DISPLAY_HEIGHT * 80)  // portrait logical width × 80 rows
 #define LVGL_DRAW_BUF_COUNT 2                   // double-buffer: overlap render + flush
 
 // LVGL refresh period — 15 ms (~66 fps target).
@@ -106,6 +109,13 @@
 // ============================================================================
 // Hide PSRAM flicker when screensaver fades (DPI FB lives in PSRAM).
 #define DISPLAY_BLANK_ON_SAVE true
+// Hold panel RST low during screensaver sleep. The JD9165 + HKC IPS combo
+// shows washed-out colors after multi-hour idle even with DCS Sleep In and
+// framebuffer blanking — only a full hardware reset reliably de-biases
+// the TFT cells. Wake re-runs the vendor init sequence (~180-230 ms total:
+// 50 ms reset-release + vendor command stream + 120 ms Sleep Out + 50 ms
+// Display On).
+#define DISPLAY_HARD_RESET_ON_SLEEP true
 // Avoid PSRAM bus contention — disable background task telemetry.
 #define DEVICE_TELEMETRY_BACKGROUND_TASKS 0
 #define DEVICE_TELEMETRY_CPU_MONITOR 1

@@ -78,7 +78,10 @@ static void wifi_ping_start(IPAddress gateway) {
 		cfg.timeout_ms = 2000;
 		cfg.interval_ms = 0;
 		cfg.data_size = 32;
-		cfg.task_stack_size = 2048;
+		// 2048 was marginal: stack canary tripped on jc3636w518 after ~90 min
+		// uptime when a low-priority ISR fired while the ping task was deep
+		// in lwIP send/recv. 4096 gives comfortable headroom.
+		cfg.task_stack_size = 4096;
 		cfg.task_prio = 1;  // lowest priority — never starve LVGL
 
 		ip_addr_t target = {};

@@ -10,6 +10,7 @@
 #include "board_config.h"
 
 // --- Always-available components (no feature flag) ---
+#include "components/setup_component.cpp"
 #include "components/wifi_component.cpp"
 #include "components/device_name_component.cpp"
 #include "components/network_component.cpp"

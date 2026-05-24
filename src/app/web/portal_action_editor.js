@@ -284,13 +284,11 @@ function actionEditorInitBindings(prefix) {
         var wrap = document.getElementById(prefix + suffix);
         if (wrap) padInitBindableColor(wrap);
     });
-    // Wire monospace toggle + binding validation on all binding-capable text inputs
+    // Wire binding validation on all binding-capable text inputs
     _ACTION_BIND_SUFFIXES.forEach(function(suffix) {
         var el = document.getElementById(prefix + suffix);
         if (el && !el.dataset.bcBind) {
             el.dataset.bcBind = '1';
-            el.oninput = function() { padUpdateMixedBindingFont(el); };
-            padUpdateMixedBindingFont(el);
             if (typeof bindingAttachValidation === 'function') bindingAttachValidation(el);
         }
     });
@@ -350,9 +348,9 @@ function actionEditorLoad(prefix, action) {
     }
     // Notify fields
     el = document.getElementById(prefix + '-notify-text');
-    if (el) { el.value = action.notify_text || ''; padUpdateMixedBindingFont(el); }
+    if (el) { el.value = action.notify_text || ''; }
     el = document.getElementById(prefix + '-notify-duration');
-    if (el) { el.value = action.notify_duration_ms || '3000'; padUpdateMixedBindingFont(el); }
+    if (el) { el.value = action.notify_duration_ms || '3000'; }
     padSetBindableColor(prefix + '-notify-text-color', action.notify_text_color || '', '#ffffff');
     padSetBindableColor(prefix + '-notify-bg-color', action.notify_bg_color || '', '#333333');
     padSetBindableColor(prefix + '-notify-border-color', action.notify_border_color || '', '');
@@ -545,6 +543,13 @@ function actionEditorPopulateScreens(prefixes, screens) {
             opt.textContent = s.name;
             sel.appendChild(opt);
         });
+        // Apply pending value deferred by actionEditorLoad() when the option
+        // did not yet exist at load time.
+        if (sel.hasAttribute('data-pending-value')) {
+            var pv = sel.getAttribute('data-pending-value');
+            sel.value = pv;
+            if (sel.value === pv) sel.removeAttribute('data-pending-value');
+        }
     });
 }
 
@@ -564,4 +569,60 @@ function actionEditorPopulateSounds(prefixes, sounds) {
             sel.appendChild(opt);
         });
     });
+}
+
+// ============================================================================
+// Action list helpers — DRY plumbing for fragments that host N action editors
+// ============================================================================
+
+// Render N action editor groups inside containerId, one per prefix in prefixes[].
+// labels[i] is the <summary> text for that group (defaults to prefix).
+function actionEditorListRender(containerId, prefixes, labels) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var html = '';
+    prefixes.forEach(function(prefix, i) {
+        var summary = (labels && labels[i]) || prefix;
+        html += '<details class="editor-group" id="' + prefix + '-group">';
+        html += '<summary>' + summary + '</summary>';
+        html += '<div class="editor-group-body">';
+        html += actionEditorHTML(prefix);
+        html += '</div></details>';
+    });
+    container.innerHTML = html;
+}
+
+// Load an array of action objects into N editor prefixes (positional).
+function actionEditorListLoad(prefixes, actions) {
+    actions = actions || [];
+    prefixes.forEach(function(prefix, i) {
+        actionEditorLoad(prefix, actions[i] || {});
+    });
+}
+
+// Build an array of action objects from N editor prefixes.
+// opts.trimEmpty (default true): drop trailing actions with empty type.
+function actionEditorListBuild(prefixes, opts) {
+    opts = opts || {};
+    var trim = (opts.trimEmpty !== false);
+    var out = prefixes.map(function(prefix) { return actionEditorBuild(prefix); });
+    if (trim) {
+        while (out.length > 0 && !out[out.length - 1].type) out.pop();
+    }
+    return out;
+}
+
+// Wire screen + sound dropdowns for a fragment hosting one or more action editors.
+// Fetches deviceInfo (screens) and /api/sounds/list once and populates the given prefixes.
+function actionEditorWireFragment(prefixes) {
+    if (typeof getDeviceInfo === 'function') {
+        getDeviceInfo().then(function(info) {
+            if (info && info.available_screens) {
+                actionEditorPopulateScreens(prefixes, info.available_screens);
+            }
+        });
+    }
+    fetch('/api/sounds/list').then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(sounds) { actionEditorPopulateSounds(prefixes, sounds); })
+        .catch(function() {});
 }

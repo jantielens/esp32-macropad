@@ -125,6 +125,7 @@ echo "=== Building unit tests: timer_format ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/board_config.h \
     -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_timer_format.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_timer_format

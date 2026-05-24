@@ -30,6 +30,7 @@ bool onPpaDone(ppa_client_handle_t client,
 static bool IRAM_ATTR onColorTransDone(esp_lcd_panel_handle_t panel,
                                        esp_lcd_dpi_panel_event_data_t* edata,
                                        void* user_ctx) {
+    g_displayFlushBusy = false;
     lv_display_t* disp = (lv_display_t*)user_ctx;
     lv_display_flush_ready(disp);
     return false;
@@ -145,12 +146,16 @@ void MipiDsiDriver::init() {
     // 4. Create DPI panel with disable_lp=true and use_dma2d=true
     //    disable_lp: keeps D-PHY in HS mode during blanking (avoids flicker)
     //    use_dma2d: hardware-accelerated async pixel copy (avoids blocking CPU)
+    //    num_fbs=2: double-buffered framebuffer. ESP-IDF mirrors draw_bitmap
+    //      writes across both FBs so partial flushes stay coherent, and
+    //      scanout reads one FB while draw_bitmap writes the other —
+    //      eliminates the tear/flicker window inherent to single-FB mode.
     esp_lcd_dpi_panel_config_t dpi_config = {
         .virtual_channel = 0,
         .dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
         .dpi_clock_freq_mhz = (uint32_t)(timing.dpi_clock_hz / 1000000),
         .pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB565,
-        .num_fbs = 1,
+        .num_fbs = 2,
         .video_timing = {
             .h_size = displayWidth,
             .v_size = displayHeight,
@@ -169,28 +174,20 @@ void MipiDsiDriver::init() {
     ESP_ERROR_CHECK(esp_lcd_new_panel_dpi(mipi_dsi_bus, &dpi_config, &panel_handle));
     
     // 5. Send vendor init commands via DSI command mode
-    const mipi_dsi_init_cmd_t* cmds = getInitCommands();
-    const size_t num_cmds = getInitCommandCount();
-    for (size_t i = 0; i < num_cmds; i++) {
-        ESP_ERROR_CHECK(esp_lcd_panel_io_tx_param(
-            io_handle, cmds[i].cmd, cmds[i].data, cmds[i].data_bytes
-        ));
-        if (cmds[i].delay_ms > 0) {
-            delay(cmds[i].delay_ms);
-        }
-    }
-    LOGI(tag, "Sent %d vendor init commands", (int)num_cmds);
+    sendInitCommands();
     
     // 6. Initialize DPI panel — starts continuous DMA refresh from PSRAM
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     
-    // 7. Get PSRAM framebuffer pointer (allocated by ESP-IDF during panel creation)
-    void* fb = nullptr;
-    ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 1, &fb));
-    framebuffer = (uint16_t*)fb;
+    // 7. Get PSRAM framebuffer pointers (allocated by ESP-IDF during panel creation).
+    //    With num_fbs=2 the driver ping-pongs between fb0 and fb1 internally.
+    void* fb0 = nullptr;
+    void* fb1 = nullptr;
+    ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 2, &fb0, &fb1));
+    framebuffer = (uint16_t*)fb0;
     
-    LOGI(tag, "DSI initialized: %dx%d, disable_lp=%s, use_dma2d=true, single FB @ %p",
-         displayWidth, displayHeight, timing.disable_lp ? "true" : "false", framebuffer);
+    LOGI(tag, "DSI initialized: %dx%d, disable_lp=%s, use_dma2d=true, dual FB @ %p / %p",
+         displayWidth, displayHeight, timing.disable_lp ? "true" : "false", fb0, fb1);
     
     delay(50);
     setBacklightBrightness(currentBrightness);
@@ -305,7 +302,9 @@ bool onPpaDone(ppa_client_handle_t client,
                ppa_event_data_t* event_data,
                void* user_ctx) {
     MipiDsiDriver* driver = (MipiDsiDriver*)user_ctx;
-    // Issue DMA2D copy of rotated buffer to framebuffer
+    // Issue DMA2D copy of rotated buffer to framebuffer.
+    // g_displayFlushBusy was already set at the top of pushColors() and
+    // remains true until onColorTransDone clears it.
     esp_lcd_panel_draw_bitmap(driver->panel_handle,
                               driver->physX, driver->physY,
                               driver->physX + driver->physW,
@@ -319,6 +318,11 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
     if (!panel_handle || !data || flushW == 0 || flushH == 0) {
         return;
     }
+
+    // Mark flush in-flight for the entire duration of the push, covering both
+    // the non-rotated direct DMA2D path and the rotated PPA→DMA2D chain.
+    // Cleared by onColorTransDone ISR after the final DMA2D copy completes.
+    g_displayFlushBusy = true;
 
     if (displayRotation == 0 || !rotBuffer || !ppaClient) {
         // No rotation — direct DMA2D async copy
@@ -421,26 +425,141 @@ bool MipiDsiDriver::asyncFlush() const {
     return true;
 }
 
+// Zero both DPI framebuffers and flush PSRAM cache so the scanout sees black.
+// The ESP-IDF DPI peripheral keeps streaming the framebuffer over the MIPI
+// lanes at 60 Hz even after DCS Sleep In, so the only reliable way to
+// protect IPS cells from hours of identical content (image-persistence /
+// ghosting) is to make sure that ongoing scanout reads all-zeros.
+// (Note: esp_lcd_panel_disp_on_off() on the DPI panel handle is not
+// implemented in our ESP-IDF version — it returns ESP_ERR_NOT_SUPPORTED
+// and logs an error — so framebuffer blanking is the actual mitigation.)
+void MipiDsiDriver::blankFramebuffers() {
+    if (!panel_handle) return;
+    void* fb0 = nullptr;
+    void* fb1 = nullptr;
+    if (esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 2, &fb0, &fb1) != ESP_OK) {
+        return;
+    }
+    const size_t fb_bytes = (size_t)displayWidth * (size_t)displayHeight * sizeof(uint16_t);
+    if (fb0) {
+        memset(fb0, 0, fb_bytes);
+        esp_cache_msync(fb0, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    }
+    if (fb1 && fb1 != fb0) {
+        memset(fb1, 0, fb_bytes);
+        esp_cache_msync(fb1, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    }
+}
+
+void MipiDsiDriver::sendInitCommands() {
+    if (!ioHandle) return;
+    const mipi_dsi_init_cmd_t* cmds = getInitCommands();
+    const size_t num_cmds = getInitCommandCount();
+    for (size_t i = 0; i < num_cmds; i++) {
+        ESP_ERROR_CHECK(esp_lcd_panel_io_tx_param(
+            ioHandle, cmds[i].cmd, cmds[i].data, cmds[i].data_bytes
+        ));
+        if (cmds[i].delay_ms > 0) {
+            delay(cmds[i].delay_ms);
+        }
+    }
+    LOGI(getLogTag(), "Sent %d vendor init commands", (int)num_cmds);
+}
+
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+// Deassert RST, wait for the panel IC to come out of reset, then re-run
+// the full vendor init sequence. The JD9165 (and most TDDI controllers)
+// require only ~10-20 ms post-RST settle before accepting DBI commands;
+// 50 ms is a conservative margin that still saves ~70 ms of wake latency
+// versus the cold-boot 120 ms. The vendor init table ends with Sleep Out
+// (0x11, +120 ms) and Display On (0x29, +50 ms), so no additional DCS
+// commands are needed after this returns.
+void MipiDsiDriver::wakeFromHardReset() {
+    digitalWrite(LCD_RST_PIN, HIGH);
+    delay(50);
+    sendInitCommands();
+}
+#else
+void MipiDsiDriver::wakeFromHardReset() {}
+#endif
+
 void MipiDsiDriver::displaySleep() {
     if (!ioHandle) return;
+
+    // Blank framebuffers so the DPI peripheral's continuous scanout reads
+    // black for the entire sleep period (image-retention mitigation).
+    // We intentionally do NOT call esp_lcd_panel_disp_on_off(panel, false)
+    // here — the DPI panel driver in our ESP-IDF version doesn't implement
+    // it and would just log "disp_on_off is not supported by this panel".
+    blankFramebuffers();
+
+    // Standard DCS power-down: Display Off → Sleep In.
     esp_lcd_panel_io_tx_param(ioHandle, 0x28, NULL, 0);  // Display Off
     delay(20);
     esp_lcd_panel_io_tx_param(ioHandle, 0x10, NULL, 0);  // Sleep In
+
+    // Optional deep sleep: hold panel RST LOW so the panel IC fully powers
+    // down its internal regulators. Required on cheap IPS MIPI-DSI panels
+    // (e.g. JD9165) where DCS Sleep In alone leaves the TFT cells DC-biased
+    // and slowly drifts VCOM, producing washed-out colors after multi-hour
+    // idle. Wake re-runs the vendor init sequence.
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    digitalWrite(LCD_RST_PIN, LOW);
+#endif
 }
 
 void MipiDsiDriver::displayWake() {
     if (!ioHandle) return;
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    wakeFromHardReset();
+#else
     esp_lcd_panel_io_tx_param(ioHandle, 0x11, NULL, 0);  // Sleep Out
     delay(120);                                           // MIPI DCS spec minimum
     esp_lcd_panel_io_tx_param(ioHandle, 0x29, NULL, 0);  // Display On
+#endif
 }
 
 void MipiDsiDriver::displayWakeSleepOut() {
     if (!ioHandle) return;
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    // Hard-reset wake is single-phase (see needsTwoPhaseWake()): replay the
+    // full init sequence here. The screensaver skips the 120 ms gap and the
+    // second displayWakeDisplayOn() call so the display lock is only held
+    // once, for the duration of wakeFromHardReset().
+    wakeFromHardReset();
+#else
     esp_lcd_panel_io_tx_param(ioHandle, 0x11, NULL, 0);  // Sleep Out
+#endif
 }
 
 void MipiDsiDriver::displayWakeDisplayOn() {
     if (!ioHandle) return;
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    // Unreachable: needsTwoPhaseWake() returns false in hard-reset mode so
+    // screen_saver_manager never calls this. Guarded out for safety.
+    return;
+#else
     esp_lcd_panel_io_tx_param(ioHandle, 0x29, NULL, 0);  // Display On
+#endif
+}
+
+bool MipiDsiDriver::needsTwoPhaseWake() const {
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    return false;
+#else
+    return true;
+#endif
+}
+
+// Periodic scrub during long idle. With hard-reset enabled the panel IC is
+// already unpowered, so this is a no-op. Otherwise re-blank both framebuffers
+// as insurance against any transient LVGL write that slipped past the opaque
+// top-layer overlay (e.g. overlay teardown race during fade-in) leaving stale
+// pixels in the FB to ghost into the IPS cells over hours.
+void MipiDsiDriver::displayRefreshSleep() {
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    return;
+#else
+    blankFramebuffers();
+#endif
 }

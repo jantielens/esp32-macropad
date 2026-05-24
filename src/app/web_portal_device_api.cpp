@@ -23,19 +23,6 @@
 #include "pad_config.h"
 #endif
 
-// GET /api/mode - Return portal mode (core vs full)
-void handleGetMode(AsyncWebServerRequest *request) {
-		if (!portal_auth_gate(request)) return;
-
-		AsyncResponseStream *response = request->beginResponseStream("application/json");
-		response->print("{\"mode\":\"");
-		response->print(web_portal_is_ap_mode_active() ? "core" : "full");
-		response->print("\",\"ap_active\":");
-		response->print(web_portal_is_ap_mode_active() ? "true" : "false");
-		response->print("}");
-		request->send(response);
-}
-
 // GET /api/info - Get device information
 void handleGetVersion(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
@@ -43,7 +30,9 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		AsyncResponseStream *response = request->beginResponseStream("application/json");
 		response->print("{\"version\":\"");
 		response->print(FIRMWARE_VERSION);
-		response->print("\",\"build_date\":\"");
+		response->print("\",\"ap_active\":");
+		response->print(web_portal_is_ap_mode_active() ? "true" : "false");
+		response->print(",\"build_date\":\"");
 		response->print(BUILD_DATE);
 		response->print("\",\"build_time\":\"");
 		response->print(BUILD_TIME);

@@ -1,9 +1,12 @@
 #include "fs_indexed_store.h"
+#include "board_config.h"
+
+#if HAS_DISPLAY
 
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 
-#include <LittleFS.h>
+#include "storage.h"
 #include <algorithm>
 #include <string.h>
 #include <time.h>
@@ -25,15 +28,16 @@ struct SortEntry { uint32_t ts; String s; };
 
 // Sort vec descending by ts and populate target JsonArray.
 // tmp is a caller-provided scratch document reused across iterations.
+template <typename TDoc>
 static void sort_and_populate(JsonArray target,
                                std::vector<SortEntry>& vec,
-                               DynamicJsonDocument& tmp) {
+                               TDoc& tmp) {
     std::sort(vec.begin(), vec.end(),
         [](const SortEntry& a, const SortEntry& b) { return a.ts > b.ts; });
     for (const auto& item : vec) {
         tmp.clear();
         if (deserializeJson(tmp, item.s) == DeserializationError::Ok) {
-            target.add(tmp.as<JsonVariant>());
+            target.add(tmp.template as<JsonVariant>());
         }
     }
 }
@@ -69,8 +73,8 @@ bool FsIndexedStore::begin() {
         return false;
     }
 
-    if (!LittleFS.exists(_base_path)) {
-        if (!LittleFS.mkdir(_base_path)) {
+    if (!Storage.exists(_base_path)) {
+        if (!Storage.mkdir(_base_path)) {
             LOGE(TAG, "Failed to create directory %s", _base_path);
             return false;
         }
@@ -107,7 +111,7 @@ String FsIndexedStore::data_path(const char* id) const {
 bool FsIndexedStore::_atomic_write(const char* path, const String& content) {
     String tmp_path = String(path) + ".tmp";
 
-    File f = LittleFS.open(tmp_path.c_str(), "w");
+    File f = Storage.open(tmp_path.c_str(), "w");
     if (!f) {
         LOGE(TAG, "Cannot open %s for writing", tmp_path.c_str());
         return false;
@@ -118,13 +122,19 @@ bool FsIndexedStore::_atomic_write(const char* path, const String& content) {
     if (written != content.length()) {
         LOGE(TAG, "Incomplete write to %s (%u/%u bytes)",
              tmp_path.c_str(), (unsigned)written, (unsigned)content.length());
-        LittleFS.remove(tmp_path.c_str());
+        Storage.remove(tmp_path.c_str());
         return false;
     }
 
-    if (!LittleFS.rename(tmp_path.c_str(), path)) {
+    // Both LittleFS and SD/FAT rename() fail if the destination exists.
+    // Remove any prior file at the target path so the rename is idempotent.
+    if (Storage.exists(path)) {
+        Storage.remove(path);
+    }
+
+    if (!Storage.rename(tmp_path.c_str(), path)) {
         LOGE(TAG, "Rename %s -> %s failed", tmp_path.c_str(), path);
-        LittleFS.remove(tmp_path.c_str());
+        Storage.remove(tmp_path.c_str());
         return false;
     }
 
@@ -138,7 +148,7 @@ bool FsIndexedStore::_atomic_write(const char* path, const String& content) {
 bool FsIndexedStore::_atomic_write_from_doc(const char* path, JsonDocument& doc) {
     String tmp_path = String(path) + ".tmp";
 
-    File f = LittleFS.open(tmp_path.c_str(), "w");
+    File f = Storage.open(tmp_path.c_str(), "w");
     if (!f) {
         LOGE(TAG, "Cannot open %s for writing", tmp_path.c_str());
         return false;
@@ -150,13 +160,19 @@ bool FsIndexedStore::_atomic_write_from_doc(const char* path, JsonDocument& doc)
     if (written != expected) {
         LOGE(TAG, "Incomplete write to %s (%u/%u bytes)",
              tmp_path.c_str(), (unsigned)written, (unsigned)expected);
-        LittleFS.remove(tmp_path.c_str());
+        Storage.remove(tmp_path.c_str());
         return false;
     }
 
-    if (!LittleFS.rename(tmp_path.c_str(), path)) {
+    // Both LittleFS and SD/FAT rename() fail if the destination exists.
+    // Remove any prior file at the target path so the rename is idempotent.
+    if (Storage.exists(path)) {
+        Storage.remove(path);
+    }
+
+    if (!Storage.rename(tmp_path.c_str(), path)) {
         LOGE(TAG, "Rename %s -> %s failed", tmp_path.c_str(), path);
-        LittleFS.remove(tmp_path.c_str());
+        Storage.remove(tmp_path.c_str());
         return false;
     }
 
@@ -214,7 +230,7 @@ void FsIndexedStore::_rebuild_manifest() {
         }
     }
 
-    File dir = LittleFS.open(_base_path);
+    File dir = Storage.open(_base_path);
     if (!dir || !dir.isDirectory()) {
         LOGE(TAG, "Cannot open directory %s for rebuild", _base_path);
         return;
@@ -246,18 +262,18 @@ void FsIndexedStore::_rebuild_manifest() {
 
         char full_path[256];
         snprintf(full_path, sizeof(full_path), "%s/%s", _base_path, fname);
-        File df = LittleFS.open(full_path, "r");
+        File df = Storage.open(full_path, "r");
         if (!df) { file = dir.openNextFile(); continue; }
 
         // Parse only the configured index fields — skips waveform/payload data
         // entirely, so data_doc stays small even for 30-50 KB session files.
-        DynamicJsonDocument data_doc(2048);
+        BasicJsonDocument<PsramJsonAllocator> data_doc(2048);
         DeserializationError err = deserializeJson(data_doc, df,
                                                     DeserializationOption::Filter(filter_doc));
         df.close();
 
         // Build the manifest entry for this file
-        DynamicJsonDocument entry_doc(1024);
+        BasicJsonDocument<PsramJsonAllocator> entry_doc(1024);
         JsonObject entry = entry_doc.to<JsonObject>();
         entry["id"] = id;
 
@@ -284,7 +300,7 @@ void FsIndexedStore::_rebuild_manifest() {
         file = dir.openNextFile();
     }
 
-    DynamicJsonDocument tmp(1024);
+    BasicJsonDocument<PsramJsonAllocator> tmp(1024);
     sort_and_populate(entries, collected, tmp);
 
     _write_manifest();
@@ -303,11 +319,11 @@ void FsIndexedStore::_ensure_loaded() {
 
     bool do_rebuild = false;
 
-    if (!LittleFS.exists(path)) {
+    if (!Storage.exists(path)) {
         LOGW(TAG, "Manifest missing for %s \u2014 will rebuild", _base_path);
         do_rebuild = true;
     } else {
-        File f = LittleFS.open(path, "r");
+        File f = Storage.open(path, "r");
         if (!f) {
             do_rebuild = true;
         } else {
@@ -363,7 +379,7 @@ void FsIndexedStore::_sort_entries() {
     // (e.g. next_id). Clearing the whole document would silently discard them.
     _manifest_doc->as<JsonObject>().remove("entries");
     JsonArray sorted = _manifest_doc->createNestedArray("entries");
-    DynamicJsonDocument tmp(1024);
+    BasicJsonDocument<PsramJsonAllocator> tmp(1024);
     sort_and_populate(sorted, vec, tmp);
 }
 
@@ -493,7 +509,7 @@ String FsIndexedStore::get(const char* id) {
 
     char dp[256];
     _data_path(id, dp, sizeof(dp));
-    File f = LittleFS.open(dp, "r");
+    File f = Storage.open(dp, "r");
     if (!f) return "";
 
     String content = f.readString();
@@ -556,7 +572,7 @@ bool FsIndexedStore::remove(const char* id) {
     if (ok) {
         char dp[256];
         _data_path(id, dp, sizeof(dp));
-        LittleFS.remove(dp);  // best-effort; ignore error (orphan is harmless)
+        Storage.remove(dp);  // best-effort; ignore error (orphan is harmless)
     }
 
     xSemaphoreGive(_mutex);
@@ -571,7 +587,7 @@ bool FsIndexedStore::clear_all() {
     if (xSemaphoreTake(_mutex, portMAX_DELAY) != pdTRUE) return false;
 
     // Delete all data files in the store directory.
-    File dir = LittleFS.open(_base_path);
+    File dir = Storage.open(_base_path);
     if (dir) {
         File f = dir.openNextFile();
         while (f) {
@@ -581,7 +597,7 @@ bool FsIndexedStore::clear_all() {
                 char full[256];
                 snprintf(full, sizeof(full), "%s/%s", _base_path, fname);
                 f.close();
-                LittleFS.remove(full);
+                Storage.remove(full);
             } else {
                 f.close();
             }
@@ -627,10 +643,10 @@ bool FsIndexedStore::patch_meta(const char* id, const JsonObject& fields) {
     _data_path(id, dp, sizeof(dp));
 
     bool ok = false;
-    if (!LittleFS.exists(dp)) {
+    if (!Storage.exists(dp)) {
         LOGW(TAG, "patch_meta: data file missing for id '%s'", id);
     } else {
-        File f = LittleFS.open(dp, "r");
+        File f = Storage.open(dp, "r");
         if (f) {
             size_t file_size = f.size();
             // Size doc from actual file; use PSRAM to avoid internal-RAM pressure.
@@ -682,7 +698,7 @@ bool FsIndexedStore::patch_meta(const char* id, const JsonObject& fields) {
 bool FsIndexedStore::patch_meta(const char* id, const String& json_patch) {
     if (json_patch.isEmpty()) return false;
 
-    DynamicJsonDocument patch_doc(FS_STORE_PATCH_MAX_BYTES);
+    BasicJsonDocument<PsramJsonAllocator> patch_doc(FS_STORE_PATCH_MAX_BYTES);
     DeserializationError err = deserializeJson(patch_doc, json_patch);
     if (err) {
         LOGW(TAG, "patch_meta: invalid JSON patch for '%s': %s", id, err.c_str());
@@ -881,3 +897,5 @@ uint32_t FsIndexedStore::allocate_id(const char* field_name, const char* prefix,
     snprintf(buf, buf_size, "%s%lu", prefix ? prefix : "", (unsigned long)id);
     return id;
 }
+
+#endif // HAS_DISPLAY

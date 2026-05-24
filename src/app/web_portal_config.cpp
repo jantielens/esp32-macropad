@@ -109,10 +109,24 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["mqtt_password"] = "";
 
 				// Power settings
-				(*doc)["power_mode"] = current_config->power_mode;
-				(*doc)["cycle_interval_seconds"] = current_config->cycle_interval_seconds;
+				(*doc)["operating_mode"] = current_config->operating_mode;
+				(*doc)["duty_cycle_wake_seconds"] = current_config->duty_cycle_wake_seconds;
+				(*doc)["mqtt_publish_interval_seconds"] = current_config->mqtt_publish_interval_seconds;
 				(*doc)["portal_idle_timeout_seconds"] = current_config->portal_idle_timeout_seconds;
 				(*doc)["wifi_backoff_max_seconds"] = current_config->wifi_backoff_max_seconds;
+
+				#if HAS_BLE
+				(*doc)["ble_burst_count"] = current_config->ble_burst_count;
+				(*doc)["ble_adv_interval_ms"] = current_config->ble_adv_interval_ms;
+				#endif
+
+				// Build capability map so the portal UI can hide controls for
+				// features that are not compiled into this firmware.
+				JsonObject caps = (*doc).createNestedObject("caps");
+				caps["ble"] = (bool)HAS_BLE;
+				caps["mqtt"] = (bool)HAS_MQTT;
+				caps["display"] = (bool)HAS_DISPLAY;
+				caps["ble_hid"] = (bool)HAS_BLE_HID;
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;
@@ -279,9 +293,14 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		// Partial update: only update fields that are present in the request
 		// This allows different pages to update only their relevant fields
 
-		// Security hardening: never allow changing Basic Auth settings in AP/core mode.
-		// Otherwise, an attacker near the device could wait for fallback AP mode and lock out the owner.
-		if (web_portal_is_ap_mode_active() && (doc.containsKey("basic_auth_enabled") || doc.containsKey("basic_auth_username") || doc.containsKey("basic_auth_password"))) {
+		// Security hardening: never allow changing Basic Auth settings in AP/core
+		// mode AFTER initial setup. Otherwise, an attacker near the device could
+		// wait for fallback AP mode and lock out the owner. EXCEPTION: during
+		// true first-boot (no WiFi configured yet) the wizard legitimately needs
+		// to set auth, so we only enforce the guard when an SSID is already on
+		// file (i.e., this is a fallback AP session, not first-boot).
+		bool first_boot = (current_config->wifi_ssid[0] == '\0');
+		if (web_portal_is_ap_mode_active() && !first_boot && (doc.containsKey("basic_auth_enabled") || doc.containsKey("basic_auth_username") || doc.containsKey("basic_auth_password"))) {
 				request->send(403, "application/json", "{\"success\":false,\"message\":\"Basic Auth settings cannot be changed in AP mode\"}");
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();
@@ -356,21 +375,28 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 
 
-		// Power mode
-		if (doc.containsKey("power_mode")) {
-				strlcpy(current_config->power_mode, doc["power_mode"] | "always_on", CONFIG_POWER_MODE_MAX_LEN);
+		// Operating mode (transport + duty cycle selector)
+		if (doc.containsKey("operating_mode")) {
+				strlcpy(current_config->operating_mode, doc["operating_mode"] | "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
 		}
 
-		// Cycle interval (legacy mqtt_interval_seconds supported as alias)
-		const bool has_cycle_interval = doc.containsKey("cycle_interval_seconds");
-		const bool has_mqtt_interval = doc.containsKey("mqtt_interval_seconds");
-		if (has_cycle_interval || has_mqtt_interval) {
-				const JsonVariant value = has_cycle_interval ? doc["cycle_interval_seconds"] : doc["mqtt_interval_seconds"];
-				if (value.is<const char*>()) {
-						const char* v = value;
-						current_config->cycle_interval_seconds = (uint16_t)atoi(v ? v : "0");
+		// Duty-Cycle wake interval
+		if (doc.containsKey("duty_cycle_wake_seconds")) {
+				if (doc["duty_cycle_wake_seconds"].is<const char*>()) {
+						const char* v = doc["duty_cycle_wake_seconds"];
+						current_config->duty_cycle_wake_seconds = (uint16_t)atoi(v ? v : "0");
 				} else {
-						current_config->cycle_interval_seconds = (uint16_t)(value | 0);
+						current_config->duty_cycle_wake_seconds = (uint16_t)(doc["duty_cycle_wake_seconds"] | 0);
+				}
+		}
+
+		// MQTT publish interval (Always-On periodic publish; 0 = disabled)
+		if (doc.containsKey("mqtt_publish_interval_seconds")) {
+				if (doc["mqtt_publish_interval_seconds"].is<const char*>()) {
+						const char* v = doc["mqtt_publish_interval_seconds"];
+						current_config->mqtt_publish_interval_seconds = (uint16_t)atoi(v ? v : "0");
+				} else {
+						current_config->mqtt_publish_interval_seconds = (uint16_t)(doc["mqtt_publish_interval_seconds"] | 0);
 				}
 		}
 
@@ -398,6 +424,27 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (doc.containsKey("mqtt_publish_scope")) {
 				strlcpy(current_config->mqtt_publish_scope, doc["mqtt_publish_scope"] | "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
 		}
+
+		#if HAS_BLE
+		// BLE telemetry advertising burst count (1..255)
+		if (doc.containsKey("ble_burst_count")) {
+				uint16_t v = doc["ble_burst_count"].is<const char*>()
+						? (uint16_t)atoi(doc["ble_burst_count"] | "0")
+						: (uint16_t)(doc["ble_burst_count"] | 0);
+				if (v == 0) v = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
+				if (v > 255) v = 255;
+				current_config->ble_burst_count = (uint8_t)v;
+		}
+
+		// BLE telemetry advertising interval (ms)
+		if (doc.containsKey("ble_adv_interval_ms")) {
+				uint16_t v = doc["ble_adv_interval_ms"].is<const char*>()
+						? (uint16_t)atoi(doc["ble_adv_interval_ms"] | "0")
+						: (uint16_t)(doc["ble_adv_interval_ms"] | 0);
+				if (v == 0) v = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
+				current_config->ble_adv_interval_ms = v;
+		}
+		#endif
 
 		// Basic Auth enabled
 		if (doc.containsKey("basic_auth_enabled")) {
@@ -553,13 +600,15 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 void handleDeleteConfig(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 
-		if (config_manager_reset()) {
-				request->send(200, "application/json", "{\"success\":true,\"message\":\"Configuration reset\"}");
+		// Send the success response FIRST so the client receives it before the
+		// long blocking wipe (NVS erase + LittleFS.format() / SD rmrf, several
+		// seconds total) starves the AsyncTCP task. The client interprets a
+		// network failure here as success too, but delivering the JSON is the
+		// happy path and makes debugging much easier.
+		request->send(200, "application/json", "{\"success\":true,\"message\":\"Configuration reset\"}");
+		// Give AsyncWebServer time to flush the response before we block.
+		delay(100);
 
-				// Schedule reboot after response is sent
-				delay(100);
-				ESP.restart();
-		} else {
-				request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to reset\"}");
-		}
+		config_manager_factory_reset();
+		ESP.restart();
 }

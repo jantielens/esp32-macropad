@@ -10,10 +10,12 @@ void handlePad(AsyncWebServerRequest *request);
 void handleNetwork(AsyncWebServerRequest *request);
 void handleFirmware(AsyncWebServerRequest *request);
 
-// Asset handlers
-void handleJS(AsyncWebServerRequest *request);
-void handleBootstrapCSS(AsyncWebServerRequest *request);
-void handlePortalCustomCSS(AsyncWebServerRequest *request);
+// Asset handlers — portal.js.bundle is split into named chunks, and the
+// minifier emits one pre-gzipped PROGMEM blob per HAS_* flag combination.
+// Each board ships exactly one combined variant, so GET /portal.js returns
+// the entire portal JS in a single HTTP response and a single gzip member.
+void handlePortalJS(AsyncWebServerRequest *request);
+void handlePortalAllCSS(AsyncWebServerRequest *request);
 
 // Shell handler (new single-page root)
 void handleShell(AsyncWebServerRequest *request);

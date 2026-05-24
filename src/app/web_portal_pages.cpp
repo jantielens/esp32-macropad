@@ -2,11 +2,23 @@
 
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
+#include "web_portal_utils.h"
 
 #include "web_assets.h"
 
 #include <string.h>
 
+// Serve a gzipped PROGMEM asset as a length-aware chunked stream rather than a
+// single beginResponse_P() blob. AsyncTCP only calls the filler when LWIP TX
+// buffer space is available, so the response is naturally paced and
+// DMA-internal SRAM pbufs recycle between chunks. This matters on ESP-Hosted
+// SDIO boards (ESP32-P4 + ESP32-C6) where a parallel burst of large static
+// asset responses (e.g. browser-issued /portal-all.css + /portal.js on a
+// fresh portal load) can otherwise exhaust the DMA-internal pbuf pool and
+// trigger a `copy_buff` NULL assert in `transport_drv_sta_tx`.
+//
+// HTTP_STREAM_CHUNK_SIZE (4 KB) matches the cap already used for file-backed
+// streamed responses in web_portal_utils.cpp::sendFileThrottled().
 static AsyncWebServerResponse *begin_gzipped_asset_response(
 		AsyncWebServerRequest *request,
 		const char *content_type,
@@ -14,11 +26,18 @@ static AsyncWebServerResponse *begin_gzipped_asset_response(
 		size_t content_gz_len,
 		const char *cache_control
 ) {
-		AsyncWebServerResponse *response = request->beginResponse_P(
-				200,
+		AsyncWebServerResponse *response = request->beginResponse(
 				content_type,
-				content_gz,
-				content_gz_len
+				content_gz_len,
+				[content_gz, content_gz_len](uint8_t *buffer, size_t max_len, size_t index) -> size_t {
+						if (index >= content_gz_len) return 0;
+						size_t remain = content_gz_len - index;
+						size_t to_copy = (max_len < HTTP_STREAM_CHUNK_SIZE)
+						                 ? max_len : HTTP_STREAM_CHUNK_SIZE;
+						if (to_copy > remain) to_copy = remain;
+						memcpy_P(buffer, content_gz + index, to_copy);
+						return to_copy;
+				}
 		);
 
 		response->addHeader("Content-Encoding", "gzip");
@@ -79,12 +98,13 @@ void handleFragment(AsyncWebServerRequest *request) {
 void handleRoot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 
-		if (web_portal_is_ap_mode_active()) {
-				// In AP mode, serve shell which will show WiFi setup
-				handleShell(request);
-				return;
-		}
-
+		// In AP mode we deliberately do NOT 302-redirect to /#setup here:
+		// captive-portal probes (Android's connectivitycheck.gstatic.com,
+		// iOS's hotspot-detect.html) follow the redirect under the probe's
+		// own hostname and end up looping. Serving the shell with HTTP 200
+		// is what the captive-portal detector expects (non-204 = portal).
+		// Routing to the setup wizard happens client-side via the nav API's
+		// `primary.fragment` field, which portal_nav.js applies on init.
 		handleShell(request);
 }
 
@@ -108,33 +128,34 @@ void handleFirmware(AsyncWebServerRequest *request) {
 		request->redirect("/#ota-update");
 }
 
-// ---- CSS asset handlers ----
-
-void handleBootstrapCSS(AsyncWebServerRequest *request) {
+// ---- CSS asset handler ----
+//
+// Bootstrap + portal-custom are bundled into a single portal-all.css asset to
+// reduce parallel HTTP requests at portal load. Fewer concurrent in-flight
+// responses keeps DMA-internal SRAM fragmentation low on ESP-Hosted SDIO
+// platforms (ESP32-P4 + ESP32-C6) where AsyncTCP TX buffers must come from
+// MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL.
+void handlePortalAllCSS(AsyncWebServerRequest *request) {
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
 				request,
 				"text/css",
-				bootstrap_min_css_gz,
-				bootstrap_min_css_gz_len,
-				"public, max-age=86400"
-		);
-		request->send(response);
-}
-
-void handlePortalCustomCSS(AsyncWebServerRequest *request) {
-		AsyncWebServerResponse *response = begin_gzipped_asset_response(
-				request,
-				"text/css",
-				portal_custom_css_gz,
-				portal_custom_css_gz_len,
+				portal_all_css_gz,
+				portal_all_css_gz_len,
 				"public, max-age=600"
 		);
 		request->send(response);
 }
 
-// ---- JS asset handler ----
+// ---- JS handler ----
+//
+// portal.js.bundle is split into named chunks (e.g. core, actions, config,
+// pad, shell). The minifier enumerates the unique HAS_* flag set across
+// chunks (today: HAS_DISPLAY) and emits one pre-gzipped PROGMEM blob per
+// flag combination, wrapped in #if guards. Exactly one variant matches per
+// build, so each board ships a single combined gzip stream and the browser
+// fetches the entire portal JS in ONE request, with ONE gzip member.
 
-void handleJS(AsyncWebServerRequest *request) {
+void handlePortalJS(AsyncWebServerRequest *request) {
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
 				request,
 				"application/javascript",

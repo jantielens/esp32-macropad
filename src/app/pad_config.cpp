@@ -1,17 +1,18 @@
 #include "pad_config.h"
+#include "board_config.h"
+
+#if HAS_DISPLAY
 
 #include "action_parse.h"
-#include "board_config.h"
 #include "button_defaults.h"
 #include "fs_health.h"
 #include "icon_store.h"
 #include "log_manager.h"
-#if HAS_DISPLAY
 #include "widgets/widget.h"
-#endif
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
+#include "psram_json_allocator.h"
+#include "storage.h"
 
 #include <esp_heap_caps.h>
 #include <esp_partition.h>
@@ -205,7 +206,9 @@ static void parse_pad_action(JsonVariant v, ButtonAction* act, const char* legac
     memset(act, 0, sizeof(ButtonAction));
 
     if (v.is<JsonObject>()) {
+#if HAS_DISPLAY
         action_parse(v.as<JsonObject>(), *act);
+#endif
         return;
     }
 
@@ -349,6 +352,20 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
 bool pad_config_init() {
     if (g_fs_mounted) return true;
 
+#if USE_SD_STORAGE
+    // SD card was already mounted in setup() via sd_storage_mount(). Skip the
+    // LittleFS partition lookup + begin() entirely — `Storage` resolves to
+    // SD_MMC and is ready to use.
+    LOGI(TAG, "Using SD card storage (mounted earlier in boot)");
+    g_fs_mounted = true;
+    storage_publish_usage(true);
+    if (!Storage.exists("/config")) {
+        Storage.mkdir("/config");
+    }
+    if (!Storage.exists("/storage")) {
+        Storage.mkdir("/storage");
+    }
+#else
     // Find storage partition by subtype (label may vary across boards)
     const esp_partition_t* part = esp_partition_find_first(
         ESP_PARTITION_TYPE_DATA,
@@ -361,7 +378,7 @@ bool pad_config_init() {
 
     LOGI(TAG, "Found storage partition '%s' (%u KB)", part->label, part->size / 1024);
 
-    if (!LittleFS.begin(true /* formatOnFail */, "/littlefs", 10, part->label)) {
+    if (!Storage.begin(true /* formatOnFail */, "/littlefs", 10, part->label)) {
         LOGE(TAG, "LittleFS mount failed on partition '%s'", part->label);
         return false;
     }
@@ -369,14 +386,15 @@ bool pad_config_init() {
     g_fs_mounted = true;
 
     // Update fs_health stats
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage(true);
 
     // Ensure /config directory exists
-    if (!LittleFS.exists("/config")) {
-        LittleFS.mkdir("/config");
+    if (!Storage.exists("/config")) {
+        Storage.mkdir("/config");
     }
 
-    LOGI(TAG, "LittleFS mounted (total=%u used=%u)", LittleFS.totalBytes(), LittleFS.usedBytes());
+    LOGI(TAG, "LittleFS mounted (total=%u used=%u)", Storage.totalBytes(), Storage.usedBytes());
+#endif
 
     // Pre-load all existing page configs into RAM cache.
     // This runs on the main task (internal stack) so flash access is safe.
@@ -384,7 +402,7 @@ bool pad_config_init() {
     for (uint8_t i = 0; i < MAX_PADS; i++) {
         char path[32];
         pad_config_path(i, path, sizeof(path));
-        if (LittleFS.exists(path)) {
+        if (Storage.exists(path)) {
             PadConfig* cfg = (PadConfig*)heap_caps_malloc(
                 sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
@@ -521,7 +539,7 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     char path[32];
     pad_config_path(page, path, sizeof(path));
 
-    File f = LittleFS.open(path, "r");
+    File f = Storage.open(path, "r");
     if (!f) {
         LOGD(TAG, "Page %u config not found", page);
         return false;
@@ -551,7 +569,7 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     f.close();
     buf[read] = '\0';
 
-    DynamicJsonDocument doc(file_size * 2 + 256);
+    BasicJsonDocument<PsramJsonAllocator> doc(file_size * 2 + 256);
     DeserializationError err = deserializeJson(doc, buf, read);
     free(buf);
 
@@ -600,7 +618,11 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     if (out->rows > MAX_GRID_ROWS) out->rows = MAX_GRID_ROWS;
 
     // Use device-level button defaults for cascading to buttons
+#if HAS_DISPLAY
     const ButtonDefaults* defs = button_defaults_get();
+#else
+    const ButtonDefaults* defs = nullptr;
+#endif
 
     JsonArray buttons = doc["buttons"];
     out->button_count = 0;
@@ -678,7 +700,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
     char path[32];
     pad_config_path(page, path, sizeof(path));
 
-    File f = LittleFS.open(path, "w");
+    File f = Storage.open(path, "w");
     if (!f) {
         LOGE(TAG, "Page %u: failed to open for write", page);
         return false;
@@ -698,21 +720,25 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
 
     // Preload icons for this pad (picks up template button icons that
     // aren't yet in the PSRAM icon cache, e.g. after template_pad change).
+#if HAS_DISPLAY
     icon_store_preload_pad(page);
+#endif
 
     // Also refresh any pad that references this page as its template_pad
     for (uint8_t i = 0; i < MAX_PADS; i++) {
         if (i == page) continue;
         if (g_cache[i] && g_cache[i]->template_pad == (int8_t)page) {
             cache_update(i);
+#if HAS_DISPLAY
             icon_store_preload_pad(i);
+#endif
         }
     }
 
     g_generation++;
 
     // Update fs_health stats
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage(false);
 
     LOGI(TAG, "Page %u saved (%u bytes, gen=%u)", page, (unsigned)len, g_generation);
     return true;
@@ -725,12 +751,12 @@ bool pad_config_delete(uint8_t page) {
     char path[32];
     pad_config_path(page, path, sizeof(path));
 
-    if (!LittleFS.exists(path)) {
+    if (!Storage.exists(path)) {
         LOGD(TAG, "Page %u: nothing to delete", page);
         return true;  // Already gone
     }
 
-    if (!LittleFS.remove(path)) {
+    if (!Storage.remove(path)) {
         LOGE(TAG, "Page %u: delete failed", page);
         return false;
     }
@@ -749,7 +775,7 @@ bool pad_config_delete(uint8_t page) {
 
     g_generation++;
 
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage(false);
 
     LOGI(TAG, "Page %u deleted (gen=%u)", page, g_generation);
     return true;
@@ -761,7 +787,7 @@ bool pad_config_exists(uint8_t page) {
 
     char path[32];
     pad_config_path(page, path, sizeof(path));
-    return LittleFS.exists(path);
+    return Storage.exists(path);
 }
 
 char* pad_config_read_raw(uint8_t page, size_t* out_len) {
@@ -772,7 +798,7 @@ char* pad_config_read_raw(uint8_t page, size_t* out_len) {
     char path[32];
     pad_config_path(page, path, sizeof(path));
 
-    File f = LittleFS.open(path, "r");
+    File f = Storage.open(path, "r");
     if (!f) return nullptr;
 
     size_t file_size = f.size();
@@ -804,3 +830,5 @@ char* pad_config_read_raw(uint8_t page, size_t* out_len) {
 uint32_t pad_config_get_generation() {
     return g_generation;
 }
+
+#endif // HAS_DISPLAY

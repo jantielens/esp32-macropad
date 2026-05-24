@@ -166,15 +166,13 @@ void handleGetSoundList(AsyncWebServerRequest *request) {
     char names[SOUND_LIST_MAX][SOUND_NAME_MAX_LEN];
     int count = sound_store_list(names, SOUND_LIST_MAX);
 
-    StaticJsonDocument<2048> doc;
-    JsonArray arr = doc.to<JsonArray>();
+    auto doc = make_psram_json_doc(2048);
+    JsonArray arr = doc->to<JsonArray>();
     for (int i = 0; i < count; i++) {
         arr.add(names[i]);
     }
 
-    String json;
-    serializeJson(doc, json);
-    request->send(200, "application/json", json);
+    web_portal_send_json_chunked(request, doc);
 }
 
 // ============================================================================

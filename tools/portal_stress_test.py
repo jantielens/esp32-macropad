@@ -582,7 +582,8 @@ def main(argv: list[str]) -> int:
         "mqtt_port": cfg.get("mqtt_port", 0),
         "mqtt_username": cfg.get("mqtt_username", ""),
         "mqtt_password": "",
-        "cycle_interval_seconds": cfg.get("cycle_interval_seconds", 0),
+        "duty_cycle_wake_seconds": cfg.get("duty_cycle_wake_seconds", 120),
+        "mqtt_publish_interval_seconds": cfg.get("mqtt_publish_interval_seconds", 120),
         "backlight_brightness": cfg.get("backlight_brightness", 100),
     }
 

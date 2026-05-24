@@ -8,16 +8,28 @@
 
 /**
  * Gather config fields from the current DOM and save to /api/config.
- * @param {boolean} reboot - If true, device reboots after save.
+ *
+ * Saves are always sent with no_reboot=1 — the device never reboots from
+ * a per-fragment Save click. Settings that require a reboot to take effect
+ * surface a global pending-reboot banner via setPendingReboot(); the user
+ * can batch several changes and click "Reboot Now" once at the end.
+ *
+ * @param {boolean} requiresReboot - True if this fragment's settings need a
+ *                                   reboot to take effect (wifi, network,
+ *                                   device name, mode, mqtt, ble, auth).
+ *                                   When true, the pending-reboot banner is
+ *                                   shown after a successful save.
  */
-async function saveFragmentConfig(reboot) {
+async function saveFragmentConfig(requiresReboot) {
     // Build config from DOM elements that exist in the current fragment
     var config = {};
     var fields = [
         'wifi_ssid', 'wifi_password', 'device_name', 'fixed_ip',
         'subnet_mask', 'gateway', 'dns1', 'dns2',
         'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
-        'power_mode', 'cycle_interval_seconds', 'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
+        'operating_mode', 'duty_cycle_wake_seconds', 'mqtt_publish_interval_seconds',
+        'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
+        'ble_burst_count', 'ble_adv_interval_ms',
         'mqtt_publish_scope',
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
         'ble_enabled',
@@ -28,6 +40,13 @@ async function saveFragmentConfig(reboot) {
         'screen_saver_wake_on_touch', 'screen_saver_wake_binding'
     ];
     fields.forEach(function (name) {
+        // Radio groups: pick the checked option (if any).
+        var radios = document.querySelectorAll('input[type="radio"][name="' + name + '"]');
+        if (radios.length > 0) {
+            var checked = document.querySelector('input[type="radio"][name="' + name + '"]:checked');
+            if (checked && !checked.disabled) config[name] = checked.value;
+            return;
+        }
         var el = document.querySelector('[name="' + name + '"]');
         if (!el || el.disabled) return;
         if (el.type === 'checkbox') {
@@ -53,19 +72,8 @@ async function saveFragmentConfig(reboot) {
         }
     }
 
-    if (reboot) {
-        var currentDeviceName = document.getElementById('device_name');
-        showRebootDialog({
-            title: 'Saving Configuration',
-            message: 'Saving configuration...',
-            context: 'save',
-            newDeviceName: currentDeviceName ? currentDeviceName.value : null
-        });
-    }
-
     try {
-        var url = '/api/config' + (reboot ? '' : '?no_reboot=1');
-        var response = await fetch(url, {
+        var response = await fetch('/api/config?no_reboot=1', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
@@ -73,36 +81,31 @@ async function saveFragmentConfig(reboot) {
         if (!response.ok) throw new Error('Failed to save configuration');
         var result = await response.json();
         if (result.success) {
-            if (reboot) {
-                var msg = document.getElementById('reboot-message');
-                if (msg) msg.textContent = 'Configuration saved. Device is rebooting...';
+            if (requiresReboot) {
+                // Banner is the user feedback — skip the toast so it doesn't
+                // cover the freshly-appeared "reboot required" banner.
+                if (typeof setPendingReboot === 'function') setPendingReboot();
             } else {
-                showMessage('Configuration saved successfully!', 'success');
+                showMessage('Configuration saved', 'success');
             }
         } else {
             showMessage('Failed to save configuration', 'error');
         }
     } catch (error) {
-        if (reboot && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-            var msg = document.getElementById('reboot-message');
-            if (msg) msg.textContent = 'Configuration saved. Device is rebooting...';
-        } else {
-            var overlay = document.getElementById('reboot-overlay');
-            if (overlay) overlay.style.display = 'none';
-            showMessage('Error saving: ' + error.message, 'error');
-        }
+        showMessage('Error saving: ' + error.message, 'error');
     }
 }
 
 /**
  * Wire loadConfig() + a save button for the common config-fragment pattern.
  * @param {string} saveBtnId - ID of the save button element
- * @param {boolean} reboot - Whether saving should trigger a device reboot
+ * @param {boolean} requiresReboot - True if this fragment's settings need a
+ *   reboot to take effect; false for live-apply settings (brightness, etc.).
  */
-function initConfigFragment(saveBtnId, reboot) {
+function initConfigFragment(saveBtnId, requiresReboot) {
     loadConfig();
     var btn = document.getElementById(saveBtnId);
-    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(reboot); });
+    if (btn) btn.addEventListener('click', function () { saveFragmentConfig(requiresReboot); });
 }
 
 // ============================================================================
@@ -125,15 +128,17 @@ window.init_welcome_fragment = function () {
     }
 
     // Populate status cards from /api/health and /api/info
-    fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
+    getDeviceInfo().then(function (info) {
+        if (!info) return;
         var el;
         el = document.getElementById('welcome-firmware');
         if (el) el.textContent = info.version || '—';
         el = document.getElementById('welcome-firmware-detail');
         if (el) el.textContent = info.chip_model || '';
-    }).catch(function () {});
+    });
 
-    fetch('/api/health').then(function (r) { return r.json(); }).then(function (h) {
+    fetchHealthOnce().then(function (h) {
+        if (!h) return;
         var el;
         el = document.getElementById('welcome-wifi-status');
         if (el) el.textContent = h.ip_address ? 'Connected' : 'Disconnected';
@@ -151,7 +156,7 @@ window.init_welcome_fragment = function () {
             var m = Math.floor(s / 60);
             el.textContent = (d > 0 ? d + 'd ' : '') + hr + 'h ' + m + 'm';
         }
-    }).catch(function () {});
+    });
 };
 
 // ============================================================================
@@ -166,6 +171,110 @@ window.init_wifi_fragment = function () {
         if (notice) notice.style.display = 'block';
     }
 };
+
+// ============================================================================
+// Setup wizard (AP-mode first-boot onboarding)
+// ============================================================================
+//
+// Single-card form that combines wifi credentials with optional friendly
+// name, portal auth, and static IP. Submits everything in one POST and
+// reboots immediately — the deferred-reboot banner is not used here because
+// onboarding is a one-shot hand-off, not iterative tweaking.
+
+window.init_setup_fragment = function () {
+    loadConfig();  // pre-fill device_name (and ssid if already set)
+
+    // Checkbox → reveal/hide the corresponding field group.
+    function wireToggle(checkboxId, groupId) {
+        var cb = document.getElementById(checkboxId);
+        var group = document.getElementById(groupId);
+        if (!cb || !group) return;
+        cb.addEventListener('change', function () {
+            group.style.display = cb.checked ? '' : 'none';
+        });
+    }
+    wireToggle('setup_enable_auth', 'setup-auth-fields');
+    wireToggle('setup_use_static_ip', 'setup-static-ip-fields');
+
+    var btn = document.getElementById('setup-save-btn');
+    if (btn) btn.addEventListener('click', saveSetupWizard);
+};
+
+async function saveSetupWizard() {
+    var ssid = (document.getElementById('wifi_ssid') || {}).value || '';
+    if (!ssid.trim()) {
+        showMessage('WiFi network name is required', 'error');
+        return;
+    }
+
+    var authOn = !!(document.getElementById('setup_enable_auth') || {}).checked;
+    var staticIpOn = !!(document.getElementById('setup_use_static_ip') || {}).checked;
+    var nameEl = document.getElementById('device_name');
+    var newDeviceName = nameEl ? nameEl.value : null;
+
+    // Build payload: always include wifi + device_name; include auth / static
+    // IP fields only when their gating checkbox is on. Unchecked groups are
+    // simply omitted so the server keeps its existing defaults rather than
+    // forcing us to send no-op clearing values (which would also trip the
+    // AP-mode basic-auth security guard for non-first-boot sessions).
+    var config = {
+        wifi_ssid: ssid,
+        wifi_password: (document.getElementById('wifi_password') || {}).value || '',
+        device_name: newDeviceName || ''
+    };
+    if (authOn) {
+        config.basic_auth_enabled = true;
+        config.basic_auth_username = (document.getElementById('basic_auth_username') || {}).value || '';
+        config.basic_auth_password = (document.getElementById('basic_auth_password') || {}).value || '';
+    }
+    if (staticIpOn) {
+        config.fixed_ip    = (document.getElementById('fixed_ip')    || {}).value || '';
+        config.subnet_mask = (document.getElementById('subnet_mask') || {}).value || '';
+        config.gateway     = (document.getElementById('gateway')     || {}).value || '';
+        config.dns1        = (document.getElementById('dns1')        || {}).value || '';
+        config.dns2        = (document.getElementById('dns2')        || {}).value || '';
+    }
+
+    // Show reboot dialog up-front; if a friendly name was set, the dialog
+    // will direct the user to http://<sanitized>.local after the device
+    // comes back on the configured WiFi.
+    showRebootDialog({
+        title: 'Saving Configuration',
+        message: 'Connecting to WiFi...',
+        context: 'save',
+        newDeviceName: newDeviceName
+    });
+
+    try {
+        // No no_reboot=1 — we want the device to reboot now.
+        var response = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        if (!response.ok) {
+            // Try to surface the server-provided message (e.g. the AP-mode
+            // basic-auth guard's 403) rather than a generic fallback.
+            var serverMsg = null;
+            try {
+                var body = await response.json();
+                if (body && body.message) serverMsg = body.message;
+            } catch (_) { /* non-JSON body — fall through */ }
+            throw new Error(serverMsg || ('HTTP ' + response.status));
+        }
+        // Success path: the reboot dialog's reconnection poller handles the
+        // rest (network switch + redirect to mDNS hostname).
+    } catch (error) {
+        // In AP mode the TCP connection often drops mid-response as the
+        // device starts rebooting — that's normal and the reboot dialog
+        // already shows the manual reconnect instructions for that case.
+        if (!String(error.message).match(/Failed to fetch|NetworkError/)) {
+            var overlay = document.getElementById('reboot-overlay');
+            if (overlay) overlay.style.display = 'none';
+            showMessage('Error saving: ' + error.message, 'error');
+        }
+    }
+}
 
 // ============================================================================
 // Device Name
@@ -191,6 +300,61 @@ window.init_network_fragment = function () {
 
 window.init_mode_fragment = function () {
     initConfigFragment('mode-save-btn', true);
+
+    // Hide the BLE option unless the firmware build advertises BLE telemetry.
+    function applyCapsVisibility() {
+        var caps = (window.__device_caps || {});
+        var bleOpt = document.getElementById('mode_opt_duty_cycle_ble');
+        if (bleOpt) bleOpt.style.display = caps.ble ? '' : 'none';
+        // If BLE was the persisted choice but the build no longer supports it,
+        // fall back to always_on.
+        if (!caps.ble) {
+            var bleRadio = document.getElementById('operating_mode_duty_cycle_ble');
+            if (bleRadio && bleRadio.checked) {
+                var alwaysOn = document.getElementById('operating_mode_always_on');
+                if (alwaysOn) alwaysOn.checked = true;
+            }
+        }
+    }
+
+    function getSelectedMode() {
+        var checked = document.querySelector('input[type="radio"][name="operating_mode"]:checked');
+        return checked ? checked.value : 'always_on';
+    }
+
+    function updateModeVisibility() {
+        var mode = getSelectedMode();
+        var isDutyMqtt = (mode === 'duty_cycle_mqtt');
+        var isDutyBle = (mode === 'duty_cycle_ble');
+        var isAnyDuty = isDutyMqtt || isDutyBle;
+
+        var dc = document.getElementById('duty-cycle-settings');
+        if (dc) dc.style.display = isAnyDuty ? '' : 'none';
+        // Wi-Fi backoff is meaningless for BLE.
+        var backoff = document.getElementById('wifi-backoff-row');
+        if (backoff) backoff.style.display = isDutyMqtt ? '' : 'none';
+        var ble = document.getElementById('ble-telemetry-settings');
+        if (ble) ble.style.display = isDutyBle ? '' : 'none';
+    }
+
+    var radios = document.querySelectorAll('input[type="radio"][name="operating_mode"]');
+    radios.forEach(function (r) { r.addEventListener('change', updateModeVisibility); });
+
+    // loadConfig() runs asynchronously; observe selection until the populated
+    // value differs from the initial DOM state (or we time out).
+    var initial = getSelectedMode();
+    var attempts = 0;
+    var timer = setInterval(function () {
+        attempts++;
+        if (getSelectedMode() !== initial || (window.__device_caps && Object.keys(window.__device_caps).length) || attempts > 40) {
+            clearInterval(timer);
+            applyCapsVisibility();
+            updateModeVisibility();
+        }
+    }, 50);
+
+    applyCapsVisibility();
+    updateModeVisibility();
 };
 
 // ============================================================================
@@ -216,23 +380,22 @@ window.init_brightness_fragment = function () {
     if (screenSelect) screenSelect.addEventListener('change', handleScreenChange);
 
     // Load screen selection dropdown if available
-    fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
-        if (info.screens && info.screens.length > 0) {
-            var group = document.getElementById('screen-selection-group');
-            var sel = document.getElementById('screen_selection');
-            if (group && sel) {
-                group.style.display = '';
-                sel.innerHTML = '';
-                info.screens.forEach(function (s) {
-                    var opt = document.createElement('option');
-                    opt.value = s.index;
-                    opt.textContent = s.name;
-                    if (s.active) opt.selected = true;
-                    sel.appendChild(opt);
-                });
-            }
+    getDeviceInfo().then(function (info) {
+        if (!info || !info.screens || info.screens.length === 0) return;
+        var group = document.getElementById('screen-selection-group');
+        var sel = document.getElementById('screen_selection');
+        if (group && sel) {
+            group.style.display = '';
+            sel.innerHTML = '';
+            info.screens.forEach(function (s) {
+                var opt = document.createElement('option');
+                opt.value = s.index;
+                opt.textContent = s.name;
+                if (s.active) opt.selected = true;
+                sel.appendChild(opt);
+            });
         }
-    }).catch(function () {});
+    });
 };
 
 // ============================================================================
@@ -252,10 +415,7 @@ window.init_screensaver_fragment = function () {
 window.init_swipe_actions_fragment = function () {
     if (typeof swipeInitEditors === 'function') swipeInitEditors();
     if (typeof loadSwipeActions === 'function') loadSwipeActions();
-    fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })
-        .then(function (sounds) {
-            if (typeof actionEditorPopulateSounds === 'function') actionEditorPopulateSounds(SWIPE_DIRECTIONS, sounds);
-        }).catch(function () {});
+    actionEditorWireFragment(SWIPE_DIRECTIONS);
 };
 
 // ============================================================================
@@ -265,10 +425,7 @@ window.init_swipe_actions_fragment = function () {
 window.init_boot_actions_fragment = function () {
     if (typeof bootActionsInitEditors === 'function') bootActionsInitEditors();
     if (typeof loadBootActions === 'function') loadBootActions();
-    fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })
-        .then(function (sounds) {
-            if (typeof actionEditorPopulateSounds === 'function') actionEditorPopulateSounds(BOOT_ACTION_PREFIXES, sounds);
-        }).catch(function () {});
+    actionEditorWireFragment(BOOT_ACTION_PREFIXES);
 };
 
 // ============================================================================
@@ -278,10 +435,7 @@ window.init_boot_actions_fragment = function () {
 window.init_timers_fragment = function () {
     if (typeof timerConfigInitEditors === 'function') timerConfigInitEditors();
     if (typeof loadTimerConfig === 'function') loadTimerConfig();
-    fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })
-        .then(function (sounds) {
-            if (typeof actionEditorPopulateSounds === 'function') actionEditorPopulateSounds(TIMER_EXPIRE_PREFIXES, sounds);
-        }).catch(function () {});
+    actionEditorWireFragment(TIMER_EXPIRE_PREFIXES);
 };
 
 // ============================================================================
@@ -351,9 +505,9 @@ window.init_thresholds_fragment = function () {
 
 window.init_ota_update_fragment = function () {
     // Populate GitHub Pages link
-    fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
+    getDeviceInfo().then(function (info) {
         if (typeof updateOnlineUpdateSection === 'function') updateOnlineUpdateSection(info);
-    }).catch(function () {});
+    });
 };
 
 // ============================================================================
@@ -376,7 +530,8 @@ window.init_version_info_fragment = function () {
         var el = document.getElementById(id);
         if (el) el.textContent = val || '—';
     };
-    fetch('/api/info').then(function (r) { return r.json(); }).then(function (info) {
+    getDeviceInfo().then(function (info) {
+        if (!info) return;
         set('vi-firmware', info.version);
         set('vi-chip', info.chip_model);
         set('vi-cores', info.chip_cores);
@@ -385,10 +540,11 @@ window.init_version_info_fragment = function () {
         set('vi-psram', info.psram_size ? (info.psram_size / 1048576).toFixed(1) + ' MB' : null);
         set('vi-sdk', info.idf_version);
         set('vi-device-name', info.hostname);
-    }).catch(function () {});
-    fetch('/api/health').then(function (r) { return r.json(); }).then(function (h) {
+    });
+    fetchHealthOnce().then(function (h) {
+        if (!h) return;
         set('vi-ip', h.ip_address);
-    }).catch(function () {});
+    });
 };
 
 // ============================================================================

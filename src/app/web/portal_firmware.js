@@ -11,7 +11,6 @@ function handleFileSelect(event) {
     
     if (selectedFile && selectedFile.name.endsWith('.bin')) {
         uploadBtn.disabled = false;
-        showMessage(`Selected: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)`, 'info');
     } else {
         uploadBtn.disabled = true;
         if (selectedFile) {
@@ -76,7 +75,6 @@ async function uploadFirmware() {
                     reconnectStatus.style.display = 'block';
                     
                     // Start unified reconnection
-                    const currentDeviceName = document.getElementById('device_name').value;
                     const targetAddress = window.location.origin;
                     document.getElementById('reboot-submessage').innerHTML = 
                         `Attempting automatic reconnection...<br><small style="color: #888; margin-top: 8px; display: block;">If this fails, manually navigate to: <code style="color: #667eea; font-weight: 600;">${targetAddress}</code></small>`;
@@ -107,7 +105,6 @@ async function uploadFirmware() {
                 reconnectStatus.style.display = 'block';
                 
                 // Start unified reconnection
-                const currentDeviceName = document.getElementById('device_name').value;
                 const targetAddress = window.location.origin;
                 document.getElementById('reboot-submessage').innerHTML = 
                     `Attempting automatic reconnection...<br><small style="color: #888; margin-top: 8px; display: block;">If this fails, manually navigate to: <code style="color: #667eea; font-weight: 600;">${targetAddress}</code></small>`;

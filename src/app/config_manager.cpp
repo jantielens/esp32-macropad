@@ -10,6 +10,7 @@
 #include "web_assets.h"
 #include "log_manager.h"
 #include "power_config.h"
+#include "storage.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 
@@ -29,13 +30,18 @@
 #define KEY_MQTT_PORT      "mqtt_port"
 #define KEY_MQTT_USER      "mqtt_user"
 #define KEY_MQTT_PASS      "mqtt_pass"
-#define KEY_MQTT_INTERVAL  "mqtt_int" // legacy (pre-cycle interval)
-#define KEY_POWER_MODE     "pwr_mode"
-#define KEY_CYCLE_INTERVAL "cycle_s"
+#define KEY_OPERATING_MODE "op_mode"
+#define KEY_DC_WAKE        "dc_wake_s"
+#define KEY_MQTT_PUB       "mqtt_pub_s"
 #define KEY_PORTAL_IDLE    "portal_idle"
 #define KEY_WIFI_BACKOFF_MAX "wifi_bomax"
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
+
+#if HAS_BLE
+#define KEY_BLE_BURST_COUNT     "ble_brst"
+#define KEY_BLE_ADV_INTERVAL_MS "ble_adv"
+#endif
 
 // Web portal Basic Auth
 #define KEY_BASIC_AUTH_ENABLED "ba_en"
@@ -148,12 +154,18 @@ bool config_manager_load(DeviceConfig *config) {
 				config->backlight_brightness = 100;  // Default to full brightness
 				config->mqtt_port = 0;
 
-				strlcpy(config->power_mode, "always_on", CONFIG_POWER_MODE_MAX_LEN);
-				config->cycle_interval_seconds = 120;
+				strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
+				config->duty_cycle_wake_seconds = 120;
+				config->mqtt_publish_interval_seconds = 120;
 				config->portal_idle_timeout_seconds = 120;
 				config->wifi_backoff_max_seconds = 900;
 
 				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
+
+				#if HAS_BLE
+				config->ble_burst_count = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
+				config->ble_adv_interval_ms = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
+				#endif
 
 				// Basic Auth defaults
 				config->basic_auth_enabled = false;
@@ -204,18 +216,15 @@ bool config_manager_load(DeviceConfig *config) {
 		config->mqtt_port = preferences.getUShort(KEY_MQTT_PORT, 0);
 		preferences.getString(KEY_MQTT_USER, config->mqtt_username, CONFIG_MQTT_USERNAME_MAX_LEN);
 		preferences.getString(KEY_MQTT_PASS, config->mqtt_password, CONFIG_MQTT_PASSWORD_MAX_LEN);
-		const uint16_t legacy_mqtt_interval_seconds = preferences.getUShort(KEY_MQTT_INTERVAL, 0);
 
 		// Load power settings
-		preferences.getString(KEY_POWER_MODE, config->power_mode, CONFIG_POWER_MODE_MAX_LEN);
-		if (strlen(config->power_mode) == 0) {
-				strlcpy(config->power_mode, "always_on", CONFIG_POWER_MODE_MAX_LEN);
+		preferences.getString(KEY_OPERATING_MODE, config->operating_mode, CONFIG_OPERATING_MODE_MAX_LEN);
+		if (strlen(config->operating_mode) == 0) {
+				strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
 		}
 
-		config->cycle_interval_seconds = preferences.getUShort(KEY_CYCLE_INTERVAL, 120);
-		if (config->cycle_interval_seconds == 0 && legacy_mqtt_interval_seconds > 0) {
-				config->cycle_interval_seconds = legacy_mqtt_interval_seconds;
-		}
+		config->duty_cycle_wake_seconds = preferences.getUShort(KEY_DC_WAKE, 120);
+		config->mqtt_publish_interval_seconds = preferences.getUShort(KEY_MQTT_PUB, 120);
 		config->portal_idle_timeout_seconds = preferences.getUShort(KEY_PORTAL_IDLE, 120);
 		config->wifi_backoff_max_seconds = preferences.getUShort(KEY_WIFI_BACKOFF_MAX, 900);
 
@@ -223,6 +232,11 @@ bool config_manager_load(DeviceConfig *config) {
 		if (strlen(config->mqtt_publish_scope) == 0) {
 				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
 		}
+
+		#if HAS_BLE
+		config->ble_burst_count = preferences.getUChar(KEY_BLE_BURST_COUNT, BLE_TELEMETRY_DEFAULT_BURST_COUNT);
+		config->ble_adv_interval_ms = preferences.getUShort(KEY_BLE_ADV_INTERVAL_MS, BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS);
+		#endif
 		
 		// Load display settings
 		config->backlight_brightness = preferences.getUChar(KEY_BACKLIGHT_BRIGHTNESS, 100);
@@ -315,13 +329,19 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putString(KEY_MQTT_PASS, config->mqtt_password);
 
 		// Save power settings
-		preferences.putString(KEY_POWER_MODE, config->power_mode);
-		preferences.putUShort(KEY_CYCLE_INTERVAL, config->cycle_interval_seconds);
+		preferences.putString(KEY_OPERATING_MODE, config->operating_mode);
+		preferences.putUShort(KEY_DC_WAKE, config->duty_cycle_wake_seconds);
+		preferences.putUShort(KEY_MQTT_PUB, config->mqtt_publish_interval_seconds);
 		preferences.putUShort(KEY_PORTAL_IDLE, config->portal_idle_timeout_seconds);
 		preferences.putUShort(KEY_WIFI_BACKOFF_MAX, config->wifi_backoff_max_seconds);
 
 		preferences.putString(KEY_MQTT_SCOPE, config->mqtt_publish_scope);
-		
+
+		#if HAS_BLE
+		preferences.putUChar(KEY_BLE_BURST_COUNT, config->ble_burst_count);
+		preferences.putUShort(KEY_BLE_ADV_INTERVAL_MS, config->ble_adv_interval_ms);
+		#endif
+
 		// Save display settings
 		LOGI("Config", "Saving brightness: %d%%", config->backlight_brightness);
 		preferences.putUChar(KEY_BACKLIGHT_BRIGHTNESS, config->backlight_brightness);
@@ -361,21 +381,93 @@ bool config_manager_save(const DeviceConfig *config) {
 		return true;
 }
 
-// Reset configuration (erase from NVS)
-bool config_manager_reset() {
-		LOGI("Config", "Reset start");
-		
-		preferences.begin(CONFIG_NAMESPACE, false);
-		bool success = preferences.clear();
-		preferences.end();
-		
-		if (success) {
-				LOGI("Config", "Reset complete");
-		} else {
-				LOGE("Config", "Failed to reset");
+// Recursively remove a directory tree on the active Storage backend.
+// Returns true if `path` no longer exists (or never did) after the call.
+// Individual remove/rmdir failures are logged.
+static bool factory_reset_rmrf(const char* path) {
+		if (!path || !*path) return true;
+		if (!Storage.exists(path)) return true;
+
+		File root = Storage.open(path);
+		if (!root) {
+				LOGW("Config", "rmrf: cannot open %s", path);
+				return false;
 		}
-		
-		return success;
+		if (!root.isDirectory()) {
+				root.close();
+				if (Storage.remove(path)) return true;
+				LOGW("Config", "rmrf: failed to remove file %s", path);
+				return false;
+		}
+
+		bool ok = true;
+		File entry = root.openNextFile();
+		while (entry) {
+				// Build the child's full path. Some FS impls return absolute names
+				// from entry.name(); strip a leading slash so we don't get "//foo".
+				const char* name = entry.name();
+				if (name && name[0] == '/') name++;
+				String child(path);
+				if (!child.endsWith("/")) child += "/";
+				child += (name ? name : "");
+
+				bool is_dir = entry.isDirectory();
+				entry.close();
+				if (is_dir) {
+						if (!factory_reset_rmrf(child.c_str())) ok = false;
+				} else {
+						if (!Storage.remove(child.c_str())) {
+								LOGW("Config", "rmrf: failed to remove %s", child.c_str());
+								ok = false;
+						}
+				}
+				entry = root.openNextFile();
+		}
+		root.close();
+
+		if (!Storage.rmdir(path)) {
+				LOGW("Config", "rmrf: failed to rmdir %s", path);
+				ok = false;
+		}
+		return ok;
+}
+
+// Factory reset: erase the entire NVS partition and wipe user data on the
+// filesystem (pad configs, button defaults, timer/swipe/boot actions, icons,
+// sounds, indexed stores). Caller is expected to reboot immediately after.
+// Returns true only if BOTH the NVS erase and the filesystem wipe succeeded.
+bool config_manager_factory_reset() {
+		LOGI("Config", "Factory reset: erasing NVS partition");
+		esp_err_t err = nvs_flash_erase();
+		if (err != ESP_OK) {
+				LOGE("Config", "nvs_flash_erase failed (%d)", (int)err);
+		}
+		// Re-init NVS so any code path that runs before the imminent reboot
+		// (logging, BLE deinit, etc.) does not crash on a closed partition.
+		nvs_flash_init();
+
+		LOGI("Config", "Factory reset: wiping filesystem");
+		bool fs_ok = true;
+#if USE_SD_STORAGE
+		// SD: cannot safely format from firmware. Selectively remove the
+		// directories the firmware owns; leave any user files at root alone.
+		fs_ok &= factory_reset_rmrf("/config");
+		fs_ok &= factory_reset_rmrf("/icons");
+		fs_ok &= factory_reset_rmrf("/sounds");
+		fs_ok &= factory_reset_rmrf("/storage");
+#else
+		// LittleFS: format wipes everything in the data partition cleanly.
+		if (!LittleFS.format()) {
+				LOGE("Config", "LittleFS.format() failed");
+				fs_ok = false;
+		} else {
+				LOGI("Config", "LittleFS formatted");
+		}
+#endif
+
+		const bool ok = (err == ESP_OK) && fs_ok;
+		LOGI("Config", "Factory reset %s", ok ? "complete" : "FAILED (partial wipe)");
+		return ok;
 }
 
 #if HAS_BLE_HID
@@ -430,7 +522,7 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 		if (strlen(config->device_name) == 0) return false;
 
 		const PowerMode mode = power_config_parse_power_mode(config);
-		const bool needs_wifi = (mode != PowerMode::DutyCycle);
+		const bool needs_wifi = (mode != PowerMode::DutyCycle && mode != PowerMode::DutyCycleBle);
 
 		if (needs_wifi && strlen(config->wifi_ssid) == 0) return false;
 
@@ -464,9 +556,9 @@ void config_manager_print(const DeviceConfig *config) {
 				LOGI("Config", "IP: DHCP");
 		}
 
-LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
-			config->power_mode,
-			(unsigned)config->cycle_interval_seconds,
+LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
+			config->operating_mode,
+			(unsigned)config->duty_cycle_wake_seconds,
 			(unsigned)config->portal_idle_timeout_seconds,
 			(unsigned)config->wifi_backoff_max_seconds
 		);
@@ -476,8 +568,8 @@ LOGI("Config", "Power: mode=%s interval=%us idle=%us backoff_max=%us",
 #if HAS_MQTT
 		if (strlen(config->mqtt_host) > 0) {
 				uint16_t port = config->mqtt_port > 0 ? config->mqtt_port : 1883;
-				if (config->cycle_interval_seconds > 0) {
-						LOGI("Config", "MQTT: %s:%d (interval %us)", config->mqtt_host, port, (unsigned)config->cycle_interval_seconds);
+				if (config->mqtt_publish_interval_seconds > 0) {
+						LOGI("Config", "MQTT: %s:%d (publish interval %us)", config->mqtt_host, port, (unsigned)config->mqtt_publish_interval_seconds);
 				} else {
 						LOGI("Config", "MQTT: %s:%d (publish disabled)", config->mqtt_host, port);
 				}

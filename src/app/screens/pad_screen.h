@@ -97,9 +97,9 @@ struct ButtonTile {
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
-    lv_image_dsc_t img_dsc;   // LVGL image descriptor for current frame
-    uint16_t* owned_pixels;   // Tile-owned copy of pixel data (PSRAM)
-    size_t owned_pixels_size; // Byte size of owned_pixels buffer
+    lv_image_dsc_t img_dsc;   // LVGL image descriptor for current frame.
+                              // dsc.data points into image_fetch's lvgl_buf
+                              // (zero-copy hand-off); tile does not own pixels.
 #endif
 };
 

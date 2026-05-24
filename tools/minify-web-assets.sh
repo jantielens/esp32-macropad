@@ -161,6 +161,90 @@ concatenate_bundle() {
     done < "$manifest"
 }
 
+# concatenate_bundle_chunked <manifest> <chunks_array> <flags_array> <names_array>
+#   Parses a .bundle manifest with `# [chunk:NAME]` or `# [chunk:NAME HAS_FLAG]`
+#   markers and emits one temp file per chunk (in order). Populates:
+#     chunks: list of temp file paths (caller must rm)
+#     flags:  list of feature flag strings (empty for always-on chunks)
+#     names:  list of chunk names (e.g. "core", "pad")
+#   Files before the first marker are an error. Empty chunks are an error.
+#   Returns 1 if the manifest does not exist or parsing fails.
+concatenate_bundle_chunked() {
+    local manifest="$1"
+    local -n _chunks="$2"
+    local -n _flags="$3"
+    local -n _names="$4"
+    [[ -f "$manifest" ]] || return 1
+    _chunks=()
+    _flags=()
+    _names=()
+
+    local current_flag=""
+    local current_name=""
+    local current_tmp=""
+    local has_content=0
+    local seen_marker=0
+
+    while IFS= read -r bline || [[ -n "$bline" ]]; do
+        # Detect [chunk:NAME] or [chunk:NAME HAS_FLAG] markers BEFORE stripping.
+        local trimmed
+        trimmed=$(echo "$bline" | xargs)
+        if [[ "$trimmed" =~ ^#[[:space:]]*\[chunk:([a-z0-9_-]+)(([[:space:]]+HAS_[A-Z_0-9]+)?)\][[:space:]]*$ ]]; then
+            local new_name="${BASH_REMATCH[1]}"
+            local new_flag_raw="${BASH_REMATCH[2]}"
+            local new_flag
+            new_flag=$(echo "$new_flag_raw" | xargs)
+            # Flush current chunk
+            if [[ $seen_marker -eq 1 ]]; then
+                if [[ $has_content -eq 0 ]]; then
+                    echo "  ✗ chunk [$current_name] is empty" >&2
+                    rm -f "$current_tmp"
+                    return 1
+                fi
+                _chunks+=("$current_tmp")
+                _flags+=("$current_flag")
+                _names+=("$current_name")
+            fi
+            current_name="$new_name"
+            current_flag="$new_flag"
+            current_tmp=$(mktemp /tmp/bundle_chunk_XXXXXX)
+            has_content=0
+            seen_marker=1
+            continue
+        fi
+        bline="${bline%%#*}"
+        bline="$(echo "$bline" | xargs)"
+        [[ -z "$bline" ]] && continue
+        if [[ $seen_marker -eq 0 ]]; then
+            echo "  ✗ file '$bline' appears before first [chunk:NAME] marker" >&2
+            return 1
+        fi
+        cat "$WEB_DIR/$bline" >> "$current_tmp"
+        echo >> "$current_tmp"
+        has_content=1
+    done < "$manifest"
+
+    # Flush trailing chunk
+    if [[ $seen_marker -eq 1 ]]; then
+        if [[ $has_content -eq 0 ]]; then
+            echo "  ✗ chunk [$current_name] is empty" >&2
+            rm -f "$current_tmp"
+            return 1
+        fi
+        _chunks+=("$current_tmp")
+        _flags+=("$current_flag")
+        _names+=("$current_name")
+    fi
+}
+
+# bundle_has_chunk_markers <manifest>
+#   Returns 0 if the manifest contains any `# [chunk:NAME]` markers, 1 otherwise.
+bundle_has_chunk_markers() {
+    local manifest="$1"
+    [[ -f "$manifest" ]] || return 1
+    grep -qE '^[[:space:]]*#[[:space:]]*\[chunk:[a-z0-9_-]+([[:space:]]+HAS_[A-Z_0-9]+)?\][[:space:]]*$' "$manifest"
+}
+
 declare -A JS_SKIP_FILES
 declare -A CSS_SKIP_FILES
 discover_bundle_manifests "js" JS_SKIP_FILES
@@ -527,13 +611,82 @@ with open('$css_source', 'r') as f:
     GZIPPED_SIZES["css_$filename"]=$gzipped_size
 done
 
+# Per-chunk feature-flag map for chunked JS bundles. Keys are JS_CONTENTS keys
+# (e.g. "portal_core"); values are HAS_* macro names (or empty for always-on).
+declare -A JS_CHUNK_FLAGS
+# Per-chunk human name (e.g. "core", "pad"); keyed by JS_CONTENTS key.
+declare -A JS_CHUNK_NAMES
+# Map from bundle primary key (e.g. "portal") to space-separated chunk keys
+# in concatenation order. Used during header emission to write the chunks table.
+declare -A JS_BUNDLE_CHUNKS
+
 # Process JS files (minify, with bundle support)
 for js_file in "${JS_FILES[@]}"; do
     raw_name=$(basename "$js_file" .js)
     filename="${raw_name//[.-]/_}"
 
-    # Bundle support: if a .bundle manifest exists, concatenate fragments
     bundle_manifest="${js_file}.bundle"
+
+    # --- Chunked bundle path (manifest contains [HAS_*] markers) ---
+    if bundle_has_chunk_markers "$bundle_manifest"; then
+        echo "Bundling JS (chunked): $raw_name.js (from $(basename "$bundle_manifest"))..."
+
+        chunk_paths=()
+        chunk_flags=()
+        chunk_names=()
+        if ! concatenate_bundle_chunked "$bundle_manifest" chunk_paths chunk_flags chunk_names; then
+            echo "  ✗ Failed to parse bundle manifest $bundle_manifest"
+            exit 1
+        fi
+
+        chunk_keys=""
+        for ci in "${!chunk_paths[@]}"; do
+            chunk_path="${chunk_paths[$ci]}"
+            chunk_flag="${chunk_flags[$ci]}"
+            chunk_name="${chunk_names[$ci]}"
+            chunk_key="${filename}_${chunk_name}"
+
+            # Syntax-check the chunk independently
+            if command -v node &> /dev/null; then
+                if ! node --check "$chunk_path" 2>/dev/null; then
+                    echo "  ✗ Bundle chunk [${chunk_name}] (${chunk_flag:-always}) has syntax errors:"
+                    node --check "$chunk_path" 2>&1 | sed 's/^/    /'
+                    rm -f "${chunk_paths[@]}"
+                    exit 1
+                fi
+            fi
+
+            echo "  Minifying chunk [${chunk_name}] (${chunk_flag:-always})..."
+            chunk_orig_size=$(wc -c <"$chunk_path")
+
+            chunk_minified=$(python3 -c "
+import rjsmin
+with open('$chunk_path', 'r') as f:
+    js = f.read()
+    print(rjsmin.jsmin(js), end='')
+")
+            rm -f "$chunk_path"
+
+            JS_CONTENTS["$chunk_key"]="$chunk_minified"
+            JS_CHUNK_FLAGS["$chunk_key"]="$chunk_flag"
+            JS_CHUNK_NAMES["$chunk_key"]="$chunk_name"
+            chunk_min_size=$(echo -n "$chunk_minified" | wc -c)
+
+            chunk_gzipped=$(gzip_to_c_array "$chunk_minified")
+            JS_GZIP_CONTENTS["$chunk_key"]="$chunk_gzipped"
+            chunk_gz_size=$(echo -n "$chunk_minified" | gzip -9 -c | wc -c)
+
+            ORIGINAL_SIZES["js_$chunk_key"]=$chunk_orig_size
+            PROCESSED_SIZES["js_$chunk_key"]=$chunk_min_size
+            GZIPPED_SIZES["js_$chunk_key"]=$chunk_gz_size
+
+            chunk_keys+="$chunk_key "
+        done
+        JS_BUNDLE_CHUNKS["$filename"]="${chunk_keys% }"
+        continue
+    fi
+
+    # --- Plain bundle / single-file path ---
     js_source="$js_file"
     if concatenate_bundle "$bundle_manifest" js_source; then
         echo "Bundling JS: $raw_name.js (from $(basename "$bundle_manifest"))..."
@@ -676,12 +829,41 @@ cat > "$OUTPUT_FILE" << 'HEADER_START'
 
 #include <Arduino.h>
 
+// Board feature flags — gate display/audio/MQTT-only fragments away when
+// the corresponding subsystem is disabled at compile time. Without this
+// the linker pulls in every PROGMEM fragment array even though headless
+// builds never call find_fragment_asset() for them.
+#include "board_config.h"
+
 // Project branding (from config.sh)
 // Kept in a tiny header so non-web code can include branding without pulling
 // in the large embedded asset arrays.
 #include "project_branding.h"
 
 HEADER_START
+
+# Map a fragment filename stem (e.g. "pad_editor_fragment") to the
+# compile-time feature flag that must be true for the fragment to be
+# included in the build. Echoes nothing for always-on fragments.
+fragment_feature_flag() {
+    local stem="$1"
+    # Strip trailing _fragment suffix
+    stem="${stem%_fragment}"
+    case "$stem" in
+        pad_editor|swipe_actions|boot_actions|button_defaults|timers|brightness|screensaver)
+            echo "HAS_DISPLAY" ;;
+        mqtt|ha_discovery)
+            echo "HAS_MQTT" ;;
+        ble)
+            echo "HAS_BLE_HID" ;;
+        volume)
+            echo "HAS_AUDIO" ;;
+        sounds)
+            echo "HAS_SOUND_PLAYER" ;;
+        *)
+            echo "" ;;
+    esac
+}
 
 # Generate HTML sections (gzipped)
 for filename in "${!HTML_CONTENTS[@]}"; do
@@ -696,6 +878,10 @@ done
 
 # Generate fragment HTML sections (gzipped)
 for filename in "${!FRAGMENT_CONTENTS[@]}"; do
+    flag=$(fragment_feature_flag "$filename")
+    if [[ -n "$flag" ]]; then
+        echo "#if $flag" >> "$OUTPUT_FILE"
+    fi
     cat >> "$OUTPUT_FILE" << EOF
 // Fragment from src/app/web/${filename%.fragment*}.fragment.html (gzipped)
 const uint8_t ${filename}_html_gz[] PROGMEM = {
@@ -703,6 +889,10 @@ ${FRAGMENT_GZIP_CONTENTS[$filename]}
 };
 
 EOF
+    if [[ -n "$flag" ]]; then
+        echo "#endif // $flag" >> "$OUTPUT_FILE"
+        echo >> "$OUTPUT_FILE"
+    fi
 done
 
 # Generate CSS sections (gzipped)
@@ -716,8 +906,13 @@ ${CSS_GZIP_CONTENTS[$filename]}
 EOF
 done
 
-# Generate JS sections (gzipped)
+# Generate JS sections (gzipped). Chunked-bundle keys are emitted as
+# per-variant blobs in a separate pass below (one combined PROGMEM array
+# per build), so skip them here.
 for filename in "${!JS_CONTENTS[@]}"; do
+    if [[ -n "${JS_CHUNK_NAMES[$filename]:-}" ]]; then
+        continue
+    fi
     cat >> "$OUTPUT_FILE" << EOF
 // JavaScript from src/app/web/${filename}.js (minified + gzipped)
 const uint8_t ${filename}_js_gz[] PROGMEM = {
@@ -738,7 +933,14 @@ for filename in "${!HTML_CONTENTS[@]}"; do
 done
 
 for filename in "${!FRAGMENT_CONTENTS[@]}"; do
-    echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
+    flag=$(fragment_feature_flag "$filename")
+    if [[ -n "$flag" ]]; then
+        echo "#if $flag" >> "$OUTPUT_FILE"
+        echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
+        echo "#endif // $flag" >> "$OUTPUT_FILE"
+    else
+        echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
+    fi
 done
 
 for filename in "${!CSS_CONTENTS[@]}"; do
@@ -746,7 +948,112 @@ for filename in "${!CSS_CONTENTS[@]}"; do
 done
 
 for filename in "${!JS_CONTENTS[@]}"; do
+    if [[ -n "${JS_CHUNK_NAMES[$filename]:-}" ]]; then
+        continue
+    fi
     echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
+done
+
+# Generate JS bundle variants. For each chunked bundle (e.g. portal_js):
+#   1. Collect unique HAS_* flags used across chunks (capped at 3 -> 8 variants).
+#   2. For each 2^N combination, concatenate chunks whose flag is unset OR
+#      matches the combination, then gzip ONCE.
+#   3. Emit each variant as a #if-guarded PROGMEM array under the same
+#      symbol name (${bundle_name}_js_gz). Exactly one #if branch matches
+#      per build -> one combined blob, one HTTP request, one gzip member.
+for bundle_name in "${!JS_BUNDLE_CHUNKS[@]}"; do
+    chunks="${JS_BUNDLE_CHUNKS[$bundle_name]}"
+
+    declare -a unique_flags=()
+    declare -A seen_flags=()
+    for ckey in $chunks; do
+        f="${JS_CHUNK_FLAGS[$ckey]:-}"
+        if [[ -n "$f" && -z "${seen_flags[$f]:-}" ]]; then
+            unique_flags+=("$f")
+            seen_flags["$f"]=1
+        fi
+    done
+    n_flags=${#unique_flags[@]}
+    if [[ $n_flags -gt 3 ]]; then
+        echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 3 supported)." >&2
+        echo "     Each flag doubles flash cost across boards; consolidate chunks instead." >&2
+        unset unique_flags seen_flags
+        exit 1
+    fi
+    n_variants=$((1 << n_flags))
+    echo "Building variants for ${bundle_name}_js (${n_flags} unique flags, ${n_variants} variant(s))..."
+
+    cat >> "$OUTPUT_FILE" << EOF
+
+// JS bundle variants for ${bundle_name}.js
+// Chunks: $(echo $chunks)
+// Unique flags: ${unique_flags[*]:-<none>}
+// Each board build matches exactly one #if branch below.
+EOF
+
+    for ((v=0; v<n_variants; v++)); do
+        if_expr=""
+        for ((b=0; b<n_flags; b++)); do
+            flag="${unique_flags[$b]}"
+            if (( (v >> b) & 1 )); then
+                cond="$flag"
+            else
+                cond="!$flag"
+            fi
+            if [[ -z "$if_expr" ]]; then
+                if_expr="$cond"
+            else
+                if_expr="$if_expr && $cond"
+            fi
+        done
+
+        variant_tmp=$(mktemp /tmp/bundle_variant_XXXXXX)
+        for ckey in $chunks; do
+            cflag="${JS_CHUNK_FLAGS[$ckey]:-}"
+            include=0
+            if [[ -z "$cflag" ]]; then
+                include=1
+            else
+                for ((b=0; b<n_flags; b++)); do
+                    if [[ "${unique_flags[$b]}" == "$cflag" ]]; then
+                        if (( (v >> b) & 1 )); then include=1; fi
+                        break
+                    fi
+                done
+            fi
+            if [[ $include -eq 1 ]]; then
+                printf '%s\n' "${JS_CONTENTS[$ckey]}" >> "$variant_tmp"
+            fi
+        done
+
+        variant_orig_size=$(wc -c <"$variant_tmp")
+        variant_gz_size=$(gzip -9 -c <"$variant_tmp" | wc -c)
+        variant_gz=$(gzip_to_c_array "$(cat "$variant_tmp")")
+        rm -f "$variant_tmp"
+
+        if [[ $n_flags -eq 0 ]]; then
+            cat >> "$OUTPUT_FILE" << EOF
+const uint8_t ${bundle_name}_js_gz[] PROGMEM = {
+${variant_gz}
+};
+const size_t ${bundle_name}_js_gz_len = sizeof(${bundle_name}_js_gz);
+
+EOF
+        else
+            cat >> "$OUTPUT_FILE" << EOF
+#if ${if_expr}
+const uint8_t ${bundle_name}_js_gz[] PROGMEM = {
+${variant_gz}
+};
+const size_t ${bundle_name}_js_gz_len = sizeof(${bundle_name}_js_gz);
+#endif // ${if_expr}
+
+EOF
+        fi
+        printf "  variant %d/%d [%s]: %d -> %d bytes\n" "$((v+1))" "$n_variants" "${if_expr:-always}" "$variant_orig_size" "$variant_gz_size"
+    done
+
+    unset unique_flags seen_flags
 done
 
 # Generate fragment lookup table for runtime dispatch
@@ -767,7 +1074,14 @@ FRAG_TABLE_START
         # Convert symbol name back to fragment_id: wifi_fragment -> wifi, pad_editor_fragment -> pad-editor
         frag_id="${filename%_fragment}"
         frag_id="${frag_id//_/-}"
-        echo "    {\"$frag_id\", ${filename}_html_gz, sizeof(${filename}_html_gz)}," >> "$OUTPUT_FILE"
+        flag=$(fragment_feature_flag "$filename")
+        if [[ -n "$flag" ]]; then
+            echo "#if $flag" >> "$OUTPUT_FILE"
+            echo "    {\"$frag_id\", ${filename}_html_gz, sizeof(${filename}_html_gz)}," >> "$OUTPUT_FILE"
+            echo "#endif // $flag" >> "$OUTPUT_FILE"
+        else
+            echo "    {\"$frag_id\", ${filename}_html_gz, sizeof(${filename}_html_gz)}," >> "$OUTPUT_FILE"
+        fi
     done
 
     cat >> "$OUTPUT_FILE" << 'FRAG_TABLE_END'

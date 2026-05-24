@@ -8,10 +8,49 @@
  * Multi-page support: home, network, firmware
  */
 
+// ---------------------------------------------------------------------------
+// Fetch concurrency limiter
+// ---------------------------------------------------------------------------
+// ESP-Hosted SDIO transports (ESP32-P4 + external ESP32-C6) allocate AsyncTCP
+// TX buffers from MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL. Concurrent responses
+// fragment that pool and can drive copy_buff allocations to NULL, asserting
+// inside transport_drv_sta_tx. Capping browser-side concurrency to 2 keeps
+// the largest free DMA-internal block above safe-water-mark in practice.
+// Applies to all window.fetch callers in the portal; navigations and image
+// loads are not affected.
+(function () {
+    var MAX_INFLIGHT = 2;
+    var inflight = 0;
+    var queue = [];
+    var originalFetch = window.fetch.bind(window);
+
+    function pump() {
+        while (inflight < MAX_INFLIGHT && queue.length > 0) {
+            var job = queue.shift();
+            inflight++;
+            originalFetch(job.input, job.init).then(function (res) {
+                inflight--;
+                job.resolve(res);
+                pump();
+            }, function (err) {
+                inflight--;
+                job.reject(err);
+                pump();
+            });
+        }
+    }
+
+    window.fetch = function (input, init) {
+        return new Promise(function (resolve, reject) {
+            queue.push({ input: input, init: init, resolve: resolve, reject: reject });
+            pump();
+        });
+    };
+})();
+
 // API endpoints
 const API_CONFIG = '/api/config';
 const API_INFO = '/api/info';
-const API_MODE = '/api/mode';
 const API_UPDATE = '/api/update';
 const API_REBOOT = '/api/reboot';
 const API_VERSION = '/api/info'; // Used for connection polling
@@ -20,6 +59,41 @@ let selectedFile = null;
 let portalMode = 'full'; // 'core' or 'full'
 
 let deviceInfoCache = null;
+let deviceInfoInflight = null;
+
+/**
+ * Fetch /api/info with session-scope caching.
+ *
+ * Multiple fragments and helpers need device info; on a cold portal load
+ * up to six independent fetch('/api/info') calls would race, each consuming
+ * AsyncTCP TX buffers from the same DMA-internal heap. This helper returns
+ * the cached payload after the first successful fetch and coalesces
+ * concurrent first-time callers into a single network request.
+ *
+ * @param {boolean} forceRefresh - Bypass the cache and refetch.
+ * @returns {Promise<object|null>} Parsed /api/info JSON, or null on error.
+ */
+function getDeviceInfo(forceRefresh) {
+    if (!forceRefresh && deviceInfoCache) {
+        return Promise.resolve(deviceInfoCache);
+    }
+    if (deviceInfoInflight) {
+        return deviceInfoInflight;
+    }
+    deviceInfoInflight = fetch(API_INFO)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (info) {
+            deviceInfoInflight = null;
+            if (info) deviceInfoCache = info;
+            return info;
+        })
+        .catch(function (err) {
+            deviceInfoInflight = null;
+            console.error('getDeviceInfo:', err);
+            return null;
+        });
+    return deviceInfoInflight;
+}
 
 /**
  * Show a Bootstrap-styled toast notification.
@@ -260,6 +334,23 @@ async function startReconnection(options) {
 }
 
 /**
+ * Sanitize a device name into a valid mDNS hostname label.
+ * Mirrors the backend logic in config_manager_sanitize_device_name():
+ * lowercase, alphanumeric + hyphens only, collapse whitespace/underscores
+ * to a single hyphen, strip leading/trailing hyphens.
+ *
+ * @param {string} name - Raw device name from the user
+ * @returns {string} mDNS-safe hostname label (without the .local suffix)
+ */
+function sanitizeForMDNS(name) {
+    return (name || '').toLowerCase()
+        .replace(/[^a-z0-9\s\-_]/g, '')
+        .replace(/[\s_]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+}
+
+/**
  * Update sanitized device name field
  */
 function updateSanitizedName() {
@@ -269,18 +360,81 @@ function updateSanitizedName() {
     // Only proceed if both elements exist
     if (!deviceNameField || !sanitizedField) return;
     
-    const deviceName = deviceNameField.value;
-    
-    // Sanitize: lowercase, alphanumeric + hyphens
-    let sanitized = deviceName.toLowerCase()
-        .replace(/[^a-z0-9\s\-_]/g, '')
-        .replace(/[\s_]+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-    
+    const sanitized = sanitizeForMDNS(deviceNameField.value);
     sanitizedField.textContent = (sanitized || 'esp32-xxxx') + '.local';
 }
 
 function escAttr(s) {
     return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ---------------------------------------------------------------------------
+// Pending-reboot banner
+// ---------------------------------------------------------------------------
+// Fragments that change reboot-required settings (wifi, network including
+// the security/auth card, device name, mode, mqtt, ble) save with
+// no_reboot=1 and call setPendingReboot().
+// The banner survives fragment navigation (the shell is a SPA, fragments load
+// via XHR so JS state persists) but is intentionally NOT persisted to
+// sessionStorage: a full page reload (Ctrl+R) clears it. That gives the user
+// a trivial escape hatch when the device was rebooted out-of-band (CLI
+// deploy, power cycle, factory reset from another tab) and the banner has
+// become stale.
+let pendingRebootFlag = false;
+
+function setPendingReboot() {
+    var wasPending = pendingRebootFlag;
+    pendingRebootFlag = true;
+    updatePendingRebootBanner();
+    // If the banner was already visible, pulse it so the user gets feedback
+    // that another change was accepted (we suppressed the toast for these).
+    if (wasPending) {
+        var el = document.getElementById('reboot-pending-banner');
+        if (el) {
+            el.classList.remove('pulse');
+            // Force reflow so re-adding the class restarts the animation.
+            void el.offsetWidth;
+            el.classList.add('pulse');
+        }
+    }
+}
+
+function clearPendingReboot() {
+    pendingRebootFlag = false;
+    updatePendingRebootBanner();
+}
+
+function updatePendingRebootBanner() {
+    var el = document.getElementById('reboot-pending-banner');
+    if (!el) return;
+    el.style.display = pendingRebootFlag ? 'flex' : 'none';
+}
+
+function initPendingRebootBanner() {
+    updatePendingRebootBanner();
+    var btn = document.getElementById('reboot-pending-btn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        // Don't pass newDeviceName: it's meant for "device was renamed,
+        // redirect to new mDNS hostname" flows. From the banner we're just
+        // applying pending changes on the same network/host, so the dialog's
+        // default (window.location.origin) is correct.
+        showRebootDialog({
+            title: 'Rebooting Device',
+            message: 'Applying configuration changes...',
+            context: 'save'
+        });
+        clearPendingReboot();
+        fetch(API_REBOOT, { method: 'POST' }).catch(function () {
+            // The TCP connection often drops mid-response when the device
+            // reboots; the reboot dialog's reconnection poller handles the
+            // wait-and-redirect, so swallow this error.
+        });
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPendingRebootBanner);
+} else {
+    initPendingRebootBanner();
 }

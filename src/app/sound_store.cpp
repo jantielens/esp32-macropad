@@ -2,7 +2,7 @@
 
 #if HAS_SOUND_PLAYER
 
-#include <LittleFS.h>
+#include "storage.h"
 #include <string.h>
 #include "log_manager.h"
 
@@ -11,8 +11,8 @@
 static const char* SOUND_DIR = "/sounds";
 
 void sound_store_init() {
-    if (!LittleFS.exists(SOUND_DIR)) {
-        LittleFS.mkdir(SOUND_DIR);
+    if (!Storage.exists(SOUND_DIR)) {
+        Storage.mkdir(SOUND_DIR);
         LOGI(TAG, "Created %s directory", SOUND_DIR);
     }
 }
@@ -39,7 +39,7 @@ char* sound_store_path(const char* name, char* out, size_t out_len) {
 bool sound_store_exists(const char* name) {
     char path[48];
     sound_store_path(name, path, sizeof(path));
-    return LittleFS.exists(path);
+    return Storage.exists(path);
 }
 
 bool sound_store_save(const char* name, const uint8_t* data, size_t len) {
@@ -55,7 +55,7 @@ bool sound_store_save(const char* name, const uint8_t* data, size_t len) {
     char path[48];
     sound_store_path(name, path, sizeof(path));
 
-    File f = LittleFS.open(path, "w");
+    File f = Storage.open(path, "w");
     if (!f) {
         LOGE(TAG, "Failed to open %s for writing", path);
         return false;
@@ -66,7 +66,7 @@ bool sound_store_save(const char* name, const uint8_t* data, size_t len) {
 
     if (written != len) {
         LOGE(TAG, "Write incomplete: %u/%u bytes", (unsigned)written, (unsigned)len);
-        LittleFS.remove(path);
+        Storage.remove(path);
         return false;
     }
 
@@ -78,18 +78,18 @@ bool sound_store_delete(const char* name) {
     char path[48];
     sound_store_path(name, path, sizeof(path));
 
-    if (!LittleFS.exists(path)) {
+    if (!Storage.exists(path)) {
         LOGW(TAG, "File not found: %s", path);
         return false;
     }
 
-    bool ok = LittleFS.remove(path);
+    bool ok = Storage.remove(path);
     LOGI(TAG, "Delete %s: %s", path, ok ? "OK" : "FAIL");
     return ok;
 }
 
 int sound_store_list(char names[][SOUND_NAME_MAX_LEN], int max_count) {
-    File dir = LittleFS.open(SOUND_DIR);
+    File dir = Storage.open(SOUND_DIR);
     if (!dir || !dir.isDirectory()) {
         return 0;
     }

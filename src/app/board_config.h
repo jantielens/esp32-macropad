@@ -55,6 +55,23 @@
 #define HAS_BLE_HID true
 #endif
 
+// Enable BTHome v2 BLE telemetry advertising (transport for headless/battery boards).
+// Independent of HAS_BLE_HID; both can be enabled on the same board but mainly intended
+// for boards without a display (e.g. ESP32-C3 sensor nodes).
+#ifndef HAS_BLE
+#define HAS_BLE false
+#endif
+
+// BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
+#ifndef BLE_TELEMETRY_DEFAULT_BURST_COUNT
+#define BLE_TELEMETRY_DEFAULT_BURST_COUNT 3
+#endif
+
+// BLE telemetry advertising interval (ms between adv packets within a burst).
+#ifndef BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS
+#define BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS 100
+#endif
+
 // GPIO for the built-in LED (only used when HAS_BUILTIN_LED is true).
 #ifndef LED_PIN
 #define LED_PIN 2  // Common GPIO for ESP32 boards
@@ -192,6 +209,29 @@
 // Defaults to HAS_AUDIO — enable audio to get sound player support.
 #ifndef HAS_SOUND_PLAYER
 #define HAS_SOUND_PLAYER HAS_AUDIO
+#endif
+
+// ============================================================================
+// SD Card Storage (optional)
+// ============================================================================
+// Board has a physical MicroSD card slot wired to SDMMC.
+#ifndef HAS_SD_CARD
+#define HAS_SD_CARD false
+#endif
+
+// Route all persistent file I/O through the SD card instead of internal
+// LittleFS. Implies HAS_SD_CARD. When true, the device halts at boot if
+// the SD card is missing or unreadable — there is no runtime fallback.
+// Eliminates display flicker on MIPI-DSI / RGB panels caused by internal
+// flash cache-disable starving the framebuffer DMA.
+#ifndef USE_SD_STORAGE
+#define USE_SD_STORAGE false
+#endif
+
+// Run a diagnostic SD probe early in setup() (mount, card info, directory
+// listing, write/read round-trip). Intended for new-board bring-up only.
+#ifndef SD_PROBE_ON_BOOT
+#define SD_PROBE_ON_BOOT false
 #endif
 
 // ============================================================================
@@ -679,6 +719,26 @@
 // Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 #ifndef SCREENSAVER_SLEEP_TICK_MS
 #define SCREENSAVER_SLEEP_TICK_MS 200
+#endif
+
+// Periodic interval (ms) at which the screensaver calls
+// DisplayDriver::displayRefreshSleep() while the display is fully asleep,
+// for image-retention / VCOM-drift mitigation on cheap IPS panels.
+// Default 15 minutes; 0 disables.
+// Interval in ms between periodic asleep-display refresh calls (0 = disabled).
+#ifndef SCREENSAVER_SLEEP_REFRESH_MS
+#define SCREENSAVER_SLEEP_REFRESH_MS 900000
+#endif
+
+// Hold the panel hardware reset pin LOW during screensaver sleep so the
+// panel IC fully powers down its internal regulators. Required on cheap
+// IPS MIPI-DSI panels (e.g. JD9165 on jc1060p470c) where DCS Sleep In
+// alone does not de-bias the TFT cells, leading to washed-out colors
+// after multi-hour idle. Wake re-runs the full vendor init sequence,
+// growing wake latency from ~120 ms to ~250-300 ms.
+// Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
+#ifndef DISPLAY_HARD_RESET_ON_SLEEP
+#define DISPLAY_HARD_RESET_ON_SLEEP false
 #endif
 
 // ============================================================================

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devices with touch screens. Built with `arduino-cli` for headless builds. Designed for WSL2/Linux environments with local toolchain installation (no system dependencies). All supported boards have a display and touch input.
+ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devices with touch screens. Built with `arduino-cli` for headless builds. Designed for WSL2/Linux environments with local toolchain installation (no system dependencies). The primary boards target display + touch hardware; a small set of headless reference boards (e.g. `esp32c3-withsensors`) also build against the same firmware for BTHome / MQTT sensor-node use cases.
 
 ## Architecture
 
@@ -11,7 +11,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Board Configuration**: `src/app/board_config.h` (defaults) + `src/boards/[board-name]/board_overrides.h` (per-board overrides). Uses `#if HAS_xxx` conditional compilation.
 - **Display & Touch**: HAL-based architecture with LVGL. See `docs/dev/display-touch-architecture.md` and `.github/instructions/display-touch.instructions.md`.
 - **Image Fetch** (`HAS_IMAGE_FETCH`): Slot-based FreeRTOS background HTTP(S) image fetcher with JPEG/PNG decode, bilinear scaling, and MJPEG streaming.
-- **Icon Store** (`HAS_DISPLAY`): PNG icon storage on LittleFS with PSRAM-cached ARGB8888 draw buffers.
+- **Storage Facade** (`storage.h`): Compile-time `Storage` macro resolves to `LittleFS` (default) or `SD_MMC` when `USE_SD_STORAGE` is enabled. All persistent file I/O (pad configs, icons, sounds, boot/swipe/timer/button-default configs, indexed stores) goes through this facade. SD card path mounts SDMMC Slot 0 in `sd_storage_mount()` and halts boot with a splash if the card is missing. Throttled usage publish via `storage_publish_usage()`.
+- **Icon Store** (`HAS_DISPLAY`): PNG icon storage on the `Storage` facade (LittleFS or SD) with PSRAM-cached ARGB8888 draw buffers.
 - **Custom Fonts** (`HAS_CUSTOM_FONTS`): 3 font families (DSEG7, Bebas, Doto) × 7 sizes. LabelStyle DSL: `font_family:dseg7`, `font_family:bebas`, `font_family:doto`.
 - **Widget Subsystem** (`HAS_DISPLAY`): Extensible widget types — gauge, sparkline, bar chart, table, rocker, numeric rocker, list. Each widget renders inside a button.
 - **Data Stream Registry** (`HAS_DISPLAY && HAS_MQTT`): Demand-driven per-widget ring buffers in PSRAM for history-based widgets.
@@ -24,13 +25,14 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Swipe Actions** (`HAS_DISPLAY`): 4-direction configurable swipe gestures with full ButtonAction parity.
 - **Boot Actions** (`HAS_DISPLAY`): Device-level actions dispatched once at boot after first screen.
 - **Button Defaults** (`HAS_DISPLAY`): Device-wide default button appearance (colors, border, radius, label styles).
-- **Action System** (`HAS_DISPLAY`): Shared `action_dispatch()` for buttons, swipe, boot, timer expire. `action_parse()` for DRY JSON serialization.
+- **Action System** (`HAS_DISPLAY`): Shared `action_dispatch()` for buttons, swipe, boot, timer expire. `action_parse()` for DRY JSON serialization. `action_list_parse()` / `action_list_dispatch()` for array-of-N-actions consumers (boot, timer, future).
 - **BLE HID** (`HAS_BLE_HID`): NimBLE keyboard with key sequence DSL, single-owner pairing, auto-re-pair. Runtime-toggled.
 - **Audio** (`HAS_AUDIO`): ES8311 codec + I2S, beep pattern DSL, volume control, async FreeRTOS playback.
 - **Sound Player** (`HAS_SOUND_PLAYER`): MP3 decode (minimp3) + resample + I2S playback from LittleFS.
 - **MQTT Audio** (`HAS_AUDIO && HAS_MQTT`): HA siren, volume, beep buttons, custom tone entities.
 - **Power + Transport**: Power modes, BLE/MQTT transport selection, duty-cycle runtime, WiFi manager, portal idle timeout.
 - **Web Portal**: Multi-page async web server with captive portal. Board variants can define `PORTAL_PRIMARY_*` flags in `board_overrides.h` to promote a custom nav category to first position with startup routing and a welcome hero card. See `.github/instructions/web-portal.instructions.md` and `docs/dev/web-portal.md`.
+  - **Portal components aggregation**: Files in `src/app/components/*.cpp` are NOT compiled directly by arduino-cli (it only compiles `.cpp` files in the sketch root). They are `#include`-aggregated into `src/app/portal_components.cpp`. **When adding a new component, you MUST add `#include "components/<name>_component.cpp"` to `portal_components.cpp`** under the correct feature-flag block — otherwise the component's `REGISTER_COMPONENT()` static initializer never runs and the component is silently absent from the nav and registry. Same pattern applies to widgets (`widgets.cpp`), screens (`screens.cpp`), drivers (`display_drivers.cpp` / `touch_drivers.cpp`), and custom fonts (`custom_fonts.cpp`).
 - **Pad Config**: `pad_config.cpp/h` — JSON parser for pad/button/widget configuration, `LabelStyle` DSL, `ButtonAction` types, `ButtonDefaults` cascade, `template_pad` inheritance.
 - **Pad Building Blocks** (`HAS_DISPLAY`): Registration-based catalog of pre-configured button groups. `pad_block.h/cpp` — `pad_block_register()` API for feature branches to add blocks independently. REST endpoint `GET /api/pad/blocks`.
 - **ListProvider Registry** (`HAS_DISPLAY`): Pluggable data source registry for list widgets. `list_provider.h/cpp` — `list_provider_register()` / `list_provider_find()`. Feature branches register providers from their own init functions. Built-in provider: `pads` (lists configured pads with custom names, item IDs `pad_N`).

@@ -102,6 +102,9 @@ register_partition_scheme_if_needed() {
     ota_1_9mb)
       label="Custom OTA (1.9MB APP×2)"
       ;;
+    ota_2mb)
+      label="Custom OTA headless (1.94MB APP×2, no SPIFFS)"
+      ;;
     *)
       label="Custom (${scheme_id})"
       ;;

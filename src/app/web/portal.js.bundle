@@ -1,12 +1,26 @@
 # Bundle manifest for portal.js
 #
-# All JS modules are concatenated (in order) into a single portal.js asset.
-# Fragment files are excluded from individual serving — only the combined
-# asset is embedded in web_assets.h and served via a single HTTP endpoint.
+# JS modules are concatenated (in order) into NAMED chunks. Each chunk is
+# independently minified + gzipped and emitted as its own PROGMEM array.
 #
-# Order: core → libraries → features → nav → fragment init → entry point
-# The last entry MUST be the primary file (portal.js).
+# Chunk markers:
+#   # [chunk:NAME]            — always-on chunk
+#   # [chunk:NAME HAS_FLAG]   — compiled out of flash unless HAS_FLAG is true
+#
+# The first marker opens the first chunk; each subsequent marker closes the
+# previous one. Files before any marker are rejected. Disabled chunks are
+# compiled out via #if guards in web_assets.h, so they never reach flash.
+#
+# Build-time assembly: the minifier enumerates the unique HAS_* flag set
+# across chunks (capped at 3 -> 8 variants), and for each 2^N combination
+# concatenates the chunks whose flag is unset OR matches the combination,
+# then gzips ONCE. Each variant is emitted as an #if-guarded PROGMEM blob
+# under the same symbol name (portal_js_gz), so exactly one variant links.
+#
+# Runtime loading: shell.html issues a single GET /portal.js, which returns
+# the one matching combined-gzip blob in a single HTTP response.
 
+# [chunk:core]
 # Core infrastructure
 portal_core.js
 
@@ -15,10 +29,15 @@ portal_dropdown.js
 
 # Shared libraries (used by config and pad editor)
 portal_binding_validator.js
-portal_action_editor.js
 
-# Configuration (actions fragment before main config)
+# [chunk:actions HAS_DISPLAY]
+# Action editor + config actions UI: only reachable from pad/swipe/boot/timer
+# editors, all of which are HAS_DISPLAY-gated fragments.
+portal_action_editor.js
 portal_config_actions.js
+
+# [chunk:config]
+# Configuration (main config page — non-display settings stay always-on)
 portal_config.js
 
 # Firmware page
@@ -28,7 +47,8 @@ portal_firmware.js
 portal_health_sparkline.js
 portal_health.js
 
-# Pad editor (fragments before main editor)
+# [chunk:pad HAS_DISPLAY]
+# Pad editor — only consumed by the pad editor fragment on display boards.
 portal_pad_colors.js
 portal_pad_io.js
 portal_pad_blocks.js
@@ -38,9 +58,8 @@ portal_pad_grid.js
 portal_pad_dialog.js
 portal_pad_editor.js
 
-# Navigation shell and fragment initialization
+# [chunk:shell]
+# Navigation shell, fragment init, and the entry point (must be last chunk).
 portal_nav.js
 portal_fragment_init.js
-
-# Entry point (must be last)
 portal.js

@@ -1,5 +1,6 @@
 #include "web_portal_ap.h"
 
+#include "board_config.h"
 #include "log_manager.h"
 #include "project_branding.h"
 
@@ -50,7 +51,14 @@ void web_portal_start_ap() {
 		// Configure AP
 		WiFi.mode(WIFI_AP);
 		WiFi.softAPConfig(CAPTIVE_PORTAL_IP, CAPTIVE_PORTAL_IP, IPAddress(255, 255, 255, 0));
+#ifdef AP_MAX_CONNECTIONS
+		// Board override: cap concurrent stations to save DMA-internal SRAM
+		// (relevant on small-RAM SoCs like ESP32-C3).
+		WiFi.softAP(apName.c_str(), nullptr, /*channel=*/1, /*hidden=*/0,
+		            /*max_connection=*/AP_MAX_CONNECTIONS);
+#else
 		WiFi.softAP(apName.c_str());
+#endif
 
 		// Start DNS server for captive portal (redirect all DNS queries to our IP)
 		dnsServer.start(DNS_PORT, "*", CAPTIVE_PORTAL_IP);

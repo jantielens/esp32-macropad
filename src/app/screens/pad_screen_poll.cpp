@@ -1,4 +1,5 @@
 #include "pad_screen.h"
+#include "../display_driver.h"
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
 #include <esp_heap_caps.h>
@@ -281,32 +282,25 @@ void PadScreen::pollBtnStateBindings() {
 
 #if HAS_IMAGE_FETCH
 void PadScreen::pollImageFrames() {
+    // Defer image frame hand-off while a DMA2D flush is actively transferring.
+    // lv_image_set_src + lv_obj_invalidate would add PSRAM bandwidth pressure
+    // and mark dirty regions that compete with the in-flight scanout. The
+    // frame is still buffered in image_fetch — we'll pick it up next tick.
+    if (displayDriverIsFlushBusy()) return;
+
     for (uint8_t i = 0; i < tileCount; i++) {
         ButtonTile& tile = tiles[i];
         if (tile.image_slot == IMAGE_SLOT_INVALID || !tile.bg_image) continue;
 
         if (!image_fetch_has_new_frame(tile.image_slot)) continue;
 
+        // Zero-copy hand-off: image_fetch owns a per-slot lvgl_buf that it
+        // never touches between get_frame calls (see image_fetch.cpp). Point
+        // LVGL directly at it \u2014 no realloc, no memcpy on the LVGL task.
         uint16_t fw = 0, fh = 0;
         const uint16_t* pixels = image_fetch_get_frame(tile.image_slot, &fw, &fh);
         if (!pixels || fw == 0 || fh == 0) continue;
 
-        // Copy frame into tile-owned buffer so LVGL has a stable pointer
-        // independent of the fetch task's double-buffer rotation.
-        size_t needed = (size_t)fw * fh * 2;
-        if (tile.owned_pixels_size < needed) {
-            if (tile.owned_pixels) heap_caps_free(tile.owned_pixels);
-            tile.owned_pixels = (uint16_t*)heap_caps_malloc(needed, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            tile.owned_pixels_size = tile.owned_pixels ? needed : 0;
-        }
-        if (!tile.owned_pixels) {
-            image_fetch_ack_frame(tile.image_slot);
-            continue;
-        }
-        memcpy(tile.owned_pixels, pixels, needed);
-        image_fetch_ack_frame(tile.image_slot);
-
-        // Build LVGL image descriptor pointing to our owned copy
         lv_image_dsc_t& dsc = tile.img_dsc;
         dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
         dsc.header.cf = LV_COLOR_FORMAT_RGB565;
@@ -314,10 +308,12 @@ void PadScreen::pollImageFrames() {
         dsc.header.w = fw;
         dsc.header.h = fh;
         dsc.header.stride = fw * 2;
-        dsc.data_size = (uint32_t)needed;
-        dsc.data = (const uint8_t*)tile.owned_pixels;
+        dsc.data_size = (uint32_t)fw * fh * 2;
+        dsc.data = (const uint8_t*)pixels;
 
         lv_image_set_src(tile.bg_image, &dsc);
+        // Force LVGL to re-render even though the dsc pointer is unchanged.
+        lv_obj_invalidate(tile.bg_image);
     }
 }
 #endif

@@ -3,7 +3,6 @@
 
 #include <ESPAsyncWebServer.h>
 
-void handleGetMode(AsyncWebServerRequest *request);
 void handleGetVersion(AsyncWebServerRequest *request);
 void handleGetHealth(AsyncWebServerRequest *request);
 void handleGetHealthHistory(AsyncWebServerRequest *request);

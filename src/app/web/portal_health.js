@@ -9,6 +9,45 @@ const API_HEALTH_HISTORY = '/api/health/history';
 let healthExpanded = false;
 let healthPollTimer = null;
 
+// Most recent /api/health snapshot, updated by every successful poll inside
+// updateHealth(). Other portal fragments (welcome, version-info) read this
+// instead of issuing their own /api/health requests — see fetchHealthOnce().
+let latestHealth = null;
+let healthFetchInflight = null;
+
+/**
+ * Synchronous accessor for the most recent /api/health snapshot.
+ * Returns null if the health widget has never completed a poll.
+ */
+function getLatestHealth() {
+    return latestHealth;
+}
+
+/**
+ * Returns a Promise resolving to the most recent /api/health snapshot.
+ * If the widget has already polled, resolves immediately from `latestHealth`.
+ * Otherwise issues a single coalesced fetch (concurrent callers share the
+ * in-flight Promise) so welcome/version-info fragments do not each spawn
+ * their own /api/health request during portal boot.
+ */
+function fetchHealthOnce() {
+    if (latestHealth) return Promise.resolve(latestHealth);
+    if (healthFetchInflight) return healthFetchInflight;
+    healthFetchInflight = fetch(API_HEALTH)
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (h) {
+            healthFetchInflight = null;
+            if (h) latestHealth = h;
+            return h;
+        })
+        .catch(function (err) {
+            healthFetchInflight = null;
+            console.error('fetchHealthOnce:', err);
+            return null;
+        });
+    return healthFetchInflight;
+}
+
 const HEALTH_POLL_INTERVAL_DEFAULT_MS = 5000;
 const HEALTH_HISTORY_DEFAULT_SECONDS = 300;
 let healthPollIntervalMs = HEALTH_POLL_INTERVAL_DEFAULT_MS;
@@ -507,6 +546,9 @@ async function updateHealth() {
         if (!response.ok) return;
 
         const health = await response.json();
+        // Publish snapshot for fetchHealthOnce() consumers (welcome + version
+        // fragments) so they don't issue their own /api/health requests.
+        latestHealth = health;
 
         const cpuUsage = (typeof health.cpu_usage === 'number' && isFinite(health.cpu_usage)) ? Math.floor(health.cpu_usage) : null;
         const hasPsram = (

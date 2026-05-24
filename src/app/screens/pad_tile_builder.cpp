@@ -34,11 +34,8 @@ void PadScreen::clearTiles() {
         }
 #if HAS_IMAGE_FETCH
         tiles[i].bg_image = nullptr;
-        if (tiles[i].owned_pixels) {
-            heap_caps_free(tiles[i].owned_pixels);
-            tiles[i].owned_pixels = nullptr;
-            tiles[i].owned_pixels_size = 0;
-        }
+        // Pixel data is owned by image_fetch's lvgl_buf (zero-copy);
+        // image_fetch_cancel() above releases it.
         memset(&tiles[i].img_dsc, 0, sizeof(tiles[i].img_dsc));
 #endif
     }
@@ -440,8 +437,6 @@ void PadScreen::buildTiles() {
         tile.bg_image = nullptr;
         tile.image_slot = IMAGE_SLOT_INVALID;
         memset(&tile.img_dsc, 0, sizeof(tile.img_dsc));
-        tile.owned_pixels = nullptr;
-        tile.owned_pixels_size = 0;
 
         if (bcfg.bg_image_url[0]) {
             ImageScaleMode sm = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;

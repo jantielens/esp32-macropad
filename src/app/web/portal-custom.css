@@ -255,11 +255,19 @@ select { color-scheme: light; }
 .portal-layout {
   display: flex;
   height: calc(100vh - var(--portal-header-height-desktop, 120px));
-  /* fallback height; JS sets --portal-header-height-desktop on load */
+  height: calc(100dvh - var(--portal-header-height-desktop, 120px));
+  /* fallback height; JS sets --portal-header-height-desktop on load.
+     dvh tracks dynamic mobile browser chrome (URL bar) so the bottom
+     of the content pane stays visible above Android's address bar. */
 }
 
 body {
   overflow: hidden; /* layout handles scroll per pane */
+  /* Prevent Android Chrome/Edge pull-to-refresh gesture from triggering
+     when the user scrolls up inside .content-pane. The internal scroller
+     never bubbles a top-of-page event, but mobile browsers attach PTR to
+     the document, so we must opt out at the body level. */
+  overscroll-behavior-y: contain;
 }
 
 /* ================================================================
@@ -500,6 +508,7 @@ body {
 .content-pane {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding: 24px 28px;
   min-height: 0;
   scrollbar-width: thin;
@@ -694,6 +703,50 @@ body {
 .status-dot.warning      { background: #ff9f0a; }
 
 /* ================================================================
+   Pending-reboot banner
+   ================================================================
+   Shown when one or more settings were saved with reboot deferred.
+   State is held in-memory in portal_core.js so it survives fragment
+   navigation (SPA) but is cleared by a full page reload — a trivial
+   escape hatch when the device was rebooted out-of-band. */
+.reboot-pending-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: #fff3cd;
+  color: #664d03;
+  border-bottom: 1px solid #ffe69c;
+  font-size: 0.92rem;
+}
+[data-bs-theme="dark"] .reboot-pending-banner {
+  background: #3a2e10;
+  color: #ffd966;
+  border-bottom-color: #5a4716;
+}
+.reboot-pending-banner .reboot-pending-text {
+  flex: 1 1 auto;
+}
+/* Subtle pulse when another reboot-required change is saved while the
+   banner is already visible (replaces the toast confirmation). */
+@keyframes reboot-pending-pulse {
+  0%   { background: #fff3cd; }
+  30%  { background: #ffe187; }
+  100% { background: #fff3cd; }
+}
+@keyframes reboot-pending-pulse-dark {
+  0%   { background: #3a2e10; }
+  30%  { background: #604c1a; }
+  100% { background: #3a2e10; }
+}
+.reboot-pending-banner.pulse {
+  animation: reboot-pending-pulse 0.6s ease-out;
+}
+[data-bs-theme="dark"] .reboot-pending-banner.pulse {
+  animation: reboot-pending-pulse-dark 0.6s ease-out;
+}
+
+/* ================================================================
    Save bar at bottom of form cards
    ================================================================ */
 .save-bar {
@@ -771,6 +824,7 @@ body {
 
   .portal-layout {
     height: calc(100vh - var(--portal-header-height-desktop, 100px));
+    height: calc(100dvh - var(--portal-header-height-desktop, 100px));
   }
 
   .content-pane {
@@ -1485,11 +1539,6 @@ input.binding-mono {
 .style-toggle-btn:hover { border-color: var(--portal-blue); color: var(--portal-blue); }
 .style-toggle-btn.active { border-color: var(--portal-blue); color: var(--portal-blue); background: rgba(var(--portal-primary-rgb),.08); }
 
-/* Mixed labels: monospace when binding detected */
-input.has-binding {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px;
-}
-
 /* Binding validation error */
 input.binding-error { border-color: #ff3b30 !important; box-shadow: 0 0 0 2px rgba(255,59,48,.15) !important; }
 .binding-error-msg { display: block; color: #ff3b30; font-size: 12px; margin-top: 3px; margin-bottom: 2px; line-height: 1.3; flex-basis: 100%; }
@@ -1816,4 +1865,15 @@ input[type="text"].label-style-input {
 .cdd-item.cdd-disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ================================================================
+   Toast container — anchor to top-right, just below the page header.
+   The header is not sticky; --portal-header-height-desktop is published
+   by JS on load/resize so this stays correct on mobile (badges wrap)
+   and desktop. Keeps toasts clear of the pad-editor toolbar at bottom.
+   ================================================================ */
+#toast-container.toast-container {
+  top: calc(var(--portal-header-height-desktop, 120px) + 12px);
+  bottom: auto;
 }

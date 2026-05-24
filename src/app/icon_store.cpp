@@ -5,7 +5,7 @@
 #include "log_manager.h"
 #include "pad_config.h"
 
-#include <LittleFS.h>
+#include "storage.h"
 #include <esp_heap_caps.h>
 #include <string.h>
 
@@ -183,9 +183,9 @@ static bool load_from_fs(const char* fs_id, IconKind kind,
     char path[64];
     snprintf(path, sizeof(path), "/icons/%s.png", fs_id);
 
-    if (!LittleFS.exists(path)) return false;
+    if (!Storage.exists(path)) return false;
 
-    File f = LittleFS.open(path, "r");
+    File f = Storage.open(path, "r");
     if (!f) return false;
 
     size_t file_size = f.size();
@@ -247,8 +247,8 @@ void icon_store_build_key(uint8_t page, uint8_t col, uint8_t row,
 }
 
 void icon_store_init() {
-    if (!LittleFS.exists("/icons")) {
-        LittleFS.mkdir("/icons");
+    if (!Storage.exists("/icons")) {
+        Storage.mkdir("/icons");
         LOGI(TAG, "Created /icons directory");
     }
     LOGI(TAG, "Initialized");
@@ -267,7 +267,7 @@ bool icon_store_install(const char* id, IconKind kind,
     char path[64];
     snprintf(path, sizeof(path), "/icons/%s.png", id);
 
-    File f = LittleFS.open(path, "w");
+    File f = Storage.open(path, "w");
     if (!f) {
         LOGE(TAG, "Failed to open '%s' for writing", path);
         return false;
@@ -389,7 +389,7 @@ void icon_store_delete_page_icons(uint8_t page) {
     snprintf(prefix, sizeof(prefix), "pad_%u_", page);
     size_t prefix_len = strlen(prefix);
 
-    File dir = LittleFS.open("/icons");
+    File dir = Storage.open("/icons");
     if (!dir || !dir.isDirectory()) return;
 
     // Collect filenames first (can't delete while iterating)
@@ -411,7 +411,7 @@ void icon_store_delete_page_icons(uint8_t page) {
     for (uint8_t i = 0; i < del_count; i++) {
         char path[64];
         snprintf(path, sizeof(path), "/icons/%s", to_delete[i]);
-        LittleFS.remove(path);
+        Storage.remove(path);
     }
 
     uint16_t invalidated = invalidate_entries_with_prefix(prefix);

@@ -631,10 +631,7 @@ async function padSavePage() {
         padUpdateDropdownLabel(padState.page, document.getElementById('pad-name').value.trim());
 
         // Refresh deviceInfoCache so target screen dropdowns pick up new pad names
-        try {
-            const infoResp = await fetch(API_INFO);
-            if (infoResp.ok) deviceInfoCache = await infoResp.json();
-        } catch (_) {}
+        await getDeviceInfo(true);
 
         // Reload to get canonical version from device
         padLoadPage(padState.page);
@@ -679,12 +676,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Shell-level initialization only.
     // Fragment-level init is handled by portal_nav.js + portal_fragment_init.js.
 
-    // Load version info for shell header badges
+    // Load version info for shell header badges (also seeds deviceInfoCache
+    // and sets portalMode from the ap_active flag).
     loadVersion();
 
     // Initialize health widget (badge in shell header)
     initHealthWidget();
-
-    // Load portal mode (AP vs full)
-    loadMode();
 });

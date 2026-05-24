@@ -6,18 +6,19 @@
 #include "log_manager.h"
 #include "timer_config.h"
 #include "web_portal_cors.h"
+#include "web_portal_json.h"
 
 #include <ArduinoJson.h>
 
 static void timers_get_config(AsyncWebServerRequest *request) {
     const TimerConfig* cfg = timer_config_get();
 
-    StaticJsonDocument<3072> doc;
+    auto doc = make_psram_json_doc(3072);
 
     for (uint8_t i = 0; i < TIMER_COUNT; i++) {
         char key[4];
         snprintf(key, sizeof(key), "%u", i + 1);
-        JsonObject tobj = doc.createNestedObject(key);
+        JsonObject tobj = doc->createNestedObject(key);
 
         const TimerSettings& ts = cfg->timers[i];
         tobj["mode"] = (ts.mode == TIMER_MODE_DOWN) ? "down" : "up";
@@ -32,9 +33,7 @@ static void timers_get_config(AsyncWebServerRequest *request) {
         }
     }
 
-    String output;
-    serializeJson(doc, output);
-    request->send(200, "application/json", output);
+    web_portal_send_json_chunked(request, doc);
 }
 
 static void timers_save_config(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {

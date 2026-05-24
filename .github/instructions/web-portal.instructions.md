@@ -1,9 +1,21 @@
 ---
 description: "Web portal conventions — multi-page architecture, REST API design, responsive layout, and UI patterns"
-applyTo: "**/web_portal*, **/web/*.html, **/web/*.js, **/web/*.css, **/web_assets.h, **/config_manager.*"
+applyTo: "**/web_portal*, **/web/*.html, **/web/*.js, **/web/*.css, **/web_assets.h, **/config_manager.*, **/components/*_component.cpp, **/portal_components.cpp"
 ---
 
 # Web Portal Conventions
+
+## Component Registration (READ THIS BEFORE ADDING A NEW COMPONENT)
+
+Arduino's build system only compiles `.cpp` files in the sketch root (`src/app/`). Files under `src/app/components/` are **not** compiled directly — they are `#include`-aggregated into `src/app/portal_components.cpp`.
+
+**When you add a new `src/app/components/<name>_component.cpp`:**
+
+1. Add `#include "components/<name>_component.cpp"` to `src/app/portal_components.cpp` under the correct feature-flag block (always-available, `HAS_DISPLAY`, `HAS_MQTT`, etc.).
+2. Without this include, the component's `REGISTER_COMPONENT()` static initializer never runs. The component will be **silently absent** from the registry and the nav API — no compile error, no runtime warning.
+3. Symptom of a missing include: `/api/portal/nav` returns `"categories":[]` (or the category that should contain the component is missing) even though the source file looks correct.
+
+Same aggregation pattern applies to `widgets.cpp`, `screens.cpp`, `display_drivers.cpp`, `touch_drivers.cpp`, and `custom_fonts.cpp`.
 
 ## Multi-Page Architecture
 

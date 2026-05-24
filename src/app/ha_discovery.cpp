@@ -5,7 +5,9 @@
 #if HAS_MQTT
 
 #include "mqtt_manager.h"
+#if HAS_DISPLAY
 #include "display_manager.h"
+#endif
 #include "sensors/sensor_manager.h"
 #include "web_assets.h" // PROJECT_DISPLAY_NAME
 #include "../version.h" // FIRMWARE_VERSION
@@ -24,18 +26,21 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 
 		ha_discovery_publish_sensor_config(mqtt, "cpu_usage", "CPU Usage", "{{ value_json.cpu_usage }}", "%", "", "measurement", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "cpu_temperature", "Core Temp", "{{ value_json.cpu_temperature }}", "°C", "temperature", "measurement", "diagnostic");
+		delay(1);  // yield — let SDIO transport drain
 
 		ha_discovery_publish_sensor_config(mqtt, "heap_fragmentation", "Heap Fragmentation", "{{ value_json.heap_fragmentation }}", "%", "", "measurement", "diagnostic");
 
 		ha_discovery_publish_sensor_config(mqtt, "heap_internal_free", "Internal Heap Free", "{{ value_json.heap_internal_free }}", "B", "", "measurement", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "heap_internal_min", "Internal Heap Min", "{{ value_json.heap_internal_min }}", "B", "", "measurement", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "heap_internal_largest", "Internal Heap Largest", "{{ value_json.heap_internal_largest }}", "B", "", "measurement", "diagnostic");
+		delay(1);
 
 		ha_discovery_publish_sensor_config(mqtt, "psram_free", "PSRAM Free", "{{ value_json.psram_free }}", "B", "", "measurement", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "psram_min", "PSRAM Min Free", "{{ value_json.psram_min }}", "B", "", "measurement", "diagnostic");
 
 		ha_discovery_publish_sensor_config(mqtt, "flash_used", "Flash Used", "{{ value_json.flash_used }}", "B", "", "measurement", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "flash_total", "Flash Total", "{{ value_json.flash_total }}", "B", "", "measurement", "diagnostic");
+		delay(1);
 
 		ha_discovery_publish_binary_sensor_config(mqtt, "fs_mounted", "FS Mounted", "{{ 'ON' if value_json.fs_mounted else 'OFF' }}", "", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "fs_used_bytes", "FS Used", "{{ value_json.fs_used_bytes }}", "B", "", "measurement", "diagnostic");
@@ -46,6 +51,7 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 		#endif
 
 		ha_discovery_publish_sensor_config(mqtt, "wifi_rssi", "WiFi RSSI", "{{ value_json.wifi_rssi }}", "dBm", "signal_strength", "measurement", "diagnostic");
+		delay(1);
 
 		// =====================================================================
 		// USER-EXTEND: Add your own Home Assistant entities here
@@ -61,6 +67,7 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 
 		// Sensor adapters self-register their discovery entries.
 		sensor_manager_publish_ha_discovery(mqtt);
+		delay(1);
 
 		// Pad button press event entity
 		#if HAS_DISPLAY
@@ -73,6 +80,7 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 		#if HAS_AUDIO
 		ha_discovery_publish_audio_entities(mqtt);
 		#endif
+		delay(1);  // yield — audio publishes 6-7 messages
 }
 
 bool ha_discovery_publish_binary_sensor_config(

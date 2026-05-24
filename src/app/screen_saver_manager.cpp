@@ -52,6 +52,9 @@ static void remove_sleep_overlay() {
 // Covers a 9×9 grid (−4..+4 in each axis) = 81 positions.
 static uint8_t g_pixel_shift_counter = 0;
 
+// Timestamp of last periodic sleep-refresh (for displayRefreshSleep ticking).
+static uint32_t g_last_sleep_refresh_ms = 0;
+
 // Centralised state-entry helpers so sleep/wake side-effects live in one place.
 static void enter_asleep() {
 		g_pixel_shift_counter = (g_pixel_shift_counter + 34) % 81;
@@ -73,6 +76,7 @@ static void enter_asleep() {
 		// Set state last so the LVGL task doesn't throttle until all
 		// transition work (overlay, panel sleep, redirect) is complete.
 		g_state = ScreenSaverState::Asleep;
+		g_last_sleep_refresh_ms = millis();
 }
 
 static void enter_awake() {
@@ -294,18 +298,24 @@ static void handle_pending_requests() {
 				// Wake panel in two phases so the mandatory 120 ms DCS delay between
 				// Sleep Out (0x11) and Display On (0x29) does not block the display lock.
 				// Holding the lock across delay() would stall LVGL flush for 120 ms.
+				// Drivers that complete wake in a single step (e.g. hard-reset wake that
+				// replays the full init sequence) report needsTwoPhaseWake()==false so the
+				// gap and second lock acquisition are skipped.
 				if (g_state == ScreenSaverState::Asleep) {
 						if (displayManager && displayManager->getDriver()) {
 								DisplayDriver* drv = displayManager->getDriver();
+								const bool twoPhase = drv->needsTwoPhaseWake();
 								displayManager->lock();
 								drv->displayWakeSleepOut();
 								displayManager->unlock();
-								// DCS spec: ≥120 ms between Sleep Out and Display On.
-								// vTaskDelay yields to other tasks during the wait.
-								vTaskDelay(pdMS_TO_TICKS(120));
-								displayManager->lock();
-								drv->displayWakeDisplayOn();
-								displayManager->unlock();
+								if (twoPhase) {
+										// DCS spec: ≥120 ms between Sleep Out and Display On.
+										// vTaskDelay yields to other tasks during the wait.
+										vTaskDelay(pdMS_TO_TICKS(120));
+										displayManager->lock();
+										drv->displayWakeDisplayOn();
+										displayManager->unlock();
+								}
 						}
 				}
 
@@ -361,6 +371,26 @@ static void maybe_auto_sleep() {
 				start_fade(ScreenSaverState::FadingOut, g_current_brightness, 0, fade_out_ms());
 				LOGI("SAVER", "Auto-sleep (timeout)");
 		}
+}
+
+// Periodic scrub while fully asleep. Drivers use this hook to re-blank
+// framebuffers or otherwise refresh state to mitigate image retention /
+// VCOM drift on IPS panels during multi-hour idle. SCREENSAVER_SLEEP_REFRESH_MS
+// of 0 disables the periodic refresh entirely.
+static void maybe_refresh_asleep() {
+#if SCREENSAVER_SLEEP_REFRESH_MS > 0
+		if (g_state != ScreenSaverState::Asleep) return;
+		if (!displayManager || !displayManager->getDriver()) return;
+
+		const uint32_t now = millis();
+		if (now - g_last_sleep_refresh_ms < SCREENSAVER_SLEEP_REFRESH_MS) return;
+
+		g_last_sleep_refresh_ms = now;
+		displayManager->lock();
+		displayManager->getDriver()->displayRefreshSleep();
+		displayManager->unlock();
+		LOGI("SAVER", "Periodic sleep refresh");
+#endif
 }
 
 #if HAS_TOUCH
@@ -442,6 +472,7 @@ void screen_saver_manager_loop() {
 
 		update_fade();
 		maybe_auto_sleep();
+		maybe_refresh_asleep();
 
 		#if HAS_TOUCH
 		// While dimming/asleep/fading in, suppress LVGL input so wake gestures don't click-through.

@@ -48,22 +48,18 @@ The orange **CPU** badge in the header shows real-time CPU usage with a breathin
 
 The Home page provides a welcome overview with quick links to the other pages, plus device behavior settings.
 
-### Operating Mode & Cadence
+### Operating Mode
 
 Controls how the device operates:
 
 | Setting | Description |
 |---------|-------------|
 | **Operating Mode** | **Always-On** keeps all services running continuously. **Duty-Cycle** wakes periodically, publishes data, then goes back to sleep to save power |
-| **Cycle Interval** | How often the device wakes and publishes in duty-cycle mode (seconds) |
-| **Portal Idle Timeout** | Auto-sleep timeout when in config/AP mode (seconds, 0 = disabled) |
-| **WiFi Backoff Max** | Maximum delay between WiFi reconnection attempts (seconds) |
+| **Duty-Cycle Wake Interval** | How often the device wakes in duty-cycle mode (seconds). Shown only when Duty-Cycle is selected. 0 = wake immediately after each cycle |
+| **Recovery Portal Auto-Sleep** | Active only in Config / AP recovery mode (when Wi-Fi can't connect). After this many seconds of no portal activity, the device deep-sleeps for the same duration, then wakes to retry Wi-Fi. 0 = disabled |
+| **Wi-Fi Backoff Max** | Maximum delay between Wi-Fi reconnection attempts (seconds) |
 
-#### MQTT Transport Settings
-
-| Setting | Description |
-|---------|-------------|
-| **MQTT Payload Scope** | What to include in MQTT publishes: sensor data only, diagnostics only, or everything |
+MQTT publish interval and payload scope live on the **Network** page under the **MQTT** card. The publish interval is only used in Always-On mode; in Duty-Cycle mode the device publishes once per wake.
 
 ### BLE Keyboard
 
@@ -287,7 +283,7 @@ Upload a compiled `.bin` firmware file directly from your computer. A progress b
 
 Erases all configuration and restarts the device in AP mode. You'll need to go through the [first-time setup](first-time-setup.md) again.
 
-> **Warning**: This cannot be undone. All settings, pad layouts, and stored icons will be lost.
+> **Warning**: This cannot be undone. Everything stored on the device is wiped: all settings (WiFi, MQTT, BLE, display), all pad layouts, button defaults, timers, swipe and boot actions, stored icons, stored sounds, indexed-store data (e.g. shutter / scale sessions), and any BLE pairings.
 
 ---
 

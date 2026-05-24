@@ -13,16 +13,15 @@ When the device boots for the first time (or after a factory reset), it starts i
 
 ## Step 2: Configure Wi-Fi
 
-You'll land on the **Network** configuration page:
+On first boot the portal lands on a one-page **setup wizard** that collects only what's needed to get the device on your network:
 
-1. Enter your **Wi-Fi SSID** (network name)
-2. Enter your **Wi-Fi password** (leave empty for open networks)
-3. Give your device a **name** (e.g., "Living Room Pad") — this will also be used for mDNS discovery
-4. *(Optional)* Configure a static IP address under **Network Configuration**
-5. *(Optional)* Set up **MQTT** if you plan to use Home Assistant integration
-6. Click **Save and Reboot**
+1. Enter your **Wi-Fi SSID** (network name) and **password** (leave empty for open networks)
+2. *(Optional)* Give your device a **friendly name** — used as the mDNS hostname so you can reach it at `http://<name>.local`
+3. *(Optional)* Tick **Require login for the portal** to set a basic-auth username and password
+4. *(Optional)* Tick **Use a static IP address** to configure IP, subnet, gateway, and DNS
+5. Click **Save & Connect**
 
-The device will restart and connect to your Wi-Fi network.
+The device reboots and connects to your Wi-Fi. MQTT, Home Assistant integration, pads, and other settings are configured later from the full portal (Step 3).
 
 ## Step 3: Access the Web Portal
 

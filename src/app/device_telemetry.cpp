@@ -11,6 +11,8 @@
 #include <WiFi.h>
 #include "soc/soc_caps.h"
 #include <esp_heap_caps.h>
+#include <esp_attr.h>
+#include <esp_rom_sys.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
@@ -444,6 +446,28 @@ void device_telemetry_init() {
 		cached_free_sketch_space = ESP.getFreeSketchSpace();
 		flash_cache_initialized = true;
 
+		// Heap allocation-failed hook. Fires once per failed heap_caps_*alloc, just
+		// before NULL is returned to the caller (which usually triggers an assert
+		// or crash shortly after). On ESP-Hosted SDIO this is what we need to
+		// catch transport_drv_sta_tx copy_buff failures — the periodic 200 ms
+		// sampler in health_history.cpp misses sub-sample-interval bursts.
+		// Callback uses esp_rom_printf (ISR-/critical-section-safe) since the
+		// failing allocation may originate from any context.
+		struct AllocFailHook {
+			static IRAM_ATTR void on_failed(size_t size, uint32_t caps, const char *function_name) {
+				const uint32_t dma_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+				const uint32_t dma_largest = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+				const uint32_t int_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+				esp_rom_printf(
+					"\n[ALLOC-FAIL] size=%u caps=0x%08x dma_internal_free=%u dma_internal_largest=%u internal_free=%u caller=%s\n",
+					(unsigned)size, (unsigned)caps,
+					(unsigned)dma_free, (unsigned)dma_largest, (unsigned)int_free,
+					function_name ? function_name : "?"
+				);
+			}
+		};
+		heap_caps_register_failed_alloc_callback(&AllocFailHook::on_failed);
+
 #if SOC_TEMP_SENSOR_SUPPORTED
 		if (!s_temp_sensor) {
 				temperature_sensor_config_t cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
@@ -679,6 +703,19 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 		doc["heap_internal_free"] = internal_free;
 		doc["heap_internal_min"] = internal_min;
 		doc["heap_internal_largest"] = internal_largest;
+
+		// DMA-capable internal heap subset. On ESP-Hosted SDIO boards (ESP32-P4)
+		// AsyncTCP/LWIP TX pbufs are allocated from this pool; exhaustion or
+		// fragmentation here is what triggers transport_drv copy_buff NULL asserts
+		// under portal load. Expose separately so the actual failure signal is
+		// observable (the broader internal heap can look healthy while this pool
+		// is empty).
+		const size_t dma_internal_free = heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		const size_t dma_internal_min = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		const size_t dma_internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		doc["heap_dma_internal_free"] = dma_internal_free;
+		doc["heap_dma_internal_min"] = dma_internal_min;
+		doc["heap_dma_internal_largest"] = dma_internal_largest;
 
 		// Heap fragmentation (internal only)
 		float heap_frag = 0;

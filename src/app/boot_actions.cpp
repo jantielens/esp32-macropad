@@ -2,13 +2,13 @@
 
 #if HAS_DISPLAY
 
-#include "action_dispatch.h"
-#include "action_parse.h"
+#include "action_list.h"
 #include "fs_health.h"
 #include "log_manager.h"
+#include "psram_json_allocator.h"
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
+#include "storage.h"
 #include <string.h>
 
 #define TAG "BootAct"
@@ -26,12 +26,12 @@ static void apply_defaults(BootActionsConfig* cfg) {
 static bool load_from_flash(BootActionsConfig* cfg) {
     apply_defaults(cfg);
 
-    if (!LittleFS.exists(BOOT_ACTIONS_PATH)) {
+    if (!Storage.exists(BOOT_ACTIONS_PATH)) {
         LOGD(TAG, "No boot actions file, using defaults");
         return false;
     }
 
-    File f = LittleFS.open(BOOT_ACTIONS_PATH, "r");
+    File f = Storage.open(BOOT_ACTIONS_PATH, "r");
     if (!f) {
         LOGW(TAG, "Failed to open boot actions");
         return false;
@@ -44,7 +44,7 @@ static bool load_from_flash(BootActionsConfig* cfg) {
         return false;
     }
 
-    StaticJsonDocument<2048> doc;
+    BasicJsonDocument<PsramJsonAllocator> doc(2048);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 
@@ -53,15 +53,7 @@ static bool load_from_flash(BootActionsConfig* cfg) {
         return false;
     }
 
-    JsonVariant v = doc["actions"];
-    if (v.is<JsonArray>()) {
-        JsonArray arr = v.as<JsonArray>();
-        for (size_t i = 0; i < arr.size() && cfg->action_count < MAX_BUTTON_ACTIONS; i++) {
-            if (!arr[i].is<JsonObject>()) continue;
-            action_parse(arr[i].as<JsonObject>(), cfg->actions[cfg->action_count]);
-            if (cfg->actions[cfg->action_count].type[0]) cfg->action_count++;
-        }
-    }
+    cfg->action_count = action_list_parse(doc["actions"], cfg->actions, MAX_BUTTON_ACTIONS);
 
     LOGI(TAG, "Loaded %u boot action(s)", cfg->action_count);
     return true;
@@ -83,7 +75,7 @@ const BootActionsConfig* boot_actions_get() {
 bool boot_actions_save_raw(const uint8_t* json, size_t len) {
     if (!json || len == 0) return false;
 
-    File f = LittleFS.open(BOOT_ACTIONS_PATH, "w");
+    File f = Storage.open(BOOT_ACTIONS_PATH, "w");
     if (!f) {
         LOGE(TAG, "Failed to open for write");
         return false;
@@ -99,7 +91,7 @@ bool boot_actions_save_raw(const uint8_t* json, size_t len) {
 
     // Update RAM cache
     load_from_flash(&g_config);
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage(false);
 
     LOGI(TAG, "Saved (%u bytes)", (unsigned)len);
     return true;
@@ -114,9 +106,7 @@ void boot_actions_dispatch() {
     // but this is safe at boot because the LVGL task is not yet processing
     // user-driven events that could trigger concurrent binding resolution.
     LOGI(TAG, "Dispatching %u boot action(s)", cfg->action_count);
-    for (uint8_t i = 0; i < cfg->action_count; i++) {
-        action_dispatch(cfg->actions[i], "Boot");
-    }
+    action_list_dispatch(cfg->actions, cfg->action_count, "Boot");
 }
 
 #endif // HAS_DISPLAY

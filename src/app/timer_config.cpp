@@ -2,13 +2,14 @@
 
 #if HAS_DISPLAY
 
-#include "action_parse.h"
+#include "action_list.h"
 #include "fs_health.h"
 #include "log_manager.h"
+#include "psram_json_allocator.h"
 #include "timer_engine.h"
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
+#include "storage.h"
 #include <string.h>
 
 #define TAG "TimerCfg"
@@ -44,12 +45,12 @@ static void apply_to_engine(const TimerConfig* cfg) {
 static bool load_from_flash(TimerConfig* cfg) {
     apply_defaults(cfg);
 
-    if (!LittleFS.exists(TIMER_CONFIG_PATH)) {
+    if (!Storage.exists(TIMER_CONFIG_PATH)) {
         LOGD(TAG, "No timer config file, using defaults");
         return false;
     }
 
-    File f = LittleFS.open(TIMER_CONFIG_PATH, "r");
+    File f = Storage.open(TIMER_CONFIG_PATH, "r");
     if (!f) {
         LOGW(TAG, "Failed to open timer config");
         return false;
@@ -62,7 +63,7 @@ static bool load_from_flash(TimerConfig* cfg) {
         return false;
     }
 
-    StaticJsonDocument<3072> doc;
+    BasicJsonDocument<PsramJsonAllocator> doc(3072);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 
@@ -89,17 +90,7 @@ static bool load_from_flash(TimerConfig* cfg) {
         ts.countdown = tobj["countdown"] | 0;
 
         // Expire actions
-        JsonVariant ea = tobj["expire_actions"];
-        if (ea.is<JsonArray>()) {
-            JsonArray arr = ea.as<JsonArray>();
-            for (size_t a = 0; a < arr.size() && ts.expire_action_count < TIMER_MAX_EXPIRE_ACTIONS; a++) {
-                if (!arr[a].is<JsonObject>()) continue;
-                action_parse(arr[a].as<JsonObject>(), ts.expire_actions[ts.expire_action_count]);
-                if (ts.expire_actions[ts.expire_action_count].type[0]) {
-                    ts.expire_action_count++;
-                }
-            }
-        }
+        ts.expire_action_count = action_list_parse(tobj["expire_actions"], ts.expire_actions, TIMER_MAX_EXPIRE_ACTIONS);
 
         LOGI(TAG, "Timer %u: mode=%s countdown=%us expire_actions=%u",
              i + 1, ts.mode == TIMER_MODE_DOWN ? "down" : "up",
@@ -126,7 +117,7 @@ const TimerConfig* timer_config_get() {
 bool timer_config_save_raw(const uint8_t* json, size_t len) {
     if (!json || len == 0) return false;
 
-    File f = LittleFS.open(TIMER_CONFIG_PATH, "w");
+    File f = Storage.open(TIMER_CONFIG_PATH, "w");
     if (!f) {
         LOGE(TAG, "Failed to open for write");
         return false;
@@ -143,7 +134,7 @@ bool timer_config_save_raw(const uint8_t* json, size_t len) {
     // Update RAM cache and re-apply to engine
     load_from_flash(&g_config);
     apply_to_engine(&g_config);
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage(false);
 
     LOGI(TAG, "Saved (%u bytes)", (unsigned)len);
     return true;

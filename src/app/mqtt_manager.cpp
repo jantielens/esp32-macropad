@@ -100,7 +100,7 @@ bool MqttManager::publishEnabled() const {
 		// Publishing health periodically is optional.
 		if (!_config) return false;
 		if (!connectEnabled()) return false;
-		return _config->cycle_interval_seconds > 0;
+		return _config->mqtt_publish_interval_seconds > 0;
 }
 
 bool MqttManager::connected() {
@@ -195,7 +195,7 @@ void MqttManager::publishHealthIfDue() {
 		if (!publishEnabled()) return;
 
 		unsigned long now = millis();
-		unsigned long interval_ms = (unsigned long)_config->cycle_interval_seconds * 1000UL;
+		unsigned long interval_ms = (unsigned long)_config->mqtt_publish_interval_seconds * 1000UL;
 
 		if (_last_health_publish_ms == 0 || (now - _last_health_publish_ms) >= interval_ms) {
 				StaticJsonDocument<768> doc;
@@ -258,18 +258,23 @@ void MqttManager::onConnected(bool publish_availability) {
 		if (power_manager_should_publish_mqtt_discovery()) {
 				publishDiscoveryOncePerBoot();
 		}
+		delay(1);  // yield — let SDIO transport drain
 
 		// Re-subscribe to all tracked subscription topics.
 		mqtt_sub_store_subscribe_all();
+		delay(1);
 
 		// Screen control subscribe + initial state publish.
 		mqtt_screen_on_connected();
+		delay(1);
 
 		// Audio control subscribe + initial state publish.
 		mqtt_audio_on_connected();
+		delay(1);
 
 		// Notify control subscribe + initial state publish.
 		mqtt_notify_on_connected();
+		delay(1);
 
 		// Publish a single retained state after connect so HA entities have values,
 		// even when periodic publishing is disabled (interval = 0).

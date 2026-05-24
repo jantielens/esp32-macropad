@@ -2,30 +2,16 @@
 // Part of the ESP32 Macropad configuration portal.
 
 /**
- * Load portal mode (core vs full)
- */
-async function loadMode() {
-    try {
-        const response = await fetch(API_MODE);
-        if (!response.ok) return;
-        
-        const mode = await response.json();
-        portalMode = mode.mode || 'full';
-    } catch (error) {
-        console.error('Error loading mode:', error);
-    }
-}
-
-/**
  * Load and display version information
  */
 async function loadVersion() {
     try {
-        const response = await fetch(API_INFO);
-        if (!response.ok) return;
-        
-        const version = await response.json();
-        deviceInfoCache = version;
+        const version = await getDeviceInfo(true);
+        if (!version) return;
+
+        // portalMode is derived from /api/info ap_active flag (previously a
+        // separate /api/mode endpoint — removed to halve boot HTTP requests).
+        portalMode = version.ap_active ? 'core' : 'full';
 
         // Health widget tuning + optional device-side history support
         healthConfigureFromDeviceInfo(deviceInfoCache);
@@ -116,6 +102,8 @@ async function loadConfig() {
         const config = await response.json();
         // Cache for validation logic (e.g., whether passwords are already set)
         window.deviceConfig = config;
+        // Cache compile-time capability map for fragments that gate UI on it.
+        window.__device_caps = config.caps || {};
         const hasConfig = config.wifi_ssid && config.wifi_ssid !== '';
         
         // Helper to safely set element value
@@ -129,6 +117,14 @@ async function loadConfig() {
             if (element && element.type === 'checkbox') {
                 element.checked = !!checked;
             }
+        };
+
+        const setRadioIfExists = (name, value) => {
+            if (value === undefined || value === null) return;
+            const el = document.querySelector(
+                'input[type="radio"][name="' + name + '"][value="' + value + '"]'
+            );
+            if (el) el.checked = true;
         };
         
         const setTextIfExists = (id, text) => {
@@ -161,10 +157,19 @@ async function loadConfig() {
         setValueIfExists('mqtt_username', config.mqtt_username);
 
         // Power settings
-        setValueIfExists('power_mode', config.power_mode);
-        setValueIfExists('cycle_interval_seconds', config.cycle_interval_seconds);
+        setRadioIfExists('operating_mode', config.operating_mode);
+        setValueIfExists('duty_cycle_wake_seconds', config.duty_cycle_wake_seconds);
+        setValueIfExists('mqtt_publish_interval_seconds', config.mqtt_publish_interval_seconds);
         setValueIfExists('portal_idle_timeout_seconds', config.portal_idle_timeout_seconds);
         setValueIfExists('wifi_backoff_max_seconds', config.wifi_backoff_max_seconds);
+
+        // BLE telemetry settings (only present when firmware has HAS_BLE)
+        if (config.ble_burst_count !== undefined) {
+            setValueIfExists('ble_burst_count', config.ble_burst_count);
+        }
+        if (config.ble_adv_interval_ms !== undefined) {
+            setValueIfExists('ble_adv_interval_ms', config.ble_adv_interval_ms);
+        }
 
         // MQTT scope
         setValueIfExists('mqtt_publish_scope', config.mqtt_publish_scope);
@@ -267,47 +272,10 @@ function validateConfig(config) {
 }
 
 /**
- * Reboot device without saving
- */
-async function rebootDevice() {
-    if (!confirm('Reboot the device without saving any changes?')) {
-        return;
-    }
-
-    // Show unified dialog immediately (do not wait on network)
-    showRebootDialog({
-        title: 'Device Rebooting',
-        message: 'Device is rebooting...',
-        context: 'reboot'
-    });
-    
-    try {
-        const response = await fetch(API_REBOOT, {
-            method: 'POST',
-            signal: AbortSignal.timeout(1500)
-        });
-
-        // If the device responds with an explicit error, surface it.
-        if (!response.ok) {
-            throw new Error('Failed to reboot device');
-        }
-    } catch (error) {
-        // Network failure/timeout is expected when the device reboots quickly.
-        // Only surface errors that clearly indicate the reboot request was rejected.
-        if (error.message && error.message.includes('Failed to reboot device')) {
-            const overlay = document.getElementById('reboot-overlay');
-            if (overlay) overlay.style.display = 'none';
-            showMessage('Error rebooting device: ' + error.message, 'error');
-            console.error('Reboot error:', error);
-        }
-    }
-}
-
-/**
  * Reset configuration to defaults
  */
 async function resetConfig() {
-    if (!confirm('Factory reset will erase all settings and reboot the device into AP mode. Continue?')) {
+    if (!confirm('Factory reset will erase ALL settings, pads, button defaults, icons, sounds, timers, swipe/boot actions, indexed stores (e.g. sessions), and BLE pairings. The device will reboot into AP mode. Continue?')) {
         return;
     }
     

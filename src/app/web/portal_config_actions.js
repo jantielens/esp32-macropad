@@ -169,20 +169,10 @@ async function saveSwipeActions() {
 // ============================================================================
 
 const BOOT_ACTION_PREFIXES = ['boot-action-1', 'boot-action-2', 'boot-action-3'];
-const BOOT_ACTION_LABELS = { 'boot-action-1': 'Action 1', 'boot-action-2': 'Action 2', 'boot-action-3': 'Action 3' };
+const BOOT_ACTION_LABELS = ['Action 1', 'Action 2', 'Action 3'];
 
 function bootActionsInitEditors() {
-    var container = document.getElementById('boot-action-editors');
-    if (!container) return;
-    var html = '';
-    BOOT_ACTION_PREFIXES.forEach(function(prefix) {
-        html += '<details class="editor-group" id="' + prefix + '-group">';
-        html += '<summary>' + BOOT_ACTION_LABELS[prefix] + '</summary>';
-        html += '<div class="editor-group-body">';
-        html += actionEditorHTML(prefix);
-        html += '</div></details>';
-    });
-    container.innerHTML = html;
+    actionEditorListRender('boot-action-editors', BOOT_ACTION_PREFIXES, BOOT_ACTION_LABELS);
 }
 
 async function loadBootActions() {
@@ -190,24 +180,14 @@ async function loadBootActions() {
         const response = await fetch('/api/component/boot-actions/config');
         if (!response.ok) return;
         const data = await response.json();
-        var actions = data.actions || [];
-        BOOT_ACTION_PREFIXES.forEach(function(prefix, i) {
-            actionEditorLoad(prefix, actions[i] || {});
-        });
+        actionEditorListLoad(BOOT_ACTION_PREFIXES, data.actions || []);
     } catch (err) {
         console.error('Failed to load boot actions:', err);
     }
 }
 
 async function saveBootActions() {
-    var actions = [];
-    BOOT_ACTION_PREFIXES.forEach(function(prefix) {
-        actions.push(actionEditorBuild(prefix));
-    });
-    // Trim trailing empty actions
-    while (actions.length > 0 && !actions[actions.length - 1].type) {
-        actions.pop();
-    }
+    var actions = actionEditorListBuild(BOOT_ACTION_PREFIXES);
     try {
         const response = await fetch('/api/component/boot-actions/config', {
             method: 'POST',

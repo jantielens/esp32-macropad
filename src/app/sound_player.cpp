@@ -2,7 +2,7 @@
 
 #if HAS_SOUND_PLAYER
 
-#include <LittleFS.h>
+#include "storage.h"
 #include <esp_heap_caps.h>
 #include <string.h>
 #include "driver/i2s_std.h"
@@ -122,7 +122,7 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
     sound_store_path(filename, path, sizeof(path));
 
     // Open file
-    File file = LittleFS.open(path, "r");
+    File file = Storage.open(path, "r");
     if (!file) {
         LOGW(TAG, "File not found: %s", path);
         return false;

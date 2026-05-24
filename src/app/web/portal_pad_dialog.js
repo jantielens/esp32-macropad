@@ -30,13 +30,6 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-label-bottom-style').placeholder = padState.buttonDefaults.label_bottom_style || 'font:24;align:left;mode:dot';
     ['top', 'center', 'bottom'].forEach(syncLabelStyleVisibility);
 
-    // Wire and init monospace toggle for mixed-binding label inputs
-    ['pad-edit-label-top', 'pad-edit-label-center', 'pad-edit-label-bottom'].forEach(function(id) {
-        var el = document.getElementById(id);
-        el.oninput = function() { padUpdateMixedBindingFont(el); };
-        padUpdateMixedBindingFont(el);
-    });
-
     // Button state
     var btnStateEl = document.getElementById('pad-edit-btn-state');
     btnStateEl.value = btn.btn_state || '';
@@ -250,15 +243,6 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
-
-    // Wire and init monospace toggle for bindable min/max inputs
-    ['pad-edit-widget-bar-min', 'pad-edit-widget-bar-max',
-     'pad-edit-gauge-min', 'pad-edit-gauge-max',
-     'pad-edit-sparkline-min', 'pad-edit-sparkline-max'].forEach(function(id) {
-        var el = document.getElementById(id);
-        el.oninput = function() { padUpdateMixedBindingFont(el); };
-        padUpdateMixedBindingFont(el);
-    });
 
     // Enable paste button if clipboard has content
     document.getElementById('pad-edit-paste').disabled = !padState.btnClipboard;

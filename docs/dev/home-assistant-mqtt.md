@@ -30,14 +30,14 @@ Go to the **Network** page and fill in:
 - `MQTT Host` (required to enable MQTT)
 - `MQTT Port` (optional, default 1883)
 - `MQTT Username` / `MQTT Password` (optional)
-- Set the publish cadence via **Cycle Interval (seconds)** on the Home page
+- Set the publish cadence via **MQTT Publish Interval (seconds)** on the Network page (Always-On mode only; Duty-Cycle publishes once per wake)
 
 Behavior:
 - If `MQTT Host` is empty: device will not connect.
 - If `MQTT Host` is set:
   - Device connects and publishes availability + discovery.
   - Device publishes **one retained** state payload right after connect.
-  - If `Cycle Interval > 0`: it also republishes state periodically.
+  - If `MQTT Publish Interval > 0` (Always-On): it also republishes state periodically.
 
 ## Topics
 
@@ -136,7 +136,7 @@ There are two viable approaches.
 ### Option A (Quick + Simple): Force-publish the existing JSON state immediately
 
 This keeps the “single JSON state topic” design intact:
-- Leave your existing interval publishing enabled (`Cycle Interval (seconds) > 0`).
+- Leave your existing interval publishing enabled (`MQTT Publish Interval (seconds) > 0`).
 - When presence changes, publish an immediate update by republishing the same retained JSON state topic.
 
 Tradeoff:

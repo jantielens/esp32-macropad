@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{PROJECT_DISPLAY_NAME}} — Configuration Portal</title>
-  <link rel="stylesheet" href="/bootstrap.min.css">
-  <link rel="stylesheet" href="/portal-custom.css">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/portal-all.css">
   <script>
     /* Apply theme immediately to prevent flash */
     (function() {
@@ -42,6 +42,11 @@
     </div>
   </header>
 
+  <div id="reboot-pending-banner" class="reboot-pending-banner" style="display:none;" role="alert">
+    <span class="reboot-pending-text">⚠️ Configuration changes saved — reboot required for them to take effect.</span>
+    <button type="button" class="btn btn-warning btn-sm" id="reboot-pending-btn">Reboot Now</button>
+  </div>
+
   <div class="portal-layout">
     <nav id="portal-nav" class="portal-nav"></nav>
     <main id="content-pane" class="content-pane"></main>
@@ -49,8 +54,10 @@
 
   {{HEALTH_WIDGET}}
 
-  <!-- Toast container -->
-  <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+  {{REBOOT_OVERLAY}}
+
+  <!-- Toast container (positioned just under the header in CSS) -->
+  <div id="toast-container" class="toast-container position-fixed end-0 p-3"></div>
 
   <noscript>
     <div class="container p-4">
@@ -60,6 +67,12 @@
       </div>
     </div>
   </noscript>
+  <!-- portal.js.bundle is split into named chunks, each gated on a HAS_*
+       flag (e.g. pad editor / action editor are HAS_DISPLAY-only). The
+       minifier emits one pre-gzipped PROGMEM blob per flag combination and
+       wraps each in an #if guard, so every build links exactly ONE combined
+       portal.js variant. /portal.js therefore serves the entire portal JS in
+       a single HTTP response with a single gzip member. -->
   <script src="/portal.js"></script>
 </body>
 </html>

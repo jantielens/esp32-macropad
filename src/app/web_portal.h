@@ -15,14 +15,12 @@
  * 
  * ENDPOINTS:
  *   GET  /                   -> Portal HTML page
- *   GET  /bootstrap.min.css  -> Bootstrap CSS framework
- *   GET  /portal-custom.css  -> Custom portal stylesheet
+ *   GET  /portal-all.css     -> Bundled CSS (Bootstrap + portal-custom)
  *   GET  /portal.js     -> JavaScript
  *   GET  /api/config    -> Get current config (JSON)
  *   POST /api/config    -> Save new config (JSON)
  *   DELETE /api/config  -> Reset config
  *   GET  /api/version   -> Get firmware version (JSON)
- *   GET  /api/mode      -> Get portal mode (core vs full)
  *   POST /api/update    -> Upload firmware binary for OTA update
  */
 

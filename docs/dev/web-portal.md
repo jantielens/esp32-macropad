@@ -27,6 +27,7 @@ The web portal provides:
 - Captive portal auto-redirects to configuration page
 
 **Features:**
+- One-page setup wizard (`setup` component, fragment `setup.fragment.html`) that handles WiFi SSID + password (required), friendly name, optional portal basic auth, and optional static IP. The wizard is the only Device-category nav item visible in AP mode and is selected automatically via the `ap_mode` + `primary.fragment` fields on `/api/portal/nav`.
 - WiFi SSID and password setup
 - Device name configuration
 - Fixed IP settings (optional)
@@ -235,7 +236,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
 **Available In:** Full Mode only (redirects to Network page in AP mode)
 
 **Sections:**
-- **⚡ Operating Mode & Cadence**: Mode selection, transport, cycle interval, portal idle timeout, WiFi backoff cap, and MQTT payload scope
+- **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
 - **Sensor & Display settings**: Threshold and display configuration sections
 
@@ -287,7 +288,8 @@ Board-specific firmware variants can promote a custom nav category to first posi
 - **📡 MQTT Settings (Optional)**: MQTT broker settings
   - Only shown when MQTT support is enabled in firmware (`HAS_MQTT`)
   - Host, port, username/password
-  - Periodic publish cadence follows `cycle_interval_seconds` in Power Settings
+  - Publish interval and payload scope
+  - Periodic publish cadence follows `mqtt_publish_interval_seconds` (Always-On mode only; in Duty-Cycle, one publish per wake)
 
 **Layout:** 
 - WiFi + Device Settings side-by-side on desktop
@@ -305,7 +307,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
   - Select .bin file from build directory
   - Upload progress bar
   - Automatic reboot and reconnection
-- **🔄 Factory Reset**: Reset all configuration to defaults
+- **🔄 Factory Reset**: Full wipe of NVS partition + filesystem (pads, icons, sounds, indexed stores, BLE pairings)
   - Confirmation required
   - Device reboots in AP mode after reset
 
@@ -427,6 +429,7 @@ Returns comprehensive device information.
 ```json
 {
   "version": "0.0.1",
+  "ap_active": false,
   "build_date": "Nov 25 2025",
   "build_time": "14:30:00",
   "board_name": "esp32-nodisplay",
@@ -473,6 +476,9 @@ Returns comprehensive device information.
 - `mdns_name`: Full mDNS name (hostname + `.local`)
 - `hostname`: Short hostname
 
+**Portal Mode Field:**
+- `ap_active`: `true` when the device is running in AP / captive-portal mode, `false` in full STA mode. Portal JS derives `portalMode` (`"core"` vs `"full"`) from this flag. (Replaces the removed `GET /api/mode` endpoint.)
+
 **Display Fields** (only when `has_display` is `true`):
 - `display_coord_width` / `display_coord_height`: Display resolution
 - `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
@@ -510,6 +516,9 @@ Returns real-time device health statistics.
   "heap_internal_free": 200000,
   "heap_internal_min": 190000,
   "heap_internal_largest": 110000,
+  "heap_dma_internal_free": 48000,
+  "heap_dma_internal_min": 32000,
+  "heap_dma_internal_largest": 24000,
   "heap_fragmentation": 5,
   "psram_free": 8388608,
   "psram_min": 8350000,
@@ -609,7 +618,8 @@ Returns current device configuration (passwords excluded).
   "dns2": "",
 
   "power_mode": "always_on",
-  "cycle_interval_seconds": 120,
+  "duty_cycle_wake_seconds": 120,
+  "mqtt_publish_interval_seconds": 120,
   "portal_idle_timeout_seconds": 120,
   "wifi_backoff_max_seconds": 900,
   "mqtt_publish_scope": "sensors_only",
@@ -656,7 +666,8 @@ Save new configuration. Device reboots after successful save.
   "dns2": "8.8.4.4",
 
   "power_mode": "duty_cycle",
-  "cycle_interval_seconds": 120,
+  "duty_cycle_wake_seconds": 120,
+  "mqtt_publish_interval_seconds": 120,
   "portal_idle_timeout_seconds": 120,
   "wifi_backoff_max_seconds": 900,
   "mqtt_publish_scope": "sensors_only",
@@ -756,21 +767,7 @@ When a board defines `PORTAL_PRIMARY_CATEGORY` (non-empty), the response include
 
 ### Portal Mode
 
-#### `GET /api/mode`
-
-Returns current portal operating mode.
-
-**Response:**
-```json
-{
-  "mode": "core",
-  "ap_active": true
-}
-```
-
-**Modes:**
-- `"core"`: AP mode with captive portal
-- `"full"`: WiFi connected mode
+Portal mode is exposed via the `ap_active` field on [`GET /api/info`](#get-apiinfo). The standalone `GET /api/mode` endpoint was removed to reduce HTTP request count during portal boot (see [Concurrent Request Throttling](#concurrent-request-throttling)).
 
 ### System Control
 - `width`/`height` must match the device's display coordinate-space resolution (see `GET /api/info` fields `display_coord_width`/`display_coord_height`)
@@ -1223,12 +1220,13 @@ Each button's `col_offset` / `row_offset` is relative to the placement anchor ce
 - `web/home.html` - Home page (custom settings)
 - `web/network.html` - Network configuration page
 - `web/firmware.html` - Firmware update and factory reset page
-- `web/bootstrap.min.css` - Bootstrap CSS framework (vendor)
-- `web/portal-custom.css` - Custom portal styles and responsive overrides
+- `web/bootstrap.min.css` - Bootstrap CSS framework (vendor, bundled into `portal-all.css`)
+- `web/portal-custom.css` - Custom portal styles and responsive overrides (bundled into `portal-all.css`)
 - `web/portal.js.bundle` - Bundle manifest listing all JS modules in concatenation order
 - `web/portal.js` - Entry point (last in bundle); all JS served as a single bundled asset
 - `web/portal_*.js` - Feature modules and fragments (see [Asset Bundle System](#asset-bundle-system))
-- `web/portal-custom.css.bundle` - Optional CSS bundle manifest (see [CSS Bundle](#css-bundle))
+- `web/portal-all.css` - Primary CSS file (bundle target) — served at `/portal-all.css`
+- `web/portal-all.css.bundle` - CSS bundle manifest (see [CSS Bundle](#css-bundle))
 - `web/_portal_*.css` - Feature CSS fragments (bundled into primary CSS at build time)
 
 **Asset Compression:**
@@ -1236,6 +1234,22 @@ Each button's `col_offset` / `row_offset` is relative to the placement anchor ce
 - Reduces flash storage and bandwidth by ~80%
 - Assets served with `Content-Encoding: gzip` header
 - Browser automatically decompresses (transparent to user)
+
+### Concurrent Request Throttling
+
+The portal is served by ESPAsyncWebServer / AsyncTCP, whose TX buffers come from DMA-internal SRAM. On boards using ESP-Hosted SDIO (ESP32-P4 + ESP32-C6 co-processor) this pool is small and fragments easily — a parallel storm of large HTTP responses can cause a `copy_buff` NULL assert (`transport_drv_sta_tx`).
+
+To keep concurrent in-flight HTTP requests bounded, the frontend applies several measures:
+
+1. **`window.fetch` cap of 2** — `portal_core.js` wraps the native `fetch` with a small queue (`MAX_INFLIGHT = 2`). Excess calls wait until an in-flight request completes.
+2. **`getDeviceInfo()` session cache** — `portal_core.js` exposes `getDeviceInfo(forceRefresh)` that issues at most one `GET /api/info` per page session and caches the result in `deviceInfoCache`. Concurrent first-time callers share a single in-flight promise. Pass `forceRefresh = true` after writes that change reported fields (e.g., saving a pad changes `available_screens`).
+3. **`fetchHealthOnce()` shared snapshot** — `portal_health.js` keeps the most recent `/api/health` response in `latestHealth` (updated by every widget poll) and exposes `fetchHealthOnce()` for other fragments. The welcome and version-info fragments call it instead of issuing their own `/api/health` request: if a snapshot exists they get it immediately, otherwise concurrent first-time callers share a single in-flight promise. The widget's periodic poll loop is unchanged and continues to issue `GET /api/health` at the configured interval.
+4. **Single CSS asset** — `bootstrap.min.css` + `portal-custom.css` are concatenated into `/portal-all.css` at build time (see [CSS Bundle](#css-bundle)), saving one request and ~1.5 KB through shared gzip dictionary.
+5. **Inline favicon** — `shell.html` sets `<link rel="icon" href="data:,">` to suppress the browser's automatic `/favicon.ico` lookup (no extra request, no 404).
+6. **`/api/mode` folded into `/api/info`** — the legacy mode endpoint was removed; portal JS derives `portalMode` from `ap_active` on the cached `/api/info` response.
+7. **Chunked static asset streaming** — the gzipped PROGMEM asset handler in `web_portal_pages.cpp` (shell HTML, `portal-all.css`, `portal.js`, fragment HTML) uses a length-aware `AwsResponseFiller` callback with `HTTP_STREAM_CHUNK_SIZE = 4 KB` instead of `beginResponse_P()`. AsyncTCP only calls the filler when LWIP TX buffer space is available, so the response is paced segment by segment and the DMA-internal pbuf pool recycles between chunks. This matters because the browser issues `/portal-all.css` (~38 KB gz) and `/portal.js` (~53 KB gz) **in parallel** as `<link>` / `<script>` tags — those requests are not subject to the `window.fetch` cap and would otherwise queue the full ~90 KB of payload into the DMA-internal pool at once.
+
+The result of these measures is that a fresh portal load on the `release/1.16.0` baseline issues approximately: `GET /`, `GET /portal-all.css`, `GET /portal.js`, `GET /api/info`, `GET /api/health`, `GET /api/portal/nav`, `GET /api/section/welcome` — plus the periodic `GET /api/health` poll. With the fetch cap, at most two are in flight at any moment.
 
 ### CPU Usage Calculation
 
@@ -1298,9 +1312,10 @@ DNS server redirects all requests to device IP in AP mode:
      - `network.html` - Network configuration
      - `firmware.html` - Firmware update and reset
    - Styling and logic:
-     - `bootstrap.min.css` - Bootstrap CSS framework (vendor)
-     - `portal-custom.css` - Custom portal styles and overrides
-     - `portal-custom.css.bundle` - Optional CSS bundle manifest
+     - `bootstrap.min.css` - Bootstrap CSS framework (vendor, bundled)
+     - `portal-custom.css` - Custom portal styles and overrides (bundled)
+     - `portal-all.css` - Primary CSS file served by the device (bundle output)
+     - `portal-all.css.bundle` - CSS bundle manifest
      - `_portal_*.css` - Feature CSS fragments (bundled into primary CSS)
      - `portal.js.bundle` - Bundle manifest (module load order)
      - `portal_*.js` - JS feature modules and fragments
@@ -1327,7 +1342,7 @@ DNS server redirects all requests to device IP in AP mode:
      HTML home.html:     5234 → 3891 → 1256 bytes (-76% total)
      HTML network.html:  8912 → 6543 → 1987 bytes (-78% total)
      HTML firmware.html: 4231 → 3124 → 1098 bytes (-74% total)
-     CSS  portal-custom.css:   14348 → 10539 → 2864 bytes (-81% total)
+     CSS  portal-all.css:      287228 → 274208 → 38475 bytes (-87% total)
      JS   portal.js:   329575 → 220746 → 50066 bytes (-85% total)
    ```
 
@@ -1387,16 +1402,16 @@ CSS files can also be bundled using the same manifest pattern. This allows featu
 
 **How it works:**
 
-1. `src/app/web/portal-custom.css.bundle` lists CSS files in cascade order (one filename per line, `#` comments ignored)
+1. `src/app/web/portal-all.css.bundle` lists CSS files in cascade order (one filename per line, `#` comments ignored)
 2. The minifier concatenates the listed files, minifies with `csscompressor`, and gzip-compresses the result into `web_assets.h`
-3. The primary CSS file (e.g., `portal-custom.css`) is served as a single asset — same as without a bundle
+3. The primary CSS file (e.g., `portal-all.css`) is served as a single asset — same as without a bundle
 
 **Concatenation order matters:** CSS cascade rules mean later entries override earlier ones at equal specificity. List base/shared styles first and feature-specific overrides last.
 
 **Adding feature CSS:**
 
 1. Create `src/app/web/_portal_myfeature.css` (underscore prefix excludes it from individual serving)
-2. Create or update `portal-custom.css.bundle` with the filename before the primary CSS file
+2. Create or update `portal-all.css.bundle` with the filename before the primary CSS file
 3. Run `./build.sh` — the feature CSS is automatically included in the bundle
 
 **Build-time validation:** Every file listed in a `.css.bundle` manifest must exist; missing files cause a hard build error.

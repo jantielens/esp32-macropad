@@ -315,16 +315,33 @@
         buildNav(data.categories || []);
 
         // Startup fallback chain:
-        // 1. URL hash if present and exists in visible nav
-        // 2. Primary fragment if defined and exists in visible nav
-        // 3. #welcome
-        var itemId = getItemFromHash();
-        if (itemId && !itemMap[itemId]) itemId = null;
+        // 1. In AP mode, primary fragment wins over any hash (the wizard is
+        //    the only meaningful page; a stale #welcome from a prior session
+        //    must not override it).
+        // 2. Otherwise: URL hash if present and exists in visible nav
+        // 3. Primary fragment if defined and exists in visible nav
+        // 4. #welcome
+        var itemId = null;
+        if (data.ap_mode && primary && primary.fragment && itemMap[primary.fragment]) {
+          itemId = primary.fragment;
+        }
+        if (!itemId) {
+          itemId = getItemFromHash();
+          if (itemId && !itemMap[itemId]) itemId = null;
+        }
         if (!itemId && primary && primary.fragment && itemMap[primary.fragment]) {
           itemId = primary.fragment;
         }
         if (!itemId) itemId = 'welcome';
         navigateTo(itemId);
+
+        // Populate header badges + start health polling once per page load.
+        // These functions live in portal_config.js / portal_health.js
+        // (always-loaded chunk) and were previously only invoked from
+        // pad-editor / sensor-data fragments — meaning headless or AP-mode
+        // landings left the badges at their placeholder values forever.
+        if (typeof loadVersion === 'function') loadVersion();
+        if (typeof initHealthWidget === 'function') initHealthWidget();
       })
       .catch(function (err) {
         navEl.innerHTML =

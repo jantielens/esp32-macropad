@@ -1,10 +1,14 @@
 #include "web_portal_fs_store.h"
+#include "board_config.h"
+
+#if HAS_DISPLAY
 
 #include "log_manager.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
+#include "web_portal_utils.h"
 
-#include <LittleFS.h>
+#include "storage.h"
 #include <string.h>
 
 #define TAG "FsStoreAPI"
@@ -64,15 +68,16 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
             }
 
             String file_path = store.data_path(id.c_str());
-            if (!LittleFS.exists(file_path.c_str())) {
+            if (!Storage.exists(file_path.c_str())) {
                 // Manifest has the entry but data file is gone (orphan).
                 request->send(404, "application/json",
                               "{\"success\":false,\"message\":\"Not found\"}");
                 return;
             }
 
-            // Stream from flash — no large heap allocation.
-            request->send(LittleFS, file_path.c_str(), "application/json");
+            // Stream from flash — throttled to prevent WiFi TX buffer
+            // exhaustion on ESP-Hosted (SDIO).
+            sendFileThrottled(request, file_path.c_str(), "application/json");
         }
     );
 
@@ -193,3 +198,5 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
 
     LOGI(TAG, "Registered routes for %s", base_url);
 }
+
+#endif // HAS_DISPLAY
