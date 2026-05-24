@@ -174,17 +174,7 @@ void MipiDsiDriver::init() {
     ESP_ERROR_CHECK(esp_lcd_new_panel_dpi(mipi_dsi_bus, &dpi_config, &panel_handle));
     
     // 5. Send vendor init commands via DSI command mode
-    const mipi_dsi_init_cmd_t* cmds = getInitCommands();
-    const size_t num_cmds = getInitCommandCount();
-    for (size_t i = 0; i < num_cmds; i++) {
-        ESP_ERROR_CHECK(esp_lcd_panel_io_tx_param(
-            io_handle, cmds[i].cmd, cmds[i].data, cmds[i].data_bytes
-        ));
-        if (cmds[i].delay_ms > 0) {
-            delay(cmds[i].delay_ms);
-        }
-    }
-    LOGI(tag, "Sent %d vendor init commands", (int)num_cmds);
+    sendInitCommands();
     
     // 6. Initialize DPI panel — starts continuous DMA refresh from PSRAM
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
@@ -461,6 +451,38 @@ void MipiDsiDriver::blankFramebuffers() {
     }
 }
 
+void MipiDsiDriver::sendInitCommands() {
+    if (!ioHandle) return;
+    const mipi_dsi_init_cmd_t* cmds = getInitCommands();
+    const size_t num_cmds = getInitCommandCount();
+    for (size_t i = 0; i < num_cmds; i++) {
+        ESP_ERROR_CHECK(esp_lcd_panel_io_tx_param(
+            ioHandle, cmds[i].cmd, cmds[i].data, cmds[i].data_bytes
+        ));
+        if (cmds[i].delay_ms > 0) {
+            delay(cmds[i].delay_ms);
+        }
+    }
+    LOGI(getLogTag(), "Sent %d vendor init commands", (int)num_cmds);
+}
+
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+// Deassert RST, wait for the panel IC to come out of reset, then re-run
+// the full vendor init sequence. The JD9165 (and most TDDI controllers)
+// require only ~10-20 ms post-RST settle before accepting DBI commands;
+// 50 ms is a conservative margin that still saves ~70 ms of wake latency
+// versus the cold-boot 120 ms. The vendor init table ends with Sleep Out
+// (0x11, +120 ms) and Display On (0x29, +50 ms), so no additional DCS
+// commands are needed after this returns.
+void MipiDsiDriver::wakeFromHardReset() {
+    digitalWrite(LCD_RST_PIN, HIGH);
+    delay(50);
+    sendInitCommands();
+}
+#else
+void MipiDsiDriver::wakeFromHardReset() {}
+#endif
+
 void MipiDsiDriver::displaySleep() {
     if (!ioHandle) return;
 
@@ -475,21 +497,69 @@ void MipiDsiDriver::displaySleep() {
     esp_lcd_panel_io_tx_param(ioHandle, 0x28, NULL, 0);  // Display Off
     delay(20);
     esp_lcd_panel_io_tx_param(ioHandle, 0x10, NULL, 0);  // Sleep In
+
+    // Optional deep sleep: hold panel RST LOW so the panel IC fully powers
+    // down its internal regulators. Required on cheap IPS MIPI-DSI panels
+    // (e.g. JD9165) where DCS Sleep In alone leaves the TFT cells DC-biased
+    // and slowly drifts VCOM, producing washed-out colors after multi-hour
+    // idle. Wake re-runs the vendor init sequence.
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    digitalWrite(LCD_RST_PIN, LOW);
+#endif
 }
 
 void MipiDsiDriver::displayWake() {
     if (!ioHandle) return;
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    wakeFromHardReset();
+#else
     esp_lcd_panel_io_tx_param(ioHandle, 0x11, NULL, 0);  // Sleep Out
     delay(120);                                           // MIPI DCS spec minimum
     esp_lcd_panel_io_tx_param(ioHandle, 0x29, NULL, 0);  // Display On
+#endif
 }
 
 void MipiDsiDriver::displayWakeSleepOut() {
     if (!ioHandle) return;
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    // Hard-reset wake is single-phase (see needsTwoPhaseWake()): replay the
+    // full init sequence here. The screensaver skips the 120 ms gap and the
+    // second displayWakeDisplayOn() call so the display lock is only held
+    // once, for the duration of wakeFromHardReset().
+    wakeFromHardReset();
+#else
     esp_lcd_panel_io_tx_param(ioHandle, 0x11, NULL, 0);  // Sleep Out
+#endif
 }
 
 void MipiDsiDriver::displayWakeDisplayOn() {
     if (!ioHandle) return;
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    // Unreachable: needsTwoPhaseWake() returns false in hard-reset mode so
+    // screen_saver_manager never calls this. Guarded out for safety.
+    return;
+#else
     esp_lcd_panel_io_tx_param(ioHandle, 0x29, NULL, 0);  // Display On
+#endif
+}
+
+bool MipiDsiDriver::needsTwoPhaseWake() const {
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    return false;
+#else
+    return true;
+#endif
+}
+
+// Periodic scrub during long idle. With hard-reset enabled the panel IC is
+// already unpowered, so this is a no-op. Otherwise re-blank both framebuffers
+// as insurance against any transient LVGL write that slipped past the opaque
+// top-layer overlay (e.g. overlay teardown race during fade-in) leaving stale
+// pixels in the FB to ghost into the IPS cells over hours.
+void MipiDsiDriver::displayRefreshSleep() {
+#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    return;
+#else
+    blankFramebuffers();
+#endif
 }

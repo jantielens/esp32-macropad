@@ -116,6 +116,19 @@ public:
 		virtual void displayWakeSleepOut()   { displayWake(); }
 		virtual void displayWakeDisplayOn()  {}
 
+		// Returns false when the driver completes wake in displayWakeSleepOut()
+		// alone (e.g. hard-reset wake re-runs the full vendor init, which already
+		// includes the Sleep Out → Display On sequence). When false, screen_saver_manager
+		// skips the 120 ms gap and the second displayWakeDisplayOn() call.
+		// Default: true (preserves the legacy two-phase contract).
+		virtual bool needsTwoPhaseWake() const { return true; }
+
+		// Periodic scrub while the display is fully asleep. Called by the screensaver
+		// every SCREENSAVER_SLEEP_REFRESH_MS so drivers can re-blank framebuffers or
+		// otherwise refresh state to mitigate image retention / VCOM drift on cheap
+		// IPS panels during multi-hour idle. Default: no-op.
+		virtual void displayRefreshSleep() {}
+
 		// LVGL configuration hook (override to customize LVGL display settings)
 		// Called during LVGL initialization to allow driver-specific configuration
 		// such as software rotation, full refresh mode, etc.

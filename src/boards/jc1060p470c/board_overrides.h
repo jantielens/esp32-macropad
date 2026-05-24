@@ -109,6 +109,13 @@
 // ============================================================================
 // Hide PSRAM flicker when screensaver fades (DPI FB lives in PSRAM).
 #define DISPLAY_BLANK_ON_SAVE true
+// Hold panel RST low during screensaver sleep. The JD9165 + HKC IPS combo
+// shows washed-out colors after multi-hour idle even with DCS Sleep In and
+// framebuffer blanking — only a full hardware reset reliably de-biases
+// the TFT cells. Wake re-runs the vendor init sequence (~180-230 ms total:
+// 50 ms reset-release + vendor command stream + 120 ms Sleep Out + 50 ms
+// Display On).
+#define DISPLAY_HARD_RESET_ON_SLEEP true
 // Avoid PSRAM bus contention — disable background task telemetry.
 #define DEVICE_TELEMETRY_BACKGROUND_TASKS 0
 #define DEVICE_TELEMETRY_CPU_MONITOR 1

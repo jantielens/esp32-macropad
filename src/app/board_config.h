@@ -704,6 +704,26 @@
 #define SCREENSAVER_SLEEP_TICK_MS 200
 #endif
 
+// Periodic interval (ms) at which the screensaver calls
+// DisplayDriver::displayRefreshSleep() while the display is fully asleep,
+// for image-retention / VCOM-drift mitigation on cheap IPS panels.
+// Default 15 minutes; 0 disables.
+// Interval in ms between periodic asleep-display refresh calls (0 = disabled).
+#ifndef SCREENSAVER_SLEEP_REFRESH_MS
+#define SCREENSAVER_SLEEP_REFRESH_MS 900000
+#endif
+
+// Hold the panel hardware reset pin LOW during screensaver sleep so the
+// panel IC fully powers down its internal regulators. Required on cheap
+// IPS MIPI-DSI panels (e.g. JD9165 on jc1060p470c) where DCS Sleep In
+// alone does not de-bias the TFT cells, leading to washed-out colors
+// after multi-hour idle. Wake re-runs the full vendor init sequence,
+// growing wake latency from ~120 ms to ~250-300 ms.
+// Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
+#ifndef DISPLAY_HARD_RESET_ON_SLEEP
+#define DISPLAY_HARD_RESET_ON_SLEEP false
+#endif
+
 // ============================================================================
 // Pad & Screen Limits
 // ============================================================================

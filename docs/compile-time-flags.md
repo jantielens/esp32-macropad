@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 169
+Total flags: 171
 
 ### Features (HAS_*)
 
@@ -140,6 +140,7 @@ Total flags: 169
 - **DEVICE_TELEMETRY_CPU_MONITOR** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable CPU monitoring (idle-hook based, 1 Hz esp_timer).
 - **DEVICE_TELEMETRY_HEALTH_WINDOW** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable health-window min/max sampling timer.
 - **DISPLAY_BLANK_ON_SAVE** default: `false` — (LittleFS + lodepng). The browser blanks/restores via /api/display/brightness.
+- **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
 - **HEALTH_HISTORY_ENABLED** default: `1` — Enable device-side health history ring buffer for charting in the web portal
@@ -174,6 +175,7 @@ Total flags: 169
 - **PORTAL_PRIMARY_LABEL** default: `""` — Display name for the primary portal category in the nav sidebar.
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
+- **SCREENSAVER_SLEEP_REFRESH_MS** default: `900000` — Interval in ms between periodic asleep-display refresh calls (0 = disabled).
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
 - **SD_PROBE_ON_BOOT** default: `false` — listing, write/read round-trip). Intended for new-board bring-up only.
@@ -520,6 +522,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **DISPLAY_BLANK_ON_SAVE**
   - src/app/board_config.h
+- **DISPLAY_HARD_RESET_ON_SLEEP**
+  - src/app/board_config.h
+  - src/app/drivers/mipi_dsi_driver.cpp
 - **DISPLAY_ROTATION**
   - src/app/touch_manager.cpp
 - **DISPLAY_SHAPE**
@@ -622,6 +627,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/power_manager.cpp
 - **PROJECT_DISPLAY_NAME**
   - src/app/board_config.h
+- **SCREENSAVER_SLEEP_REFRESH_MS**
+  - src/app/board_config.h
+  - src/app/screen_saver_manager.cpp
 - **SCREENSAVER_SLEEP_TICK_MS**
   - src/app/board_config.h
 - **SCREEN_HISTORY_MAX**

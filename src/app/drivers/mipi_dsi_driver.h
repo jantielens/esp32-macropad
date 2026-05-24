@@ -131,6 +131,16 @@ protected:
     // so the scanout (if it ever resumes) reads black, not stale UI content.
     void blankFramebuffers();
 
+    // Send the subclass vendor init command table via the DBI command channel.
+    // Used both by init() and by the hard-reset wake path to re-program panel
+    // registers after RST has been cycled.
+    void sendInitCommands();
+
+    // Hard-reset wake helper: deassert RST, wait for panel power-up
+    // stabilization, then re-run the vendor init sequence. Shared by
+    // displayWake() and displayWakeSleepOut().
+    void wakeFromHardReset();
+
 public:
     MipiDsiDriver();
     ~MipiDsiDriver() override;
@@ -157,6 +167,8 @@ public:
     void displayWake() override;
     void displayWakeSleepOut() override;
     void displayWakeDisplayOn() override;
+    bool needsTwoPhaseWake() const override;
+    void displayRefreshSleep() override;
 };
 
 #endif // MIPI_DSI_DRIVER_H
