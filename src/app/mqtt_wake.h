@@ -1,6 +1,8 @@
 #pragma once
 
 #include "board_config.h"
+// Always included: the !HAS_DISPLAY stub below references DeviceConfig*, which
+// must be a complete type even in headless builds.
 #include "config_manager.h"
 
 // ============================================================================

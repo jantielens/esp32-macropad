@@ -67,12 +67,12 @@
       </div>
     </div>
   </noscript>
-  <!-- portal.js is split into named, independently-gzipped chunks so that
-       HAS_DISPLAY-only code (pad editor, action editor) can be dropped from
-       flash on headless builds. The /portal.js endpoint without a name param
-       returns a tiny bootstrap that chain-loads only the chunks compiled
-       into this firmware — strictly sequential (one HTTP request at a time)
-       to keep ESP-Hosted DMA pressure low on P4/C6 boards. -->
+  <!-- portal.js.bundle is split into named chunks, each gated on a HAS_*
+       flag (e.g. pad editor / action editor are HAS_DISPLAY-only). The
+       minifier emits one pre-gzipped PROGMEM blob per flag combination and
+       wraps each in an #if guard, so every build links exactly ONE combined
+       portal.js variant. /portal.js therefore serves the entire portal JS in
+       a single HTTP response with a single gzip member. -->
   <script src="/portal.js"></script>
 </body>
 </html>

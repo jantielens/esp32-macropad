@@ -41,12 +41,11 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/firmware.html", HTTP_GET, handleFirmware);
 
 		// Asset routes
-		// /portal.js with no query param returns a tiny bootstrap that chain-loads
-		// enabled chunks one at a time (see handlePortalJS). /portal.js?name=NAME
-		// returns the corresponding gzipped chunk. This keeps boot to a single
-		// in-flight HTTP request — matches the original ESP-Hosted DMA budget.
+		// /portal.js returns a single pre-gzipped PROGMEM blob whose contents are
+		// selected at compile time from the chunked portal.js.bundle manifest.
+		// Exactly one #if variant matches per build, so the browser fetches the
+		// entire portal JS in one request with one gzip member (see handlePortalJS).
 		server->on("/portal.js", HTTP_GET, handlePortalJS);
-		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 
 		// API endpoints

@@ -160,8 +160,13 @@ bool ble_telemetry_advertise_burst(uint8_t burst_count, uint16_t interval_ms) {
     // and the device becomes invisible to BTHome receivers.
     BLEAdvertisementData adv_data;
     adv_data.setFlags(0x06);  // LE General Discoverable | BR/EDR Not Supported
-    // Arduino-ESP32 BLE API expects String; use concat(buf, len) to preserve
-    // binary bytes (including embedded NULs) in the service data blob.
+    // Arduino-ESP32 BLE API expects an Arduino String. We use concat(buf, len)
+    // (NOT a (const char*) ctor or operator+=) because BTHome payloads can
+    // legitimately contain 0x00 bytes — e.g. temperature 0.00 C encodes as
+    // s16 0x0000. Arduino String stores length separately from the buffer and
+    // BLEAdvertisementData::setServiceData uses data.length() (verified against
+    // BLEAdvertising.cpp), so embedded NULs round-trip safely. Do NOT switch
+    // this to c_str()/strlen() — it would silently truncate at the first NUL.
     String svc_data;
     svc_data.concat((const char *)payload, payload_len);
     adv_data.setServiceData(BLEUUID((uint16_t)BTHOME_SERVICE_UUID), svc_data);

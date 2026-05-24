@@ -975,7 +975,7 @@ for bundle_name in "${!JS_BUNDLE_CHUNKS[@]}"; do
     done
     n_flags=${#unique_flags[@]}
     if [[ $n_flags -gt 3 ]]; then
-        echo "  \xe2\x9c\x97 Bundle $bundle_name has $n_flags unique chunk flags (max 3 supported)." >&2
+        echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 3 supported)." >&2
         echo "     Each flag doubles flash cost across boards; consolidate chunks instead." >&2
         unset unique_flags seen_flags
         exit 1

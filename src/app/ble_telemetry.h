@@ -31,12 +31,14 @@
 #include <Arduino.h>
 #include <stdint.h>
 
-// Initialize NimBLE stack and prepare advertising. Idempotent — safe to call
-// multiple times. Must be called from a normal (non-ISR) context after NVS.
+// Initialize the Arduino-ESP32 BLE (Bluedroid) stack and prepare advertising.
+// Idempotent — safe to call multiple times. Must be called from a normal
+// (non-ISR) context after NVS.
 void ble_telemetry_init(const char *device_name);
 
-// Tear down advertising and (when no other NimBLE user remains) the stack.
-// Safe to call when already stopped.
+// Stop advertising. Does NOT deinitialize the underlying BLE controller —
+// other Bluedroid users (e.g. BLE HID) may still hold it. Safe to call when
+// already stopped.
 void ble_telemetry_deinit();
 
 // Set the latest value for a BTHome object id. Values are buffered and
@@ -55,8 +57,11 @@ size_t ble_telemetry_pending_count();
 // Build the BTHome payload from buffered values and advertise it as a burst.
 //   burst_count   number of advertisement packets to emit (1..255). Clamped.
 //   interval_ms   advertisement interval (20..10240 ms; clamped).
-// Blocks until the burst has completed, then stops advertising. Returns false
-// if the BLE stack failed to start or there is nothing to advertise.
+// Blocks the calling task for approximately `burst_count * interval_ms + 50` ms
+// (via `delay()`), then stops advertising. Intended for the duty-cycle BLE
+// boot path where the next step is `power_manager_sleep_for(...)`; do NOT
+// call from the LVGL, MQTT, or any other latency-sensitive task. Returns
+// false if the BLE stack failed to start or there is nothing to advertise.
 bool ble_telemetry_advertise_burst(uint8_t burst_count, uint16_t interval_ms);
 
 #endif // HAS_BLE

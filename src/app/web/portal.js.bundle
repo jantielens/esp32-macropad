@@ -8,15 +8,17 @@
 #   # [chunk:NAME HAS_FLAG]   — compiled out of flash unless HAS_FLAG is true
 #
 # The first marker opens the first chunk; each subsequent marker closes the
-# previous one. Files before any marker are rejected. Disabled chunks are not
-# referenced by the runtime bootstrap, so the browser never even requests them.
+# previous one. Files before any marker are rejected. Disabled chunks are
+# compiled out via #if guards in web_assets.h, so they never reach flash.
 #
-# Runtime loading (strictly sequential — one request at a time, matching the
-# DMA-pressure budget that motivated the original concurrency reduction):
-#   shell.html  →  GET /portal.js              (tiny bootstrap, lists enabled chunks)
-#               →  GET /portal.js?name=core    (chained via <script onload>)
-#               →  GET /portal.js?name=config
-#               →  ... (only chunks compiled into the running firmware)
+# Build-time assembly: the minifier enumerates the unique HAS_* flag set
+# across chunks (capped at 3 -> 8 variants), and for each 2^N combination
+# concatenates the chunks whose flag is unset OR matches the combination,
+# then gzips ONCE. Each variant is emitted as an #if-guarded PROGMEM blob
+# under the same symbol name (portal_js_gz), so exactly one variant links.
+#
+# Runtime loading: shell.html issues a single GET /portal.js, which returns
+# the one matching combined-gzip blob in a single HTTP response.
 
 # [chunk:core]
 # Core infrastructure
