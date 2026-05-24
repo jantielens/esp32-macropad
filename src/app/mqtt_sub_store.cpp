@@ -213,6 +213,7 @@ void mqtt_sub_store_subscribe_all() {
         unique_count++;
     };
 
+#if HAS_DISPLAY
     // Temp config buffer
     PadConfig* cfg = (PadConfig*)heap_caps_malloc(
         sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -254,6 +255,7 @@ void mqtt_sub_store_subscribe_all() {
             binding_template_collect_topics(dcfg->screen_saver_wake_binding, &ctx);
         }
     }
+#endif // HAS_DISPLAY
 
     // Update store entries and subscribe
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {

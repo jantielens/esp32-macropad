@@ -16,6 +16,9 @@
 #include "portal_idle.h"
 #include "wifi_manager.h"
 #include "duty_cycle.h"
+#if HAS_BLE
+#include "ble_telemetry.h"
+#endif
 #if HEALTH_HISTORY_ENABLED
 #include "health_history.h"
 #endif
@@ -289,6 +292,18 @@ void setup()
 		return;
 	}
 
+	#if HAS_BLE
+	if (boot_mode == PowerMode::DutyCycleBle) {
+		// Initialize sensors (their update path buffers BLE telemetry values)
+		sensor_manager_init();
+
+		ble_telemetry_init(device_config.device_name);
+
+		duty_cycle_run(&device_config);
+		return;
+	}
+	#endif
+
 	// Re-apply brightness from loaded config (display was initialized before config load)
 	#if HAS_DISPLAY && HAS_BACKLIGHT
 	LOGI("Main", "Applying loaded brightness: %d%%", device_config.backlight_brightness);
@@ -350,7 +365,9 @@ void setup()
 				wifi_manager_start_mdns(&device_config);
 				device_telemetry_cache_rssi();
 				wifi_manager_register_events();
+				#if HAS_DISPLAY
 				time_binding_start_ntp();
+				#endif
 			} else {
 				LOGW("Main", "WiFi failed - fallback to AP");
 				power_manager_set_current_mode(PowerMode::Ap);
@@ -366,29 +383,58 @@ void setup()
 		portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);
 		portal_idle_set_mode(power_manager_get_current_mode());
 
+	// In AP/captive-portal mode the device's only job is to collect WiFi
+	// credentials, save them, and reboot into STA mode. Skip all heavy
+	// subsystem inits (MQTT, MQTT subscription store, BLE HID, sensors,
+	// HA discovery) — they're irrelevant without LAN/internet and on
+	// small-RAM SoCs (ESP32-C3) the mqtt_sub_store calloc alone (~136 KB)
+	// will OOM the boot when WiFi softAP + lwIP + AsyncTCP are already
+	// resident.
+	const bool in_ap_mode = web_portal_is_ap_mode();
+	if (in_ap_mode) {
+		LOGI("Main", "AP mode: skipping sensor/BLE/MQTT init (saves RAM for portal)");
+	}
+
 	// Initialize sensors (optional adapters)
-	sensor_manager_init();
+	if (!in_ap_mode) {
+		sensor_manager_init();
+	}
 
 	// BLE HID keyboard — guarded by ble_hid_init() which bails gracefully
 	// (init_error = true) if the NimBLE stack fails to allocate.
 	#if HAS_BLE_HID
-	if (device_config.ble_enabled) {
+	if (!in_ap_mode && device_config.ble_enabled) {
 		ble_hid_init(device_config.device_name, false);
-	} else {
+	} else if (!in_ap_mode) {
 		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
 	}
 	#endif
 
 	#if HAS_MQTT
-	// Initialize MQTT manager (will only connect/publish when configured)
-	char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
-	config_manager_sanitize_device_name(device_config.device_name, sanitized, sizeof(sanitized));
-	mqtt_manager.begin(&device_config, device_config.device_name, sanitized);
-	mqtt_sub_store_init();
-	mqtt_screen_init();
-	mqtt_wake_init(&device_config);
-	mqtt_audio_init();
-	mqtt_notify_init();
+	if (!in_ap_mode) {
+		// Initialize MQTT manager (will only connect/publish when configured)
+		char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
+		config_manager_sanitize_device_name(device_config.device_name, sanitized, sizeof(sanitized));
+		mqtt_manager.begin(&device_config, device_config.device_name, sanitized);
+		// mqtt_sub_store caches inbound topic payloads (~136 KB) so widget
+		// bindings can read them from the LVGL task. Only useful with a
+		// display; on headless boards (C3) the store is dead weight and
+		// fragments out of internal RAM. The other init calls below are
+		// already compile-time no-op stubs without HAS_DISPLAY / HAS_AUDIO,
+		// so they cost nothing on C3 — keeping the runtime gate documents
+		// intent and avoids running them when no broker is configured.
+		if (mqtt_manager.enabled()) {
+			#if HAS_DISPLAY
+			mqtt_sub_store_init();
+			#endif
+			mqtt_screen_init();
+			mqtt_wake_init(&device_config);
+			mqtt_audio_init();
+			mqtt_notify_init();
+		} else {
+			LOGI("Main", "MQTT not configured: skipping handler init");
+		}
+	}
 	#endif
 
 	#if HAS_DISPLAY

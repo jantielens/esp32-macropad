@@ -55,6 +55,23 @@
 #define HAS_BLE_HID true
 #endif
 
+// Enable BTHome v2 BLE telemetry advertising (transport for headless/battery boards).
+// Independent of HAS_BLE_HID; both can be enabled on the same board but mainly intended
+// for boards without a display (e.g. ESP32-C3 sensor nodes).
+#ifndef HAS_BLE
+#define HAS_BLE false
+#endif
+
+// BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
+#ifndef BLE_TELEMETRY_DEFAULT_BURST_COUNT
+#define BLE_TELEMETRY_DEFAULT_BURST_COUNT 3
+#endif
+
+// BLE telemetry advertising interval (ms between adv packets within a burst).
+#ifndef BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS
+#define BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS 100
+#endif
+
 // GPIO for the built-in LED (only used when HAS_BUILTIN_LED is true).
 #ifndef LED_PIN
 #define LED_PIN 2  // Common GPIO for ESP32 boards

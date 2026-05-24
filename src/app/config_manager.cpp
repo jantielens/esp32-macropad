@@ -30,13 +30,18 @@
 #define KEY_MQTT_PORT      "mqtt_port"
 #define KEY_MQTT_USER      "mqtt_user"
 #define KEY_MQTT_PASS      "mqtt_pass"
-#define KEY_POWER_MODE     "pwr_mode"
+#define KEY_OPERATING_MODE "op_mode"
 #define KEY_DC_WAKE        "dc_wake_s"
 #define KEY_MQTT_PUB       "mqtt_pub_s"
 #define KEY_PORTAL_IDLE    "portal_idle"
 #define KEY_WIFI_BACKOFF_MAX "wifi_bomax"
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
+
+#if HAS_BLE
+#define KEY_BLE_BURST_COUNT     "ble_brst"
+#define KEY_BLE_ADV_INTERVAL_MS "ble_adv"
+#endif
 
 // Web portal Basic Auth
 #define KEY_BASIC_AUTH_ENABLED "ba_en"
@@ -149,13 +154,18 @@ bool config_manager_load(DeviceConfig *config) {
 				config->backlight_brightness = 100;  // Default to full brightness
 				config->mqtt_port = 0;
 
-				strlcpy(config->power_mode, "always_on", CONFIG_POWER_MODE_MAX_LEN);
+				strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
 				config->duty_cycle_wake_seconds = 120;
 				config->mqtt_publish_interval_seconds = 120;
 				config->portal_idle_timeout_seconds = 120;
 				config->wifi_backoff_max_seconds = 900;
 
 				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
+
+				#if HAS_BLE
+				config->ble_burst_count = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
+				config->ble_adv_interval_ms = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
+				#endif
 
 				// Basic Auth defaults
 				config->basic_auth_enabled = false;
@@ -208,9 +218,9 @@ bool config_manager_load(DeviceConfig *config) {
 		preferences.getString(KEY_MQTT_PASS, config->mqtt_password, CONFIG_MQTT_PASSWORD_MAX_LEN);
 
 		// Load power settings
-		preferences.getString(KEY_POWER_MODE, config->power_mode, CONFIG_POWER_MODE_MAX_LEN);
-		if (strlen(config->power_mode) == 0) {
-				strlcpy(config->power_mode, "always_on", CONFIG_POWER_MODE_MAX_LEN);
+		preferences.getString(KEY_OPERATING_MODE, config->operating_mode, CONFIG_OPERATING_MODE_MAX_LEN);
+		if (strlen(config->operating_mode) == 0) {
+				strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
 		}
 
 		config->duty_cycle_wake_seconds = preferences.getUShort(KEY_DC_WAKE, 120);
@@ -222,6 +232,11 @@ bool config_manager_load(DeviceConfig *config) {
 		if (strlen(config->mqtt_publish_scope) == 0) {
 				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
 		}
+
+		#if HAS_BLE
+		config->ble_burst_count = preferences.getUChar(KEY_BLE_BURST_COUNT, BLE_TELEMETRY_DEFAULT_BURST_COUNT);
+		config->ble_adv_interval_ms = preferences.getUShort(KEY_BLE_ADV_INTERVAL_MS, BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS);
+		#endif
 		
 		// Load display settings
 		config->backlight_brightness = preferences.getUChar(KEY_BACKLIGHT_BRIGHTNESS, 100);
@@ -314,14 +329,19 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putString(KEY_MQTT_PASS, config->mqtt_password);
 
 		// Save power settings
-		preferences.putString(KEY_POWER_MODE, config->power_mode);
+		preferences.putString(KEY_OPERATING_MODE, config->operating_mode);
 		preferences.putUShort(KEY_DC_WAKE, config->duty_cycle_wake_seconds);
 		preferences.putUShort(KEY_MQTT_PUB, config->mqtt_publish_interval_seconds);
 		preferences.putUShort(KEY_PORTAL_IDLE, config->portal_idle_timeout_seconds);
 		preferences.putUShort(KEY_WIFI_BACKOFF_MAX, config->wifi_backoff_max_seconds);
 
 		preferences.putString(KEY_MQTT_SCOPE, config->mqtt_publish_scope);
-		
+
+		#if HAS_BLE
+		preferences.putUChar(KEY_BLE_BURST_COUNT, config->ble_burst_count);
+		preferences.putUShort(KEY_BLE_ADV_INTERVAL_MS, config->ble_adv_interval_ms);
+		#endif
+
 		// Save display settings
 		LOGI("Config", "Saving brightness: %d%%", config->backlight_brightness);
 		preferences.putUChar(KEY_BACKLIGHT_BRIGHTNESS, config->backlight_brightness);
@@ -502,7 +522,7 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 		if (strlen(config->device_name) == 0) return false;
 
 		const PowerMode mode = power_config_parse_power_mode(config);
-		const bool needs_wifi = (mode != PowerMode::DutyCycle);
+		const bool needs_wifi = (mode != PowerMode::DutyCycle && mode != PowerMode::DutyCycleBle);
 
 		if (needs_wifi && strlen(config->wifi_ssid) == 0) return false;
 
@@ -537,7 +557,7 @@ void config_manager_print(const DeviceConfig *config) {
 		}
 
 LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
-			config->power_mode,
+			config->operating_mode,
 			(unsigned)config->duty_cycle_wake_seconds,
 			(unsigned)config->portal_idle_timeout_seconds,
 			(unsigned)config->wifi_backoff_max_seconds

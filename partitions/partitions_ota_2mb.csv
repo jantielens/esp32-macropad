@@ -1,0 +1,25 @@
+# Custom partition table for 4MB flash with OTA support — headless variant
+#
+# Goal:
+# - Maximize app partition size while keeping dual OTA partitions (app0/app1)
+# - Drop the (unused) SPIFFS data partition on headless boards
+# - Keep a small coredump partition for crash diagnostics
+#
+# Per-slot size: 0x1F0000 = 2,031,616 bytes (~1.94 MB), vs 0x1E0000 (~1.87 MB)
+# in partitions_ota_1_9mb.csv. Gain: +65,536 bytes (+64 KB) per OTA slot.
+#
+# Safe for boards with HAS_DISPLAY=false (and HAS_SD_STORAGE=false). Such
+# boards never call Storage.begin() or LittleFS mount — the SPIFFS partition
+# is effectively dead weight and is removed here to give the firmware more
+# headroom.
+#
+# Notes:
+# - Offsets (except nvs/otadata) must be aligned to 0x10000 (64KB)
+# - The FQBN option `PartitionScheme=ota_2mb` must match this filename (without .csv)
+#
+# Name,    Type, SubType,  Offset,   Size,     Flags
+nvs,       data, nvs,      0x9000,   0x5000,
+otadata,   data, ota,      0xE000,   0x2000,
+app0,      app,  ota_0,    0x10000,  0x1F0000,
+app1,      app,  ota_1,    0x200000, 0x1F0000,
+coredump,  data, coredump, 0x3F0000, 0x10000,

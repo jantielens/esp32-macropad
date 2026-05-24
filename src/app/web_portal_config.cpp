@@ -109,11 +109,24 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["mqtt_password"] = "";
 
 				// Power settings
-				(*doc)["power_mode"] = current_config->power_mode;
+				(*doc)["operating_mode"] = current_config->operating_mode;
 				(*doc)["duty_cycle_wake_seconds"] = current_config->duty_cycle_wake_seconds;
 				(*doc)["mqtt_publish_interval_seconds"] = current_config->mqtt_publish_interval_seconds;
 				(*doc)["portal_idle_timeout_seconds"] = current_config->portal_idle_timeout_seconds;
 				(*doc)["wifi_backoff_max_seconds"] = current_config->wifi_backoff_max_seconds;
+
+				#if HAS_BLE
+				(*doc)["ble_burst_count"] = current_config->ble_burst_count;
+				(*doc)["ble_adv_interval_ms"] = current_config->ble_adv_interval_ms;
+				#endif
+
+				// Build capability map so the portal UI can hide controls for
+				// features that are not compiled into this firmware.
+				JsonObject caps = (*doc).createNestedObject("caps");
+				caps["ble"] = (bool)HAS_BLE;
+				caps["mqtt"] = (bool)HAS_MQTT;
+				caps["display"] = (bool)HAS_DISPLAY;
+				caps["ble_hid"] = (bool)HAS_BLE_HID;
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;
@@ -362,9 +375,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 
 
-		// Power mode
-		if (doc.containsKey("power_mode")) {
-				strlcpy(current_config->power_mode, doc["power_mode"] | "always_on", CONFIG_POWER_MODE_MAX_LEN);
+		// Operating mode (transport + duty cycle selector)
+		if (doc.containsKey("operating_mode")) {
+				strlcpy(current_config->operating_mode, doc["operating_mode"] | "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
 		}
 
 		// Duty-Cycle wake interval
@@ -411,6 +424,27 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (doc.containsKey("mqtt_publish_scope")) {
 				strlcpy(current_config->mqtt_publish_scope, doc["mqtt_publish_scope"] | "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
 		}
+
+		#if HAS_BLE
+		// BLE telemetry advertising burst count (1..255)
+		if (doc.containsKey("ble_burst_count")) {
+				uint16_t v = doc["ble_burst_count"].is<const char*>()
+						? (uint16_t)atoi(doc["ble_burst_count"] | "0")
+						: (uint16_t)(doc["ble_burst_count"] | 0);
+				if (v == 0) v = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
+				if (v > 255) v = 255;
+				current_config->ble_burst_count = (uint8_t)v;
+		}
+
+		// BLE telemetry advertising interval (ms)
+		if (doc.containsKey("ble_adv_interval_ms")) {
+				uint16_t v = doc["ble_adv_interval_ms"].is<const char*>()
+						? (uint16_t)atoi(doc["ble_adv_interval_ms"] | "0")
+						: (uint16_t)(doc["ble_adv_interval_ms"] | 0);
+				if (v == 0) v = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
+				current_config->ble_adv_interval_ms = v;
+		}
+		#endif
 
 		// Basic Auth enabled
 		if (doc.containsKey("basic_auth_enabled")) {

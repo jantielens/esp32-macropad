@@ -4,8 +4,30 @@
 // Board Overrides: esp32c3-withsensors
 // ==========================================================================
 
-// Enable MQTT (required for HA discovery in this sample)
+// Enable MQTT (required for HA discovery in this sample when always-on or duty_cycle_mqtt)
 #define HAS_MQTT true
+
+// Headless board: no display, touch, audio, or BLE HID keyboard.
+#define HAS_DISPLAY false
+#define HAS_TOUCH false
+#define HAS_AUDIO false
+#define HAS_BLE_HID false
+
+// ESP32-C3 only has ~320 KB internal SRAM, most of it consumed by WiFi softAP
+// + lwIP + AsyncTCP. Shrink the HTTP streaming chunk size so each TX pbuf
+// allocation fits comfortably in the small fragmented DMA-internal heap that
+// remains after softAP brings up its DHCP/DNS pools. Without this the
+// portal assets stall mid-stream with `transport_drv_sta_tx` pbuf alloc
+// failures (size ~2.3 KB requested vs ~1.6 KB largest free).
+#define HTTP_STREAM_CHUNK_SIZE 1024
+
+// Limit softAP to a single concurrent client. The default (4) reserves
+// per-station buffers in DMA-internal RAM that we cannot spare on the C3.
+// One client is sufficient for first-time provisioning.
+#define AP_MAX_CONNECTIONS 1
+
+// Enable BTHome v2 BLE telemetry as an alternative transport (duty_cycle_ble mode).
+#define HAS_BLE true
 
 // Enable user button (GPIO9 on ESP32-C3 Super Mini)
 #define HAS_BUTTON true

@@ -192,6 +192,7 @@ void power_manager_led_set_mode(PowerMode mode) {
 #if HAS_BUILTIN_LED
 		switch (mode) {
 				case PowerMode::DutyCycle:
+				case PowerMode::DutyCycleBle:
 						g_led_interval_ms = 0;
 						g_led_state = true;
 						led_write(true);

@@ -41,7 +41,11 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/firmware.html", HTTP_GET, handleFirmware);
 
 		// Asset routes
-		server->on("/portal.js", HTTP_GET, handleJS);
+		// /portal.js returns a single pre-gzipped PROGMEM blob whose contents are
+		// selected at compile time from the chunked portal.js.bundle manifest.
+		// Exactly one #if variant matches per build, so the browser fetches the
+		// entire portal JS in one request with one gzip member (see handlePortalJS).
+		server->on("/portal.js", HTTP_GET, handlePortalJS);
 		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 
 		// API endpoints

@@ -21,12 +21,13 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 171
+Total flags: 176
 
 ### Features (HAS_*)
 
 - **HAS_AUDIO** default: `false` — Audio (ES8311 codec + I2S, optional)
 - **HAS_BACKLIGHT** default: `false` — Enable backlight control (typically via PWM).
+- **HAS_BLE** default: `false` — for boards without a display (e.g. ESP32-C3 sensor nodes).
 - **HAS_BLE_HID** default: `true` — Enable BLE HID keyboard support.
 - **HAS_BUILTIN_LED** default: `false` — Enable built-in status LED support.
 - **HAS_BUTTON** default: `false` — User Button (optional)
@@ -100,9 +101,11 @@ Total flags: 171
 
 ### Limits & Tuning
 
+- **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
+- **HTTP_STREAM_CHUNK_SIZE** default: `(no default)` — failures (size ~2.3 KB requested vs ~1.6 KB largest free).
 - **JD9165_DSI_DPI_CLK_HZ** default: `51200000L` — DPI pixel clock in Hz.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
@@ -134,6 +137,8 @@ Total flags: 171
 - **AUDIO_I2S_LRCK** default: `-1` — I2S word select / left-right clock pin.
 - **AUDIO_I2S_MCLK** default: `-1` — I2S master clock pin.
 - **AUDIO_PA_ACTIVE_LOW** default: `false` — Some boards route the PA enable through an inverting transistor.
+- **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS** default: `100` — BLE telemetry advertising interval (ms between adv packets within a burst).
+- **BLE_TELEMETRY_DEFAULT_BURST_COUNT** default: `3` — BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
@@ -218,14 +223,15 @@ Total flags: 171
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc1060p470c | ✅ | ✅ | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_SOUND_PLAYER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ | ? | ✅ |  |  |  |  | ? | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  | ? | ✅ |  |  | ✅ |  | ? |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -239,6 +245,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
+| esp32c3-withsensors | — | — |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)
@@ -269,6 +276,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/drivers/mipi_dsi_driver.cpp
   - src/app/drivers/st7701_rgb_driver.cpp
   - src/app/drivers/tft_espi_driver.cpp
+- **HAS_BLE**
+  - src/app/app.ino
+  - src/app/ble_telemetry.cpp
+  - src/app/ble_telemetry.h
+  - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/duty_cycle.cpp
+  - src/app/sensors/dummy_sensor.cpp
+  - src/app/web_portal_config.cpp
 - **HAS_BLE_HID**
   - src/app/action_dispatch.cpp
   - src/app/app.ino
@@ -320,6 +337,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_screen_nav.cpp
   - src/app/display_task.cpp
   - src/app/expr_binding.cpp
+  - src/app/fs_indexed_store.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/health_table_builder.cpp
@@ -336,6 +354,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
   - src/app/mqtt_screen.h
+  - src/app/mqtt_sub_store.cpp
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
   - src/app/pad_binding.cpp
@@ -360,6 +379,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_device_api.cpp
+  - src/app/web_portal_fs_store.cpp
   - src/app/web_portal_icons.cpp
   - src/app/web_portal_icons.h
   - src/app/web_portal_pad.cpp
@@ -488,6 +508,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/touch_drivers.cpp
   - src/app/touch_manager.cpp
+- **AP_MAX_CONNECTIONS**
+  - src/app/web_portal_ap.cpp
 - **AUDIO_CODEC_ADDR**
   - src/app/board_config.h
 - **AUDIO_I2S_BCLK**
@@ -503,6 +525,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **AUDIO_PA_ACTIVE_LOW**
   - src/app/board_config.h
 - **AUDIO_PA_PIN**
+  - src/app/board_config.h
+- **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS**
+  - src/app/board_config.h
+- **BLE_TELEMETRY_DEFAULT_BURST_COUNT**
   - src/app/board_config.h
 - **BME280_I2C_ADDR**
   - src/app/board_config.h
@@ -545,6 +571,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS**
   - src/app/board_config.h
+- **HTTP_STREAM_CHUNK_SIZE**
+  - src/app/web_portal_utils.h
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **JD9165_DSI_HSYNC_BACK_PORCH**

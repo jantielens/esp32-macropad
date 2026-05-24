@@ -334,6 +334,14 @@
         }
         if (!itemId) itemId = 'welcome';
         navigateTo(itemId);
+
+        // Populate header badges + start health polling once per page load.
+        // These functions live in portal_config.js / portal_health.js
+        // (always-loaded chunk) and were previously only invoked from
+        // pad-editor / sensor-data fragments — meaning headless or AP-mode
+        // landings left the badges at their placeholder values forever.
+        if (typeof loadVersion === 'function') loadVersion();
+        if (typeof initHealthWidget === 'function') initHealthWidget();
       })
       .catch(function (err) {
         navEl.innerHTML =

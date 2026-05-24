@@ -32,8 +32,8 @@
 #define CONFIG_MQTT_USERNAME_MAX_LEN 32
 #define CONFIG_MQTT_PASSWORD_MAX_LEN 64
 
-// Power settings
-#define CONFIG_POWER_MODE_MAX_LEN 16
+// Operating mode (always_on | duty_cycle_mqtt | duty_cycle_ble). Sized to fit longest value + NUL.
+#define CONFIG_OPERATING_MODE_MAX_LEN 20
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
 
 // Screen saver MQTT wake binding
@@ -70,12 +70,16 @@ struct DeviceConfig {
 		char mqtt_username[CONFIG_MQTT_USERNAME_MAX_LEN];
 		char mqtt_password[CONFIG_MQTT_PASSWORD_MAX_LEN];
 
-		// Power settings
-		char power_mode[CONFIG_POWER_MODE_MAX_LEN];            // always_on | duty_cycle | config | ap
-		uint16_t duty_cycle_wake_seconds;                      // default 120; deep-sleep duration in Duty-Cycle mode (0 = wake immediately)
+		// Operating mode (user-selectable transport / wake behaviour)
+		char operating_mode[CONFIG_OPERATING_MODE_MAX_LEN];    // always_on | duty_cycle_mqtt | duty_cycle_ble
+		uint16_t duty_cycle_wake_seconds;                      // default 120; deep-sleep duration in any duty-cycle mode (0 = wake immediately)
 		uint16_t mqtt_publish_interval_seconds;                // default 120; periodic MQTT publish cadence in Always-On (0 = disabled)
 		uint16_t portal_idle_timeout_seconds;                  // default 120; auto-sleep timeout in Config/AP mode
-		uint16_t wifi_backoff_max_seconds;                     // default 900; max exponential backoff in Duty-Cycle
+		uint16_t wifi_backoff_max_seconds;                     // default 900; max exponential backoff in duty_cycle_mqtt
+#if HAS_BLE
+		uint8_t ble_burst_count;                               // default BLE_TELEMETRY_DEFAULT_BURST_COUNT; advertising packets per wake
+		uint16_t ble_adv_interval_ms;                          // default BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS; ms between adv packets in a burst
+#endif
 
 		// MQTT scope
 		char mqtt_publish_scope[CONFIG_MQTT_SCOPE_MAX_LEN];    // sensors_only | diagnostics_only | all

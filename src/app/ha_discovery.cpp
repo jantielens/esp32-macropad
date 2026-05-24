@@ -5,7 +5,9 @@
 #if HAS_MQTT
 
 #include "mqtt_manager.h"
+#if HAS_DISPLAY
 #include "display_manager.h"
+#endif
 #include "sensors/sensor_manager.h"
 #include "web_assets.h" // PROJECT_DISPLAY_NAME
 #include "../version.h" // FIRMWARE_VERSION

@@ -146,9 +146,16 @@ void handlePortalAllCSS(AsyncWebServerRequest *request) {
 		request->send(response);
 }
 
-// ---- JS asset handler ----
+// ---- JS handler ----
+//
+// portal.js.bundle is split into named chunks (e.g. core, actions, config,
+// pad, shell). The minifier enumerates the unique HAS_* flag set across
+// chunks (today: HAS_DISPLAY) and emits one pre-gzipped PROGMEM blob per
+// flag combination, wrapped in #if guards. Exactly one variant matches per
+// build, so each board ships a single combined gzip stream and the browser
+// fetches the entire portal JS in ONE request, with ONE gzip member.
 
-void handleJS(AsyncWebServerRequest *request) {
+void handlePortalJS(AsyncWebServerRequest *request) {
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
 				request,
 				"application/javascript",

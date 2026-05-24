@@ -67,6 +67,12 @@
       </div>
     </div>
   </noscript>
+  <!-- portal.js.bundle is split into named chunks, each gated on a HAS_*
+       flag (e.g. pad editor / action editor are HAS_DISPLAY-only). The
+       minifier emits one pre-gzipped PROGMEM blob per flag combination and
+       wraps each in an #if guard, so every build links exactly ONE combined
+       portal.js variant. /portal.js therefore serves the entire portal JS in
+       a single HTTP response with a single gzip member. -->
   <script src="/portal.js"></script>
 </body>
 </html>
