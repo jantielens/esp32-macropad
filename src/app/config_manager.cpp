@@ -157,7 +157,7 @@ bool config_manager_load(DeviceConfig *config) {
 				strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
 				config->duty_cycle_wake_seconds = 120;
 				config->mqtt_publish_interval_seconds = 120;
-				config->portal_idle_timeout_seconds = 120;
+				config->portal_idle_timeout_seconds = CONFIG_DEFAULT_PORTAL_IDLE_SECONDS;
 				config->wifi_backoff_max_seconds = 900;
 
 				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
@@ -225,7 +225,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 		config->duty_cycle_wake_seconds = preferences.getUShort(KEY_DC_WAKE, 120);
 		config->mqtt_publish_interval_seconds = preferences.getUShort(KEY_MQTT_PUB, 120);
-		config->portal_idle_timeout_seconds = preferences.getUShort(KEY_PORTAL_IDLE, 120);
+		config->portal_idle_timeout_seconds = preferences.getUShort(KEY_PORTAL_IDLE, CONFIG_DEFAULT_PORTAL_IDLE_SECONDS);
 		config->wifi_backoff_max_seconds = preferences.getUShort(KEY_WIFI_BACKOFF_MAX, 900);
 
 		preferences.getString(KEY_MQTT_SCOPE, config->mqtt_publish_scope, CONFIG_MQTT_SCOPE_MAX_LEN);

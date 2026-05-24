@@ -1,4 +1,4 @@
-#include "../version.h"
+#include "version.h"
 #include "board_config.h"
 #include "config_manager.h"
 #include "web_portal.h"
@@ -56,6 +56,13 @@
 
 #if HAS_AUDIO
 #include "audio.h"
+#endif
+
+#if HAS_EPAPER
+// Pulled in here only to verify the Inkplate library wires up cleanly under
+// arduino-cli for the e-paper class build. Actual e-paper render path lives
+// in the epaper driver and duty-cycle branch.
+#include <Inkplate.h>
 #endif
 
 #include "i2c_bus.h"

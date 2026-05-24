@@ -5,7 +5,7 @@
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "power_manager.h"
-#include "../version.h"
+#include "version.h"
 
 #include <atomic>
 #include <WiFi.h>

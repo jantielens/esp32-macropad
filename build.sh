@@ -160,7 +160,14 @@ build_board() {
     # Use a string literal define: BUILD_BOARD_NAME="cyd-v2".
     # Important: do NOT include backslashes in the final define value.
     local BOARD_NAME_DEFINE="-DBUILD_BOARD_NAME=\"$board_name\""
-    
+
+    # Some platforms (e.g. Inkplate_Boards:esp32) stage the sketch into a temp
+    # build dir before compiling, which breaks `#include "../version.h"`-style
+    # relative parent paths used in app.ino and a few helpers. Always add the
+    # project's src/ directory as an explicit include path so version.h resolves
+    # regardless of staging behavior.
+    local PROJECT_INCLUDE="-I$SCRIPT_DIR/src -I$SCRIPT_DIR/src/app"
+
     if [[ -d "$board_override_dir" ]]; then
         echo -e "${YELLOW}Config:    Using board-specific overrides from src/boards/$board_name/${NC}"
         # Add include path and define BOARD_HAS_OVERRIDE to trigger board_overrides.h inclusion
@@ -168,12 +175,17 @@ build_board() {
         # Sanitize board name for valid C++ macro (alphanumeric + underscore only)
         board_macro="BOARD_${board_name^^}"
         board_macro="${board_macro//[^A-Z0-9_]/_}"
-        EXTRA_FLAGS+=(--build-property "compiler.cpp.extra_flags=-I$board_override_dir -D$board_macro -DBOARD_HAS_OVERRIDE=1 $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
-        EXTRA_FLAGS+=(--build-property "compiler.c.extra_flags=-I$board_override_dir -D$board_macro -DBOARD_HAS_OVERRIDE=1 $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
+        EXTRA_FLAGS+=(--build-property "compiler.cpp.extra_flags=$PROJECT_INCLUDE -I$board_override_dir -D$board_macro -DBOARD_HAS_OVERRIDE=1 $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
+        EXTRA_FLAGS+=(--build-property "compiler.c.extra_flags=$PROJECT_INCLUDE -I$board_override_dir -D$board_macro -DBOARD_HAS_OVERRIDE=1 $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
+        # Some library .S files (e.g. lvgl's helium assembly stubs) preprocess
+        # `#include "../../lv_conf.h"` and need the project src/app path even
+        # though the assembly itself is gated to ARM Cortex-M targets.
+        EXTRA_FLAGS+=(--build-property "compiler.S.extra_flags=$PROJECT_INCLUDE -I$board_override_dir -D$board_macro -DBOARD_HAS_OVERRIDE=1")
     else
         echo "Config:    Using default configuration"
-        EXTRA_FLAGS+=(--build-property "compiler.cpp.extra_flags=$BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
-        EXTRA_FLAGS+=(--build-property "compiler.c.extra_flags=$BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
+        EXTRA_FLAGS+=(--build-property "compiler.cpp.extra_flags=$PROJECT_INCLUDE $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
+        EXTRA_FLAGS+=(--build-property "compiler.c.extra_flags=$PROJECT_INCLUDE $BOARD_NAME_DEFINE$EXTRA_GLOBAL_DEFINES$EXTRA_GLOBAL_FLAGS")
+        EXTRA_FLAGS+=(--build-property "compiler.S.extra_flags=$PROJECT_INCLUDE")
     fi
     echo ""
 

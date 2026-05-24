@@ -1,0 +1,20 @@
+# Custom partition table for 8MB flash with OTA support (Inkplate 5V2 / ESP32 classic)
+#
+# Goal:
+# - Dual OTA partitions (3 MB each) for safe firmware updates
+# - NVS for configuration storage
+# - SPIFFS/LittleFS storage for assets and configs
+# - Coredump for crash diagnostics
+#
+# Notes:
+# - Offsets (except nvs/otadata) must be aligned to 0x10000 (64KB)
+# - The FQBN option `PartitionScheme=ota_3mb_8MB` must match this filename (without .csv)
+# - Total: 8 MB (0x800000)
+#
+# Name,    Type, SubType,  Offset,     Size,       Flags
+nvs,       data, nvs,      0x9000,     0x5000,
+otadata,   data, ota,      0xE000,     0x2000,
+app0,      app,  ota_0,    0x10000,    0x300000,
+app1,      app,  ota_1,    0x310000,   0x300000,
+storage,   data, spiffs,   0x610000,   0x1E0000,
+coredump,  data, coredump, 0x7F0000,   0x10000,

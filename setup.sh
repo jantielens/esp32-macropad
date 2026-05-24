@@ -30,6 +30,11 @@ arduino-cli config init --overwrite
 echo "Adding ESP32 board manager URL..."
 arduino-cli config add board_manager.additional_urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
+# Add Soldered (Inkplate) board manager URL — required for Inkplate-class boards.
+# Harmless on systems that never build Inkplate; arduino-cli accepts multiple URLs.
+echo "Adding Soldered (Inkplate) board manager URL..."
+arduino-cli config add board_manager.additional_urls https://raw.githubusercontent.com/SolderedElectronics/Dasduino-Board-Definitions-for-Arduino-IDE/master/package_Dasduino_Boards_index.json
+
 # Update board index
 echo "Updating board index..."
 arduino-cli core update-index
@@ -42,6 +47,18 @@ arduino-cli lib update-index
 ESP32_CORE_VERSION="3.3.7"
 echo "Installing ESP32 board support (esp32:esp32@${ESP32_CORE_VERSION})..."
 arduino-cli core install "esp32:esp32@${ESP32_CORE_VERSION}"
+
+# Install Soldered (Inkplate) board support. Required for the Inkplate 5V2
+# target; bundles the InkplateLibrary sources used by HAS_EPAPER builds.
+# Skipped silently if no Inkplate board is present in FQBN_TARGETS.
+SCRIPT_DIR_EARLY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if grep -q '"Inkplate_Boards' "$SCRIPT_DIR_EARLY/config.sh" \
+        || ([[ -f "$SCRIPT_DIR_EARLY/config.project.sh" ]] && grep -q '"Inkplate_Boards' "$SCRIPT_DIR_EARLY/config.project.sh"); then
+    echo "Installing Soldered (Inkplate) board support (Inkplate_Boards:esp32)..."
+    arduino-cli core install "Inkplate_Boards:esp32"
+    echo "Installing InkplateLibrary..."
+    arduino-cli lib install "InkplateLibrary"
+fi
 
 # Install/register template-provided custom partition schemes.
 #
