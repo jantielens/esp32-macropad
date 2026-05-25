@@ -500,7 +500,31 @@ window.init_epaper_fragment = function () {
         sidecar: document.getElementById('epaper-status-sidecar'),
         battery: document.getElementById('epaper-status-battery'),
         crc:     document.getElementById('epaper-status-crc'),
+        rssi:    document.getElementById('epaper-status-rssi'),
+        loop:    document.getElementById('epaper-status-loop'),
+        tWifi:   document.getElementById('epaper-status-t-wifi'),
+        tDraw:   document.getElementById('epaper-status-t-draw'),
+        tMqtt:   document.getElementById('epaper-status-t-mqtt'),
+        crcAttempts: document.getElementById('epaper-status-crc-attempts'),
     };
+    // Wire the "(button-only)" hint to the wake-seconds input + operating mode.
+    var wakeInput = document.getElementById('duty_cycle_wake_seconds');
+    var wakeHelp  = document.getElementById('epaper-wake-help');
+    var wakeHelpDefault = wakeHelp ? wakeHelp.innerHTML : '';
+    function updateWakeHint() {
+        if (!wakeInput || !wakeHelp) return;
+        var v = parseInt(wakeInput.value, 10);
+        if (v === 0) {
+            wakeHelp.innerHTML = '<strong>Button-only mode:</strong> the device only wakes when the WAKE button is pressed (no timer).';
+        } else {
+            wakeHelp.innerHTML = wakeHelpDefault;
+        }
+    }
+    if (wakeInput) {
+        wakeInput.addEventListener('input', updateWakeHint);
+        // Run once after the form has loaded its current value.
+        setTimeout(updateWakeHint, 200);
+    }
     function fmtDrawResult(r) {
         if (r === 'updated') return 'Updated';
         if (r === 'skipped') return 'Skipped (unchanged)';
@@ -536,12 +560,38 @@ window.init_epaper_fragment = function () {
                 if (statusFields.sidecar) statusFields.sidecar.textContent = (j.sidecar_http_status && j.sidecar_http_status > 0)
                     ? String(j.sidecar_http_status)
                     : 'N/A';
-                if (statusFields.battery) statusFields.battery.textContent = (j.battery_mv && j.battery_mv > 0)
-                    ? (j.battery_mv / 1000).toFixed(2) + ' V'
-                    : 'Not available';
+                if (statusFields.battery) {
+                    var pct = (j.battery_pct != null) ? j.battery_pct : null;
+                    var mv = j.battery_mv;
+                    if (mv && mv > 0) {
+                        var pctStr = (pct != null) ? (' (' + pct + '%)') : '';
+                        statusFields.battery.textContent = (mv / 1000).toFixed(2) + ' V' + pctStr;
+                    } else {
+                        statusFields.battery.textContent = 'Not available';
+                    }
+                }
                 if (statusFields.crc) {
                     var c = j.last_crc32 || 0;
                     statusFields.crc.innerHTML = '<code>0x' + c.toString(16).padStart(8, '0') + '</code>';
+                }
+                var t = j.timing || {};
+                function fmtMs(v) {
+                    if (v == null || v === 0) return 'N/A';
+                    return v + ' ms';
+                }
+                if (statusFields.rssi) {
+                    statusFields.rssi.textContent = t.wifi_rssi
+                        ? (t.wifi_rssi + ' dBm')
+                        : 'N/A';
+                }
+                if (statusFields.loop)  statusFields.loop.textContent  = fmtMs(t.total_active_ms);
+                if (statusFields.tWifi) statusFields.tWifi.textContent = fmtMs(t.boot_to_wifi_ms);
+                if (statusFields.tDraw) statusFields.tDraw.textContent = fmtMs(t.crc_to_draw_ms);
+                if (statusFields.tMqtt) statusFields.tMqtt.textContent = fmtMs(t.draw_to_mqtt_ms);
+                if (statusFields.crcAttempts) {
+                    statusFields.crcAttempts.textContent = (j.crc_retry_count && j.crc_retry_count > 0)
+                        ? String(j.crc_retry_count)
+                        : 'N/A';
                 }
             })
             .catch(function () { /* silent */ });

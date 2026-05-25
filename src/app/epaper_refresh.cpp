@@ -22,10 +22,10 @@ static constexpr uint32_t kMinValidEpoch = 1704067200U;
 RTC_DATA_ATTR static uint32_t g_last_refresh_unix = 0;
 RTC_DATA_ATTR static uint32_t g_refresh_count = 0;
 
-static EpaperRefreshOutcome s_last_outcome = {EpaperRefreshResult::Disabled, 0, 0, 0, 0};
+static EpaperRefreshOutcome s_last_outcome = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 
 EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
-		EpaperRefreshOutcome out = {EpaperRefreshResult::Disabled, 0, 0, 0, 0};
+		EpaperRefreshOutcome out = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 		const uint32_t t0 = millis();
 
 		if (!config || strlen(config->epaper_url) == 0) {
@@ -38,13 +38,14 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		// 10-30s panel refreshes. Skipped on force=true (portal "Refresh now")
 		// to avoid wasting 1-5s of sidecar retries when the user explicitly
 		// asks for a redraw.
-		EpaperCrcFetchResult crc_fetch = {0, 0};
+		EpaperCrcFetchResult crc_fetch = {0, 0, 0};
 		if (!force) {
 				crc_fetch = epaper_crc32_fetch_sidecar(config->epaper_url);
 		}
 		const uint32_t fresh_crc = crc_fetch.crc;
 		out.crc_used = fresh_crc;
 		out.sidecar_http_status = crc_fetch.http_status;
+		out.crc_retry_count = crc_fetch.attempts;
 		// Treat HTTP status 0 (begin/connect failure) and negative (HTTPClient
 		// error codes such as HTTPC_ERROR_CONNECTION_REFUSED) as transport-level
 		// failures, distinct from "server returned a non-200 response".
@@ -52,20 +53,34 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 
 		if (!force && fresh_crc != 0 && fresh_crc == config->epaper_last_crc32) {
 				out.result = EpaperRefreshResult::Skipped;
+				// Even on the skip path we still want a fresh battery reading so HA
+				// can chart it across all wakes. readBattery() needs the TPS65186
+				// rails up, so power-cycle the panel briefly (no waveform drive,
+				// so still <100 ms and minimal current draw).
+				const bool panel_ok = epaper_driver_begin();
+				if (panel_ok) {
+								out.battery_mv = epaper_driver_battery_mv();
+								epaper_driver_sleep();
+				}
 				out.elapsed_ms = millis() - t0;
-				LOGI("Epaper", "Refresh skipped: CRC unchanged (%08x)", (unsigned)fresh_crc);
-				s_last_outcome = out;
-				return out;
-		}
-
-		if (!epaper_driver_begin()) {
-				out.result = EpaperRefreshResult::FailedDraw;
+				if (panel_ok) {
+								LOGI("Epaper", "Refresh skipped: CRC unchanged (%08x), battery=%umV",
+										 (unsigned)fresh_crc, (unsigned)out.battery_mv);
+				} else {
+								LOGW("Epaper", "Refresh skipped: CRC unchanged (%08x), battery read unavailable (panel init failed)",
+										 (unsigned)fresh_crc);
+				}
 				out.elapsed_ms = millis() - t0;
 				s_last_outcome = out;
 				return out;
 		}
 
 		epaper_driver_set_rotation(config->epaper_rotation);
+
+		// Read battery BEFORE drawImage so the sample reflects WiFi-only current
+		// (~80 mA) rather than the panel waveform drive (~200 mA), which sags
+		// the cell and produces an artificially low SoC estimate.
+		out.battery_mv = epaper_driver_battery_mv();
 
 		// drawImage is the long pole — disable the task watchdog for this thread
 		// while it runs to avoid spurious resets during the panel refresh.
@@ -84,7 +99,6 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 				esp_task_wdt_add(nullptr);
 		}
 
-		out.battery_mv = epaper_driver_battery_mv();
 		epaper_driver_sleep();
 
 		if (!drew) {

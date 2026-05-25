@@ -171,18 +171,35 @@ uint32_t power_manager_get_wifi_backoff_seconds() {
 }
 
 void power_manager_sleep_for(uint32_t seconds) {
-		if (seconds == 0) {
+		// E-paper button-only mode: when wake_seconds is 0 AND we're in the
+		// DutyCycleEpaper mode, the device sleeps with ONLY the ext0 (wake
+		// button) source armed -- no timer wakeup. Other duty-cycle modes
+		// retain the "0 = wake immediately" semantics via the clamp below.
+		const bool epaper_button_only =
+#if HAS_EPAPER
+				(power_manager_get_current_mode() == PowerMode::DutyCycleEpaper && seconds == 0);
+#else
+				false;
+#endif
+
+		if (!epaper_button_only && seconds == 0) {
 				seconds = 1;
 		}
 
-		LOGI("Power", "Sleeping for %us", (unsigned)seconds);
+		if (epaper_button_only) {
+				LOGI("Power", "Sleeping (button-only, no timer wakeup)");
+		} else {
+				LOGI("Power", "Sleeping for %us", (unsigned)seconds);
+		}
 
 		led_write(false);
 
 		WiFi.disconnect(true);
 		WiFi.mode(WIFI_OFF);
 
-		esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
+		if (!epaper_button_only) {
+				esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
+		}
 #if HAS_EPAPER_WAKE_BUTTON
 		// Inkplate WAKE button is active-low on a RTC GPIO; arm ext0 alongside the timer.
 		esp_sleep_enable_ext0_wakeup((gpio_num_t)EPAPER_BUTTON_PIN, 0);

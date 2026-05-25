@@ -40,13 +40,14 @@ static uint32_t parse_crc_body(const String& body) {
 }
 
 EpaperCrcFetchResult epaper_crc32_fetch_sidecar(const char* image_url) {
-		EpaperCrcFetchResult out = {0, 0};
+		EpaperCrcFetchResult out = {0, 0, 0};
 		if (!image_url || !*image_url) return out;
 
 		String sidecar_url = String(image_url) + ".crc32";
 		const bool is_https = sidecar_url.startsWith("https://");
 
 		for (uint8_t attempt = 0; attempt < kMaxAttempts; attempt++) {
+				out.attempts = (uint8_t)(attempt + 1);
 				HTTPClient http;
 				bool begin_ok = false;
 				int code = 0;

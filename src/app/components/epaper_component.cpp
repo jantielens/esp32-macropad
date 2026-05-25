@@ -7,7 +7,9 @@
 
 #include "component_registry.h"
 #include "config_manager.h"
+#include "epaper_battery.h"
 #include "epaper_refresh.h"
+#include "epaper_timing.h"
 #include "log_manager.h"
 #include "power_manager.h"
 #include "web_portal_auth.h"
@@ -73,7 +75,7 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     // Match the threshold used in epaper_refresh.cpp (2024-01-01).
     const bool clock_synced = (now >= (time_t)1704067200);
 
-    StaticJsonDocument<256> resp;
+    StaticJsonDocument<512> resp;
     if (last_unix == 0) {
         // No refresh recorded since cold boot (RTC memory was cleared by
         // power loss or this is the first ever boot).
@@ -104,8 +106,19 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     }
     resp["sidecar_http_status"] = last.sidecar_http_status;
     resp["battery_mv"]      = last.battery_mv;
+    resp["battery_pct"]     = epaper_battery_percent(last.battery_mv);
     resp["last_crc32"]      = cfg ? cfg->epaper_last_crc32 : 0;
     resp["last_elapsed_ms"] = last.elapsed_ms;
+    resp["crc_retry_count"] = last.crc_retry_count;
+
+    // RTC-retained per-wake timing budget. Zeros on cold boot until first
+    // full cycle completes.
+    JsonObject t = resp.createNestedObject("timing");
+    t["boot_to_wifi_ms"] = epaper_timing_last.boot_to_wifi_ms;
+    t["wifi_rssi"]       = epaper_timing_last.wifi_rssi;
+    t["crc_to_draw_ms"]  = epaper_timing_last.crc_to_draw_ms;
+    t["draw_to_mqtt_ms"] = epaper_timing_last.draw_to_mqtt_ms;
+    t["total_active_ms"] = epaper_timing_last.total_active_ms;
 
     String body;
     serializeJson(resp, body);

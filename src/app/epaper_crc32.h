@@ -9,6 +9,7 @@
 struct EpaperCrcFetchResult {
 		uint32_t crc;          // Parsed CRC value (0 when unavailable / invalid)
 		int16_t http_status;   // HTTP status from the final attempt (0 = transport/begin failure)
+		uint8_t attempts;      // Number of HTTP attempts made (1..3); useful for diagnosing slow servers
 };
 
 // Fetches "<image_url>.crc32" — a small text sidecar containing a single

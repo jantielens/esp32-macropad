@@ -32,8 +32,8 @@
   <div class="card-body">
     <div class="mb-3">
       <label class="form-label" for="duty_cycle_wake_seconds">Wake every (seconds)</label>
-      <input type="number" class="form-control" id="duty_cycle_wake_seconds" name="duty_cycle_wake_seconds" min="30" max="86400" placeholder="900">
-      <div class="form-text">The device deep-sleeps between refreshes to save battery. 900 = 15 minutes.</div>
+      <input type="number" class="form-control" id="duty_cycle_wake_seconds" name="duty_cycle_wake_seconds" min="0" max="86400" placeholder="900">
+      <div class="form-text" id="epaper-wake-help">The device deep-sleeps between refreshes to save battery. 900 = 15 minutes. Set to <code>0</code> for button-only wake (no timer).</div>
     </div>
     <div class="mb-3">
       <label class="form-label" for="wifi_backoff_max_seconds">WiFi failure backoff max (seconds)</label>
@@ -53,6 +53,12 @@
       <dt class="col-sm-4">Last sidecar HTTP</dt><dd class="col-sm-8" id="epaper-status-sidecar">—</dd>
       <dt class="col-sm-4">Battery</dt><dd class="col-sm-8" id="epaper-status-battery">—</dd>
       <dt class="col-sm-4">Last image CRC</dt><dd class="col-sm-8" id="epaper-status-crc"><code>—</code></dd>
+      <dt class="col-sm-4">WiFi (last wake)</dt><dd class="col-sm-8" id="epaper-status-rssi">—</dd>
+      <dt class="col-sm-4">Active loop time</dt><dd class="col-sm-8" id="epaper-status-loop">—</dd>
+      <dt class="col-sm-4">Boot → WiFi</dt><dd class="col-sm-8" id="epaper-status-t-wifi">—</dd>
+      <dt class="col-sm-4">CRC → draw</dt><dd class="col-sm-8" id="epaper-status-t-draw">—</dd>
+      <dt class="col-sm-4">Draw → MQTT</dt><dd class="col-sm-8" id="epaper-status-t-mqtt">—</dd>
+      <dt class="col-sm-4">CRC fetch attempts</dt><dd class="col-sm-8" id="epaper-status-crc-attempts">—</dd>
     </dl>
   </div>
 </div>

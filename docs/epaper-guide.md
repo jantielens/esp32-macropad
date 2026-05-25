@@ -175,6 +175,76 @@ The portal currently renders `0` as `N/A`.
 
 The CRC shown in the portal is the last successfully committed image CRC from NVS. It represents the last known displayed image identity, not necessarily the most recent sidecar body when a refresh failed.
 
+## Power and Telemetry
+
+The e-paper duty cycle measures and retains a per-wake timing budget in RTC memory so the portal can show "last cycle" numbers and MQTT can publish them on the next wake.
+
+### Wake Modes
+
+The `Wake every (seconds)` setting on the E-Paper page accepts two value classes:
+
+* Any positive value (default `900`) — the device deep-sleeps for that many seconds, then wakes via the RTC timer and refreshes
+* `0` — button-only mode: the timer wakeup is not armed and the device sleeps until the WAKE button is pressed
+
+In button-only mode, the only way to refresh is to press WAKE. Use this when the device is acting as a static placard whose image only changes on demand.
+
+### Sleep-Time Compensation
+
+After each cycle the firmware subtracts the active loop duration from the configured wake interval so the wake-to-wake cadence approximates the target. A 900 s setting with a 12 s active loop sleeps for 888 s, not 900 s. A minimum sleep of 10 s is enforced.
+
+### Battery Reporting
+
+The battery voltage is read before the panel-drive waveform sags the cell, on both the "updated" and "skipped" code paths. The portal renders it as both volts and a 0&ndash;100&nbsp;% linear estimate derived from a 3.00&ndash;4.20&nbsp;V range.
+
+### MQTT Telemetry
+
+When MQTT is configured, every wake publishes a retained JSON document to `<base>/epaper/state` with the following shape:
+
+```json
+{
+  "battery_mv": 3870,
+  "battery_pct": 75,
+  "wifi_rssi": -62,
+  "image_crc32": 305419896,
+  "refresh_result": "updated",
+  "refresh_count": 42,
+  "sidecar_http_status": 200,
+  "timing": {
+    "boot_to_wifi_ms": 2310,
+    "crc_retry_count": 1,
+    "crc_to_draw_ms": 4820,
+    "draw_to_mqtt_ms": 180,
+    "total_active_ms": 7820,
+    "last_elapsed_ms": 5100
+  }
+}
+```
+
+The MQTT connect attempt is bounded at 5 s. A clean DISCONNECT is sent before deep sleep to avoid spurious LWT messages on the broker.
+
+### Home Assistant Auto-Discovery
+
+Twelve sensor entities are auto-discovered into Home Assistant, all reading from the JSON state topic above:
+
+| Entity                          | JSON field                       | Unit |
+|---------------------------------|----------------------------------|------|
+| Battery                         | `battery_pct`                    | %    |
+| Battery Voltage                 | `battery_mv`                     | mV   |
+| E-Paper Refresh Count           | `refresh_count`                  |      |
+| E-Paper Last Refresh Result     | `refresh_result`                 |      |
+| E-Paper Image CRC               | `image_crc32` (formatted as hex) |      |
+| E-Paper Sidecar HTTP Status     | `sidecar_http_status`            |      |
+| E-Paper Wake Loop Time          | `timing.total_active_ms`         | ms   |
+| E-Paper Boot to WiFi            | `timing.boot_to_wifi_ms`         | ms   |
+| E-Paper CRC to Draw             | `timing.crc_to_draw_ms`          | ms   |
+| E-Paper Draw to MQTT            | `timing.draw_to_mqtt_ms`         | ms   |
+| E-Paper Refresh Elapsed         | `timing.last_elapsed_ms`         | ms   |
+| E-Paper CRC Fetch Attempts      | `timing.crc_retry_count`         |      |
+
+WiFi RSSI is intentionally not duplicated &mdash; the generic `WiFi RSSI` entity from the shared health discovery already updates on every wake.
+
+Discovery configs are retained on the broker, so they are only published on cold boot. An `RTC_DATA_ATTR` flag suppresses the entire discovery burst (health + e-paper) on subsequent warm wakes to save battery.
+
 ## Config Mode
 
 Config Mode uses the same portal idle-timeout mechanism as the rest of the project.

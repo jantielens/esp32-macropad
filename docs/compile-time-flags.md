@@ -418,7 +418,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/epaper_drivers.cpp
   - src/app/epaper_refresh.cpp
   - src/app/epaper_refresh.h
+  - src/app/mqtt_manager.cpp
   - src/app/portal_components.cpp
+  - src/app/power_manager.cpp
   - src/app/web_portal_config.cpp
 - **HAS_EPAPER_WAKE_BUTTON**
   - src/app/app.ino

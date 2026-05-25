@@ -14,6 +14,10 @@
 #include "power_config.h"
 #include "log_manager.h"
 
+#if HAS_EPAPER
+#include "epaper_mqtt.h"
+#endif
+
 MqttManager::MqttManager() : _client(_net) {}
 
 void MqttManager::begin(const DeviceConfig *config, const char *friendly_name, const char *sanitized_name) {
@@ -162,8 +166,26 @@ void MqttManager::publishAvailability(bool online) {
 void MqttManager::publishDiscoveryOncePerBoot() {
 		if (_discovery_published_this_boot) return;
 
+#if HAS_EPAPER
+		// On e-paper boards we publish discovery once per cold boot and skip
+		// it on every subsequent timer/button wake -- HA retains the configs
+		// on the broker, so re-publishing every cycle just burns ~1-2s and
+		// ~2.5 KB of network traffic on a battery-powered device. The RTC
+		// flag persists across deep sleep + soft resets and is only cleared
+		// on power loss.
+		if (epaper_mqtt_discovery_already_published()) {
+				LOGI("MQTT", "Skipping discovery (e-paper RTC flag set; retained configs persist)");
+				_discovery_published_this_boot = true;
+				return;
+		}
+#endif
+
 		LOGI("MQTT", "Publishing HA discovery");
 		ha_discovery_publish_health(*this);
+#if HAS_EPAPER
+		epaper_mqtt_publish_ha_discovery(*this);
+		epaper_mqtt_mark_discovery_published();
+#endif
 		_discovery_published_this_boot = true;
 }
 

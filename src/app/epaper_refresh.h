@@ -21,6 +21,7 @@ struct EpaperRefreshOutcome {
 		EpaperRefreshResult result;
 		uint32_t crc_used;       // CRC reported by sidecar (0 if unknown)
 		int16_t sidecar_http_status; // Last sidecar HTTP status (0 = transport/begin failure)
+		uint8_t crc_retry_count; // HTTP attempts made by the sidecar fetcher (0 = not attempted)
 		uint16_t battery_mv;     // Last battery read (0 if unsupported)
 		uint32_t elapsed_ms;     // Total wall-clock for the refresh call
 };

@@ -1,0 +1,161 @@
+#include "epaper_mqtt.h"
+
+#if HAS_EPAPER && HAS_MQTT
+
+#include "epaper_battery.h"
+#include "ha_discovery.h"
+#include "log_manager.h"
+#include "mqtt_manager.h"
+
+#include <Arduino.h>
+#include <ArduinoJson.h>
+#include <WiFi.h>
+#include <esp_attr.h>
+
+RTC_DATA_ATTR static bool g_epaper_discovery_published = false;
+
+bool epaper_mqtt_discovery_already_published() {
+		return g_epaper_discovery_published;
+}
+
+void epaper_mqtt_mark_discovery_published() {
+		g_epaper_discovery_published = true;
+}
+
+static const char* result_to_str(EpaperRefreshResult r) {
+		switch (r) {
+				case EpaperRefreshResult::Updated:     return "updated";
+				case EpaperRefreshResult::Skipped:     return "skipped";
+				case EpaperRefreshResult::FailedFetch: return "failed_fetch";
+				case EpaperRefreshResult::FailedDraw:  return "failed_draw";
+				case EpaperRefreshResult::Disabled:    return "disabled";
+		}
+		return "unknown";
+}
+
+bool epaper_mqtt_publish_state(const DeviceConfig* config,
+															 const EpaperRefreshOutcome& outcome,
+															 const EpaperTimingBudget* timing) {
+		(void)config;
+		extern MqttManager mqtt_manager;
+		if (!mqtt_manager.connected()) return false;
+
+		char topic[160];
+		snprintf(topic, sizeof(topic), "%s/epaper/state", mqtt_manager.baseTopic());
+
+		StaticJsonDocument<640> doc;
+		doc["battery_mv"]      = outcome.battery_mv;
+		doc["battery_pct"]     = epaper_battery_percent(outcome.battery_mv);
+		doc["wifi_rssi"]       = timing ? timing->wifi_rssi : (int16_t)WiFi.RSSI();
+		doc["image_crc32"]     = outcome.crc_used;
+		doc["refresh_result"]  = result_to_str(outcome.result);
+		doc["refresh_count"]   = epaper_refresh_get_count();
+		doc["sidecar_http_status"] = outcome.sidecar_http_status;
+
+		JsonObject t = doc.createNestedObject("timing");
+		if (timing) {
+				t["boot_to_wifi_ms"]  = timing->boot_to_wifi_ms;
+				t["crc_retry_count"]  = timing->crc_retry_count;
+				t["crc_to_draw_ms"]   = timing->crc_to_draw_ms;
+				t["draw_to_mqtt_ms"]  = timing->draw_to_mqtt_ms;
+				t["total_active_ms"]  = timing->total_active_ms;
+				t["last_elapsed_ms"]  = outcome.elapsed_ms;
+		} else {
+				t["last_elapsed_ms"]  = outcome.elapsed_ms;
+		}
+
+		if (doc.overflowed()) {
+				LOGE("Epaper", "MQTT state JSON overflow");
+				return false;
+		}
+
+		const bool ok = mqtt_manager.publishJson(topic, doc, true /*retained*/);
+		if (ok) {
+				LOGI("Epaper", "Published telemetry to %s", topic);
+		} else {
+				LOGW("Epaper", "MQTT telemetry publish failed");
+		}
+		return ok;
+}
+
+void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
+		// Publishes twelve retained HA discovery configs for the e-paper
+		// telemetry surfaced under <base>/epaper/state. Entities are NOT marked
+		// entity_category="diagnostic" so they appear together in the main
+		// entity list of the device card; the "E-Paper" name prefix keeps them
+		// visually grouped. WiFi RSSI is intentionally omitted -- the generic
+		// wifi_rssi entity from ha_discovery.cpp already updates on every wake.
+		char base[160];
+		snprintf(base, sizeof(base), "%s/epaper/state", mqtt.baseTopic());
+
+		const char* device_name = mqtt.friendlyName();
+		const char* sanitized   = mqtt.sanitizedName();
+
+		auto publish_sensor = [&](const char* object_id,
+													const char* name_suffix,
+													const char* value_template,
+													const char* unit,
+													const char* device_class,
+													const char* state_class) {
+				char cfg_topic[192];
+				snprintf(cfg_topic, sizeof(cfg_topic),
+								 "homeassistant/sensor/%s/%s/config", sanitized, object_id);
+
+				StaticJsonDocument<512> doc;
+				char unique_id[96];
+				snprintf(unique_id, sizeof(unique_id), "%s_%s", sanitized, object_id);
+				char name[96];
+				snprintf(name, sizeof(name), "%s %s", device_name, name_suffix);
+
+				doc["name"]   = name;
+				doc["uniq_id"] = unique_id;
+				doc["stat_t"] = base;
+				doc["val_tpl"] = value_template;
+				if (unit && *unit) doc["unit_of_meas"] = unit;
+				if (device_class && *device_class) doc["dev_cla"] = device_class;
+				if (state_class && *state_class) doc["stat_cla"] = state_class;
+
+				JsonObject dev = doc.createNestedObject("dev");
+				JsonArray ids = dev.createNestedArray("ids");
+				ids.add(sanitized);
+				dev["name"] = device_name;
+
+				mqtt.publishJson(cfg_topic, doc, true /*retained*/);
+		};
+
+		// Core status entities.
+		publish_sensor("epaper_battery", "Battery",
+									 "{{ value_json.battery_pct }}", "%", "battery", "measurement");
+		publish_sensor("epaper_battery_mv", "Battery Voltage",
+									 "{{ value_json.battery_mv }}", "mV", "voltage", "measurement");
+		delay(1);
+		publish_sensor("epaper_refresh_count", "E-Paper Refresh Count",
+									 "{{ value_json.refresh_count }}", "", "", "total_increasing");
+		publish_sensor("epaper_last_result", "E-Paper Last Refresh Result",
+									 "{{ value_json.refresh_result }}", "", "", "");
+		delay(1);
+		publish_sensor("epaper_image_crc", "E-Paper Image CRC",
+									 "{{ '0x%08x' | format(value_json.image_crc32) }}", "", "", "");
+		publish_sensor("epaper_sidecar_http", "E-Paper Sidecar HTTP Status",
+									 "{{ value_json.sidecar_http_status }}", "", "", "measurement");
+		delay(1);
+
+		// Per-cycle timing budget. HA accepts "ms" as a duration unit since 2023.
+		publish_sensor("epaper_loop_ms", "E-Paper Wake Loop Time",
+									 "{{ value_json.timing.total_active_ms }}", "ms", "duration", "measurement");
+		publish_sensor("epaper_boot_to_wifi_ms", "E-Paper Boot to WiFi",
+									 "{{ value_json.timing.boot_to_wifi_ms }}", "ms", "duration", "measurement");
+		delay(1);
+		publish_sensor("epaper_crc_to_draw_ms", "E-Paper CRC to Draw",
+									 "{{ value_json.timing.crc_to_draw_ms }}", "ms", "duration", "measurement");
+		publish_sensor("epaper_draw_to_mqtt_ms", "E-Paper Draw to MQTT",
+									 "{{ value_json.timing.draw_to_mqtt_ms }}", "ms", "duration", "measurement");
+		delay(1);
+		publish_sensor("epaper_last_elapsed_ms", "E-Paper Refresh Elapsed",
+									 "{{ value_json.timing.last_elapsed_ms }}", "ms", "duration", "measurement");
+		publish_sensor("epaper_crc_retries", "E-Paper CRC Fetch Attempts",
+									 "{{ value_json.timing.crc_retry_count }}", "", "", "measurement");
+		delay(1);
+}
+
+#endif // HAS_EPAPER && HAS_MQTT
