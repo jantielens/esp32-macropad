@@ -14,7 +14,12 @@
 #include "components/wifi_component.cpp"
 #include "components/device_name_component.cpp"
 #include "components/network_component.cpp"
+#if !HAS_EPAPER
+// On e-paper boards the Power Mode page is suppressed — e-paper devices
+// always run in duty_cycle_epaper, and that mode is set automatically when
+// the E-Paper fragment is saved (hidden operating_mode field).
 #include "components/mode_component.cpp"
+#endif
 #include "components/factory_reset_component.cpp"
 #include "components/ota_update_component.cpp"
 #include "components/manual_upload_component.cpp"
@@ -51,3 +56,8 @@
 #if HAS_SOUND_PLAYER
 #include "components/sounds_component.cpp"
 #endif // HAS_SOUND_PLAYER
+
+// --- E-Paper-gated components ---
+#if HAS_EPAPER
+#include "components/epaper_component.cpp"
+#endif // HAS_EPAPER

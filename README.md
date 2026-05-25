@@ -1,8 +1,15 @@
-# ESP32 Macropad
+---
+title: ESP32 Macropad
+description: Open-source firmware for ESP32 touchscreen and e-paper control panels, including the Inkplate 5V2 e-paper device class.
+ms.date: 2026-05-25
+ms.topic: overview
+---
 
-Turn your ESP32 touch screen into a powerful, fully customizable smart home control panel — no coding required.
+## Overview
 
-ESP32 Macropad is open-source firmware that transforms affordable ESP32 development boards with touch displays into beautiful, configurable macro pads. Design your own button layouts with live data, icons, and colors — all from a browser-based editor. Connect to Home Assistant via MQTT and put your smart home at your fingertips.
+Turn your ESP32 display board into a powerful, fully customizable smart home control panel with no coding required.
+
+ESP32 Macropad is open-source firmware that transforms affordable ESP32 development boards into configurable control surfaces and dashboards. Interactive boards use a touch-first pad UI. E-paper boards, such as the Inkplate 5V2, use a battery-focused duty-cycle image-refresh model. Both are configured from the same web portal and integrate with Home Assistant over MQTT.
 
 ## ✨ Features
 
@@ -62,6 +69,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 
 - **Home Assistant control panel** — lights, switches, scenes, climate — all one tap away
 - **Energy monitor dashboard** — real-time solar, battery, and grid power visualization
+- **Battery-powered e-paper dashboard** — wake on a schedule, fetch a pre-rendered image, refresh, and go back to sleep
 - **Media controller** — play, pause, skip, volume for your media players
 - **Bluetooth macro keyboard** — launch apps, paste snippets, control presentations, or trigger shortcuts on your PC or Mac
 - **Smart home remote** — replace a drawer full of remotes with one touch screen
@@ -70,7 +78,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 
 ## 📱 Supported Devices
 
-ESP32 Macropad runs on these ESP32 development boards with touch screens:
+ESP32 Macropad runs on these ESP32 development boards:
 
 | Board | Chip | Display | Resolution | Shape |
 |-------|------|---------|------------|-------|
@@ -80,8 +88,9 @@ ESP32 Macropad runs on these ESP32 development boards with touch screens:
 | **Waveshare ESP32-P4 Touch LCD 4B** | ESP32-P4 | 4.0" IPS LCD | 720 × 720 | Square |
 | **Guition JC4880P433** | ESP32-P4 | 4.3" IPS LCD | 800 × 480 | Rectangle |
 | **Guition JC1060P470C** | ESP32-P4 | 7.0" IPS LCD | 1024 × 600 | Rectangle |
+| **Soldered Inkplate 5V2** | ESP32 | 5.17" 3-bit grayscale e-paper | 720 × 1280 | Portrait |
 
-All boards feature capacitive touch and are widely available from AliExpress and similar retailers.
+Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2 is the current non-touch e-paper target.
 
 > **More boards welcome!** The firmware has a modular driver architecture that makes adding new boards straightforward. Check the [developer docs](docs/dev/display-touch-architecture.md) if you'd like to contribute.
 
@@ -134,6 +143,7 @@ The pad editor lets you design button layouts visually: drag-to-move and drag-to
 |-------|-------------|
 | [First-Time Setup](docs/first-time-setup.md) | Initial configuration after flashing |
 | [Web Portal Guide](docs/web-portal-guide.md) | Complete guide to all portal features |
+| [E-Paper Guide](epaper-guide.md) | Detailed guide for the e-paper device class, image pipeline, wake behavior, and status semantics |
 | [Home Assistant Integration](docs/ha-integration-guide.md) | HA entity reference, audio control, and automation examples |
 | [Home Assistant + MQTT (dev)](docs/dev/home-assistant-mqtt.md) | MQTT topic structure and HA auto-discovery internals |
 

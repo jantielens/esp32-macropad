@@ -127,9 +127,16 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["mqtt"] = (bool)HAS_MQTT;
 				caps["display"] = (bool)HAS_DISPLAY;
 				caps["ble_hid"] = (bool)HAS_BLE_HID;
+				caps["epaper"] = (bool)HAS_EPAPER;
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;
+
+				#if HAS_EPAPER
+				// E-paper image source (epaper_last_crc32 is internal state — not exposed)
+				(*doc)["epaper_url"] = current_config->epaper_url;
+				(*doc)["epaper_rotation"] = current_config->epaper_rotation;
+				#endif
 
 				// Web portal Basic Auth (password not returned)
 				(*doc)["basic_auth_enabled"] = current_config->basic_auth_enabled;
@@ -424,6 +431,19 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (doc.containsKey("mqtt_publish_scope")) {
 				strlcpy(current_config->mqtt_publish_scope, doc["mqtt_publish_scope"] | "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
 		}
+
+		#if HAS_EPAPER
+		if (doc.containsKey("epaper_url")) {
+				strlcpy(current_config->epaper_url, doc["epaper_url"] | "", CONFIG_EPAPER_URL_MAX_LEN);
+		}
+		if (doc.containsKey("epaper_rotation")) {
+				uint8_t r = doc["epaper_rotation"].is<const char*>()
+						? (uint8_t)atoi(doc["epaper_rotation"] | "0")
+						: (uint8_t)(doc["epaper_rotation"] | 0);
+				if (r > 3) r = 0;
+				current_config->epaper_rotation = r;
+		}
+		#endif
 
 		#if HAS_BLE
 		// BLE telemetry advertising burst count (1..255)

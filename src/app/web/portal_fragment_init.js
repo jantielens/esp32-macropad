@@ -37,7 +37,8 @@ async function saveFragmentConfig(requiresReboot) {
         'backlight_brightness',
         'screen_saver_enabled', 'screen_saver_timeout_seconds',
         'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms',
-        'screen_saver_wake_on_touch', 'screen_saver_wake_binding'
+        'screen_saver_wake_on_touch', 'screen_saver_wake_binding',
+        'epaper_url', 'epaper_rotation'
     ];
     fields.forEach(function (name) {
         // Radio groups: pick the checked option (if any).
@@ -306,11 +307,20 @@ window.init_mode_fragment = function () {
         var caps = (window.__device_caps || {});
         var bleOpt = document.getElementById('mode_opt_duty_cycle_ble');
         if (bleOpt) bleOpt.style.display = caps.ble ? '' : 'none';
+        var epOpt = document.getElementById('mode_opt_duty_cycle_epaper');
+        if (epOpt) epOpt.style.display = caps.epaper ? '' : 'none';
         // If BLE was the persisted choice but the build no longer supports it,
         // fall back to always_on.
         if (!caps.ble) {
             var bleRadio = document.getElementById('operating_mode_duty_cycle_ble');
             if (bleRadio && bleRadio.checked) {
+                var alwaysOn = document.getElementById('operating_mode_always_on');
+                if (alwaysOn) alwaysOn.checked = true;
+            }
+        }
+        if (!caps.epaper) {
+            var epRadio = document.getElementById('operating_mode_duty_cycle_epaper');
+            if (epRadio && epRadio.checked) {
                 var alwaysOn = document.getElementById('operating_mode_always_on');
                 if (alwaysOn) alwaysOn.checked = true;
             }
@@ -326,13 +336,14 @@ window.init_mode_fragment = function () {
         var mode = getSelectedMode();
         var isDutyMqtt = (mode === 'duty_cycle_mqtt');
         var isDutyBle = (mode === 'duty_cycle_ble');
-        var isAnyDuty = isDutyMqtt || isDutyBle;
+        var isDutyEpaper = (mode === 'duty_cycle_epaper');
+        var isAnyDuty = isDutyMqtt || isDutyBle || isDutyEpaper;
 
         var dc = document.getElementById('duty-cycle-settings');
         if (dc) dc.style.display = isAnyDuty ? '' : 'none';
         // Wi-Fi backoff is meaningless for BLE.
         var backoff = document.getElementById('wifi-backoff-row');
-        if (backoff) backoff.style.display = isDutyMqtt ? '' : 'none';
+        if (backoff) backoff.style.display = (isDutyMqtt || isDutyEpaper) ? '' : 'none';
         var ble = document.getElementById('ble-telemetry-settings');
         if (ble) ble.style.display = isDutyBle ? '' : 'none';
     }
@@ -470,6 +481,100 @@ window.init_ha_discovery_fragment = function () {
 
 window.init_volume_fragment = function () {
     initConfigFragment('volume-save-btn', false);
+};
+
+// ============================================================================
+// E-Paper
+// ============================================================================
+
+window.init_epaper_fragment = function () {
+    initConfigFragment('epaper-save-btn', false);
+    var btn = document.getElementById('epaper-refresh-btn');
+    var status = document.getElementById('epaper-refresh-status');
+
+    // Status card auto-refresh
+    var statusFields = {
+        last:    document.getElementById('epaper-status-last'),
+        count:   document.getElementById('epaper-status-count'),
+        draw:    document.getElementById('epaper-status-draw'),
+        sidecar: document.getElementById('epaper-status-sidecar'),
+        battery: document.getElementById('epaper-status-battery'),
+        crc:     document.getElementById('epaper-status-crc'),
+    };
+    function fmtDrawResult(r) {
+        if (r === 'updated') return 'Updated';
+        if (r === 'skipped') return 'Skipped (unchanged)';
+        if (r === 'fetch_failed') return 'Fetch failed';
+        if (r === 'draw_failed') return 'Draw failed';
+        if (r === 'disabled') return 'Not attempted';
+        return 'Unknown';
+    }
+    function fmtSecondsAgo(s) {
+        if (s == null) return null;
+        if (s < 60) return s + ' s ago';
+        if (s < 3600) return Math.floor(s / 60) + ' min ago';
+        if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+        return Math.floor(s / 86400) + ' d ago';
+    }
+    function loadStatus() {
+        fetch('/api/component/epaper/status')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) {
+                if (!j) return;
+                if (statusFields.last) {
+                    var ago = fmtSecondsAgo(j.last_refresh_seconds_ago);
+                    if (ago) {
+                        statusFields.last.textContent = ago;
+                    } else if (j.last_refresh_status === 'clock_unsynced') {
+                        statusFields.last.textContent = 'Unknown (clock not synced)';
+                    } else {
+                        statusFields.last.textContent = 'Never (since cold boot)';
+                    }
+                }
+                if (statusFields.count)   statusFields.count.textContent   = j.refresh_count != null ? String(j.refresh_count) : '—';
+                if (statusFields.draw)    statusFields.draw.textContent    = fmtDrawResult(j.last_result);
+                if (statusFields.sidecar) statusFields.sidecar.textContent = (j.sidecar_http_status && j.sidecar_http_status > 0)
+                    ? String(j.sidecar_http_status)
+                    : 'N/A';
+                if (statusFields.battery) statusFields.battery.textContent = (j.battery_mv && j.battery_mv > 0)
+                    ? (j.battery_mv / 1000).toFixed(2) + ' V'
+                    : 'Not available';
+                if (statusFields.crc) {
+                    var c = j.last_crc32 || 0;
+                    statusFields.crc.innerHTML = '<code>0x' + c.toString(16).padStart(8, '0') + '</code>';
+                }
+            })
+            .catch(function () { /* silent */ });
+    }
+    loadStatus();
+    var statusTimer = setInterval(loadStatus, 5000);
+    window.addEventListener('hashchange', function once() {
+        clearInterval(statusTimer);
+        window.removeEventListener('hashchange', once);
+    });
+
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        if (status) { status.textContent = 'Refreshing… (this can take 10–30 seconds)'; }
+        fetch('/api/component/epaper/refresh', { method: 'POST' })
+            .then(function (r) { return r.json().catch(function () { return { success: false, message: 'Bad response' }; }); })
+            .then(function (j) {
+                if (status) {
+                    if (j.success) {
+                        var elapsed = j.elapsed_ms ? (' (' + j.elapsed_ms + ' ms)') : '';
+                        status.textContent = (j.result === 'skipped' ? 'Skipped (image unchanged)' : 'Refresh complete') + elapsed;
+                    } else {
+                        status.textContent = 'Failed: ' + (j.message || j.result || 'unknown error');
+                    }
+                }
+                loadStatus();
+            })
+            .catch(function (e) {
+                if (status) status.textContent = 'Failed: ' + e;
+            })
+            .finally(function () { btn.disabled = false; });
+    });
 };
 
 // ============================================================================

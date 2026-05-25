@@ -1,4 +1,11 @@
-# Changelog
+---
+title: Changelog
+description: Notable changes for ESP32 Macropad releases.
+ms.date: 2026-05-25
+ms.topic: reference
+---
+
+## Overview
 
 All notable changes to this project will be documented in this file.
 
@@ -6,6 +13,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+* Added the e-paper device class for the Soldered Inkplate 5V2. The new `HAS_EPAPER` path uses a duty-cycle image-refresh loop: connect WiFi, fetch `<url>.crc32`, skip unchanged images, draw the image with the Inkplate library, update the panel, and deep-sleep until the next wake.
+* Added the `duty_cycle_epaper` operating mode, the e-paper wake button feature flags (`HAS_EPAPER_WAKE_BUTTON`, `EPAPER_BUTTON_PIN`), and persistent e-paper config fields (`epaper_url`, `epaper_rotation`, `epaper_last_crc32`).
+* Added the dedicated E-Paper portal page with image source settings, refresh scheduling, manual refresh, and persistent status reporting for last refresh time, successful refresh count, last draw result, last sidecar HTTP status, battery voltage, and last image CRC.
+* Added the `inkplate5v2` board target using `Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb`, plus the Soldered board-manager setup path in `setup.sh` and automatic inclusion in the build matrix.
+* Added [epaper-guide.md](epaper-guide.md) for detailed e-paper documentation, while keeping generic project docs at a higher level.
 
 ## [1.16.0] - 2026-05-24
 

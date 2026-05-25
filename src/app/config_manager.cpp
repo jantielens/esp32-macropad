@@ -60,6 +60,11 @@
 #define KEY_SCREEN_SAVER_WAKE_TOUCH "ss_wt"
 #define KEY_SCREEN_SAVER_WAKE_BINDING "ss_wb"
 #endif
+#if HAS_EPAPER
+#define KEY_EPAPER_URL     "ep_url"
+#define KEY_EPAPER_ROT     "ep_rot"
+#define KEY_EP_CRC32       "ep_crc32"
+#endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
 #define KEY_TAP_BEEP       "tap_beep"
@@ -189,6 +194,12 @@ bool config_manager_load(DeviceConfig *config) {
 				#endif
 				config->screen_saver_wake_binding[0] = '\0';
 				#endif
+
+				#if HAS_EPAPER
+				config->epaper_url[0] = '\0';
+				config->epaper_rotation = 0;
+				config->epaper_last_crc32 = 0;
+				#endif
 				
 				return false;
 		}
@@ -275,6 +286,13 @@ bool config_manager_load(DeviceConfig *config) {
 		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, false);
 		#endif
 		preferences.getString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding, CONFIG_SS_WAKE_BINDING_MAX_LEN);
+		#endif
+
+		#if HAS_EPAPER
+		preferences.getString(KEY_EPAPER_URL, config->epaper_url, CONFIG_EPAPER_URL_MAX_LEN);
+		config->epaper_rotation = preferences.getUChar(KEY_EPAPER_ROT, 0);
+		if (config->epaper_rotation > 3) config->epaper_rotation = 0;
+		config->epaper_last_crc32 = preferences.getUInt(KEY_EP_CRC32, 0);
 		#endif
 		
 		config->magic = magic;
@@ -369,6 +387,12 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUShort(KEY_SCREEN_SAVER_FADE_IN, config->screen_saver_fade_in_ms);
 		preferences.putBool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch);
 		preferences.putString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding);
+		#endif
+
+		#if HAS_EPAPER
+		preferences.putString(KEY_EPAPER_URL, config->epaper_url);
+		preferences.putUChar(KEY_EPAPER_ROT, config->epaper_rotation);
+		preferences.putUInt(KEY_EP_CRC32, config->epaper_last_crc32);
 		#endif
 		
 		// Save magic number last (indicates valid config)

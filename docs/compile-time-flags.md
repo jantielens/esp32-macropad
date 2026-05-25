@@ -407,8 +407,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_EPAPER**
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/duty_cycle.cpp
+  - src/app/portal_components.cpp
+  - src/app/web_portal_config.cpp
 - **HAS_EPAPER_WAKE_BUTTON**
+  - src/app/app.ino
   - src/app/board_config.h
+  - src/app/duty_cycle.cpp
+  - src/app/power_manager.cpp
+  - src/app/power_manager.h
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino
   - src/app/board_config.h

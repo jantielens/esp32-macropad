@@ -22,6 +22,7 @@ PowerMode power_config_parse_power_mode(const DeviceConfig *config) {
 		if (equals_ignore_case(config->operating_mode, "always_on")) return PowerMode::AlwaysOn;
 		if (equals_ignore_case(config->operating_mode, "duty_cycle_mqtt")) return PowerMode::DutyCycle;
 		if (equals_ignore_case(config->operating_mode, "duty_cycle_ble")) return PowerMode::DutyCycleBle;
+		if (equals_ignore_case(config->operating_mode, "duty_cycle_epaper")) return PowerMode::DutyCycleEpaper;
 		// Internal/runtime-only values (not user-selectable but kept for completeness).
 		if (equals_ignore_case(config->operating_mode, "config")) return PowerMode::Config;
 		if (equals_ignore_case(config->operating_mode, "ap")) return PowerMode::Ap;
@@ -44,6 +45,7 @@ const char *power_config_power_mode_to_string(PowerMode mode) {
 				case PowerMode::AlwaysOn: return "always_on";
 				case PowerMode::DutyCycle: return "duty_cycle_mqtt";
 				case PowerMode::DutyCycleBle: return "duty_cycle_ble";
+				case PowerMode::DutyCycleEpaper: return "duty_cycle_epaper";
 				case PowerMode::Config: return "config";
 				case PowerMode::Ap: return "ap";
 				default: return "always_on";

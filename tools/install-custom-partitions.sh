@@ -118,15 +118,28 @@ register_partition_scheme_if_needed() {
       ;;
   esac
 
+  # Derive flash_size override from a trailing _<N>MB suffix on the scheme id
+  # (e.g. ota_3mb_8MB → 8MB, ota_6mb_16MB → 16MB). Required because some board
+  # defs (notably Inkplate5V2) ship build.flash_size=4MB even on 8MB hardware;
+  # without this override the bootloader rejects partitions past 0x400000 and
+  # the device immediately resets after the ROM hands off to stage 2.
+  local flash_size_override=""
+  if [[ "$scheme_id" =~ _([0-9]+)MB$ ]]; then
+    flash_size_override="${BASH_REMATCH[1]}MB"
+  fi
+
   {
     echo ""
     echo "# Custom partition scheme '$scheme_id' (installed by $REPO_ROOT/tools/install-custom-partitions.sh)"
     echo "${board_id}.menu.PartitionScheme.${scheme_id}=${label}"
     echo "${board_id}.menu.PartitionScheme.${scheme_id}.build.partitions=${partition_name_no_ext}"
     echo "${board_id}.menu.PartitionScheme.${scheme_id}.upload.maximum_size=${upload_max_size_dec}"
+    if [[ -n "$flash_size_override" ]]; then
+      echo "${board_id}.menu.PartitionScheme.${scheme_id}.build.flash_size=${flash_size_override}"
+    fi
   } >> "$boards_txt"
 
-  echo "✓ Registered PartitionScheme '$scheme_id' for board '$board_id'"
+  echo "✓ Registered PartitionScheme '$scheme_id' for board '$board_id'${flash_size_override:+ (flash_size=$flash_size_override)}"
 }
 
 ESP32_DIR=""

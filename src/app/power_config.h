@@ -7,6 +7,7 @@ enum class PowerMode {
 		AlwaysOn,
 		DutyCycle,        // duty_cycle_mqtt (wake -> WiFi -> MQTT publish -> sleep)
 		DutyCycleBle,     // duty_cycle_ble  (wake -> BLE BTHome adv burst -> sleep, no WiFi)
+		DutyCycleEpaper,  // duty_cycle_epaper (wake -> WiFi -> fetch image -> render -> sleep)
 		Config,
 		Ap
 };

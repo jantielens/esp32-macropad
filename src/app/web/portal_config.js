@@ -222,6 +222,14 @@ async function loadConfig() {
         setValueIfExists('screen_saver_fade_in_ms', config.screen_saver_fade_in_ms);
         setCheckedIfExists('screen_saver_wake_on_touch', config.screen_saver_wake_on_touch);
         setValueIfExists('screen_saver_wake_binding', config.screen_saver_wake_binding);
+
+        // E-paper settings (only present when firmware has HAS_EPAPER)
+        if (config.epaper_url !== undefined) {
+            setValueIfExists('epaper_url', config.epaper_url);
+        }
+        if (config.epaper_rotation !== undefined) {
+            setValueIfExists('epaper_rotation', config.epaper_rotation);
+        }
     } catch (error) {
         showMessage('Error loading configuration: ' + error.message, 'error');
         console.error('Load error:', error);

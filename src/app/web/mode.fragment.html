@@ -41,6 +41,18 @@
           </div>
         </label>
       </div>
+
+      <div class="form-check" id="mode_opt_duty_cycle_epaper" style="display:none;">
+        <input class="form-check-input" type="radio" name="operating_mode" id="operating_mode_duty_cycle_epaper" value="duty_cycle_epaper">
+        <label class="form-check-label" for="operating_mode_duty_cycle_epaper">
+          <b>Duty-Cycle (E-Paper)</b>
+          <div class="form-text">
+            Device wakes from deep sleep, connects Wi-Fi, fetches the image configured on the
+            <a href="#epaper">E-Paper</a> page (when its CRC sidecar shows it changed), renders it on the panel,
+            then sleeps again. The wake button forces an immediate refresh outside the schedule.
+          </div>
+        </label>
+      </div>
     </fieldset>
 
     <div id="duty-cycle-settings" style="display:none;">

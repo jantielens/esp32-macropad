@@ -121,6 +121,25 @@ static bool check_config_mode_button() {
 
 	LOGI("Power", "Config button held - entering Config Mode");
 	return true;
+	#elif HAS_EPAPER_WAKE_BUTTON
+	if (power_manager_get_button_wake_action() == EpaperButtonWakeAction::Config) {
+		LOGI("Power", "E-paper wake button held - entering Config Mode");
+		return true;
+	}
+	if (power_manager_is_button_wake()) {
+		return false;
+	}
+	// On e-paper boards the wake button doubles as the config-mode button.
+	// On a cold boot the user can hold it from the start to enter Config Mode.
+	// ext0 wake presses are already classified in power_manager_boot_init().
+	pinMode(EPAPER_BUTTON_PIN, INPUT);
+	const unsigned long start = millis();
+	while (millis() - start < 2500) {
+		if (digitalRead(EPAPER_BUTTON_PIN) != LOW) return false;
+		delay(10);
+	}
+	LOGI("Power", "E-paper wake button held - entering Config Mode");
+	return true;
 	#else
 	return false;
 	#endif
@@ -306,6 +325,15 @@ void setup()
 
 		ble_telemetry_init(device_config.device_name);
 
+		duty_cycle_run(&device_config);
+		return;
+	}
+	#endif
+
+	#if HAS_EPAPER
+	if (boot_mode == PowerMode::DutyCycleEpaper) {
+		// E-paper devices skip the LVGL display path entirely; the duty cycle
+		// drives the panel directly from the Inkplate library.
 		duty_cycle_run(&device_config);
 		return;
 	}

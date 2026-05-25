@@ -10,6 +10,10 @@
 #include "sensors/sensor_manager.h"
 #include "wifi_manager.h"
 
+#if HAS_EPAPER
+#include "epaper_refresh.h"
+#endif
+
 #include <ArduinoJson.h>
 
 #if HAS_MQTT
@@ -32,6 +36,34 @@ bool duty_cycle_run(const DeviceConfig *config) {
 		// the upcoming advertisement.
 		StaticJsonDocument<512> sensors_doc;
 		build_sensor_json(sensors_doc);
+
+#if HAS_EPAPER
+		if (mode == PowerMode::DutyCycleEpaper) {
+				// E-paper duty cycle: WiFi -> CRC check -> conditional draw -> sleep.
+				// Cast away const so the refresh helper can persist a fresh CRC.
+				DeviceConfig *cfg_mut = const_cast<DeviceConfig*>(config);
+				const bool connected = wifi_manager_connect(config, true);
+				if (!connected) {
+						const uint32_t backoff = power_manager_note_wifi_failure(
+								config->duty_cycle_wake_seconds,
+								config->wifi_backoff_max_seconds);
+						power_manager_sleep_for(backoff);
+						return false;
+				}
+				power_manager_note_wifi_success();
+
+#if HAS_EPAPER_WAKE_BUTTON
+				const bool force_refresh =
+						power_manager_get_button_wake_action() == EpaperButtonWakeAction::Refresh;
+#else
+				const bool force_refresh = false;
+#endif
+				epaper_refresh_run(cfg_mut, force_refresh);
+
+				power_manager_sleep_for(config->duty_cycle_wake_seconds);
+				return true;
+		}
+#endif
 
 #if HAS_BLE
 		if (mode == PowerMode::DutyCycleBle) {
