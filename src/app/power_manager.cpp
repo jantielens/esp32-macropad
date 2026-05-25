@@ -14,7 +14,6 @@
 RTC_DATA_ATTR static uint32_t g_wifi_backoff_seconds = 0;
 RTC_DATA_ATTR static uint8_t g_wifi_fail_count = 0;
 #if HAS_EPAPER_WAKE_BUTTON
-RTC_DATA_ATTR static uint32_t g_epaper_refresh_count = 0;
 static EpaperButtonWakeAction g_button_wake_action_boot = EpaperButtonWakeAction::None;
 #endif
 
@@ -198,14 +197,6 @@ bool power_manager_is_button_wake() {
 
 EpaperButtonWakeAction power_manager_get_button_wake_action() {
 		return g_button_wake_action_boot;
-}
-
-uint32_t power_manager_increment_refresh_count() {
-		return ++g_epaper_refresh_count;
-}
-
-uint32_t power_manager_get_refresh_count() {
-		return g_epaper_refresh_count;
 }
 #endif
 

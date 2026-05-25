@@ -143,7 +143,7 @@ The pad editor lets you design button layouts visually: drag-to-move and drag-to
 |-------|-------------|
 | [First-Time Setup](docs/first-time-setup.md) | Initial configuration after flashing |
 | [Web Portal Guide](docs/web-portal-guide.md) | Complete guide to all portal features |
-| [E-Paper Guide](epaper-guide.md) | Detailed guide for the e-paper device class, image pipeline, wake behavior, and status semantics |
+| [E-Paper Guide](docs/epaper-guide.md) | Detailed guide for the e-paper device class, image pipeline, wake behavior, and status semantics |
 | [Home Assistant Integration](docs/ha-integration-guide.md) | HA entity reference, audio control, and automation examples |
 | [Home Assistant + MQTT (dev)](docs/dev/home-assistant-mqtt.md) | MQTT topic structure and HA auto-discovery internals |
 

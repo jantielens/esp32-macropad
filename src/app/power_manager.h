@@ -40,9 +40,6 @@ enum class EpaperButtonWakeAction : uint8_t {
 bool power_manager_is_button_wake();
 // Returns the boot-time classification of the wake button press.
 EpaperButtonWakeAction power_manager_get_button_wake_action();
-// RTC-retained refresh counter for diagnostics.
-uint32_t power_manager_increment_refresh_count();
-uint32_t power_manager_get_refresh_count();
 #endif
 
 // Background housekeeping

@@ -94,12 +94,7 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
         resp["last_refresh_status"] = "ok";
     }
     resp["last_refresh_unix"] = last_unix;
-    resp["refresh_count"]   =
-#if HAS_EPAPER_WAKE_BUTTON
-        power_manager_get_refresh_count();
-#else
-        0;
-#endif
+    resp["refresh_count"]   = epaper_refresh_get_count();
     switch (last.result) {
         case EpaperRefreshResult::Updated:     resp["last_result"] = "updated"; break;
         case EpaperRefreshResult::Skipped:     resp["last_result"] = "skipped"; break;

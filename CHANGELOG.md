@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added the `duty_cycle_epaper` operating mode, the e-paper wake button feature flags (`HAS_EPAPER_WAKE_BUTTON`, `EPAPER_BUTTON_PIN`), and persistent e-paper config fields (`epaper_url`, `epaper_rotation`, `epaper_last_crc32`).
 * Added the dedicated E-Paper portal page with image source settings, refresh scheduling, manual refresh, and persistent status reporting for last refresh time, successful refresh count, last draw result, last sidecar HTTP status, battery voltage, and last image CRC.
 * Added the `inkplate5v2` board target using `Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb`, plus the Soldered board-manager setup path in `setup.sh` and automatic inclusion in the build matrix.
-* Added [epaper-guide.md](epaper-guide.md) for detailed e-paper documentation, while keeping generic project docs at a higher level.
+* Added [docs/epaper-guide.md](docs/epaper-guide.md) for detailed e-paper documentation, while keeping generic project docs at a higher level.
 
 ## [1.16.0] - 2026-05-24
 

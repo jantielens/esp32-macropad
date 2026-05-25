@@ -16,20 +16,24 @@ static uint32_t parse_crc_body(const String& body) {
 		trimmed.trim();
 		if (trimmed.length() == 0) return 0;
 
-		// Accept "0xDEADBEEF", "DEADBEEF", or decimal.
+		// Accept "0xDEADBEEF", "DEADBEEF", or decimal. Use endptr to detect
+		// successful parses — this correctly handles CRC value 0x00000000
+		// (strtoul returns 0 for both "0" and garbage, so we need endptr).
 		const char* c = trimmed.c_str();
+		char* endptr = nullptr;
 		uint32_t value = 0;
 		bool ok = false;
 
 		if (trimmed.startsWith("0x") || trimmed.startsWith("0X")) {
-				value = (uint32_t)strtoul(c + 2, nullptr, 16);
-				ok = (value != 0 || strcmp(c + 2, "0") == 0);
+				const char* start = c + 2;
+				value = (uint32_t)strtoul(start, &endptr, 16);
+				ok = (endptr > start);
 		} else if (trimmed.length() == 8 && strspn(c, "0123456789abcdefABCDEF") == 8) {
 				value = (uint32_t)strtoul(c, nullptr, 16);
 				ok = true;
 		} else {
-				value = (uint32_t)strtoul(c, nullptr, 10);
-				ok = (value != 0 || strcmp(c, "0") == 0);
+				value = (uint32_t)strtoul(c, &endptr, 10);
+				ok = (endptr > c);
 		}
 
 		return ok ? value : 0;

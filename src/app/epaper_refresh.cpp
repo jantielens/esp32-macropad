@@ -20,6 +20,7 @@ static constexpr uint32_t kMinValidEpoch = 1704067200U;
 // "last refresh" timestamp after the device wakes into config mode. Cleared
 // on cold boot / power loss.
 RTC_DATA_ATTR static uint32_t g_last_refresh_unix = 0;
+RTC_DATA_ATTR static uint32_t g_refresh_count = 0;
 
 static EpaperRefreshOutcome s_last_outcome = {EpaperRefreshResult::Disabled, 0, 0, 0, 0};
 
@@ -34,11 +35,20 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		}
 
 		// Compare sidecar CRC against last-known value to avoid unnecessary
-		// 10-30s panel refreshes.
-		const EpaperCrcFetchResult crc_fetch = epaper_crc32_fetch_sidecar(config->epaper_url);
+		// 10-30s panel refreshes. Skipped on force=true (portal "Refresh now")
+		// to avoid wasting 1-5s of sidecar retries when the user explicitly
+		// asks for a redraw.
+		EpaperCrcFetchResult crc_fetch = {0, 0};
+		if (!force) {
+				crc_fetch = epaper_crc32_fetch_sidecar(config->epaper_url);
+		}
 		const uint32_t fresh_crc = crc_fetch.crc;
 		out.crc_used = fresh_crc;
 		out.sidecar_http_status = crc_fetch.http_status;
+		// Treat HTTP status 0 (begin/connect failure) and negative (HTTPClient
+		// error codes such as HTTPC_ERROR_CONNECTION_REFUSED) as transport-level
+		// failures, distinct from "server returned a non-200 response".
+		const bool sidecar_transport_failed = !force && crc_fetch.http_status <= 0;
 
 		if (!force && fresh_crc != 0 && fresh_crc == config->epaper_last_crc32) {
 				out.result = EpaperRefreshResult::Skipped;
@@ -78,7 +88,13 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		epaper_driver_sleep();
 
 		if (!drew) {
-				out.result = EpaperRefreshResult::FailedDraw;
+				// If the sidecar fetch also failed at the transport layer, the most
+				// likely root cause is network/server unreachability rather than a
+				// panel-side problem; surface that to the portal so users can tell
+				// "server unreachable" apart from "server returned garbage image".
+				out.result = sidecar_transport_failed
+					? EpaperRefreshResult::FailedFetch
+					: EpaperRefreshResult::FailedDraw;
 				out.elapsed_ms = millis() - t0;
 				s_last_outcome = out;
 				return out;
@@ -100,9 +116,7 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		if (now >= (time_t)kMinValidEpoch) {
 				g_last_refresh_unix = (uint32_t)now;
 		}
-		#if HAS_EPAPER_WAKE_BUTTON
-		power_manager_increment_refresh_count();
-		#endif
+		++g_refresh_count;
 		s_last_outcome = out;
 		return out;
 }
@@ -113,6 +127,10 @@ uint32_t epaper_refresh_last_unix() {
 
 EpaperRefreshOutcome epaper_refresh_last_outcome() {
 		return s_last_outcome;
+}
+
+uint32_t epaper_refresh_get_count() {
+		return g_refresh_count;
 }
 
 #endif // HAS_EPAPER

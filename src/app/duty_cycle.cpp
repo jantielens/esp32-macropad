@@ -25,7 +25,7 @@ static void build_sensor_json(JsonDocument &doc) {
 		sensor_manager_append_mqtt(root);
 }
 
-bool duty_cycle_run(const DeviceConfig *config) {
+bool duty_cycle_run(DeviceConfig *config) {
 		if (!config) return false;
 
 		const PowerMode mode = power_manager_get_current_mode();
@@ -40,8 +40,6 @@ bool duty_cycle_run(const DeviceConfig *config) {
 #if HAS_EPAPER
 		if (mode == PowerMode::DutyCycleEpaper) {
 				// E-paper duty cycle: WiFi -> CRC check -> conditional draw -> sleep.
-				// Cast away const so the refresh helper can persist a fresh CRC.
-				DeviceConfig *cfg_mut = const_cast<DeviceConfig*>(config);
 				const bool connected = wifi_manager_connect(config, true);
 				if (!connected) {
 						const uint32_t backoff = power_manager_note_wifi_failure(
@@ -58,7 +56,7 @@ bool duty_cycle_run(const DeviceConfig *config) {
 #else
 				const bool force_refresh = false;
 #endif
-				epaper_refresh_run(cfg_mut, force_refresh);
+				epaper_refresh_run(config, force_refresh);
 
 				power_manager_sleep_for(config->duty_cycle_wake_seconds);
 				return true;

@@ -6,15 +6,15 @@
 
 #include <stdint.h>
 
-struct DeviceConfig;
+#include "config_manager.h"
 
 // Result of a refresh attempt. Used by the portal "manual refresh" endpoint.
 enum class EpaperRefreshResult : uint8_t {
-		Skipped = 0,    // Sidecar CRC matched stored value; no redraw performed.
-		Updated = 1,    // Image was drawn and pushed to the panel.
-		FailedFetch = 2,
-		FailedDraw = 3,
-		Disabled = 4,   // HAS_EPAPER is false or URL is empty.
+		Skipped = 0,     // Sidecar CRC matched stored value; no redraw performed.
+		Updated = 1,     // Image was drawn and pushed to the panel.
+		FailedFetch = 2, // Sidecar transport failure AND subsequent draw also failed.
+		FailedDraw = 3,  // Draw / display step failed (panel or image decode).
+		Disabled = 4,    // HAS_EPAPER is false or URL is empty.
 };
 
 struct EpaperRefreshOutcome {
@@ -45,5 +45,8 @@ uint32_t epaper_refresh_last_unix();
 // Last outcome (battery_mv etc.) from the most recent refresh call in this
 // boot. Result == Disabled means no refresh has been attempted yet.
 EpaperRefreshOutcome epaper_refresh_last_outcome();
+
+// RTC-retained count of successful (Updated) refreshes since cold boot.
+uint32_t epaper_refresh_get_count();
 
 #endif // HAS_EPAPER

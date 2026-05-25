@@ -407,9 +407,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_EPAPER**
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/components/epaper_component.cpp
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/drivers/inkplate5v2_driver.cpp
   - src/app/duty_cycle.cpp
+  - src/app/epaper_crc32.cpp
+  - src/app/epaper_crc32.h
+  - src/app/epaper_driver.h
+  - src/app/epaper_drivers.cpp
+  - src/app/epaper_refresh.cpp
+  - src/app/epaper_refresh.h
   - src/app/portal_components.cpp
   - src/app/web_portal_config.cpp
 - **HAS_EPAPER_WAKE_BUTTON**

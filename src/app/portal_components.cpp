@@ -18,6 +18,8 @@
 // On e-paper boards the Power Mode page is suppressed — e-paper devices
 // always run in duty_cycle_epaper, and that mode is set automatically when
 // the E-Paper fragment is saved (hidden operating_mode field).
+// TODO: allow mode override for debugging on e-paper builds (show mode page
+// with duty_cycle_epaper preselected and a "debug only" note).
 #include "components/mode_component.cpp"
 #endif
 #include "components/factory_reset_component.cpp"
