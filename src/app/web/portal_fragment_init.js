@@ -38,7 +38,10 @@ async function saveFragmentConfig(requiresReboot) {
         'screen_saver_enabled', 'screen_saver_timeout_seconds',
         'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms',
         'screen_saver_wake_on_touch', 'screen_saver_wake_binding',
-        'epaper_url', 'epaper_rotation'
+        'epaper_url', 'epaper_rotation',
+        'epaper_overlay_enabled', 'epaper_overlay_position',
+        'epaper_overlay_color', 'epaper_overlay_items',
+        'epaper_frontlight_brightness', 'epaper_frontlight_duration_s'
     ];
     fields.forEach(function (name) {
         // Radio groups: pick the checked option (if any).
@@ -625,6 +628,131 @@ window.init_epaper_fragment = function () {
             })
             .finally(function () { btn.disabled = false; });
     });
+
+    // ---- Overlay item checkboxes -> hidden bitmask ------------------------
+    var overlayItemEls = [
+        document.getElementById('epaper_overlay_item_icon'),
+        document.getElementById('epaper_overlay_item_pct'),
+        document.getElementById('epaper_overlay_item_time'),
+        document.getElementById('epaper_overlay_item_cycle')
+    ];
+    var overlayHidden = document.getElementById('epaper_overlay_items');
+    function syncOverlayItems() {
+        if (!overlayHidden) return;
+        var bits = 0;
+        overlayItemEls.forEach(function (el) {
+            if (el && el.checked) {
+                bits |= parseInt(el.getAttribute('data-overlay-bit'), 10) || 0;
+            }
+        });
+        overlayHidden.value = bits;
+    }
+    overlayItemEls.forEach(function (el) {
+        if (el) el.addEventListener('change', syncOverlayItems);
+    });
+    // Sync once after load values have populated checkboxes.
+    setTimeout(syncOverlayItems, 250);
+
+    // ---- VCOM tools -------------------------------------------------------
+    var vcomReadBtn = document.getElementById('epaper-vcom-read-btn');
+    var vcomCurrent = document.getElementById('epaper-vcom-current');
+    var vcomWriteBtn = document.getElementById('epaper-vcom-write-btn');
+    var vcomTestBtn = document.getElementById('epaper-vcom-test-btn');
+    var vcomValueEl = document.getElementById('epaper_vcom_value');
+    var vcomStatus = document.getElementById('epaper-vcom-status');
+
+    function setVcomStatus(text, isErr) {
+        if (!vcomStatus) return;
+        vcomStatus.textContent = text;
+        vcomStatus.style.color = isErr ? '#c00' : '';
+    }
+
+    function parseVcomInput() {
+        if (!vcomValueEl) return null;
+        var value = parseFloat(vcomValueEl.value);
+        if (isNaN(value) || !(value < 0 && value >= -5)) {
+            return null;
+        }
+        return value;
+    }
+
+    if (vcomReadBtn) {
+        vcomReadBtn.addEventListener('click', function () {
+            vcomReadBtn.disabled = true;
+            setVcomStatus('Reading…', false);
+            fetch('/api/component/epaper/vcom')
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    if (j && j.vcom != null) {
+                        if (vcomCurrent) vcomCurrent.textContent = Number(j.vcom).toFixed(2) + ' V';
+                        if (vcomValueEl && !vcomValueEl.value) vcomValueEl.value = Number(j.vcom).toFixed(2);
+                        setVcomStatus('Read OK', false);
+                    } else {
+                        if (vcomCurrent) vcomCurrent.textContent = 'N/A';
+                        setVcomStatus(j && j.message ? j.message : 'VCOM read failed', true);
+                    }
+                })
+                .catch(function (e) { setVcomStatus('Error: ' + e, true); })
+                .finally(function () { vcomReadBtn.disabled = false; });
+        });
+    }
+
+    if (vcomWriteBtn) {
+        vcomWriteBtn.addEventListener('click', function () {
+            var v = parseVcomInput();
+            if (v === null) {
+                setVcomStatus('VCOM must be a negative number between -5.0 and 0.', true);
+                return;
+            }
+            if (!confirm('Write VCOM = ' + v.toFixed(2) + ' V to the TPS65186 EEPROM?\n\n'
+                       + 'The EEPROM is rated for ~100,000 program cycles. Only continue if you really need to change this value.')) {
+                return;
+            }
+            vcomWriteBtn.disabled = true;
+            setVcomStatus('Programming EEPROM…', false);
+            var body = 'value=' + encodeURIComponent(v.toFixed(3));
+            fetch('/api/component/epaper/vcom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    if (j && j.success) {
+                        if (vcomCurrent) vcomCurrent.textContent = Number(v).toFixed(2) + ' V';
+                        setVcomStatus('VCOM programmed: ' + Number(v).toFixed(2) + ' V', false);
+                    } else {
+                        setVcomStatus(j && j.message ? j.message : 'Write failed', true);
+                    }
+                })
+                .catch(function (e) { setVcomStatus('Error: ' + e, true); })
+                .finally(function () { vcomWriteBtn.disabled = false; });
+        });
+    }
+
+    if (vcomTestBtn) {
+        vcomTestBtn.addEventListener('click', function () {
+            vcomTestBtn.disabled = true;
+            // If the user has typed a candidate VCOM value, preview it via the
+            // TPS65186 volatile registers (no EEPROM write). Empty input falls
+            // back to the currently programmed EEPROM value.
+            var previewUrl = '/api/component/epaper/vcom-test-pattern';
+            var previewLabel = 'programmed';
+            var pv = parseVcomInput();
+            if (pv !== null) {
+                previewUrl += '?vcom=' + encodeURIComponent(pv.toFixed(2));
+                previewLabel = pv.toFixed(2) + ' V (preview)';
+            }
+            setVcomStatus('Drawing test pattern with VCOM = ' + previewLabel + '…', false);
+            fetch(previewUrl, { method: 'POST' })
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    setVcomStatus(j && j.success ? 'Test pattern drawn — look at the panel.' : 'Failed', !j || !j.success);
+                })
+                .catch(function (e) { setVcomStatus('Error: ' + e, true); })
+                .finally(function () { vcomTestBtn.disabled = false; });
+        });
+    }
 };
 
 // ============================================================================

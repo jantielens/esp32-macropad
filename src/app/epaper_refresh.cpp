@@ -5,6 +5,8 @@
 #include "config_manager.h"
 #include "epaper_crc32.h"
 #include "epaper_driver.h"
+#include "epaper_overlay.h"
+#include "epaper_screens.h"
 #include "log_manager.h"
 #include "power_manager.h"
 
@@ -75,8 +77,25 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 				return out;
 		}
 
-		epaper_driver_set_rotation(config->epaper_rotation);
-
+		// Render the dashboard image in the panel's native orientation. The
+		// configured `epaper_rotation` only affects on-device overlays and
+		// status screens — the image itself is assumed to be delivered
+		// pre-rotated by the publisher.
+		// Ensure the driver object is initialized before we render this frame.
+		// Earlier wake stages may have already initialized it, so begin() is
+		// usually an inexpensive no-op in steady state.
+		if (!epaper_driver_begin()) {
+				LOGW("Epaper", "epaper_driver_begin() failed; cannot refresh image");
+				out.result = EpaperRefreshResult::FailedDraw;
+				out.elapsed_ms = millis() - t0;
+				s_last_outcome = out;
+				return out;
+		}
+		epaper_driver_set_rotation(0);
+		// Earlier wake stages (boot splash, low-battery screen) may have left
+		// pixels in the framebuffer. Wipe before drawing the new image so the
+		// previous content doesn't bleed through at the configured rotation.
+		epaper_driver_clear();
 		// Read battery BEFORE drawImage so the sample reflects WiFi-only current
 		// (~80 mA) rather than the panel waveform drive (~200 mA), which sags
 		// the cell and produces an artificially low SoC estimate.
@@ -92,6 +111,12 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		const bool drew = epaper_driver_draw_url(config->epaper_url);
 
 		if (drew) {
+				// Switch to the user's configured rotation so the overlay lands in
+				// the correct screen corner regardless of how the image was framed.
+				epaper_driver_set_rotation(config->epaper_rotation);
+				// Composite the status overlay on top of the dashboard image before
+				// pushing the frame. Pure framebuffer draws — no panel waveform yet.
+				epaper_overlay_render(config, out.battery_mv, (uint32_t)(millis() - t0));
 				epaper_driver_display();
 		}
 
@@ -109,6 +134,19 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 				out.result = sidecar_transport_failed
 					? EpaperRefreshResult::FailedFetch
 					: EpaperRefreshResult::FailedDraw;
+				// Show a user-visible error screen so the panel doesn't just keep
+				// the stale image with no indication anything went wrong. Re-power
+				// the panel briefly to push the status frame; the previous sleep
+				// call above already powered it down.
+				if (epaper_driver_begin()) {
+						epaper_driver_set_rotation(config->epaper_rotation);
+						const char* detail = sidecar_transport_failed
+								? "Network or server unreachable"
+								: "Image fetch or decode failed";
+						epaper_screen_error(detail, config->duty_cycle_wake_seconds);
+						epaper_driver_display();
+						epaper_driver_sleep();
+				}
 				out.elapsed_ms = millis() - t0;
 				s_last_outcome = out;
 				return out;

@@ -65,17 +65,26 @@ That split is intentional. The e-paper board does not participate in the LVGL di
 Each refresh cycle uses the same high-level sequence:
 
 1. Connect to WiFi.
-2. Fetch `<image-url>.crc32`.
-3. Compare the sidecar value to the last successfully displayed CRC.
-4. Skip the panel refresh when the CRC is unchanged, unless the refresh was explicitly forced.
-5. Draw the image with the Inkplate library.
-6. Trigger the panel refresh.
-7. Read battery voltage.
-8. Store the new CRC after a successful update.
-9. Put the panel to sleep.
-10. Enter ESP32 deep sleep until the next wake.
+2. On cold boot only, kick SNTP and wait up to 2 s for the first time sync so the status overlay timestamp is meaningful on the very first refresh. The ESP32 RTC keeps wall-clock through deep sleep, so subsequent wakes skip the wait.
+3. Fetch `<image-url>.crc32`.
+4. Compare the sidecar value to the last successfully displayed CRC.
+5. Skip the panel refresh when the CRC is unchanged, unless the refresh was explicitly forced.
+6. Clear the framebuffer so the boot splash or low-battery screen does not bleed through at the configured rotation.
+7. Draw the image with the Inkplate library.
+8. Composite the status overlay on top of the image.
+9. Trigger the panel refresh.
+10. Read battery voltage.
+11. Store the new CRC after a successful update.
+12. Put the panel to sleep.
+13. Enter ESP32 deep sleep until the next wake.
 
 The image itself is fetched and decoded by the Inkplate library. The firmware does not implement a custom PNG, JPEG, or dithering pipeline for this board class.
+
+A refresh is always forced (CRC skip is bypassed) when any of these is true:
+
+* Cold boot — the panel currently shows only the boot splash, so the dashboard image must be drawn at least once before the CRC short-circuit becomes safe.
+* Short press of the WAKE button — the user is actively looking at the panel.
+* The portal `Refresh now` action.
 
 ## Image and Sidecar Contract
 
@@ -114,6 +123,58 @@ The Inkplate wake button has two meanings:
 The long-press threshold is 2.5 seconds.
 
 Button wake classification is done once at boot. That prevents the refresh path and the config-mode path from re-interpreting the same physical press differently later in startup.
+
+## Status Overlay
+
+Every successful refresh composites a small status chip on top of the dashboard image before the panel-drive waveform runs, so the overlay is always in sync with the image being refreshed.
+
+* **Font** &mdash; the overlay uses the medium font (Inter 12 pt). The smallest font face (Inter 8 pt) stays compiled in for future high-DPI boards but is not readable on the Inkplate 5V2 panel.
+* **Background** &mdash; a filled rounded-rectangle chip with no outline; on a panel this size the outline made the overlay feel boxed-in, while the fill on its own already reads as a chip.
+* **Items** &mdash; configurable bitmask covering battery icon, battery percentage, wall-clock time, and last cycle duration. The fields appear in the order listed and only the enabled items are drawn.
+* **Position** &mdash; one of the four panel corners, set via the E-Paper portal page.
+* **Time field** &mdash; sourced from the ESP32 RTC, which is seeded by SNTP on the first cold boot after a power cycle and then carried forward across deep sleep. If the clock has not yet synced (very first wake on a flaky network), the time field falls back to a placeholder.
+
+## VCOM Calibration
+
+The Inkplate's TPS65186 PMIC stores a panel-specific VCOM bias voltage in its on-board EEPROM. The value is printed on the e-paper ribbon cable and only needs to be set once per device.
+
+The portal exposes three actions under the VCOM card on the E-Paper page:
+
+* **Read current VCOM** &mdash; queries the TPS65186 and shows the value currently programmed into EEPROM.
+* **Show test pattern** &mdash; draws an all-grey-levels calibration pattern so you can compare candidate VCOM values visually. If the input field has a value, the pattern is drawn with that value written to the TPS65186 *volatile* registers only (EEPROM is not touched, and the value reverts on the next panel power cycle). With the input empty, the pattern is drawn with the EEPROM-programmed value.
+* **Write VCOM (programs EEPROM)** &mdash; commits the value in the input to the EEPROM. The TPS65186 EEPROM is rated for roughly 100,000 program cycles, so this should only be done when the new value visibly improves image quality.
+
+The preview path is intentionally non-destructive: experiment freely with `Show test pattern`, then only `Write VCOM` once you have picked a final value.
+
+## Status Screens
+
+The e-paper flow now renders explicit full-screen status screens in lifecycle moments where users otherwise only see a stale image.
+
+* Boot splash appears on cold boot and on button wakes before WiFi work starts, so the device gives immediate feedback that a wake was accepted.
+* Configuration mode screen is drawn when entering AP or STA recovery portal mode, showing SSID and URL/IP details needed to open the portal.
+* Error screen appears when refresh fails, with a human-readable reason and retry timing guidance.
+* Low-battery screen appears when battery reads below 3.2 V before WiFi connect, then the device sleeps for 600 seconds to reduce brownout churn.
+
+## Frontlight Behavior
+
+Frontlight controls are present only on boards that compile with `HAS_EPAPER_FRONTLIGHT=true`.
+
+* Brightness range is 0 to 63.
+* Duration is in seconds.
+* Frontlight runs on button wakes only, not on timer wakes.
+* A value of 0 brightness disables frontlight output.
+
+The Inkplate 5V2 board keeps `HAS_EPAPER_FRONTLIGHT=false`, so the card stays hidden there.
+
+## E-Paper Endpoints
+
+E-paper component endpoints are under `/api/component/epaper/*`.
+
+* `POST /api/component/epaper/refresh` triggers an immediate refresh attempt.
+* `GET /api/component/epaper/status` returns latest refresh counters, timing, battery, and last outcome fields.
+* `GET /api/component/epaper/vcom` reads the current programmed VCOM.
+* `POST /api/component/epaper/vcom` programs VCOM to TPS65186 EEPROM.
+* `POST /api/component/epaper/vcom-test-pattern` draws the grayscale calibration pattern and optionally previews a volatile VCOM candidate via query `?vcom=-X.XX`.
 
 ## Portal Configuration Model
 

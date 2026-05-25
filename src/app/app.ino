@@ -16,6 +16,10 @@
 #include "portal_idle.h"
 #include "wifi_manager.h"
 #include "duty_cycle.h"
+#if HAS_EPAPER
+#include "epaper_driver.h"
+#include "epaper_screens.h"
+#endif
 #if HAS_BLE
 #include "ble_telemetry.h"
 #endif
@@ -332,6 +336,19 @@ void setup()
 
 	#if HAS_EPAPER
 	if (boot_mode == PowerMode::DutyCycleEpaper) {
+		// Show a boot splash on every wake that ISN'T a periodic timer wake,
+		// so the user gets immediate visual feedback when they press the
+		// button or cold-boot the device. Periodic refreshes skip the splash
+		// to avoid flashing the panel every refresh interval.
+		const esp_sleep_wakeup_cause_t wake_cause = esp_sleep_get_wakeup_cause();
+		if (wake_cause != ESP_SLEEP_WAKEUP_TIMER) {
+			if (epaper_driver_begin()) {
+				epaper_driver_set_rotation(device_config.epaper_rotation);
+				epaper_screen_boot_splash(device_config.device_name, FIRMWARE_VERSION);
+				epaper_driver_display();
+				epaper_driver_sleep();
+			}
+		}
 		// E-paper devices skip the LVGL display path entirely; the duty cycle
 		// drives the panel directly from the Inkplate library.
 		duty_cycle_run(&device_config);
@@ -410,6 +427,31 @@ void setup()
 				web_portal_start_ap();
 			}
 		}
+
+		#if HAS_EPAPER
+		// On e-paper boards, paint a "configuration mode" screen so the user
+		// can see the AP SSID / STA IP without a serial console. Runs after
+		// WiFi / AP start so we have the correct IP and SSID. The panel is
+		// powered down again afterward — the portal interaction itself
+		// doesn't need the panel.
+		{
+			const PowerMode now_mode = power_manager_get_current_mode();
+			const bool is_ap = (now_mode == PowerMode::Ap);
+			if (epaper_driver_begin()) {
+				epaper_driver_set_rotation(device_config.epaper_rotation);
+				if (is_ap) {
+					const String ip = WiFi.softAPIP().toString();
+					const String ssid = WiFi.softAPSSID();
+					epaper_screen_config_mode(ssid.c_str(), ip.c_str(), true);
+				} else {
+					const String ip = WiFi.localIP().toString();
+					epaper_screen_config_mode(device_config.wifi_ssid, ip.c_str(), false);
+				}
+				epaper_driver_display();
+				epaper_driver_sleep();
+			}
+		}
+		#endif
 
 		// Initialize web portal AFTER WiFi is started
 		web_portal_init(&device_config);

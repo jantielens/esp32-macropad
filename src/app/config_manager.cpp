@@ -64,6 +64,12 @@
 #define KEY_EPAPER_URL     "ep_url"
 #define KEY_EPAPER_ROT     "ep_rot"
 #define KEY_EP_CRC32       "ep_crc32"
+#define KEY_EP_OVL_EN      "ep_ovl_en"
+#define KEY_EP_OVL_POS     "ep_ovl_pos"
+#define KEY_EP_OVL_COL     "ep_ovl_col"
+#define KEY_EP_OVL_ITEMS   "ep_ovl_it"
+#define KEY_EP_FL_BRIGHT   "ep_fl_b"
+#define KEY_EP_FL_DUR      "ep_fl_d"
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
@@ -199,6 +205,12 @@ bool config_manager_load(DeviceConfig *config) {
 				config->epaper_url[0] = '\0';
 				config->epaper_rotation = 0;
 				config->epaper_last_crc32 = 0;
+				config->epaper_overlay_enabled = false;
+				config->epaper_overlay_position = 3; // BR
+				config->epaper_overlay_color = 0;    // black
+				config->epaper_overlay_items = 0x1 | 0x2 | 0x4; // batt icon, batt%, time
+				config->epaper_frontlight_brightness = 0;
+				config->epaper_frontlight_duration_s = 30;
 				#endif
 				
 				return false;
@@ -293,6 +305,15 @@ bool config_manager_load(DeviceConfig *config) {
 		config->epaper_rotation = preferences.getUChar(KEY_EPAPER_ROT, 0);
 		if (config->epaper_rotation > 3) config->epaper_rotation = 0;
 		config->epaper_last_crc32 = preferences.getUInt(KEY_EP_CRC32, 0);
+		config->epaper_overlay_enabled = preferences.getBool(KEY_EP_OVL_EN, false);
+		config->epaper_overlay_position = preferences.getUChar(KEY_EP_OVL_POS, 3);
+		if (config->epaper_overlay_position > 3) config->epaper_overlay_position = 3;
+		config->epaper_overlay_color = preferences.getUChar(KEY_EP_OVL_COL, 0);
+		if (config->epaper_overlay_color > 3) config->epaper_overlay_color = 0;
+		config->epaper_overlay_items = preferences.getUChar(KEY_EP_OVL_ITEMS, 0x1 | 0x2 | 0x4);
+		config->epaper_frontlight_brightness = preferences.getUChar(KEY_EP_FL_BRIGHT, 0);
+		if (config->epaper_frontlight_brightness > 63) config->epaper_frontlight_brightness = 63;
+		config->epaper_frontlight_duration_s = preferences.getUShort(KEY_EP_FL_DUR, 30);
 		#endif
 		
 		config->magic = magic;
@@ -393,6 +414,12 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putString(KEY_EPAPER_URL, config->epaper_url);
 		preferences.putUChar(KEY_EPAPER_ROT, config->epaper_rotation);
 		preferences.putUInt(KEY_EP_CRC32, config->epaper_last_crc32);
+		preferences.putBool(KEY_EP_OVL_EN, config->epaper_overlay_enabled);
+		preferences.putUChar(KEY_EP_OVL_POS, config->epaper_overlay_position);
+		preferences.putUChar(KEY_EP_OVL_COL, config->epaper_overlay_color);
+		preferences.putUChar(KEY_EP_OVL_ITEMS, config->epaper_overlay_items);
+		preferences.putUChar(KEY_EP_FL_BRIGHT, config->epaper_frontlight_brightness);
+		preferences.putUShort(KEY_EP_FL_DUR, config->epaper_frontlight_duration_s);
 		#endif
 		
 		// Save magic number last (indicates valid config)

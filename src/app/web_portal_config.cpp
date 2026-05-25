@@ -37,6 +37,15 @@ static bool parseBoolField(const JsonDocument &doc, const char* key) {
 		return (bool)(doc[key] | false);
 }
 
+// Parse an unsigned integer that may arrive as string or numeric JSON.
+static uint32_t parseUintField(const JsonVariantConst& field, uint32_t default_value) {
+		if (field.is<const char*>()) {
+				const char* v = field.as<const char*>();
+				return v ? (uint32_t)strtoul(v, nullptr, 10) : default_value;
+		}
+		return (uint32_t)(field | default_value);
+}
+
 // /api/config body accumulator (chunk-safe)
 static portMUX_TYPE g_config_post_mux = portMUX_INITIALIZER_UNLOCKED;
 static struct {
@@ -136,6 +145,13 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				// E-paper image source (epaper_last_crc32 is internal state — not exposed)
 				(*doc)["epaper_url"] = current_config->epaper_url;
 				(*doc)["epaper_rotation"] = current_config->epaper_rotation;
+				(*doc)["epaper_overlay_enabled"] = current_config->epaper_overlay_enabled;
+				(*doc)["epaper_overlay_position"] = current_config->epaper_overlay_position;
+				(*doc)["epaper_overlay_color"] = current_config->epaper_overlay_color;
+				(*doc)["epaper_overlay_items"] = current_config->epaper_overlay_items;
+				(*doc)["epaper_frontlight_brightness"] = current_config->epaper_frontlight_brightness;
+				(*doc)["epaper_frontlight_duration_s"] = current_config->epaper_frontlight_duration_s;
+				(*doc)["epaper_frontlight_supported"] = (bool)HAS_EPAPER_FRONTLIGHT;
 				#endif
 
 				// Web portal Basic Auth (password not returned)
@@ -437,11 +453,35 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				strlcpy(current_config->epaper_url, doc["epaper_url"] | "", CONFIG_EPAPER_URL_MAX_LEN);
 		}
 		if (doc.containsKey("epaper_rotation")) {
-				uint8_t r = doc["epaper_rotation"].is<const char*>()
-						? (uint8_t)atoi(doc["epaper_rotation"] | "0")
-						: (uint8_t)(doc["epaper_rotation"] | 0);
+				uint8_t r = (uint8_t)parseUintField(doc["epaper_rotation"], 0);
 				if (r > 3) r = 0;
 				current_config->epaper_rotation = r;
+		}
+		if (doc.containsKey("epaper_overlay_enabled")) {
+				current_config->epaper_overlay_enabled = (bool)(doc["epaper_overlay_enabled"] | false);
+		}
+		if (doc.containsKey("epaper_overlay_position")) {
+				uint8_t v = (uint8_t)parseUintField(doc["epaper_overlay_position"], 3);
+				if (v > 3) v = 3;
+				current_config->epaper_overlay_position = v;
+		}
+		if (doc.containsKey("epaper_overlay_color")) {
+				uint8_t v = (uint8_t)parseUintField(doc["epaper_overlay_color"], 0);
+				if (v > 3) v = 0;
+				current_config->epaper_overlay_color = v;
+		}
+		if (doc.containsKey("epaper_overlay_items")) {
+				uint8_t v = (uint8_t)parseUintField(doc["epaper_overlay_items"], 0);
+				current_config->epaper_overlay_items = v;
+		}
+		if (doc.containsKey("epaper_frontlight_brightness")) {
+				uint8_t v = (uint8_t)parseUintField(doc["epaper_frontlight_brightness"], 0);
+				if (v > 63) v = 63;
+				current_config->epaper_frontlight_brightness = v;
+		}
+		if (doc.containsKey("epaper_frontlight_duration_s")) {
+				uint16_t v = (uint16_t)parseUintField(doc["epaper_frontlight_duration_s"], 30);
+				current_config->epaper_frontlight_duration_s = v;
 		}
 		#endif
 

@@ -63,6 +63,76 @@
   </div>
 </div>
 
+<div class="card mb-3">
+  <div class="card-header"><strong>Status overlay</strong></div>
+  <div class="card-body">
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" id="epaper_overlay_enabled" name="epaper_overlay_enabled">
+      <label class="form-check-label" for="epaper_overlay_enabled">Show overlay on top of dashboard image</label>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="epaper_overlay_position">Position</label>
+      <select class="form-select" id="epaper_overlay_position" name="epaper_overlay_position">
+        <option value="0">Top-left</option>
+        <option value="1">Top-right</option>
+        <option value="2">Bottom-left</option>
+        <option value="3" selected>Bottom-right</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="epaper_overlay_color">Color</label>
+      <select class="form-select" id="epaper_overlay_color" name="epaper_overlay_color">
+        <option value="0" selected>Black</option>
+        <option value="1">Dark gray</option>
+        <option value="2">Light gray</option>
+        <option value="3">White</option>
+      </select>
+    </div>
+    <div class="mb-2"><strong>Contents</strong></div>
+    <div class="form-check"><input type="checkbox" class="form-check-input" id="epaper_overlay_item_icon" data-overlay-bit="1"><label class="form-check-label" for="epaper_overlay_item_icon">Battery icon</label></div>
+    <div class="form-check"><input type="checkbox" class="form-check-input" id="epaper_overlay_item_pct" data-overlay-bit="2"><label class="form-check-label" for="epaper_overlay_item_pct">Battery percentage</label></div>
+    <div class="form-check"><input type="checkbox" class="form-check-input" id="epaper_overlay_item_time" data-overlay-bit="4"><label class="form-check-label" for="epaper_overlay_item_time">Time</label></div>
+    <div class="form-check"><input type="checkbox" class="form-check-input" id="epaper_overlay_item_cycle" data-overlay-bit="8"><label class="form-check-label" for="epaper_overlay_item_cycle">Cycle time (ms)</label></div>
+    <input type="hidden" id="epaper_overlay_items" name="epaper_overlay_items" value="0">
+  </div>
+</div>
+
+<div class="card mb-3" id="epaper-frontlight-card" hidden>
+  <div class="card-header"><strong>Frontlight</strong></div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="epaper_frontlight_brightness">Brightness (0–63, 0 disables)</label>
+      <input type="number" class="form-control" id="epaper_frontlight_brightness" name="epaper_frontlight_brightness" min="0" max="63" placeholder="0">
+      <div class="form-text">Only used on button wakes — periodic refreshes do not light the panel.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="epaper_frontlight_duration_s">Stay on for (seconds)</label>
+      <input type="number" class="form-control" id="epaper_frontlight_duration_s" name="epaper_frontlight_duration_s" min="1" max="600" placeholder="30">
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><strong>VCOM (advanced)</strong></div>
+  <div class="card-body">
+    <p class="small text-muted">VCOM is a panel-specific calibration voltage printed on the e-paper ribbon cable. Setting it incorrectly degrades image quality but rarely damages the panel. The TPS65186 EEPROM is rated for ~100,000 program cycles — only change this when needed.</p>
+    <div class="mb-2">
+      <button type="button" class="btn btn-secondary btn-sm" id="epaper-vcom-read-btn">Read current VCOM</button>
+      <span id="epaper-vcom-current" class="ms-2">—</span>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="epaper_vcom_value">New VCOM (V) — must be negative, e.g. <code>-1.48</code></label>
+      <input type="number" class="form-control" id="epaper_vcom_value" step="0.01" min="-5" max="-0.01" placeholder="-1.48">
+    </div>
+    <div class="mb-2">
+      <button type="button" class="btn btn-warning btn-sm" id="epaper-vcom-write-btn">Write VCOM (programs EEPROM)</button>
+      <button type="button" class="btn btn-secondary btn-sm ms-2" id="epaper-vcom-test-btn">Show test pattern</button>
+    </div>
+    <p class="small text-muted mt-2 mb-0">The test pattern uses the value typed above (preview only — EEPROM is not touched). Leave the field empty to test the currently programmed VCOM.</p>
+    <div id="epaper-vcom-status" class="form-text mt-2" style="min-height:1.2em;"></div>
+  </div>
+</div>
+
 <div class="save-bar">
   <button type="button" class="btn btn-primary btn-sm" id="epaper-save-btn">Save</button>
   <button type="button" class="btn btn-secondary btn-sm" id="epaper-refresh-btn">Refresh now</button>

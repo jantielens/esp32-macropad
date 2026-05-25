@@ -39,6 +39,9 @@
 #define HAS_EPAPER_WAKE_BUTTON true
 #define EPAPER_BUTTON_PIN 36
 
+// Inkplate 5 V2 has no frontlight hardware.
+#define HAS_EPAPER_FRONTLIGHT false
+
 // First-boot recovery portal idle default — generous so a user has time to
 // finish configuring the dashboard URL after the device falls into Config/AP
 // mode on a fresh flash.

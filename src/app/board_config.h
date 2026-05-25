@@ -57,13 +57,12 @@
 
 // Enable e-paper device class (Inkplate-style refresh-on-wake dashboards).
 // When true the firmware compiles the e-paper HAL, the DutyCycleEpaper mode,
-// CRC32 sidecar URL gating, and the portal's E-Paper page.
+// Enable the e-paper refresh path and E-Paper portal page.
 #ifndef HAS_EPAPER
 #define HAS_EPAPER false
 #endif
 
-// Enable e-paper wake-button handling (ext0 deep-sleep wake + short/long-press
-// classifier). Only meaningful when HAS_EPAPER is true.
+// Enable e-paper wake-button handling (ext0 wake plus short/long press).
 #ifndef HAS_EPAPER_WAKE_BUTTON
 #define HAS_EPAPER_WAKE_BUTTON false
 #endif
@@ -72,6 +71,11 @@
 // (typical Inkplate wiring uses GPIO36 with an external pullup).
 #ifndef EPAPER_BUTTON_PIN
 #define EPAPER_BUTTON_PIN 36
+#endif
+
+// Enable e-paper frontlight control on boards with frontlight hardware.
+#ifndef HAS_EPAPER_FRONTLIGHT
+#define HAS_EPAPER_FRONTLIGHT false
 #endif
 
 // Recovery / config portal first-boot auto-sleep default (seconds). Boards

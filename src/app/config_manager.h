@@ -123,6 +123,17 @@ struct DeviceConfig {
 		char epaper_url[CONFIG_EPAPER_URL_MAX_LEN];   // full HTTP(S) URL of the dashboard image
 		uint8_t epaper_rotation;                      // 0..3, default 0
 		uint32_t epaper_last_crc32;                   // CRC32 of last successfully rendered image (0 = none)
+
+		// On-image status overlay
+		bool epaper_overlay_enabled;                  // default false
+		uint8_t epaper_overlay_position;              // 0=TL, 1=TR, 2=BL, 3=BR (default 3)
+		uint8_t epaper_overlay_color;                 // 0=black, 1=darkgray, 2=lightgray, 3=white (default 0)
+		uint8_t epaper_overlay_items;                 // bitmask: 0x1=batt icon, 0x2=batt %, 0x4=time, 0x8=cycle ms
+		// Frontlight (boards with HAS_EPAPER_FRONTLIGHT only — values are still
+		// stored/exposed on other boards so the same NVS layout works across
+		// upgrades, but the duty cycle ignores them).
+		uint8_t epaper_frontlight_brightness;         // 0..63 (0 = disabled, default 0)
+		uint16_t epaper_frontlight_duration_s;        // seconds after button wake (default 30)
 #endif
 		
 		// Validation flag (magic number to detect valid config)
