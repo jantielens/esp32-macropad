@@ -1,4 +1,6 @@
 #pragma once
+#ifndef EPAPER_DRIVER_H
+#define EPAPER_DRIVER_H
 
 #include "board_config.h"
 
@@ -98,3 +100,5 @@ void epaper_driver_frontlight_off();
 #endif
 
 #endif // HAS_EPAPER
+
+#endif // EPAPER_DRIVER_H

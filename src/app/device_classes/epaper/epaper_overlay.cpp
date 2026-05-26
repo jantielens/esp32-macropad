@@ -2,8 +2,8 @@
 
 #if HAS_EPAPER
 
-#include "config_manager.h"
 #include "epaper_battery.h"
+#include "epaper_config.h"
 #include "epaper_driver.h"
 #include "log_manager.h"
 
@@ -48,9 +48,9 @@ void draw_battery_icon(int16_t x, int16_t y, uint8_t pct, uint8_t color, uint8_t
 
 } // namespace
 
-void epaper_overlay_render(const DeviceConfig* config, uint16_t battery_mv, uint32_t cycle_time_ms) {
-		if (!config || !config->epaper_overlay_enabled) return;
-		if (config->epaper_overlay_items == 0) return;
+void epaper_overlay_render(uint16_t battery_mv, uint32_t cycle_time_ms) {
+		if (!g_epaper_config.epaper_overlay_enabled) return;
+		if (g_epaper_config.epaper_overlay_items == 0) return;
 
 		// Build the line of text first so we can measure it for the background pad.
 		char text[64];
@@ -68,11 +68,11 @@ void epaper_overlay_render(const DeviceConfig* config, uint16_t battery_mv, uint
 		const uint8_t pct = epaper_battery_percent(battery_mv);
 		char chunk[24];
 
-		if (config->epaper_overlay_items & kItemBattPct) {
+		if (g_epaper_config.epaper_overlay_items & kItemBattPct) {
 				snprintf(chunk, sizeof(chunk), "%u%%", (unsigned)pct);
 				append(chunk);
 		}
-		if (config->epaper_overlay_items & kItemTimestamp) {
+		if (g_epaper_config.epaper_overlay_items & kItemTimestamp) {
 				const time_t now = time(nullptr);
 				struct tm tm_buf;
 				if (now > 1704067200 && localtime_r(&now, &tm_buf)) {
@@ -81,17 +81,17 @@ void epaper_overlay_render(const DeviceConfig* config, uint16_t battery_mv, uint
 						append(chunk);
 				}
 		}
-		if (config->epaper_overlay_items & kItemCycleTime) {
+		if (g_epaper_config.epaper_overlay_items & kItemCycleTime) {
 				snprintf(chunk, sizeof(chunk), "%s%ums", len ? "  " : "", (unsigned)cycle_time_ms);
 				append(chunk);
 		}
 
-		const bool show_icon = (config->epaper_overlay_items & kItemBattIcon) != 0;
+		const bool show_icon = (g_epaper_config.epaper_overlay_items & kItemBattIcon) != 0;
 		const bool show_text = (len > 0);
 		if (!show_icon && !show_text) return;
 
 		epaper_driver_set_font(EPAPER_FONT_MEDIUM);
-		const uint8_t color = resolve_color(config->epaper_overlay_color);
+		const uint8_t color = resolve_color(g_epaper_config.epaper_overlay_color);
 		// Background uses the opposite extreme so the overlay stays legible
 		// regardless of what's underneath. Light text on dark bg, or vice versa.
 		const uint8_t bg = (color == EPAPER_BLACK || color == EPAPER_DARK_GRAY)
@@ -116,7 +116,7 @@ void epaper_overlay_render(const DeviceConfig* config, uint16_t battery_mv, uint
 		const int16_t margin = 12;
 
 		int16_t bx = 0, by = 0;
-		switch (config->epaper_overlay_position) {
+		switch (g_epaper_config.epaper_overlay_position) {
 				case 0: bx = margin; by = margin; break;                       // TL
 				case 1: bx = W - margin - box_w; by = margin; break;           // TR
 				case 2: bx = margin; by = H - margin - box_h; break;           // BL
@@ -146,8 +146,8 @@ void epaper_overlay_render(const DeviceConfig* config, uint16_t battery_mv, uint
 		}
 
 		LOGI("Epaper", "Overlay drawn (pos=%u items=0x%02x batt=%u%% cycle=%ums)",
-			 (unsigned)config->epaper_overlay_position,
-			 (unsigned)config->epaper_overlay_items,
+			 (unsigned)g_epaper_config.epaper_overlay_position,
+			 (unsigned)g_epaper_config.epaper_overlay_items,
 			 (unsigned)pct, (unsigned)cycle_time_ms);
 }
 

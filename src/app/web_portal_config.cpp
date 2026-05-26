@@ -6,6 +6,7 @@
 
 #include "board_config.h"
 #include "config_manager.h"
+#include "device_class.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -141,19 +142,6 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;
 
-				#if HAS_EPAPER
-				// E-paper image source (epaper_last_crc32 is internal state — not exposed)
-				(*doc)["epaper_url"] = current_config->epaper_url;
-				(*doc)["epaper_rotation"] = current_config->epaper_rotation;
-				(*doc)["epaper_overlay_enabled"] = current_config->epaper_overlay_enabled;
-				(*doc)["epaper_overlay_position"] = current_config->epaper_overlay_position;
-				(*doc)["epaper_overlay_color"] = current_config->epaper_overlay_color;
-				(*doc)["epaper_overlay_items"] = current_config->epaper_overlay_items;
-				(*doc)["epaper_frontlight_brightness"] = current_config->epaper_frontlight_brightness;
-				(*doc)["epaper_frontlight_duration_s"] = current_config->epaper_frontlight_duration_s;
-				(*doc)["epaper_frontlight_supported"] = (bool)HAS_EPAPER_FRONTLIGHT;
-				#endif
-
 				// Web portal Basic Auth (password not returned)
 				(*doc)["basic_auth_enabled"] = current_config->basic_auth_enabled;
 				(*doc)["basic_auth_username"] = current_config->basic_auth_username;
@@ -182,6 +170,12 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["screen_saver_wake_on_touch"] = current_config->screen_saver_wake_on_touch;
 				(*doc)["screen_saver_wake_binding"] = current_config->screen_saver_wake_binding;
 				#endif
+
+				// Let registered device classes append their own fields.
+				{
+						JsonObject root = doc->as<JsonObject>();
+						device_class_dispatch_config_api_get(current_config, root);
+				}
 
 				if (doc->overflowed()) {
 						LOGE("Portal", "/api/config JSON overflow");
@@ -448,43 +442,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				strlcpy(current_config->mqtt_publish_scope, doc["mqtt_publish_scope"] | "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
 		}
 
-		#if HAS_EPAPER
-		if (doc.containsKey("epaper_url")) {
-				strlcpy(current_config->epaper_url, doc["epaper_url"] | "", CONFIG_EPAPER_URL_MAX_LEN);
-		}
-		if (doc.containsKey("epaper_rotation")) {
-				uint8_t r = (uint8_t)parseUintField(doc["epaper_rotation"], 0);
-				if (r > 3) r = 0;
-				current_config->epaper_rotation = r;
-		}
-		if (doc.containsKey("epaper_overlay_enabled")) {
-				current_config->epaper_overlay_enabled = (bool)(doc["epaper_overlay_enabled"] | false);
-		}
-		if (doc.containsKey("epaper_overlay_position")) {
-				uint8_t v = (uint8_t)parseUintField(doc["epaper_overlay_position"], 3);
-				if (v > 3) v = 3;
-				current_config->epaper_overlay_position = v;
-		}
-		if (doc.containsKey("epaper_overlay_color")) {
-				uint8_t v = (uint8_t)parseUintField(doc["epaper_overlay_color"], 0);
-				if (v > 3) v = 0;
-				current_config->epaper_overlay_color = v;
-		}
-		if (doc.containsKey("epaper_overlay_items")) {
-				uint8_t v = (uint8_t)parseUintField(doc["epaper_overlay_items"], 0);
-				current_config->epaper_overlay_items = v;
-		}
-		if (doc.containsKey("epaper_frontlight_brightness")) {
-				uint8_t v = (uint8_t)parseUintField(doc["epaper_frontlight_brightness"], 0);
-				if (v > 63) v = 63;
-				current_config->epaper_frontlight_brightness = v;
-		}
-		if (doc.containsKey("epaper_frontlight_duration_s")) {
-				uint16_t v = (uint16_t)parseUintField(doc["epaper_frontlight_duration_s"], 30);
-				current_config->epaper_frontlight_duration_s = v;
-		}
-		#endif
-
 		#if HAS_BLE
 		// BLE telemetry advertising burst count (1..255)
 		if (doc.containsKey("ble_burst_count")) {
@@ -619,6 +576,12 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				strlcpy(current_config->screen_saver_wake_binding, doc["screen_saver_wake_binding"] | "", CONFIG_SS_WAKE_BINDING_MAX_LEN);
 		}
 		#endif
+
+		// Let registered device classes parse their own fields before save.
+		{
+				JsonObject body = doc.as<JsonObject>();
+				device_class_dispatch_config_api_set(current_config, body);
+		}
 
 		current_config->magic = CONFIG_MAGIC;
 

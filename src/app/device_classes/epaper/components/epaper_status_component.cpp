@@ -8,9 +8,10 @@
 
 #include "component_registry.h"
 #include "config_manager.h"
-#include "epaper_battery.h"
-#include "epaper_refresh.h"
-#include "epaper_timing.h"
+#include "device_classes/epaper/epaper_battery.h"
+#include "device_classes/epaper/epaper_config.h"
+#include "device_classes/epaper/epaper_refresh.h"
+#include "device_classes/epaper/epaper_timing.h"
 #include "log_manager.h"
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
@@ -30,7 +31,7 @@ static void epaper_status_refresh_post(AsyncWebServerRequest* request) {
         return;
     }
 
-    if (strlen(cfg->epaper_url) == 0) {
+    if (strlen(g_epaper_config.epaper_url) == 0) {
         request->send(400, "application/json",
                       "{\"success\":false,\"message\":\"No image URL configured\"}");
         return;
@@ -106,7 +107,7 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     resp["sidecar_http_status"] = last.sidecar_http_status;
     resp["battery_mv"]      = last.battery_mv;
     resp["battery_pct"]     = epaper_battery_percent(last.battery_mv);
-    resp["last_crc32"]      = cfg ? cfg->epaper_last_crc32 : 0;
+    resp["last_crc32"]      = g_epaper_config.epaper_last_crc32;
     resp["last_elapsed_ms"] = last.elapsed_ms;
     resp["crc_retry_count"] = last.crc_retry_count;
 

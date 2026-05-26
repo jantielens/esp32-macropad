@@ -9,6 +9,6 @@
 
 #if HAS_EPAPER
 
-#include "drivers/inkplate5v2_driver.cpp"
+#include "device_classes/epaper/drivers/inkplate5v2_driver.cpp"
 
 #endif // HAS_EPAPER

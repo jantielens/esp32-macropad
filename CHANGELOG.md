@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-05-25
+ms.date: 2026-05-26
 ms.topic: reference
 ---
 
@@ -16,33 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **E-paper config-mode exit via wake button** — pressing the wake button while the device is in Config or AP mode now reboots straight back to the configured operating mode, so users no longer have to power-cycle to leave the portal. The config-mode screen now spells out "Press the wake button to exit and resume normal mode." A 1.5 s grace period after entering config mode prevents the triggering long-press from bouncing back out.
-* **Web portal header reboot button** — a new always-visible 🔄 button next to the dark/light toggle in the portal header reboots the device from any page (with a confirm prompt). Calls the existing `POST /api/reboot` endpoint and reuses the standard reboot dialog. Complements the Save-footer Reboot button on the Home/Network pages.
-* **Immediate config-mode ack on fast e-paper panels (`EPAPER_FAST_REFRESH`)** — boards that opt in (currently `inkplate5v2`) now paint a "Entering config mode…" splash before WiFi comes up, so a long-press / reset-burst is acknowledged within a single refresh instead of waiting for the SSID/IP screen.
-* Added `epaper_show_status()` helper in `epaper_screens.h` that wraps the recurring begin → set_rotation → paint → display → sleep dance used by every full-panel status draw.
-* Added the e-paper device class for the Soldered Inkplate 5V2. The new `HAS_EPAPER` path uses a duty-cycle image-refresh loop: connect WiFi, fetch `<url>.crc32`, skip unchanged images, draw the image with the Inkplate library, update the panel, and deep-sleep until the next wake.
-* Added the `duty_cycle_epaper` operating mode, the e-paper wake button feature flags (`HAS_EPAPER_WAKE_BUTTON`, `EPAPER_BUTTON_PIN`), and persistent e-paper config fields (`epaper_url`, `epaper_rotation`, `epaper_last_crc32`).
-* Added the dedicated E-Paper portal page with image source settings, refresh scheduling, manual refresh, and persistent status reporting for last refresh time, successful refresh count, last draw result, last sidecar HTTP status, battery voltage, and last image CRC.
-* Added the `inkplate5v2` board target using `Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb`, plus the Soldered board-manager setup path in `setup.sh` and automatic inclusion in the build matrix.
-* Added [docs/epaper-guide.md](docs/epaper-guide.md) for detailed e-paper documentation, while keeping generic project docs at a higher level.
-* **E-paper power and telemetry** — button-only wake mode (set `duty_cycle_wake_seconds=0` to disable the timer wakeup and rely solely on the WAKE button), sleep-time compensation so the next wake aligns with the configured cadence regardless of active-loop duration, and an RTC-retained per-wake timing budget (boot→WiFi, WiFi RSSI, CRC fetch attempts, CRC→draw, draw→MQTT, total active time). The battery voltage is now sampled before the panel-drive waveform sags it, and surfaced in the portal as both volts and a 0–100 % linear estimate.
-* **E-paper MQTT telemetry burst** — when MQTT is configured, every wake cycle publishes a retained `<base>/epaper/state` JSON document (battery, RSSI, CRC, refresh result, retry count, sidecar HTTP status, timing budget) followed by an immediate disconnect. The MQTT connect timeout is bounded at 5 s to keep the duty cycle bounded on flaky networks.
-* **Home Assistant auto-discovery for e-paper telemetry** — twelve entities (battery %, battery mV, refresh count, last result, image CRC, sidecar HTTP status, wake loop time, boot→WiFi, CRC→draw, draw→MQTT, refresh elapsed, CRC fetch attempts) published once on cold boot and skipped on subsequent warm wakes via an `RTC_DATA_ATTR` flag. WiFi RSSI is intentionally not re-published, since the generic `wifi_rssi` entity from the health discovery already updates on every wake. The same RTC flag is consulted to skip the entire discovery burst (health + e-paper) on warm wakes, since HA-retained discovery configs do not need re-publishing.
-* **E-paper VCOM preview test pattern** — the E-Paper portal page now has a non-destructive VCOM preview path. `Show test pattern` writes a candidate VCOM value (typed into the existing VCOM input) to the TPS65186 *volatile* registers (no EEPROM program cycle) and draws the all-grey-levels calibration pattern at that bias. The value reverts on the next panel power cycle. Leave the input empty to test the EEPROM-programmed value. `Write VCOM` is still the only path that commits to EEPROM. Mirrors the inkplate-dashboard behavior.
-* **E-paper status screens** — added dedicated full-screen renders for boot splash, config mode, low battery, and refresh-failure states so users get explicit on-device feedback even when dashboard refresh cannot proceed.
-* **E-paper overlay and frontlight configuration controls** — the E-Paper portal now exposes status-overlay options (enable, corner, color, item bitmask) and frontlight settings (brightness and duration) on supporting boards.
-* **E-paper VCOM component endpoints** — added `GET/POST /api/component/epaper-vcom/vcom` and `POST /api/component/epaper-vcom/vcom-test-pattern` for read/program/preview flows from the portal.
+* **E-paper device class release** for Inkplate 5V2 (`HAS_EPAPER`) with dedicated duty-cycle behavior: WiFi connect, CRC sidecar check, image refresh, telemetry publish, and deep sleep.
+* **E-Paper portal category** with four focused pages: Status, Image & Schedule, Status Overlay, and VCOM.
+* **E-paper power and wake controls** including `duty_cycle_epaper`, wake-button handling (`HAS_EPAPER_WAKE_BUTTON`), button-only wake (`duty_cycle_wake_seconds=0`), and config-mode entry/exit behavior from the wake button.
+* **E-paper telemetry surface** in portal and MQTT, including per-wake timing budget, refresh outcomes, battery values, and retained `<base>/epaper/state` payloads with Home Assistant discovery.
+* **E-paper VCOM tooling** with read, EEPROM write, and non-destructive preview test-pattern workflows from the portal.
+* **E-paper documentation set** with board behavior and operational details in [docs/epaper-guide.md](docs/epaper-guide.md).
 
 ### Changed
 
-* **E-paper status screens refactored** — `epaper_screens.cpp` now uses a small `StatusScreenBuilder` (two-pass measure / draw with a shared border and gap layout) so every status screen has consistent margins and line spacing. Boards can supply their own font family via the `EPAPER_FONT_{SMALL,MEDIUM,LARGE}_PTR` overrides.
-* **E-paper portal restructured into four pages** — the single E-Paper portal page is split under a new **E-Paper** nav category with four entries: **Status** (read-only telemetry + `Refresh e-paper now` action, 5-second auto-refresh), **Image Source & Refresh Schedule** (URL, rotation, wake interval, WiFi backoff, frontlight), **Status Overlay** (overlay enable, position, color, item bitmask), and **VCOM** (calibration). The previous combined fragment is removed. As part of the split, the e-paper component endpoints moved: `refresh` and `status` now live under `/api/component/epaper-status/*`, and `vcom` / `vcom-test-pattern` under `/api/component/epaper-vcom/*` (breaking change for any external scripts hitting the old `/api/component/epaper/*` paths). The previously-ambiguous `Refresh now` button is renamed `Refresh e-paper now`. New fragments are gated by `HAS_EPAPER` so non-e-paper boards no longer carry the dead web assets.
-
-* **E-paper cold boot now always refreshes the image** — the persisted `epaper_last_crc32` in NVS would previously cause `Refresh skipped: CRC unchanged` on a fresh power-up, leaving the panel stuck on the boot splash because the dashboard image never drew. The duty cycle now treats cold boot the same as a short WAKE-button press and bypasses the CRC skip path on the first refresh after every power cycle.
-* **E-paper status overlay readability** — the overlay (battery icon, battery %, wall-clock time, cycle duration) now uses the medium font (Inter 12 pt) instead of the small font (Inter 8 pt), which was unreadable on the Inkplate 5V2 panel. The smaller font face stays compiled in for future high-DPI boards. The boot-splash subtitle also switches to the medium font for the same reason.
-* **E-paper overlay outline removed** — the rounded outline around the status chip was making the overlay feel boxed-in on small panels; the filled background on its own already reads as a chip. The `draw_round_rect` border pass is gone; only the `fill_round_rect` background remains.
-* **E-paper framebuffer cleared between splash and image** — the Inkplate framebuffer is now wiped after switching to rotation 0 and before `draw_url`, so pixels left over from the boot splash or low-battery screen no longer bleed through at the configured rotation.
-* **E-paper time sync on cold boot** — the duty cycle now calls `configTime(0, 0, "pool.ntp.org")` and waits up to 2 s for SNTP on the first wake after a power cycle, so the status overlay timestamp gets a real wall-clock value on the very first refresh. The ESP32 RTC carries the synced time across deep sleep, so subsequent wakes do not pay the wait.
+* **Portal web-asset architecture for device classes** — bundle resolution now supports `src/app/device_classes/*/web/` in addition to `src/app/web/`, so device-class JS/HTML can be isolated while keeping a single bundled `portal.js` output.
+* **Portal component aggregation guidance** — project instructions now document both shared and device-class include patterns for `portal_components.cpp`, reducing missed component-registration mistakes in future feature branches.
 
 ## [1.16.0] - 2026-05-24
 

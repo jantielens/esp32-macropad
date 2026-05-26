@@ -4,7 +4,6 @@
 
 #if HAS_EPAPER && HAS_MQTT
 
-#include "config_manager.h"
 #include "epaper_refresh.h"
 #include "epaper_timing.h"
 
@@ -13,8 +12,7 @@ class MqttManager;
 // Publish a single retained JSON state burst to `<base>/epaper/state`
 // summarising the last refresh attempt + timing budget. Best-effort;
 // returns false if MQTT isn't connected or the payload won't fit.
-bool epaper_mqtt_publish_state(const DeviceConfig* config,
-															 const EpaperRefreshOutcome& outcome,
+bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 															 const EpaperTimingBudget* timing);
 
 // Publish HA discovery entries for the e-paper telemetry sensors. Should

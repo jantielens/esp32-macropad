@@ -3,6 +3,7 @@
 #if HAS_EPAPER
 
 #include "config_manager.h"
+#include "epaper_config.h"
 #include "epaper_crc32.h"
 #include "epaper_driver.h"
 #include "epaper_overlay.h"
@@ -27,7 +28,7 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		EpaperRefreshOutcome out = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 		const uint32_t t0 = millis();
 
-		if (!config || strlen(config->epaper_url) == 0) {
+		if (!config || strlen(g_epaper_config.epaper_url) == 0) {
 				LOGW("Epaper", "Refresh skipped: no URL configured");
 				s_last_outcome = out;
 				return out;
@@ -39,7 +40,7 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		// asks for a redraw.
 		EpaperCrcFetchResult crc_fetch = {0, 0, 0};
 		if (!force) {
-				crc_fetch = epaper_crc32_fetch_sidecar(config->epaper_url);
+				crc_fetch = epaper_crc32_fetch_sidecar(g_epaper_config.epaper_url);
 		}
 		const uint32_t fresh_crc = crc_fetch.crc;
 		out.crc_used = fresh_crc;
@@ -50,7 +51,7 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		// failures, distinct from "server returned a non-200 response".
 		const bool sidecar_transport_failed = !force && crc_fetch.http_status <= 0;
 
-		if (!force && fresh_crc != 0 && fresh_crc == config->epaper_last_crc32) {
+		if (!force && fresh_crc != 0 && fresh_crc == g_epaper_config.epaper_last_crc32) {
 				out.result = EpaperRefreshResult::Skipped;
 				// Even on the skip path we still want a fresh battery reading so HA
 				// can chart it across all wakes. readBattery() needs the TPS65186
@@ -105,15 +106,15 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 				esp_task_wdt_delete(nullptr);
 		}
 
-		const bool drew = epaper_driver_draw_url(config->epaper_url);
+		const bool drew = epaper_driver_draw_url(g_epaper_config.epaper_url);
 
 		if (drew) {
 				// Switch to the user's configured rotation so the overlay lands in
 				// the correct screen corner regardless of how the image was framed.
-				epaper_driver_set_rotation(config->epaper_rotation);
+				epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
 				// Composite the status overlay on top of the dashboard image before
 				// pushing the frame. Pure framebuffer draws — no panel waveform yet.
-				epaper_overlay_render(config, out.battery_mv, (uint32_t)(millis() - t0));
+				epaper_overlay_render(out.battery_mv, (uint32_t)(millis() - t0));
 				epaper_driver_display();
 		}
 
@@ -136,7 +137,7 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 				// the panel briefly to push the status frame; the previous sleep
 				// call above already powered it down.
 				if (epaper_driver_begin()) {
-						epaper_driver_set_rotation(config->epaper_rotation);
+						epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
 						const char* detail = sidecar_transport_failed
 								? "Network or server unreachable"
 								: "Image fetch or decode failed";
@@ -150,9 +151,9 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		}
 
 		// Persist CRC so subsequent wakes can short-circuit when unchanged.
-		if (fresh_crc != 0 && fresh_crc != config->epaper_last_crc32) {
-				config->epaper_last_crc32 = fresh_crc;
-				config_manager_save(config);
+		if (fresh_crc != 0 && fresh_crc != g_epaper_config.epaper_last_crc32) {
+				g_epaper_config.epaper_last_crc32 = fresh_crc;
+				epaper_config_persist_crc(fresh_crc);
 		}
 
 		out.result = EpaperRefreshResult::Updated;

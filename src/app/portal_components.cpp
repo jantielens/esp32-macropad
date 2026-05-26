@@ -64,8 +64,8 @@
 // Status Overlay / VCOM) — all share the "epaper" category. Image and
 // Overlay are nav-only; their settings are saved via /api/config.
 #if HAS_EPAPER
-#include "components/epaper_status_component.cpp"
-#include "components/epaper_image_component.cpp"
-#include "components/epaper_overlay_component.cpp"
-#include "components/epaper_vcom_component.cpp"
+#include "device_classes/epaper/components/epaper_status_component.cpp"
+#include "device_classes/epaper/components/epaper_image_component.cpp"
+#include "device_classes/epaper/components/epaper_overlay_component.cpp"
+#include "device_classes/epaper/components/epaper_vcom_component.cpp"
 #endif // HAS_EPAPER

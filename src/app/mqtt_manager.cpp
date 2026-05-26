@@ -4,6 +4,7 @@
 
 #if HAS_MQTT
 
+#include "device_class.h"
 #include "ha_discovery.h"
 #include "device_telemetry.h"
 #include "mqtt_sub_store.h"
@@ -13,10 +14,6 @@
 #include "power_manager.h"
 #include "power_config.h"
 #include "log_manager.h"
-
-#if HAS_EPAPER
-#include "epaper_mqtt.h"
-#endif
 
 MqttManager::MqttManager() : _client(_net) {}
 
@@ -166,26 +163,24 @@ void MqttManager::publishAvailability(bool online) {
 void MqttManager::publishDiscoveryOncePerBoot() {
 		if (_discovery_published_this_boot) return;
 
-#if HAS_EPAPER
-		// On e-paper boards we publish discovery once per cold boot and skip
-		// it on every subsequent timer/button wake -- HA retains the configs
-		// on the broker, so re-publishing every cycle just burns ~1-2s and
-		// ~2.5 KB of network traffic on a battery-powered device. The RTC
-		// flag persists across deep sleep + soft resets and is only cleared
-		// on power loss.
-		if (epaper_mqtt_discovery_already_published()) {
-				LOGI("MQTT", "Skipping discovery (e-paper RTC flag set; retained configs persist)");
-				_discovery_published_this_boot = true;
-				return;
+		// Let registered device classes publish their own discovery first and
+		// optionally suppress the generic core discovery (e.g. battery-powered
+		// classes that publish a curated subset on a slow link). No-op until a
+		// class registers.
+		{
+				bool skip_generic = false;
+				device_class_dispatch_mqtt_discovery(*this, &skip_generic);
+				if (skip_generic) {
+						_discovery_published_this_boot = true;
+						return;
+				}
 		}
-#endif
 
 		LOGI("MQTT", "Publishing HA discovery");
 		ha_discovery_publish_health(*this);
-#if HAS_EPAPER
-		epaper_mqtt_publish_ha_discovery(*this);
-		epaper_mqtt_mark_discovery_published();
-#endif
+		// Device classes can publish an immediate state snapshot so entities
+		// are populated right after discovery on always-on boards.
+		device_class_dispatch_mqtt_state(*this);
 		_discovery_published_this_boot = true;
 }
 

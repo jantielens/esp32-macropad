@@ -9,7 +9,7 @@
 #if HAS_EPAPER
 
 #include "component_registry.h"
-#include "epaper_driver.h"
+#include "device_classes/epaper/epaper_driver.h"
 #include "log_manager.h"
 #include "web_portal_auth.h"
 

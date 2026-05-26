@@ -2,6 +2,7 @@
 
 #include "board_config.h"
 #include "config_manager.h"
+#include "device_class.h"
 #include "log_manager.h"
 
 #include <Arduino.h>
@@ -13,33 +14,11 @@
 // RTC-retained backoff state
 RTC_DATA_ATTR static uint32_t g_wifi_backoff_seconds = 0;
 RTC_DATA_ATTR static uint8_t g_wifi_fail_count = 0;
-#if HAS_EPAPER_WAKE_BUTTON
-static EpaperButtonWakeAction g_button_wake_action_boot = EpaperButtonWakeAction::None;
-#endif
 
 static bool g_is_deep_sleep_wake = false;
 static PowerMode g_boot_mode = PowerMode::AlwaysOn;
 static PowerMode g_current_mode = PowerMode::AlwaysOn;
 static bool g_force_config_mode = false;
-
-#if HAS_EPAPER_WAKE_BUTTON
-static EpaperButtonWakeAction classify_button_wake(uint32_t threshold_ms) {
-		if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_EXT0) {
-				return EpaperButtonWakeAction::None;
-		}
-
-		pinMode(EPAPER_BUTTON_PIN, INPUT);
-		const unsigned long start = millis();
-		while (digitalRead(EPAPER_BUTTON_PIN) == LOW) {
-				if ((millis() - start) >= threshold_ms) {
-						return EpaperButtonWakeAction::Config;
-				}
-			delay(10);
-		}
-
-		return EpaperButtonWakeAction::Refresh;
-}
-#endif
 
 static const uint8_t kPoweronBurstRequired = 2;
 static const unsigned long kPoweronBurstWindowMs = 10000;
@@ -60,9 +39,15 @@ void power_manager_boot_init() {
 		const esp_reset_reason_t reason = esp_reset_reason();
 		g_is_deep_sleep_wake = (reason == ESP_RST_DEEPSLEEP);
 		g_force_config_mode = false;
-		#if HAS_EPAPER_WAKE_BUTTON
-		g_button_wake_action_boot = classify_button_wake(2500);
-		#endif
+
+		// Allow registered device classes to classify the wake reason and
+		// optionally request Config Mode. OR'd with any contribution from the
+		// power-on burst detector below so neither path can mask the other.
+		{
+				bool dc_force_config = false;
+				(void)device_class_dispatch_wake_classify(&dc_force_config);
+				if (dc_force_config) g_force_config_mode = true;
+		}
 
 		#if POWERON_CONFIG_BURST_ENABLED
 		// Power-on burst detection (for boards without a reliable user button):
@@ -171,22 +156,22 @@ uint32_t power_manager_get_wifi_backoff_seconds() {
 }
 
 void power_manager_sleep_for(uint32_t seconds) {
-		// E-paper button-only mode: when wake_seconds is 0 AND we're in the
-		// DutyCycleEpaper mode, the device sleeps with ONLY the ext0 (wake
-		// button) source armed -- no timer wakeup. Other duty-cycle modes
-		// retain the "0 = wake immediately" semantics via the clamp below.
-		const bool epaper_button_only =
-#if HAS_EPAPER
-				(power_manager_get_current_mode() == PowerMode::DutyCycleEpaper && seconds == 0);
-#else
-				false;
-#endif
+		// Let registered device classes mutate the sleep duration and arm any
+		// additional wake sources they own (ext0/ext1/touchpad/etc.). Hook is
+		// a no-op until at least one class registers.
+		device_class_dispatch_sleep_prepare(&seconds);
 
-		if (!epaper_button_only && seconds == 0) {
+		// A registered device class may opt into button-only sleep by leaving
+		// seconds at 0 (its sleep_prepare hook is responsible for arming the
+		// alternate wake source). Without a registered class, treat 0 as
+		// "wake immediately" by clamping to 1 second.
+		const bool class_owns_wake =
+				(device_class_find_by_mode(power_manager_get_current_mode()) != nullptr);
+		if (seconds == 0 && !class_owns_wake) {
 				seconds = 1;
 		}
 
-		if (epaper_button_only) {
+		if (seconds == 0) {
 				LOGI("Power", "Sleeping (button-only, no timer wakeup)");
 		} else {
 				LOGI("Power", "Sleeping for %us", (unsigned)seconds);
@@ -197,25 +182,11 @@ void power_manager_sleep_for(uint32_t seconds) {
 		WiFi.disconnect(true);
 		WiFi.mode(WIFI_OFF);
 
-		if (!epaper_button_only) {
+		if (seconds > 0) {
 				esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
 		}
-#if HAS_EPAPER_WAKE_BUTTON
-		// Inkplate WAKE button is active-low on a RTC GPIO; arm ext0 alongside the timer.
-		esp_sleep_enable_ext0_wakeup((gpio_num_t)EPAPER_BUTTON_PIN, 0);
-#endif
 		esp_deep_sleep_start();
 }
-
-#if HAS_EPAPER_WAKE_BUTTON
-bool power_manager_is_button_wake() {
-		return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
-}
-
-EpaperButtonWakeAction power_manager_get_button_wake_action() {
-		return g_button_wake_action_boot;
-}
-#endif
 
 void power_manager_loop() {
 		#if POWERON_CONFIG_BURST_ENABLED

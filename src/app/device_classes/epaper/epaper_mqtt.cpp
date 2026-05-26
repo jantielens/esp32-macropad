@@ -33,10 +33,8 @@ static const char* result_to_str(EpaperRefreshResult r) {
 		return "unknown";
 }
 
-bool epaper_mqtt_publish_state(const DeviceConfig* config,
-															 const EpaperRefreshOutcome& outcome,
-															 const EpaperTimingBudget* timing) {
-		(void)config;
+bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
+													 const EpaperTimingBudget* timing) {
 		extern MqttManager mqtt_manager;
 		if (!mqtt_manager.connected()) return false;
 

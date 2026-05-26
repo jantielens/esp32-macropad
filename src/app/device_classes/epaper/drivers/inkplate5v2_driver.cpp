@@ -1,13 +1,13 @@
 // Inkplate 5 V2 e-paper driver (Soldered InkplateLibrary).
 //
 // Only compiled when the board is Inkplate 5V2 and HAS_EPAPER is enabled.
-// Wired into the build through src/app/epaper_drivers.cpp.
+// Wired into the build through device_classes/epaper/epaper_drivers.cpp.
 
 #include "board_config.h"
 
 #if HAS_EPAPER && defined(BOARD_INKPLATE5V2)
 
-#include "epaper_driver.h"
+#include "device_classes/epaper/epaper_driver.h"
 #include "log_manager.h"
 
 #include <Inkplate.h>
