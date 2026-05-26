@@ -414,6 +414,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/components/epaper_status_component.cpp
   - src/app/device_classes/epaper/components/epaper_vcom_component.cpp
   - src/app/device_classes/epaper/drivers/inkplate5v2_driver.cpp
+  - src/app/device_classes/epaper/epaper_carousel.cpp
+  - src/app/device_classes/epaper/epaper_carousel.h
   - src/app/device_classes/epaper/epaper_config.h
   - src/app/device_classes/epaper/epaper_crc32.cpp
   - src/app/device_classes/epaper/epaper_crc32.h
@@ -425,6 +427,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_overlay.h
   - src/app/device_classes/epaper/epaper_refresh.cpp
   - src/app/device_classes/epaper/epaper_refresh.h
+  - src/app/device_classes/epaper/epaper_schedule.cpp
+  - src/app/device_classes/epaper/epaper_schedule.h
   - src/app/device_classes/epaper/epaper_screens.cpp
   - src/app/device_classes/epaper/epaper_screens.h
   - src/app/device_classes/epaper/epaper_timing.cpp

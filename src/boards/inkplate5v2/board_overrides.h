@@ -3,7 +3,7 @@
 // ==========================================================================
 // Board Overrides: inkplate5v2 (Soldered Inkplate 5 V2)
 // ==========================================================================
-// 5.17" 720x1280 3-bit grayscale e-paper, ESP32 classic SoC, 8 MB flash,
+// 5.17" 720x1280 3-bit grayscale e-paper, ESP32 classic SoC, 4 MB flash,
 // 4 MB QSPI PSRAM, GT911 hardware "wake" button on GPIO36 (external pullup
 // on the Inkplate carrier board). Designed for ultra-low-power dashboard
 // duty-cycle operation: wake → connect Wi-Fi → optionally fetch a single
