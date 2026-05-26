@@ -137,7 +137,6 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["mqtt"] = (bool)HAS_MQTT;
 				caps["display"] = (bool)HAS_DISPLAY;
 				caps["ble_hid"] = (bool)HAS_BLE_HID;
-				caps["epaper"] = (bool)HAS_EPAPER;
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;

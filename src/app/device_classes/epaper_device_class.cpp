@@ -172,6 +172,7 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 }
 
 static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) {
+		root["caps"]["epaper"] = true;
 		root["epaper_url"] = g_epaper_config.epaper_url;
 		root["epaper_rotation"] = g_epaper_config.epaper_rotation;
 		root["epaper_overlay_enabled"] = g_epaper_config.epaper_overlay_enabled;
