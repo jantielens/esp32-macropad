@@ -12,11 +12,18 @@
 #define CONFIG_EPAPER_URL_MAX_LEN 256
 #endif
 
+// Carousel entry: URL, per-entry refresh interval, and stay flag (pause rotation when CRC unchanged).
+struct EpaperCarouselEntry {
+		char url[CONFIG_EPAPER_URL_MAX_LEN];          // empty if slot unused
+		uint32_t interval_seconds;                    // required per-slot duration in seconds
+		bool stay;                                    // true = don't advance to next entry after refresh
+};
+
 // All e-paper-specific configuration lives here, separate from the generic
 // DeviceConfig, so the core firmware does not need to know about e-paper.
 // The DeviceClass registry owns lifecycle (defaults / load / save / API).
 struct EpaperConfig {
-		char epaper_url[CONFIG_EPAPER_URL_MAX_LEN];   // full HTTP(S) URL of the dashboard image
+		char epaper_url[CONFIG_EPAPER_URL_MAX_LEN];   // resolved runtime URL for current carousel slot (not user-configured)
 		uint8_t epaper_rotation;                      // 0..3, default 0
 		uint32_t epaper_last_crc32;                   // CRC32 of last successfully rendered image (0 = none)
 
@@ -30,11 +37,26 @@ struct EpaperConfig {
 		// but the duty cycle ignores them).
 		uint8_t epaper_frontlight_brightness;         // 0..63 (0 = disabled, default 0)
 		uint16_t epaper_frontlight_duration_s;        // seconds after button wake (default 30)
+
+		// Carousel: 5-slot rotation with per-entry intervals and stay flags.
+		uint8_t carousel_count;                       // number of active carousel entries (0..5)
+		EpaperCarouselEntry carousel[5];              // 5-slot carousel (empty entries have url[0] == '\0')
+
+		// Schedule: 24-bit hourly mask + UTC offset for battery-aware sleep.
+		// schedule_hours: bit N set = hour N is enabled for refresh (0=midnight, 23=11pm).
+		// 0x00FFFFFF (default) = all hours enabled (no schedule active).
+		// schedule_tz_offset: UTC offset in hours (-12 to +14) for local time calculation.
+		uint32_t schedule_hours;                      // 24-bit mask of enabled hours (default 0x00FFFFFF = all)
+		int8_t schedule_tz_offset;                    // UTC offset in hours (default 0)
 };
 
 // Single global instance, owned by epaper_device_class.cpp. Other e-paper
 // modules read directly from this.
 extern EpaperConfig g_epaper_config;
+
+// Resolve g_epaper_config.epaper_url from the current carousel slot.
+// Returns false when no valid slot URL is available.
+bool epaper_resolve_current_url();
 
 // Persist just the rendered-image CRC to NVS without rewriting the entire
 // config. Called from the refresh pipeline after a successful redraw so the

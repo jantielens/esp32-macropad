@@ -8,10 +8,14 @@
 // /api/config without editing the shared file.
 if (typeof window.registerConfigFields === 'function') {
     window.registerConfigFields([
-        'epaper_url', 'epaper_rotation',
+        'epaper_rotation',
         'epaper_overlay_enabled', 'epaper_overlay_position',
         'epaper_overlay_color', 'epaper_overlay_items',
-        'epaper_frontlight_brightness', 'epaper_frontlight_duration_s'
+        'epaper_frontlight_brightness', 'epaper_frontlight_duration_s',
+        'ep_sch_hrs', 'ep_sch_tz',
+        'ep_c0_url', 'ep_c1_url', 'ep_c2_url', 'ep_c3_url', 'ep_c4_url',
+        'ep_c0_int', 'ep_c1_int', 'ep_c2_int', 'ep_c3_int', 'ep_c4_int',
+        'ep_c0_stay', 'ep_c1_stay', 'ep_c2_stay', 'ep_c3_stay', 'ep_c4_stay'
     ]);
 }
 
@@ -138,29 +142,205 @@ window.init_epaper_status_fragment = function () {
 };
 
 // ---- Image & Schedule page -------------------------------------------------
-// Image URL, rotation, wake interval, WiFi backoff, frontlight (if board has
-// one). Saved via shared /api/config.
+// Image sources, per-slot duration, schedule, WiFi backoff, frontlight (if
+// board has one). Saved via shared /api/config.
 window.init_epaper_image_fragment = function () {
-    initConfigFragment('epaper-image-save-btn', false);
+    loadConfig();
 
-    // Wire the "(button-only)" hint to the wake-seconds input.
-    var wakeInput = document.getElementById('duty_cycle_wake_seconds');
-    var wakeHelp  = document.getElementById('epaper-wake-help');
-    var wakeHelpDefault = wakeHelp ? wakeHelp.innerHTML : '';
-    function updateWakeHint() {
-        if (!wakeInput || !wakeHelp) return;
-        var v = parseInt(wakeInput.value, 10);
-        if (v === 0) {
-            wakeHelp.innerHTML = '<strong>Button-only mode:</strong> the device only wakes when the WAKE button is pressed (no timer).';
-        } else {
-            wakeHelp.innerHTML = wakeHelpDefault;
+    var hiddenHours = document.getElementById('ep_sch_hrs');
+    var tzSelect = document.getElementById('ep_sch_tz');
+    var grid = document.getElementById('epaper-schedule-grid');
+    var saveBtn = document.getElementById('epaper-image-save-btn');
+
+    function hourEnabled(mask, h) {
+        return ((mask >>> h) & 1) === 1;
+    }
+
+    function setHourEnabled(mask, h, enabled) {
+        if (enabled) return (mask | (1 << h)) >>> 0;
+        return (mask & ~(1 << h)) >>> 0;
+    }
+
+    function readHoursMask() {
+        if (!hiddenHours) return 0x00FFFFFF;
+        var v = parseInt(hiddenHours.value || '16777215', 10);
+        if (isNaN(v)) v = 0x00FFFFFF;
+        return (v & 0x00FFFFFF) >>> 0;
+    }
+
+    function writeHoursMask(v) {
+        if (hiddenHours) hiddenHours.value = String((v & 0x00FFFFFF) >>> 0);
+    }
+
+    function renderHourButtons() {
+        if (!grid) return;
+        var mask = readHoursMask();
+        var buttons = grid.querySelectorAll('button[data-hour]');
+        buttons.forEach(function (btn) {
+            var h = parseInt(btn.getAttribute('data-hour') || '0', 10);
+            var enabled = hourEnabled(mask, h);
+            btn.className = enabled ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-outline-secondary';
+            btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        });
+    }
+
+    function buildHourGrid() {
+        if (!grid || grid.children.length > 0) return;
+        for (var h = 0; h < 24; h++) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = String(h).padStart(2, '0');
+            btn.setAttribute('data-hour', String(h));
+            btn.className = 'btn btn-sm btn-outline-secondary';
+            btn.addEventListener('click', function () {
+                var hour = parseInt(this.getAttribute('data-hour') || '0', 10);
+                var mask = readHoursMask();
+                var enabled = !hourEnabled(mask, hour);
+                writeHoursMask(setHourEnabled(mask, hour, enabled));
+                renderHourButtons();
+            });
+            grid.appendChild(btn);
         }
     }
-    if (wakeInput) {
-        wakeInput.addEventListener('input', updateWakeHint);
-        // Run once after the form has loaded its current value.
-        setTimeout(updateWakeHint, 200);
+
+    function setNamedValue(name, value) {
+        var el = document.querySelector('[name="' + name + '"]');
+        if (!el) return;
+        if (el.type === 'checkbox') {
+            el.checked = !!value;
+        } else {
+            el.value = value == null ? '' : String(value);
+        }
     }
+
+    function loadCarouselAndSchedule() {
+        fetch('/api/config')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (cfg) {
+                if (!cfg) return;
+
+                var scheduleMask = (cfg.epaper_schedule_hours == null)
+                    ? 0x00FFFFFF
+                    : (parseInt(cfg.epaper_schedule_hours, 10) & 0x00FFFFFF);
+                if (isNaN(scheduleMask)) scheduleMask = 0x00FFFFFF;
+                writeHoursMask(scheduleMask >>> 0);
+                if (tzSelect && cfg.epaper_schedule_tz_offset != null) {
+                    tzSelect.value = String(cfg.epaper_schedule_tz_offset);
+                }
+
+                var arr = Array.isArray(cfg.epaper_carousel) ? cfg.epaper_carousel : [];
+                for (var i = 0; i < 5; i++) {
+                    var row = arr[i] || {};
+                    setNamedValue('ep_c' + i + '_url', row.url || '');
+                    setNamedValue('ep_c' + i + '_int', row.interval_seconds || '');
+                    setNamedValue('ep_c' + i + '_stay', !!row.stay);
+                }
+
+                renderHourButtons();
+            })
+            .catch(function () { /* keep defaults */ });
+    }
+
+    function setQuickHours(startInclusive, endInclusive) {
+        var mask = 0;
+        for (var h = startInclusive; h <= endInclusive; h++) {
+            mask = setHourEnabled(mask, h, true);
+        }
+        writeHoursMask(mask);
+        renderHourButtons();
+    }
+
+    var allBtn = document.getElementById('epaper-hours-all');
+    var noneBtn = document.getElementById('epaper-hours-none');
+    var workBtn = document.getElementById('epaper-hours-workday');
+    if (allBtn) allBtn.addEventListener('click', function () {
+        writeHoursMask(0x00FFFFFF);
+        renderHourButtons();
+    });
+    if (noneBtn) noneBtn.addEventListener('click', function () {
+        writeHoursMask(0);
+        renderHourButtons();
+    });
+    if (workBtn) workBtn.addEventListener('click', function () {
+        setQuickHours(8, 17);
+    });
+
+    function buildCarouselPayload() {
+        var out = [];
+        for (var i = 0; i < 5; i++) {
+            var urlEl = document.querySelector('[name="ep_c' + i + '_url"]');
+            var intEl = document.querySelector('[name="ep_c' + i + '_int"]');
+            var stayEl = document.querySelector('[name="ep_c' + i + '_stay"]');
+            var url = urlEl ? String(urlEl.value || '').trim() : '';
+            if (!url) break; // top-to-bottom rule
+            var interval = intEl ? parseInt(intEl.value || '0', 10) : 0;
+            if (isNaN(interval) || interval <= 0) {
+                return { ok: false, message: 'Slot ' + (i + 1) + ': Duration must be greater than 0 seconds.' };
+            }
+            var stay = stayEl ? !!stayEl.checked : false;
+            out.push({ url: url, interval_seconds: interval, stay: stay });
+        }
+        return { ok: true, value: out };
+    }
+
+    async function saveImageConfig() {
+        var config = {};
+        var fields = [
+            'operating_mode',
+            'epaper_rotation',
+            'wifi_backoff_max_seconds',
+            'epaper_frontlight_brightness', 'epaper_frontlight_duration_s'
+        ];
+
+        fields.forEach(function (name) {
+            var el = document.querySelector('[name="' + name + '"]');
+            if (!el || el.disabled) return;
+            config[name] = (el.type === 'checkbox') ? el.checked : el.value;
+        });
+
+        config.epaper_schedule_hours = readHoursMask();
+        config.epaper_schedule_tz_offset = tzSelect ? parseInt(tzSelect.value || '0', 10) : 0;
+        if (isNaN(config.epaper_schedule_tz_offset)) config.epaper_schedule_tz_offset = 0;
+        var carouselPayload = buildCarouselPayload();
+        if (!carouselPayload.ok) {
+            showMessage(carouselPayload.message, 'error');
+            return;
+        }
+        config.epaper_carousel = carouselPayload.value;
+
+        var validation = validateConfig(config);
+        if (!validation.valid) {
+            showMessage(validation.message, 'error');
+            return;
+        }
+
+        try {
+            var response = await fetch('/api/config?no_reboot=1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+            if (!response.ok) throw new Error('Failed to save configuration');
+            var result = await response.json();
+            if (result && result.success) {
+                showMessage('Configuration saved', 'success');
+            } else {
+                showMessage('Failed to save configuration', 'error');
+            }
+        } catch (error) {
+            showMessage('Error saving: ' + error.message, 'error');
+        }
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            saveImageConfig();
+        });
+    }
+
+    buildHourGrid();
+    renderHourButtons();
+    loadCarouselAndSchedule();
 };
 
 // ---- Status Overlay page ---------------------------------------------------

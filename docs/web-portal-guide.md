@@ -1,6 +1,6 @@
 # Web Portal Guide
 
-The ESP32 Macropad includes a built-in web portal for configuring every aspect of your device — from Wi-Fi settings to pad layouts — all from your browser.
+The ESP32 Macropad includes a built-in web portal for configuring every aspect of your device — from Wi-Fi settings to pad layouts and e-paper image scheduling — all from your browser.
 
 ## Accessing the Portal
 
@@ -9,7 +9,7 @@ The ESP32 Macropad includes a built-in web portal for configuring every aspect o
 | **AP Mode** (first boot / factory reset) | Wi-Fi not configured | Connect to the device's Wi-Fi, then go to `http://192.168.4.1` |
 | **Full Mode** (normal operation) | Connected to your Wi-Fi | `http://<device-name>.local` or the device's IP address |
 
-In AP mode, only the Network page is available. In Full mode, all four pages are accessible.
+In AP mode, only the Network page is available. In Full mode, the standard four pages are accessible, and e-paper boards also expose a dedicated E-Paper page.
 
 ## Header & Health Monitoring
 
@@ -194,6 +194,24 @@ Configure up to 3 independent on-device timers. Each timer can run in **Count Up
 Expire actions use the same action editor as buttons, so you can play a sound, send an MQTT message, navigate to a screen, play a beep pattern, or any combination. This replaces the previous beep-only expiry with full action parity.
 
 Timer configuration is applied at boot and updated immediately when saved. Button actions on pads only control timers at runtime (toggle, start, stop, pause, adjust). Use `[timer:N]` bindings on pad button labels to display timer values.
+
+## E-Paper Page
+
+*Available only on e-paper boards such as the Inkplate 5V2.*
+
+The E-Paper page configures the battery-oriented image workflow:
+
+| Setting | Description |
+|---------|-------------|
+| **Image sources** | Up to 5 image slots, each with its own URL, Duration, and Stay flag. Empty slots are skipped top-to-bottom. |
+| **Hourly refresh window** | 24-hour local-time mask that can disable refreshes during selected hours to save battery |
+| **Timezone offset** | Fixed UTC offset used to evaluate the hourly window |
+| **WiFi Failure Backoff** | Maximum WiFi retry sleep after repeated failures |
+| **Status** | Read-only refresh counters, timing, battery, and manual refresh action |
+| **Overlay** | Status overlay position/color/fields drawn on the image |
+| **VCOM** | Inkplate TPS65186 calibration controls |
+
+Duration is per slot and applies while that slot is active. The page does not expose a separate "wake every" control.
 
 ---
 

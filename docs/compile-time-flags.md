@@ -408,11 +408,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.h
 - **HAS_EPAPER**
   - src/app/board_config.h
+  - src/app/device_classes.cpp
   - src/app/device_classes/epaper/components/epaper_image_component.cpp
   - src/app/device_classes/epaper/components/epaper_overlay_component.cpp
   - src/app/device_classes/epaper/components/epaper_status_component.cpp
   - src/app/device_classes/epaper/components/epaper_vcom_component.cpp
   - src/app/device_classes/epaper/drivers/inkplate5v2_driver.cpp
+  - src/app/device_classes/epaper/epaper_config.h
   - src/app/device_classes/epaper/epaper_crc32.cpp
   - src/app/device_classes/epaper/epaper_crc32.h
   - src/app/device_classes/epaper/epaper_driver.h
@@ -427,13 +429,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_screens.h
   - src/app/device_classes/epaper/epaper_timing.cpp
   - src/app/device_classes/epaper/epaper_timing.h
+  - src/app/device_classes/epaper_device_class.cpp
   - src/app/portal_components.cpp
 - **HAS_EPAPER_FRONTLIGHT**
   - src/app/board_config.h
   - src/app/device_classes/epaper/drivers/inkplate5v2_driver.cpp
   - src/app/device_classes/epaper/epaper_driver.h
+  - src/app/device_classes/epaper_device_class.cpp
 - **HAS_EPAPER_WAKE_BUTTON**
   - src/app/board_config.h
+  - src/app/device_classes/epaper/epaper_config.h
+  - src/app/device_classes/epaper_device_class.cpp
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino
   - src/app/board_config.h
@@ -457,6 +463,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.h
   - src/app/device_classes/epaper/epaper_mqtt.cpp
   - src/app/device_classes/epaper/epaper_mqtt.h
+  - src/app/device_classes/epaper_device_class.cpp
   - src/app/device_telemetry.cpp
   - src/app/display_manager.cpp
   - src/app/display_task.cpp

@@ -15,8 +15,10 @@
 #include "config_manager.h"
 #include "device_class.h"
 #include "epaper/epaper_battery.h"
+#include "epaper/epaper_carousel.h"
 #include "epaper/epaper_driver.h"
 #include "epaper/epaper_refresh.h"
+#include "epaper/epaper_schedule.h"
 #include "epaper/epaper_screens.h"
 #include "epaper/epaper_timing.h"
 #include "log_manager.h"
@@ -50,7 +52,6 @@ EpaperConfig g_epaper_config = {};
 // stored values across the upgrade.
 // ---------------------------------------------------------------------------
 static const char *kNvsNamespace      = "device_cfg";
-static const char *kKeyUrl            = "ep_url";
 static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
 static const char *kKeyOverlayEn      = "ep_ovl_en";
@@ -59,6 +60,43 @@ static const char *kKeyOverlayCol     = "ep_ovl_col";
 static const char *kKeyOverlayItems   = "ep_ovl_it";
 static const char *kKeyFrontBright    = "ep_fl_b";
 static const char *kKeyFrontDuration  = "ep_fl_d";
+// Carousel and schedule keys (PRD B)
+static const char *kKeyCarouselCount  = "ep_c_cnt";
+static const char *kKeyScheduleHours  = "ep_sch_hrs";
+static const char *kKeyScheduleTzOff  = "ep_sch_tz";
+static const uint32_t kDefaultCarouselDurationS = 900;
+
+bool epaper_resolve_current_url() {
+		if (g_epaper_config.carousel_count == 0) {
+				g_epaper_config.epaper_url[0] = '\0';
+				return false;
+		}
+
+		if (g_epaper_carousel_index >= g_epaper_config.carousel_count) {
+				LOGW("Epaper", "Carousel index %u >= count %u; clamping to 0", g_epaper_carousel_index, g_epaper_config.carousel_count);
+				g_epaper_carousel_index = 0;
+		}
+
+		const char *slot_url = g_epaper_config.carousel[g_epaper_carousel_index].url;
+		if (!slot_url || slot_url[0] == '\0') {
+				g_epaper_config.epaper_url[0] = '\0';
+				return false;
+		}
+
+		strlcpy(g_epaper_config.epaper_url, slot_url, CONFIG_EPAPER_URL_MAX_LEN);
+		return true;
+}
+
+static uint32_t epaper_current_slot_duration_seconds() {
+		if (g_epaper_config.carousel_count == 0) {
+				return kDefaultCarouselDurationS;
+		}
+		if (g_epaper_carousel_index >= g_epaper_config.carousel_count) {
+				g_epaper_carousel_index = 0;
+		}
+		const uint32_t duration = g_epaper_config.carousel[g_epaper_carousel_index].interval_seconds;
+		return (duration > 0) ? duration : kDefaultCarouselDurationS;
+}
 
 // ---------------------------------------------------------------------------
 // Wake-button classification (formerly in power_manager.cpp).
@@ -135,14 +173,24 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.epaper_overlay_items = 0x7; // batt-icon | batt-% | time
 		g_epaper_config.epaper_frontlight_brightness = 0;
 		g_epaper_config.epaper_frontlight_duration_s = 30;
+
+		// Carousel: legacy single-URL mode by default
+		g_epaper_config.carousel_count = 0;
+		for (int i = 0; i < 5; ++i) {
+				g_epaper_config.carousel[i].url[0] = '\0';
+				g_epaper_config.carousel[i].interval_seconds = 0;
+				g_epaper_config.carousel[i].stay = false;
+		}
+
+		// Schedule: all hours enabled (no schedule active) by default
+		g_epaper_config.schedule_hours = 0x00FFFFFF;
+		g_epaper_config.schedule_tz_offset = 0;
 }
 
 static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		// Defaults so missing keys land on sane values.
 		config_defaults_hook(nullptr);
 
-		String url = prefs.getString(kKeyUrl, "");
-		strlcpy(g_epaper_config.epaper_url, url.c_str(), CONFIG_EPAPER_URL_MAX_LEN);
 		g_epaper_config.epaper_rotation = prefs.getUChar(kKeyRotation, 0);
 		if (g_epaper_config.epaper_rotation > 3) g_epaper_config.epaper_rotation = 0;
 		g_epaper_config.epaper_last_crc32 = prefs.getUInt(kKeyCrc32, 0);
@@ -157,10 +205,29 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		g_epaper_config.epaper_frontlight_brightness = prefs.getUChar(kKeyFrontBright, 0);
 		if (g_epaper_config.epaper_frontlight_brightness > 63) g_epaper_config.epaper_frontlight_brightness = 63;
 		g_epaper_config.epaper_frontlight_duration_s = prefs.getUShort(kKeyFrontDuration, 30);
+
+		// Load carousel
+		g_epaper_config.carousel_count = prefs.getUChar(kKeyCarouselCount, 0);
+		if (g_epaper_config.carousel_count > 5) g_epaper_config.carousel_count = 5;
+		for (int i = 0; i < 5; ++i) {
+				char key_url[16], key_int[16], key_stay[16];
+				snprintf(key_url, sizeof(key_url), "ep_c%d_url", i);
+				snprintf(key_int, sizeof(key_int), "ep_c%d_int", i);
+				snprintf(key_stay, sizeof(key_stay), "ep_c%d_stay", i);
+				String carousel_url = prefs.getString(key_url, "");
+				strlcpy(g_epaper_config.carousel[i].url, carousel_url.c_str(), CONFIG_EPAPER_URL_MAX_LEN);
+				g_epaper_config.carousel[i].interval_seconds = prefs.getUInt(key_int, 0);
+				g_epaper_config.carousel[i].stay = prefs.getBool(key_stay, false);
+		}
+
+		// Load schedule
+		g_epaper_config.schedule_hours = prefs.getUInt(kKeyScheduleHours, 0x00FFFFFF);
+		g_epaper_config.schedule_tz_offset = prefs.getChar(kKeyScheduleTzOff, 0);
+		if (g_epaper_config.schedule_tz_offset < -12) g_epaper_config.schedule_tz_offset = -12;
+		if (g_epaper_config.schedule_tz_offset > 14) g_epaper_config.schedule_tz_offset = 14;
 }
 
 static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
-		prefs.putString(kKeyUrl, g_epaper_config.epaper_url);
 		prefs.putUChar(kKeyRotation, g_epaper_config.epaper_rotation);
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_last_crc32);
 		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_overlay_enabled);
@@ -169,11 +236,29 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putUChar(kKeyOverlayItems, g_epaper_config.epaper_overlay_items);
 		prefs.putUChar(kKeyFrontBright, g_epaper_config.epaper_frontlight_brightness);
 		prefs.putUShort(kKeyFrontDuration, g_epaper_config.epaper_frontlight_duration_s);
+
+		// Save carousel (only write non-empty entries to save NVS space)
+		prefs.putUChar(kKeyCarouselCount, g_epaper_config.carousel_count);
+		for (int i = 0; i < 5; ++i) {
+				char key_url[16], key_int[16], key_stay[16];
+				snprintf(key_url, sizeof(key_url), "ep_c%d_url", i);
+				snprintf(key_int, sizeof(key_int), "ep_c%d_int", i);
+				snprintf(key_stay, sizeof(key_stay), "ep_c%d_stay", i);
+				// Only write non-empty carousel entries
+				if (g_epaper_config.carousel[i].url[0] != '\0') {
+						prefs.putString(key_url, g_epaper_config.carousel[i].url);
+						prefs.putUInt(key_int, g_epaper_config.carousel[i].interval_seconds);
+						prefs.putBool(key_stay, g_epaper_config.carousel[i].stay);
+				}
+		}
+
+		// Save schedule
+		prefs.putUInt(kKeyScheduleHours, g_epaper_config.schedule_hours);
+		prefs.putChar(kKeyScheduleTzOff, g_epaper_config.schedule_tz_offset);
 }
 
 static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) {
 		root["caps"]["epaper"] = true;
-		root["epaper_url"] = g_epaper_config.epaper_url;
 		root["epaper_rotation"] = g_epaper_config.epaper_rotation;
 		root["epaper_overlay_enabled"] = g_epaper_config.epaper_overlay_enabled;
 		root["epaper_overlay_position"] = g_epaper_config.epaper_overlay_position;
@@ -182,13 +267,23 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 		root["epaper_frontlight_brightness"] = g_epaper_config.epaper_frontlight_brightness;
 		root["epaper_frontlight_duration_s"] = g_epaper_config.epaper_frontlight_duration_s;
 		root["epaper_frontlight_supported"] = (bool)HAS_EPAPER_FRONTLIGHT;
+
+		// Carousel
+		root["epaper_carousel_count"] = g_epaper_config.carousel_count;
+		JsonArray carousel_array = root.createNestedArray("epaper_carousel");
+		for (int i = 0; i < g_epaper_config.carousel_count; ++i) {
+				JsonObject entry = carousel_array.createNestedObject();
+				entry["url"] = g_epaper_config.carousel[i].url;
+				entry["interval_seconds"] = g_epaper_config.carousel[i].interval_seconds;
+				entry["stay"] = g_epaper_config.carousel[i].stay;
+		}
+
+		// Schedule
+		root["epaper_schedule_hours"] = g_epaper_config.schedule_hours;
+		root["epaper_schedule_tz_offset"] = g_epaper_config.schedule_tz_offset;
 }
 
 static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
-		if (body.containsKey("epaper_url")) {
-				const char *v = body["epaper_url"] | "";
-				strlcpy(g_epaper_config.epaper_url, v, CONFIG_EPAPER_URL_MAX_LEN);
-		}
 		if (body.containsKey("epaper_rotation")) {
 				uint8_t v = body["epaper_rotation"].is<const char*>()
 						? (uint8_t)atoi(body["epaper_rotation"].as<const char*>())
@@ -229,6 +324,51 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 				g_epaper_config.epaper_frontlight_duration_s = body["epaper_frontlight_duration_s"].is<const char*>()
 						? (uint16_t)atoi(body["epaper_frontlight_duration_s"].as<const char*>())
 						: (uint16_t)(body["epaper_frontlight_duration_s"] | 30);
+		}
+
+		// Parse carousel
+		if (body.containsKey("epaper_carousel")) {
+				JsonArray carousel_array = body["epaper_carousel"];
+				uint8_t count = 0;
+				for (int i = 0; i < 5; ++i) {
+						if (i < (int)carousel_array.size() && carousel_array[i].is<JsonObject>()) {
+								JsonObject entry = carousel_array[i].as<JsonObject>();
+								const char *url = entry["url"] | "";
+								if (url[0] != '\0') {
+										strlcpy(g_epaper_config.carousel[i].url, url, CONFIG_EPAPER_URL_MAX_LEN);
+										uint32_t interval = entry["interval_seconds"] | 0;
+										if (interval == 0) interval = kDefaultCarouselDurationS;
+										g_epaper_config.carousel[i].interval_seconds = interval;
+										g_epaper_config.carousel[i].stay = entry["stay"] | false;
+										count = (uint8_t)(i + 1);
+								} else {
+										g_epaper_config.carousel[i].url[0] = '\0';
+										g_epaper_config.carousel[i].interval_seconds = 0;
+										g_epaper_config.carousel[i].stay = false;
+								}
+						} else {
+								g_epaper_config.carousel[i].url[0] = '\0';
+								g_epaper_config.carousel[i].interval_seconds = 0;
+								g_epaper_config.carousel[i].stay = false;
+						}
+				}
+				g_epaper_config.carousel_count = count;
+		}
+
+		// Parse schedule
+		if (body.containsKey("epaper_schedule_hours")) {
+				uint32_t v = body["epaper_schedule_hours"].is<const char*>()
+						? (uint32_t)strtoul(body["epaper_schedule_hours"].as<const char*>(), nullptr, 10)
+						: (uint32_t)(body["epaper_schedule_hours"] | 0xFFFFFF);
+				g_epaper_config.schedule_hours = v & 0xFFFFFF;
+		}
+		if (body.containsKey("epaper_schedule_tz_offset")) {
+				int8_t v = body["epaper_schedule_tz_offset"].is<const char*>()
+						? (int8_t)atoi(body["epaper_schedule_tz_offset"].as<const char*>())
+						: (int8_t)(body["epaper_schedule_tz_offset"] | 0);
+				if (v < -12) v = -12;
+				if (v > 14) v = 14;
+				g_epaper_config.schedule_tz_offset = v;
 		}
 }
 
@@ -386,7 +526,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		const bool connected = wifi_manager_connect(config, true);
 		if (!connected) {
 				const uint32_t backoff = power_manager_note_wifi_failure(
-						config->duty_cycle_wake_seconds,
+						epaper_current_slot_duration_seconds(),
 						config->wifi_backoff_max_seconds);
 				epaper_timing_last.boot_to_wifi_ms = millis();
 				epaper_timing_last.total_active_ms = millis();
@@ -403,9 +543,35 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				getLocalTime(&tm_now, 2000);
 		}
 
+		// Conditional NTP sync for schedule: only needed if schedule is active and clock is stale.
+		// Fail-open: if NTP times out after 5s, proceed anyway rather than bricking the device.
+		if (g_epaper_config.schedule_hours != 0x00FFFFFF && time(nullptr) < EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
+				LOGI("Epaper", "Schedule active and clock stale; syncing NTP");
+				configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+				for (int i = 0; i < 50; ++i) {  // 5s timeout (50 × 100ms)
+						if (time(nullptr) >= EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
+								break;
+						}
+						delay(100);
+				}
+				if (time(nullptr) < EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
+						LOGW("Epaper", "NTP timeout; proceeding with stale clock (schedule will fail-open)");
+				}
+		}
+
 		const uint32_t t_wifi_done = millis();
 		epaper_timing_last.boot_to_wifi_ms = t_wifi_done;
 		epaper_timing_last.wifi_rssi = (int16_t)WiFi.RSSI();
+
+		// Schedule check BEFORE image fetch: if disabled at this hour, sleep and skip refresh
+		if (g_epaper_config.schedule_hours != 0x00FFFFFF) {
+				if (!epaper_schedule_should_refresh(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr))) {
+						uint32_t sleep_s = epaper_schedule_seconds_to_next(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr));
+						LOGI("Epaper", "Schedule: disabled at this hour; sleeping %u seconds", sleep_s);
+						power_manager_sleep_for(sleep_s);
+						return true;
+				}
+		}
 
 		// Cold boot forces a refresh: the panel currently shows only the boot
 		// splash, so a CRC-match skip would leave the user staring at the
@@ -417,9 +583,28 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 #else
 		const bool force_refresh = cold_boot;
 #endif
+
+		if (!epaper_resolve_current_url()) {
+				LOGW("Epaper", "Refresh skipped: no carousel URL configured");
+				power_manager_sleep_for(kDefaultCarouselDurationS);
+				return true;
+		}
+		const uint8_t active_slot_index = g_epaper_carousel_index;
+		LOGI("Epaper", "Carousel: using slot %u URL: %s", g_epaper_carousel_index, g_epaper_config.epaper_url);
+
 		const EpaperRefreshOutcome outcome = epaper_refresh_run(config, force_refresh);
 		const uint32_t t_draw_done = millis();
 		epaper_timing_last.crc_retry_count = outcome.crc_retry_count;
+
+		// Carousel: advance index after refresh (on success or skip)
+		if (g_epaper_config.carousel_count > 0) {
+				uint8_t next_idx = epaper_carousel_next_index(
+						g_epaper_carousel_index,
+						g_epaper_config.carousel_count,
+						g_epaper_config.carousel[g_epaper_carousel_index].stay);
+				g_epaper_carousel_index = next_idx;
+				LOGI("Epaper", "Carousel: advanced to slot %u", next_idx);
+		}
 		epaper_timing_last.crc_to_draw_ms = t_draw_done - t_wifi_done;
 
 #if HAS_MQTT
@@ -447,7 +632,14 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// Sleep-time compensation: subtract active loop duration so wake-to-wake
 		// cadence approximates duty_cycle_wake_seconds. Skip when target is 0
 		// (button-only mode) so we don't accidentally re-arm the timer.
-		const uint32_t target_s = config->duty_cycle_wake_seconds;
+		// Per-entry interval: if carousel active, use current entry's interval (if > 0)
+		uint32_t target_s = kDefaultCarouselDurationS;
+		if (g_epaper_config.carousel_count > 0) {
+				target_s = g_epaper_config.carousel[active_slot_index].interval_seconds;
+				if (target_s == 0) target_s = kDefaultCarouselDurationS;
+				LOGI("Epaper", "Using carousel slot %u duration: %u seconds", active_slot_index, target_s);
+		}
+
 		epaper_timing_last.total_active_ms = millis();
 		uint32_t sleep_s = target_s;
 		if (target_s > 0) {
@@ -542,10 +734,12 @@ void epaper_device_class_register() {
 // under device_classes/epaper/ is brought in via these #includes so the
 // whole device class lives in one folder.
 #include "epaper/epaper_crc32.cpp"
+#include "epaper/epaper_carousel.cpp"
 #include "epaper/epaper_drivers.cpp"
 #include "epaper/epaper_mqtt.cpp"
 #include "epaper/epaper_overlay.cpp"
 #include "epaper/epaper_refresh.cpp"
+#include "epaper/epaper_schedule.cpp"
 #include "epaper/epaper_screens.cpp"
 #include "epaper/epaper_timing.cpp"
 

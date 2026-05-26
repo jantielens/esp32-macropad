@@ -10,6 +10,7 @@
 #include <esp_sleep.h>
 #include <esp_system.h>
 #include <Preferences.h>
+#include <time.h>
 
 // RTC-retained backoff state
 RTC_DATA_ATTR static uint32_t g_wifi_backoff_seconds = 0;
@@ -172,9 +173,25 @@ void power_manager_sleep_for(uint32_t seconds) {
 		}
 
 		if (seconds == 0) {
-				LOGI("Power", "Sleeping (button-only, no timer wakeup)");
+				LOGI("Power", "Sleeping (button-only, no timer wakeup; wake time depends on external trigger)");
 		} else {
-				LOGI("Power", "Sleeping for %us", (unsigned)seconds);
+				time_t now = time(nullptr);
+				time_t wake_epoch = now + (time_t)seconds;
+
+				if (now >= 946684800) {
+						struct tm wake_tm;
+						char wake_buf[32];
+						localtime_r(&wake_epoch, &wake_tm);
+						strftime(wake_buf, sizeof(wake_buf), "%Y-%m-%d %H:%M:%S", &wake_tm);
+						LOGI("Power", "Sleeping for %us; planned wake at %s (epoch=%llu)",
+						     (unsigned)seconds,
+						     wake_buf,
+						     (unsigned long long)wake_epoch);
+				} else {
+						LOGI("Power", "Sleeping for %us; planned wake in +%us (clock not synced)",
+						     (unsigned)seconds,
+						     (unsigned)seconds);
+				}
 		}
 
 		led_write(false);

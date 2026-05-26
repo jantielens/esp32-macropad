@@ -9,7 +9,7 @@ ms.topic: concept
 
 The e-paper device class is the low-power, non-interactive branch of ESP32 Macropad.
 
-Instead of rendering an LVGL user interface and waiting for touch input, an e-paper device wakes on demand, refreshes a single full-screen image, and returns to deep sleep. The current board target is the Soldered Inkplate 5V2.
+Instead of rendering an LVGL user interface and waiting for touch input, an e-paper device wakes on demand, refreshes one or more configured full-screen images, and returns to deep sleep. The current board target is the Soldered Inkplate 5V2.
 
 This guide holds the detailed e-paper-specific material. Generic project docs, such as the README and changelog, stay intentionally high level so they do not become a second copy of the same evolving information.
 
@@ -21,7 +21,7 @@ The current implementation targets one board and one usage model:
 * SoC: ESP32 classic
 * Display: 720 × 1280 3-bit grayscale e-paper
 * Interaction model: non-touch, battery-oriented dashboard
-* Render model: fetch one remote image, draw it, sleep
+* Render model: fetch the current remote image slot, draw it, sleep
 
 The shared web portal is still used for setup and configuration, but the runtime behavior is intentionally much simpler than the interactive display class.
 
@@ -88,7 +88,7 @@ A refresh is always forced (CRC skip is bypassed) when any of these is true:
 
 ## Image and Sidecar Contract
 
-The current implementation expects a public HTTP or HTTPS image URL.
+The current implementation expects public HTTP or HTTPS image URLs.
 
 Supported image formats:
 
@@ -112,6 +112,18 @@ Sidecar body formats currently accepted:
 * `305419896` (decimal)
 
 If the sidecar fetch fails, times out, or returns unparseable content, the device treats the image as changed and proceeds with a normal refresh.
+
+## Image Carousel
+
+The portal can configure up to five image slots. Each slot has:
+
+* A URL
+* A per-slot Duration in seconds
+* A Stay flag that keeps the same slot active when the refresh result does not change the content
+
+Slots are filled top-to-bottom. Empty slots are skipped. A slot's Duration is the amount of time the device stays on that image before the next wake.
+
+There is no separate global "wake every" control in the current UI. The wake-to-wake cadence is driven by the active slot's Duration. When only the first slot is populated, the board behaves like a single-image setup.
 
 ## Wake Button Behavior
 
@@ -178,14 +190,15 @@ E-paper component endpoints are split across two components: `epaper-status` and
 
 ## Portal Configuration Model
 
-On e-paper boards, the web portal uses a dedicated **E-Paper** category as the primary landing area. The category contains four pages:
+On e-paper boards, the web portal uses a dedicated **E-Paper** category as the primary landing area. The category contains five pages:
 
 * **Status** &mdash; read-only refresh counters, timing, battery, and last outcome, plus a `Refresh e-paper now` action. Auto-refreshes every 5 seconds.
-* **Image Source & Refresh Schedule** &mdash; image URL, rotation, wake interval, WiFi backoff cap, and frontlight (when the board supports it).
+* **Image Sources** &mdash; up to 5 image slots with per-slot Duration and Stay flags, plus the hourly refresh window and timezone offset.
+* **WiFi Failure Backoff** &mdash; WiFi retry sleep cap after repeated failures.
 * **Status Overlay** &mdash; overlay enable, corner position, color, and per-field bitmask (battery, percentage, time, duration).
 * **VCOM** &mdash; one-time TPS65186 EEPROM calibration controls.
 
-The operating mode is not exposed as a separate page on e-paper boards. The Image and Status Overlay pages each write the hidden `operating_mode=duty_cycle_epaper` field on save so the board cannot drift into an unrelated transport mode through normal portal use.
+The operating mode is not exposed as a separate page on e-paper boards. The Image Sources and Status Overlay pages each write the hidden `operating_mode=duty_cycle_epaper` field on save so the board cannot drift into an unrelated transport mode through normal portal use.
 
 ## Status Semantics
 
@@ -241,16 +254,15 @@ The e-paper duty cycle measures and retains a per-wake timing budget in RTC memo
 
 ### Wake Modes
 
-The `Wake every (seconds)` setting on the E-Paper page accepts two value classes:
+The e-paper device wakes from either the RTC timer or the WAKE button. The current UI no longer exposes a separate global "wake every" control; the wake cadence is driven by the active slot's Duration.
 
-* Any positive value (default `900`) — the device deep-sleeps for that many seconds, then wakes via the RTC timer and refreshes
-* `0` — button-only mode: the timer wakeup is not armed and the device sleeps until the WAKE button is pressed
-
-In button-only mode, the only way to refresh is to press WAKE. Use this when the device is acting as a static placard whose image only changes on demand.
+* Slot Duration controls how long the device sleeps after showing that slot.
+* The schedule can still disable refreshes for selected local hours.
+* Button-only operation remains possible when the timer wake is intentionally disabled in firmware behavior.
 
 ### Sleep-Time Compensation
 
-After each cycle the firmware subtracts the active loop duration from the configured wake interval so the wake-to-wake cadence approximates the target. A 900 s setting with a 12 s active loop sleeps for 888 s, not 900 s. A minimum sleep of 10 s is enforced.
+After each cycle the firmware subtracts the active loop duration from the planned slot Duration so the wake-to-wake cadence stays close to the configured value. The planned sleep time is logged before deep sleep, including the wake timestamp when the clock is valid.
 
 ### Battery Reporting
 
@@ -318,11 +330,11 @@ The e-paper device class is intentionally narrow in this first version.
 Current limitations include:
 
 * Public image URLs only
-* Single-image refresh model
 * Full refresh only, no partial-update pipeline
 * No local cache or offline image fallback
 * No touch UI runtime
-* No slideshow or multi-slot image rotation
+* No local image storage; all carousel slots point to remote URLs
+* Hourly schedule uses a fixed UTC offset rather than full timezone rules (DST must be adjusted manually)
 
 Those constraints keep the runtime predictable and power efficient while the device class matures.
 

@@ -31,9 +31,9 @@ static void epaper_status_refresh_post(AsyncWebServerRequest* request) {
         return;
     }
 
-    if (strlen(g_epaper_config.epaper_url) == 0) {
+    if (!epaper_resolve_current_url()) {
         request->send(400, "application/json",
-                      "{\"success\":false,\"message\":\"No image URL configured\"}");
+                      "{\"success\":false,\"message\":\"No carousel image configured\"}");
         return;
     }
 

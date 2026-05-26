@@ -9,7 +9,7 @@ ms.topic: overview
 
 Turn your ESP32 display board into a powerful, fully customizable smart home control panel with no coding required.
 
-ESP32 Macropad is open-source firmware that transforms affordable ESP32 development boards into configurable control surfaces and dashboards. Interactive boards use a touch-first pad UI. E-paper boards, such as the Inkplate 5V2, use a battery-focused duty-cycle image-refresh model. Both are configured from the same web portal and integrate with Home Assistant over MQTT.
+ESP32 Macropad is open-source firmware that transforms affordable ESP32 development boards into configurable control surfaces and dashboards. Interactive boards use a touch-first pad UI. E-paper boards, such as the Inkplate 5V2, use a battery-focused image carousel + hourly schedule model with deep sleep between refreshes. Both are configured from the same web portal and integrate with Home Assistant over MQTT.
 
 ## ✨ Features
 
@@ -69,7 +69,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 
 - **Home Assistant control panel** — lights, switches, scenes, climate — all one tap away
 - **Energy monitor dashboard** — real-time solar, battery, and grid power visualization
-- **Battery-powered e-paper dashboard** — wake on a schedule, fetch a pre-rendered image, refresh, and go back to sleep
+- **Battery-powered e-paper dashboard** — rotate through one or more images, apply hourly refresh windows, refresh, and go back to sleep
 - **Media controller** — play, pause, skip, volume for your media players
 - **Bluetooth macro keyboard** — launch apps, paste snippets, control presentations, or trigger shortcuts on your PC or Mac
 - **Smart home remote** — replace a drawer full of remotes with one touch screen
@@ -143,7 +143,7 @@ The pad editor lets you design button layouts visually: drag-to-move and drag-to
 |-------|-------------|
 | [First-Time Setup](docs/first-time-setup.md) | Initial configuration after flashing |
 | [Web Portal Guide](docs/web-portal-guide.md) | Complete guide to all portal features |
-| [E-Paper Guide](docs/epaper-guide.md) | Detailed guide for the e-paper device class, image pipeline, wake behavior, and status semantics |
+| [E-Paper Guide](docs/epaper-guide.md) | Detailed guide for the e-paper device class, carousel/schedule model, wake behavior, and status semantics |
 | [Home Assistant Integration](docs/ha-integration-guide.md) | HA entity reference, audio control, and automation examples |
 | [Home Assistant + MQTT (dev)](docs/dev/home-assistant-mqtt.md) | MQTT topic structure and HA auto-discovery internals |
 

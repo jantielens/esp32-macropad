@@ -1311,7 +1311,8 @@ DNS server redirects all requests to device IP in AP mode:
 
   The bundler scans both locations. Use `src/app/web/` for shared, cross-board
   portal behavior. Use `src/app/device_classes/<class>/web/` for feature files
-  that only make sense for one device class (for example, e-paper fragment init).
+  that only make sense for one device class (for example, the e-paper page,
+  its fragment init, and any device-class-specific JS state management).
 
   Under `src/app/web/`:
    - Template fragments (shared):

@@ -36,12 +36,15 @@ static const char* result_to_str(EpaperRefreshResult r) {
 bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 													 const EpaperTimingBudget* timing) {
 		extern MqttManager mqtt_manager;
+		extern EpaperConfig g_epaper_config;
+		extern uint8_t g_epaper_carousel_index;
+
 		if (!mqtt_manager.connected()) return false;
 
 		char topic[160];
 		snprintf(topic, sizeof(topic), "%s/epaper/state", mqtt_manager.baseTopic());
 
-		StaticJsonDocument<640> doc;
+		StaticJsonDocument<768> doc;
 		doc["battery_mv"]      = outcome.battery_mv;
 		doc["battery_pct"]     = epaper_battery_percent(outcome.battery_mv);
 		doc["wifi_rssi"]       = timing ? timing->wifi_rssi : (int16_t)WiFi.RSSI();
@@ -49,6 +52,18 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		doc["refresh_result"]  = result_to_str(outcome.result);
 		doc["refresh_count"]   = epaper_refresh_get_count();
 		doc["sidecar_http_status"] = outcome.sidecar_http_status;
+
+		// Carousel telemetry
+		doc["carousel_count"] = g_epaper_config.carousel_count;
+		if (g_epaper_config.carousel_count > 0) {
+				doc["carousel_index"] = g_epaper_carousel_index;
+				doc["carousel_url"] = g_epaper_config.carousel[g_epaper_carousel_index].url;
+		}
+
+		// Schedule telemetry
+		doc["schedule_active"] = (g_epaper_config.schedule_hours != 0x00FFFFFF);
+		doc["schedule_hours"] = g_epaper_config.schedule_hours;
+		doc["schedule_tz_offset"] = g_epaper_config.schedule_tz_offset;
 
 		JsonObject t = doc.createNestedObject("timing");
 		if (timing) {
