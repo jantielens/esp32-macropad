@@ -1,7 +1,7 @@
 // Host-native unit test for epaper_battery_percent — a pure function with
 // no Arduino dependencies.
 
-#include "epaper_battery.h"
+#include "device_classes/epaper/epaper_battery.h"
 
 #include <cassert>
 #include <cstdio>
