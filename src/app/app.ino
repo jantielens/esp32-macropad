@@ -149,6 +149,55 @@ static bool check_config_mode_button() {
 	#endif
 }
 
+#if HAS_EPAPER_WAKE_BUTTON
+// Poll the wake button while in Config / AP mode and reboot on a single
+// press. In Config / AP the device stays awake and the button is no longer
+// wired to ext0, so we poll it directly. A 1.5 s grace period after entering
+// config mode prevents the long-press that *triggered* config mode from
+// immediately bouncing back out; a 20 ms re-read rejects contact chatter.
+//
+// The pin uses an external pull-up (configured as plain INPUT — no internal
+// pull is needed on inkplate5v2). On release the pin reads HIGH; on press it
+// reads LOW.
+static void check_config_mode_exit_button() {
+	static bool s_armed = false;
+	static unsigned long s_arm_at_ms = 0;
+	static bool s_last_released = true;
+
+	const PowerMode now_mode = power_manager_get_current_mode();
+	const bool in_config = (now_mode == PowerMode::Config || now_mode == PowerMode::Ap);
+	if (!in_config) {
+		s_armed = false;
+		return;
+	}
+
+	if (!s_armed) {
+		pinMode(EPAPER_BUTTON_PIN, INPUT);
+		s_arm_at_ms = millis() + 1500;
+		s_last_released = true;
+		s_armed = true;
+		return;
+	}
+	if ((long)(millis() - s_arm_at_ms) < 0) return;
+
+	const bool released = (digitalRead(EPAPER_BUTTON_PIN) != LOW);
+	if (!released && s_last_released) {
+		// Falling edge — confirm with a short re-read to debounce.
+		delay(20);
+		if (digitalRead(EPAPER_BUTTON_PIN) == LOW) {
+			LOGI("Power", "Wake button pressed in Config/AP mode - rebooting to normal");
+			#if HAS_EPAPER
+			epaper_show_status(device_config.epaper_rotation, []() {
+				epaper_screen_returning_to_normal();
+			});
+			#endif
+			delay(100);
+			ESP.restart();
+		}
+	}
+	s_last_released = released;
+}
+#endif
 
 void setup()
 {
@@ -307,6 +356,20 @@ void setup()
 	power_manager_set_current_mode(boot_mode);
 	power_manager_led_set_mode(boot_mode);
 
+	#if HAS_EPAPER
+	// Immediate ack when entering Config / AP mode so the user sees their
+	// long-press or reset-burst was registered without waiting for Wi-Fi to
+	// come up first. The full SSID/IP screen is drawn later once those are
+	// known. Costs one extra ~1 s refresh on fast e-paper panels; skipped on
+	// slow panels (EPAPER_FAST_REFRESH=false) where it would dominate the
+	// time-to-actionable-info.
+	if (EPAPER_FAST_REFRESH && (boot_mode == PowerMode::Config || boot_mode == PowerMode::Ap)) {
+		epaper_show_status(device_config.epaper_rotation, []() {
+			epaper_screen_config_mode_starting();
+		});
+	}
+	#endif
+
 	if (boot_mode == PowerMode::DutyCycle) {
 		// Initialize sensors (optional adapters)
 		sensor_manager_init();
@@ -336,18 +399,33 @@ void setup()
 
 	#if HAS_EPAPER
 	if (boot_mode == PowerMode::DutyCycleEpaper) {
-		// Show a boot splash on every wake that ISN'T a periodic timer wake,
-		// so the user gets immediate visual feedback when they press the
-		// button or cold-boot the device. Periodic refreshes skip the splash
-		// to avoid flashing the panel every refresh interval.
-		const esp_sleep_wakeup_cause_t wake_cause = esp_sleep_get_wakeup_cause();
-		if (wake_cause != ESP_SLEEP_WAKEUP_TIMER) {
-			if (epaper_driver_begin()) {
-				epaper_driver_set_rotation(device_config.epaper_rotation);
-				epaper_screen_boot_splash(device_config.device_name, FIRMWARE_VERSION);
-				epaper_driver_display();
-				epaper_driver_sleep();
-			}
+		// Splash policy:
+		//   - Cold boot: always show the boot splash so the user gets proof
+		//     of life on a freshly plugged-in device.
+		//   - Button wake on a fast panel (EPAPER_FAST_REFRESH=true, e.g.
+		//     Inkplate 5V2 at ~1 s per refresh): show a brief "Refreshing"
+		//     splash for immediate visual feedback before the image fetch.
+		//   - Button wake on a slow panel: skip the splash — the extra full
+		//     refresh would dominate the time-to-new-image budget.
+		//   - Timer wake: never any splash — periodic refreshes are silent.
+		const bool is_cold_boot = !power_manager_is_deep_sleep_wake();
+		#if HAS_EPAPER_WAKE_BUTTON
+		const bool is_button_wake = power_manager_is_button_wake();
+		#else
+		const bool is_button_wake = false;
+		#endif
+
+		const bool show_boot_splash    = is_cold_boot;
+		const bool show_manual_refresh = (EPAPER_FAST_REFRESH && is_button_wake);
+
+		if (show_boot_splash || show_manual_refresh) {
+			epaper_show_status(device_config.epaper_rotation, [show_boot_splash]() {
+				if (show_boot_splash) {
+					epaper_screen_boot_splash(device_config.device_name, FIRMWARE_VERSION);
+				} else {
+					epaper_screen_manual_refresh(nullptr);
+				}
+			});
 		}
 		// E-paper devices skip the LVGL display path entirely; the duty cycle
 		// drives the panel directly from the Inkplate library.
@@ -437,8 +515,7 @@ void setup()
 		{
 			const PowerMode now_mode = power_manager_get_current_mode();
 			const bool is_ap = (now_mode == PowerMode::Ap);
-			if (epaper_driver_begin()) {
-				epaper_driver_set_rotation(device_config.epaper_rotation);
+			epaper_show_status(device_config.epaper_rotation, [is_ap]() {
 				if (is_ap) {
 					const String ip = WiFi.softAPIP().toString();
 					const String ssid = WiFi.softAPSSID();
@@ -447,9 +524,7 @@ void setup()
 					const String ip = WiFi.localIP().toString();
 					epaper_screen_config_mode(device_config.wifi_ssid, ip.c_str(), false);
 				}
-				epaper_driver_display();
-				epaper_driver_sleep();
-			}
+			});
 		}
 		#endif
 
@@ -586,6 +661,10 @@ void loop()
 {
 	power_manager_led_loop();
 	power_manager_loop();
+
+	#if HAS_EPAPER_WAKE_BUTTON
+	check_config_mode_exit_button();
+	#endif
 
 	#if HAS_DISPLAY
 	screen_saver_manager_loop();

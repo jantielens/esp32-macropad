@@ -42,6 +42,14 @@
 // Inkplate 5 V2 has no frontlight hardware.
 #define HAS_EPAPER_FRONTLIGHT false
 
+// --- E-paper refresh speed classification --------------------------------
+// The Inkplate 5 V2 (720x1280 3-bit) completes a full waveform in ~1 s,
+// fast enough that showing transient splashes for state changes is a UX
+// win rather than a tax. Enables: "Refreshing" splash on button wake, and
+// the immediate "Configuration Mode — preparing…" ack at boot when the
+// user long-presses for config.
+#define EPAPER_FAST_REFRESH true
+
 // First-boot recovery portal idle default — generous so a user has time to
 // finish configuring the dashboard URL after the device falls into Config/AP
 // mode on a fresh flash.

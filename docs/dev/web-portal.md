@@ -333,6 +333,9 @@ All pages include a fixed bottom footer with action buttons:
 - Footer stays attached to bottom, spans full page width (max 900px)
 - Always visible while scrolling
 
+**Header Reboot Button:**
+The portal header also carries a 🔄 reboot button next to the dark/light theme toggle, available on every page (including pages without the Save/Reboot footer). Clicking it prompts for confirmation, calls `POST /api/reboot`, and shows the standard reboot dialog. It does not save first.
+
 ## Automatic Reconnection After Reboot
 
 When the device reboots (after saving settings, firmware update, or manual reboot), the portal automatically attempts to reconnect and redirect you to the device.

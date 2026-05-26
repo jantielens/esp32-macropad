@@ -768,14 +768,23 @@ body {
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 20px;
-  padding: 3px 10px;
+  padding: 0 10px;
+  height: 28px;
   cursor: pointer;
   font-size: 0.95rem;
   line-height: 1;
   margin-left: auto;
   transition: background 0.2s, border-color 0.2s;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+}
+
+.theme-toggle-btn > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .theme-toggle-btn:hover {
@@ -785,9 +794,18 @@ body {
 
 /* Show sun in dark mode, moon in light mode */
 :root[data-bs-theme="dark"] .theme-icon-moon { display: none; }
-:root[data-bs-theme="dark"] .theme-icon-sun  { display: inline; }
+:root[data-bs-theme="dark"] .theme-icon-sun  { display: inline-flex; }
 :root[data-bs-theme="light"] .theme-icon-sun  { display: none; }
-:root[data-bs-theme="light"] .theme-icon-moon { display: inline; }
+:root[data-bs-theme="light"] .theme-icon-moon { display: inline-flex; }
+
+/* Reboot toggle sits right next to the theme toggle and reuses its pill
+   styling. margin-left:auto is reset to a small gap so the two buttons
+   group together at the header's trailing edge. Both buttons use emoji
+   glyphs so they share the same vertical metrics and render at matching
+   sizes. */
+.reboot-toggle-btn {
+  margin-left: 2px;
+}
 
 /* ================================================================
    Mobile Responsive (≤767.98px)

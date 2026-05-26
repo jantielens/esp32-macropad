@@ -301,6 +301,8 @@ The **Pads** page has its own separate footer — see [Pads Page](#pads-page) ab
 
 Each page only saves the fields shown on that page — saving on the Home page won't clear your Network settings.
 
+A **🔄 reboot button** also lives in the portal header (next to the light/dark theme toggle) and is available on every page. It prompts for confirmation, then reboots without saving — handy when you've made a change elsewhere (e.g., the API) and just need to restart.
+
 After a reboot, the portal shows an automatic reconnection dialog. If it can't reconnect (e.g., the device name changed), it provides a manual link with the new address.
 
 ---

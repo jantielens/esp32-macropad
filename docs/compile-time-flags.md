@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 181
+Total flags: 182
 
 ### Features (HAS_*)
 
@@ -153,6 +153,7 @@ Total flags: 181
 - **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
+- **EPAPER_FAST_REFRESH** default: `false` — button wakes skip straight to the image fetch to avoid the second waveform.
 - **HEALTH_HISTORY_ENABLED** default: `1` — Enable device-side health history ring buffer for charting in the web portal
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
@@ -408,6 +409,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_EPAPER**
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/components/epaper_image_component.cpp
+  - src/app/components/epaper_overlay_component.cpp
+  - src/app/components/epaper_status_component.cpp
+  - src/app/components/epaper_vcom_component.cpp
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/drivers/inkplate5v2_driver.cpp
@@ -604,6 +609,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **DISPLAY_SHAPE**
   - src/app/board_config.h
 - **EPAPER_BUTTON_PIN**
+  - src/app/board_config.h
+- **EPAPER_FAST_REFRESH**
   - src/app/board_config.h
 - **HEALTH_HISTORY_ENABLED**
   - src/app/app.ino

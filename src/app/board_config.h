@@ -78,6 +78,14 @@
 #define HAS_EPAPER_FRONTLIGHT false
 #endif
 
+// E-paper full-refresh speed classification. When true, the boot path shows
+// a short "Refreshing" splash on button wakes (OG inkplate-dashboard pattern).
+// When false (default — most e-paper panels need 6-10 s per full refresh),
+// button wakes skip straight to the image fetch to avoid the second waveform.
+#ifndef EPAPER_FAST_REFRESH
+#define EPAPER_FAST_REFRESH false
+#endif
+
 // Recovery / config portal first-boot auto-sleep default (seconds). Boards
 // where the recovery portal is the primary user-facing surface (e.g. headless
 // e-paper dashboards) can raise this so the user has more time to configure

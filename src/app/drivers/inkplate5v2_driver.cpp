@@ -20,6 +20,20 @@
 #include "fonts/Inter_Regular_12pt7b.h"
 #include "fonts/Inter_Bold_20pt7b.h"
 
+// Per-board font overrides. A board_overrides.h can `#define` any of these to
+// point at a different GFXfont* (and `#include` the corresponding font header
+// from its own headers) to retune the e-paper status screens for a different
+// pixel density. Defaults below match the original Inkplate 5 V2 tuning.
+#ifndef EPAPER_FONT_SMALL_PTR
+#define EPAPER_FONT_SMALL_PTR  (&Inter_Regular8pt7b)
+#endif
+#ifndef EPAPER_FONT_MEDIUM_PTR
+#define EPAPER_FONT_MEDIUM_PTR (&Inter_Regular12pt7b)
+#endif
+#ifndef EPAPER_FONT_LARGE_PTR
+#define EPAPER_FONT_LARGE_PTR  (&Inter_Bold20pt7b)
+#endif
+
 // The Inkplate constructor allocates large 3-bit framebuffers in PSRAM and
 // touches the I2C / SPI peripherals. Doing that during C++ global init runs
 // before the Arduino runtime (heap_caps PSRAM mapping, peripheral clocks) is
@@ -29,9 +43,9 @@ static Inkplate *s_display = nullptr;
 static bool s_began = false;
 
 static const GFXfont* const s_font_table[3] = {
-		&Inter_Regular8pt7b,    // EPAPER_FONT_SMALL
-		&Inter_Regular12pt7b,   // EPAPER_FONT_MEDIUM
-		&Inter_Bold20pt7b,      // EPAPER_FONT_LARGE
+		EPAPER_FONT_SMALL_PTR,   // EPAPER_FONT_SMALL
+		EPAPER_FONT_MEDIUM_PTR,  // EPAPER_FONT_MEDIUM
+		EPAPER_FONT_LARGE_PTR,   // EPAPER_FONT_LARGE
 };
 
 bool epaper_driver_begin() {
