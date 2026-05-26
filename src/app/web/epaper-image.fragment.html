@@ -1,0 +1,63 @@
+<div class="section-header">
+  <h2>📰 Image &amp; Schedule</h2>
+  <p>Where the dashboard image is fetched from and how often the device wakes to refresh it. The device deep-sleeps between refreshes to save battery.</p>
+</div>
+
+<!-- Hidden: e-paper boards always run in this mode. Setting it on every Save
+     ensures the device cannot drift out of duty_cycle_epaper by accident. -->
+<input type="hidden" name="operating_mode" value="duty_cycle_epaper">
+
+<div class="card mb-3">
+  <div class="card-header"><strong>Image source</strong></div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="epaper_url">Image URL</label>
+      <input type="url" class="form-control" id="epaper_url" name="epaper_url" maxlength="255" placeholder="https://example.com/dashboard.png">
+      <div class="form-text">PNG, JPG, or BMP. Sized for your panel (720×1280 for Inkplate 5 V2). The device also fetches <code>&lt;url&gt;.crc32</code> as a change-detection sidecar so unchanged images skip the slow refresh.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="epaper_rotation">Rotation</label>
+      <select class="form-select" id="epaper_rotation" name="epaper_rotation">
+        <option value="0">0° (portrait)</option>
+        <option value="1">90° (landscape)</option>
+        <option value="2">180°</option>
+        <option value="3">270°</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><strong>Refresh schedule</strong></div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="duty_cycle_wake_seconds">Wake every (seconds)</label>
+      <input type="number" class="form-control" id="duty_cycle_wake_seconds" name="duty_cycle_wake_seconds" min="0" max="86400" placeholder="900">
+      <div class="form-text" id="epaper-wake-help">The device deep-sleeps between refreshes to save battery. 900 = 15 minutes. Set to <code>0</code> for button-only wake (no timer).</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="wifi_backoff_max_seconds">WiFi failure backoff max (seconds)</label>
+      <input type="number" class="form-control" id="wifi_backoff_max_seconds" name="wifi_backoff_max_seconds" min="60" max="86400" placeholder="3600">
+      <div class="form-text">After repeated WiFi failures the sleep interval doubles up to this ceiling. 3600 = 1 hour.</div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3" id="epaper-frontlight-card" hidden>
+  <div class="card-header"><strong>Frontlight</strong></div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="epaper_frontlight_brightness">Brightness (0–63, 0 disables)</label>
+      <input type="number" class="form-control" id="epaper_frontlight_brightness" name="epaper_frontlight_brightness" min="0" max="63" placeholder="0">
+      <div class="form-text">Only used on button wakes — periodic refreshes do not light the panel.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="epaper_frontlight_duration_s">Stay on for (seconds)</label>
+      <input type="number" class="form-control" id="epaper_frontlight_duration_s" name="epaper_frontlight_duration_s" min="1" max="600" placeholder="30">
+    </div>
+  </div>
+</div>
+
+<div class="save-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="epaper-image-save-btn">Save</button>
+</div>

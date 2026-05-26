@@ -860,6 +860,8 @@ fragment_feature_flag() {
             echo "HAS_AUDIO" ;;
         sounds)
             echo "HAS_SOUND_PLAYER" ;;
+        epaper_status|epaper_image|epaper_overlay|epaper_vcom)
+            echo "HAS_EPAPER" ;;
         *)
             echo "" ;;
     esac

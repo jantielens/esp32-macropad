@@ -1,0 +1,46 @@
+<div class="section-header">
+  <h2>📰 Status Overlay</h2>
+  <p>Optional readout the device paints on top of the dashboard image (battery, time, cycle time). Useful when the image source does not include this information itself.</p>
+</div>
+
+<!-- Hidden: e-paper boards always run in this mode. Setting it on every Save
+     ensures the device cannot drift out of duty_cycle_epaper by accident. -->
+<input type="hidden" name="operating_mode" value="duty_cycle_epaper">
+
+<div class="card mb-3">
+  <div class="card-header"><strong>Overlay</strong></div>
+  <div class="card-body">
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" id="epaper_overlay_enabled" name="epaper_overlay_enabled">
+      <label class="form-check-label" for="epaper_overlay_enabled">Show overlay on top of dashboard image</label>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="epaper_overlay_position">Position</label>
+      <select class="form-select" id="epaper_overlay_position" name="epaper_overlay_position">
+        <option value="0">Top-left</option>
+        <option value="1">Top-right</option>
+        <option value="2">Bottom-left</option>
+        <option value="3" selected>Bottom-right</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="epaper_overlay_color">Color</label>
+      <select class="form-select" id="epaper_overlay_color" name="epaper_overlay_color">
+        <option value="0" selected>Black</option>
+        <option value="1">Dark gray</option>
+        <option value="2">Light gray</option>
+        <option value="3">White</option>
+      </select>
+    </div>
+    <div class="mb-2"><strong>Contents</strong></div>
+    <div class="form-check"><input type="checkbox" class="form-check-input" id="epaper_overlay_item_icon" data-overlay-bit="1"><label class="form-check-label" for="epaper_overlay_item_icon">Battery icon</label></div>
+    <div class="form-check"><input type="checkbox" class="form-check-input" id="epaper_overlay_item_pct" data-overlay-bit="2"><label class="form-check-label" for="epaper_overlay_item_pct">Battery percentage</label></div>
+    <div class="form-check"><input type="checkbox" class="form-check-input" id="epaper_overlay_item_time" data-overlay-bit="4"><label class="form-check-label" for="epaper_overlay_item_time">Time</label></div>
+    <div class="form-check"><input type="checkbox" class="form-check-input" id="epaper_overlay_item_cycle" data-overlay-bit="8"><label class="form-check-label" for="epaper_overlay_item_cycle">Cycle time (ms)</label></div>
+    <input type="hidden" id="epaper_overlay_items" name="epaper_overlay_items" value="0">
+  </div>
+</div>
+
+<div class="save-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="epaper-overlay-save-btn">Save</button>
+</div>

@@ -15,9 +15,6 @@
 #include <esp_task_wdt.h>
 #include <time.h>
 
-// Anything earlier than 2024-01-01 is treated as "clock not yet synced".
-static constexpr uint32_t kMinValidEpoch = 1704067200U;
-
 // Persisted across deep sleep so the portal status card can show a meaningful
 // "last refresh" timestamp after the device wakes into config mode. Cleared
 // on cold boot / power loss.
@@ -165,7 +162,7 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		// the previous (possibly persisted) value untouched so we don't poison
 		// it with a 1970 epoch.
 		const time_t now = time(nullptr);
-		if (now >= (time_t)kMinValidEpoch) {
+		if (now >= (time_t)kEpaperMinValidEpoch) {
 				g_last_refresh_unix = (uint32_t)now;
 		}
 		++g_refresh_count;

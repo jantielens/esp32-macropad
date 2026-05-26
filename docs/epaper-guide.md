@@ -84,7 +84,7 @@ A refresh is always forced (CRC skip is bypassed) when any of these is true:
 
 * Cold boot — the panel currently shows only the boot splash, so the dashboard image must be drawn at least once before the CRC short-circuit becomes safe.
 * Short press of the WAKE button — the user is actively looking at the panel.
-* The portal `Refresh now` action.
+* The portal `Refresh e-paper now` action.
 
 ## Image and Sidecar Contract
 
@@ -168,25 +168,24 @@ The Inkplate 5V2 board keeps `HAS_EPAPER_FRONTLIGHT=false`, so the card stays hi
 
 ## E-Paper Endpoints
 
-E-paper component endpoints are under `/api/component/epaper/*`.
+E-paper component endpoints are split across two components: `epaper-status` and `epaper-vcom`.
 
-* `POST /api/component/epaper/refresh` triggers an immediate refresh attempt.
-* `GET /api/component/epaper/status` returns latest refresh counters, timing, battery, and last outcome fields.
-* `GET /api/component/epaper/vcom` reads the current programmed VCOM.
-* `POST /api/component/epaper/vcom` programs VCOM to TPS65186 EEPROM.
-* `POST /api/component/epaper/vcom-test-pattern` draws the grayscale calibration pattern and optionally previews a volatile VCOM candidate via query `?vcom=-X.XX`.
+* `POST /api/component/epaper-status/refresh` triggers an immediate refresh attempt.
+* `GET /api/component/epaper-status/status` returns latest refresh counters, timing, battery, and last outcome fields.
+* `GET /api/component/epaper-vcom/vcom` reads the current programmed VCOM.
+* `POST /api/component/epaper-vcom/vcom` programs VCOM to TPS65186 EEPROM.
+* `POST /api/component/epaper-vcom/vcom-test-pattern` draws the grayscale calibration pattern and optionally previews a volatile VCOM candidate via query `?vcom=-X.XX`.
 
 ## Portal Configuration Model
 
-On e-paper boards, the web portal uses a dedicated E-Paper page as the primary landing area.
+On e-paper boards, the web portal uses a dedicated **E-Paper** category as the primary landing area. The category contains four pages:
 
-The page currently groups settings into three areas:
+* **Status** &mdash; read-only refresh counters, timing, battery, and last outcome, plus a `Refresh e-paper now` action. Auto-refreshes every 5 seconds.
+* **Image Source & Refresh Schedule** &mdash; image URL, rotation, wake interval, WiFi backoff cap, and frontlight (when the board supports it).
+* **Status Overlay** &mdash; overlay enable, corner position, color, and per-field bitmask (battery, percentage, time, duration).
+* **VCOM** &mdash; one-time TPS65186 EEPROM calibration controls.
 
-* Image source
-* Refresh schedule
-* Status
-
-The operating mode is not exposed as a separate page on e-paper boards. The E-Paper page writes the hidden `operating_mode=duty_cycle_epaper` field on save so the board cannot drift into an unrelated transport mode through normal portal use.
+The operating mode is not exposed as a separate page on e-paper boards. The Image and Status Overlay pages each write the hidden `operating_mode=duty_cycle_epaper` field on save so the board cannot drift into an unrelated transport mode through normal portal use.
 
 ## Status Semantics
 

@@ -47,11 +47,12 @@
 // mode on a fresh flash.
 #define CONFIG_DEFAULT_PORTAL_IDLE_SECONDS 300
 
-// --- Portal nav: promote the E-Paper page to the primary slot --------------
-// The board only has one real configuration story (image URL + rotation),
-// so the portal lands there on open and shows it first in the sidebar.
-#define PORTAL_PRIMARY_FRAGMENT "epaper"
+// --- Portal nav: promote the E-Paper category to the primary slot ----------
+// The board's primary configuration story lives under the E-Paper category
+// (Status / Image & Schedule / Status Overlay / VCOM). Land on the Status
+// page since it gives the user an immediate "is this thing working" view.
+#define PORTAL_PRIMARY_FRAGMENT "epaper-status"
 #define PORTAL_PRIMARY_CATEGORY "epaper"
 #define PORTAL_PRIMARY_LABEL    "E-Paper"
-// UTF-8 emoji 📰 (newspaper) — single visual hint that this is the e-paper page.
+// UTF-8 emoji 📰 (newspaper) — single visual hint for the e-paper category.
 #define PORTAL_PRIMARY_ICON     "\xf0\x9f\x93\xb0"

@@ -487,15 +487,15 @@ window.init_volume_fragment = function () {
 };
 
 // ============================================================================
-// E-Paper
+// E-Paper — split into 4 pages: Status / Image & Schedule / Overlay / VCOM.
 // ============================================================================
 
-window.init_epaper_fragment = function () {
-    initConfigFragment('epaper-save-btn', false);
+// ---- Status page -----------------------------------------------------------
+// Read-only dl + "Refresh e-paper now" action. Auto-refreshes every 5s.
+window.init_epaper_status_fragment = function () {
     var btn = document.getElementById('epaper-refresh-btn');
     var status = document.getElementById('epaper-refresh-status');
 
-    // Status card auto-refresh
     var statusFields = {
         last:    document.getElementById('epaper-status-last'),
         count:   document.getElementById('epaper-status-count'),
@@ -510,24 +510,6 @@ window.init_epaper_fragment = function () {
         tMqtt:   document.getElementById('epaper-status-t-mqtt'),
         crcAttempts: document.getElementById('epaper-status-crc-attempts'),
     };
-    // Wire the "(button-only)" hint to the wake-seconds input + operating mode.
-    var wakeInput = document.getElementById('duty_cycle_wake_seconds');
-    var wakeHelp  = document.getElementById('epaper-wake-help');
-    var wakeHelpDefault = wakeHelp ? wakeHelp.innerHTML : '';
-    function updateWakeHint() {
-        if (!wakeInput || !wakeHelp) return;
-        var v = parseInt(wakeInput.value, 10);
-        if (v === 0) {
-            wakeHelp.innerHTML = '<strong>Button-only mode:</strong> the device only wakes when the WAKE button is pressed (no timer).';
-        } else {
-            wakeHelp.innerHTML = wakeHelpDefault;
-        }
-    }
-    if (wakeInput) {
-        wakeInput.addEventListener('input', updateWakeHint);
-        // Run once after the form has loaded its current value.
-        setTimeout(updateWakeHint, 200);
-    }
     function fmtDrawResult(r) {
         if (r === 'updated') return 'Updated';
         if (r === 'skipped') return 'Skipped (unchanged)';
@@ -544,7 +526,7 @@ window.init_epaper_fragment = function () {
         return Math.floor(s / 86400) + ' d ago';
     }
     function loadStatus() {
-        fetch('/api/component/epaper/status')
+        fetch('/api/component/epaper-status/status')
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (j) {
                 if (!j) return;
@@ -610,7 +592,7 @@ window.init_epaper_fragment = function () {
     btn.addEventListener('click', function () {
         btn.disabled = true;
         if (status) { status.textContent = 'Refreshing… (this can take 10–30 seconds)'; }
-        fetch('/api/component/epaper/refresh', { method: 'POST' })
+        fetch('/api/component/epaper-status/refresh', { method: 'POST' })
             .then(function (r) { return r.json().catch(function () { return { success: false, message: 'Bad response' }; }); })
             .then(function (j) {
                 if (status) {
@@ -628,8 +610,41 @@ window.init_epaper_fragment = function () {
             })
             .finally(function () { btn.disabled = false; });
     });
+};
 
-    // ---- Overlay item checkboxes -> hidden bitmask ------------------------
+// ---- Image & Schedule page -------------------------------------------------
+// Image URL, rotation, wake interval, WiFi backoff, frontlight (if board has
+// one). Saved via shared /api/config.
+window.init_epaper_image_fragment = function () {
+    initConfigFragment('epaper-image-save-btn', false);
+
+    // Wire the "(button-only)" hint to the wake-seconds input.
+    var wakeInput = document.getElementById('duty_cycle_wake_seconds');
+    var wakeHelp  = document.getElementById('epaper-wake-help');
+    var wakeHelpDefault = wakeHelp ? wakeHelp.innerHTML : '';
+    function updateWakeHint() {
+        if (!wakeInput || !wakeHelp) return;
+        var v = parseInt(wakeInput.value, 10);
+        if (v === 0) {
+            wakeHelp.innerHTML = '<strong>Button-only mode:</strong> the device only wakes when the WAKE button is pressed (no timer).';
+        } else {
+            wakeHelp.innerHTML = wakeHelpDefault;
+        }
+    }
+    if (wakeInput) {
+        wakeInput.addEventListener('input', updateWakeHint);
+        // Run once after the form has loaded its current value.
+        setTimeout(updateWakeHint, 200);
+    }
+};
+
+// ---- Status Overlay page ---------------------------------------------------
+// Overlay enabled/position/color + per-item bitmask. Saved via shared
+// /api/config.
+window.init_epaper_overlay_fragment = function () {
+    initConfigFragment('epaper-overlay-save-btn', false);
+
+    // Overlay item checkboxes -> hidden bitmask.
     var overlayItemEls = [
         document.getElementById('epaper_overlay_item_icon'),
         document.getElementById('epaper_overlay_item_pct'),
@@ -652,8 +667,12 @@ window.init_epaper_fragment = function () {
     });
     // Sync once after load values have populated checkboxes.
     setTimeout(syncOverlayItems, 250);
+};
 
-    // ---- VCOM tools -------------------------------------------------------
+// ---- VCOM page -------------------------------------------------------------
+// Read / write / preview the TPS65186 VCOM calibration voltage. No shared
+// /api/config save — all writes are direct component actions.
+window.init_epaper_vcom_fragment = function () {
     var vcomReadBtn = document.getElementById('epaper-vcom-read-btn');
     var vcomCurrent = document.getElementById('epaper-vcom-current');
     var vcomWriteBtn = document.getElementById('epaper-vcom-write-btn');
@@ -680,7 +699,7 @@ window.init_epaper_fragment = function () {
         vcomReadBtn.addEventListener('click', function () {
             vcomReadBtn.disabled = true;
             setVcomStatus('Reading…', false);
-            fetch('/api/component/epaper/vcom')
+            fetch('/api/component/epaper-vcom/vcom')
                 .then(function (r) { return r.json(); })
                 .then(function (j) {
                     if (j && j.vcom != null) {
@@ -711,7 +730,7 @@ window.init_epaper_fragment = function () {
             vcomWriteBtn.disabled = true;
             setVcomStatus('Programming EEPROM…', false);
             var body = 'value=' + encodeURIComponent(v.toFixed(3));
-            fetch('/api/component/epaper/vcom', {
+            fetch('/api/component/epaper-vcom/vcom', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: body
@@ -736,7 +755,7 @@ window.init_epaper_fragment = function () {
             // If the user has typed a candidate VCOM value, preview it via the
             // TPS65186 volatile registers (no EEPROM write). Empty input falls
             // back to the currently programmed EEPROM value.
-            var previewUrl = '/api/component/epaper/vcom-test-pattern';
+            var previewUrl = '/api/component/epaper-vcom/vcom-test-pattern';
             var previewLabel = 'programmed';
             var pv = parseVcomInput();
             if (pv !== null) {

@@ -1,5 +1,6 @@
-// E-Paper portal component.
-// Nav entry + custom "refresh" action that triggers an immediate redraw.
+// E-Paper Status portal component.
+// Read-only status dl + "Refresh e-paper now" custom action that triggers an
+// immediate redraw on the panel.
 
 #include "board_config.h"
 
@@ -8,21 +9,18 @@
 #include "component_registry.h"
 #include "config_manager.h"
 #include "epaper_battery.h"
-#include "epaper_driver.h"
 #include "epaper_refresh.h"
 #include "epaper_timing.h"
 #include "log_manager.h"
-#include "power_manager.h"
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
-#include <math.h>
 #include <time.h>
 
-static void epaper_refresh_post(AsyncWebServerRequest* request) {
+static void epaper_status_refresh_post(AsyncWebServerRequest* request) {
     if (!portal_auth_gate(request)) return;
 
     DeviceConfig* cfg = web_portal_get_current_config();
@@ -44,7 +42,7 @@ static void epaper_refresh_post(AsyncWebServerRequest* request) {
         return;
     }
 
-    LOGI("API", "POST /api/component/epaper/refresh");
+    LOGI("API", "POST /api/component/epaper-status/refresh");
     EpaperRefreshOutcome out = epaper_refresh_run(cfg, true /*force*/);
 
     StaticJsonDocument<256> resp;
@@ -74,8 +72,7 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     const uint32_t last_unix = epaper_refresh_last_unix();
     const EpaperRefreshOutcome last = epaper_refresh_last_outcome();
     const time_t now = time(nullptr);
-    // Match the threshold used in epaper_refresh.cpp (2024-01-01).
-    const bool clock_synced = (now >= (time_t)1704067200);
+    const bool clock_synced = (now >= (time_t)kEpaperMinValidEpoch);
 
     StaticJsonDocument<512> resp;
     if (last_unix == 0) {
@@ -127,113 +124,25 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     request->send(200, "application/json", body);
 }
 
-// ---------------------------------------------------------------------------
-// VCOM endpoints. Read returns the current programmed value; write programs
-// the TPS65186 EEPROM (~100K-cycle endurance — the UI confirms before POST).
-// Test pattern paints 8 grayscale bars + the current VCOM value at the top so
-// the user can visually pick the cleanest setting.
-// ---------------------------------------------------------------------------
-
-static void epaper_vcom_get(AsyncWebServerRequest* request) {
-    if (!portal_auth_gate(request)) return;
-    if (!epaper_driver_begin()) {
-        request->send(500, "application/json",
-                      "{\"success\":false,\"message\":\"Panel init failed\"}");
-        return;
-    }
-    const float v = epaper_driver_read_vcom();
-    StaticJsonDocument<128> resp;
-    resp["success"] = true;
-    if (isnan(v)) {
-        resp["vcom"] = nullptr;
-    } else {
-        resp["vcom"] = v;
-    }
-    String body;
-    serializeJson(resp, body);
-    request->send(200, "application/json", body);
-}
-
-static void epaper_vcom_post(AsyncWebServerRequest* request) {
-    if (!portal_auth_gate(request)) return;
-    if (!request->hasParam("value", true) && !request->hasParam("value")) {
-        request->send(400, "application/json",
-                      "{\"success\":false,\"message\":\"Missing 'value' parameter\"}");
-        return;
-    }
-    const String s = request->hasParam("value", true)
-        ? request->getParam("value", true)->value()
-        : request->getParam("value")->value();
-    const float v = s.toFloat();
-    if (!(v < 0.0f && v >= -5.0f)) {
-        request->send(400, "application/json",
-                      "{\"success\":false,\"message\":\"VCOM must be in range [-5.0, 0.0)\"}");
-        return;
-    }
-    LOGI("API", "POST /api/component/epaper/vcom value=%.3f", v);
-    if (!epaper_driver_begin()) {
-        request->send(500, "application/json",
-                      "{\"success\":false,\"message\":\"Panel init failed\"}");
-        return;
-    }
-    const bool ok = epaper_driver_write_vcom(v);
-    StaticJsonDocument<128> resp;
-    resp["success"] = ok;
-    resp["vcom"] = v;
-    if (!ok) resp["message"] = "VCOM program failed (see serial log)";
-    String body;
-    serializeJson(resp, body);
-    request->send(ok ? 200 : 500, "application/json", body);
-}
-
-static void epaper_vcom_test_pattern_post(AsyncWebServerRequest* request) {
-    if (!portal_auth_gate(request)) return;
-    // Optional ?vcom=-X.Y query param previews that value via the TPS65186
-    // volatile registers without burning an EEPROM write. Range matches
-    // epaper_driver_write_vcom(): -5.0 .. <0.0 V.
-    float preview = NAN;
-    if (request->hasParam("vcom")) {
-        const float v = request->getParam("vcom")->value().toFloat();
-        if (v < 0.0f && v >= -5.0f) {
-            preview = v;
-        } else {
-            request->send(400, "application/json",
-                          "{\"success\":false,\"message\":\"vcom must be in range [-5.0, 0.0)\"}");
-            return;
-        }
-    }
-    LOGI("API", "POST /api/component/epaper/vcom-test-pattern preview=%.3f", preview);
-    if (!epaper_driver_begin()) {
-        request->send(500, "application/json",
-                      "{\"success\":false,\"message\":\"Panel init failed\"}");
-        return;
-    }
-    epaper_driver_show_vcom_test_pattern(preview);
-    request->send(200, "application/json", "{\"success\":true}");
-}
-
-static const ComponentAction epaper_actions[] = {
-    {"refresh", HTTP_POST, epaper_refresh_post, nullptr},
-    {"status",  HTTP_GET,  epaper_status_get,   nullptr},
-    {"vcom",    HTTP_GET,  epaper_vcom_get,     nullptr},
-    {"vcom",    HTTP_POST, epaper_vcom_post,    nullptr},
-    {"vcom-test-pattern", HTTP_POST, epaper_vcom_test_pattern_post, nullptr},
+static const ComponentAction epaper_status_actions[] = {
+    {"refresh", HTTP_POST, epaper_status_refresh_post, nullptr},
+    {"status",  HTTP_GET,  epaper_status_get,          nullptr},
 };
 
-static ComponentDef epaper_component = {
-    .id = "epaper",
+static ComponentDef epaper_status_component = {
+    .id = "epaper-status",
     .category = "epaper",
-    .display_name = "E-Paper",
+    .display_name = "Status",
     .nav_order = 10,
     .get_config = nullptr,
     .save_config = nullptr,
     .save_config_body = nullptr,
     .delete_config = nullptr,
-    .custom_actions = epaper_actions,
-    .num_custom_actions = sizeof(epaper_actions) / sizeof(epaper_actions[0]),
-    .fragment_id = "epaper",
+    .custom_actions = epaper_status_actions,
+    .num_custom_actions = sizeof(epaper_status_actions) / sizeof(epaper_status_actions[0]),
+    .fragment_id = "epaper-status",
 };
 
-REGISTER_COMPONENT(epaper);
+REGISTER_COMPONENT(epaper_status);
 
 #endif // HAS_EPAPER

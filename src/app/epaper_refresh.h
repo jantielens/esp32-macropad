@@ -8,6 +8,11 @@
 
 #include "config_manager.h"
 
+// Anything earlier than 2024-01-01 (Unix epoch 1704067200) is treated as
+// "wall clock not yet synced". Shared so portal status code and the refresh
+// pipeline use a single source of truth.
+static constexpr uint32_t kEpaperMinValidEpoch = 1704067200U;
+
 // Result of a refresh attempt. Used by the portal "manual refresh" endpoint.
 enum class EpaperRefreshResult : uint8_t {
 		Skipped = 0,     // Sidecar CRC matched stored value; no redraw performed.

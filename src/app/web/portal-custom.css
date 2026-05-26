@@ -747,9 +747,12 @@ body {
 }
 
 /* ================================================================
-   Save bar at bottom of form cards
+   Save / action bar at bottom of form cards
+   .save-bar  — pages with a Save button (most config fragments)
+   .action-bar — pages with a non-save primary action (e.g. Refresh)
    ================================================================ */
-.save-bar {
+.save-bar,
+.action-bar {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
