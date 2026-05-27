@@ -6,6 +6,7 @@
 
 #include "board_config.h"
 #include "config_manager.h"
+#include "device_class.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -35,6 +36,15 @@ static bool parseBoolField(const JsonDocument &doc, const char* key) {
 				return (v && (strcmp(v, "1") == 0 || strcasecmp(v, "true") == 0 || strcasecmp(v, "on") == 0));
 		}
 		return (bool)(doc[key] | false);
+}
+
+// Parse an unsigned integer that may arrive as string or numeric JSON.
+static uint32_t parseUintField(const JsonVariantConst& field, uint32_t default_value) {
+		if (field.is<const char*>()) {
+				const char* v = field.as<const char*>();
+				return v ? (uint32_t)strtoul(v, nullptr, 10) : default_value;
+		}
+		return (uint32_t)(field | default_value);
 }
 
 // /api/config body accumulator (chunk-safe)
@@ -159,6 +169,12 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["screen_saver_wake_on_touch"] = current_config->screen_saver_wake_on_touch;
 				(*doc)["screen_saver_wake_binding"] = current_config->screen_saver_wake_binding;
 				#endif
+
+				// Let registered device classes append their own fields.
+				{
+						JsonObject root = doc->as<JsonObject>();
+						device_class_dispatch_config_api_get(current_config, root);
+				}
 
 				if (doc->overflowed()) {
 						LOGE("Portal", "/api/config JSON overflow");
@@ -559,6 +575,12 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				strlcpy(current_config->screen_saver_wake_binding, doc["screen_saver_wake_binding"] | "", CONFIG_SS_WAKE_BINDING_MAX_LEN);
 		}
 		#endif
+
+		// Let registered device classes parse their own fields before save.
+		{
+				JsonObject body = doc.as<JsonObject>();
+				device_class_dispatch_config_api_set(current_config, body);
+		}
 
 		current_config->magic = CONFIG_MAGIC;
 

@@ -14,7 +14,14 @@
 #include "components/wifi_component.cpp"
 #include "components/device_name_component.cpp"
 #include "components/network_component.cpp"
+#if !HAS_EPAPER
+// On e-paper boards the Power Mode page is suppressed — e-paper devices
+// always run in duty_cycle_epaper, and that mode is set automatically when
+// the E-Paper fragment is saved (hidden operating_mode field).
+// TODO: allow mode override for debugging on e-paper builds (show mode page
+// with duty_cycle_epaper preselected and a "debug only" note).
 #include "components/mode_component.cpp"
+#endif
 #include "components/factory_reset_component.cpp"
 #include "components/ota_update_component.cpp"
 #include "components/manual_upload_component.cpp"
@@ -51,3 +58,14 @@
 #if HAS_SOUND_PLAYER
 #include "components/sounds_component.cpp"
 #endif // HAS_SOUND_PLAYER
+
+// --- E-Paper-gated components ---
+// Split into one component per nav entry (Status / Image & Schedule /
+// Status Overlay / VCOM) — all share the "epaper" category. Image and
+// Overlay are nav-only; their settings are saved via /api/config.
+#if HAS_EPAPER
+#include "device_classes/epaper/components/epaper_status_component.cpp"
+#include "device_classes/epaper/components/epaper_image_component.cpp"
+#include "device_classes/epaper/components/epaper_overlay_component.cpp"
+#include "device_classes/epaper/components/epaper_vcom_component.cpp"
+#endif // HAS_EPAPER

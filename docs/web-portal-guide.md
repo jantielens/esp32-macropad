@@ -1,6 +1,6 @@
 # Web Portal Guide
 
-The ESP32 Macropad includes a built-in web portal for configuring every aspect of your device — from Wi-Fi settings to pad layouts — all from your browser.
+The ESP32 Macropad includes a built-in web portal for configuring every aspect of your device — from Wi-Fi settings to pad layouts and e-paper image scheduling — all from your browser.
 
 ## Accessing the Portal
 
@@ -9,7 +9,7 @@ The ESP32 Macropad includes a built-in web portal for configuring every aspect o
 | **AP Mode** (first boot / factory reset) | Wi-Fi not configured | Connect to the device's Wi-Fi, then go to `http://192.168.4.1` |
 | **Full Mode** (normal operation) | Connected to your Wi-Fi | `http://<device-name>.local` or the device's IP address |
 
-In AP mode, only the Network page is available. In Full mode, all four pages are accessible.
+In AP mode, only the Network page is available. In Full mode, the standard four pages are accessible, and e-paper boards also expose a dedicated E-Paper page.
 
 ## Header & Health Monitoring
 
@@ -195,6 +195,24 @@ Expire actions use the same action editor as buttons, so you can play a sound, s
 
 Timer configuration is applied at boot and updated immediately when saved. Button actions on pads only control timers at runtime (toggle, start, stop, pause, adjust). Use `[timer:N]` bindings on pad button labels to display timer values.
 
+## E-Paper Page
+
+*Available only on e-paper boards such as the Inkplate 5V2.*
+
+The E-Paper page configures the battery-oriented image workflow:
+
+| Setting | Description |
+|---------|-------------|
+| **Image sources** | Up to 5 image slots, each with its own URL, Duration, and Stay flag. Empty slots are skipped top-to-bottom. |
+| **Hourly refresh window** | 24-hour local-time mask that can disable refreshes during selected hours to save battery |
+| **Timezone offset** | Fixed UTC offset used to evaluate the hourly window |
+| **WiFi Failure Backoff** | Maximum WiFi retry sleep after repeated failures |
+| **Status** | Read-only refresh counters, timing, battery, and manual refresh action |
+| **Overlay** | Status overlay position/color/fields drawn on the image |
+| **VCOM** | Inkplate TPS65186 calibration controls |
+
+Duration is per slot and applies while that slot is active. The page does not expose a separate "wake every" control.
+
 ---
 
 ## Pads Page
@@ -300,6 +318,8 @@ The Home and Network pages share a floating footer with three actions:
 The **Pads** page has its own separate footer — see [Pads Page](#pads-page) above.
 
 Each page only saves the fields shown on that page — saving on the Home page won't clear your Network settings.
+
+A **🔄 reboot button** also lives in the portal header (next to the light/dark theme toggle) and is available on every page. It prompts for confirmation, then reboots without saving — handy when you've made a change elsewhere (e.g., the API) and just need to restart.
 
 After a reboot, the portal shows an automatic reconnection dialog. If it can't reconnect (e.g., the device name changed), it provides a manual link with the new address.
 

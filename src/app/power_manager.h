@@ -1,6 +1,7 @@
 #ifndef POWER_MANAGER_H
 #define POWER_MANAGER_H
 
+#include "board_config.h"
 #include "power_config.h"
 
 struct DeviceConfig;

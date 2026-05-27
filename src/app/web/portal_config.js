@@ -222,6 +222,45 @@ async function loadConfig() {
         setValueIfExists('screen_saver_fade_in_ms', config.screen_saver_fade_in_ms);
         setCheckedIfExists('screen_saver_wake_on_touch', config.screen_saver_wake_on_touch);
         setValueIfExists('screen_saver_wake_binding', config.screen_saver_wake_binding);
+
+        // E-paper settings (only present when firmware has HAS_EPAPER)
+        if (config.epaper_url !== undefined) {
+            setValueIfExists('epaper_url', config.epaper_url);
+        }
+        if (config.epaper_rotation !== undefined) {
+            setValueIfExists('epaper_rotation', config.epaper_rotation);
+        }
+        if (config.epaper_overlay_enabled !== undefined) {
+            setCheckedIfExists('epaper_overlay_enabled', config.epaper_overlay_enabled);
+        }
+        if (config.epaper_overlay_position !== undefined) {
+            setValueIfExists('epaper_overlay_position', config.epaper_overlay_position);
+        }
+        if (config.epaper_overlay_color !== undefined) {
+            setValueIfExists('epaper_overlay_color', config.epaper_overlay_color);
+        }
+        if (config.epaper_overlay_items !== undefined) {
+            var items = config.epaper_overlay_items | 0;
+            setValueIfExists('epaper_overlay_items', items);
+            var iconEl = document.getElementById('epaper_overlay_item_icon');
+            var pctEl = document.getElementById('epaper_overlay_item_pct');
+            var timeEl = document.getElementById('epaper_overlay_item_time');
+            var cycleEl = document.getElementById('epaper_overlay_item_cycle');
+            if (iconEl) iconEl.checked = !!(items & 0x1);
+            if (pctEl) pctEl.checked = !!(items & 0x2);
+            if (timeEl) timeEl.checked = !!(items & 0x4);
+            if (cycleEl) cycleEl.checked = !!(items & 0x8);
+        }
+        if (config.epaper_frontlight_brightness !== undefined) {
+            setValueIfExists('epaper_frontlight_brightness', config.epaper_frontlight_brightness);
+        }
+        if (config.epaper_frontlight_duration_s !== undefined) {
+            setValueIfExists('epaper_frontlight_duration_s', config.epaper_frontlight_duration_s);
+        }
+        if (config.epaper_frontlight_supported) {
+            var flCard = document.getElementById('epaper-frontlight-card');
+            if (flCard) flCard.hidden = false;
+        }
     } catch (error) {
         showMessage('Error loading configuration: ' + error.message, 'error');
         console.error('Load error:', error);

@@ -2,6 +2,7 @@
 
 #include "ble_telemetry.h"
 #include "config_manager.h"
+#include "device_class.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
@@ -21,11 +22,19 @@ static void build_sensor_json(JsonDocument &doc) {
 		sensor_manager_append_mqtt(root);
 }
 
-bool duty_cycle_run(const DeviceConfig *config) {
+bool duty_cycle_run(DeviceConfig *config) {
 		if (!config) return false;
 
 		const PowerMode mode = power_manager_get_current_mode();
 		LOGI("Duty", "Start (mode=%s)", power_config_power_mode_to_string(mode));
+
+		// Route to a registered device class if one owns this mode. No-op
+		// until a class registers (Phase 2 wires the e-paper class here).
+		if (const DeviceClass *dc = device_class_find_by_mode(mode)) {
+				if (dc->run_duty_cycle) {
+						return dc->run_duty_cycle(config);
+				}
+		}
 
 		// Collect sensor data. As a side effect this triggers each sensor's
 		// update path, which is where BLE telemetry values are buffered for

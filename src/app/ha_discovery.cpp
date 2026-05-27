@@ -10,7 +10,7 @@
 #endif
 #include "sensors/sensor_manager.h"
 #include "web_assets.h" // PROJECT_DISPLAY_NAME
-#include "../version.h" // FIRMWARE_VERSION
+#include "version.h" // FIRMWARE_VERSION
 #include <ArduinoJson.h>
 
 // Forward declaration — used by all entity publish helpers.

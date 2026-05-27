@@ -91,6 +91,17 @@ FRAGMENT_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.fragment.html" -type f | 
 CSS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.css" -not -name "_*.css" -type f | sort))
 JS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.js" -not -name "_*.js" -type f | sort))
 
+# Device-class web assets: per-feature fragments and JS handlers live next to
+# their owning C++ code under src/app/device_classes/<class>/web/. They are
+# bundled and emitted with the same naming/feature-flag conventions as files
+# in WEB_DIR (symbol names are derived from basename only, so a file in either
+# location produces the same C symbol).
+DEVICE_CLASSES_ROOT="$PROJECT_ROOT/src/app/device_classes"
+if [[ -d "$DEVICE_CLASSES_ROOT" ]]; then
+    FRAGMENT_FILES+=($(find "$DEVICE_CLASSES_ROOT" -path "*/web/*.fragment.html" -type f | sort))
+    JS_FILES+=($(find "$DEVICE_CLASSES_ROOT" -path "*/web/*.js" -not -name "_*.js" -type f | sort))
+fi
+
 # ---- Bundle support ----
 # A *.bundle manifest lists fragment files that should be concatenated into the
 # primary asset during minification.  Works for both JS (.js.bundle) and CSS
@@ -101,11 +112,31 @@ JS_FILES=($(find "$WEB_DIR" -maxdepth 1 -name "*.js" -not -name "_*.js" -type f 
 # follow CSS cascade rules (later entries override earlier ones at equal
 # specificity).
 
+# resolve_bundle_path <relative-path>
+#   Echoes the absolute filesystem path for a manifest entry. Looks under
+#   WEB_DIR first, then falls back to src/app/device_classes/*/web/<path>.
+#   Echoes nothing and returns 1 if the file is not found.
+resolve_bundle_path() {
+    local rel="$1"
+    if [[ -f "$WEB_DIR/$rel" ]]; then
+        echo "$WEB_DIR/$rel"
+        return 0
+    fi
+    if [[ -d "$DEVICE_CLASSES_ROOT" ]]; then
+        local match
+        match=$(find "$DEVICE_CLASSES_ROOT" -path "*/web/$rel" -type f 2>/dev/null | head -1)
+        if [[ -n "$match" ]]; then
+            echo "$match"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # discover_bundle_manifests <extension> <skip_array_name>
 #   Scans WEB_DIR for *.<ext>.bundle manifests, validates referenced files, and
 #   populates the named associative array with fragment paths to skip.
-discover_bundle_manifests() {
-    local ext="$1"
+discover_bundle_manifests() {    local ext="$1"
     local -n _skip_map="$2"
     for bundle_manifest in $(find "$WEB_DIR" -maxdepth 1 -name "*.$ext.bundle" -type f 2>/dev/null); do
         local primary_name
@@ -115,13 +146,16 @@ discover_bundle_manifests() {
             bline="${bline%%#*}"                     # strip comments
             bline="$(echo "$bline" | xargs)"         # trim whitespace
             [[ -z "$bline" ]] && continue
-            # Validate that the listed file exists
-            if [[ ! -f "$WEB_DIR/$bline" ]]; then
+            # Validate that the listed file exists (WEB_DIR or device_classes/*/web/)
+            local resolved
+            resolved=$(resolve_bundle_path "$bline")
+            if [[ -z "$resolved" ]]; then
                 echo "  Error: $(basename "$bundle_manifest") references missing file: $bline"
                 bundle_missing=$((bundle_missing + 1))
+                continue
             fi
             [[ "$bline" = "$primary_name" ]] && continue  # don't skip the primary
-            _skip_map["$WEB_DIR/$bline"]=1
+            _skip_map["$resolved"]=1
         done < "$bundle_manifest"
         if [[ $bundle_missing -gt 0 ]]; then
             echo "Error: $bundle_missing missing file(s) in bundle manifest $(basename "$bundle_manifest")"
@@ -156,7 +190,13 @@ concatenate_bundle() {
         bline="${bline%%#*}"
         bline="$(echo "$bline" | xargs)"
         [[ -z "$bline" ]] && continue
-        cat "$WEB_DIR/$bline" >> "$_out_path"
+        local resolved
+        resolved=$(resolve_bundle_path "$bline")
+        if [[ -z "$resolved" ]]; then
+            echo "  Error: bundle manifest references missing file: $bline" >&2
+            return 1
+        fi
+        cat "$resolved" >> "$_out_path"
         echo >> "$_out_path"
     done < "$manifest"
 }
@@ -219,7 +259,13 @@ concatenate_bundle_chunked() {
             echo "  ✗ file '$bline' appears before first [chunk:NAME] marker" >&2
             return 1
         fi
-        cat "$WEB_DIR/$bline" >> "$current_tmp"
+        local resolved
+        resolved=$(resolve_bundle_path "$bline")
+        if [[ -z "$resolved" ]]; then
+            echo "  ✗ chunk references missing file: $bline" >&2
+            return 1
+        fi
+        cat "$resolved" >> "$current_tmp"
         echo >> "$current_tmp"
         has_content=1
     done < "$manifest"
@@ -860,6 +906,8 @@ fragment_feature_flag() {
             echo "HAS_AUDIO" ;;
         sounds)
             echo "HAS_SOUND_PLAYER" ;;
+        epaper_status|epaper_image|epaper_overlay|epaper_vcom)
+            echo "HAS_EPAPER" ;;
         *)
             echo "" ;;
     esac

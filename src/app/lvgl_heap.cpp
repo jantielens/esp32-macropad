@@ -9,6 +9,9 @@
  */
 
 #include "lvgl_heap.h"
+#include "board_config.h"
+
+#if HAS_DISPLAY
 
 #include <lvgl.h>          // lv_mem_monitor_t, lv_mem_pool_t, lv_result_t, LV_UNUSED
 #include <esp_heap_caps.h>
@@ -88,3 +91,5 @@ extern "C" void lv_mem_monitor_core(lv_mem_monitor_t* mon_p) {
 extern "C" lv_result_t lv_mem_test_core(void) {
 		return LV_RESULT_OK;
 }
+
+#endif // HAS_DISPLAY

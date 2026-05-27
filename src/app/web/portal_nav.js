@@ -289,6 +289,26 @@
     });
   }
 
+  // ---------- Reboot toggle ----------
+
+  var rebootToggle = document.getElementById('reboot-toggle');
+  if (rebootToggle) {
+    rebootToggle.addEventListener('click', function () {
+      if (!confirm('Reboot the device now?')) return;
+      if (typeof showRebootDialog === 'function') {
+        showRebootDialog({
+          title: 'Rebooting Device',
+          message: 'Please wait while the device restarts\u2026',
+          context: 'save'
+        });
+      }
+      fetch(API_REBOOT, { method: 'POST' }).catch(function () {
+        // TCP often drops mid-response as the device restarts; the reboot
+        // dialog's reconnection poller handles the wait-and-redirect.
+      });
+    });
+  }
+
   // Follow browser changes when no explicit preference saved
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
     if (!localStorage.getItem('portal-theme')) {

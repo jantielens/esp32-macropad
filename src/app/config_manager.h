@@ -32,7 +32,7 @@
 #define CONFIG_MQTT_USERNAME_MAX_LEN 32
 #define CONFIG_MQTT_PASSWORD_MAX_LEN 64
 
-// Operating mode (always_on | duty_cycle_mqtt | duty_cycle_ble). Sized to fit longest value + NUL.
+// Operating mode (always_on | duty_cycle_mqtt | duty_cycle_ble | duty_cycle_epaper). Sized to fit longest value + NUL.
 #define CONFIG_OPERATING_MODE_MAX_LEN 20
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
 
@@ -112,7 +112,7 @@ struct DeviceConfig {
 		bool screen_saver_wake_on_touch;         // default true (when HAS_TOUCH)
 		char screen_saver_wake_binding[CONFIG_SS_WAKE_BINDING_MAX_LEN]; // binding expression; wake on "ON"
 #endif
-		
+
 		// Validation flag (magic number to detect valid config)
 		uint32_t magic;
 };

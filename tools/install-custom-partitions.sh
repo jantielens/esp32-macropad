@@ -12,31 +12,36 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)"
 
-ESP32_HW_BASE="$HOME/.arduino15/packages/esp32/hardware/esp32"
+# Base of all installed Arduino packages.
+PACKAGES_BASE="$HOME/.arduino15/packages"
 
 trim() {
   echo "$1" | xargs
 }
 
-find_esp32_core_dir() {
-  if [[ ! -d "$ESP32_HW_BASE" ]]; then
-    echo "Error: ESP32 Arduino core not found at $ESP32_HW_BASE" >&2
-    echo "Run ./setup.sh first to install esp32:esp32." >&2
-    exit 1
+# Resolve the on-disk install directory for the package:arch combo of an FQBN.
+# Example: vendor=esp32, arch=esp32 → $HOME/.arduino15/packages/esp32/hardware/esp32/<version>/
+#          vendor=Inkplate_Boards, arch=esp32 → .../Inkplate_Boards/hardware/esp32/<version>/
+find_core_dir_for() {
+  local vendor="$1"
+  local arch="$2"
+
+  local hw_base="$PACKAGES_BASE/$vendor/hardware/$arch"
+  if [[ ! -d "$hw_base" ]]; then
+    return 1
   fi
 
-  # Pick the latest installed ESP32 core directory.
-  # Example: ~/.arduino15/packages/esp32/hardware/esp32/3.0.7
-  local esp32_dir
-  esp32_dir="$(ls -1d "$ESP32_HW_BASE"/*/ 2>/dev/null | sort -V | tail -n 1 || true)"
-  esp32_dir="${esp32_dir%/}"
+  # Pick the latest installed version directory under hw_base.
+  local core_dir
+  core_dir="$(ls -1d "$hw_base"/*/ 2>/dev/null | sort -V | tail -n 1 || true)"
+  core_dir="${core_dir%/}"
 
-  if [[ -z "$esp32_dir" || ! -d "$esp32_dir" ]]; then
-    echo "Error: could not locate an installed ESP32 core version under $ESP32_HW_BASE" >&2
-    exit 1
+  if [[ -z "$core_dir" || ! -d "$core_dir" ]]; then
+    return 1
   fi
 
-  echo "$esp32_dir"
+  echo "$core_dir"
+  return 0
 }
 
 get_fqbn_option() {
@@ -105,10 +110,23 @@ register_partition_scheme_if_needed() {
     ota_2mb)
       label="Custom OTA headless (1.94MB APP×2, no SPIFFS)"
       ;;
+    ota_3mb_8MB)
+      label="Custom OTA 8MB (3MB APP×2)"
+      ;;
     *)
       label="Custom (${scheme_id})"
       ;;
   esac
+
+  # Derive flash_size override from a trailing _<N>MB suffix on the scheme id
+  # (e.g. ota_3mb_8MB → 8MB, ota_6mb_16MB → 16MB). Required when a board def
+  # ships a build.flash_size that disagrees with the larger flash actually
+  # populated on the hardware; without this override the bootloader rejects
+  # partitions past the declared flash size and the device immediately resets.
+  local flash_size_override=""
+  if [[ "$scheme_id" =~ _([0-9]+)MB$ ]]; then
+    flash_size_override="${BASH_REMATCH[1]}MB"
+  fi
 
   {
     echo ""
@@ -116,61 +134,72 @@ register_partition_scheme_if_needed() {
     echo "${board_id}.menu.PartitionScheme.${scheme_id}=${label}"
     echo "${board_id}.menu.PartitionScheme.${scheme_id}.build.partitions=${partition_name_no_ext}"
     echo "${board_id}.menu.PartitionScheme.${scheme_id}.upload.maximum_size=${upload_max_size_dec}"
+    if [[ -n "$flash_size_override" ]]; then
+      echo "${board_id}.menu.PartitionScheme.${scheme_id}.build.flash_size=${flash_size_override}"
+    fi
   } >> "$boards_txt"
 
-  echo "✓ Registered PartitionScheme '$scheme_id' for board '$board_id'"
+  echo "✓ Registered PartitionScheme '$scheme_id' for board '$board_id'${flash_size_override:+ (flash_size=$flash_size_override)}"
 }
 
-ESP32_DIR="$(find_esp32_core_dir)"
-
-PARTITION_DIR="$ESP32_DIR/tools/partitions"
-BOARDS_TXT="$ESP32_DIR/boards.txt"
-
-if [[ ! -d "$PARTITION_DIR" ]]; then
-  echo "Error: partition directory not found: $PARTITION_DIR" >&2
-  exit 1
-fi
-
-if [[ ! -f "$BOARDS_TXT" ]]; then
-  echo "Error: boards.txt not found: $BOARDS_TXT" >&2
-  exit 1
-fi
-
-echo "Installing custom partition table into Arduino ESP32 core..."
-echo "- Core:       $ESP32_DIR"
-echo "- Partitions: $PARTITION_DIR"
-
-# 1) Copy all repo-provided partition CSVs into the core (idempotent overwrite).
-shopt -s nullglob
-partition_files=("$REPO_ROOT"/partitions/*.csv)
-shopt -u nullglob
-if [[ ${#partition_files[@]} -eq 0 ]]; then
-  echo "Note: no partition CSVs found under $REPO_ROOT/partitions/"
-else
-  for csv in "${partition_files[@]}"; do
-    base="$(basename "$csv")"
-    cp "$csv" "$PARTITION_DIR/$base"
-    echo "✓ Installed $base"
-  done
-fi
-
-# 2) Register only the custom schemes that are actively used in config.sh (or config.project.sh).
+ESP32_DIR=""
 
 # Source config to access FQBN_TARGETS (and project overrides).
 source "$REPO_ROOT/config.sh"
 
+shopt -s nullglob
+PARTITION_FILES=("$REPO_ROOT"/partitions/*.csv)
+shopt -u nullglob
+if [[ ${#PARTITION_FILES[@]} -eq 0 ]]; then
+  echo "Note: no partition CSVs found under $REPO_ROOT/partitions/"
+fi
+
+# Track which package install dirs already received the CSV copy this run,
+# so multi-board configs sharing one package don't trigger duplicate work.
+declare -A INSTALLED_PACKAGES
+
 for board_name in "${!FQBN_TARGETS[@]}"; do
   fqbn="${FQBN_TARGETS[$board_name]}"
-  board_id=$(echo "$fqbn" | cut -d':' -f3)
+  IFS=':' read -r vendor arch board_id _ <<<"$fqbn"
+
   scheme_id=$(get_fqbn_option "PartitionScheme" "$fqbn" || true)
   if [[ -z "$scheme_id" ]]; then
     continue
   fi
 
-  # Only handle schemes that exist in this repo (treat everything else as core-provided).
   csv_path="$REPO_ROOT/partitions/partitions_${scheme_id}.csv"
+  # If this is a core-provided scheme (no matching CSV in repo) skip silently.
   if [[ ! -f "$csv_path" ]]; then
     continue
+  fi
+
+  core_dir=$(find_core_dir_for "$vendor" "$arch" || true)
+  if [[ -z "$core_dir" ]]; then
+    echo "Warning: skipping board '$board_name' — Arduino package '${vendor}:${arch}' not installed." >&2
+    echo "         Run ./setup.sh (or arduino-cli core install ${vendor}:${arch}) to enable this board." >&2
+    continue
+  fi
+
+  partition_dir="$core_dir/tools/partitions"
+  boards_txt="$core_dir/boards.txt"
+
+  if [[ ! -d "$partition_dir" || ! -f "$boards_txt" ]]; then
+    echo "Warning: '$core_dir' missing partitions/ or boards.txt — skipping board '$board_name'." >&2
+    continue
+  fi
+
+  # Copy every repo-provided CSV into this package's partitions/ on first touch.
+  if [[ -z "${INSTALLED_PACKAGES[$core_dir]:-}" ]]; then
+    echo "Installing custom partition tables into Arduino package..."
+    echo "- Package:    ${vendor}:${arch}"
+    echo "- Core:       $core_dir"
+    echo "- Partitions: $partition_dir"
+    for csv in "${PARTITION_FILES[@]}"; do
+      base="$(basename "$csv")"
+      cp "$csv" "$partition_dir/$base"
+      echo "✓ Installed $base"
+    done
+    INSTALLED_PACKAGES[$core_dir]=1
   fi
 
   partition_name_no_ext="partitions_${scheme_id}"
@@ -180,7 +209,7 @@ for board_name in "${!FQBN_TARGETS[@]}"; do
     exit 1
   fi
 
-  register_partition_scheme_if_needed "$BOARDS_TXT" "$board_id" "$scheme_id" "$partition_name_no_ext" "$upload_max_size_dec"
+  register_partition_scheme_if_needed "$boards_txt" "$board_id" "$scheme_id" "$partition_name_no_ext" "$upload_max_size_dec"
 done
 
 echo "Done."

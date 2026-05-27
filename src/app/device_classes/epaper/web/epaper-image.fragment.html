@@ -1,0 +1,147 @@
+<div class="section-header">
+  <h2>📰 Images &amp; Schedule</h2>
+  <p>Where the dashboard image is fetched from and how often the device wakes to refresh it. The device deep-sleeps between refreshes to save battery.</p>
+</div>
+
+<!-- Hidden: e-paper boards always run in this mode. Setting it on every Save
+     ensures the device cannot drift out of duty_cycle_epaper by accident. -->
+<input type="hidden" name="operating_mode" value="duty_cycle_epaper">
+
+<div class="card mb-3">
+  <div class="card-header"><strong>Image sources</strong></div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="epaper_rotation">Rotation</label>
+      <select class="form-select" id="epaper_rotation" name="epaper_rotation">
+        <option value="0">0° (portrait)</option>
+        <option value="1">90° (landscape)</option>
+        <option value="2">180°</option>
+        <option value="3">270°</option>
+      </select>
+    </div>
+    <div class="table-responsive mt-3">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th scope="col" style="width: 72px;">Slot</th>
+            <th scope="col">Image URL</th>
+            <th scope="col" style="width: 170px;">Duration (s)</th>
+            <th scope="col" style="width: 90px;">Stay</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><input type="url" class="form-control" name="ep_c0_url" maxlength="255" placeholder="https://example.com/image-1.png"></td>
+            <td><input type="number" class="form-control" name="ep_c0_int" min="1" max="86400" placeholder="900"></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c0_stay"></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><input type="url" class="form-control" name="ep_c1_url" maxlength="255" placeholder="https://example.com/image-2.png"></td>
+            <td><input type="number" class="form-control" name="ep_c1_int" min="1" max="86400" placeholder="900"></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c1_stay"></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><input type="url" class="form-control" name="ep_c2_url" maxlength="255" placeholder="https://example.com/image-3.png"></td>
+            <td><input type="number" class="form-control" name="ep_c2_int" min="1" max="86400" placeholder="900"></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c2_stay"></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><input type="url" class="form-control" name="ep_c3_url" maxlength="255" placeholder="https://example.com/image-4.png"></td>
+            <td><input type="number" class="form-control" name="ep_c3_int" min="1" max="86400" placeholder="900"></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c3_stay"></td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><input type="url" class="form-control" name="ep_c4_url" maxlength="255" placeholder="https://example.com/image-5.png"></td>
+            <td><input type="number" class="form-control" name="ep_c4_int" min="1" max="86400" placeholder="900"></td>
+            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c4_stay"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="form-text">Fill top-to-bottom. Empty URLs are skipped. <code>Stay</code> keeps showing that image when content is unchanged.</div>
+    <div class="form-text">Duration is required for each configured slot and applies while that slot is active.</div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><strong>Hourly refresh window</strong></div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="ep_sch_tz">Timezone offset</label>
+      <select class="form-select" id="ep_sch_tz" name="ep_sch_tz">
+        <option value="-12">UTC-12</option>
+        <option value="-11">UTC-11</option>
+        <option value="-10">UTC-10</option>
+        <option value="-9">UTC-9</option>
+        <option value="-8">UTC-8</option>
+        <option value="-7">UTC-7</option>
+        <option value="-6">UTC-6</option>
+        <option value="-5">UTC-5</option>
+        <option value="-4">UTC-4</option>
+        <option value="-3">UTC-3</option>
+        <option value="-2">UTC-2</option>
+        <option value="-1">UTC-1</option>
+        <option value="0">UTC+0</option>
+        <option value="1">UTC+1</option>
+        <option value="2">UTC+2</option>
+        <option value="3">UTC+3</option>
+        <option value="4">UTC+4</option>
+        <option value="5">UTC+5</option>
+        <option value="6">UTC+6</option>
+        <option value="7">UTC+7</option>
+        <option value="8">UTC+8</option>
+        <option value="9">UTC+9</option>
+        <option value="10">UTC+10</option>
+        <option value="11">UTC+11</option>
+        <option value="12">UTC+12</option>
+        <option value="13">UTC+13</option>
+        <option value="14">UTC+14</option>
+      </select>
+    </div>
+
+    <input type="hidden" name="ep_sch_hrs" id="ep_sch_hrs" value="16777215">
+    <div class="mb-2">Enabled hours (local time)</div>
+    <div class="d-grid" style="grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.35rem;" id="epaper-schedule-grid"></div>
+    <div class="mt-2">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="epaper-hours-all">All</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="epaper-hours-none">None</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="epaper-hours-workday">08-17</button>
+    </div>
+    <div class="form-text mt-2">When an hour is disabled, the device skips HTTP fetch and sleeps until the next enabled hour.</div>
+  </div>
+</div>
+
+<div class="card mb-3" id="epaper-frontlight-card" hidden>
+  <div class="card-header"><strong>Frontlight</strong></div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="epaper_frontlight_brightness">Brightness (0–63, 0 disables)</label>
+      <input type="number" class="form-control" id="epaper_frontlight_brightness" name="epaper_frontlight_brightness" min="0" max="63" placeholder="0">
+      <div class="form-text">Only used on button wakes — periodic refreshes do not light the panel.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="epaper_frontlight_duration_s">Stay on for (seconds)</label>
+      <input type="number" class="form-control" id="epaper_frontlight_duration_s" name="epaper_frontlight_duration_s" min="1" max="600" placeholder="30">
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><strong>WiFi Failure Backoff</strong></div>
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="wifi_backoff_max_seconds">Backoff max (seconds)</label>
+      <input type="number" class="form-control" id="wifi_backoff_max_seconds" name="wifi_backoff_max_seconds" min="60" max="86400" placeholder="3600">
+      <div class="form-text">After repeated WiFi failures the sleep interval doubles up to this ceiling. 3600 = 1 hour.</div>
+    </div>
+  </div>
+</div>
+
+<div class="save-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="epaper-image-save-btn">Save</button>
+</div>

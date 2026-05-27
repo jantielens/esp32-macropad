@@ -175,4 +175,14 @@ echo "=== Running unit tests: list_provider ==="
 ./tests/bin/test_list_provider
 echo
 
+echo "=== Building unit tests: epaper_battery ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_epaper_battery.cpp \
+    -o tests/bin/test_epaper_battery
+
+echo "=== Running unit tests: epaper_battery ==="
+./tests/bin/test_epaper_battery
+echo
+
 echo "=== All tests passed ==="

@@ -1,4 +1,11 @@
-# Changelog
+---
+title: Changelog
+description: Notable changes for ESP32 Macropad releases.
+ms.date: 2026-05-26
+ms.topic: reference
+---
+
+## Overview
 
 All notable changes to this project will be documented in this file.
 
@@ -6,6 +13,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.17.0] - 2026-05-27
+
+### Added
+
+* **E-paper device class release** for Inkplate 5V2 (`HAS_EPAPER`) with dedicated duty-cycle behavior: WiFi connect, CRC sidecar check, image refresh, telemetry publish, and deep sleep.
+* **E-Paper portal category** with four focused pages: Status, Image & Schedule, Status Overlay, and VCOM.
+* **E-paper power and wake controls** including `duty_cycle_epaper`, wake-button handling (`HAS_EPAPER_WAKE_BUTTON`), button-only wake (`duty_cycle_wake_seconds=0`), and config-mode entry/exit behavior from the wake button.
+* **E-paper telemetry surface** in portal and MQTT, including per-wake timing budget, refresh outcomes, battery values, and retained `<base>/epaper/state` payloads with Home Assistant discovery.
+* **E-paper VCOM tooling** with read, EEPROM write, and non-destructive preview test-pattern workflows from the portal.
+* **E-paper documentation set** with board behavior and operational details in [docs/epaper-guide.md](docs/epaper-guide.md).
+
+### Changed
+
+* **Portal web-asset architecture for device classes** — bundle resolution now supports `src/app/device_classes/*/web/` in addition to `src/app/web/`, so device-class JS/HTML can be isolated while keeping a single bundled `portal.js` output.
+* **Portal component aggregation guidance** — project instructions now document both shared and device-class include patterns for `portal_components.cpp`, reducing missed component-registration mistakes in future feature branches.
 
 ## [1.16.0] - 2026-05-24
 

@@ -19,6 +19,17 @@
 #include <freertos/timers.h>
 #include <freertos/idf_additions.h>
 #include <esp_timer.h>
+#include <esp_idf_version.h>
+
+// Per-core idle-task run-time counter API was added in ESP-IDF v5.x.
+// Inkplate's bundled arduino-esp32 fork ships an older IDF (4.x) that lacks
+// `configRUN_TIME_COUNTER_TYPE` and `ulTaskGetIdleRunTimeCounterForCore`. On
+// that platform we compile out the per-core sampler entirely and report -1.
+#if (ESP_IDF_VERSION_MAJOR >= 5)
+#define TELEMETRY_HAS_PER_CORE_IDLE_COUNTER 1
+#else
+#define TELEMETRY_HAS_PER_CORE_IDLE_COUNTER 0
+#endif
 
 #if HAS_MQTT
 #include "mqtt_manager.h"
@@ -60,11 +71,13 @@ int16_t device_telemetry_get_cached_rssi(bool *valid) {
 // `ulTaskGetIdleRunTimeCounterForCore()` (ESP-IDF addition) reads a single
 // uint32 from the idle-task TCB — no scheduler suspension, no task-list walk.
 // A 1 Hz esp_timer computes the delta and derives CPU%.
+#if TELEMETRY_HAS_PER_CORE_IDLE_COUNTER
 static configRUN_TIME_COUNTER_TYPE s_idle_rt_last[portNUM_PROCESSORS] = {};
 static int64_t           s_wall_us_last = 0;
+static bool              s_cpu_first_sample = true;
+#endif
 static volatile int      s_cpu_usage = -1;           // Written by timer, read by getter
 static esp_timer_handle_t s_cpu_timer = nullptr;
-static bool              s_cpu_first_sample = true;
 
 // /api/health min/max window sampling (time-based rollover).
 // Goal: capture short-lived dips/spikes without storing time series on-device.
@@ -208,6 +221,7 @@ static void get_memory_snapshot(
 // 1 Hz timer callback — reads per-core idle-task run-time counters (microseconds)
 // and derives CPU% from the delta.  Runs in esp_timer task context.
 static void cpu_timer_cb(void*) {
+#if TELEMETRY_HAS_PER_CORE_IDLE_COUNTER
 	const int64_t wall_now = esp_timer_get_time();  // microseconds since boot
 
 	if (s_cpu_first_sample) {
@@ -239,6 +253,10 @@ static void cpu_timer_cb(void*) {
 	if (usage > 100)  usage = 100;
 
 	s_cpu_usage = usage;
+#else
+	// Per-core idle-counter API unavailable on this IDF — leave s_cpu_usage at -1.
+	(void)0;
+#endif
 }
 
 static void health_window_timer_cb(TimerHandle_t) {
@@ -499,6 +517,11 @@ size_t device_telemetry_free_sketch_space() {
 
 // Start a 1 Hz timer that reads per-core idle-task run-time counters.
 void device_telemetry_start_cpu_monitoring() {
+#if !TELEMETRY_HAS_PER_CORE_IDLE_COUNTER
+		// Older IDF — no per-core idle-counter API; report CPU% as unavailable.
+		LOGI("CPU", "Per-core idle-counter API unavailable on this IDF; CPU monitor disabled");
+		return;
+#else
 		if (s_cpu_timer != nullptr) return;  // Already started
 
 		// Create a periodic 1 Hz esp_timer to compute the delta.
@@ -526,6 +549,7 @@ void device_telemetry_start_cpu_monitoring() {
 
 		LOGI("CPU", "Run-time-stats CPU monitor started (%d core%s)",
 				portNUM_PROCESSORS, portNUM_PROCESSORS > 1 ? "s" : "");
+#endif
 }
 
 int device_telemetry_get_cpu_usage() {

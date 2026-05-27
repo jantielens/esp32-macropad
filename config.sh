@@ -62,6 +62,7 @@ declare -A FQBN_TARGETS=(
     ["jc4880p433"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 (480x800 MIPI-DSI ST7701 + GT911 touch; 16MB + 32MB PSRAM)
     ["jc1060p470c"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC1060P470C (1024x600 MIPI-DSI JD9165 + GT911 touch; 16MB + 32MB PSRAM)
     ["esp32c3-withsensors"]="esp32:esp32:nologo_esp32c3_super_mini:CDCOnBoot=cdc,PartitionScheme=ota_2mb" # ESP32-C3 Super Mini headless sensor node (no display; HAS_BLE + sensors)
+    ["inkplate5v2"]="Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb" # Soldered Inkplate 5V2 (ESP32 classic, 5.17" 720x1280 3-bit grayscale e-paper; 4MB flash + 4MB QSPI PSRAM)
 )
 
 # Default board (used when only one board is configured)

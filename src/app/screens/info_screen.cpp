@@ -1,5 +1,5 @@
 #include "info_screen.h"
-#include "../../version.h"
+#include "version.h"
 #include "log_manager.h"
 #include "../device_telemetry.h"
 #include "../board_config.h"

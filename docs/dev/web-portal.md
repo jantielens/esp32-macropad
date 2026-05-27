@@ -333,6 +333,9 @@ All pages include a fixed bottom footer with action buttons:
 - Footer stays attached to bottom, spans full page width (max 900px)
 - Always visible while scrolling
 
+**Header Reboot Button:**
+The portal header also carries a 🔄 reboot button next to the dark/light theme toggle, available on every page (including pages without the Save/Reboot footer). Clicking it prompts for confirmation, calls `POST /api/reboot`, and shows the standard reboot dialog. It does not save first.
+
 ## Automatic Reconnection After Reboot
 
 When the device reboots (after saving settings, firmware update, or manual reboot), the portal automatically attempts to reconnect and redirect you to the device.
@@ -1302,7 +1305,16 @@ DNS server redirects all requests to device IP in AP mode:
 
 ### Modifying the Web Interface
 
-1. Edit files in `src/app/web/`:
+1. Edit files in one of the web asset roots:
+  - Shared portal assets: `src/app/web/`
+  - Device-class assets: `src/app/device_classes/<class>/web/`
+
+  The bundler scans both locations. Use `src/app/web/` for shared, cross-board
+  portal behavior. Use `src/app/device_classes/<class>/web/` for feature files
+  that only make sense for one device class (for example, the e-paper page,
+  its fragment init, and any device-class-specific JS state management).
+
+  Under `src/app/web/`:
    - Template fragments (shared):
      - `_header.html` - HTML head section
      - `_nav.html` - Navigation tabs and loading overlay
@@ -1365,9 +1377,10 @@ All JavaScript source files are concatenated into a single `portal.js` asset at 
 **How it works:**
 
 1. `src/app/web/portal.js.bundle` lists every JS module in dependency order (one filename per line, `#` comments ignored)
-2. `tools/minify-web-assets.sh` reads the manifest, concatenates the files, minifies the result, and gzip-compresses it into `web_assets.h`
-3. Every HTML page loads a single `<script src="/portal.js"></script>`
-4. One C++ handler (`handleJS`) serves the bundled asset
+2. `tools/minify-web-assets.sh` resolves each manifest entry by checking `src/app/web/` first, then `src/app/device_classes/*/web/`
+3. The minifier concatenates the resolved files, minifies the result, and gzip-compresses it into `web_assets.h`
+4. Every HTML page loads a single `<script src="/portal.js"></script>`
+5. One C++ handler (`handleJS`) serves the bundled asset
 
 **Module organization:**
 
@@ -1383,9 +1396,11 @@ All JavaScript source files are concatenated into a single `portal.js` asset at 
 
 **Adding a new JS module:**
 
-1. Create `src/app/web/portal_myfeature.js`
-2. Add the filename to `portal.js.bundle` in the correct dependency position (before any file that calls its functions, after any file it depends on)
-3. Run `./build.sh` — the module is automatically included in the bundle
+1. Create the module in the correct root:
+  - Shared module: `src/app/web/portal_myfeature.js`
+  - Device-class module: `src/app/device_classes/<class>/web/portal_myfeature.js`
+2. Add the filename (basename only) to `portal.js.bundle` in the correct dependency position (before any file that calls its functions, after any file it depends on)
+3. Run `./build.sh` - the module is automatically included in the bundle
 
 **Fragment pattern:** Large modules are split into a main file and one or more fragment files. Fragments are listed before the main file in the bundle manifest so their functions are available when the main file executes. For example, `portal_health_sparkline.js` (fragment) appears before `portal_health.js` (main).
 

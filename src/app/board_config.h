@@ -55,6 +55,45 @@
 #define HAS_BLE_HID true
 #endif
 
+// Enable e-paper device class (Inkplate-style refresh-on-wake dashboards).
+// When true the firmware compiles the e-paper HAL, the DutyCycleEpaper mode,
+// Enable the e-paper refresh path and E-Paper portal page.
+#ifndef HAS_EPAPER
+#define HAS_EPAPER false
+#endif
+
+// Enable e-paper wake-button handling (ext0 wake plus short/long press).
+#ifndef HAS_EPAPER_WAKE_BUTTON
+#define HAS_EPAPER_WAKE_BUTTON false
+#endif
+
+// GPIO used for the e-paper wake button. Must be an RTC-capable input pin
+// (typical Inkplate wiring uses GPIO36 with an external pullup).
+#ifndef EPAPER_BUTTON_PIN
+#define EPAPER_BUTTON_PIN 36
+#endif
+
+// Enable e-paper frontlight control on boards with frontlight hardware.
+#ifndef HAS_EPAPER_FRONTLIGHT
+#define HAS_EPAPER_FRONTLIGHT false
+#endif
+
+// E-paper full-refresh speed classification. When true, the boot path shows
+// a short "Refreshing" splash on button wakes (OG inkplate-dashboard pattern).
+// When false (default — most e-paper panels need 6-10 s per full refresh),
+// button wakes skip straight to the image fetch to avoid the second waveform.
+#ifndef EPAPER_FAST_REFRESH
+#define EPAPER_FAST_REFRESH false
+#endif
+
+// Recovery / config portal first-boot auto-sleep default (seconds). Boards
+// where the recovery portal is the primary user-facing surface (e.g. headless
+// e-paper dashboards) can raise this so the user has more time to configure
+// the device on a fresh flash.
+#ifndef CONFIG_DEFAULT_PORTAL_IDLE_SECONDS
+#define CONFIG_DEFAULT_PORTAL_IDLE_SECONDS 120
+#endif
+
 // Enable BTHome v2 BLE telemetry advertising (transport for headless/battery boards).
 // Independent of HAS_BLE_HID; both can be enabled on the same board but mainly intended
 // for boards without a display (e.g. ESP32-C3 sensor nodes).

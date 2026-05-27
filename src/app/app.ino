@@ -1,4 +1,4 @@
-#include "../version.h"
+#include "version.h"
 #include "board_config.h"
 #include "config_manager.h"
 #include "web_portal.h"
@@ -15,6 +15,7 @@
 #include "power_manager.h"
 #include "portal_idle.h"
 #include "wifi_manager.h"
+#include "device_class.h"
 #include "duty_cycle.h"
 #if HAS_BLE
 #include "ble_telemetry.h"
@@ -119,7 +120,6 @@ static bool check_config_mode_button() {
 	#endif
 }
 
-
 void setup()
 {
 	// Optional device-side history for sparklines (/api/health/history)
@@ -127,6 +127,11 @@ void setup()
 	#if HEALTH_HISTORY_ENABLED
 	health_history_start();
 	#endif
+
+	// Register device classes before wake classification so each class can
+	// participate in power_manager_boot_init()'s dispatch.
+	extern void device_classes_register_all();
+	device_classes_register_all();
 
 	power_manager_boot_init();
 
@@ -277,6 +282,9 @@ void setup()
 	power_manager_set_current_mode(boot_mode);
 	power_manager_led_set_mode(boot_mode);
 
+	// Let registered device classes hook in before any network / display init.
+	device_class_dispatch_setup_early(&device_config, boot_mode);
+
 	if (boot_mode == PowerMode::DutyCycle) {
 		// Initialize sensors (optional adapters)
 		sensor_manager_init();
@@ -303,6 +311,17 @@ void setup()
 		return;
 	}
 	#endif
+
+	// Generic duty-cycle dispatch: route to any registered DeviceClass that
+	// owns this boot mode (e.g. e-paper). The class runs its full pipeline
+	// (splashes, WiFi, refresh, sleep) and we exit setup() afterward so the
+	// rest of the always-on init never runs in duty-cycle modes.
+	if (const DeviceClass *dc = device_class_find_by_mode(boot_mode)) {
+		if (dc->run_duty_cycle) {
+			dc->run_duty_cycle(&device_config);
+			return;
+		}
+	}
 
 	// Re-apply brightness from loaded config (display was initialized before config load)
 	#if HAS_DISPLAY && HAS_BACKLIGHT
@@ -382,6 +401,10 @@ void setup()
 		portal_idle_init();
 		portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);
 		portal_idle_set_mode(power_manager_get_current_mode());
+
+	// Let registered device classes finish setup after WiFi / AP / portal
+	// are up (no-op until a class registers).
+	device_class_dispatch_setup_late(&device_config, power_manager_get_current_mode());
 
 	// In AP/captive-portal mode the device's only job is to collect WiFi
 	// credentials, save them, and reboot into STA mode. Skip all heavy
@@ -509,6 +532,7 @@ void loop()
 {
 	power_manager_led_loop();
 	power_manager_loop();
+	device_class_dispatch_loop();
 
 	#if HAS_DISPLAY
 	screen_saver_manager_loop();

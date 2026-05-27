@@ -3,6 +3,21 @@
 // Each function populates fragment fields and attaches event listeners.
 
 // ============================================================================
+// Extensible config-field registration
+// ============================================================================
+//
+// Per-feature modules (e.g. e-paper, future device classes) register the NVS
+// keys their fragments edit via window.registerConfigFields([...]).
+// saveFragmentConfig() merges the registered set with the static core list
+// before scraping the DOM, so device-class modules can ship their own keys
+// without editing this file.
+window.__extra_config_fields = window.__extra_config_fields || [];
+window.registerConfigFields = function (names) {
+    if (!names || !names.length) return;
+    Array.prototype.push.apply(window.__extra_config_fields, names);
+};
+
+// ============================================================================
 // Shared: config save helper (no FormData needed)
 // ============================================================================
 
@@ -39,6 +54,10 @@ async function saveFragmentConfig(requiresReboot) {
         'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms',
         'screen_saver_wake_on_touch', 'screen_saver_wake_binding'
     ];
+    // Merge any keys contributed by device-class modules (e.g. e-paper).
+    if (window.__extra_config_fields && window.__extra_config_fields.length) {
+        fields = fields.concat(window.__extra_config_fields);
+    }
     fields.forEach(function (name) {
         // Radio groups: pick the checked option (if any).
         var radios = document.querySelectorAll('input[type="radio"][name="' + name + '"]');
@@ -306,11 +325,20 @@ window.init_mode_fragment = function () {
         var caps = (window.__device_caps || {});
         var bleOpt = document.getElementById('mode_opt_duty_cycle_ble');
         if (bleOpt) bleOpt.style.display = caps.ble ? '' : 'none';
+        var epOpt = document.getElementById('mode_opt_duty_cycle_epaper');
+        if (epOpt) epOpt.style.display = caps.epaper ? '' : 'none';
         // If BLE was the persisted choice but the build no longer supports it,
         // fall back to always_on.
         if (!caps.ble) {
             var bleRadio = document.getElementById('operating_mode_duty_cycle_ble');
             if (bleRadio && bleRadio.checked) {
+                var alwaysOn = document.getElementById('operating_mode_always_on');
+                if (alwaysOn) alwaysOn.checked = true;
+            }
+        }
+        if (!caps.epaper) {
+            var epRadio = document.getElementById('operating_mode_duty_cycle_epaper');
+            if (epRadio && epRadio.checked) {
                 var alwaysOn = document.getElementById('operating_mode_always_on');
                 if (alwaysOn) alwaysOn.checked = true;
             }
@@ -326,13 +354,14 @@ window.init_mode_fragment = function () {
         var mode = getSelectedMode();
         var isDutyMqtt = (mode === 'duty_cycle_mqtt');
         var isDutyBle = (mode === 'duty_cycle_ble');
-        var isAnyDuty = isDutyMqtt || isDutyBle;
+        var isDutyEpaper = (mode === 'duty_cycle_epaper');
+        var isAnyDuty = isDutyMqtt || isDutyBle || isDutyEpaper;
 
         var dc = document.getElementById('duty-cycle-settings');
         if (dc) dc.style.display = isAnyDuty ? '' : 'none';
         // Wi-Fi backoff is meaningless for BLE.
         var backoff = document.getElementById('wifi-backoff-row');
-        if (backoff) backoff.style.display = isDutyMqtt ? '' : 'none';
+        if (backoff) backoff.style.display = (isDutyMqtt || isDutyEpaper) ? '' : 'none';
         var ble = document.getElementById('ble-telemetry-settings');
         if (ble) ble.style.display = isDutyBle ? '' : 'none';
     }
@@ -471,6 +500,7 @@ window.init_ha_discovery_fragment = function () {
 window.init_volume_fragment = function () {
     initConfigFragment('volume-save-btn', false);
 };
+
 
 // ============================================================================
 // Sound Files

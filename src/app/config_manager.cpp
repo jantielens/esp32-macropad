@@ -7,6 +7,7 @@
 
 #include "config_manager.h"
 #include "board_config.h"
+#include "device_class.h"
 #include "web_assets.h"
 #include "log_manager.h"
 #include "power_config.h"
@@ -157,7 +158,7 @@ bool config_manager_load(DeviceConfig *config) {
 				strlcpy(config->operating_mode, "always_on", CONFIG_OPERATING_MODE_MAX_LEN);
 				config->duty_cycle_wake_seconds = 120;
 				config->mqtt_publish_interval_seconds = 120;
-				config->portal_idle_timeout_seconds = 120;
+				config->portal_idle_timeout_seconds = CONFIG_DEFAULT_PORTAL_IDLE_SECONDS;
 				config->wifi_backoff_max_seconds = 900;
 
 				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
@@ -189,6 +190,9 @@ bool config_manager_load(DeviceConfig *config) {
 				#endif
 				config->screen_saver_wake_binding[0] = '\0';
 				#endif
+
+				// Let registered device classes seed their own defaults.
+				device_class_dispatch_config_defaults(config);
 				
 				return false;
 		}
@@ -225,7 +229,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 		config->duty_cycle_wake_seconds = preferences.getUShort(KEY_DC_WAKE, 120);
 		config->mqtt_publish_interval_seconds = preferences.getUShort(KEY_MQTT_PUB, 120);
-		config->portal_idle_timeout_seconds = preferences.getUShort(KEY_PORTAL_IDLE, 120);
+		config->portal_idle_timeout_seconds = preferences.getUShort(KEY_PORTAL_IDLE, CONFIG_DEFAULT_PORTAL_IDLE_SECONDS);
 		config->wifi_backoff_max_seconds = preferences.getUShort(KEY_WIFI_BACKOFF_MAX, 900);
 
 		preferences.getString(KEY_MQTT_SCOPE, config->mqtt_publish_scope, CONFIG_MQTT_SCOPE_MAX_LEN);
@@ -276,6 +280,10 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 		preferences.getString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding, CONFIG_SS_WAKE_BINDING_MAX_LEN);
 		#endif
+
+		// Let registered device classes load their own fields from the same
+		// already-open namespace.
+		device_class_dispatch_config_load(config, preferences);
 		
 		config->magic = magic;
 		
@@ -370,6 +378,9 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putBool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch);
 		preferences.putString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding);
 		#endif
+
+		// Let registered device classes persist their own fields.
+		device_class_dispatch_config_save(config, preferences);
 		
 		// Save magic number last (indicates valid config)
 		preferences.putUInt(KEY_MAGIC, CONFIG_MAGIC);

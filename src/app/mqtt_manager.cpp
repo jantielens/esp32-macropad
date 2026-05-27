@@ -4,6 +4,7 @@
 
 #if HAS_MQTT
 
+#include "device_class.h"
 #include "ha_discovery.h"
 #include "device_telemetry.h"
 #include "mqtt_sub_store.h"
@@ -162,8 +163,24 @@ void MqttManager::publishAvailability(bool online) {
 void MqttManager::publishDiscoveryOncePerBoot() {
 		if (_discovery_published_this_boot) return;
 
+		// Let registered device classes publish their own discovery first and
+		// optionally suppress the generic core discovery (e.g. battery-powered
+		// classes that publish a curated subset on a slow link). No-op until a
+		// class registers.
+		{
+				bool skip_generic = false;
+				device_class_dispatch_mqtt_discovery(*this, &skip_generic);
+				if (skip_generic) {
+						_discovery_published_this_boot = true;
+						return;
+				}
+		}
+
 		LOGI("MQTT", "Publishing HA discovery");
 		ha_discovery_publish_health(*this);
+		// Device classes can publish an immediate state snapshot so entities
+		// are populated right after discovery on always-on boards.
+		device_class_dispatch_mqtt_state(*this);
 		_discovery_published_this_boot = true;
 }
 

@@ -2,6 +2,7 @@
 
 #include "board_config.h"
 #include "config_manager.h"
+#include "device_class.h"
 #include "log_manager.h"
 
 #include <Arduino.h>
@@ -9,6 +10,7 @@
 #include <esp_sleep.h>
 #include <esp_system.h>
 #include <Preferences.h>
+#include <time.h>
 
 // RTC-retained backoff state
 RTC_DATA_ATTR static uint32_t g_wifi_backoff_seconds = 0;
@@ -38,6 +40,15 @@ void power_manager_boot_init() {
 		const esp_reset_reason_t reason = esp_reset_reason();
 		g_is_deep_sleep_wake = (reason == ESP_RST_DEEPSLEEP);
 		g_force_config_mode = false;
+
+		// Allow registered device classes to classify the wake reason and
+		// optionally request Config Mode. OR'd with any contribution from the
+		// power-on burst detector below so neither path can mask the other.
+		{
+				bool dc_force_config = false;
+				(void)device_class_dispatch_wake_classify(&dc_force_config);
+				if (dc_force_config) g_force_config_mode = true;
+		}
 
 		#if POWERON_CONFIG_BURST_ENABLED
 		// Power-on burst detection (for boards without a reliable user button):
@@ -146,18 +157,51 @@ uint32_t power_manager_get_wifi_backoff_seconds() {
 }
 
 void power_manager_sleep_for(uint32_t seconds) {
-		if (seconds == 0) {
+		// Let registered device classes mutate the sleep duration and arm any
+		// additional wake sources they own (ext0/ext1/touchpad/etc.). Hook is
+		// a no-op until at least one class registers.
+		device_class_dispatch_sleep_prepare(&seconds);
+
+		// A registered device class may opt into button-only sleep by leaving
+		// seconds at 0 (its sleep_prepare hook is responsible for arming the
+		// alternate wake source). Without a registered class, treat 0 as
+		// "wake immediately" by clamping to 1 second.
+		const bool class_owns_wake =
+				(device_class_find_by_mode(power_manager_get_current_mode()) != nullptr);
+		if (seconds == 0 && !class_owns_wake) {
 				seconds = 1;
 		}
 
-		LOGI("Power", "Sleeping for %us", (unsigned)seconds);
+		if (seconds == 0) {
+				LOGI("Power", "Sleeping (button-only, no timer wakeup; wake time depends on external trigger)");
+		} else {
+				time_t now = time(nullptr);
+				time_t wake_epoch = now + (time_t)seconds;
+
+				if (now >= 946684800) {
+						struct tm wake_tm;
+						char wake_buf[32];
+						localtime_r(&wake_epoch, &wake_tm);
+						strftime(wake_buf, sizeof(wake_buf), "%Y-%m-%d %H:%M:%S", &wake_tm);
+						LOGI("Power", "Sleeping for %us; planned wake at %s (epoch=%llu)",
+						     (unsigned)seconds,
+						     wake_buf,
+						     (unsigned long long)wake_epoch);
+				} else {
+						LOGI("Power", "Sleeping for %us; planned wake in +%us (clock not synced)",
+						     (unsigned)seconds,
+						     (unsigned)seconds);
+				}
+		}
 
 		led_write(false);
 
 		WiFi.disconnect(true);
 		WiFi.mode(WIFI_OFF);
 
-		esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
+		if (seconds > 0) {
+				esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
+		}
 		esp_deep_sleep_start();
 }
 

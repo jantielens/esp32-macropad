@@ -13,7 +13,7 @@
 #if HEALTH_HISTORY_ENABLED
 #include "health_history.h"
 #endif
-#include "../version.h"
+#include "version.h"
 
 #include <ArduinoJson.h>
 #include <WiFi.h>

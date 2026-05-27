@@ -1,0 +1,29 @@
+<div class="section-header">
+  <h2>📰 E-Paper Status</h2>
+  <p>Most recent refresh outcome, timing breakdown, and battery reading. Auto-refreshes every 5 seconds while this page is open.</p>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><strong>Last refresh</strong></div>
+  <div class="card-body">
+    <dl class="row mb-0 small">
+      <dt class="col-sm-4">Last refresh</dt><dd class="col-sm-8" id="epaper-status-last">—</dd>
+      <dt class="col-sm-4">Successful refreshes</dt><dd class="col-sm-8" id="epaper-status-count">—</dd>
+      <dt class="col-sm-4">Last draw result</dt><dd class="col-sm-8" id="epaper-status-draw">—</dd>
+      <dt class="col-sm-4">Last sidecar HTTP</dt><dd class="col-sm-8" id="epaper-status-sidecar">—</dd>
+      <dt class="col-sm-4">Battery</dt><dd class="col-sm-8" id="epaper-status-battery">—</dd>
+      <dt class="col-sm-4">Last image CRC</dt><dd class="col-sm-8" id="epaper-status-crc"><code>—</code></dd>
+      <dt class="col-sm-4">WiFi (last wake)</dt><dd class="col-sm-8" id="epaper-status-rssi">—</dd>
+      <dt class="col-sm-4">Active loop time</dt><dd class="col-sm-8" id="epaper-status-loop">—</dd>
+      <dt class="col-sm-4">Boot → WiFi</dt><dd class="col-sm-8" id="epaper-status-t-wifi">—</dd>
+      <dt class="col-sm-4">CRC → draw</dt><dd class="col-sm-8" id="epaper-status-t-draw">—</dd>
+      <dt class="col-sm-4">Draw → MQTT</dt><dd class="col-sm-8" id="epaper-status-t-mqtt">—</dd>
+      <dt class="col-sm-4">CRC fetch attempts</dt><dd class="col-sm-8" id="epaper-status-crc-attempts">—</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="action-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="epaper-refresh-btn">Refresh e-paper now</button>
+</div>
+<div id="epaper-refresh-status" class="form-text mt-2" style="min-height:1.2em;"></div>
