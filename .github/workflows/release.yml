@@ -149,9 +149,34 @@ jobs:
           echo "Error: partitions binary not found: $PARTITIONS_BIN"
           exit 1
         fi
-        if [ ! -f "$MERGED_BIN" ]; then
-          echo "Error: merged firmware not found: $MERGED_BIN"
+        # boot_app0.bin: search esp32:esp32 first, fall back to Inkplate_Boards platform.
+        BOOT_APP0_SRC=""
+        for hw_base in \
+          "$HOME/.arduino15/packages/esp32/hardware/esp32" \
+          "$HOME/.arduino15/packages/Inkplate_Boards/hardware/esp32"; do
+          candidate=$(ls -1d "$hw_base"/*/ 2>/dev/null | sort -V | tail -n 1 || true)
+          candidate="${candidate%/}"
+          if [ -f "$candidate/tools/partitions/boot_app0.bin" ]; then
+            BOOT_APP0_SRC="$candidate/tools/partitions/boot_app0.bin"
+            echo "Found boot_app0.bin: $BOOT_APP0_SRC"
+            break
+          fi
+        done
+        if [ -z "$BOOT_APP0_SRC" ]; then
+          echo "Error: boot_app0.bin not found in any installed ESP32 core"
           exit 1
+        fi
+
+        # Generate merged binary if the platform didn't produce one (e.g. Inkplate_Boards).
+        if [ ! -f "$MERGED_BIN" ]; then
+          echo "app.ino.merged.bin not produced by platform; generating with esptool merge_bin..."
+          python3 -m esptool --chip esp32 merge_bin \
+            --output "$MERGED_BIN" \
+            0x1000  "$BOOTLOADER_BIN" \
+            0x8000  "$PARTITIONS_BIN" \
+            0xE000  "$BOOT_APP0_SRC" \
+            0x10000 "$APP_BIN"
+          echo "Generated: $MERGED_BIN"
         fi
 
         cp "$APP_BIN" "$BOARD_DIR/$PROJECT_NAME-${{ matrix.board.name }}-v$VERSION.bin"
@@ -162,16 +187,6 @@ jobs:
 
         cp "$PARTITIONS_BIN" "$BOARD_DIR/$PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-partitions.bin"
         echo "Created: $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-partitions.bin"
-
-        # boot_app0.bin is provided by the installed ESP32 core.
-        ESP32_HW_BASE="$HOME/.arduino15/packages/esp32/hardware/esp32"
-        ESP32_DIR=$(ls -1d "$ESP32_HW_BASE"/*/ 2>/dev/null | sort -V | tail -n 1 || true)
-        ESP32_DIR="${ESP32_DIR%/}"
-        BOOT_APP0_SRC="$ESP32_DIR/tools/partitions/boot_app0.bin"
-        if [ ! -f "$BOOT_APP0_SRC" ]; then
-          echo "Error: boot_app0.bin not found in ESP32 core: $BOOT_APP0_SRC"
-          exit 1
-        fi
 
         cp "$BOOT_APP0_SRC" "$BOARD_DIR/$PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-boot_app0.bin"
         echo "Created: $PROJECT_NAME-${{ matrix.board.name }}-v$VERSION-boot_app0.bin"
