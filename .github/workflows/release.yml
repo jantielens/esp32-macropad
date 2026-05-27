@@ -149,25 +149,15 @@ jobs:
           echo "Error: partitions binary not found: $PARTITIONS_BIN"
           exit 1
         fi
-        # boot_app0.bin: search esp32:esp32 first, fall back to Inkplate_Boards platform.
-        BOOT_APP0_SRC=""
-        for hw_base in \
-          "$HOME/.arduino15/packages/esp32/hardware/esp32" \
-          "$HOME/.arduino15/packages/Inkplate_Boards/hardware/esp32"; do
-          candidate=$(ls -1d "$hw_base"/*/ 2>/dev/null | sort -V | tail -n 1 || true)
-          candidate="${candidate%/}"
-          if [ -f "$candidate/tools/partitions/boot_app0.bin" ]; then
-            BOOT_APP0_SRC="$candidate/tools/partitions/boot_app0.bin"
-            echo "Found boot_app0.bin: $BOOT_APP0_SRC"
-            break
-          fi
-        done
+        # boot_app0.bin is supplied by the installed board platform.
+        BOOT_APP0_SRC=$(find "$HOME/.arduino15/packages" -path '*/tools/partitions/boot_app0.bin' 2>/dev/null | sort -V | tail -n 1 || true)
         if [ -z "$BOOT_APP0_SRC" ]; then
           echo "Error: boot_app0.bin not found in any installed ESP32 core"
           exit 1
         fi
+        echo "Found boot_app0.bin: $BOOT_APP0_SRC"
 
-        # Generate merged binary if the platform didn't produce one (e.g. Inkplate_Boards).
+        # Generate merged binary if the selected platform did not emit one itself.
         if [ ! -f "$MERGED_BIN" ]; then
           echo "app.ino.merged.bin not produced by platform; generating with esptool merge_bin..."
           python3 -m esptool --chip esp32 merge_bin \
