@@ -79,10 +79,10 @@ jobs:
       with:
         python-version: '3.x'
 
-    - name: Install Python serial dependency
+      - name: Install Python release tooling
       run: |
         python3 -m pip install --upgrade pip
-        python3 -m pip install pyserial
+          python3 -m pip install pyserial esptool
     
     - name: Cache arduino-cli
       uses: actions/cache@v4
