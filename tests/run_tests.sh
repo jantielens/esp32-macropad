@@ -103,6 +103,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_parse.cpp \
     src/app/action_parse.cpp \
+    src/app/action_registry.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_action_parse
 
@@ -130,6 +131,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_shutter_session_actions.cpp \
     src/app/action_parse.cpp \
+    src/app/action_registry.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_shutter_session_actions
 

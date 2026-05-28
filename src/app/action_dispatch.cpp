@@ -2,6 +2,7 @@
 
 #if HAS_DISPLAY
 
+#include "action_registry.h"
 #include "display_manager.h"
 #include "log_manager.h"
 #include "message_bubble.h"
@@ -20,12 +21,6 @@
 #include "timer_engine.h"
 #include "wifi_manager.h"
 #include "screen_saver_manager.h"
-
-#if IS_SHUTTER_TESTER
-#include "device_classes/shutter_tester/shutter_measure.h"
-#include "device_classes/shutter_tester/shutter_session.h"
-#include "device_classes/shutter_tester/shutter_capture.h"
-#endif
 
 #include <math.h>
 
@@ -74,8 +69,13 @@ static void resolve_action_bindings(ButtonAction& act) {
         try_resolve(act.payload.notify.notify_text_color,   sizeof(act.payload.notify.notify_text_color));
         try_resolve(act.payload.notify.notify_bg_color,     sizeof(act.payload.notify.notify_bg_color));
         try_resolve(act.payload.notify.notify_border_color, sizeof(act.payload.notify.notify_border_color));
+    } else {
+        // Device-class action types (e.g. shutter) self-register via the
+        // action type registry; delegate to their resolve_bindings hook if any.
+        const ActionTypeDef* t = action_type_find(act.type);
+        if (t && t->resolve_bindings) t->resolve_bindings(act);
     }
-    // sound, system, back, ble_pair, shutter: no bindable fields today.
+    // sound, system, back, ble_pair: no bindable fields today.
 }
 
 // Quick scan: return true if the active payload arm contains a binding token.
@@ -104,7 +104,8 @@ static bool action_has_any_binding(const ButtonAction& act) {
             || has(act.payload.notify.notify_bg_color)
             || has(act.payload.notify.notify_border_color);
     }
-    return false;
+    const ActionTypeDef* t = action_type_find(act.type);
+    return (t && t->has_binding) ? t->has_binding(act) : false;
 }
 #endif // HAS_MQTT
 
@@ -284,63 +285,6 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
             LOGI(TAG, "%s notify: '%s' dur=%u loc=%s", label, params.text,
                  params.duration_ms, n.notify_location[0] ? n.notify_location : "bottom");
         }
-#if IS_SHUTTER_TESTER
-    } else if (strcmp(act.type, ACTION_TYPE_SHUTTER) == 0) {
-        const auto& sh = act.payload.shutter;
-        const char* cmd = sh.command;
-        if (strcmp(cmd, "set") == 0) {
-            if (!shutter_measure_set_target(sh.value)) {
-                LOGW(TAG, "%s shutter set: unknown speed '%s'", label, sh.value);
-            } else {
-                LOGI(TAG, "%s shutter set: %s", label, sh.value);
-            }
-        } else if (strcmp(cmd, "adjust") == 0) {
-            bool faster = strcmp(sh.value, "faster") == 0;
-            shutter_measure_adjust_target(faster);
-            LOGI(TAG, "%s shutter adjust: %s", label, sh.value);
-        } else if (strcmp(cmd, "toggle_lock") == 0) {
-            if (!shutter_measure_toggle_lock()) {
-                LOGW(TAG, "%s shutter toggle_lock: no target set", label);
-            } else {
-                LOGI(TAG, "%s shutter toggle_lock", label);
-            }
-        } else if (strcmp(cmd, "sess_start") == 0) {
-            shutter_session_start(sh.value);
-            LOGI(TAG, "%s shutter sess_start: camera='%s'", label, sh.value);
-        } else if (strcmp(cmd, "sess_stop") == 0) {
-            shutter_session_stop();
-            LOGI(TAG, "%s shutter sess_stop", label);
-        } else if (strcmp(cmd, "sess_toggle") == 0) {
-            shutter_session_toggle(sh.value);
-            LOGI(TAG, "%s shutter sess_toggle: camera='%s'", label, sh.value);
-        } else if (strcmp(cmd, "sess_discard") == 0) {
-            shutter_session_discard_last();
-            LOGI(TAG, "%s shutter sess_discard", label);
-        } else if (strcmp(cmd, "guide_start") == 0) {
-            shutter_session_guide_start(sh.value);
-            LOGI(TAG, "%s shutter guide_start: test='%s'", label, sh.value);
-        } else if (strcmp(cmd, "guide_stop") == 0) {
-            shutter_session_guide_stop();
-            LOGI(TAG, "%s shutter guide_stop", label);
-        } else if (strcmp(cmd, "guide_skip") == 0) {
-            shutter_session_guide_skip();
-            LOGI(TAG, "%s shutter guide_skip", label);
-        } else if (strcmp(cmd, "guide_redo") == 0) {
-            shutter_session_guide_redo();
-            LOGI(TAG, "%s shutter guide_redo", label);
-        } else if (strcmp(cmd, "align_start") == 0) {
-            shutter_capture_start_alignment();
-            LOGI(TAG, "%s shutter align_start", label);
-        } else if (strcmp(cmd, "align_stop") == 0) {
-            shutter_capture_stop_alignment();
-            LOGI(TAG, "%s shutter align_stop", label);
-        } else if (strcmp(cmd, "recalibrate") == 0) {
-            shutter_capture_recalibrate();
-            LOGI(TAG, "%s shutter recalibrate", label);
-        } else {
-            LOGW(TAG, "%s shutter: unknown cmd '%s'", label, cmd);
-        }
-#endif // IS_SHUTTER_TESTER
     } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
         const char* syscmd = act.payload.system.system_command;
         if (strcmp(syscmd, "reboot") == 0) {
@@ -357,7 +301,14 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
             LOGW(TAG, "%s system: unknown command '%s'", label, syscmd);
         }
     } else {
-        LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
+        // Device-class action types (e.g. shutter) self-register via the
+        // action type registry; delegate dispatch when found.
+        const ActionTypeDef* t = action_type_find(act.type);
+        if (t && t->dispatch) {
+            t->dispatch(act, label);
+        } else {
+            LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
+        }
     }
 }
 

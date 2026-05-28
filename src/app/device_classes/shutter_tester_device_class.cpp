@@ -126,6 +126,7 @@ void shutter_tester_device_class_register() {
 #include "shutter_tester/shutter_test_scripts.cpp"
 #include "shutter_tester/shutter_binding.cpp"
 #include "shutter_tester/shutter_align_binding.cpp"
+#include "shutter_tester/shutter_actions.cpp"
 
 // Web portal endpoints and list providers
 #include "shutter_tester/web/portal_shutter_sessions.cpp"

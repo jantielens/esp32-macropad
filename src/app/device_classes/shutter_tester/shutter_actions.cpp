@@ -1,0 +1,112 @@
+// Shutter Tester ActionTypeDef — parse, serialize, resolve_bindings,
+// has_binding, dispatch for the "shutter" action type. Registered via
+// REGISTER_ACTION_TYPE so action_dispatch.cpp / action_parse.cpp do not need
+// to know about the shutter arm at compile time (beyond the union arm itself,
+// which must live in pad_config.h because ActionPayload is a union).
+//
+// Aggregated into the build via device_classes/shutter_tester_device_class.cpp
+// under #if IS_SHUTTER_TESTER.
+
+#include "../../action_registry.h"
+
+#if HAS_DISPLAY && IS_SHUTTER_TESTER
+
+#include "../../log_manager.h"
+#include "shutter_capture.h"
+#include "shutter_measure.h"
+#include "shutter_session.h"
+
+#if HAS_MQTT
+#include "../../binding_template.h"
+#endif
+
+#include <string.h>
+
+#define TAG "ShutterAction"
+
+static void shutter_parse(const JsonObject& a, ButtonAction& act) {
+    strlcpy(act.payload.shutter.command, a["shutter_command"] | "", sizeof(act.payload.shutter.command));
+    strlcpy(act.payload.shutter.value,   a["shutter_value"]   | "", sizeof(act.payload.shutter.value));
+}
+
+static void shutter_serialize(const ButtonAction& act, JsonObject obj) {
+    if (act.payload.shutter.command[0]) obj["shutter_command"] = act.payload.shutter.command;
+    if (act.payload.shutter.value[0])   obj["shutter_value"]   = act.payload.shutter.value;
+}
+
+#if HAS_MQTT
+// Shutter has no bindable string fields today — command/value are structural.
+// Provided as nullptrs in the vtable; declaration kept for symmetry only.
+#endif
+
+static void shutter_dispatch(const ButtonAction& act, const char* label) {
+    const auto& sh = act.payload.shutter;
+    const char* cmd = sh.command;
+    if (strcmp(cmd, "set") == 0) {
+        if (!shutter_measure_set_target(sh.value)) {
+            LOGW(TAG, "%s shutter set: unknown speed '%s'", label, sh.value);
+        } else {
+            LOGI(TAG, "%s shutter set: %s", label, sh.value);
+        }
+    } else if (strcmp(cmd, "adjust") == 0) {
+        bool faster = strcmp(sh.value, "faster") == 0;
+        shutter_measure_adjust_target(faster);
+        LOGI(TAG, "%s shutter adjust: %s", label, sh.value);
+    } else if (strcmp(cmd, "toggle_lock") == 0) {
+        if (!shutter_measure_toggle_lock()) {
+            LOGW(TAG, "%s shutter toggle_lock: no target set", label);
+        } else {
+            LOGI(TAG, "%s shutter toggle_lock", label);
+        }
+    } else if (strcmp(cmd, "sess_start") == 0) {
+        shutter_session_start(sh.value);
+        LOGI(TAG, "%s shutter sess_start: camera='%s'", label, sh.value);
+    } else if (strcmp(cmd, "sess_stop") == 0) {
+        shutter_session_stop();
+        LOGI(TAG, "%s shutter sess_stop", label);
+    } else if (strcmp(cmd, "sess_toggle") == 0) {
+        shutter_session_toggle(sh.value);
+        LOGI(TAG, "%s shutter sess_toggle: camera='%s'", label, sh.value);
+    } else if (strcmp(cmd, "sess_discard") == 0) {
+        shutter_session_discard_last();
+        LOGI(TAG, "%s shutter sess_discard", label);
+    } else if (strcmp(cmd, "guide_start") == 0) {
+        shutter_session_guide_start(sh.value);
+        LOGI(TAG, "%s shutter guide_start: test='%s'", label, sh.value);
+    } else if (strcmp(cmd, "guide_stop") == 0) {
+        shutter_session_guide_stop();
+        LOGI(TAG, "%s shutter guide_stop", label);
+    } else if (strcmp(cmd, "guide_skip") == 0) {
+        shutter_session_guide_skip();
+        LOGI(TAG, "%s shutter guide_skip", label);
+    } else if (strcmp(cmd, "guide_redo") == 0) {
+        shutter_session_guide_redo();
+        LOGI(TAG, "%s shutter guide_redo", label);
+    } else if (strcmp(cmd, "align_start") == 0) {
+        shutter_capture_start_alignment();
+        LOGI(TAG, "%s shutter align_start", label);
+    } else if (strcmp(cmd, "align_stop") == 0) {
+        shutter_capture_stop_alignment();
+        LOGI(TAG, "%s shutter align_stop", label);
+    } else if (strcmp(cmd, "recalibrate") == 0) {
+        shutter_capture_recalibrate();
+        LOGI(TAG, "%s shutter recalibrate", label);
+    } else {
+        LOGW(TAG, "%s shutter: unknown cmd '%s'", label, cmd);
+    }
+}
+
+static const ActionTypeDef shutter_action_type = {
+    /* type_name        */ ACTION_TYPE_SHUTTER,
+    /* parse            */ shutter_parse,
+    /* serialize        */ shutter_serialize,
+#if HAS_MQTT
+    /* resolve_bindings */ nullptr,  // no bindable fields
+    /* has_binding      */ nullptr,
+#endif
+    /* dispatch         */ shutter_dispatch,
+};
+
+REGISTER_ACTION_TYPE(shutter_action_type);
+
+#endif // HAS_DISPLAY && IS_SHUTTER_TESTER

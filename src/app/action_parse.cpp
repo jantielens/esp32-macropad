@@ -2,6 +2,7 @@
 
 #if HAS_DISPLAY
 
+#include "action_registry.h"
 #include <string.h>
 
 // ============================================================================
@@ -53,13 +54,13 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         strlcpy(act.payload.notify.notify_location,     a["notify_location"]     | "", sizeof(act.payload.notify.notify_location));
     } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
         strlcpy(act.payload.system.system_command, a["system_command"] | "", sizeof(act.payload.system.system_command));
-#if IS_SHUTTER_TESTER
-    } else if (strcmp(act.type, ACTION_TYPE_SHUTTER) == 0) {
-        strlcpy(act.payload.shutter.command, a["shutter_command"] | "", sizeof(act.payload.shutter.command));
-        strlcpy(act.payload.shutter.value,   a["shutter_value"]   | "", sizeof(act.payload.shutter.value));
-#endif
+    } else {
+        // Device-class action types (e.g. shutter) self-register via
+        // action_type_register(); fall through to the registry.
+        const ActionTypeDef* t = action_type_find(act.type);
+        if (t && t->parse) t->parse(a, act);
+        // back, ble_pair, none: type tag only — no payload to parse.
     }
-    // back, ble_pair, none: type tag only — no payload to parse.
 }
 
 void action_to_json(const ButtonAction& act, JsonObject obj) {
@@ -100,13 +101,11 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
         if (act.payload.notify.notify_location[0])     obj["notify_location"]     = act.payload.notify.notify_location;
     } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
         if (act.payload.system.system_command[0]) obj["system_command"] = act.payload.system.system_command;
-#if IS_SHUTTER_TESTER
-    } else if (strcmp(act.type, ACTION_TYPE_SHUTTER) == 0) {
-        if (act.payload.shutter.command[0]) obj["shutter_command"] = act.payload.shutter.command;
-        if (act.payload.shutter.value[0])   obj["shutter_value"]   = act.payload.shutter.value;
-#endif
+    } else {
+        const ActionTypeDef* t = action_type_find(act.type);
+        if (t && t->serialize) t->serialize(act, obj);
+        // back, ble_pair, none: type tag only — no payload to serialize.
     }
-    // back, ble_pair, none: type tag only — no payload to serialize.
 }
 
 #endif // HAS_DISPLAY

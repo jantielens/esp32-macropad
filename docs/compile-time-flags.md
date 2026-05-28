@@ -659,8 +659,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
 - **IS_SHUTTER_TESTER**
-  - src/app/action_dispatch.cpp
-  - src/app/action_parse.cpp
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
@@ -676,6 +674,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/shutter_capture.h
   - src/app/device_classes/shutter_tester/shutter_measure.cpp
   - src/app/device_classes/shutter_tester/shutter_measure.h
+  - src/app/device_classes/shutter_tester/shutter_payload.h
   - src/app/device_classes/shutter_tester/shutter_session.cpp
   - src/app/device_classes/shutter_tester/shutter_session.h
   - src/app/device_classes/shutter_tester/shutter_session_actions.cpp
