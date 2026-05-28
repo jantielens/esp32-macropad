@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-05-26
+ms.date: 2026-05-28
 ms.topic: reference
 ---
 
@@ -13,6 +13,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.18.0] - 2026-05-28
+
+### Added
+
+* **Device-class branding system** — firmware now auto-detects a device class at build time (`macropad` / `epaper` / `headless`) from `HAS_EPAPER` and `HAS_DISPLAY`, and uses it to derive the web portal title, default device name, captive-portal SSID, HTTP basic-auth realm, Home Assistant model string, and ESP Web Tools flash-page card label. C++ side: new `src/app/class_branding.{h,cpp}` exposes `device_class_get_display_name()`, `device_class_get_slug()`, and `device_class_get_full_name()`. Bash side: `config.sh` exposes `device_class_for_board <board>` and `device_class_brand_prefix <class>`, used by `build.sh` (per-board `PROJECT_DISPLAY_NAME`) and `tools/build-esp-web-tools-site.sh` (per-board flash-page labels). SSID format is `ESP32-MACROPAD-XXXXXX` for the macropad class and `ESP32-MP-{EPAPER|HEADLESS}-XXXXXX` for the others (`XXXXXX` = low 24 bits of the eFuse chip id as fixed-width uppercase hex).
+* **Per-board flash-page metadata (`src/boards/<board>/metadata.json`)** — declarative hardware metadata consumed by the ESP Web Tools static site generator. Fields: `device_class` (validated against the class whitelist), `board_label`, `description` (hardware-only one-liner — brand, model, distinguishing features), `chip_family`, `flash_mb`, `psram_mb`, `wireless`, and `display`. Missing file falls back to `device_class=macropad` with a single `INFO` log. All injected values are HTML-escaped.
+* **ESP Web Tools static site grouped by device class** — `tools/esp-web-tools-site/` now groups boards into per-class sections (Macropad / E-Paper / Headless) with a class-level description card, accent border, and color theming (purple / cyan / green). Layout is a vertical category stack with a 2-column board grid inside each section at ≥720 px. Per-board cards show brand-prefixed titles, a hardware description, and spec badges (chip / flash / PSRAM / display). Live filter hides empty categories. `jq` is now a required dependency of `tools/build-esp-web-tools-site.sh`.
+* **`device_class_for_board` and `device_class_brand_prefix` shell helpers (`config.sh`)** — single source of truth for the bash-side device-class detection rules and brand-prefix mapping, used by both `build.sh` and the flash-page generator. Mirrors the C++ precedence in `class_branding.cpp` (`HAS_EPAPER` wins over `HAS_DISPLAY`).
+* **README "Device Classes" section** — documents the three classes, their detection rules, brand prefixes, SSID formats, and boards. Pointer to the per-board metadata format.
+* **Developer doc: "Device Class Branding"** — new section in `docs/dev/build-and-release-process.md` covering the C++ and bash mirrors, the per-board metadata schema, and a step-by-step checklist for adding a new device class.
+
+### Changed
+
+* **Per-board `PROJECT_DISPLAY_NAME`** — `build.sh` now re-runs `tools/minify-web-assets.sh` per board with a class-derived `PROJECT_DISPLAY_NAME` ("ESP32 Macropad", "ESP32-MP E-Paper", "ESP32-MP Headless") instead of the project-wide value. The embedded HTML, runtime device name, SSID, and HA model strings all stay consistent for a given board. `inkplate5v2/board_overrides.h` drops its custom `PROJECT_DISPLAY_NAME` override — the e-paper class now supplies the branding.
+* **Headless captive-portal SSID** — `web_portal_ap.cpp` no longer uppercases `PROJECT_NAME` to build the SSID. Instead it uses the device-class slug with a fixed-width 6-hex-digit chip-id suffix, so headless boards advertise `ESP32-MP-HEADLESS-XXXXXX` and e-paper boards advertise `ESP32-MP-EPAPER-XXXXXX` regardless of how `PROJECT_NAME` is set.
+* **`/api/info` adds `device_class` and `device_class_slug` fields** — clients can now distinguish builds without parsing the display name.
+
+### Removed
+
+* **`inkplate5v2/board_overrides.h` `PROJECT_DISPLAY_NAME` override** — superseded by device-class branding.
 
 ## [1.17.0] - 2026-05-27
 

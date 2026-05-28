@@ -1,0 +1,12 @@
+{
+  "device_class": "headless",
+  "board_label": "ESP32-C3",
+  "description": "ESP32-C3 Super Mini — palm-sized RISC-V board without display. Intended as a BLE / Wi-Fi sensor node.",
+  "chip_family": "ESP32-C3",
+  "flash_mb": 4,
+  "psram_mb": 0,
+  "wireless": {
+    "wifi": true,
+    "ble": true
+  }
+}

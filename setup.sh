@@ -7,6 +7,24 @@ set -e
 
 echo "=== ESP32 Development Environment Setup ==="
 
+# Verify host-side dependencies that the release tooling expects.
+# `jq` is required by tools/build-esp-web-tools-site.sh to read per-board
+# src/boards/<board>/metadata.json. Without it `create-release.sh` and the
+# GitHub Pages flash-page deploy will fail with a hard error.
+if ! command -v jq &> /dev/null; then
+    echo "Installing jq (required by tools/build-esp-web-tools-site.sh)..."
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update -y && sudo apt-get install -y jq
+    elif command -v brew &> /dev/null; then
+        brew install jq
+    else
+        echo "WARNING: jq is not installed and no supported package manager (apt-get, brew) was found." >&2
+        echo "         Install jq manually before running tools/build-esp-web-tools-site.sh." >&2
+    fi
+else
+    echo "jq is already installed"
+fi
+
 # Configure the 'ours' merge driver used by .gitattributes for auto-generated files.
 git config merge.ours.driver true
 

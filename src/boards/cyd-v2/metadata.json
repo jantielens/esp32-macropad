@@ -1,0 +1,18 @@
+{
+  "device_class": "macropad",
+  "board_label": "CYD v2",
+  "description": "Cheap Yellow Display (CYD) v2 — 2.8\" 320x240 ILI9341 IPS with XPT2046 resistive touch. Low-cost ESP32 dev board widely used by hobbyists.",
+  "chip_family": "ESP32",
+  "flash_mb": 4,
+  "psram_mb": 0,
+  "wireless": {
+    "wifi": true,
+    "ble": true
+  },
+  "display": {
+    "size": "2.8\"",
+    "resolution": "320x240",
+    "type": "TFT",
+    "touch": true
+  }
+}

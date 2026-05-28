@@ -9,7 +9,7 @@
 #include "display_manager.h"
 #endif
 #include "sensors/sensor_manager.h"
-#include "web_assets.h" // PROJECT_DISPLAY_NAME
+#include "class_branding.h"
 #include "version.h" // FIRMWARE_VERSION
 #include <ArduinoJson.h>
 
@@ -369,7 +369,7 @@ static void fill_device_block(JsonDocument &doc, MqttManager &mqtt) {
 		JsonArray ids = dev["ids"].to<JsonArray>();
 		ids.add(mqtt.sanitizedName());
 		dev["name"] = mqtt.friendlyName();
-		dev["mdl"] = PROJECT_DISPLAY_NAME;
+		dev["mdl"] = device_class_get_full_name();
 		dev["sw"] = FIRMWARE_VERSION;
 }
 

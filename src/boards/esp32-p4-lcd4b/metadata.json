@@ -1,0 +1,19 @@
+{
+  "device_class": "macropad",
+  "board_label": "ESP32-P4 LCD4B",
+  "description": "Waveshare ESP32-P4-WIFI6-Touch-LCD-4B — square 4.0\" 720x720 MIPI-DSI with GT911 capacitive touch. RISC-V dual-core P4 with 32 MB PSRAM and Wi-Fi 6 via ESP32-C6 co-processor.",
+  "chip_family": "ESP32-P4",
+  "flash_mb": 32,
+  "psram_mb": 32,
+  "wireless": {
+    "wifi": true,
+    "ble": true,
+    "notes": "WiFi/BLE via ESP-Hosted ESP32-C6 over SDIO"
+  },
+  "display": {
+    "size": "4.0\"",
+    "resolution": "720x720",
+    "type": "MIPI-DSI",
+    "touch": true
+  }
+}

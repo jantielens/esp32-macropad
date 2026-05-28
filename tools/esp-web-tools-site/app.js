@@ -5,6 +5,69 @@
 
   if (!input || !container || !count) return;
 
+  // Group boards by device class on initial load. Boards arrive in the DOM
+  // as a flat list of `.board[data-class]` elements; rewrap them into per-
+  // class <section.board-category> blocks so the page surfaces device-class
+  // structure (Interactive Display / E-Paper / Headless).
+  const CATEGORY_ORDER = [
+    {
+      key: 'macropad',
+      title: 'Macropad (with LCD display)',
+      description:
+        'Touch-screen control surface. Configurable grid of buttons with icons, colors, and actions; live data widgets (gauges, sparklines, bar charts) bound to MQTT topics; Home Assistant integration; optional BLE HID keyboard. Great as a desktop macro pad, smart-home remote, or always-on status dashboard.',
+    },
+    {
+      key: 'epaper',
+      title: 'E-Paper',
+      description:
+        'Battery-powered, sunlight-readable display that sleeps between refreshes. Image carousel with hourly schedules and Home Assistant integration. Ideal for fridge dashboards, photo frames, family calendars, and other low-power info panels.',
+    },
+    {
+      key: 'headless',
+      title: 'Headless',
+      description:
+        'No display \u2014 a sensor / bridge node. Publishes telemetry over MQTT, broadcasts BTHome BLE beacons, and exposes the same web portal for configuration. Useful for distributed sensors, BLE-to-MQTT bridges, and remote actuator nodes.',
+    },
+  ];
+
+  const initialBoards = Array.from(container.querySelectorAll(':scope > .board'));
+  if (initialBoards.length) {
+    const grouped = new Map(CATEGORY_ORDER.map((c) => [c.key, []]));
+    const other = [];
+    for (const board of initialBoards) {
+      const cls = board.dataset.class || 'macropad';
+      if (grouped.has(cls)) grouped.get(cls).push(board);
+      else other.push(board);
+    }
+    container.innerHTML = '';
+    const buildSection = (key, title, description, boards) => {
+      const section = document.createElement('section');
+      section.className = 'board-category';
+      if (key) section.dataset.class = key;
+      const heading = document.createElement('h2');
+      heading.className = 'category-title';
+      heading.textContent = title;
+      section.appendChild(heading);
+      if (description) {
+        const desc = document.createElement('p');
+        desc.className = 'category-desc';
+        desc.textContent = description;
+        section.appendChild(desc);
+      }
+      const grid = document.createElement('div');
+      grid.className = 'boards';
+      for (const b of boards) grid.appendChild(b);
+      section.appendChild(grid);
+      container.appendChild(section);
+    };
+    for (const { key, title, description } of CATEGORY_ORDER) {
+      const boards = grouped.get(key);
+      if (!boards.length) continue;
+      buildSection(key, title, description, boards);
+    }
+    if (other.length) buildSection('', 'Other', '', other);
+  }
+
   const cards = Array.from(container.querySelectorAll('[data-board]'));
 
   function update() {
@@ -17,6 +80,13 @@
       const match = !q || name.includes(q) || chip.includes(q);
       el.style.display = match ? '' : 'none';
       if (match) visible++;
+    }
+
+    // Hide category sections that have no visible boards.
+    for (const section of container.querySelectorAll('.board-category')) {
+      const anyVisible = Array.from(section.querySelectorAll('.board'))
+        .some((b) => b.style.display !== 'none');
+      section.style.display = anyVisible ? '' : 'none';
     }
 
     count.textContent = `${visible} / ${cards.length} boards`;

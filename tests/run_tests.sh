@@ -185,4 +185,8 @@ echo "=== Running unit tests: epaper_battery ==="
 ./tests/bin/test_epaper_battery
 echo
 
+echo "=== Running guard: branding mirror (C++ <-> bash) ==="
+./tests/test_branding_mirror.sh
+echo
+
 echo "=== All tests passed ==="

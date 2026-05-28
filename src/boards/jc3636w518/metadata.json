@@ -1,0 +1,18 @@
+{
+  "device_class": "macropad",
+  "board_label": "JC3636W518",
+  "description": "Guition JC3636W518 — round 3.6\" 360x360 IPS with capacitive touch. ESP32-S3 with circular display, distinctive smart-home form factor.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "wireless": {
+    "wifi": true,
+    "ble": true
+  },
+  "display": {
+    "size": "3.6\"",
+    "resolution": "360x360",
+    "type": "IPS",
+    "touch": true
+  }
+}

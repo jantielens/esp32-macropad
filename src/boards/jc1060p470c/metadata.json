@@ -1,0 +1,19 @@
+{
+  "device_class": "macropad",
+  "board_label": "JC1060P470C",
+  "description": "Guition JC1060P470C — 7.0\" 1024x600 MIPI-DSI JD9165 IPS with GT911 capacitive touch. ESP32-P4 with 32 MB PSRAM; largest screen in the lineup.",
+  "chip_family": "ESP32-P4",
+  "flash_mb": 16,
+  "psram_mb": 32,
+  "wireless": {
+    "wifi": true,
+    "ble": true,
+    "notes": "WiFi/BLE via ESP-Hosted ESP32-C6 over SDIO"
+  },
+  "display": {
+    "size": "7.0\"",
+    "resolution": "1024x600",
+    "type": "MIPI-DSI",
+    "touch": true
+  }
+}

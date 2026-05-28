@@ -9,6 +9,7 @@
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 #include "project_branding.h"
+#include "class_branding.h"
 #include "web_portal_json.h"
 #if HEALTH_HISTORY_ENABLED
 #include "health_history.h"
@@ -67,7 +68,11 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print("\",\"project_name\":\"");
 		response->print(PROJECT_NAME);
 		response->print("\",\"project_display_name\":\"");
-		response->print(PROJECT_DISPLAY_NAME);
+		response->print(device_class_get_full_name());
+		response->print("\",\"device_class\":\"");
+		response->print(device_class_get_display_name());
+		response->print("\",\"device_class_slug\":\"");
+		response->print(device_class_get_slug());
 
 		// Build metadata for GitHub Pages-based updates
 		response->print("\",\"board_name\":\"");

@@ -8,6 +8,7 @@
 #include "config_manager.h"
 #include "board_config.h"
 #include "device_class.h"
+#include "class_branding.h"
 #include "web_assets.h"
 #include "log_manager.h"
 #include "power_config.h"
@@ -94,8 +95,8 @@ String config_manager_get_default_device_name() {
 		for (int i = 0; i < 17; i = i + 8) {
 				chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
 		}
-		char name[32];
-		snprintf(name, sizeof(name), PROJECT_DISPLAY_NAME " %04X", (uint16_t)(chipId & 0xFFFF));
+		char name[40];
+		snprintf(name, sizeof(name), "%s %04X", device_class_get_full_name(), (uint16_t)(chipId & 0xFFFF));
 		return String(name);
 }
 
