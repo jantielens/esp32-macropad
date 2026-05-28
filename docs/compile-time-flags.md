@@ -338,6 +338,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/data_stream.cpp
   - src/app/data_stream.h
+  - src/app/device_class_registry.cpp
   - src/app/device_telemetry.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
@@ -408,6 +409,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.h
 - **HAS_EPAPER**
   - src/app/board_config.h
+  - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
   - src/app/device_classes/epaper/components/epaper_image_component.cpp
   - src/app/device_classes/epaper/components/epaper_overlay_component.cpp
