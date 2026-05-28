@@ -110,6 +110,19 @@ echo "=== Running unit tests: action_parse ==="
 ./tests/bin/test_action_parse
 echo
 
+echo "=== Building size guard: action_sizes ==="
+g++ -std=c++17 -Wall -Wextra -Wno-unused \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_action_sizes.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_sizes
+
+echo "=== Running size guard: action_sizes ==="
+./tests/bin/test_action_sizes
+echo
+
 echo "=== Building unit tests: shutter_session_actions ==="
 g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -include tests/log_manager.h -include tests/board_config.h \
