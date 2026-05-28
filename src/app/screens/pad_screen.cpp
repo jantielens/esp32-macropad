@@ -16,7 +16,7 @@
 #include "../image_fetch.h"
 #endif
 #if IS_SHUTTER_TESTER
-#include "../shutter_capture.h"
+#include "../device_classes/shutter_tester/shutter_capture.h"
 #endif
 
 #include <esp_heap_caps.h>

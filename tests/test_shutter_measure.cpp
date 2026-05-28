@@ -28,8 +28,8 @@ struct SerialStub {
 } Serial;
 
 // ---- Pull in types from shutter_capture.h and shutter_adc.h ----
-#include "../src/app/shutter_adc.h"
-#include "../src/app/shutter_capture.h"
+#include "../src/app/device_classes/shutter_tester/shutter_adc.h"
+#include "../src/app/device_classes/shutter_tester/shutter_capture.h"
 
 // ---- Mock shutter_capture calls used by shutter_measure.cpp ----
 static ShutterCaptureFrame g_mock_frame;
@@ -48,7 +48,7 @@ bool shutter_capture_get_latest(ShutterCaptureFrame* out) {
 #if !defined(__GLIBC__) || (__GLIBC__ < 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 38)
 extern "C" size_t strlcpy(char* dst, const char* src, size_t siz);
 #endif
-#include "../src/app/shutter_measure.h"
+#include "../src/app/device_classes/shutter_tester/shutter_measure.h"
 
 // Stub session hooks — no-ops in test context.
 void shutter_session_on_measurement(const ShutterMeasurement*) {}
@@ -69,7 +69,7 @@ void shutter_capture_get_caps(ShutterCaptureCaps* out) {
     out->preset_name   = "3-Line Direct";
     out->backend_name  = "adc_p4";
 }
-#include "../src/app/shutter_measure.cpp"
+#include "../src/app/device_classes/shutter_tester/shutter_measure.cpp"
 
 // ---- Test harness ----
 static int g_pass = 0;

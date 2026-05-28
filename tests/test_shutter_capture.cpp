@@ -65,7 +65,7 @@ void shutter_adc_stop()  { g_adc_stop_calls++;  g_adc_running = false; }
 bool shutter_adc_is_running() { return g_adc_running; }
 
 // ---- Include implementation under test ----
-#include "../src/app/shutter_capture.cpp"
+#include "../src/app/device_classes/shutter_tester/shutter_capture.cpp"
 
 // ---- Test harness ----
 static int g_pass = 0;

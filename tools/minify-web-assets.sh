@@ -924,6 +924,23 @@ fragment_feature_flag() {
     esac
 }
 
+# Map a standalone JS filename stem (e.g. "portal_shutter_sessions") to the
+# compile-time feature flag that must be true for the JS blob to be included
+# in the build. Echoes nothing for always-on scripts. Mirrors
+# fragment_feature_flag so device-class JS handlers don't bleed into builds
+# that have the feature disabled.
+js_feature_flag() {
+    local stem="$1"
+    case "$stem" in
+        portal_shutter_sessions|portal_shutter_tests)
+            echo "IS_SHUTTER_TESTER" ;;
+        epaper_init)
+            echo "HAS_EPAPER" ;;
+        *)
+            echo "" ;;
+    esac
+}
+
 # Generate HTML sections (gzipped)
 for filename in "${!HTML_CONTENTS[@]}"; do
     cat >> "$OUTPUT_FILE" << EOF
@@ -972,13 +989,26 @@ for filename in "${!JS_CONTENTS[@]}"; do
     if [[ -n "${JS_CHUNK_NAMES[$filename]:-}" ]]; then
         continue
     fi
-    cat >> "$OUTPUT_FILE" << EOF
+    js_flag=$(js_feature_flag "$filename")
+    if [[ -n "$js_flag" ]]; then
+        cat >> "$OUTPUT_FILE" << EOF
+// JavaScript from src/app/web/${filename}.js (minified + gzipped)
+#if $js_flag
+const uint8_t ${filename}_js_gz[] PROGMEM = {
+${JS_GZIP_CONTENTS[$filename]}
+};
+#endif // $js_flag
+
+EOF
+    else
+        cat >> "$OUTPUT_FILE" << EOF
 // JavaScript from src/app/web/${filename}.js (minified + gzipped)
 const uint8_t ${filename}_js_gz[] PROGMEM = {
 ${JS_GZIP_CONTENTS[$filename]}
 };
 
 EOF
+    fi
 done
 
 # Add size constants (gzipped sizes)
@@ -1010,7 +1040,14 @@ for filename in "${!JS_CONTENTS[@]}"; do
     if [[ -n "${JS_CHUNK_NAMES[$filename]:-}" ]]; then
         continue
     fi
-    echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
+    js_flag=$(js_feature_flag "$filename")
+    if [[ -n "$js_flag" ]]; then
+        echo "#if $js_flag" >> "$OUTPUT_FILE"
+        echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
+        echo "#endif // $js_flag" >> "$OUTPUT_FILE"
+    else
+        echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
+    fi
 done
 
 # Generate JS bundle variants. For each chunked bundle (e.g. portal_js):

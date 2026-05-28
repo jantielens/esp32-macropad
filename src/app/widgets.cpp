@@ -19,7 +19,7 @@
 #include "widgets/list_widget.cpp"
 
 #if IS_SHUTTER_TESTER
-#include "widgets/waveform_widget.cpp"
+#include "device_classes/shutter_tester/widgets/waveform_widget.cpp"
 #endif
 
 #endif // HAS_DISPLAY

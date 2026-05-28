@@ -1,4 +1,5 @@
-#pragma once
+#ifndef PAD_CONFIG_H
+#define PAD_CONFIG_H
 
 #include "board_config.h"
 
@@ -308,3 +309,5 @@ uint32_t pad_config_get_generation();
 #ifdef __cplusplus
 }
 #endif
+
+#endif // PAD_CONFIG_H

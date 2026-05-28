@@ -35,8 +35,8 @@ inline void* heap_caps_malloc(size_t size, uint32_t) { return malloc(size); }
 inline void  heap_caps_free(void* p)                 { free(p); }
 
 // ---- Include headers for shared types ----
-#include "../src/app/shutter_capture.h"
-#include "../src/app/shutter_measure.h"
+#include "../src/app/device_classes/shutter_tester/shutter_capture.h"
+#include "../src/app/device_classes/shutter_tester/shutter_measure.h"
 #include "../src/app/binding_template.h"
 
 // ============================================================================
@@ -113,9 +113,9 @@ bool shutter_capture_get_alignment(ShutterAlignmentReading* out) {
 }
 
 // ---- Include implementations under test ----
-#include "../src/app/shutter_align_binding.cpp"
+#include "../src/app/device_classes/shutter_tester/shutter_align_binding.cpp"
 // shutter_align_binding.cpp defines no TAG; safe to include before shutter_binding.
-#include "../src/app/shutter_binding.cpp"
+#include "../src/app/device_classes/shutter_tester/shutter_binding.cpp"
 // binding_template.cpp defines its own TAG; undef shutter_binding's TAG first.
 #undef TAG
 #include "../src/app/binding_template.cpp"

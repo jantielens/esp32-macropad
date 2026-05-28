@@ -1,8 +1,8 @@
-#include "web_portal_shutter_tests.h"
+#include "portal_shutter_tests.h"
 
 #if IS_SHUTTER_TESTER
 
-#include "shutter_test_scripts.h"
+#include "../shutter_test_scripts.h"
 #include "web_portal_auth.h"
 #include "component_registry.h"
 #include "log_manager.h"

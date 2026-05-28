@@ -1,4 +1,5 @@
-#pragma once
+#ifndef WIDGETS_WIDGET_H
+#define WIDGETS_WIDGET_H
 
 #include "../board_config.h"
 
@@ -182,3 +183,5 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
     } _##prefix##_auto_reg
 
 #endif // HAS_DISPLAY
+
+#endif // WIDGETS_WIDGET_H

@@ -1,10 +1,10 @@
-#include "widget.h"
+#include "widgets/widget.h"
 
 #if HAS_DISPLAY && IS_SHUTTER_TESTER
 
 #include "../shutter_capture.h"
 #include "../shutter_measure.h"
-#include "../log_manager.h"
+#include "log_manager.h"
 #include <string.h>
 #include <math.h>
 

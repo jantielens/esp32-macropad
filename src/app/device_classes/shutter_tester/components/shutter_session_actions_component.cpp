@@ -6,7 +6,7 @@
 
 #include "component_registry.h"
 #include "action_parse.h"
-#include "shutter_session_actions.h"
+#include "../shutter_session_actions.h"
 #include "web_portal_json.h"
 
 #include <ArduinoJson.h>

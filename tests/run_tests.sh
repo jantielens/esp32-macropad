@@ -113,7 +113,7 @@ echo
 echo "=== Building unit tests: shutter_session_actions ==="
 g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -include tests/log_manager.h -include tests/board_config.h \
-    -I src/app \
+    -I src/app -I src/app/device_classes/shutter_tester \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_shutter_session_actions.cpp \
     src/app/action_parse.cpp \
@@ -176,9 +176,9 @@ echo
 
 echo "=== Building unit tests: shutter_curtain_stats ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
-    -I src/app \
+    -I src/app -I src/app/device_classes/shutter_tester \
     tests/test_shutter_curtain_stats.cpp \
-    src/app/shutter_curtain_stats.cpp \
+    src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp \
     -o tests/bin/test_shutter_curtain_stats -lm
 
 echo "=== Running unit tests: shutter_curtain_stats ==="
@@ -189,7 +189,7 @@ echo "=== Building unit tests: shutter_capture ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -DIS_SHUTTER_TESTER=true \
     -include tests/log_manager.h \
-    -I tests -I src/app \
+    -I tests -I src/app -I src/app/device_classes/shutter_tester \
     tests/test_shutter_capture.cpp \
     -o tests/bin/test_shutter_capture
 
@@ -201,7 +201,7 @@ echo "=== Building unit tests: shutter_measure ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -DIS_SHUTTER_TESTER=true \
     -include tests/log_manager.h \
-    -I tests -I src/app \
+    -I tests -I src/app -I src/app/device_classes/shutter_tester \
     tests/test_shutter_measure.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_shutter_measure -lm
@@ -214,7 +214,7 @@ echo "=== Building unit tests: shutter_binding ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -DHAS_DISPLAY=true -DIS_SHUTTER_TESTER=true \
     -include tests/log_manager.h \
-    -I tests -I src/app \
+    -I tests -I src/app -I src/app/device_classes/shutter_tester \
     tests/test_shutter_binding.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_shutter_binding -lm
@@ -245,11 +245,11 @@ g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h \
     -I tests/shutter_session_overrides \
     -I tests \
-    -I src/app \
+    -I src -I src/app -I src/app/device_classes/shutter_tester \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_shutter_session.cpp \
-    src/app/shutter_session.cpp \
-    src/app/shutter_curtain_stats.cpp \
+    src/app/device_classes/shutter_tester/shutter_session.cpp \
+    src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_shutter_session -lm
 

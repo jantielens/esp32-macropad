@@ -60,11 +60,11 @@
 #endif
 
 #if IS_SHUTTER_TESTER
-#include "shutter_capture.h"
-#include "shutter_measure.h"
-#include "shutter_session.h"
-#include "shutter_session_actions.h"
-#include "shutter_binding.h"
+#include "device_classes/shutter_tester/shutter_capture.h"
+#include "device_classes/shutter_tester/shutter_measure.h"
+#include "device_classes/shutter_tester/shutter_session.h"
+#include "device_classes/shutter_tester/shutter_session_actions.h"
+#include "device_classes/shutter_tester/shutter_binding.h"
 #endif
 
 #include "i2c_bus.h"

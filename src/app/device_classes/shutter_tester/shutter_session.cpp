@@ -9,7 +9,7 @@
 #include "shutter_test_scripts.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
-#include "../version.h"
+#include "version.h"
 
 #include "storage.h"
 #include <ArduinoJson.h>
@@ -41,10 +41,10 @@ static FsIndexedStore s_store(
 );
 
 // ============================================================================
-// Module state — all protected by s_mutex
+// Module state — all protected by s_session_mutex
 // ============================================================================
 
-static SemaphoreHandle_t s_mutex = nullptr;
+static SemaphoreHandle_t s_session_mutex = nullptr;
 
 static bool     s_active       = false;
 static uint32_t s_current_id   = 0;    // numeric id of the active session
@@ -61,7 +61,7 @@ static std::vector<ShutterSessionMeasurement>* s_measurements = nullptr;
 // Captured once when the session opens so meta reflects the active config
 // during measurement, not whatever is active at save time.
 static char     s_caps_preset_id_str[64] = {};
-static uint8_t  s_caps_sensor_count      = 0;
+static uint8_t  s_session_caps_sensor_count      = 0;
 static float    s_caps_sample_rate_hz    = 0.0f;
 
 // Snapshotted sensor layout offsets at session start.
@@ -667,9 +667,9 @@ static bool persist_session(const PersistContext& ctx) {
     // ensures we persist the highest reserved value even if another session
     // has started in the meantime.
     uint32_t to_persist = 0;
-    if (s_mutex && xSemaphoreTake(s_mutex, portMAX_DELAY) == pdTRUE) {
+    if (s_session_mutex && xSemaphoreTake(s_session_mutex, portMAX_DELAY) == pdTRUE) {
         to_persist = s_next_id;
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
     }
     if (to_persist != 0) {
         s_store.set_root_uint32("next_id", to_persist);
@@ -689,8 +689,8 @@ FsIndexedStore& shutter_session_get_store() {
 }
 
 void shutter_session_init() {
-    s_mutex = xSemaphoreCreateMutex();
-    if (!s_mutex) {
+    s_session_mutex = xSemaphoreCreateMutex();
+    if (!s_session_mutex) {
         LOGE(TAG, "Mutex creation failed");
         return;
     }
@@ -708,7 +708,7 @@ void shutter_session_init() {
 }
 
 void shutter_session_start(const char* camera) {
-    if (!s_mutex) return;
+    if (!s_session_mutex) return;
 
     // Acquire the ADC engine before doing any session bookkeeping. This is
     // the call that allocates the ~28 KB of DMA-internal RAM when no other
@@ -721,18 +721,18 @@ void shutter_session_start(const char* camera) {
     }
 
     // Snapshot capture configuration before acquiring the mutex to avoid
-    // holding s_mutex while calling into the capture module (which may
+    // holding s_session_mutex while calling into the capture module (which may
     // have its own synchronization).
     ShutterCaptureCaps caps;
     shutter_capture_get_caps(&caps);
 
-    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) {
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) {
         shutter_capture_release("session");
         return;
     }
 
     if (s_active) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         shutter_capture_release("session");
         LOGW(TAG, "start: session already active");
         return;
@@ -757,7 +757,7 @@ void shutter_session_start(const char* camera) {
 
     // Copy pre-snapshotted capture configuration into session statics
     strlcpy(s_caps_preset_id_str, caps.preset_id_str ? caps.preset_id_str : "", sizeof(s_caps_preset_id_str));
-    s_caps_sensor_count   = caps.sensor_count;
+    s_session_caps_sensor_count   = caps.sensor_count;
     s_caps_sample_rate_hz = (float)caps.sample_rate_hz_per_sensor;
 
     // Snapshot sensor layout offsets from measurement engine
@@ -767,16 +767,16 @@ void shutter_session_start(const char* camera) {
     s_caps_position_count = shutter_measure_get_geometry(s_caps_positions, SHUTTER_SENSOR_MAX);
     s_caps_topology = caps.topology;
 
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
     LOGI(TAG, "Session %s started (camera='%s')", s_session_id, s_camera);
 }
 
 void shutter_session_stop() {
-    if (!s_mutex) return;
-    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!s_session_mutex) return;
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
 
     if (!s_active) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         return;
     }
 
@@ -794,7 +794,7 @@ void shutter_session_stop() {
 
     // Copy snapshotted capture configuration
     strlcpy(ctx->preset_id_str, s_caps_preset_id_str, sizeof(ctx->preset_id_str));
-    ctx->sensor_count   = s_caps_sensor_count;
+    ctx->sensor_count   = s_session_caps_sensor_count;
     ctx->sample_rate_hz = s_caps_sample_rate_hz;
 
     // Copy snapshotted sensor layout offsets
@@ -833,7 +833,7 @@ void shutter_session_stop() {
     s_guide_step = 0;
     s_guide_shot = 0;
 
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 
     // If a guided session was active, release the measurement-engine lock that
     // shutter_session_guide_start() asserted. Without this, the lock outlives
@@ -846,7 +846,7 @@ void shutter_session_stop() {
 
     // Fire the user-configured "save started" lifecycle action (e.g. notify
     // bubble, screen navigation, MQTT publish). Dispatched AFTER releasing
-    // s_mutex so an action handler that indirectly re-enters the session
+    // s_session_mutex so an action handler that indirectly re-enters the session
     // module cannot deadlock. Runs on the LVGL/action-dispatch task — safe
     // to call action_dispatch() directly. No-op when unconfigured.
     shutter_session_actions_dispatch_start();
@@ -888,10 +888,10 @@ void shutter_session_stop() {
 }
 
 void shutter_session_toggle(const char* camera) {
-    if (!s_mutex) return;
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) return;
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     bool active = s_active;
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 
     if (active) {
         shutter_session_stop();
@@ -901,52 +901,52 @@ void shutter_session_toggle(const char* camera) {
 }
 
 void shutter_session_discard_last() {
-    if (!s_mutex) return;
-    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!s_session_mutex) return;
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
 
     if (!s_active || !s_measurements || s_measurements->empty()) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         return;
     }
 
     free_measurement_waveforms(s_measurements->back());
     s_measurements->pop_back();
 
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
     LOGI(TAG, "Discarded last measurement (%u remaining)", (unsigned)s_measurements->size());
 }
 
 bool shutter_session_is_active() {
-    if (!s_mutex) return false;
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) return false;
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     bool a = s_active;
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
     return a;
 }
 
 uint32_t shutter_session_get_count() {
-    if (!s_mutex) return 0;
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) return 0;
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     uint32_t c = (s_active && s_measurements) ? (uint32_t)s_measurements->size() : 0;
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
     return c;
 }
 
 uint32_t shutter_session_get_id() {
-    if (!s_mutex) return 0;
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) return 0;
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     uint32_t id = s_active ? s_current_id : 0;
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
     return id;
 }
 
 void shutter_session_on_measurement(const ShutterMeasurement* m) {
     if (!m || !m->valid) return;
-    if (!s_mutex) return;
-    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!s_session_mutex) return;
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
 
     if (!s_active || !s_measurements) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         return;
     }
 
@@ -981,7 +981,7 @@ void shutter_session_on_measurement(const ShutterMeasurement* m) {
         }
     }
 
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 
     // Deferred operations outside mutex
     if (do_advance) {
@@ -994,11 +994,11 @@ void shutter_session_on_measurement(const ShutterMeasurement* m) {
 }
 
 void shutter_session_on_recompute() {
-    if (!s_mutex) return;
-    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!s_session_mutex) return;
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
 
     if (!s_active || !s_measurements || s_measurements->empty()) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         return;
     }
 
@@ -1006,14 +1006,14 @@ void shutter_session_on_recompute() {
     // Recompute would overwrite nearest_speed with the NEW target after
     // step-advance, corrupting the last measurement's grouping.
     if (s_guided) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         return;
     }
 
     // Get the updated latest measurement and overwrite the last snapshot.
     ShutterMeasurement m;
     if (!shutter_measure_get_latest(&m) || !m.valid) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         return;
     }
 
@@ -1032,7 +1032,7 @@ void shutter_session_on_recompute() {
     last.target_manual       = m.target_manual;
     last.speed_locked        = m.speed_locked;
 
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 // ============================================================================
@@ -1088,7 +1088,7 @@ static void guide_start_inner(const char* test_id) {
     shutter_capture_stop_alignment();
     shutter_session_start(nullptr);
 
-    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) {
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) {
         heap_caps_free(speeds_copy);
         heap_caps_free(result);
         return;
@@ -1103,7 +1103,7 @@ static void guide_start_inner(const char* test_id) {
     s_guide_step = 0;
     s_guide_shot = 0;
 
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 
     shutter_measure_set_target(speeds_copy[0].speed_suffixed);
     shutter_measure_set_lock(true);
@@ -1143,11 +1143,11 @@ void shutter_session_guide_stop() {
 }
 
 void shutter_session_guide_skip() {
-    if (!s_mutex) return;
-    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!s_session_mutex) return;
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
 
     if (!s_active || !s_guided || !s_guide_speeds) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         return;
     }
 
@@ -1164,7 +1164,7 @@ void shutter_session_guide_skip() {
                 sizeof(next_speed));
     }
 
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 
     if (do_auto_stop) {
         LOGI(TAG, "guide_skip: at last speed — auto-stopping");
@@ -1177,16 +1177,16 @@ void shutter_session_guide_skip() {
 }
 
 void shutter_session_guide_redo() {
-    if (!s_mutex) return;
-    if (xSemaphoreTake(s_mutex, portMAX_DELAY) != pdTRUE) return;
+    if (!s_session_mutex) return;
+    if (xSemaphoreTake(s_session_mutex, portMAX_DELAY) != pdTRUE) return;
 
     if (!s_active || !s_guided) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         return;
     }
 
     if (s_guide_shot == 0 && s_guide_step == 0) {
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         LOGI(TAG, "guide_redo: at very first shot, no-op");
         return;
     }
@@ -1211,7 +1211,7 @@ void shutter_session_guide_redo() {
         s_measurements->pop_back();
     }
 
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 
     if (crossed_boundary) {
         shutter_measure_set_target(prev_speed, false);
@@ -1222,107 +1222,107 @@ void shutter_session_guide_redo() {
 }
 
 bool shutter_session_is_guided() {
-    if (!s_mutex) return false;
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) return false;
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     bool g = s_active && s_guided;
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
     return g;
 }
 
 void shutter_session_get_type(char* out, size_t len) {
-    if (!s_mutex) { out[0] = '\0'; return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { out[0] = '\0'; return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (!s_active) strlcpy(out, "", len);
     else if (s_guided) strlcpy(out, "guided", len);
     else strlcpy(out, "freeform", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_get_worst_verdict(char* out, size_t len) {
-    if (!s_mutex) { out[0] = '\0'; return; }
-    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(50)) != pdTRUE) { out[0] = '\0'; return; }
+    if (!s_session_mutex) { out[0] = '\0'; return; }
+    if (xSemaphoreTake(s_session_mutex, pdMS_TO_TICKS(50)) != pdTRUE) { out[0] = '\0'; return; }
     if (!s_active || !s_measurements || s_measurements->empty()) {
         out[0] = '\0';
-        xSemaphoreGive(s_mutex);
+        xSemaphoreGive(s_session_mutex);
         return;
     }
     strlcpy(out, verdict_str(worst_verdict(*s_measurements)), len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_guide_get_target(char* out, size_t len) {
-    if (!s_mutex) { strlcpy(out, "---", len); return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { strlcpy(out, "---", len); return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (s_active && s_guided && s_guide_speeds && s_guide_step < s_guide_speed_count)
         strlcpy(out, s_guide_speeds[s_guide_step].speed, len);
     else strlcpy(out, "---", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_guide_get_step(char* out, size_t len) {
-    if (!s_mutex) { strlcpy(out, "---", len); return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { strlcpy(out, "---", len); return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (s_active && s_guided) snprintf(out, len, "%u", (unsigned)(s_guide_step + 1));
     else strlcpy(out, "---", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_guide_get_steps(char* out, size_t len) {
-    if (!s_mutex) { strlcpy(out, "---", len); return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { strlcpy(out, "---", len); return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (s_active && s_guided) snprintf(out, len, "%u", (unsigned)s_guide_speed_count);
     else strlcpy(out, "---", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_guide_get_shot(char* out, size_t len) {
-    if (!s_mutex) { strlcpy(out, "---", len); return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { strlcpy(out, "---", len); return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (s_active && s_guided) snprintf(out, len, "%u", (unsigned)(s_guide_shot + 1));
     else strlcpy(out, "---", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_guide_get_shots(char* out, size_t len) {
-    if (!s_mutex) { strlcpy(out, "---", len); return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { strlcpy(out, "---", len); return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (s_active && s_guided) snprintf(out, len, "%u", (unsigned)s_guide_shots_per);
     else strlcpy(out, "---", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_guide_get_taking(char* out, size_t len) {
-    if (!s_mutex) { strlcpy(out, "---", len); return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { strlcpy(out, "---", len); return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (s_active && s_guided) {
         unsigned taking = s_guide_step * s_guide_shots_per + s_guide_shot + 1;
         snprintf(out, len, "%u", taking);
     } else strlcpy(out, "---", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_guide_get_total(char* out, size_t len) {
-    if (!s_mutex) { strlcpy(out, "---", len); return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { strlcpy(out, "---", len); return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (s_active && s_guided) snprintf(out, len, "%u", (unsigned)(s_guide_speed_count * s_guide_shots_per));
     else strlcpy(out, "---", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_guide_get_name(char* out, size_t len) {
-    if (!s_mutex) { strlcpy(out, "---", len); return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { strlcpy(out, "---", len); return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (s_active && s_guided) strlcpy(out, s_guide_name, len);
     else strlcpy(out, "---", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 void shutter_session_guide_get_id(char* out, size_t len) {
-    if (!s_mutex) { strlcpy(out, "---", len); return; }
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (!s_session_mutex) { strlcpy(out, "---", len); return; }
+    xSemaphoreTake(s_session_mutex, portMAX_DELAY);
     if (s_active && s_guided) strlcpy(out, s_guide_id, len);
     else strlcpy(out, "---", len);
-    xSemaphoreGive(s_mutex);
+    xSemaphoreGive(s_session_mutex);
 }
 
 #endif // IS_SHUTTER_TESTER

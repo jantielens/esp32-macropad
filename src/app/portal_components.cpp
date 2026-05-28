@@ -61,8 +61,8 @@
 
 // --- Shutter Tester components ---
 #if IS_SHUTTER_TESTER
-#include "components/shutter_component.cpp"
-#include "components/shutter_session_actions_component.cpp"
+#include "device_classes/shutter_tester/components/shutter_component.cpp"
+#include "device_classes/shutter_tester/components/shutter_session_actions_component.cpp"
 #endif // IS_SHUTTER_TESTER
 
 // --- E-Paper-gated components ---

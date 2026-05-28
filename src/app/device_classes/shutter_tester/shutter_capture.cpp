@@ -158,7 +158,7 @@ static const uint8_t PRESET_TABLE_COUNT =
 // Module state
 // ============================================================================
 
-static bool s_available = false;
+static bool s_capture_available = false;
 static ShutterCaptureCaps s_caps = {};
 static ShutterTriggerConfig s_trigger_cfg = {};
 static const ShutterSensorPreset* s_active_preset = nullptr;
@@ -245,7 +245,7 @@ static const ShutterSensorPreset* resolve_preset(const char* requested_id_str) {
 // ============================================================================
 
 void shutter_capture_init(const char* preset_id_str) {
-    s_available = false;
+    s_capture_available = false;
     memset(&s_caps, 0, sizeof(s_caps));
 
     // Set default trigger configuration from board macros.
@@ -290,7 +290,7 @@ void shutter_capture_init(const char* preset_id_str) {
     s_caps.waveform_available         = true;
     s_caps.local_capture              = true;
 
-    s_available = true;
+    s_capture_available = true;
     s_active_preset = preset;
 
     // Create the refcount mutex on first init. Subsequent re-inits keep it.
@@ -298,7 +298,7 @@ void shutter_capture_init(const char* preset_id_str) {
         s_refcount_mux = xSemaphoreCreateMutex();
         if (!s_refcount_mux) {
             LOGE(TAG, "Failed to create refcount mutex — lifecycle will not work");
-            s_available = false;
+            s_capture_available = false;
             return;
         }
     }
@@ -311,7 +311,7 @@ void shutter_capture_init(const char* preset_id_str) {
 // ============================================================================
 
 bool shutter_capture_acquire(const char* tag) {
-    if (!s_available) {
+    if (!s_capture_available) {
         LOGW(TAG, "acquire('%s'): not available", tag ? tag : "<null>");
         return false;
     }
@@ -348,7 +348,7 @@ bool shutter_capture_acquire(const char* tag) {
 }
 
 void shutter_capture_release(const char* tag) {
-    if (!s_available || !s_refcount_mux) return;
+    if (!s_capture_available || !s_refcount_mux) return;
 
     xSemaphoreTake(s_refcount_mux, portMAX_DELAY);
 
@@ -371,7 +371,7 @@ void shutter_capture_release(const char* tag) {
 }
 
 bool shutter_capture_is_running() {
-    if (!s_available || !s_refcount_mux) return false;
+    if (!s_capture_available || !s_refcount_mux) return false;
     xSemaphoreTake(s_refcount_mux, portMAX_DELAY);
     bool running = (s_refcount > 0);
     xSemaphoreGive(s_refcount_mux);
@@ -379,7 +379,7 @@ bool shutter_capture_is_running() {
 }
 
 bool shutter_capture_is_available() {
-    return s_available;
+    return s_capture_available;
 }
 
 void shutter_capture_get_caps(ShutterCaptureCaps* out) {
@@ -425,7 +425,7 @@ void shutter_capture_poll() {
 }
 
 bool shutter_capture_get_latest(ShutterCaptureFrame* out) {
-    if (!s_available || !out) return false;
+    if (!s_capture_available || !out) return false;
 
     ShutterCapture adc_cap;
     if (!shutter_adc_get_capture(&adc_cap)) return false;
@@ -469,7 +469,7 @@ const ShutterSensorPreset* shutter_capture_get_preset_table(uint8_t* count_out) 
 // ============================================================================
 
 void shutter_capture_start_alignment() {
-    if (!s_available) { LOGW(TAG, "start_alignment: not available"); return; }
+    if (!s_capture_available) { LOGW(TAG, "start_alignment: not available"); return; }
     // Hold the engine for the duration of alignment mode.
     if (!shutter_capture_acquire("align")) {
         LOGE(TAG, "start_alignment: failed to acquire engine");
@@ -480,7 +480,7 @@ void shutter_capture_start_alignment() {
 }
 
 void shutter_capture_stop_alignment() {
-    if (!s_available) { LOGW(TAG, "stop_alignment: not available"); return; }
+    if (!s_capture_available) { LOGW(TAG, "stop_alignment: not available"); return; }
     bool was_active = shutter_adc_is_alignment_active();
     LOGI(TAG, "stop_alignment: calling adc_stop, adc_active=%d", was_active);
     shutter_adc_stop_alignment();
@@ -492,12 +492,12 @@ void shutter_capture_stop_alignment() {
 }
 
 bool shutter_capture_is_alignment_active() {
-    if (!s_available) return false;
+    if (!s_capture_available) return false;
     return shutter_adc_is_alignment_active();
 }
 
 void shutter_capture_recalibrate() {
-    if (!s_available) { LOGW(TAG, "recalibrate: not available"); return; }
+    if (!s_capture_available) { LOGW(TAG, "recalibrate: not available"); return; }
     // Recalibrate is meaningful only while the engine is held by some other
     // consumer (e.g. the shutter pad screen). If nobody is holding it, the
     // calibration would happen during the next start() anyway, so this is a
@@ -510,12 +510,12 @@ void shutter_capture_recalibrate() {
 }
 
 bool shutter_capture_is_calibrating() {
-    if (!s_available) return false;
+    if (!s_capture_available) return false;
     return shutter_adc_is_calibrating();
 }
 
 bool shutter_capture_get_alignment(ShutterAlignmentReading* out) {
-    if (!s_available || !out) return false;
+    if (!s_capture_available || !out) return false;
     return shutter_adc_get_alignment(out);
 }
 

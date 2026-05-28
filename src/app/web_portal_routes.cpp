@@ -25,8 +25,8 @@
 #endif
 
 #if IS_SHUTTER_TESTER
-#include "web_portal_shutter_sessions.h"
-#include "web_portal_shutter_tests.h"
+#include "device_classes/shutter_tester/web/portal_shutter_sessions.h"
+#include "device_classes/shutter_tester/web/portal_shutter_tests.h"
 #endif
 
 void web_portal_register_routes(AsyncWebServer* server) {

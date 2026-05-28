@@ -4,7 +4,7 @@
 
 #if IS_SHUTTER_TESTER
 
-#include "pad_config.h"  // ButtonAction, ACTION_TYPE_SHUTTER, MAX_BUTTON_ACTIONS
+#include "../../pad_config.h"  // ButtonAction, ACTION_TYPE_SHUTTER, MAX_BUTTON_ACTIONS
 
 #include <string.h>
 

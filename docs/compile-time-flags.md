@@ -360,6 +360,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.cpp
   - src/app/data_stream.h
   - src/app/device_class_registry.cpp
+  - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
+  - src/app/device_classes/shutter_tester/shutter_align_binding.h
+  - src/app/device_classes/shutter_tester/shutter_binding.cpp
+  - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
+  - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
   - src/app/device_telemetry.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
@@ -377,7 +382,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_provider.cpp
   - src/app/list_provider.h
   - src/app/list_provider_pads.cpp
-  - src/app/list_provider_shutter_tests.cpp
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
   - src/app/message_bubble.cpp
@@ -398,9 +402,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
-  - src/app/shutter_align_binding.cpp
-  - src/app/shutter_align_binding.h
-  - src/app/shutter_binding.cpp
   - src/app/swipe_actions.cpp
   - src/app/swipe_actions.h
   - src/app/swipe_config.cpp
@@ -659,35 +660,37 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **IS_SHUTTER_TESTER**
   - src/app/app.ino
   - src/app/board_config.h
-  - src/app/components/shutter_session_actions_component.cpp
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/device_class_registry.cpp
-  - src/app/list_provider_shutter_tests.cpp
+  - src/app/device_classes.cpp
+  - src/app/device_classes/shutter_tester/components/shutter_session_actions_component.cpp
+  - src/app/device_classes/shutter_tester/shutter_adc.cpp
+  - src/app/device_classes/shutter_tester/shutter_adc.h
+  - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
+  - src/app/device_classes/shutter_tester/shutter_align_binding.h
+  - src/app/device_classes/shutter_tester/shutter_binding.cpp
+  - src/app/device_classes/shutter_tester/shutter_capture.cpp
+  - src/app/device_classes/shutter_tester/shutter_capture.h
+  - src/app/device_classes/shutter_tester/shutter_measure.cpp
+  - src/app/device_classes/shutter_tester/shutter_measure.h
+  - src/app/device_classes/shutter_tester/shutter_session.cpp
+  - src/app/device_classes/shutter_tester/shutter_session.h
+  - src/app/device_classes/shutter_tester/shutter_session_actions.cpp
+  - src/app/device_classes/shutter_tester/shutter_session_actions.h
+  - src/app/device_classes/shutter_tester/shutter_test_scripts.cpp
+  - src/app/device_classes/shutter_tester/shutter_test_scripts.h
+  - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
+  - src/app/device_classes/shutter_tester/web/portal_shutter_sessions.cpp
+  - src/app/device_classes/shutter_tester/web/portal_shutter_sessions.h
+  - src/app/device_classes/shutter_tester/web/portal_shutter_tests.cpp
+  - src/app/device_classes/shutter_tester/web/portal_shutter_tests.h
+  - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen.h
   - src/app/screens/pad_tile_builder.cpp
-  - src/app/shutter_adc.cpp
-  - src/app/shutter_adc.h
-  - src/app/shutter_align_binding.cpp
-  - src/app/shutter_align_binding.h
-  - src/app/shutter_binding.cpp
-  - src/app/shutter_capture.cpp
-  - src/app/shutter_capture.h
-  - src/app/shutter_measure.cpp
-  - src/app/shutter_measure.h
-  - src/app/shutter_session.cpp
-  - src/app/shutter_session.h
-  - src/app/shutter_session_actions.cpp
-  - src/app/shutter_session_actions.h
-  - src/app/shutter_test_scripts.cpp
-  - src/app/shutter_test_scripts.h
   - src/app/web_portal_routes.cpp
-  - src/app/web_portal_shutter_sessions.cpp
-  - src/app/web_portal_shutter_sessions.h
-  - src/app/web_portal_shutter_tests.cpp
-  - src/app/web_portal_shutter_tests.h
   - src/app/widgets.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
@@ -816,13 +819,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SHUTTER_POST_CAPTURE_SAMPLES**
   - src/app/board_config.h
-  - src/app/shutter_adc.h
+  - src/app/device_classes/shutter_tester/shutter_adc.h
 - **SHUTTER_PRE_TRIGGER_SAMPLES**
   - src/app/board_config.h
-  - src/app/shutter_adc.h
+  - src/app/device_classes/shutter_tester/shutter_adc.h
 - **SHUTTER_SENSOR_MAX**
   - src/app/board_config.h
-  - src/app/shutter_capture.h
+  - src/app/device_classes/shutter_tester/shutter_capture.h
 - **SHUTTER_VERDICT_DEVIATION_FAIL**
   - src/app/board_config.h
 - **SHUTTER_VERDICT_DEVIATION_WARNING**

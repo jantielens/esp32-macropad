@@ -6,7 +6,7 @@
 
 #if IS_SHUTTER_TESTER
 
-#include "shutter_test_scripts.h"
+#include "../shutter_test_scripts.h"
 #include <Arduino.h>
 #include <esp_heap_caps.h>
 #include <string.h>

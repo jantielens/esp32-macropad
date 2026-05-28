@@ -1,4 +1,4 @@
-#include "web_portal_shutter_sessions.h"
+#include "portal_shutter_sessions.h"
 
 #if IS_SHUTTER_TESTER
 
