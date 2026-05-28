@@ -108,7 +108,7 @@ bool shutter_session_actions_save_raw(const uint8_t* json, size_t len) {
 static void dispatch_guarded(const ButtonAction& act) {
     if (!act.type[0]) return;  // none configured
     if (shutter_session_actions_is_self_trigger(act)) {
-        LOGW(TAG, "Skipping self-triggering shutter action (%s)", act.shutter_command);
+        LOGW(TAG, "Skipping self-triggering shutter action (%s)", act.payload.shutter.command);
         return;
     }
     action_dispatch(act, "SessSave");

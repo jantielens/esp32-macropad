@@ -180,11 +180,23 @@ static void substitute_step_in_field(char* field, size_t field_size, float step)
 }
 
 void numericrocker_substitute_step(ButtonAction* act, float step) {
-    substitute_step_in_field(act->mqtt_payload, sizeof(act->mqtt_payload), step);
-    substitute_step_in_field(act->key_sequence, sizeof(act->key_sequence), step);
-    substitute_step_in_field(act->volume_value, sizeof(act->volume_value), step);
-    substitute_step_in_field(act->brightness_value, sizeof(act->brightness_value), step);
-    substitute_step_in_field(act->timer_value, sizeof(act->timer_value), step);
+    // Type-dispatched: only touch the active union arm.
+    if (strcmp(act->type, ACTION_TYPE_MQTT) == 0) {
+        substitute_step_in_field(act->payload.mqtt.mqtt_payload,
+                                 sizeof(act->payload.mqtt.mqtt_payload), step);
+    } else if (strcmp(act->type, ACTION_TYPE_KEY) == 0) {
+        substitute_step_in_field(act->payload.key.key_sequence,
+                                 sizeof(act->payload.key.key_sequence), step);
+    } else if (strcmp(act->type, ACTION_TYPE_VOLUME) == 0) {
+        substitute_step_in_field(act->payload.volume.volume_value,
+                                 sizeof(act->payload.volume.volume_value), step);
+    } else if (strcmp(act->type, ACTION_TYPE_BRIGHTNESS) == 0) {
+        substitute_step_in_field(act->payload.brightness.brightness_value,
+                                 sizeof(act->payload.brightness.brightness_value), step);
+    } else if (strcmp(act->type, ACTION_TYPE_TIMER) == 0) {
+        substitute_step_in_field(act->payload.timer.timer_value,
+                                 sizeof(act->payload.timer.timer_value), step);
+    }
 }
 
 // ---- Registration ----

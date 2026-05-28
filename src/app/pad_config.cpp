@@ -217,7 +217,7 @@ static void parse_pad_action(JsonVariant v, ButtonAction* act, const char* legac
         const char* screen = obj[legacy_screen_key] | "";
         if (screen[0]) {
             strlcpy(act->type, ACTION_TYPE_SCREEN, CONFIG_ACTION_TYPE_MAX_LEN);
-            strlcpy(act->screen_id, screen, CONFIG_SCREEN_ID_MAX_LEN);
+            strlcpy(act->payload.screen.screen_id, screen, CONFIG_SCREEN_ID_MAX_LEN);
         }
     }
 }

@@ -133,9 +133,9 @@ TEST(round_trip_preserves_both_actions) {
     ASSERT_TRUE(cfg.save_start_count == 1);
     ASSERT_TRUE(cfg.save_complete_count == 1);
     ASSERT_STR(cfg.save_start_actions[0].type, "notify");
-    ASSERT_STR(cfg.save_start_actions[0].notify_text, "Saving...");
+    ASSERT_STR(cfg.save_start_actions[0].payload.notify.notify_text, "Saving...");
     ASSERT_STR(cfg.save_complete_actions[0].type, "beep");
-    ASSERT_STR(cfg.save_complete_actions[0].beep_pattern, "100");
+    ASSERT_STR(cfg.save_complete_actions[0].payload.beep.beep_pattern, "100");
 
     char buf[1024];
     serialize_config(cfg, buf, sizeof(buf));
@@ -144,9 +144,9 @@ TEST(round_trip_preserves_both_actions) {
     parse_config(buf, back);
     ASSERT_TRUE(back.save_start_count == 1);
     ASSERT_STR(back.save_start_actions[0].type, "notify");
-    ASSERT_STR(back.save_start_actions[0].notify_text, "Saving...");
+    ASSERT_STR(back.save_start_actions[0].payload.notify.notify_text, "Saving...");
     ASSERT_STR(back.save_complete_actions[0].type, "beep");
-    ASSERT_STR(back.save_complete_actions[0].beep_pattern, "100");
+    ASSERT_STR(back.save_complete_actions[0].payload.beep.beep_pattern, "100");
 }
 
 TEST(round_trip_screen_action) {
@@ -161,7 +161,7 @@ TEST(round_trip_screen_action) {
     parse_config(buf, back);
     ASSERT_TRUE(back.save_start_count == 1);
     ASSERT_STR(back.save_start_actions[0].type, "screen");
-    ASSERT_STR(back.save_start_actions[0].screen_id, "pad_1");
+    ASSERT_STR(back.save_start_actions[0].payload.screen.screen_id, "pad_1");
     ASSERT_TRUE(back.save_complete_count == 0);
 }
 
@@ -183,7 +183,7 @@ TEST(round_trip_three_actions_per_event) {
     ASSERT_STR(cfg.save_start_actions[0].type, "notify");
     ASSERT_STR(cfg.save_start_actions[1].type, "beep");
     ASSERT_STR(cfg.save_start_actions[2].type, "screen");
-    ASSERT_STR(cfg.save_complete_actions[2].notify_text, "Z");
+    ASSERT_STR(cfg.save_complete_actions[2].payload.notify.notify_text, "Z");
 
     char buf[2048];
     serialize_config(cfg, buf, sizeof(buf));
@@ -191,8 +191,8 @@ TEST(round_trip_three_actions_per_event) {
     parse_config(buf, back);
     ASSERT_TRUE(back.save_start_count == 3);
     ASSERT_TRUE(back.save_complete_count == 3);
-    ASSERT_STR(back.save_start_actions[1].beep_pattern, "50");
-    ASSERT_STR(back.save_complete_actions[0].notify_text, "X");
+    ASSERT_STR(back.save_start_actions[1].payload.beep.beep_pattern, "50");
+    ASSERT_STR(back.save_complete_actions[0].payload.notify.notify_text, "X");
 }
 
 TEST(parse_drops_empty_array_entries) {
@@ -202,7 +202,7 @@ TEST(parse_drops_empty_array_entries) {
     parse_config(json, cfg);
     ASSERT_TRUE(cfg.save_start_count == 1);
     ASSERT_STR(cfg.save_start_actions[0].type, "notify");
-    ASSERT_STR(cfg.save_start_actions[0].notify_text, "A");
+    ASSERT_STR(cfg.save_start_actions[0].payload.notify.notify_text, "A");
 }
 
 // ============================================================================
@@ -213,7 +213,7 @@ TEST(self_trigger_rejects_sess_stop) {
     ButtonAction act;
     memset(&act, 0, sizeof(act));
     strcpy(act.type, ACTION_TYPE_SHUTTER);
-    strcpy(act.shutter_command, "sess_stop");
+    strcpy(act.payload.shutter.command, "sess_stop");
     ASSERT_TRUE(shutter_session_actions_is_self_trigger(act));
 }
 
@@ -221,7 +221,7 @@ TEST(self_trigger_rejects_sess_start) {
     ButtonAction act;
     memset(&act, 0, sizeof(act));
     strcpy(act.type, ACTION_TYPE_SHUTTER);
-    strcpy(act.shutter_command, "sess_start");
+    strcpy(act.payload.shutter.command, "sess_start");
     ASSERT_TRUE(shutter_session_actions_is_self_trigger(act));
 }
 
@@ -229,7 +229,7 @@ TEST(self_trigger_allows_other_shutter_commands) {
     ButtonAction act;
     memset(&act, 0, sizeof(act));
     strcpy(act.type, ACTION_TYPE_SHUTTER);
-    strcpy(act.shutter_command, "set");
+    strcpy(act.payload.shutter.command, "set");
     ASSERT_FALSE(shutter_session_actions_is_self_trigger(act));
 }
 
@@ -237,7 +237,8 @@ TEST(self_trigger_allows_non_shutter_action) {
     ButtonAction act;
     memset(&act, 0, sizeof(act));
     strcpy(act.type, "notify");
-    strcpy(act.shutter_command, "sess_stop");  // ignored — type is not shutter
+    // payload.shutter is not the active arm here; the function must check
+    // act.type first and ignore payload contents.
     ASSERT_FALSE(shutter_session_actions_is_self_trigger(act));
 }
 

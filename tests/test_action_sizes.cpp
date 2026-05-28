@@ -14,10 +14,9 @@
 #include <cassert>
 #include <cstdio>
 
-// Tightened in Phase 1 once the union lands. Pre-union baseline is whatever
-// the flat struct happens to be — this run records it.
+// Tightened post-union: 420 B = 394 B notify arm + 16 B type + 8 B alignment.
 #ifndef ACTION_SIZEOF_BUDGET
-#define ACTION_SIZEOF_BUDGET 1024
+#define ACTION_SIZEOF_BUDGET 420
 #endif
 
 int main() {
@@ -26,7 +25,7 @@ int main() {
 #ifdef ACTION_PAYLOAD_PRESENT
     printf("sizeof(ActionPayload)             = %zu bytes\n", sizeof(ActionPayload));
 #  ifdef ACTION_PAYLOAD_DUMP_ARMS
-    ACTION_PAYLOAD_DUMP_ARMS
+    ACTION_PAYLOAD_DUMP_ARMS(printf);
 #  endif
 #endif
     printf("Budget                            = %u bytes\n",

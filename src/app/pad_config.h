@@ -130,40 +130,121 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
 
-// Typed action for tap or long-press
-struct ButtonAction {
-    char type[CONFIG_ACTION_TYPE_MAX_LEN];           // "screen", "mqtt", "key", "ble_pair", "beep", "volume", or "" (none)
-    char screen_id[CONFIG_SCREEN_ID_MAX_LEN];        // type="screen": target screen
-    char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];      // type="mqtt": publish topic
-    char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // type="mqtt": publish payload
-    char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // type="key": DSL key sequence
-    char beep_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];  // type="beep": "freq:dur freq:dur" (empty = default)
-    uint8_t beep_volume;                             // type="beep": 0 = use device volume, 1-100 = override
-    char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // type="volume": "set" or "adjust"
-    char volume_value[CONFIG_VALUE_MAX_LEN];          // type="volume": absolute 0-100, signed delta, or {step}
-    char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // type="brightness": "set" or "adjust"
-    char brightness_value[CONFIG_VALUE_MAX_LEN];       // type="brightness": absolute 5-100, signed delta, or {step}
-    // Timer action fields
-    uint8_t timer_id;                                  // type="timer": 1-3
-    char timer_command[CONFIG_TIMER_CMD_MAX_LEN];      // type="timer": "toggle", "start", "stop", etc.
-    char timer_value[CONFIG_VALUE_MAX_LEN];             // type="timer": seconds for set/adjust (supports {step})
-    char sound_file[32];                              // type="sound": filename (no path/extension)
-    uint8_t sound_volume;                             // type="sound": 0 = device vol, 1-100 = override
-    // Notify action fields
-    char notify_text[128];                             // type="notify": message text (bindable)
-    char notify_duration_ms[CONFIG_BINDABLE_SHORT_LEN]; // type="notify": auto-dismiss delay (bindable), "0" = persistent
-    char notify_text_color[CONFIG_BINDABLE_SHORT_LEN]; // type="notify": text color hex (bindable)
-    char notify_bg_color[CONFIG_BINDABLE_SHORT_LEN];   // type="notify": background color hex (bindable)
-    char notify_border_color[CONFIG_BINDABLE_SHORT_LEN]; // type="notify": border color hex (bindable)
-    uint8_t notify_opacity;                            // type="notify": 0-100%, 0 = use default (85)
-    uint8_t notify_font_size;                          // type="notify": 0 = auto
-    char notify_location[8];                           // type="notify": "top", "center", "bottom"
-    // System action fields
-    char system_command[CONFIG_ACTION_TYPE_MAX_LEN];   // type="system": "reboot", "wifi_reconnect", "screensaver"
-    // Shutter action fields
-    char shutter_command[CONFIG_TIMER_CMD_MAX_LEN];    // type="shutter": "set", "adjust", "toggle_lock", "sess_*", "align_*"
-    char shutter_value[CONFIG_BINDABLE_SHORT_LEN];      // type="shutter": speed label, "faster"/"slower", or binding
+// ============================================================================
+// ButtonAction — typed tap / long-press action
+// ============================================================================
+// Storage is a discriminated union: ButtonAction::type names the active arm
+// of ActionPayload. Only the active arm is valid; reading or writing a
+// non-active arm is undefined behavior.
+//
+// All built-in action arms live here in common code so every device-class
+// build pays the same per-action memory cost (the canary is
+// tests/test_action_sizes.cpp). Device-class arms are added by conditionally
+// including their header below.
+//
+// JSON wire format is intentionally *flat* (e.g. `{"type":"mqtt","topic":...,
+// "payload":...}`) — see action_parse.cpp for the type-dispatched mapping
+// between flat JSON keys and the active union arm.
+
+struct ScreenPayload {
+    char screen_id[CONFIG_SCREEN_ID_MAX_LEN];        // target screen
 };
+struct MqttPayload {
+    char mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN];      // publish topic
+    char mqtt_payload[CONFIG_MQTT_PAYLOAD_MAX_LEN];  // publish payload
+};
+struct KeyPayload {
+    char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // DSL key sequence
+};
+struct BeepPayload {
+    char beep_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];  // "freq:dur freq:dur" (empty = default)
+    uint8_t beep_volume;                             // 0 = device volume, 1-100 = override
+};
+struct VolumePayload {
+    char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // "set" or "adjust"
+    char volume_value[CONFIG_VALUE_MAX_LEN];         // absolute 0-100, signed delta, or {step}
+};
+struct BrightnessPayload {
+    char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // "set" or "adjust"
+    char brightness_value[CONFIG_VALUE_MAX_LEN];      // absolute 5-100, signed delta, or {step}
+};
+struct TimerPayload {
+    uint8_t timer_id;                                 // 1-3
+    char timer_command[CONFIG_TIMER_CMD_MAX_LEN];     // "toggle", "start", "stop", "adjust", "set", etc.
+    char timer_value[CONFIG_VALUE_MAX_LEN];           // seconds for set/adjust (supports {step})
+};
+struct SoundPayload {
+    char sound_file[32];                              // filename (no path/extension)
+    uint8_t sound_volume;                             // 0 = device vol, 1-100 = override
+};
+struct NotifyPayload {
+    char notify_text[128];                                // message text (bindable). NOTE: dominates union size — see Future Work.
+    char notify_duration_ms[CONFIG_BINDABLE_SHORT_LEN];   // auto-dismiss delay (bindable), "0" = persistent
+    char notify_text_color[CONFIG_BINDABLE_SHORT_LEN];    // text color hex (bindable)
+    char notify_bg_color[CONFIG_BINDABLE_SHORT_LEN];      // background color hex (bindable)
+    char notify_border_color[CONFIG_BINDABLE_SHORT_LEN];  // border color hex (bindable)
+    uint8_t notify_opacity;                               // 0-100%, 0 = use default (85)
+    uint8_t notify_font_size;                             // 0 = auto
+    char notify_location[8];                              // "top", "center", "bottom"
+};
+struct SystemPayload {
+    char system_command[CONFIG_ACTION_TYPE_MAX_LEN];      // "reboot", "wifi_reconnect", "screensaver"
+};
+
+// Device-class payload arms. Conditionally included so every board ships
+// with exactly the arms its compile-time flags select — and so device-class
+// payload definitions live next to their dispatch code.
+#if IS_SHUTTER_TESTER
+#include "device_classes/shutter_tester/shutter_payload.h"
+#endif
+
+union ActionPayload {
+    ScreenPayload     screen;       // type == ACTION_TYPE_SCREEN
+    MqttPayload       mqtt;         // type == ACTION_TYPE_MQTT
+    KeyPayload        key;          // type == ACTION_TYPE_KEY
+    BeepPayload       beep;         // type == ACTION_TYPE_BEEP
+    VolumePayload     volume;       // type == ACTION_TYPE_VOLUME
+    BrightnessPayload brightness;   // type == ACTION_TYPE_BRIGHTNESS
+    TimerPayload      timer;        // type == ACTION_TYPE_TIMER
+    SoundPayload      sound;        // type == ACTION_TYPE_SOUND
+    NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
+    SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
+#if IS_SHUTTER_TESTER
+    ShutterPayload    shutter;      // type == ACTION_TYPE_SHUTTER
+#endif
+    // back, ble_pair, "" (none) carry no payload data — only the type tag.
+};
+
+struct ButtonAction {
+    char type[CONFIG_ACTION_TYPE_MAX_LEN];  // discriminator; "" = none
+    ActionPayload payload;                  // valid arm selected by `type`
+};
+
+// Sentinel for host-native size-budget tests + tooling.
+#define ACTION_PAYLOAD_PRESENT 1
+
+// ButtonAction has a hard size budget of 420 bytes (notify arm = 394 B dominates).
+// Trimming notify_text length is tracked as separate follow-up work.
+static_assert(sizeof(ButtonAction) <= 420,
+              "ButtonAction size budget exceeded (>420 bytes)");
+
+// Per-arm size dump for size-canary tests. Skipped under shutter build to keep
+// the macro shape stable across device classes (ShutterPayload printed
+// separately via its header when needed).
+#define ACTION_PAYLOAD_DUMP_ARMS(printf_fn) do { \
+    printf_fn("  ButtonAction      = %zu\n", sizeof(ButtonAction));      \
+    printf_fn("  ActionPayload     = %zu\n", sizeof(ActionPayload));     \
+    printf_fn("  ScreenPayload     = %zu\n", sizeof(ScreenPayload));     \
+    printf_fn("  MqttPayload       = %zu\n", sizeof(MqttPayload));       \
+    printf_fn("  KeyPayload        = %zu\n", sizeof(KeyPayload));        \
+    printf_fn("  BeepPayload       = %zu\n", sizeof(BeepPayload));       \
+    printf_fn("  VolumePayload     = %zu\n", sizeof(VolumePayload));     \
+    printf_fn("  BrightnessPayload = %zu\n", sizeof(BrightnessPayload)); \
+    printf_fn("  TimerPayload      = %zu\n", sizeof(TimerPayload));      \
+    printf_fn("  SoundPayload      = %zu\n", sizeof(SoundPayload));      \
+    printf_fn("  NotifyPayload     = %zu\n", sizeof(NotifyPayload));     \
+    printf_fn("  SystemPayload     = %zu\n", sizeof(SystemPayload));     \
+} while (0)
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
 // Use [mqtt:topic;path;format] syntax in label_top/center/bottom fields.

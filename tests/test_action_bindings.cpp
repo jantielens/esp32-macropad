@@ -5,6 +5,9 @@
 // Host-native: tests the binding engine behavior on action-field-sized buffers.
 // Exercises the same resolve pattern used by resolve_action_bindings() in
 // action_dispatch.cpp without requiring ESP32-specific headers.
+//
+// ButtonAction is a discriminated union; each test sets exactly one arm
+// (selected by `act.type`) before invoking the type-dispatched resolver.
 
 #include <cstdio>
 #include <cstring>
@@ -26,7 +29,6 @@ static bool mock_echo(const char* params, char* out, size_t out_len) {
     return true;
 }
 
-// Returns a long string to test field truncation
 static bool mock_long(const char* params, char* out, size_t out_len) {
     (void)params;
     strlcpy(out, "1234567890123456789", out_len);
@@ -39,10 +41,8 @@ static void mock_collect(const char* params, void* user_data) {
 }
 
 // ---------------------------------------------------------------------------
-// Reproduce the resolve_action_bindings pattern for testing
+// Type-dispatched resolver — mirrors action_dispatch.cpp::resolve_action_bindings
 // ---------------------------------------------------------------------------
-// This matches the logic in action_dispatch.cpp — resolve value-class fields
-// in-place, skip structural fields.
 static void test_try_resolve(char* field, size_t len) {
     if (field[0] && binding_template_has_bindings(field)) {
         char tmp[BINDING_TEMPLATE_MAX_LEN];
@@ -52,18 +52,29 @@ static void test_try_resolve(char* field, size_t len) {
 }
 
 static void resolve_action_bindings(ButtonAction& act) {
-    test_try_resolve(act.mqtt_topic,          sizeof(act.mqtt_topic));
-    test_try_resolve(act.mqtt_payload,        sizeof(act.mqtt_payload));
-    test_try_resolve(act.key_sequence,        sizeof(act.key_sequence));
-    test_try_resolve(act.beep_pattern,        sizeof(act.beep_pattern));
-    test_try_resolve(act.volume_value,        sizeof(act.volume_value));
-    test_try_resolve(act.brightness_value,    sizeof(act.brightness_value));
-    test_try_resolve(act.timer_value,         sizeof(act.timer_value));
-    test_try_resolve(act.notify_text,         sizeof(act.notify_text));
-    test_try_resolve(act.notify_duration_ms,  sizeof(act.notify_duration_ms));
-    test_try_resolve(act.notify_text_color,   sizeof(act.notify_text_color));
-    test_try_resolve(act.notify_bg_color,     sizeof(act.notify_bg_color));
-    test_try_resolve(act.notify_border_color, sizeof(act.notify_border_color));
+    if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
+        test_try_resolve(act.payload.screen.screen_id, sizeof(act.payload.screen.screen_id));
+    } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
+        test_try_resolve(act.payload.mqtt.mqtt_topic,   sizeof(act.payload.mqtt.mqtt_topic));
+        test_try_resolve(act.payload.mqtt.mqtt_payload, sizeof(act.payload.mqtt.mqtt_payload));
+    } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
+        test_try_resolve(act.payload.key.key_sequence, sizeof(act.payload.key.key_sequence));
+    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
+        test_try_resolve(act.payload.beep.beep_pattern, sizeof(act.payload.beep.beep_pattern));
+    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
+        test_try_resolve(act.payload.volume.volume_value, sizeof(act.payload.volume.volume_value));
+    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
+        test_try_resolve(act.payload.brightness.brightness_value, sizeof(act.payload.brightness.brightness_value));
+    } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
+        test_try_resolve(act.payload.timer.timer_value, sizeof(act.payload.timer.timer_value));
+    } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
+        test_try_resolve(act.payload.notify.notify_text,         sizeof(act.payload.notify.notify_text));
+        test_try_resolve(act.payload.notify.notify_duration_ms,  sizeof(act.payload.notify.notify_duration_ms));
+        test_try_resolve(act.payload.notify.notify_text_color,   sizeof(act.payload.notify.notify_text_color));
+        test_try_resolve(act.payload.notify.notify_bg_color,     sizeof(act.payload.notify.notify_bg_color));
+        test_try_resolve(act.payload.notify.notify_border_color, sizeof(act.payload.notify.notify_border_color));
+    }
+    // sound, system, back, ble_pair: no bindable fields today.
 }
 
 // ---------------------------------------------------------------------------
@@ -90,149 +101,213 @@ static void check_true(bool cond, const char* label) {
     g_pass++;
 }
 
+// Helper: zero-init a ButtonAction and set its discriminator.
+static ButtonAction make_action(const char* type) {
+    ButtonAction act;
+    memset(&act, 0, sizeof(act));
+    strlcpy(act.type, type, sizeof(act.type));
+    return act;
+}
+
 // ---------------------------------------------------------------------------
-// Tests
+// Tests — one per arm with bindable fields
 // ---------------------------------------------------------------------------
 
 static void test_value_fields_resolved() {
-    printf("--- value fields are resolved ---\n");
-    ButtonAction act = {};
-    strlcpy(act.mqtt_topic,          "[mock:t]", sizeof(act.mqtt_topic));
-    strlcpy(act.mqtt_payload,        "[mock:p]", sizeof(act.mqtt_payload));
-    strlcpy(act.key_sequence,        "[mock:k]", sizeof(act.key_sequence));
-    strlcpy(act.beep_pattern,        "[mock:b]", sizeof(act.beep_pattern));
-    strlcpy(act.volume_value,        "[mock:v]", sizeof(act.volume_value));
-    strlcpy(act.brightness_value,    "[mock:br]", sizeof(act.brightness_value));
-    strlcpy(act.timer_value,         "[mock:tv]", sizeof(act.timer_value));
-    strlcpy(act.notify_text,         "[mock:nt]", sizeof(act.notify_text));
-    strlcpy(act.notify_duration_ms,  "[mock:nd]", sizeof(act.notify_duration_ms));
-    strlcpy(act.notify_text_color,   "[mock:tc]", sizeof(act.notify_text_color));
-    strlcpy(act.notify_bg_color,     "[mock:bg]", sizeof(act.notify_bg_color));
-    strlcpy(act.notify_border_color, "[mock:bc]", sizeof(act.notify_border_color));
+    printf("--- value fields are resolved per arm ---\n");
 
-    resolve_action_bindings(act);
-
-    check_str(act.mqtt_topic,          "RESOLVED", "mqtt_topic resolved");
-    check_str(act.mqtt_payload,        "RESOLVED", "mqtt_payload resolved");
-    check_str(act.key_sequence,        "RESOLVED", "key_sequence resolved");
-    check_str(act.beep_pattern,        "RESOLVED", "beep_pattern resolved");
-    check_str(act.volume_value,        "RESOLVED", "volume_value resolved");
-    check_str(act.brightness_value,    "RESOLVED", "brightness_value resolved");
-    check_str(act.timer_value,         "RESOLVED", "timer_value resolved");
-    check_str(act.notify_text,         "RESOLVED", "notify_text resolved");
-    check_str(act.notify_duration_ms,  "RESOLVED", "notify_duration_ms resolved");
-    check_str(act.notify_text_color,   "RESOLVED", "notify_text_color resolved");
-    check_str(act.notify_bg_color,     "RESOLVED", "notify_bg_color resolved");
-    check_str(act.notify_border_color, "RESOLVED", "notify_border_color resolved");
+    {
+        ButtonAction act = make_action(ACTION_TYPE_MQTT);
+        strlcpy(act.payload.mqtt.mqtt_topic,   "[mock:t]", sizeof(act.payload.mqtt.mqtt_topic));
+        strlcpy(act.payload.mqtt.mqtt_payload, "[mock:p]", sizeof(act.payload.mqtt.mqtt_payload));
+        resolve_action_bindings(act);
+        check_str(act.payload.mqtt.mqtt_topic,   "RESOLVED", "mqtt_topic resolved");
+        check_str(act.payload.mqtt.mqtt_payload, "RESOLVED", "mqtt_payload resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_KEY);
+        strlcpy(act.payload.key.key_sequence, "[mock:k]", sizeof(act.payload.key.key_sequence));
+        resolve_action_bindings(act);
+        check_str(act.payload.key.key_sequence, "RESOLVED", "key_sequence resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_BEEP);
+        strlcpy(act.payload.beep.beep_pattern, "[mock:b]", sizeof(act.payload.beep.beep_pattern));
+        resolve_action_bindings(act);
+        check_str(act.payload.beep.beep_pattern, "RESOLVED", "beep_pattern resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_VOLUME);
+        strlcpy(act.payload.volume.volume_value, "[mock:v]", sizeof(act.payload.volume.volume_value));
+        resolve_action_bindings(act);
+        check_str(act.payload.volume.volume_value, "RESOLVED", "volume_value resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_BRIGHTNESS);
+        strlcpy(act.payload.brightness.brightness_value, "[mock:br]", sizeof(act.payload.brightness.brightness_value));
+        resolve_action_bindings(act);
+        check_str(act.payload.brightness.brightness_value, "RESOLVED", "brightness_value resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_TIMER);
+        strlcpy(act.payload.timer.timer_value, "[mock:tv]", sizeof(act.payload.timer.timer_value));
+        resolve_action_bindings(act);
+        check_str(act.payload.timer.timer_value, "RESOLVED", "timer_value resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_NOTIFY);
+        strlcpy(act.payload.notify.notify_text,         "[mock:nt]", sizeof(act.payload.notify.notify_text));
+        strlcpy(act.payload.notify.notify_duration_ms,  "[mock:nd]", sizeof(act.payload.notify.notify_duration_ms));
+        strlcpy(act.payload.notify.notify_text_color,   "[mock:tc]", sizeof(act.payload.notify.notify_text_color));
+        strlcpy(act.payload.notify.notify_bg_color,     "[mock:bg]", sizeof(act.payload.notify.notify_bg_color));
+        strlcpy(act.payload.notify.notify_border_color, "[mock:bc]", sizeof(act.payload.notify.notify_border_color));
+        resolve_action_bindings(act);
+        check_str(act.payload.notify.notify_text,         "RESOLVED", "notify_text resolved");
+        check_str(act.payload.notify.notify_duration_ms,  "RESOLVED", "notify_duration_ms resolved");
+        check_str(act.payload.notify.notify_text_color,   "RESOLVED", "notify_text_color resolved");
+        check_str(act.payload.notify.notify_bg_color,     "RESOLVED", "notify_bg_color resolved");
+        check_str(act.payload.notify.notify_border_color, "RESOLVED", "notify_border_color resolved");
+    }
 }
 
 static void test_structural_fields_excluded() {
     printf("--- structural fields are NOT resolved ---\n");
-    ButtonAction act = {};
-    strlcpy(act.type,           "[mock:x]", sizeof(act.type));
-    strlcpy(act.screen_id,      "[mock:x]", sizeof(act.screen_id));
-    // These fields are only 8 bytes — use a short token that fits
-    strlcpy(act.volume_mode,    "[m:x]",    sizeof(act.volume_mode));
-    strlcpy(act.brightness_mode,"[m:x]",    sizeof(act.brightness_mode));
-    strlcpy(act.timer_command,  "[mock:x]", sizeof(act.timer_command));
-    strlcpy(act.system_command, "[mock:x]", sizeof(act.system_command));
-    strlcpy(act.notify_location,"[m:x]",    sizeof(act.notify_location));
-    strlcpy(act.sound_file,     "[mock:x]", sizeof(act.sound_file));
 
-    resolve_action_bindings(act);
-
-    check_str(act.type,            "[mock:x]", "type not resolved");
-    check_str(act.screen_id,       "[mock:x]", "screen_id not resolved");
-    check_str(act.volume_mode,     "[m:x]",    "volume_mode not resolved");
-    check_str(act.brightness_mode, "[m:x]",    "brightness_mode not resolved");
-    check_str(act.timer_command,   "[mock:x]", "timer_command not resolved");
-    check_str(act.system_command,  "[mock:x]", "system_command not resolved");
-    check_str(act.notify_location, "[m:x]",    "notify_location not resolved");
-    check_str(act.sound_file,      "[mock:x]", "sound_file not resolved");
+    {
+        // screen_id IS resolved in production (production code listed it in
+        // the resolvable set), so this test documents that behavior.
+        ButtonAction act = make_action(ACTION_TYPE_SCREEN);
+        strlcpy(act.payload.screen.screen_id, "[mock:x]", sizeof(act.payload.screen.screen_id));
+        resolve_action_bindings(act);
+        check_str(act.payload.screen.screen_id, "RESOLVED", "screen_id is resolved (matches prod)");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_VOLUME);
+        strlcpy(act.payload.volume.volume_mode,  "[m:x]", sizeof(act.payload.volume.volume_mode));
+        strlcpy(act.payload.volume.volume_value, "55",    sizeof(act.payload.volume.volume_value));
+        resolve_action_bindings(act);
+        check_str(act.payload.volume.volume_mode, "[m:x]", "volume_mode not resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_BRIGHTNESS);
+        strlcpy(act.payload.brightness.brightness_mode, "[m:x]", sizeof(act.payload.brightness.brightness_mode));
+        resolve_action_bindings(act);
+        check_str(act.payload.brightness.brightness_mode, "[m:x]", "brightness_mode not resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_TIMER);
+        strlcpy(act.payload.timer.timer_command, "[mock:x]", sizeof(act.payload.timer.timer_command));
+        resolve_action_bindings(act);
+        check_str(act.payload.timer.timer_command, "[mock:x]", "timer_command not resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_SYSTEM);
+        strlcpy(act.payload.system.system_command, "[mock:x]", sizeof(act.payload.system.system_command));
+        resolve_action_bindings(act);
+        check_str(act.payload.system.system_command, "[mock:x]", "system_command not resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_NOTIFY);
+        strlcpy(act.payload.notify.notify_location, "[m:x]", sizeof(act.payload.notify.notify_location));
+        resolve_action_bindings(act);
+        check_str(act.payload.notify.notify_location, "[m:x]", "notify_location not resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_SOUND);
+        strlcpy(act.payload.sound.sound_file, "[mock:x]", sizeof(act.payload.sound.sound_file));
+        resolve_action_bindings(act);
+        check_str(act.payload.sound.sound_file, "[mock:x]", "sound_file not resolved");
+    }
 }
 
 static void test_plain_values_unchanged() {
     printf("--- plain values without bindings stay unchanged ---\n");
-    ButtonAction act = {};
-    strlcpy(act.mqtt_topic,   "home/light/set", sizeof(act.mqtt_topic));
-    strlcpy(act.mqtt_payload, "ON",             sizeof(act.mqtt_payload));
-    strlcpy(act.timer_value,  "300",            sizeof(act.timer_value));
 
-    resolve_action_bindings(act);
-
-    check_str(act.mqtt_topic,   "home/light/set", "plain mqtt_topic unchanged");
-    check_str(act.mqtt_payload, "ON",              "plain mqtt_payload unchanged");
-    check_str(act.timer_value,  "300",             "plain timer_value unchanged");
+    {
+        ButtonAction act = make_action(ACTION_TYPE_MQTT);
+        strlcpy(act.payload.mqtt.mqtt_topic,   "home/light/set", sizeof(act.payload.mqtt.mqtt_topic));
+        strlcpy(act.payload.mqtt.mqtt_payload, "ON",             sizeof(act.payload.mqtt.mqtt_payload));
+        resolve_action_bindings(act);
+        check_str(act.payload.mqtt.mqtt_topic,   "home/light/set", "plain mqtt_topic unchanged");
+        check_str(act.payload.mqtt.mqtt_payload, "ON",             "plain mqtt_payload unchanged");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_TIMER);
+        strlcpy(act.payload.timer.timer_value, "300", sizeof(act.payload.timer.timer_value));
+        resolve_action_bindings(act);
+        check_str(act.payload.timer.timer_value, "300", "plain timer_value unchanged");
+    }
 }
 
 static void test_empty_fields_stay_empty() {
     printf("--- empty fields stay empty ---\n");
-    ButtonAction act = {};
-
+    ButtonAction act = make_action(ACTION_TYPE_MQTT);
     resolve_action_bindings(act);
+    check_str(act.payload.mqtt.mqtt_topic,   "", "empty mqtt_topic stays empty");
+    check_str(act.payload.mqtt.mqtt_payload, "", "empty mqtt_payload stays empty");
 
-    check_str(act.mqtt_topic,          "", "empty mqtt_topic stays empty");
-    check_str(act.mqtt_payload,        "", "empty mqtt_payload stays empty");
-    check_str(act.notify_text,         "", "empty notify_text stays empty");
-    check_str(act.notify_duration_ms,  "", "empty notify_duration_ms stays empty");
+    ButtonAction n = make_action(ACTION_TYPE_NOTIFY);
+    resolve_action_bindings(n);
+    check_str(n.payload.notify.notify_text,        "", "empty notify_text stays empty");
+    check_str(n.payload.notify.notify_duration_ms, "", "empty notify_duration_ms stays empty");
 }
 
 static void test_curly_brace_step_not_affected() {
     printf("--- {step} placeholder is not affected ---\n");
-    ButtonAction act = {};
-    strlcpy(act.volume_value,     "{step}", sizeof(act.volume_value));
-    strlcpy(act.brightness_value, "{step}", sizeof(act.brightness_value));
-    strlcpy(act.timer_value,      "{step}", sizeof(act.timer_value));
-
-    resolve_action_bindings(act);
-
-    check_str(act.volume_value,     "{step}", "{step} in volume_value unchanged");
-    check_str(act.brightness_value, "{step}", "{step} in brightness_value unchanged");
-    check_str(act.timer_value,      "{step}", "{step} in timer_value unchanged");
+    {
+        ButtonAction act = make_action(ACTION_TYPE_VOLUME);
+        strlcpy(act.payload.volume.volume_value, "{step}", sizeof(act.payload.volume.volume_value));
+        resolve_action_bindings(act);
+        check_str(act.payload.volume.volume_value, "{step}", "{step} in volume_value unchanged");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_BRIGHTNESS);
+        strlcpy(act.payload.brightness.brightness_value, "{step}", sizeof(act.payload.brightness.brightness_value));
+        resolve_action_bindings(act);
+        check_str(act.payload.brightness.brightness_value, "{step}", "{step} in brightness_value unchanged");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_TIMER);
+        strlcpy(act.payload.timer.timer_value, "{step}", sizeof(act.payload.timer.timer_value));
+        resolve_action_bindings(act);
+        check_str(act.payload.timer.timer_value, "{step}", "{step} in timer_value unchanged");
+    }
 }
 
 static void test_mixed_static_and_binding() {
     printf("--- mixed static text and binding token ---\n");
-    ButtonAction act = {};
-    strlcpy(act.notify_text, "CPU: [echo:42]%", sizeof(act.notify_text));
-
+    ButtonAction act = make_action(ACTION_TYPE_NOTIFY);
+    strlcpy(act.payload.notify.notify_text, "CPU: [echo:42]%", sizeof(act.payload.notify.notify_text));
     resolve_action_bindings(act);
-
-    check_str(act.notify_text, "CPU: 42%", "mixed binding resolved");
+    check_str(act.payload.notify.notify_text, "CPU: 42%", "mixed binding resolved");
 }
 
 static void test_small_field_truncation() {
     printf("--- small field truncation on resolve ---\n");
-    ButtonAction act = {};
+    ButtonAction act = make_action(ACTION_TYPE_VOLUME);
     // volume_value is CONFIG_VALUE_MAX_LEN = 16 bytes
     // [long:x] fits in 16 bytes; resolver returns 19-char string, truncated to 15+nul
-    strlcpy(act.volume_value, "[long:x]", sizeof(act.volume_value));
-
+    strlcpy(act.payload.volume.volume_value, "[long:x]", sizeof(act.payload.volume.volume_value));
     resolve_action_bindings(act);
-
-    check_true(strlen(act.volume_value) == CONFIG_VALUE_MAX_LEN - 1,
+    check_true(strlen(act.payload.volume.volume_value) == CONFIG_VALUE_MAX_LEN - 1,
                "truncated to field size");
-    check_str(act.volume_value, "123456789012345", "truncated content correct");
+    check_str(act.payload.volume.volume_value, "123456789012345", "truncated content correct");
 }
 
 static void test_unregistered_scheme() {
     printf("--- unregistered scheme produces error marker ---\n");
-    ButtonAction act = {};
-    strlcpy(act.mqtt_payload, "[nosuch:key]", sizeof(act.mqtt_payload));
-
+    ButtonAction act = make_action(ACTION_TYPE_MQTT);
+    strlcpy(act.payload.mqtt.mqtt_payload, "[nosuch:key]", sizeof(act.payload.mqtt.mqtt_payload));
     resolve_action_bindings(act);
-
-    check_str(act.mqtt_payload, "ERR:unknown", "unregistered scheme produces error");
+    check_str(act.payload.mqtt.mqtt_payload, "ERR:unknown", "unregistered scheme produces error");
 }
 
 static void test_multiple_bindings_in_one_field() {
     printf("--- multiple binding tokens in one field ---\n");
-    ButtonAction act = {};
-    strlcpy(act.notify_text, "[echo:hello] [echo:world]", sizeof(act.notify_text));
-
+    ButtonAction act = make_action(ACTION_TYPE_NOTIFY);
+    strlcpy(act.payload.notify.notify_text, "[echo:hello] [echo:world]", sizeof(act.payload.notify.notify_text));
     resolve_action_bindings(act);
-
-    check_str(act.notify_text, "hello world", "multiple bindings resolved");
+    check_str(act.payload.notify.notify_text, "hello world", "multiple bindings resolved");
 }
 
 // ---------------------------------------------------------------------------
