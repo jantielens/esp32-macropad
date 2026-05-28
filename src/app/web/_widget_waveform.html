@@ -1,0 +1,73 @@
+                <!-- Waveform Settings (conditional, shown only for waveform widget type) -->
+                <details class="editor-group" id="pad-edit-waveform-section" style="display:none;">
+                    <summary>Waveform Settings</summary>
+                    <div class="editor-group-body">
+                        <div class="widget-sub-heading">Channel Colors</div>
+                        <div style="display:flex; gap:12px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-color-1">Sensor 1</label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-waveform-color-1" class="bc-input" maxlength="20" placeholder="#hex" value="#4CAF50"></div>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-color-2">Sensor 2</label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-waveform-color-2" class="bc-input" maxlength="20" placeholder="#hex" value="#2196F3"></div>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-color-3">Sensor 3</label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-waveform-color-3" class="bc-input" maxlength="20" placeholder="#hex" value="#9C27B0"></div>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-color-4">Sensor 4</label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-waveform-color-4" class="bc-input" maxlength="20" placeholder="#hex" value="#F44336"></div>
+                            </div>
+                        </div>
+
+                        <div class="widget-sub-heading">Reference Lines</div>
+                        <div style="display:flex; gap:12px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-threshold-color">Threshold</label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-waveform-threshold-color" class="bc-input" maxlength="20" placeholder="#hex" value="#FF9800"></div>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-trigger-color">Trigger</label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-waveform-trigger-color" class="bc-input" maxlength="20" placeholder="#hex" value="#FFFFFF"></div>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:12px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-show-threshold">Show Threshold</label>
+                                <input type="checkbox" id="pad-edit-waveform-show-threshold" checked>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-show-trigger">Show Trigger</label>
+                                <input type="checkbox" id="pad-edit-waveform-show-trigger" checked>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-show-target">Show Target</label>
+                                <input type="checkbox" id="pad-edit-waveform-show-target" checked>
+                            </div>
+                        </div>
+
+                        <div class="widget-sub-heading">Appearance</div>
+                        <div style="display:flex; gap:12px;">
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-sensor">Sensor</label>
+                                <select id="pad-edit-waveform-sensor">
+                                    <option value="0">All sensors</option>
+                                    <option value="1">Sensor 1 only</option>
+                                    <option value="2">Sensor 2 only</option>
+                                    <option value="3">Sensor 3 only</option>
+                                    <option value="4">Sensor 4 only</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-line-width">Line Width</label>
+                                <input type="number" id="pad-edit-waveform-line-width" min="1" max="5" value="2">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label for="pad-edit-waveform-invert-y">Invert Y</label>
+                                <input type="checkbox" id="pad-edit-waveform-invert-y">
+                            </div>
+                        </div>
+                    </div>
+                </details>

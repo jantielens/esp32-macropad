@@ -24,6 +24,11 @@
 #include "web_portal_sounds.h"
 #endif
 
+#if IS_SHUTTER_TESTER
+#include "web_portal_shutter_sessions.h"
+#include "web_portal_shutter_tests.h"
+#endif
+
 void web_portal_register_routes(AsyncWebServer* server) {
 		auto handleCorsPreflight = [](AsyncWebServerRequest *request) {
 				web_portal_send_cors_preflight(request);
@@ -193,6 +198,11 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		registerOptions("/api/sounds/play");
 		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
+#endif
+
+#if IS_SHUTTER_TESTER
+		web_portal_sessions_register_routes(server);
+		web_portal_shutter_tests_register_routes(server);
 #endif
 
 		// Fragment serving — /api/section/{id}

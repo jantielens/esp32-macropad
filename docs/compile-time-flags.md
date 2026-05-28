@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 182
+Total flags: 201
 
 ### Features (HAS_*)
 
@@ -158,6 +158,7 @@ Total flags: 182
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
+- **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
 - **JD9165_DSI_HSYNC_PULSE_WIDTH** default: `24` — HSYNC pulse width in pixel clocks.
@@ -190,6 +191,24 @@ Total flags: 182
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
 - **SD_PROBE_ON_BOOT** default: `false` — listing, write/read round-trip). Intended for new-board bring-up only.
+- **SHUTTER_ADC_PIN_S1** default: `-1` — ADC input pin for shutter sensor 1.
+- **SHUTTER_ADC_PIN_S2** default: `-1` — ADC input pin for shutter sensor 2.
+- **SHUTTER_ADC_PIN_S3** default: `-1` — ADC input pin for shutter sensor 3.
+- **SHUTTER_ADC_PIN_S4** default: `-1` — ADC input pin for shutter sensor 4 (used by 4-corner presets).
+- **SHUTTER_ADC_PIN_S5** default: `-1` — ADC input pin for shutter sensor 5 — reserved for future presets.
+- **SHUTTER_ADC_PIN_S6** default: `-1` — ADC input pin for shutter sensor 6 — reserved for future presets.
+- **SHUTTER_ADC_PIN_S7** default: `-1` — ADC input pin for shutter sensor 7 — reserved for future presets.
+- **SHUTTER_ADC_PIN_S8** default: `-1` — ADC input pin for shutter sensor 8 — reserved for future presets.
+- **SHUTTER_ADC_PIN_S9** default: `-1` — ADC input pin for shutter sensor 9 — reserved for future presets.
+- **SHUTTER_DEFAULT_OFFSET_X_MM** default: `11.2f` — (S1/S3), in mm.
+- **SHUTTER_DEFAULT_OFFSET_Y_MM** default: `7.4f` — (S1/S3), in mm.
+- **SHUTTER_DEFAULT_PRESET_ID** default: `"direct_3_line"` — "direct_4_corner". See shutter_capture.h for the preset registry.
+- **SHUTTER_FILM_DIAGONAL_MM** default: `43.27f` — 35mm film diagonal for full-frame capping projection (sqrt(36² + 24²)).
+- **SHUTTER_POST_CAPTURE_SAMPLES** default: `4096` — Post-pulse sample count (kept here as a fallback; boards typically override).
+- **SHUTTER_PRE_TRIGGER_SAMPLES** default: `4096` — Pre-trigger sample count (kept here as a fallback; boards typically override).
+- **SHUTTER_SENSOR_MAX** default: `9` — position buffer). Runtime behavior is driven by the active preset.
+- **SHUTTER_VERDICT_DEVIATION_FAIL** default: `0.500f` — Deviation verdict threshold (stops): values above this are a definite FAIL.
+- **SHUTTER_VERDICT_DEVIATION_WARNING** default: `0.333f` — Deviation verdict threshold (stops): values at or below this are PASS.
 - **ST7701_DSI_HSYNC_BACK_PORCH** default: `42` — HSYNC back porch in pixel clocks.
 - **ST7701_DSI_HSYNC_FRONT_PORCH** default: `42` — HSYNC front porch in pixel clocks.
 - **ST7701_DSI_HSYNC_PULSE_WIDTH** default: `12` — HSYNC pulse width in pixel clocks.
@@ -236,6 +255,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
 | esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
 | jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ✅ | ✅ |  |  |  | ? | ✅ |
 | jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
 | esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ |  |  | ✅ |  | ? |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ |  |  |  |  |  |  |
@@ -251,6 +271,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-shutter | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | — | — |
 | inkplate5v2 | — | — |
@@ -356,6 +377,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_provider.cpp
   - src/app/list_provider.h
   - src/app/list_provider_pads.cpp
+  - src/app/list_provider_shutter_tests.cpp
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
   - src/app/message_bubble.cpp
@@ -376,6 +398,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
+  - src/app/shutter_align_binding.cpp
+  - src/app/shutter_align_binding.h
+  - src/app/shutter_binding.cpp
   - src/app/swipe_actions.cpp
   - src/app/swipe_actions.h
   - src/app/swipe_config.cpp
@@ -631,6 +656,37 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
+- **IS_SHUTTER_TESTER**
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/components/shutter_session_actions_component.cpp
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/device_class_registry.cpp
+  - src/app/list_provider_shutter_tests.cpp
+  - src/app/portal_components.cpp
+  - src/app/screens/pad_screen.cpp
+  - src/app/screens/pad_screen.h
+  - src/app/shutter_adc.cpp
+  - src/app/shutter_adc.h
+  - src/app/shutter_align_binding.cpp
+  - src/app/shutter_align_binding.h
+  - src/app/shutter_binding.cpp
+  - src/app/shutter_capture.cpp
+  - src/app/shutter_capture.h
+  - src/app/shutter_measure.cpp
+  - src/app/shutter_measure.h
+  - src/app/shutter_session.cpp
+  - src/app/shutter_session.h
+  - src/app/shutter_session_actions.cpp
+  - src/app/shutter_session_actions.h
+  - src/app/shutter_test_scripts.cpp
+  - src/app/shutter_test_scripts.h
+  - src/app/web_portal_routes.cpp
+  - src/app/web_portal_shutter_sessions.cpp
+  - src/app/web_portal_shutter_sessions.h
+  - src/app/web_portal_shutter_tests.cpp
+  - src/app/web_portal_shutter_tests.h
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **JD9165_DSI_HSYNC_BACK_PORCH**
@@ -729,6 +785,45 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **SENSOR_I2C_SCL**
   - src/app/board_config.h
 - **SENSOR_I2C_SDA**
+  - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S1**
+  - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S2**
+  - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S3**
+  - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S4**
+  - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S5**
+  - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S6**
+  - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S7**
+  - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S8**
+  - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S9**
+  - src/app/board_config.h
+- **SHUTTER_DEFAULT_OFFSET_X_MM**
+  - src/app/board_config.h
+- **SHUTTER_DEFAULT_OFFSET_Y_MM**
+  - src/app/board_config.h
+- **SHUTTER_DEFAULT_PRESET_ID**
+  - src/app/board_config.h
+- **SHUTTER_FILM_DIAGONAL_MM**
+  - src/app/board_config.h
+- **SHUTTER_POST_CAPTURE_SAMPLES**
+  - src/app/board_config.h
+  - src/app/shutter_adc.h
+- **SHUTTER_PRE_TRIGGER_SAMPLES**
+  - src/app/board_config.h
+  - src/app/shutter_adc.h
+- **SHUTTER_SENSOR_MAX**
+  - src/app/board_config.h
+  - src/app/shutter_capture.h
+- **SHUTTER_VERDICT_DEVIATION_FAIL**
+  - src/app/board_config.h
+- **SHUTTER_VERDICT_DEVIATION_WARNING**
   - src/app/board_config.h
 - **ST7701_DSI_DPI_CLK_HZ**
   - src/app/board_config.h

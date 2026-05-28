@@ -110,6 +110,20 @@ echo "=== Running unit tests: action_parse ==="
 ./tests/bin/test_action_parse
 echo
 
+echo "=== Building unit tests: shutter_session_actions ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_shutter_session_actions.cpp \
+    src/app/action_parse.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_shutter_session_actions
+
+echo "=== Running unit tests: shutter_session_actions ==="
+./tests/bin/test_shutter_session_actions
+echo
+
 echo "=== Building unit tests: wifi_reconnect ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I tests -I src/app \
@@ -160,6 +174,55 @@ echo "=== Running unit tests: component_registry ==="
 ./tests/bin/test_component_registry
 echo
 
+echo "=== Building unit tests: shutter_curtain_stats ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_shutter_curtain_stats.cpp \
+    src/app/shutter_curtain_stats.cpp \
+    -o tests/bin/test_shutter_curtain_stats -lm
+
+echo "=== Running unit tests: shutter_curtain_stats ==="
+./tests/bin/test_shutter_curtain_stats
+echo
+
+echo "=== Building unit tests: shutter_capture ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_SHUTTER_TESTER=true \
+    -include tests/log_manager.h \
+    -I tests -I src/app \
+    tests/test_shutter_capture.cpp \
+    -o tests/bin/test_shutter_capture
+
+echo "=== Running unit tests: shutter_capture ==="
+./tests/bin/test_shutter_capture
+echo
+
+echo "=== Building unit tests: shutter_measure ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_SHUTTER_TESTER=true \
+    -include tests/log_manager.h \
+    -I tests -I src/app \
+    tests/test_shutter_measure.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_shutter_measure -lm
+
+echo "=== Running unit tests: shutter_measure ==="
+./tests/bin/test_shutter_measure
+echo
+
+echo "=== Building unit tests: shutter_binding ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_DISPLAY=true -DIS_SHUTTER_TESTER=true \
+    -include tests/log_manager.h \
+    -I tests -I src/app \
+    tests/test_shutter_binding.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_shutter_binding -lm
+
+echo "=== Running unit tests: shutter_binding ==="
+./tests/bin/test_shutter_binding
+echo
+
 echo "=== Building unit tests: list_provider ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \
@@ -173,6 +236,25 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running unit tests: list_provider ==="
 ./tests/bin/test_list_provider
+echo
+
+echo "=== Building unit tests: shutter_session ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -Wno-deprecated-declarations \
+    -DIS_SHUTTER_TESTER=true \
+    -include tests/log_manager.h \
+    -I tests/shutter_session_overrides \
+    -I tests \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_shutter_session.cpp \
+    src/app/shutter_session.cpp \
+    src/app/shutter_curtain_stats.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_shutter_session -lm
+
+echo "=== Running unit tests: shutter_session ==="
+./tests/bin/test_shutter_session
 echo
 
 echo "=== Building unit tests: epaper_battery ==="

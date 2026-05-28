@@ -138,6 +138,18 @@ private:
     // --- Lightweight state (kept even when evicted) ---
     uint32_t cachedGeneration; // Last seen pad_config generation
     bool tilesBuilt;
+#if IS_SHUTTER_TESTER
+    // True if any tile on this pad has a [shutter:*] binding token (label,
+    // color, number, widget, or btn-state). Recomputed in buildTiles().
+    // Drives shutter_capture_acquire()/release() in show()/update()/hide().
+    bool hasShutterConsumer;
+    // True iff this PadScreen instance is currently holding the ADC engine
+    // via shutter_capture_acquire("pad_screen"). Used to keep acquire and
+    // release strictly balanced even when buildTiles() runs *after* show()
+    // (deferred to the first update() call) or when a config rebuild flips
+    // hasShutterConsumer while the pad is visible.
+    bool shutterEngineHeld;
+#endif
     char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
     char pageBgTemplate[CONFIG_COLOR_MAX_LEN];     // Page background color/binding
     uint32_t pageBgDefault;                        // Fallback page bg color

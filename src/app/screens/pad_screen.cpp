@@ -15,6 +15,9 @@
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
 #endif
+#if IS_SHUTTER_TESTER
+#include "../shutter_capture.h"
+#endif
 
 #include <esp_heap_caps.h>
 #include <string.h>
@@ -63,6 +66,10 @@ PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
       pageBindings(nullptr), pageBindingCount(0),
       arraysAllocated(false),
       cachedGeneration(UINT32_MAX), tilesBuilt(false) {
+#if IS_SHUTTER_TESTER
+    hasShutterConsumer = false;
+    shutterEngineHeld = false;
+#endif
     wakeScreen[0] = '\0';
     pageBgTemplate[0] = '\0';
     pageBgDefault = 0x000000;
@@ -164,6 +171,19 @@ void PadScreen::show() {
         lv_screen_load(screen);
     }
 
+#if IS_SHUTTER_TESTER
+    // Acquire the shutter ADC engine if this pad is already known to use it.
+    // On the very first show() of a freshly-constructed PadScreen, tiles have
+    // not been built yet, so hasShutterConsumer is still false; in that case
+    // update() will perform the acquire after buildTiles() completes. Acquire
+    // is reference-counted and idempotent for paired show()/hide() calls.
+    if (hasShutterConsumer && !shutterEngineHeld) {
+        if (shutter_capture_acquire("pad_screen")) {
+            shutterEngineHeld = true;
+        }
+    }
+#endif
+
     // Clear last-rendered text so the first poll after navigating back
     // re-renders current store values.
     for (uint16_t i = 0; i < bindingCount; i++) {
@@ -189,6 +209,16 @@ void PadScreen::hide() {
     for (uint8_t i = 0; i < tileCount; i++) {
         if (tiles[i].image_slot != IMAGE_SLOT_INVALID)
             image_fetch_pause_slot(tiles[i].image_slot);
+    }
+#endif
+#if IS_SHUTTER_TESTER
+    // Release iff this instance actually acquired. Tracking with a separate
+    // flag (rather than re-reading hasShutterConsumer) keeps acquire/release
+    // balanced when buildTiles() runs after show() or when a config rebuild
+    // flipped hasShutterConsumer between the matching acquire and this hide.
+    if (shutterEngineHeld) {
+        shutter_capture_release("pad_screen");
+        shutterEngineHeld = false;
     }
 #endif
 }
@@ -220,6 +250,21 @@ void PadScreen::update() {
 
     cachedGeneration = gen;
     buildTiles();
+
+#if IS_SHUTTER_TESTER
+    // buildTiles() just (re)evaluated hasShutterConsumer. Reconcile the
+    // acquire state: this covers (a) the first update() after a freshly-
+    // constructed pad's show(), and (b) live config rebuilds that add or
+    // remove shutter bindings while the pad is visible.
+    if (hasShutterConsumer && !shutterEngineHeld) {
+        if (shutter_capture_acquire("pad_screen")) {
+            shutterEngineHeld = true;
+        }
+    } else if (!hasShutterConsumer && shutterEngineHeld) {
+        shutter_capture_release("pad_screen");
+        shutterEngineHeld = false;
+    }
+#endif
 }
 
 // ============================================================================

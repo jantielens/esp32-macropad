@@ -124,6 +124,7 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_SOUND    "sound"
 #define ACTION_TYPE_NOTIFY   "notify"
 #define ACTION_TYPE_SYSTEM   "system"
+#define ACTION_TYPE_SHUTTER  "shutter"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -158,6 +159,9 @@ struct ButtonAction {
     char notify_location[8];                           // type="notify": "top", "center", "bottom"
     // System action fields
     char system_command[CONFIG_ACTION_TYPE_MAX_LEN];   // type="system": "reboot", "wifi_reconnect", "screensaver"
+    // Shutter action fields
+    char shutter_command[CONFIG_TIMER_CMD_MAX_LEN];    // type="shutter": "set", "adjust", "toggle_lock", "sess_*", "align_*"
+    char shutter_value[CONFIG_BINDABLE_SHORT_LEN];      // type="shutter": speed label, "faster"/"slower", or binding
 };
 
 // LabelBinding removed — MQTT bindings are now inline in label text.

@@ -59,6 +59,14 @@
 #include "audio.h"
 #endif
 
+#if IS_SHUTTER_TESTER
+#include "shutter_capture.h"
+#include "shutter_measure.h"
+#include "shutter_session.h"
+#include "shutter_session_actions.h"
+#include "shutter_binding.h"
+#endif
+
 #include "i2c_bus.h"
 #include "sd_probe.h"
 #include "sd_storage.h"
@@ -354,6 +362,11 @@ void setup()
 	void list_provider_pads_init();
 	list_provider_pads_init();
 
+	#if IS_SHUTTER_TESTER
+	void list_provider_shutter_tests_init();
+	list_provider_shutter_tests_init();
+	#endif
+
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
@@ -423,6 +436,37 @@ void setup()
 		sensor_manager_init();
 	}
 
+	#if IS_SHUTTER_TESTER
+	#if HAS_DISPLAY
+	display_manager_set_splash_status("Init sensors...");
+	#endif
+	shutter_capture_init(device_config.shutter_preset_id);
+	shutter_measure_init();
+	{
+		// Set sensor geometry from the resolved preset's positions.
+		// For Direct3Line, DeviceConfig offsets override the preset defaults
+		// (user-configurable mount dimensions).
+		ShutterCaptureCaps caps = {};
+		shutter_capture_get_caps(&caps);
+		if (caps.preset_id == ShutterPresetId::Direct3Line) {
+			// Apply runtime-configurable offsets (DeviceConfig is the source of truth for 3-line).
+			ShutterSensorPosition pos3[3] = {
+				{ -device_config.sensor_offset_x_mm, -device_config.sensor_offset_y_mm },
+				{  0.0f,                              0.0f                              },
+				{  device_config.sensor_offset_x_mm,  device_config.sensor_offset_y_mm },
+			};
+			shutter_measure_set_geometry(pos3, 3);
+		} else {
+			// Use preset-defined positions directly.
+			ShutterSensorPosition pos_buf[SHUTTER_SENSOR_MAX];
+			uint8_t count = shutter_capture_get_positions(pos_buf, SHUTTER_SENSOR_MAX);
+			shutter_measure_set_geometry(pos_buf, count);
+		}
+	}
+	shutter_session_init();
+	shutter_session_actions_init();
+	#endif
+
 	// BLE HID keyboard — guarded by ble_hid_init() which bails gracefully
 	// (init_error = true) if the NimBLE stack fails to allocate.
 	#if HAS_BLE_HID
@@ -465,6 +509,9 @@ void setup()
 	time_binding_init();
 	expr_binding_init();
 	pad_binding_init();
+	#if IS_SHUTTER_TESTER
+	shutter_binding_init();
+	#endif
 	timer_binding_init();
 	list_binding_init();
 	timer_config_init();
@@ -540,6 +587,10 @@ void loop()
 	message_bubble_loop();
 	#endif
 
+	#if IS_SHUTTER_TESTER
+	shutter_session_actions_loop();
+	#endif
+
 	#if HAS_TOUCH
 	touch_manager_loop();
 	#endif
@@ -563,6 +614,10 @@ void loop()
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).
 	sensor_manager_loop();
+
+	#if IS_SHUTTER_TESTER
+	shutter_measure_process();
+	#endif
 
 
 

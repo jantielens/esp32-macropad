@@ -28,6 +28,12 @@
       description:
         'No display \u2014 a sensor / bridge node. Publishes telemetry over MQTT, broadcasts BTHome BLE beacons, and exposes the same web portal for configuration. Useful for distributed sensors, BLE-to-MQTT bridges, and remote actuator nodes.',
     },
+    {
+      key: 'shutter_tester',
+      title: 'Shutter Tester',
+      description:
+        'Specialized capture rig for measuring camera shutter speeds. ADC sensor array reads the light pulse from a film-plane LED bar, computes exposure times across the frame, and stores test sessions for review in the web portal.',
+    },
   ];
 
   const initialBoards = Array.from(container.querySelectorAll(':scope > .board'));

@@ -1,0 +1,33 @@
+<div class="section-header">
+  <h2>📷 Sensor Configuration</h2>
+  <p>Sensor preset for capture measurements.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="shutter_preset_id">Sensor Preset</label>
+      <select class="form-select" id="shutter_preset_id" name="shutter_preset_id">
+        <option value="direct_single">Direct — Single sensor (1× BPW34)</option>
+        <option value="direct_3_line">Direct — 3-line array (3× BPW34)</option>
+        <option value="direct_4_corner">Direct — 4-corner array (4× BPW34)</option>
+      </select>
+      <div class="form-text">Select the sensor layout wired to this device. The 4-corner preset enables 2D capping and curtain twist analysis; the 3-line preset measures across the full frame; single-sensor measures at the position of sensor 1 only.</div>
+    </div>
+    <hr>
+    <h6>Sensor Offsets</h6>
+    <p class="form-text mt-0 mb-2">Distance from the centre sensor (S2) to an outer sensor (S1 or S3) in mm. Used for capping gradient calculation.</p>
+    <div class="row g-3 mb-3">
+      <div class="col-6">
+        <label class="form-label" for="sensor_offset_x_mm">X offset (mm)</label>
+        <input type="number" class="form-control" id="sensor_offset_x_mm" name="sensor_offset_x_mm" step="0.1" min="0" placeholder="11.2">
+      </div>
+      <div class="col-6">
+        <label class="form-label" for="sensor_offset_y_mm">Y offset (mm)</label>
+        <input type="number" class="form-control" id="sensor_offset_y_mm" name="sensor_offset_y_mm" step="0.1" min="0" placeholder="7.4">
+      </div>
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="shutter-save-btn">Save &amp; Reboot</button>
+    </div>
+  </div>
+</div>

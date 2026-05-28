@@ -1,0 +1,41 @@
+<!-- Shutter sessions fragment.
+     CSS for .sst-*, .sif-*, and .speed-group* lives in portal-custom.css
+     so the asset minifier can compress it. -->
+
+<div class="section-header">
+  <h2>📋 Sessions</h2>
+  <p>Saved capture sessions for your cameras.</p>
+</div>
+
+<!-- Session list view -->
+<div id="sessions-list-view">
+  <div class="card mb-3">
+    <div class="card-body">
+      <div id="sessions-loading" class="text-muted small mb-2">Loading sessions…</div>
+      <div id="sessions-empty" class="text-muted small mb-2" style="display:none">No saved sessions yet.</div>
+      <div id="sessions-list"></div>
+      <div class="mt-2">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="sessionsClearAll()">Delete all sessions</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Session detail view -->
+<div id="sessions-detail-view" style="display:none">
+  <h1 class="session-print-title">Camera Test Report</h1>
+  <div class="session-detail-actions mb-2 d-flex gap-2 flex-wrap">
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="sessionsShowList()">← Back to sessions</button>
+    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.print()" title="Save as PDF or print">🖨 Print / Save PDF</button>
+    <button type="button" class="btn btn-sm btn-outline-info" onclick="sessionCopyAiPrompt()" title="Generate a diagnostic prompt and copy to clipboard for use with ChatGPT, Claude, etc.">📋 Copy for AI Analysis</button>
+  </div>
+  <div class="card mb-3">
+    <div class="card-body">
+      <div id="session-detail-header"></div>
+    </div>
+  </div>
+  <div id="session-deviation-section" class="card mb-3" style="display:none"></div>
+  <div id="session-notes-section" class="card mb-3" style="display:none"></div>
+  <div id="summary-table-container" class="card mb-3" style="display:none"></div>
+  <div id="session-measurements"></div>
+</div>

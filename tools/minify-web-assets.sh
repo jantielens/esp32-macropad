@@ -309,6 +309,7 @@ WIDGET_SPARKLINE_TEMPLATE=""
 WIDGET_TABLE_TEMPLATE=""
 WIDGET_ROCKER_TEMPLATE=""
 WIDGET_NUMERICROCKER_TEMPLATE=""
+WIDGET_WAVEFORM_TEMPLATE=""
 WIDGET_LIST_TEMPLATE=""
 STYLE_HELP_TEMPLATE=""
 HEALTH_WIDGET_TEMPLATE=""
@@ -352,6 +353,10 @@ fi
 
 if [ -f "$WEB_DIR/_widget_numericrocker.html" ]; then
     WIDGET_NUMERICROCKER_TEMPLATE=$(cat "$WEB_DIR/_widget_numericrocker.html")
+fi
+
+if [ -f "$WEB_DIR/_widget_waveform.html" ]; then
+    WIDGET_WAVEFORM_TEMPLATE=$(cat "$WEB_DIR/_widget_waveform.html")
 fi
 
 if [ -f "$WEB_DIR/_widget_list.html" ]; then
@@ -501,6 +506,7 @@ widget_sparkline_template = '''$WIDGET_SPARKLINE_TEMPLATE'''
 widget_table_template = '''$WIDGET_TABLE_TEMPLATE'''
 widget_rocker_template = '''$WIDGET_ROCKER_TEMPLATE'''
 widget_numericrocker_template = '''$WIDGET_NUMERICROCKER_TEMPLATE'''
+widget_waveform_template = '''$WIDGET_WAVEFORM_TEMPLATE'''
 widget_list_template = '''$WIDGET_LIST_TEMPLATE'''
 style_help_template = '''$STYLE_HELP_TEMPLATE'''
 health_widget_template = '''$HEALTH_WIDGET_TEMPLATE'''
@@ -520,6 +526,7 @@ with open('$html_file', 'r') as f:
     html = html.replace('{{WIDGET_TABLE}}', widget_table_template)
     html = html.replace('{{WIDGET_ROCKER}}', widget_rocker_template)
     html = html.replace('{{WIDGET_NUMERICROCKER}}', widget_numericrocker_template)
+    html = html.replace('{{WIDGET_WAVEFORM}}', widget_waveform_template)
     html = html.replace('{{WIDGET_LIST}}', widget_list_template)
     html = html.replace('{{STYLE_HELP}}', style_help_template)
     html = html.replace('{{HEALTH_WIDGET}}', health_widget_template)
@@ -575,6 +582,7 @@ widget_sparkline_template = '''$WIDGET_SPARKLINE_TEMPLATE'''
 widget_table_template = '''$WIDGET_TABLE_TEMPLATE'''
 widget_rocker_template = '''$WIDGET_ROCKER_TEMPLATE'''
 widget_numericrocker_template = '''$WIDGET_NUMERICROCKER_TEMPLATE'''
+widget_waveform_template = '''$WIDGET_WAVEFORM_TEMPLATE'''
 widget_list_template = '''$WIDGET_LIST_TEMPLATE'''
 style_help_template = '''$STYLE_HELP_TEMPLATE'''
 health_widget_template = '''$HEALTH_WIDGET_TEMPLATE'''
@@ -590,6 +598,7 @@ with open('$fragment_file', 'r') as f:
     html = html.replace('{{WIDGET_TABLE}}', widget_table_template)
     html = html.replace('{{WIDGET_ROCKER}}', widget_rocker_template)
     html = html.replace('{{WIDGET_NUMERICROCKER}}', widget_numericrocker_template)
+    html = html.replace('{{WIDGET_WAVEFORM}}', widget_waveform_template)
     html = html.replace('{{WIDGET_LIST}}', widget_list_template)
     html = html.replace('{{STYLE_HELP}}', style_help_template)
     html = html.replace('{{HEALTH_WIDGET}}', health_widget_template)

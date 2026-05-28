@@ -10,15 +10,13 @@
 // ...) must be checked BEFORE the HAS_* hardware flags, because a product
 // variant may run on top of the same hardware as a generic macropad/epaper build.
 DeviceClass device_class_detect() {
-    // Example shape for future product variants:
-    //   #if IS_DARKROOM_TIMER
-    //       return DeviceClass::DARKROOM_TIMER;
-    //   #elif IS_SHUTTER_TESTER
-    //       return DeviceClass::SHUTTER_TESTER;
-    //   #elif HAS_EPAPER
-    //       ...
+    // Product-variant flags (IS_*) are checked BEFORE hardware flags so a
+    // variant that runs on top of the same hardware as a generic macropad
+    // build still resolves to its specialized device class.
 
-#if HAS_EPAPER
+#if IS_SHUTTER_TESTER
+    return DeviceClass::SHUTTER_TESTER;
+#elif HAS_EPAPER
     return DeviceClass::EPAPER;
 #elif !HAS_DISPLAY
     return DeviceClass::HEADLESS;
@@ -32,9 +30,10 @@ DeviceClass device_class_detect() {
 // but the tests/test_branding_mirror.sh guard walks this table textually
 // and expects one row per device class.
 static const DeviceClassDescriptor DESCRIPTORS[] = {
-    { DeviceClass::MACROPAD, "Macropad", "MACROPAD", "ESP32 Macropad"    },
-    { DeviceClass::EPAPER,   "E-Paper",  "EPAPER",   "ESP32-MP E-Paper"  },
-    { DeviceClass::HEADLESS, "Headless", "HEADLESS", "ESP32-MP Headless" },
+    { DeviceClass::MACROPAD,       "Macropad",       "MACROPAD", "ESP32 Macropad"          },
+    { DeviceClass::EPAPER,         "E-Paper",        "EPAPER",   "ESP32-MP E-Paper"        },
+    { DeviceClass::HEADLESS,       "Headless",       "HEADLESS", "ESP32-MP Headless"       },
+    { DeviceClass::SHUTTER_TESTER, "Shutter Tester", "SHUTTER",  "ESP32-MP Shutter Tester" },
 };
 
 static const size_t DESCRIPTOR_COUNT = sizeof(DESCRIPTORS) / sizeof(DESCRIPTORS[0]);

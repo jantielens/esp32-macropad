@@ -59,6 +59,12 @@
 #include "components/sounds_component.cpp"
 #endif // HAS_SOUND_PLAYER
 
+// --- Shutter Tester components ---
+#if IS_SHUTTER_TESTER
+#include "components/shutter_component.cpp"
+#include "components/shutter_session_actions_component.cpp"
+#endif // IS_SHUTTER_TESTER
+
 // --- E-Paper-gated components ---
 // Split into one component per nav entry (Status / Image & Schedule /
 // Status Overlay / VCOM) — all share the "epaper" category. Image and

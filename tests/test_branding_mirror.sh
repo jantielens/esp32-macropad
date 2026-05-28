@@ -59,11 +59,12 @@ extract_full_name() {
 cpp_macropad="$(extract_full_name MACROPAD)"
 cpp_epaper="$(  extract_full_name EPAPER)"
 cpp_headless="$(extract_full_name HEADLESS)"
+cpp_shutter="$( extract_full_name SHUTTER_TESTER)"
 
 # Sanity check: every extraction must yield a non-empty literal. An empty
 # value means the table format changed in a way the extractor cannot parse,
 # and we MUST fail loud rather than silently compare empty strings.
-for pair in "macropad=$cpp_macropad" "epaper=$cpp_epaper" "headless=$cpp_headless"; do
+for pair in "macropad=$cpp_macropad" "epaper=$cpp_epaper" "headless=$cpp_headless" "shutter_tester=$cpp_shutter"; do
     cls="${pair%%=*}"
     val="${pair#*=}"
     if [[ -z "$val" ]]; then
@@ -79,6 +80,7 @@ source "$CFG"
 sh_epaper="$(  device_class_brand_prefix epaper)"
 sh_headless="$(device_class_brand_prefix headless)"
 sh_macropad="$(device_class_brand_prefix macropad)"
+sh_shutter="$( device_class_brand_prefix shutter_tester)"
 
 fail=0
 check() {
@@ -96,6 +98,7 @@ check() {
 check macropad "$cpp_macropad" "$sh_macropad"
 check epaper   "$cpp_epaper"   "$sh_epaper"
 check headless "$cpp_headless" "$sh_headless"
+check shutter_tester "$cpp_shutter" "$sh_shutter"
 
 # Bonus: catch silently-added unknown classes by asserting the bash helper
 # returns empty for one. Keeps the whitelist honest.
