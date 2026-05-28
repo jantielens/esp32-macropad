@@ -1,0 +1,18 @@
+{
+  "device_class": "macropad",
+  "board_label": "JC3248W535",
+  "description": "Guition JC3248W535 — 3.5\" 320x480 IPS with capacitive touch. Compact ESP32-S3 board with OPI PSRAM.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "wireless": {
+    "wifi": true,
+    "ble": true
+  },
+  "display": {
+    "size": "3.2\"",
+    "resolution": "320x480",
+    "type": "IPS",
+    "touch": true
+  }
+}

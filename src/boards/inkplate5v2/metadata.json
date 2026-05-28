@@ -1,0 +1,18 @@
+{
+  "device_class": "epaper",
+  "board_label": "Inkplate5V2",
+  "description": "Soldered Inkplate 5 V2 — 5.17\" 720x1280 3-bit grayscale e-paper, battery-powered with USB-C charging. Designed for ultra-low-power, sunlight-readable displays.",
+  "chip_family": "ESP32",
+  "flash_mb": 4,
+  "psram_mb": 4,
+  "wireless": {
+    "wifi": true,
+    "ble": false
+  },
+  "display": {
+    "size": "5.17\"",
+    "resolution": "720x1280",
+    "type": "E-Paper",
+    "touch": false
+  }
+}

@@ -5,6 +5,7 @@ This document describes the build system configuration and automated release wor
 ## Table of Contents
 
 - [Project Branding Configuration](#project-branding-configuration)
+- [Device Class Branding](#device-class-branding)
 - [Build System](#build-system)
 - [Release Workflow](#release-workflow)
 - [Release Scenarios](#release-scenarios)
@@ -52,6 +53,8 @@ Used for user-facing text and branding:
 | **Default device name** | First-time device name | `"ESP32 Template 1A2B"` |
 | **API response** | `/api/info` endpoint | `{"project_display_name": "ESP32 Template"}` |
 
+> **Per-board override (device-class branding):** `build.sh` re-runs `tools/minify-web-assets.sh` per board with a device-class-aware `PROJECT_DISPLAY_NAME` ("ESP32 Macropad", "ESP32-MP E-Paper", "ESP32-MP Headless") instead of the project-wide value. The class is derived from the board's `HAS_EPAPER` / `HAS_DISPLAY` flags via `device_class_for_board()` in `config.sh`; the prefix mapping lives in `device_class_brand_prefix()` in the same file. The C++ side mirrors this through the registry in `src/app/device_class_registry.{h,cpp}` (see [Device Class Branding](#device-class-branding) below) so that the embedded HTML, runtime device name, SSID, and HA model strings all stay consistent for the same board.
+
 ### Customizing for Your Project
 
 1. **Set branding values**:
@@ -77,6 +80,64 @@ Used for user-facing text and branding:
    - Release file names
 
 **Note**: No code changes required - everything is templated!
+
+---
+
+## Device Class Branding
+
+The firmware auto-detects a **device class** at build time from the board's capability flags and uses it to derive user-facing branding (web portal title, default device name, captive-portal SSID, HTTP basic-auth realm, Home Assistant model string, flash-page card label).
+
+### Classes and Detection
+
+| Class      | Detection (compile-time)              | Brand prefix         | SSID format                       |
+|------------|---------------------------------------|----------------------|-----------------------------------|
+| `macropad` | `HAS_DISPLAY` (default)               | `ESP32 Macropad`     | `ESP32-MACROPAD-XXXXXX`           |
+| `epaper`   | `HAS_EPAPER`                          | `ESP32-MP E-Paper`   | `ESP32-MP-EPAPER-XXXXXX`          |
+| `headless` | `!HAS_DISPLAY`                        | `ESP32-MP Headless`  | `ESP32-MP-HEADLESS-XXXXXX`        |
+
+`XXXXXX` is the low 24 bits of the eFuse chip ID as fixed-width uppercase hex. The same precedence (`HAS_EPAPER` wins over `HAS_DISPLAY`) is enforced on both sides:
+
+- **C++ runtime** — `src/app/device_class_registry.{h,cpp}` owns the single `#if HAS_EPAPER / !HAS_DISPLAY / default` detection ladder (`device_class_detect()`) and the `DESCRIPTORS[]` table that holds every branding string for every class. `src/app/class_branding.{h,cpp}` exposes the thin convenience wrappers `device_class_get_display_name()`, `device_class_get_slug()`, and `device_class_get_full_name()`, used by `web_portal_ap.cpp` (SSID), `web_portal_auth.cpp` (HTTP realm), `web_portal_device_api.cpp` (`/api/info`), `ha_discovery.cpp` (HA `mdl` field), and `config_manager.cpp` (default device name).
+- **Build-time bash** — `config.sh` exposes `device_class_for_board <board>` and `device_class_brand_prefix <class>`. Used by `build.sh` to pick the per-board `PROJECT_DISPLAY_NAME` and by `tools/build-esp-web-tools-site.sh` to label boards on the flash page.
+
+When changing the brand-prefix mapping, update **both** sides — the bash helper `device_class_brand_prefix()` in `config.sh` and the corresponding row in the `DESCRIPTORS[]` table in `src/app/device_class_registry.cpp` — and verify the affected boards still build. `tests/test_branding_mirror.sh` (wired into `tests/run_tests.sh`) walks the `DESCRIPTORS[]` table and the bash helper and fails loud on drift.
+
+### Per-Board Metadata for the Flash Page
+
+Each board may declare presentation metadata in `src/boards/<board>/metadata.json` for the ESP Web Tools static site:
+
+```json
+{
+  "device_class": "macropad",
+  "board_label": "JC3636W518",
+  "description": "Hardware-focused one-liner (brand, model, distinguishing features).",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "wireless": { "wifi": true, "ble": true },
+  "display": { "size": "3.6\"", "resolution": "360x360", "type": "IPS", "touch": true }
+}
+```
+
+Conventions:
+
+- `device_class` **must** match the class the board compiles into. The flash-page generator validates this against the whitelist and warns if it sees an unknown value.
+- `description` is for **hardware only** — brand, model, and physically distinguishing features. Firmware capabilities belong to the class-level description in `tools/esp-web-tools-site/app.js`, not the board card.
+- Missing metadata file falls back to `device_class=macropad` and `board_label=<board>` with a one-line `INFO` log.
+- `tools/build-esp-web-tools-site.sh` HTML-escapes `board_label` and `description` before injection — safe to include `&`, `<`, `>`, `"`, `'`.
+
+### Adding a New Device Class
+
+1. Add a value to the `DeviceClass` enum in `src/app/device_class_registry.h`.
+2. Add a row to the `DESCRIPTORS[]` table in `src/app/device_class_registry.cpp` (display name, slug, full name).
+3. Add a branch to the `device_class_detect()` `#if` ladder in `src/app/device_class_registry.cpp` (for product variants, gate on `IS_*` flags and put them before the `HAS_*` checks; first match wins).
+4. Mirror the brand prefix in `device_class_brand_prefix()` in `config.sh`.
+5. Mirror the detection rule in `device_class_for_board()` in `config.sh`.
+6. Add a category entry to `CATEGORY_ORDER` in `tools/esp-web-tools-site/app.js`.
+7. Add a `.board-category[data-class="<slug>"]` accent block (and light-mode override) to `tools/esp-web-tools-site/style.css`.
+8. Whitelist the slug in the validation `case` in `tools/build-esp-web-tools-site.sh`.
+9. Update the Device Classes table in `README.md`.
+10. Run `./tests/run_tests.sh` — the branding mirror guard will fail loud if step 2 and step 4 drift.
 
 ---
 

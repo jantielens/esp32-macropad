@@ -92,6 +92,18 @@ ESP32 Macropad runs on these ESP32 development boards:
 
 Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2 is the current non-touch e-paper target.
 
+### Device Classes
+
+The firmware auto-detects a device class at build time based on board capability flags. The class drives mDNS naming, captive-portal SSID, Home Assistant model strings, the default device name, and how each board is presented on the flash page.
+
+| Device Class | Detection | Brand Prefix | SSID Format | Boards |
+|---|---|---|---|---|
+| **Macropad** | `HAS_DISPLAY` (default) | `ESP32 Macropad` | `ESP32-MACROPAD-XXXXXX` | All touch-screen boards listed above |
+| **E-Paper** | `HAS_EPAPER` | `ESP32-MP E-Paper` | `ESP32-MP-EPAPER-XXXXXX` | Inkplate 5V2 |
+| **Headless** | `!HAS_DISPLAY` | `ESP32-MP Headless` | `ESP32-MP-HEADLESS-XXXXXX` | Sensor-only boards (e.g. `esp32c3-withsensors`) |
+
+`XXXXXX` is the last six hex digits of the ESP32 chip ID. Per-board metadata (label, description, specs) lives in `src/boards/<board>/metadata.json` and is consumed by the flash page generator.
+
 > **More boards welcome!** The firmware has a modular driver architecture that makes adding new boards straightforward. Check the [developer docs](docs/dev/display-touch-architecture.md) if you'd like to contribute.
 
 ## 🚀 Getting Started

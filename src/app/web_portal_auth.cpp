@@ -3,7 +3,7 @@
 #include "web_portal_state.h"
 #include "portal_idle.h"
 #include "config_manager.h"
-#include "project_branding.h"
+#include "class_branding.h"
 
 static bool portal_auth_required() {
 		if (web_portal_is_ap_mode_active()) return false;
@@ -29,6 +29,6 @@ bool portal_auth_gate(AsyncWebServerRequest *request) {
 				return true;
 		}
 
-		request->requestAuthentication(PROJECT_DISPLAY_NAME);
+		request->requestAuthentication(device_class_get_full_name());
 		return false;
 }

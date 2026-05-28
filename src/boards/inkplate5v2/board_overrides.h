@@ -9,8 +9,8 @@
 // duty-cycle operation: wake → connect Wi-Fi → optionally fetch a single
 // pre-rendered image → refresh panel → deep sleep.
 
-// Project branding — surfaces in mDNS hostname, web portal title, etc.
-#define PROJECT_DISPLAY_NAME "Inkplate Dashboard"
+// Project branding is now derived from device class (HAS_EPAPER/HAS_DISPLAY)
+// via src/app/device_class_branding.{h,cpp}, so no per-board override here.
 
 // --- Disable all conventional UI / interactive subsystems --------------------
 // The Inkplate has no touchscreen and no audio. The e-paper panel is driven

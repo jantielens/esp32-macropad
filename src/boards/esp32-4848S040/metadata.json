@@ -1,0 +1,18 @@
+{
+  "device_class": "macropad",
+  "board_label": "ESP32-4848S040",
+  "description": "Guition ESP32-S3-4848S040 — square 4.0\" 480x480 ST7701 RGB IPS with GT911 capacitive touch. Compact desk-mount form factor.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "wireless": {
+    "wifi": true,
+    "ble": true
+  },
+  "display": {
+    "size": "4.0\"",
+    "resolution": "480x480",
+    "type": "RGB",
+    "touch": true
+  }
+}

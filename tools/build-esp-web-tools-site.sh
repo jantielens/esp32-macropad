@@ -8,6 +8,13 @@ TEMPLATE_DIR="$REPO_ROOT/tools/esp-web-tools-site"
 
 source "$REPO_ROOT/config.sh"
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: jq is required for parsing src/boards/*/metadata.json but is not installed" >&2
+  echo "Install: sudo apt-get install jq  (Debian/Ubuntu)" >&2
+  echo "         brew install jq          (macOS)" >&2
+  exit 1
+fi
+
 OUT_DIR="${1:-$REPO_ROOT/site}"
 
 # Only deploy “latest” (site output is overwritten each deploy)
@@ -69,6 +76,19 @@ find_boot_app0_bin() {
   fi
 
   return 1
+}
+
+# Minimal HTML escaping for values injected into board fragment markup
+# (description, board_label). Covers the characters that would otherwise
+# break attribute or text contexts: & < > " '
+html_escape() {
+  local s="$1"
+  s="${s//&/&amp;}"
+  s="${s//</&lt;}"
+  s="${s//>/&gt;}"
+  s="${s//\"/&quot;}"
+  s="${s//\'/&#39;}"
+  printf '%s' "$s"
 }
 
 get_app_offset_dec_from_partitions_bin() {
@@ -213,15 +233,13 @@ render_index() {
   local out_path="$2"
   local board_fragment="$3"
 
-  awk -v display_name="$PROJECT_DISPLAY_NAME" \
-      -v site_version="$SITE_VERSION" \
+  awk -v site_version="$SITE_VERSION" \
       -v display_version="$DISPLAY_VERSION" \
       -v version_href="$VERSION_HREF" \
       -v changelog_href="$CHANGELOG_HREF" \
       -v frag="$board_fragment" \
       '
         {
-          gsub(/{{PROJECT_DISPLAY_NAME}}/, display_name)
           gsub(/{{SITE_VERSION}}/, site_version)
           gsub(/{{DISPLAY_VERSION}}/, display_version)
           gsub(/{{VERSION_HREF}}/, version_href)
@@ -305,11 +323,55 @@ for board_name in "${boards[@]}"; do
   cp "$boot_app0_bin" "$dst_dir/boot_app0.bin"
   cp "$app_bin" "$dst_dir/app.bin"
 
+  # ----- Optional per-board metadata (src/boards/<board>/metadata.json) -----
+  # All fields optional. Missing file / fields use sensible defaults.
+  metadata_file="$REPO_ROOT/src/boards/$board_name/metadata.json"
+  device_class="macropad"
+  board_label="$board_name"
+  description=""
+  flash_mb=""
+  psram_mb=""
+  display_size=""
+
+  if [[ -f "$metadata_file" ]]; then
+    if ! jq empty "$metadata_file" 2>/dev/null; then
+      echo "ERROR: Invalid JSON in $metadata_file" >&2
+      exit 1
+    fi
+    device_class=$(jq -r '.device_class // "macropad"' "$metadata_file")
+    board_label=$(jq -r '.board_label // ""' "$metadata_file")
+    description=$(jq -r '.description // ""' "$metadata_file")
+    flash_mb=$(jq -r '(.flash_mb // "") | tostring' "$metadata_file")
+    psram_mb=$(jq -r '(.psram_mb // "") | tostring' "$metadata_file")
+    display_size=$(jq -r '.display.size // ""' "$metadata_file")
+
+    case "$device_class" in
+      macropad|epaper|headless) ;;
+      *)
+        echo "WARNING: Unknown device_class '$device_class' in $metadata_file, defaulting to 'macropad'" >&2
+        device_class="macropad"
+        ;;
+    esac
+
+    if [[ -z "$board_label" || "$board_label" == "null" ]]; then
+      board_label="$board_name"
+    fi
+  else
+    echo "INFO: No metadata file for $board_name, using defaults (device_class=macropad)" >&2
+  fi
+
+  brand_prefix="$(device_class_brand_prefix "$device_class")"
+  if [[ -z "$brand_prefix" ]]; then
+    board_display_name="$board_label"
+  else
+    board_display_name="${brand_prefix} ${board_label}"
+  fi
+
   manifest_path="$OUT_DIR/manifests/$board_name.json"
 
   cat > "$manifest_path" <<EOF
 {
-  "name": "${PROJECT_DISPLAY_NAME} (${board_name})",
+  "name": "${board_display_name}",
   "version": "${SITE_VERSION}",
   "new_install_prompt_erase": true,
   "builds": [
@@ -343,11 +405,25 @@ EOF
 }
 EOF
 
+  # Build spec badges (only emit non-empty ones)
+  badges_html="<span class=\"badge\">Chip: <code>${chip_family}</code></span>"
+  [[ -n "$flash_mb" && "$flash_mb" != "null" ]] && badges_html="${badges_html}<span class=\"badge\">${flash_mb} MB Flash</span>"
+  [[ -n "$psram_mb" && "$psram_mb" != "null" && "$psram_mb" != "0" ]] && badges_html="${badges_html}<span class=\"badge\">${psram_mb} MB PSRAM</span>"
+  [[ -n "$display_size" && "$display_size" != "null" ]] && badges_html="${badges_html}<span class=\"badge\">${display_size} Display</span>"
+
+  desc_html=""
+  if [[ -n "$description" && "$description" != "null" ]]; then
+    desc_html="<div class=\"board-desc\">$(html_escape "$description")</div>"
+  fi
+
+  board_display_name_esc="$(html_escape "$board_display_name")"
+
   cat >> "$board_fragment_tmp" <<EOF
-          <div class="board" data-board="${board_name}" data-chip="${chip_family}">
+          <div class="board" data-board="${board_name}" data-chip="${chip_family}" data-class="${device_class}">
             <div>
-              <div class="board-title">${board_name}</div>
-              <div class="board-sub">Chip: <code>${chip_family}</code></div>
+              <div class="board-title">${board_display_name_esc}</div>
+              ${desc_html}
+              <div class="board-specs">${badges_html}</div>
               <div class="board-links">
                 <a href="./manifests/${board_name}.json">manifest</a>
                 <a href="./firmware/${board_name}/app.bin">app</a>

@@ -52,6 +52,22 @@ board_has_display() {
     return 1
 }
 
+# Determine the device-class-specific PROJECT_DISPLAY_NAME for a board,
+# mirroring the compile-time registry in src/app/device_class_registry.cpp.
+# Detection + brand-prefix mapping live in config.sh
+# (device_class_for_board + device_class_brand_prefix).
+project_display_name_for_board() {
+    local board_name="$1"
+    local cls
+    cls="$(device_class_for_board "$board_name")"
+    local prefix
+    prefix="$(device_class_brand_prefix "$cls")"
+    if [[ -z "$prefix" ]]; then
+        prefix="ESP32 Macropad"
+    fi
+    echo "$prefix"
+}
+
 should_generate_png_assets() {
     local target_board="$1"
 
@@ -92,6 +108,16 @@ build_board() {
     echo "Board:     $board_name"
     echo "FQBN:      $fqbn"
     echo "Output:    $board_build_path"
+
+    # Regenerate web assets per board so the embedded shell.html carries the
+    # device-class-specific PROJECT_DISPLAY_NAME (e.g. "ESP32 Macropad",
+    # "ESP32-MP E-Paper", "ESP32-MP Headless"). web_assets.h, project_branding.h
+    # and the resulting binary are all per-board, so this is safe to overwrite
+    # between builds.
+    local board_display_name
+    board_display_name="$(project_display_name_for_board "$board_name")"
+    echo "Brand:     $board_display_name"
+    "$SCRIPT_DIR/tools/minify-web-assets.sh" "$PROJECT_NAME" "$board_display_name" >/dev/null
     
     # Check for board-specific configuration overrides
     EXTRA_FLAGS=()
@@ -276,10 +302,8 @@ else
     echo ""
 fi
 
-# Generate web assets (once for all builds)
-echo "Generating web assets..."
-"$SCRIPT_DIR/tools/minify-web-assets.sh" "$PROJECT_NAME" "$PROJECT_DISPLAY_NAME"
-echo ""
+# Generate web assets (re-run per board inside build_board with a
+# device-class-aware PROJECT_DISPLAY_NAME).
 
 # Determine which boards to build
 if [[ -n "$TARGET_BOARD" ]]; then

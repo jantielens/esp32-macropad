@@ -224,6 +224,44 @@ get_fqbn_for_board() {
     return 1
 }
 
+# Map a device class slug ("macropad" | "epaper" | "headless") to the
+# user-facing brand prefix. Mirrors the DESCRIPTORS[] table in
+# src/app/device_class_registry.cpp (full_name field) but does NOT include
+# any per-board suffix. Unknown classes return empty so callers can decide
+# on a default. Drift between this helper and the C++ table is caught by
+# tests/test_branding_mirror.sh.
+device_class_brand_prefix() {
+    case "$1" in
+        macropad) echo "ESP32 Macropad" ;;
+        epaper)   echo "ESP32-MP E-Paper" ;;
+        headless) echo "ESP32-MP Headless" ;;
+        *)        echo "" ;;
+    esac
+}
+
+# Determine the device class for a board by inspecting its
+# board_overrides.h file. Mirrors the compile-time precedence in
+# src/app/device_class_registry.cpp :: device_class_detect():
+#   IS_* product variants (future) -> product-specific class
+#   HAS_EPAPER  -> "epaper"
+#   !HAS_DISPLAY -> "headless"
+#   otherwise   -> "macropad"
+device_class_for_board() {
+    local board_name="$1"
+    local overrides_file="$SCRIPT_DIR/src/boards/$board_name/board_overrides.h"
+    if [[ -f "$overrides_file" ]]; then
+        if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_EPAPER[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+            echo "epaper"
+            return
+        fi
+        if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_DISPLAY[[:space:]]+false[[:space:]]*$' "$overrides_file"; then
+            echo "headless"
+            return
+        fi
+    fi
+    echo "macropad"
+}
+
 # Parse board and port arguments for scripts that need them
 # Usage: parse_board_and_port_args "$@"
 # Sets global variables: BOARD, PORT, FQBN
