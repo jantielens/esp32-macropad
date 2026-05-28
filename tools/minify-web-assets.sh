@@ -917,6 +917,8 @@ fragment_feature_flag() {
             echo "HAS_SOUND_PLAYER" ;;
         epaper_status|epaper_image|epaper_overlay|epaper_vcom)
             echo "HAS_EPAPER" ;;
+        shutter|shutter_tests|shutter_sessions|shutter_session_actions)
+            echo "IS_SHUTTER_TESTER" ;;
         *)
             echo "" ;;
     esac

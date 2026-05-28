@@ -496,6 +496,57 @@ void PadScreen::buildTiles() {
 #endif
 
     free(cfg);
+
+#if IS_SHUTTER_TESTER
+    // Detect whether any tile on this pad has a *live* shutter binding so
+    // show()/hide() can hold the ADC engine only when needed.
+    //
+    // Only bindings (label/color/number/btn-state/widget) count: they resolve
+    // every poll cycle and would render "---" without the engine running.
+    //
+    // Shutter *actions* (tap/long-press) are intentionally NOT scanned — they
+    // fire on demand, and their handlers (session start, alignment start, …)
+    // acquire the engine themselves. A nav pad that merely hosts a "start
+    // session" button should not keep the ADC active while idle.
+    hasShutterConsumer = false;
+    const char* shutter_reason = nullptr;
+    int shutter_tile = -1;
+    for (uint8_t i = 0; i < tileCount && !hasShutterConsumer; i++) {
+        const ButtonTile& t = tiles[i];
+        for (uint8_t w = 0; w < MAX_WIDGET_BINDINGS; w++) {
+            if (strstr(t.widget_binding[w], "[shutter:")) {
+                hasShutterConsumer = true; shutter_reason = "widget binding"; shutter_tile = i; break;
+            }
+        }
+    }
+    if (!hasShutterConsumer) {
+        for (uint16_t i = 0; i < bindingCount && !hasShutterConsumer; i++) {
+            if (strstr(bindings[i].templ, "[shutter:")) {
+                hasShutterConsumer = true; shutter_reason = "label/value binding"; shutter_tile = -1;
+            }
+        }
+        for (uint16_t i = 0; i < colorBindingCount && !hasShutterConsumer; i++) {
+            if (strstr(colorBindings[i].templ, "[shutter:")) {
+                hasShutterConsumer = true; shutter_reason = "color binding"; shutter_tile = colorBindings[i].tileIndex;
+            }
+        }
+        for (uint16_t i = 0; i < numberBindingCount && !hasShutterConsumer; i++) {
+            if (strstr(numberBindings[i].templ, "[shutter:")) {
+                hasShutterConsumer = true; shutter_reason = "number binding"; shutter_tile = numberBindings[i].tileIndex;
+            }
+        }
+        for (uint16_t i = 0; i < btnStateBindingCount && !hasShutterConsumer; i++) {
+            if (strstr(btnStateBindings[i].templ, "[shutter:")) {
+                hasShutterConsumer = true; shutter_reason = "btn-state binding"; shutter_tile = btnStateBindings[i].tileIndex;
+            }
+        }
+    }
+    if (hasShutterConsumer) {
+        LOGI(TAG, "Page %u: shutter consumer detected (%s on tile %d) — will hold ADC while visible",
+             pageIndex, shutter_reason, shutter_tile);
+    }
+#endif
+
     tilesBuilt = true;
 
     LOGI(TAG, "Page %u: built %u tiles (%dx%d display)", pageIndex, tileCount, disp_w, disp_h);

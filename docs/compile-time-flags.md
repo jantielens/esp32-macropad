@@ -667,6 +667,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen.h
+  - src/app/screens/pad_tile_builder.cpp
   - src/app/shutter_adc.cpp
   - src/app/shutter_adc.h
   - src/app/shutter_align_binding.cpp
@@ -687,6 +688,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_shutter_sessions.h
   - src/app/web_portal_shutter_tests.cpp
   - src/app/web_portal_shutter_tests.h
+  - src/app/widgets.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **JD9165_DSI_HSYNC_BACK_PORCH**
