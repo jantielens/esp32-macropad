@@ -225,9 +225,11 @@ get_fqbn_for_board() {
 }
 
 # Map a device class slug ("macropad" | "epaper" | "headless") to the
-# user-facing brand prefix. Mirrors src/app/device_class_branding.cpp
-# (device_class_get_full_name) but does NOT include any per-board suffix.
-# Unknown classes return empty so callers can decide on a default.
+# user-facing brand prefix. Mirrors the DESCRIPTORS[] table in
+# src/app/device_class_registry.cpp (full_name field) but does NOT include
+# any per-board suffix. Unknown classes return empty so callers can decide
+# on a default. Drift between this helper and the C++ table is caught by
+# tests/test_branding_mirror.sh.
 device_class_brand_prefix() {
     case "$1" in
         macropad) echo "ESP32 Macropad" ;;
@@ -239,7 +241,8 @@ device_class_brand_prefix() {
 
 # Determine the device class for a board by inspecting its
 # board_overrides.h file. Mirrors the compile-time precedence in
-# src/app/device_class_branding.cpp:
+# src/app/device_class_registry.cpp :: device_class_detect():
+#   IS_* product variants (future) -> product-specific class
 #   HAS_EPAPER  -> "epaper"
 #   !HAS_DISPLAY -> "headless"
 #   otherwise   -> "macropad"

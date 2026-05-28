@@ -53,7 +53,7 @@ board_has_display() {
 }
 
 # Determine the device-class-specific PROJECT_DISPLAY_NAME for a board,
-# mirroring the compile-time helpers in src/app/device_class_branding.cpp.
+# mirroring the compile-time registry in src/app/device_class_registry.cpp.
 # Detection + brand-prefix mapping live in config.sh
 # (device_class_for_board + device_class_brand_prefix).
 project_display_name_for_board() {
