@@ -36,6 +36,15 @@ portal_binding_validator.js
 portal_action_editor.js
 portal_config_actions.js
 
+# [chunk:shutter_actions IS_SHUTTER_TESTER]
+# Shutter Tester action-editor extension. Registers the "shutter" action type
+# with the shared editor via the _actionEditorExtensions hook array, so only
+# shutter-tester builds pay the flash cost. Must come after the actions chunk
+# (which defines _actionEditorExtensions). Lives under
+# src/app/device_classes/shutter_tester/web/ — the asset bundler scans
+# device_classes/*/web/ for *.js files.
+portal_action_editor_shutter.js
+
 # [chunk:config]
 # Configuration (main config page — non-display settings stay always-on)
 portal_config.js

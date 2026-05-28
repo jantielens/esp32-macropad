@@ -349,6 +349,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_list.h
   - src/app/action_parse.cpp
   - src/app/action_parse.h
+  - src/app/action_registry.cpp
+  - src/app/action_registry.h
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/boot_actions.cpp
@@ -360,6 +362,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.cpp
   - src/app/data_stream.h
   - src/app/device_class_registry.cpp
+  - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.h
   - src/app/device_classes/shutter_tester/shutter_binding.cpp
@@ -489,6 +492,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_firmware.cpp
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
+  - src/app/action_registry.h
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
@@ -497,6 +501,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_mqtt.cpp
   - src/app/device_classes/epaper/epaper_mqtt.h
   - src/app/device_classes/epaper_device_class.cpp
+  - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_telemetry.cpp
   - src/app/display_manager.cpp
   - src/app/display_task.cpp
@@ -665,6 +670,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
   - src/app/device_classes/shutter_tester/components/shutter_session_actions_component.cpp
+  - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_adc.cpp
   - src/app/device_classes/shutter_tester/shutter_adc.h
   - src/app/device_classes/shutter_tester/shutter_align_binding.cpp

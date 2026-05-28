@@ -205,7 +205,7 @@ concatenate_bundle() {
 #   Parses a .bundle manifest with `# [chunk:NAME]` or `# [chunk:NAME HAS_FLAG]`
 #   markers and emits one temp file per chunk (in order). Populates:
 #     chunks: list of temp file paths (caller must rm)
-#     flags:  list of feature flag strings (empty for always-on chunks)
+#     flags:  list of feature flag strings (empty for always-on chunks; HAS_* or IS_*)
 #     names:  list of chunk names (e.g. "core", "pad")
 #   Files before the first marker are an error. Empty chunks are an error.
 #   Returns 1 if the manifest does not exist or parsing fails.
@@ -229,7 +229,7 @@ concatenate_bundle_chunked() {
         # Detect [chunk:NAME] or [chunk:NAME HAS_FLAG] markers BEFORE stripping.
         local trimmed
         trimmed=$(echo "$bline" | xargs)
-        if [[ "$trimmed" =~ ^#[[:space:]]*\[chunk:([a-z0-9_-]+)(([[:space:]]+HAS_[A-Z_0-9]+)?)\][[:space:]]*$ ]]; then
+        if [[ "$trimmed" =~ ^#[[:space:]]*\[chunk:([a-z0-9_-]+)(([[:space:]]+(HAS|IS)_[A-Z_0-9]+)?)\][[:space:]]*$ ]]; then
             local new_name="${BASH_REMATCH[1]}"
             local new_flag_raw="${BASH_REMATCH[2]}"
             local new_flag
@@ -288,7 +288,7 @@ concatenate_bundle_chunked() {
 bundle_has_chunk_markers() {
     local manifest="$1"
     [[ -f "$manifest" ]] || return 1
-    grep -qE '^[[:space:]]*#[[:space:]]*\[chunk:[a-z0-9_-]+([[:space:]]+HAS_[A-Z_0-9]+)?\][[:space:]]*$' "$manifest"
+    grep -qE '^[[:space:]]*#[[:space:]]*\[chunk:[a-z0-9_-]+([[:space:]]+(HAS|IS)_[A-Z_0-9]+)?\][[:space:]]*$' "$manifest"
 }
 
 declare -A JS_SKIP_FILES
@@ -1051,7 +1051,7 @@ for filename in "${!JS_CONTENTS[@]}"; do
 done
 
 # Generate JS bundle variants. For each chunked bundle (e.g. portal_js):
-#   1. Collect unique HAS_* flags used across chunks (capped at 3 -> 8 variants).
+#   1. Collect unique HAS_*/IS_* flags used across chunks (capped at 3 -> 8 variants).
 #   2. For each 2^N combination, concatenate chunks whose flag is unset OR
 #      matches the combination, then gzip ONCE.
 #   3. Emit each variant as a #if-guarded PROGMEM array under the same
