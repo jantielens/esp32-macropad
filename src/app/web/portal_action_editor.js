@@ -27,6 +27,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="timer">Timer Control</option>';
     h += '<option value="notify">Show Notification</option>';
     h += '<option value="system">System Command</option>';
+    h += '<option value="shutter">Shutter Speed Control</option>';
     h += '</select>';
     if (opts.showBleHint) {
         h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
@@ -188,6 +189,59 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<small>Positive increases, negative decreases. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
     h += '</div>';
     h += '</div>';
+    // Shutter speed control
+    h += '<div id="' + prefix + '-shutter-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-shutter-command">Command</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-shutter-command" onchange="actionEditorShutterChanged(\'' + prefix + '\')">';
+    h += '<optgroup label="Target Speed">';
+    h += '<option value="toggle_lock">Toggle Lock</option>';
+    h += '<option value="set">Set Target Speed</option>';
+    h += '<option value="adjust">Adjust Target Speed</option>';
+    h += '</optgroup>';
+    h += '<optgroup label="Session">';
+    h += '<option value="sess_toggle">Session: Toggle Start/Stop</option>';
+    h += '<option value="sess_start">Session: Start</option>';
+    h += '<option value="sess_stop">Session: Stop</option>';
+    h += '<option value="sess_discard">Session: Discard Last Shot</option>';
+    h += '</optgroup>';
+    h += '<optgroup label="Guided Test">';
+    h += '<option value="guide_start">Guide: Start Test</option>';
+    h += '<option value="guide_stop">Guide: Stop</option>';
+    h += '<option value="guide_skip">Guide: Skip Step</option>';
+    h += '<option value="guide_redo">Guide: Redo Step</option>';
+    h += '</optgroup>';
+    h += '<optgroup label="Alignment">';
+    h += '<option value="align_start">Alignment: Start</option>';
+    h += '<option value="align_stop">Alignment: Stop</option>';
+    h += '<option value="recalibrate">Recalibrate Baseline</option>';
+    h += '</optgroup>';
+    h += '</select>';
+    h += '</div>';
+    // Set: speed label input
+    h += '<div class="form-group" id="' + prefix + '-shutter-set-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-shutter-set-speed">Target Speed</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-shutter-set-speed">';
+    ['1s','1/2s','1/4s','1/5s','1/8s','1/10s','1/15s','1/25s','1/30s','1/50s','1/60s','1/100s','1/125s','1/200s','1/250s','1/500s','1/1000s','1/2000s'].forEach(function(spd) {
+        h += '<option value="' + spd + '">' + spd + '</option>';
+    });
+    h += '</select>';
+    h += '</div>';
+    // Adjust: faster/slower
+    h += '<div class="form-group" id="' + prefix + '-shutter-adjust-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-shutter-adjust-dir">Direction</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-shutter-adjust-dir">';
+    h += '<option value="faster">Faster (shorter)</option>';
+    h += '<option value="slower">Slower (longer)</option>';
+    h += '</select>';
+    h += '</div>';
+    // Free-text argument (camera for sess_start/sess_toggle, test_id for guide_start)
+    h += '<div class="form-group" id="' + prefix + '-shutter-arg-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-shutter-arg" id="' + prefix + '-shutter-arg-label">Argument</label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-shutter-arg" maxlength="63" placeholder="">';
+    h += '<small id="' + prefix + '-shutter-arg-hint"></small>';
+    h += '</div>';
+    h += '</div>';
     return h;
 }
 
@@ -227,9 +281,12 @@ function actionEditorTypeChanged(prefix) {
     if (notifyGrp) notifyGrp.style.display = (type === 'notify') ? '' : 'none';
     var systemGrp = document.getElementById(prefix + '-system-group');
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
+    var shutterGrp = document.getElementById(prefix + '-shutter-group');
+    if (shutterGrp) shutterGrp.style.display = (type === 'shutter') ? '' : 'none';
     if (['notify', 'mqtt', 'key', 'beep', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
     if (type === 'system') actionEditorSystemChanged(prefix);
+    if (type === 'shutter') actionEditorShutterChanged(prefix);
 }
 
 // Show/hide system command sub-fields based on the command dropdown.
@@ -268,6 +325,31 @@ function actionEditorTimerChanged(prefix) {
     var adjustGrp = document.getElementById(prefix + '-timer-adjust-group');
     if (setGrp) setGrp.style.display = (cmd === 'set') ? '' : 'none';
     if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
+}
+
+// Show/hide shutter sub-fields based on the command dropdown.
+function actionEditorShutterChanged(prefix) {
+    var sel = document.getElementById(prefix + '-shutter-command');
+    if (!sel) return;
+    var cmd = sel.value;
+    var setGrp = document.getElementById(prefix + '-shutter-set-group');
+    var adjGrp = document.getElementById(prefix + '-shutter-adjust-group');
+    var argGrp = document.getElementById(prefix + '-shutter-arg-group');
+    var argLbl = document.getElementById(prefix + '-shutter-arg-label');
+    var argHint = document.getElementById(prefix + '-shutter-arg-hint');
+    if (setGrp) setGrp.style.display = (cmd === 'set') ? '' : 'none';
+    if (adjGrp) adjGrp.style.display = (cmd === 'adjust') ? '' : 'none';
+    var takesArg = (cmd === 'sess_start' || cmd === 'sess_toggle' || cmd === 'guide_start');
+    if (argGrp) argGrp.style.display = takesArg ? '' : 'none';
+    if (argLbl && argHint) {
+        if (cmd === 'guide_start') {
+            argLbl.textContent = 'Test ID';
+            argHint.textContent = 'ID of the guided test to start (e.g. id from /api/shutter/tests).';
+        } else {
+            argLbl.textContent = 'Camera (optional)';
+            argHint.textContent = 'Camera name to record with the session. Leave blank to skip.';
+        }
+    }
 }
 
 // Suffixes for binding-capable action text inputs (shared with binding validator).
@@ -380,6 +462,24 @@ function actionEditorLoad(prefix, action) {
         el = document.getElementById(prefix + '-system-command');
         if (el) el.value = action.system_command || 'reboot';
     }
+    // Shutter fields
+    if (action.type === 'shutter') {
+        var sc2 = document.getElementById(prefix + '-shutter-command');
+        if (sc2) sc2.value = action.shutter_command || 'toggle_lock';
+        if (action.shutter_command === 'set') {
+            var ss = document.getElementById(prefix + '-shutter-set-speed');
+            if (ss) ss.value = action.shutter_value || '1/125s';
+        } else if (action.shutter_command === 'adjust') {
+            var sd = document.getElementById(prefix + '-shutter-adjust-dir');
+            if (sd) sd.value = action.shutter_value || 'faster';
+        } else {
+            var sa = document.getElementById(prefix + '-shutter-arg');
+            if (sa) sa.value = action.shutter_value || '';
+        }
+    } else {
+        var sc2d = document.getElementById(prefix + '-shutter-command');
+        if (sc2d) sc2d.value = 'toggle_lock';
+    }
     actionEditorTypeChanged(prefix);
 }
 
@@ -450,6 +550,22 @@ function actionEditorBuild(prefix) {
         if (nfs && nfs.value !== '') act.notify_font_size = parseInt(nfs.value, 10);
         var nloc = document.getElementById(prefix + '-notify-location');
         if (nloc) act.notify_location = nloc.value;
+    }
+    if (type === 'shutter') {
+        var sc3 = document.getElementById(prefix + '-shutter-command');
+        if (sc3) {
+            act.shutter_command = sc3.value || 'toggle_lock';
+            if (act.shutter_command === 'set') {
+                var ss2 = document.getElementById(prefix + '-shutter-set-speed');
+                if (ss2) act.shutter_value = ss2.value || '';
+            } else if (act.shutter_command === 'adjust') {
+                var sd2 = document.getElementById(prefix + '-shutter-adjust-dir');
+                if (sd2) act.shutter_value = sd2.value || 'faster';
+            } else if (act.shutter_command === 'sess_start' || act.shutter_command === 'sess_toggle' || act.shutter_command === 'guide_start') {
+                var sa2 = document.getElementById(prefix + '-shutter-arg');
+                if (sa2 && sa2.value) act.shutter_value = sa2.value.trim();
+            }
+        }
     }
     if (type === 'system') {
         var sc = document.getElementById(prefix + '-system-command');

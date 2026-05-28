@@ -45,8 +45,9 @@ void shutter_session_actions_loop();
 // session start/stop and must be skipped.
 inline bool shutter_session_actions_is_self_trigger(const ButtonAction& act) {
     if (strcmp(act.type, ACTION_TYPE_SHUTTER) != 0) return false;
-    return strcmp(act.shutter_command, "sess_stop")  == 0
-        || strcmp(act.shutter_command, "sess_start") == 0;
+    return strcmp(act.shutter_command, "sess_stop")   == 0
+        || strcmp(act.shutter_command, "sess_start")  == 0
+        || strcmp(act.shutter_command, "sess_toggle") == 0;
 }
 
 #endif // IS_SHUTTER_TESTER

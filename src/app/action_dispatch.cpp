@@ -21,6 +21,12 @@
 #include "wifi_manager.h"
 #include "screen_saver_manager.h"
 
+#if IS_SHUTTER_TESTER
+#include "device_classes/shutter_tester/shutter_measure.h"
+#include "device_classes/shutter_tester/shutter_session.h"
+#include "device_classes/shutter_tester/shutter_capture.h"
+#endif
+
 #include <math.h>
 
 #define TAG "Action"
@@ -246,6 +252,62 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
             LOGI(TAG, "%s notify: '%s' dur=%u loc=%s", label, params.text,
                  params.duration_ms, act.notify_location[0] ? act.notify_location : "bottom");
         }
+#if IS_SHUTTER_TESTER
+    } else if (strcmp(act.type, ACTION_TYPE_SHUTTER) == 0) {
+        const char* cmd = act.shutter_command;
+        if (strcmp(cmd, "set") == 0) {
+            if (!shutter_measure_set_target(act.shutter_value)) {
+                LOGW(TAG, "%s shutter set: unknown speed '%s'", label, act.shutter_value);
+            } else {
+                LOGI(TAG, "%s shutter set: %s", label, act.shutter_value);
+            }
+        } else if (strcmp(cmd, "adjust") == 0) {
+            bool faster = strcmp(act.shutter_value, "faster") == 0;
+            shutter_measure_adjust_target(faster);
+            LOGI(TAG, "%s shutter adjust: %s", label, act.shutter_value);
+        } else if (strcmp(cmd, "toggle_lock") == 0) {
+            if (!shutter_measure_toggle_lock()) {
+                LOGW(TAG, "%s shutter toggle_lock: no target set", label);
+            } else {
+                LOGI(TAG, "%s shutter toggle_lock", label);
+            }
+        } else if (strcmp(cmd, "sess_start") == 0) {
+            shutter_session_start(act.shutter_value);
+            LOGI(TAG, "%s shutter sess_start: camera='%s'", label, act.shutter_value);
+        } else if (strcmp(cmd, "sess_stop") == 0) {
+            shutter_session_stop();
+            LOGI(TAG, "%s shutter sess_stop", label);
+        } else if (strcmp(cmd, "sess_toggle") == 0) {
+            shutter_session_toggle(act.shutter_value);
+            LOGI(TAG, "%s shutter sess_toggle: camera='%s'", label, act.shutter_value);
+        } else if (strcmp(cmd, "sess_discard") == 0) {
+            shutter_session_discard_last();
+            LOGI(TAG, "%s shutter sess_discard", label);
+        } else if (strcmp(cmd, "guide_start") == 0) {
+            shutter_session_guide_start(act.shutter_value);
+            LOGI(TAG, "%s shutter guide_start: test='%s'", label, act.shutter_value);
+        } else if (strcmp(cmd, "guide_stop") == 0) {
+            shutter_session_guide_stop();
+            LOGI(TAG, "%s shutter guide_stop", label);
+        } else if (strcmp(cmd, "guide_skip") == 0) {
+            shutter_session_guide_skip();
+            LOGI(TAG, "%s shutter guide_skip", label);
+        } else if (strcmp(cmd, "guide_redo") == 0) {
+            shutter_session_guide_redo();
+            LOGI(TAG, "%s shutter guide_redo", label);
+        } else if (strcmp(cmd, "align_start") == 0) {
+            shutter_capture_start_alignment();
+            LOGI(TAG, "%s shutter align_start", label);
+        } else if (strcmp(cmd, "align_stop") == 0) {
+            shutter_capture_stop_alignment();
+            LOGI(TAG, "%s shutter align_stop", label);
+        } else if (strcmp(cmd, "recalibrate") == 0) {
+            shutter_capture_recalibrate();
+            LOGI(TAG, "%s shutter recalibrate", label);
+        } else {
+            LOGW(TAG, "%s shutter: unknown cmd '%s'", label, cmd);
+        }
+#endif // IS_SHUTTER_TESTER
     } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
         if (strcmp(act.system_command, "reboot") == 0) {
             LOGI(TAG, "%s system: reboot", label);

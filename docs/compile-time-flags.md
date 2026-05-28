@@ -659,6 +659,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
 - **IS_SHUTTER_TESTER**
+  - src/app/action_dispatch.cpp
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h

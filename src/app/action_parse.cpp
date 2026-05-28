@@ -34,6 +34,9 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
     strlcpy(act.notify_location, a["notify_location"] | "", sizeof(act.notify_location));
     // System fields
     strlcpy(act.system_command, a["system_command"] | "", CONFIG_ACTION_TYPE_MAX_LEN);
+    // Shutter fields
+    strlcpy(act.shutter_command, a["shutter_command"] | "", CONFIG_TIMER_CMD_MAX_LEN);
+    strlcpy(act.shutter_value,   a["shutter_value"]   | "", CONFIG_VALUE_MAX_LEN);
 }
 
 void action_to_json(const ButtonAction& act, JsonObject obj) {
@@ -66,6 +69,9 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
     if (act.notify_location[0])       obj["notify_location"]     = act.notify_location;
     // System fields
     if (act.system_command[0])        obj["system_command"]    = act.system_command;
+    // Shutter fields
+    if (act.shutter_command[0])       obj["shutter_command"]   = act.shutter_command;
+    if (act.shutter_value[0])         obj["shutter_value"]     = act.shutter_value;
 }
 
 #endif // HAS_DISPLAY
