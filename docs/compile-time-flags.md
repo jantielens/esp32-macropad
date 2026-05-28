@@ -365,6 +365,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/shutter_binding.cpp
   - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
+  - src/app/device_classes/shutter_tester_device_class.cpp
   - src/app/device_telemetry.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
@@ -658,7 +659,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
 - **IS_SHUTTER_TESTER**
-  - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
@@ -686,6 +686,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/web/portal_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/web/portal_shutter_tests.h
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
+  - src/app/device_classes/shutter_tester_device_class.cpp
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen.h

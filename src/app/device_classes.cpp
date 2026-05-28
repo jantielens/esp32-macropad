@@ -22,4 +22,7 @@ void device_classes_register_all() {
 #if HAS_EPAPER
 		epaper_device_class_register();
 #endif
+#if IS_SHUTTER_TESTER
+                shutter_tester_device_class_register();
+#endif
 }
