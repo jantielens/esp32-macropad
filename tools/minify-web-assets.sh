@@ -299,10 +299,13 @@ discover_bundle_manifests "css" CSS_SKIP_FILES
 filter_bundle_fragments JS_FILES JS_SKIP_FILES
 filter_bundle_fragments CSS_FILES CSS_SKIP_FILES
 
-# Template fragments under $WEB_DIR (_header.html, _nav.html, _footer.html,
-# _binding_help.html, _widget_*.html, _style_help.html, _health_widget.html,
-# _reboot_overlay.html) are loaded by tools/_render_html_template.py at
-# render time; the shell no longer caches them into *_TEMPLATE variables.
+# Template fragments under $WEB_DIR (_binding_help.html, _widget_*.html,
+# _style_help.html, _health_widget.html, _reboot_overlay.html) are loaded
+# by tools/_render_html_template.py at render time.
+#
+# Historical note: HEADER/NAV/FOOTER placeholders (_header.html / _nav.html
+# / _footer.html) were also supported but never landed on disk for any
+# board. Removed; resurrect from git history if a future board needs them.
 
 if [ ${#HTML_FILES[@]} -eq 0 ] && [ ${#FRAGMENT_FILES[@]} -eq 0 ] && [ ${#CSS_FILES[@]} -eq 0 ] && [ ${#JS_FILES[@]} -eq 0 ]; then
     echo "Error: No HTML, CSS, or JS files found in $WEB_DIR"
@@ -687,7 +690,6 @@ for html_file in "${HTML_FILES[@]}"; do
     minified=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
         --web-dir "$WEB_DIR" \
         --input "$html_file" \
-        --mode shell \
         --project-name "$PROJECT_NAME" \
         --project-display-name "$PROJECT_DISPLAY_NAME")
     
@@ -719,7 +721,6 @@ for fragment_file in "${FRAGMENT_FILES[@]}"; do
     minified=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
         --web-dir "$WEB_DIR" \
         --input "$fragment_file" \
-        --mode fragment \
         --project-name "$PROJECT_NAME" \
         --project-display-name "$PROJECT_DISPLAY_NAME")
     
