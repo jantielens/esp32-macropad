@@ -1217,9 +1217,6 @@ Each button's `col_offset` / `row_offset` is relative to the placement anchor ce
 - `log_manager.cpp/h` - Print-compatible logging with nested blocks (serial output only)
 
 **Frontend (HTML/CSS/JS):**
-- `web/_header.html` - Shared HTML head template (DRY)
-- `web/_nav.html` - Shared navigation and loading overlay template (DRY)
-- `web/_footer.html` - Shared form buttons template (DRY)
 - `web/home.html` - Home page (custom settings)
 - `web/network.html` - Network configuration page
 - `web/firmware.html` - Firmware update and factory reset page
@@ -1231,6 +1228,9 @@ Each button's `col_offset` / `row_offset` is relative to the placement anchor ce
 - `web/portal-all.css` - Primary CSS file (bundle target) — served at `/portal-all.css`
 - `web/portal-all.css.bundle` - CSS bundle manifest (see [CSS Bundle](#css-bundle))
 - `web/_portal_*.css` - Feature CSS fragments (bundled into primary CSS at build time)
+- `web/_*.html` (e.g. `_binding_help.html`, `_widget_*.html`, `_style_help.html`,
+  `_health_widget.html`, `_reboot_overlay.html`) - Shared HTML partials inlined
+  into pages and fragments by `tools/_render_html_template.py`
 
 **Asset Compression:**
 - All web assets are automatically minified and gzip compressed during build
@@ -1315,10 +1315,9 @@ DNS server redirects all requests to device IP in AP mode:
   its fragment init, and any device-class-specific JS state management).
 
   Under `src/app/web/`:
-   - Template fragments (shared):
-     - `_header.html` - HTML head section
-     - `_nav.html` - Navigation tabs and loading overlay
-     - `_footer.html` - Form buttons
+   - Shared HTML partials (inlined by `tools/_render_html_template.py`):
+     - `_binding_help.html`, `_widget_*.html`, `_style_help.html`,
+       `_health_widget.html`, `_reboot_overlay.html`
    - Page files:
      - `home.html` - Home page structure
      - `network.html` - Network configuration

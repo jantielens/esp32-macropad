@@ -302,9 +302,10 @@ Files under `device_classes/foo/web/` are picked up automatically by
 
 - `*.fragment.html` — emitted as gated PROGMEM blobs and registered in the
   fragment lookup table. Feature flag is derived from filename via
-  `fragment_feature_flag()` (extend this case statement for the new class).
-- `*.js` — emitted as gated PROGMEM blobs. Extend `js_feature_flag()` for
-  device-class JS files.
+  `asset_feature_flag()` (extend this case statement for the new class).
+- `*.js` — emitted as gated PROGMEM blobs. Extend the same
+  `asset_feature_flag()` case statement for device-class JS files
+  (fragment and JS stem namespaces are disjoint).
 - `*.css` — emitted directly, or rolled into a chunked CSS bundle (see
   `portal-all.css.bundle` for the chunked pattern).
 

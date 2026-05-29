@@ -23,8 +23,8 @@ Same aggregation pattern applies to `widgets.cpp`, `screens.cpp`, `display_drive
 - **Pads** (`/pads.html`): Visual pad editor with button editor dialog (Full Mode only)
 - **Network** (`/network.html`): WiFi, device, and network configuration (both modes)
 - **Firmware** (`/firmware.html`): Online update (GitHub Releases), manual upload, and factory reset (Full Mode only)
-- Template fragments: `_header.html`, `_nav.html`, `_footer.html`, `_binding_help.html` used via `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders
-- Build-time template replacement in `tools/minify-web-assets.sh`
+- Template fragments: `_binding_help.html`, `_widget_*.html`, `_style_help.html`, `_health_widget.html`, `_reboot_overlay.html` used via `{{BINDING_HELP}}`, `{{WIDGET_*}}`, `{{STYLE_HELP}}`, `{{HEALTH_WIDGET}}`, `{{REBOOT_OVERLAY}}` placeholders
+- Build-time template replacement in `tools/_render_html_template.py` (invoked by `tools/minify-web-assets.sh`)
 
 ## JavaScript Bundle System
 
