@@ -871,12 +871,14 @@ cat > "$OUTPUT_FILE" << 'HEADER_START'
 
 HEADER_START
 
-# Map a fragment filename stem (e.g. "pad_editor_fragment") to the
-# compile-time feature flag that must be true for the fragment to be
-# included in the build. Echoes nothing for always-on fragments.
-fragment_feature_flag() {
+# Map an asset filename stem (fragment stem like "pad_editor_fragment" or
+# JS stem like "epaper_init") to the compile-time feature flag that must
+# be true for the asset to be included in the build. Echoes nothing for
+# always-on assets. The fragment and JS stem namespaces are disjoint, so a
+# single mapping table handles both.
+asset_feature_flag() {
     local stem="$1"
-    # Strip trailing _fragment suffix
+    # Strip trailing _fragment suffix (no-op for JS stems).
     stem="${stem%_fragment}"
     case "$stem" in
         pad_editor|swipe_actions|boot_actions|button_defaults|timers|brightness|screensaver)
@@ -889,25 +891,10 @@ fragment_feature_flag() {
             echo "HAS_AUDIO" ;;
         sounds)
             echo "HAS_SOUND_PLAYER" ;;
-        epaper_status|epaper_image|epaper_overlay|epaper_vcom)
+        epaper_status|epaper_image|epaper_overlay|epaper_vcom|epaper_init)
             echo "HAS_EPAPER" ;;
         shutter|shutter_tests|shutter_sessions|shutter_session_actions)
             echo "IS_SHUTTER_TESTER" ;;
-        *)
-            echo "" ;;
-    esac
-}
-
-# Map a standalone JS filename stem (e.g. "portal_shutter_sessions") to the
-# compile-time feature flag that must be true for the JS blob to be included
-# in the build. Echoes nothing for always-on scripts. Mirrors
-# fragment_feature_flag so device-class JS handlers don't bleed into builds
-# that have the feature disabled.
-js_feature_flag() {
-    local stem="$1"
-    case "$stem" in
-        epaper_init)
-            echo "HAS_EPAPER" ;;
         *)
             echo "" ;;
     esac
@@ -926,7 +913,7 @@ done
 
 # Generate fragment HTML sections (gzipped)
 for filename in "${!FRAGMENT_CONTENTS[@]}"; do
-    flag=$(fragment_feature_flag "$filename")
+    flag=$(asset_feature_flag "$filename")
     if [[ -n "$flag" ]]; then
         echo "#if $flag" >> "$OUTPUT_FILE"
     fi
@@ -966,7 +953,7 @@ for filename in "${!JS_CONTENTS[@]}"; do
     if [[ -n "${JS_CHUNK_NAMES[$filename]:-}" ]]; then
         continue
     fi
-    js_flag=$(js_feature_flag "$filename")
+    js_flag=$(asset_feature_flag "$filename")
     if [[ -n "$js_flag" ]]; then
         cat >> "$OUTPUT_FILE" << EOF
 // JavaScript from src/app/web/${filename}.js (minified + gzipped)
@@ -999,7 +986,7 @@ for filename in "${!HTML_CONTENTS[@]}"; do
 done
 
 for filename in "${!FRAGMENT_CONTENTS[@]}"; do
-    flag=$(fragment_feature_flag "$filename")
+    flag=$(asset_feature_flag "$filename")
     if [[ -n "$flag" ]]; then
         echo "#if $flag" >> "$OUTPUT_FILE"
         echo "const size_t ${filename}_html_gz_len = sizeof(${filename}_html_gz);" >> "$OUTPUT_FILE"
@@ -1020,7 +1007,7 @@ for filename in "${!JS_CONTENTS[@]}"; do
     if [[ -n "${JS_CHUNK_NAMES[$filename]:-}" ]]; then
         continue
     fi
-    js_flag=$(js_feature_flag "$filename")
+    js_flag=$(asset_feature_flag "$filename")
     if [[ -n "$js_flag" ]]; then
         echo "#if $js_flag" >> "$OUTPUT_FILE"
         echo "const size_t ${filename}_js_gz_len = sizeof(${filename}_js_gz);" >> "$OUTPUT_FILE"
@@ -1054,7 +1041,7 @@ FRAG_TABLE_START
         # Convert symbol name back to fragment_id: wifi_fragment -> wifi, pad_editor_fragment -> pad-editor
         frag_id="${filename%_fragment}"
         frag_id="${frag_id//_/-}"
-        flag=$(fragment_feature_flag "$filename")
+        flag=$(asset_feature_flag "$filename")
         if [[ -n "$flag" ]]; then
             echo "#if $flag" >> "$OUTPUT_FILE"
             echo "    {\"$frag_id\", ${filename}_html_gz, sizeof(${filename}_html_gz)}," >> "$OUTPUT_FILE"
