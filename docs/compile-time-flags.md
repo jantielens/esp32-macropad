@@ -665,7 +665,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_utils.h
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
-  - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
@@ -678,6 +677,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/shutter_binding.cpp
   - src/app/device_classes/shutter_tester/shutter_capture.cpp
   - src/app/device_classes/shutter_tester/shutter_capture.h
+  - src/app/device_classes/shutter_tester/shutter_config.cpp
+  - src/app/device_classes/shutter_tester/shutter_config.h
   - src/app/device_classes/shutter_tester/shutter_defaults.h
   - src/app/device_classes/shutter_tester/shutter_measure.cpp
   - src/app/device_classes/shutter_tester/shutter_measure.h
@@ -695,6 +696,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester_device_class.cpp
   - src/app/pad_config.h
   - src/app/portal_components.cpp
+  - src/app/route_components.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen.h
   - src/app/screens/pad_tile_builder.cpp

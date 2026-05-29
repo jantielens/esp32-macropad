@@ -7,9 +7,6 @@
 
 #include "config_manager.h"
 #include "board_config.h"
-#if IS_SHUTTER_TESTER
-#include "device_classes/shutter_tester/shutter_defaults.h"
-#endif
 #include "device_class.h"
 #include "class_branding.h"
 #include "web_assets.h"
@@ -64,11 +61,6 @@
 #define KEY_SCREEN_SAVER_FADE_IN "ss_fi"
 #define KEY_SCREEN_SAVER_WAKE_TOUCH "ss_wt"
 #define KEY_SCREEN_SAVER_WAKE_BINDING "ss_wb"
-#endif
-#if IS_SHUTTER_TESTER
-#define KEY_SHUTTER_PRESET   "sh_preset"
-#define KEY_SHUTTER_OFFSET_X "sh_off_x"
-#define KEY_SHUTTER_OFFSET_Y "sh_off_y"
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
@@ -200,12 +192,6 @@ bool config_manager_load(DeviceConfig *config) {
 				config->screen_saver_wake_binding[0] = '\0';
 				#endif
 
-				#if IS_SHUTTER_TESTER
-				strlcpy(config->shutter_preset_id, SHUTTER_DEFAULT_PRESET_ID, CONFIG_SHUTTER_PRESET_ID_MAX_LEN);
-				config->sensor_offset_x_mm = SHUTTER_DEFAULT_OFFSET_X_MM;
-				config->sensor_offset_y_mm = SHUTTER_DEFAULT_OFFSET_Y_MM;
-				#endif
-
 				// Let registered device classes seed their own defaults.
 				device_class_dispatch_config_defaults(config);
 				
@@ -294,15 +280,6 @@ bool config_manager_load(DeviceConfig *config) {
 		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, false);
 		#endif
 		preferences.getString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding, CONFIG_SS_WAKE_BINDING_MAX_LEN);
-		#endif
-
-		#if IS_SHUTTER_TESTER
-		preferences.getString(KEY_SHUTTER_PRESET, config->shutter_preset_id, CONFIG_SHUTTER_PRESET_ID_MAX_LEN);
-		if (strlen(config->shutter_preset_id) == 0) {
-			strlcpy(config->shutter_preset_id, SHUTTER_DEFAULT_PRESET_ID, CONFIG_SHUTTER_PRESET_ID_MAX_LEN);
-		}
-		config->sensor_offset_x_mm = preferences.getFloat(KEY_SHUTTER_OFFSET_X, SHUTTER_DEFAULT_OFFSET_X_MM);
-		config->sensor_offset_y_mm = preferences.getFloat(KEY_SHUTTER_OFFSET_Y, SHUTTER_DEFAULT_OFFSET_Y_MM);
 		#endif
 
 		// Let registered device classes load their own fields from the same
@@ -401,12 +378,6 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUShort(KEY_SCREEN_SAVER_FADE_IN, config->screen_saver_fade_in_ms);
 		preferences.putBool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch);
 		preferences.putString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding);
-		#endif
-
-		#if IS_SHUTTER_TESTER
-		preferences.putString(KEY_SHUTTER_PRESET, config->shutter_preset_id);
-		preferences.putFloat(KEY_SHUTTER_OFFSET_X, config->sensor_offset_x_mm);
-		preferences.putFloat(KEY_SHUTTER_OFFSET_Y, config->sensor_offset_y_mm);
 		#endif
 
 		// Let registered device classes persist their own fields.

@@ -48,9 +48,6 @@
 #define CONFIG_BASIC_AUTH_USERNAME_MAX_LEN 32
 #define CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN 64
 
-// Shutter tester preset identifier (e.g. "direct_3_line")
-#define CONFIG_SHUTTER_PRESET_ID_MAX_LEN 24
-
 // Configuration structure
 struct DeviceConfig {
 		// WiFi credentials
@@ -117,12 +114,10 @@ struct DeviceConfig {
 #endif
 
 #if IS_SHUTTER_TESTER
-		// Active capture preset (resolved by shutter_capture_init())
-		char shutter_preset_id[CONFIG_SHUTTER_PRESET_ID_MAX_LEN]; // e.g. "direct_3_line"
-		// Sensor layout: distance from centre sensor (S2) to outer sensor (S1 or S3), in mm.
-		// Used for capping gradient computation (diagonal = 2 * sqrt(x² + y²)).
-		float sensor_offset_x_mm; // default SHUTTER_DEFAULT_OFFSET_X_MM
-		float sensor_offset_y_mm; // default SHUTTER_DEFAULT_OFFSET_Y_MM
+		// Shutter-tester device-class fields live in the module-local
+		// ShutterTesterConfig singleton (see
+		// device_classes/shutter_tester/shutter_config.h). They are NOT stored
+		// in DeviceConfig; load/save runs via the DeviceClass.config_* hooks.
 #endif
 
 		// Validation flag (magic number to detect valid config)

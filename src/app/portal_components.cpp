@@ -63,6 +63,10 @@
 #if IS_SHUTTER_TESTER
 #include "device_classes/shutter_tester/components/shutter_component.cpp"
 #include "device_classes/shutter_tester/components/shutter_session_actions_component.cpp"
+// Module-local config singleton + DeviceClass.config_* hook implementations.
+// Aggregated here (per project convention: one aggregation file per
+// subsystem; portal_components.cpp owns non-route shutter-tester TUs).
+#include "device_classes/shutter_tester/shutter_config.cpp"
 #endif // IS_SHUTTER_TESTER
 
 // --- E-Paper-gated components ---

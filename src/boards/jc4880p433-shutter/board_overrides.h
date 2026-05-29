@@ -40,7 +40,7 @@
 // Shutter Tester — up to 4× BPW34 photodiodes on ADC2
 // ============================================================================
 // ADC input pins (ADC2_CH0–CH3 on ESP32-P4). The runtime configuration
-// (DeviceConfig.shutter_preset_id) selects how many sensors are active for
+// (ShutterTesterConfig.preset_id) selects how many sensors are active for
 // a given test — 3-sensor presets ignore S4.
 #define SHUTTER_ADC_PIN_S1 49   // Sensor 1 — GPIO 49
 #define SHUTTER_ADC_PIN_S2 50   // Sensor 2 — GPIO 50
