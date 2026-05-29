@@ -549,6 +549,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/widget.h
+- **HAS_SCALE**
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
 - **HAS_SD_CARD**
   - src/app/board_config.h
 - **HAS_SENSOR_BME280**
@@ -560,10 +562,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/sensors/dummy_sensor.h
+- **HAS_SENSOR_HX711**
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+  - src/app/device_classes/coffee_scale/coffee_scale_device_class.cpp
 - **HAS_SENSOR_LD2410_OUT**
   - src/app/board_config.h
   - src/app/sensors.cpp
   - src/app/sensors/ld2410_out_sensor.cpp
+- **HAS_SENSOR_NAU7802**
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+  - src/app/device_classes/coffee_scale/coffee_scale_device_class.cpp
 - **HAS_SOUND_PLAYER**
   - src/app/action_dispatch.cpp
   - src/app/app.ino
@@ -673,10 +681,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
+- **HX711_DOUT_PIN**
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+- **HX711_SCK_PIN**
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
 - **IS_COFFEE_SCALE**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+  - src/app/device_classes/coffee_scale/coffee_scale_device_class.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
