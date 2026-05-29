@@ -261,6 +261,26 @@ async function loadConfig() {
             var flCard = document.getElementById('epaper-frontlight-card');
             if (flCard) flCard.hidden = false;
         }
+
+        // Device-class fields registered via window.registerConfigFields([...]).
+        // Symmetric with saveFragmentConfig(): any name added to
+        // window.__extra_config_fields is auto-populated here from the
+        // matching key on the /api/config response. Element id must equal
+        // the field name. Checkbox/radio handling matches save semantics.
+        if (window.__extra_config_fields && window.__extra_config_fields.length) {
+            window.__extra_config_fields.forEach(function (name) {
+                if (config[name] === undefined) return;
+                var el = document.getElementById(name);
+                if (!el) return;
+                if (el.type === 'checkbox') {
+                    el.checked = !!config[name];
+                } else if (el.type === 'radio') {
+                    setRadioIfExists(name, config[name]);
+                } else {
+                    setValueIfExists(name, config[name]);
+                }
+            });
+        }
     } catch (error) {
         showMessage('Error loading configuration: ' + error.message, 'error');
         console.error('Load error:', error);

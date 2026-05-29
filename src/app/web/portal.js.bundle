@@ -45,6 +45,18 @@ portal_config_actions.js
 # device_classes/*/web/ for *.js files.
 portal_action_editor_shutter.js
 
+# [chunk:shutter_pages IS_SHUTTER_TESTER]
+# Shutter Tester portal pages: Sensor Configuration, Session Save Actions,
+# sessions list/detail, and guided test editor. Each module installs its own
+# init_<id>_fragment() handler that portal_fragment_init.js (in the shell
+# chunk) invokes when that fragment loads. portal_shutter_config.js must come
+# first because it calls registerConfigFields() to extend the shared config
+# save loop with shutter-specific NVS keys. Lives under
+# src/app/device_classes/shutter_tester/web/.
+portal_shutter_config.js
+portal_shutter_sessions.js
+portal_shutter_tests.js
+
 # [chunk:config]
 # Configuration (main config page — non-display settings stay always-on)
 portal_config.js

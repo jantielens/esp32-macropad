@@ -13,6 +13,8 @@
 
 #if IS_SHUTTER_TESTER
 
+#include <ArduinoJson.h>
+
 #include "config_manager.h"
 #include "device_class.h"
 #include "log_manager.h"
@@ -100,6 +102,32 @@ static void on_config_save_hook(const DeviceConfig * /*config*/, Preferences &pr
 		shutter_config_save(preferences);
 }
 
+// Expose shutter_config fields on GET /api/config so the portal Sensor
+// Configuration fragment can load them. Matches the field names registered
+// via window.registerConfigFields() in portal_shutter_config.js.
+static void config_api_get_hook(const DeviceConfig * /*config*/, JsonObject &root) {
+		root["shutter_preset_id"] = shutter_config.preset_id;
+		root["sensor_offset_x_mm"] = shutter_config.sensor_offset_x_mm;
+		root["sensor_offset_y_mm"] = shutter_config.sensor_offset_y_mm;
+}
+
+// Apply shutter_config fields from POST /api/config. The post handler runs
+// config_save() after dispatch, which persists shutter_config via the
+// on_config_save_hook above.
+static void config_api_set_hook(DeviceConfig * /*config*/, JsonObject &body) {
+		if (body.containsKey("shutter_preset_id")) {
+				const char *v = body["shutter_preset_id"] | "";
+				strncpy(shutter_config.preset_id, v, SHUTTER_CONFIG_PRESET_ID_MAX_LEN - 1);
+				shutter_config.preset_id[SHUTTER_CONFIG_PRESET_ID_MAX_LEN - 1] = '\0';
+		}
+		if (body.containsKey("sensor_offset_x_mm")) {
+				shutter_config.sensor_offset_x_mm = body["sensor_offset_x_mm"].as<float>();
+		}
+		if (body.containsKey("sensor_offset_y_mm")) {
+				shutter_config.sensor_offset_y_mm = body["sensor_offset_y_mm"].as<float>();
+		}
+}
+
 // ---------------------------------------------------------------------------
 // Class instance + registration. No owned power mode (shutter tester runs
 // in the always-on display path), no MQTT hooks (the shutter modules publish
@@ -117,8 +145,8 @@ static const DeviceClass kShutterTesterClass = {
 		/* config_defaults */   on_config_defaults_hook,
 		/* config_load */       on_config_load_hook,
 		/* config_save */       on_config_save_hook,
-		/* config_api_get */    nullptr,
-		/* config_api_set */    nullptr,
+		/* config_api_get */    config_api_get_hook,
+		/* config_api_set */    config_api_set_hook,
 		/* mqtt_on_discovery */ nullptr,
 		/* mqtt_publish_state */ nullptr,
 };

@@ -8,6 +8,25 @@
  * Multi-page support: home, network, firmware
  */
 
+// ============================================================================
+// Extensible config-field registration
+// ============================================================================
+//
+// Per-feature modules (e.g. e-paper, shutter-tester, future device classes)
+// register the NVS keys their fragments edit via
+// window.registerConfigFields([...]). loadConfig() (portal_config.js) and
+// saveFragmentConfig() (portal_fragment_init.js) both merge the registered
+// set with their static core lists.
+//
+// MUST live in portal_core.js (first chunk, always-on) so device-class
+// chunks gated by IS_*/HAS_* flags can register at module top-level even
+// when they precede the shell chunk in concatenation order.
+window.__extra_config_fields = window.__extra_config_fields || [];
+window.registerConfigFields = function (names) {
+    if (!names || !names.length) return;
+    Array.prototype.push.apply(window.__extra_config_fields, names);
+};
+
 // ---------------------------------------------------------------------------
 // Fetch concurrency limiter
 // ---------------------------------------------------------------------------

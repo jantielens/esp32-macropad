@@ -3214,3 +3214,63 @@ function _copyFallback(text) {
         document.body.removeChild(ta);
     }
 }
+
+// ============================================================================
+// Fragment init — called by portal_nav.js when the shutter-sessions fragment loads
+// ============================================================================
+window.init_shutter_sessions_fragment = function () {
+    // Fire-and-forget Chart.js + annotation CDN load so the libraries are ready
+    // by the time the user opens a session detail view.
+    if (!window.Chart) {
+        _sessionLoadScript('https://cdn.jsdelivr.net/npm/chart.js@4')
+            .then(function () { return _sessionLoadScript('https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3'); })
+            .catch(function () {});
+    }
+    sessionsShowList();
+
+    // Recreate charts when the Bootstrap theme attribute changes so colors
+    // update immediately without requiring navigation.
+    if (window._sessionsThemeObserver) window._sessionsThemeObserver.disconnect();
+    window._sessionsThemeObserver = new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+            if (mutations[i].attributeName === 'data-bs-theme') {
+                sessionRecreateAllCharts();
+                break;
+            }
+        }
+    });
+    window._sessionsThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+
+    // Force light theme while printing so backgrounds are white.
+    // Temporarily switch data-bs-theme and pause the MutationObserver so it
+    // doesn't trigger a chart recreate mid-print.
+    if (!window._sessionsPrintHandlersRegistered) {
+        window._sessionsPrintHandlersRegistered = true;
+        window.addEventListener('beforeprint', function () {
+            window._sessionsThemeObserver.disconnect();
+            var html = document.documentElement;
+            html._printSavedTheme = html.getAttribute('data-bs-theme');
+            html.setAttribute('data-bs-theme', 'light');
+            // Force every Chart.js instance to redraw against the print
+            // stylesheet's container width. Without this, charts keep the
+            // bitmap they drew at on-screen container width; the print engine
+            // then stretches/clips that bitmap, mangling waveform axes and
+            // pushing data points outside the visible plot area.
+            if (typeof window.sessionResizeAllCharts === 'function') {
+                window.sessionResizeAllCharts();
+            }
+        });
+        window.addEventListener('afterprint', function () {
+            var html = document.documentElement;
+            if (html._printSavedTheme) {
+                html.setAttribute('data-bs-theme', html._printSavedTheme);
+                html._printSavedTheme = null;
+            }
+            // Reconnect observer and redraw charts in the restored theme
+            if (window._sessionsThemeObserver) {
+                window._sessionsThemeObserver.observe(html, { attributes: true, attributeFilter: ['data-bs-theme'] });
+            }
+            sessionRecreateAllCharts();
+        });
+    }
+};

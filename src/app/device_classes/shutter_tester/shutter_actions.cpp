@@ -35,8 +35,23 @@ static void shutter_serialize(const ButtonAction& act, JsonObject obj) {
 }
 
 #if HAS_MQTT
-// Shutter has no bindable string fields today — command/value are structural.
-// Provided as nullptrs in the vtable; declaration kept for symmetry only.
+// The `value` field is user-templated for commands like guide_start
+// ([list:shutter_tests.selected]) and sess_start (camera id from a list).
+// `command` is structural (parsed by the dispatcher's strcmp ladder) and is
+// never bindable.
+static void shutter_resolve_bindings(ButtonAction& act) {
+    char* field = act.payload.shutter.value;
+    if (field[0] && binding_template_has_bindings(field)) {
+        char tmp[BINDING_TEMPLATE_MAX_LEN];
+        binding_template_resolve(field, tmp, sizeof(tmp));
+        strlcpy(field, tmp, sizeof(act.payload.shutter.value));
+    }
+}
+
+static bool shutter_has_binding(const ButtonAction& act) {
+    const char* f = act.payload.shutter.value;
+    return f[0] && memchr(f, '[', strlen(f)) != nullptr;
+}
 #endif
 
 static void shutter_dispatch(const ButtonAction& act, const char* label) {
@@ -101,8 +116,8 @@ static const ActionTypeDef shutter_action_type = {
     /* parse            */ shutter_parse,
     /* serialize        */ shutter_serialize,
 #if HAS_MQTT
-    /* resolve_bindings */ nullptr,  // no bindable fields
-    /* has_binding      */ nullptr,
+    /* resolve_bindings */ shutter_resolve_bindings,
+    /* has_binding      */ shutter_has_binding,
 #endif
     /* dispatch         */ shutter_dispatch,
 };

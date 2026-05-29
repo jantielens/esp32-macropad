@@ -932,8 +932,6 @@ fragment_feature_flag() {
 js_feature_flag() {
     local stem="$1"
     case "$stem" in
-        portal_shutter_sessions|portal_shutter_tests)
-            echo "IS_SHUTTER_TESTER" ;;
         epaper_init)
             echo "HAS_EPAPER" ;;
         *)

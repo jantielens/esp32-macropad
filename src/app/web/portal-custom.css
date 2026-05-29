@@ -1898,3 +1898,238 @@ input[type="text"].label-style-input {
   top: calc(var(--portal-header-height-desktop, 120px) + 12px);
   bottom: auto;
 }
+
+
+/* ============================================================================
+   Shutter Tester — sessions detail view, summary tables, exposure simulation,
+   and print stylesheet. Loaded for all builds but referenced only by
+   IS_SHUTTER_TESTER fragments.
+   ============================================================================ */
+
+/* ================================================================
+   Back-to-top button (sessions detail view)
+   ================================================================ */
+#sessions-back-to-top {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bs-secondary-bg);
+  color: var(--bs-body-color);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  font-size: 18px;
+  line-height: 40px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 1050;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+#sessions-back-to-top.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ============================================================================
+   Shutter sessions — summary table (.sst-*) + inline-edit fields (.sif-*) +
+   speed-group collapsible wrappers (.speed-group*).
+   Moved from inline <style> in shutter-sessions.fragment.html and from
+   per-render injection in portal_shutter_sessions.js so the asset minifier
+   can compress them.
+   ============================================================================ */
+.sst-table th  { font-size: 0.78rem; white-space: nowrap; vertical-align: bottom; cursor: help; }
+/* A zero-opacity unit line on single-line headers so their label sits on
+   the same baseline as the LABEL line of two-line headers. */
+.sst-table .sst-unit-spacer { display: inline-block; opacity: 0; font-size: 0.85em; }
+/* Curtain group banner is in its own row above the sub-headers. */
+.sst-table th.sst-curtain-group { vertical-align: top; }
+.sst-table .sst-unit { display: inline-block; font-weight: normal;
+                       color: var(--bs-secondary-color, #888); font-size: 0.85em; }
+.sst-table td  { font-size: 0.85rem; vertical-align: middle; }
+.sst-info      { font-size: 0.65em; color: var(--bs-secondary-color, #888); cursor: help; margin-left: 2px; }
+.sst-totals td { border-top: 2px solid var(--bs-border-color, #444) !important; }
+@media (max-width: 767px) { .sst-indiv { display: none !important; } }
+
+/* Per-metric cell coloring */
+.sst-table td.sst-cell-green  { background-color: rgba(46,160,67,0.10) !important; }
+.sst-table td.sst-cell-orange { background-color: rgba(210,153,34,0.13) !important; }
+.sst-table td.sst-cell-red    { background-color: rgba(248,81,73,0.13) !important; }
+
+/* Curtain travel time column group: visual grouping via vertical separators
+   on the leftmost (Opening) and rightmost (Balance) cells of the group, in
+   both the colspan banner header and every body row. No background tint, so
+   verdict color coding remains the only colored signal in the table. */
+.sst-table .sst-curtain-group       { border-left:  2px solid var(--bs-border-color, #444);
+                                      border-right: 2px solid var(--bs-border-color, #444); }
+.sst-table .sst-curtain-edge-left   { border-left:  2px solid var(--bs-border-color, #444); }
+.sst-table .sst-curtain-edge-right  { border-right: 2px solid var(--bs-border-color, #444); }
+
+/* Per-shot measurement card stats table — compact two-column metric list.
+   Mirrors the speed-summary table (.sst-table) typography: muted 0.78rem
+   labels, 0.85rem values, no Bootstrap borders. The label column shrinks to
+   fit content so values sit close, not pushed apart. */
+.meas-stats-table              { width: auto; margin-bottom: 0; }
+.meas-stats-table td           { padding: 0.15rem 0.4rem; vertical-align: middle; }
+.meas-stats-table tr:first-child td { padding-top: 0; }
+.meas-stats-table .meas-stats-label { white-space: nowrap; padding-right: 1rem;
+                                      font-size: 0.78rem;
+                                      color: var(--bs-secondary-color, #888); }
+.meas-stats-table .meas-stats-value { font-size: 0.85rem; }
+
+/* Skew detail info icon (hover for per-curtain breakdown) */
+.skew-detail-icon { font-size: 14px; vertical-align: middle; opacity: 0.5; cursor: help; }
+
+/* Caption under the exposure simulation canvas — wraps to fit the 288px canvas
+   width; multi-line is acceptable since the column has spare vertical room. */
+.meas-sim-caption { font-size: 0.68rem; line-height: 1.2; max-width: 288px; }
+
+/* Session verdict tile subtitle */
+.welcome-stat-card .welcome-stat-sub { font-size: 0.78rem; opacity: 0.8; margin-top: 2px; }
+
+.sif-row       { margin-bottom: 4px; }
+.welcome-stat-card .sif-row { margin-bottom: 0; }
+.welcome-stat-card .sif-label { font-size: 0.78rem; color: var(--portal-text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.welcome-stat-card .sif-display { font-size: 1.05rem; font-weight: 700; }
+.welcome-stat-card .sif-view { min-height: 1.5em; margin-bottom: 2px; }
+.sif-label     { display: block; margin-bottom: 1px; }
+.sif-view      { display: flex; align-items: center; gap: 6px; cursor: pointer; line-height: 1.4; }
+.sif-view:hover .sif-edit-btn { opacity: 1; }
+.sif-edit-btn  { background: none; border: none; padding: 0 2px; font-size: 0.8em; opacity: 0.35;
+                 cursor: pointer; transition: opacity 0.15s; line-height: 1; }
+.sif-input     { margin-top: 2px; }
+.sif-actions   { display: flex; gap: 6px; margin-top: 5px; }
+.sif-action-btn  { border: none; border-radius: 4px; padding: 2px 10px; font-size: 0.8rem; cursor: pointer; }
+.sif-save-btn    { background: var(--bs-success, #198754); color: #fff; }
+.sif-cancel-btn  { background: var(--bs-secondary-bg, #444); color: var(--bs-body-color, #ccc); }
+
+.speed-group        { margin-bottom: 12px; }
+.speed-group-header { display: flex; align-items: center; gap: 8px;
+                      padding: 8px 12px; background: var(--bs-secondary-bg, #1a1a1a);
+                      border-radius: 6px; cursor: pointer; user-select: none; font-size: 0.9rem; }
+.speed-group-header:hover { background: var(--bs-tertiary-bg, #2a2a2a); }
+.speed-group-chevron        { font-size: 0.75em; opacity: 0.6; min-width: 10px; }
+.speed-group-chevron::before { content: "\25BC"; }
+.speed-group-body           { padding-top: 8px; }
+.speed-group--collapsed .speed-group-body            { display: none; }
+.speed-group--collapsed .speed-group-chevron::before { content: "\25B6"; }
+
+.session-print-title { display: none; }
+
+/* Exposure simulation card region (per-measurement). Class hooks replace the
+   inline styles previously emitted from sessionMeasurementCard(). */
+.exposure-sim-canvas {
+  width: 288px;
+  height: 192px;
+  max-width: 100%;
+  border-radius: 4px;
+  border: 1px solid var(--bs-border-color, #333);
+}
+.exposure-sim-play {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: 0;
+  border-radius: 50%;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.exposure-sim-flip {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: 0;
+  border-radius: 50%;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.exposure-sim-play .material-symbols-outlined,
+.exposure-sim-flip .material-symbols-outlined {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* ============================================================================
+   Print / Save as PDF — shutter sessions detail view
+   ============================================================================ */
+@media print {
+  /* Suppress browser-added page title and URL headers/footers */
+  @page { margin: 1.5cm; }
+
+  /* Hide all portal chrome */
+  .portal-header,
+  #portal-nav,
+  #sessions-back-to-top,
+  .session-detail-actions,
+  .section-header { display: none !important; }
+
+  /* Hide the per-shot exposure simulation (canvas + caption + play button).
+     The simulation is interactive/illustrative and not useful in printouts;
+     hiding the whole right column lets the metrics table use the full width. */
+  .exposure-sim-wrapper { display: none !important; }
+
+  /* Show stat tiles in print and preserve accent borders */
+  .session-tiles-row { display: flex !important; }
+
+  /* Remove layout constraints so content fills the page */
+  body, .portal-layout, .content-pane {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Let the detail view expand fully */
+  #sessions-detail-view { display: block !important; }
+
+  .session-print-title {
+    display: block !important;
+    margin: 0 0 12px !important;
+    font-size: 22pt;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .sif-view { cursor: default; }
+  .sif-edit,
+  .sif-edit-btn { display: none !important; }
+
+  /* Page break after the top summary card (deviation chart + legend) */
+  #session-measurements { break-before: page; }
+
+  /* Avoid page breaks inside measurement cards */
+  .card, .card-body { break-inside: avoid; }
+
+  /* Force all speed groups expanded for print, regardless of UI collapsed state */
+  .speed-group--collapsed .speed-group-body { display: block !important; }
+  .speed-group-header { cursor: default; }
+
+  /* Scale the canvas to fit the print page width without stretching */
+  #session-deviation-chart canvas { max-width: 100%; height: auto !important; }
+
+  /* Ensure SVG legend shapes and chart colors print */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+}

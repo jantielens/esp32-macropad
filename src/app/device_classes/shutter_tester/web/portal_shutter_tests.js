@@ -126,3 +126,10 @@ function _escHtml(s) {
     d.appendChild(document.createTextNode(s));
     return d.innerHTML;
 }
+
+// ============================================================================
+// Fragment init — called by portal_nav.js when the shutter-tests fragment loads
+// ============================================================================
+window.init_shutter_tests_fragment = function () {
+    shutterTestsReload();
+};
