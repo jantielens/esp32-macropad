@@ -299,82 +299,10 @@ discover_bundle_manifests "css" CSS_SKIP_FILES
 filter_bundle_fragments JS_FILES JS_SKIP_FILES
 filter_bundle_fragments CSS_FILES CSS_SKIP_FILES
 
-# Read template fragments for HTML processing
-HEADER_TEMPLATE=""
-NAV_TEMPLATE=""
-FOOTER_TEMPLATE=""
-BINDING_HELP_TEMPLATE=""
-WIDGET_BAR_CHART_TEMPLATE=""
-WIDGET_GAUGE_TEMPLATE=""
-WIDGET_SPARKLINE_TEMPLATE=""
-WIDGET_TABLE_TEMPLATE=""
-WIDGET_ROCKER_TEMPLATE=""
-WIDGET_NUMERICROCKER_TEMPLATE=""
-WIDGET_WAVEFORM_TEMPLATE=""
-WIDGET_LIST_TEMPLATE=""
-STYLE_HELP_TEMPLATE=""
-HEALTH_WIDGET_TEMPLATE=""
-REBOOT_OVERLAY_TEMPLATE=""
-
-if [ -f "$WEB_DIR/_header.html" ]; then
-    HEADER_TEMPLATE=$(cat "$WEB_DIR/_header.html")
-fi
-
-if [ -f "$WEB_DIR/_nav.html" ]; then
-    NAV_TEMPLATE=$(cat "$WEB_DIR/_nav.html")
-fi
-
-if [ -f "$WEB_DIR/_footer.html" ]; then
-    FOOTER_TEMPLATE=$(cat "$WEB_DIR/_footer.html")
-fi
-
-if [ -f "$WEB_DIR/_binding_help.html" ]; then
-    BINDING_HELP_TEMPLATE=$(cat "$WEB_DIR/_binding_help.html")
-fi
-
-if [ -f "$WEB_DIR/_widget_bar_chart.html" ]; then
-    WIDGET_BAR_CHART_TEMPLATE=$(cat "$WEB_DIR/_widget_bar_chart.html")
-fi
-
-if [ -f "$WEB_DIR/_widget_gauge.html" ]; then
-    WIDGET_GAUGE_TEMPLATE=$(cat "$WEB_DIR/_widget_gauge.html")
-fi
-
-if [ -f "$WEB_DIR/_widget_sparkline.html" ]; then
-    WIDGET_SPARKLINE_TEMPLATE=$(cat "$WEB_DIR/_widget_sparkline.html")
-fi
-
-if [ -f "$WEB_DIR/_widget_table.html" ]; then
-    WIDGET_TABLE_TEMPLATE=$(cat "$WEB_DIR/_widget_table.html")
-fi
-
-if [ -f "$WEB_DIR/_widget_rocker.html" ]; then
-    WIDGET_ROCKER_TEMPLATE=$(cat "$WEB_DIR/_widget_rocker.html")
-fi
-
-if [ -f "$WEB_DIR/_widget_numericrocker.html" ]; then
-    WIDGET_NUMERICROCKER_TEMPLATE=$(cat "$WEB_DIR/_widget_numericrocker.html")
-fi
-
-if [ -f "$WEB_DIR/_widget_waveform.html" ]; then
-    WIDGET_WAVEFORM_TEMPLATE=$(cat "$WEB_DIR/_widget_waveform.html")
-fi
-
-if [ -f "$WEB_DIR/_widget_list.html" ]; then
-    WIDGET_LIST_TEMPLATE=$(cat "$WEB_DIR/_widget_list.html")
-fi
-
-if [ -f "$WEB_DIR/_style_help.html" ]; then
-    STYLE_HELP_TEMPLATE=$(cat "$WEB_DIR/_style_help.html")
-fi
-
-if [ -f "$WEB_DIR/_health_widget.html" ]; then
-    HEALTH_WIDGET_TEMPLATE=$(cat "$WEB_DIR/_health_widget.html")
-fi
-
-if [ -f "$WEB_DIR/_reboot_overlay.html" ]; then
-    REBOOT_OVERLAY_TEMPLATE=$(cat "$WEB_DIR/_reboot_overlay.html")
-fi
+# Template fragments under $WEB_DIR (_header.html, _nav.html, _footer.html,
+# _binding_help.html, _widget_*.html, _style_help.html, _health_widget.html,
+# _reboot_overlay.html) are loaded by tools/_render_html_template.py at
+# render time; the shell no longer caches them into *_TEMPLATE variables.
 
 if [ ${#HTML_FILES[@]} -eq 0 ] && [ ${#FRAGMENT_FILES[@]} -eq 0 ] && [ ${#CSS_FILES[@]} -eq 0 ] && [ ${#JS_FILES[@]} -eq 0 ]; then
     echo "Error: No HTML, CSS, or JS files found in $WEB_DIR"
@@ -754,63 +682,14 @@ for html_file in "${HTML_FILES[@]}"; do
     echo "Processing HTML: $filename.html..."
     content=$(cat "$html_file")
     original_size=$(echo -n "$content" | wc -c)
-    
-    # Template substitution and minification
-    minified=$(python3 -c "
-import re
-import sys
 
-# Read template fragments from environment or files
-header_template = '''$HEADER_TEMPLATE'''
-nav_template = '''$NAV_TEMPLATE'''
-footer_template = '''$FOOTER_TEMPLATE'''
-binding_help_template = '''$BINDING_HELP_TEMPLATE'''
-widget_bar_chart_template = '''$WIDGET_BAR_CHART_TEMPLATE'''
-widget_gauge_template = '''$WIDGET_GAUGE_TEMPLATE'''
-widget_sparkline_template = '''$WIDGET_SPARKLINE_TEMPLATE'''
-widget_table_template = '''$WIDGET_TABLE_TEMPLATE'''
-widget_rocker_template = '''$WIDGET_ROCKER_TEMPLATE'''
-widget_numericrocker_template = '''$WIDGET_NUMERICROCKER_TEMPLATE'''
-widget_waveform_template = '''$WIDGET_WAVEFORM_TEMPLATE'''
-widget_list_template = '''$WIDGET_LIST_TEMPLATE'''
-style_help_template = '''$STYLE_HELP_TEMPLATE'''
-health_widget_template = '''$HEALTH_WIDGET_TEMPLATE'''
-reboot_overlay_template = '''$REBOOT_OVERLAY_TEMPLATE'''
-
-with open('$html_file', 'r') as f:
-    html = f.read()
-    
-    # Replace template placeholders with actual content
-    html = html.replace('{{HEADER}}', header_template)
-    html = html.replace('{{NAV}}', nav_template)
-    html = html.replace('{{FOOTER}}', footer_template)
-    html = html.replace('{{BINDING_HELP}}', binding_help_template)
-    html = html.replace('{{WIDGET_BAR_CHART}}', widget_bar_chart_template)
-    html = html.replace('{{WIDGET_GAUGE}}', widget_gauge_template)
-    html = html.replace('{{WIDGET_SPARKLINE}}', widget_sparkline_template)
-    html = html.replace('{{WIDGET_TABLE}}', widget_table_template)
-    html = html.replace('{{WIDGET_ROCKER}}', widget_rocker_template)
-    html = html.replace('{{WIDGET_NUMERICROCKER}}', widget_numericrocker_template)
-    html = html.replace('{{WIDGET_WAVEFORM}}', widget_waveform_template)
-    html = html.replace('{{WIDGET_LIST}}', widget_list_template)
-    html = html.replace('{{STYLE_HELP}}', style_help_template)
-    html = html.replace('{{HEALTH_WIDGET}}', health_widget_template)
-    html = html.replace('{{REBOOT_OVERLAY}}', reboot_overlay_template)
-    
-    # Project name substitution
-    html = html.replace('{{PROJECT_NAME}}', '$PROJECT_NAME')
-    html = html.replace('{{PROJECT_DISPLAY_NAME}}', '$PROJECT_DISPLAY_NAME')
-    
-    # Remove HTML comments
-    html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
-    # Collapse multiple spaces/newlines to single space
-    html = re.sub(r'\s+', ' ', html)
-    # Remove spaces around tags
-    html = re.sub(r'>\s+<', '><', html)
-    # Trim
-    html = html.strip()
-    print(html, end='')
-")
+    # Template substitution and minification (see tools/_render_html_template.py).
+    minified=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
+        --web-dir "$WEB_DIR" \
+        --input "$html_file" \
+        --mode shell \
+        --project-name "$PROJECT_NAME" \
+        --project-display-name "$PROJECT_DISPLAY_NAME")
     
     HTML_CONTENTS["$filename"]="$minified"
     minified_size=$(echo -n "$minified" | wc -c)
@@ -836,48 +715,13 @@ for fragment_file in "${FRAGMENT_FILES[@]}"; do
     echo "Processing fragment: $stem.fragment.html..."
     content=$(cat "$fragment_file")
     original_size=$(echo -n "$content" | wc -c)
-    
-    minified=$(python3 -c "
-import re
 
-binding_help_template = '''$BINDING_HELP_TEMPLATE'''
-widget_bar_chart_template = '''$WIDGET_BAR_CHART_TEMPLATE'''
-widget_gauge_template = '''$WIDGET_GAUGE_TEMPLATE'''
-widget_sparkline_template = '''$WIDGET_SPARKLINE_TEMPLATE'''
-widget_table_template = '''$WIDGET_TABLE_TEMPLATE'''
-widget_rocker_template = '''$WIDGET_ROCKER_TEMPLATE'''
-widget_numericrocker_template = '''$WIDGET_NUMERICROCKER_TEMPLATE'''
-widget_waveform_template = '''$WIDGET_WAVEFORM_TEMPLATE'''
-widget_list_template = '''$WIDGET_LIST_TEMPLATE'''
-style_help_template = '''$STYLE_HELP_TEMPLATE'''
-health_widget_template = '''$HEALTH_WIDGET_TEMPLATE'''
-reboot_overlay_template = '''$REBOOT_OVERLAY_TEMPLATE'''
-
-with open('$fragment_file', 'r') as f:
-    html = f.read()
-    
-    html = html.replace('{{BINDING_HELP}}', binding_help_template)
-    html = html.replace('{{WIDGET_BAR_CHART}}', widget_bar_chart_template)
-    html = html.replace('{{WIDGET_GAUGE}}', widget_gauge_template)
-    html = html.replace('{{WIDGET_SPARKLINE}}', widget_sparkline_template)
-    html = html.replace('{{WIDGET_TABLE}}', widget_table_template)
-    html = html.replace('{{WIDGET_ROCKER}}', widget_rocker_template)
-    html = html.replace('{{WIDGET_NUMERICROCKER}}', widget_numericrocker_template)
-    html = html.replace('{{WIDGET_WAVEFORM}}', widget_waveform_template)
-    html = html.replace('{{WIDGET_LIST}}', widget_list_template)
-    html = html.replace('{{STYLE_HELP}}', style_help_template)
-    html = html.replace('{{HEALTH_WIDGET}}', health_widget_template)
-    html = html.replace('{{REBOOT_OVERLAY}}', reboot_overlay_template)
-    
-    html = html.replace('{{PROJECT_NAME}}', '$PROJECT_NAME')
-    html = html.replace('{{PROJECT_DISPLAY_NAME}}', '$PROJECT_DISPLAY_NAME')
-    
-    html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
-    html = re.sub(r'\s+', ' ', html)
-    html = re.sub(r'>\s+<', '><', html)
-    html = html.strip()
-    print(html, end='')
-")
+    minified=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
+        --web-dir "$WEB_DIR" \
+        --input "$fragment_file" \
+        --mode fragment \
+        --project-name "$PROJECT_NAME" \
+        --project-display-name "$PROJECT_DISPLAY_NAME")
     
     FRAGMENT_CONTENTS["$filename"]="$minified"
     minified_size=$(echo -n "$minified" | wc -c)
