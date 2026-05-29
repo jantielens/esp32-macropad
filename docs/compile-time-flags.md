@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 201
+Total flags: 207
 
 ### Features (HAS_*)
 
@@ -38,10 +38,13 @@ Total flags: 201
 - **HAS_EPAPER_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext0 wake plus short/long press).
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
+- **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.
 - **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
 - **HAS_SENSOR_DUMMY** default: `false` — Enable dummy sensor adapter (synthetic values for testing).
+- **HAS_SENSOR_HX711** default: `false` — HX711 strain-gauge amplifier (bit-banged digital protocol).
 - **HAS_SENSOR_LD2410_OUT** default: `false` — Enable LD2410 OUT pin presence sensor adapter.
+- **HAS_SENSOR_NAU7802** default: `false` — NAU7802 24-bit I2C load-cell ADC.
 - **HAS_SOUND_PLAYER** default: `HAS_AUDIO` — Defaults to HAS_AUDIO — enable audio to get sound player support.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 
@@ -61,6 +64,8 @@ Total flags: 201
 - **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin.
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
 - **EPAPER_BUTTON_PIN** default: `36` — (typical Inkplate wiring uses GPIO36 with an external pullup).
+- **HX711_DOUT_PIN** default: `-1` — HX711 data-out pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
+- **HX711_SCK_PIN** default: `-1` — HX711 clock pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.
 - **LCD_B1_PIN** default: `(no default)` — RGB Blue 1 pin.
 - **LCD_B2_PIN** default: `(no default)` — RGB Blue 2 pin.
@@ -158,6 +163,7 @@ Total flags: 201
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
+- **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
@@ -248,17 +254,19 @@ Total flags: 201
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ✅ | ✅ |  |  |  | ? | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ |  |  | ✅ |  | ? |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ |  |  |  |  |  |  |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SOUND_PLAYER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
+| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ✅ | ? | ✅ |  |  |  |  |  | ? | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  | ? | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ | ? | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  | ? |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -272,6 +280,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-shutter | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-hx711 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-nau7802 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | — | — |
 | inkplate5v2 | — | — |
@@ -663,6 +673,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
+- **IS_COFFEE_SCALE**
+  - src/app/board_config.h
+  - src/app/device_class_registry.cpp
+  - src/app/device_classes.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp

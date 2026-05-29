@@ -71,6 +71,15 @@
 #define IS_SHUTTER_TESTER false
 #endif
 
+// Coffee-scale product variant. When true the firmware compiles the load-cell
+// sensor drivers (HX711 / NAU7802), scale HAL + brew engine, and the
+// brew/scale portal pages — and the device identifies as the
+// "Coffee Scale" device class (see device_class_registry). Off by default;
+// enabled per-board via src/boards/<name>/board_overrides.h.
+#ifndef IS_COFFEE_SCALE
+#define IS_COFFEE_SCALE false
+#endif
+
 // Enable e-paper wake-button handling (ext0 wake plus short/long press).
 #ifndef HAS_EPAPER_WAKE_BUTTON
 #define HAS_EPAPER_WAKE_BUTTON false
@@ -359,6 +368,16 @@
 // src/app/device_classes/shutter_tester/shutter_defaults.h. Board override
 // files may still pre-define any SHUTTER_* macro; those overrides are
 // preserved by the #ifndef guards in shutter_defaults.h.
+
+// Coffee Scale defaults (HAS_SENSOR_HX711, HAS_SENSOR_NAU7802, HAS_SCALE,
+// HX711_DOUT_PIN, HX711_SCK_PIN) are owned by the coffee_scale device class
+// and live in src/app/device_classes/coffee_scale/coffee_scale_defaults.h.
+// Pulled in only on coffee-scale builds so the macros never leak into other
+// device classes; board override files may still pre-define any of them and
+// those overrides are preserved by the #ifndef guards in the header.
+#if IS_COFFEE_SCALE
+#include "device_classes/coffee_scale/coffee_scale_defaults.h"
+#endif
 
 // ============================================================================
 // Web Portal Health Widget

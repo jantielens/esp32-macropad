@@ -876,6 +876,12 @@ HEADER_START
 # be true for the asset to be included in the build. Echoes nothing for
 # always-on assets. The fragment and JS stem namespaces are disjoint, so a
 # single mapping table handles both.
+#
+# CSS chunking convention: chunked CSS files in portal-all.css.bundle use
+# the marker `[chunk:<full_class_name> IS_<CLASS>]` (full class name, e.g.
+# `coffee_scale`, never abbreviations like `scale`) so chunk names never
+# collide as more device classes land. Same naming applies to any future
+# chunked-JS bundle.
 asset_feature_flag() {
     local stem="$1"
     # Strip trailing _fragment suffix (no-op for JS stems).
@@ -895,6 +901,8 @@ asset_feature_flag() {
             echo "HAS_EPAPER" ;;
         shutter|shutter_tests|shutter_sessions|shutter_session_actions)
             echo "IS_SHUTTER_TESTER" ;;
+        portal_action_editor_scale|portal_brews|portal_brews_charts|portal_brews_init|portal_brews_templates)
+            echo "IS_COFFEE_SCALE" ;;
         *)
             echo "" ;;
     esac

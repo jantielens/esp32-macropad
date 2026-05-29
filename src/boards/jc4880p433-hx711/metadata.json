@@ -1,0 +1,19 @@
+{
+  "device_class": "coffee_scale",
+  "board_label": "JC4880P433 HX711",
+  "description": "Guition JC4880P433 — 4.3\" 480x800 MIPI-DSI ST7701 IPS with GT911 capacitive touch. ESP32-P4 variant with HX711 amplifier-based load cell sensor for coffee brewing (weight measurement, brew templates, brew log).",
+  "chip_family": "ESP32-P4",
+  "flash_mb": 16,
+  "psram_mb": 32,
+  "wireless": {
+    "wifi": true,
+    "ble": true,
+    "notes": "WiFi/BLE via ESP-Hosted ESP32-C6 over SDIO"
+  },
+  "display": {
+    "size": "4.3\"",
+    "resolution": "480x800",
+    "type": "MIPI-DSI",
+    "touch": true
+  }
+}

@@ -16,6 +16,8 @@ DeviceClass device_class_detect() {
 
 #if IS_SHUTTER_TESTER
     return DeviceClass::SHUTTER_TESTER;
+#elif IS_COFFEE_SCALE
+    return DeviceClass::COFFEE_SCALE;
 #elif HAS_EPAPER
     return DeviceClass::EPAPER;
 #elif !HAS_DISPLAY
@@ -34,6 +36,7 @@ static const DeviceClassDescriptor DESCRIPTORS[] = {
     { DeviceClass::EPAPER,         "E-Paper",        "EPAPER",   "ESP32-MP E-Paper"        },
     { DeviceClass::HEADLESS,       "Headless",       "HEADLESS", "ESP32-MP Headless"       },
     { DeviceClass::SHUTTER_TESTER, "Shutter Tester", "SHUTTER",  "ESP32-MP Shutter Tester" },
+    { DeviceClass::COFFEE_SCALE,   "Coffee Scale",   "SCALE",    "ESP32-MP Coffee Scale"   },
 };
 
 static const size_t DESCRIPTOR_COUNT = sizeof(DESCRIPTORS) / sizeof(DESCRIPTORS[0]);

@@ -34,6 +34,12 @@
       description:
         'Specialized capture rig for measuring camera shutter speeds. ADC sensor array reads the light pulse from a film-plane LED bar, computes exposure times across the frame, and stores test sessions for review in the web portal.',
     },
+    {
+      key: 'coffee_scale',
+      title: 'Coffee Scale',
+      description:
+        'Touch-screen kitchen scale for coffee brewing. Reads load-cell sensors (HX711 or NAU7802), runs configurable brew templates with pour-by-pour timing and weight targets, and logs brews to the web portal.',
+    },
   ];
 
   const initialBoards = Array.from(container.querySelectorAll(':scope > .board'));

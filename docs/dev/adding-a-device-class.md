@@ -24,7 +24,7 @@ core firmware through three independent mechanisms:
    files in the sketch root, every `.cpp` under `device_classes/<name>/`
    must be `#include`d from a feature-gated block in an aggregator
    (`device_classes.cpp`, `portal_components.cpp`, `route_components.cpp`,
-   `widgets.cpp`).
+   `widgets.cpp`, `sensors.cpp`).
 
 The class is enabled by a single `IS_<NAME>` flag set in one or more board
 override files. Boards that do not set the flag pay zero flash cost.
@@ -295,7 +295,29 @@ registration files (`REGISTER_ROUTES()`) for the class:
 #endif
 ```
 
-### 4.4 Web Assets
+### 4.4 Sensor Drivers
+
+[src/app/sensors.cpp](src/app/sensors.cpp) — sensor driver implementations
+and registration. Follows the same aggregator pattern as the other
+subsystem files: a file-scope `#if HAS_SENSOR_*` `#include` of the driver
+`.cpp` plus a matching `register_*_sensor(registry)` call inside
+`sensor_manager_register_all`. Without both halves the driver is silently
+absent from the sensor manager.
+
+```cpp
+#if HAS_SENSOR_FOO
+#include "device_classes/foo/sensors/foo_sensor.cpp"
+#endif
+
+void sensor_manager_register_all(SensorRegistry &registry) {
+    #if HAS_SENSOR_FOO
+    register_foo_sensor(registry);
+    #endif
+    // ... existing sensors ...
+}
+```
+
+### 4.5 Web Assets
 
 Files under `device_classes/foo/web/` are picked up automatically by
 [tools/minify-web-assets.sh](tools/minify-web-assets.sh):
@@ -318,7 +340,14 @@ gzip blob instead of a separate HTTP request, add a chunk marker to
 portal_foo.css
 ```
 
-### 4.5 Action Types
+**Chunk naming convention:** chunk markers use the form
+`[chunk:<full_class_name> IS_<CLASS>]`. Use the **full** device-class name
+(e.g. `coffee_scale`, `shutter_tester`) and never an abbreviation
+(`[chunk:scale]`, `[chunk:shutter]`) so chunk names never collide as more
+device classes land. Same convention applies to any future chunked-JS
+bundle.
+
+### 4.6 Action Types
 
 If the class defines new button action types (e.g. `"foo_start"`), use the
 `ActionTypeDef` registry rather than editing the core `action_dispatch.cpp`
