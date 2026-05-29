@@ -2,6 +2,14 @@
 # Combines vendor framework + portal styles into a single asset to reduce
 # parallel HTTP requests at portal load (mitigates ESP-Hosted SDIO DMA pressure).
 # Order follows CSS cascade: framework first, custom overrides last.
+#
+# Chunked-bundle markers (mirror the JS chunked path): each [chunk:NAME FLAG]
+# group is compiled into a separate variant; exactly one #if branch matches
+# per build so device-class CSS contributes zero bytes to non-matching boards.
+# [chunk:core]
 bootstrap.min.css
 portal-custom.css
 portal-all.css
+
+# [chunk:shutter IS_SHUTTER_TESTER]
+portal_shutter.css
