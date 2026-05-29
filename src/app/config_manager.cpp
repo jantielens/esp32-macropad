@@ -7,6 +7,9 @@
 
 #include "config_manager.h"
 #include "board_config.h"
+#if IS_SHUTTER_TESTER
+#include "device_classes/shutter_tester/shutter_defaults.h"
+#endif
 #include "device_class.h"
 #include "class_branding.h"
 #include "web_assets.h"

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "board_config.h"
+#include "shutter_defaults.h"
 
 #if IS_SHUTTER_TESTER
 
