@@ -488,6 +488,266 @@ gzip_to_c_array() {
     rm -f "$temp_file" "$temp_gz"
 }
 
+# ---------------------------------------------------------------------------
+# Shared CSS/JS pipeline helpers
+# ---------------------------------------------------------------------------
+# Both CSS and JS go through the same shape: discover source files, optionally
+# concatenate from a .bundle manifest (chunked or plain), minify, gzip, store
+# into kind-specific associative arrays, then emit 2^N #if-guarded PROGMEM
+# variants for chunked bundles. The only per-kind differences are the
+# minifier (csscompressor vs rjsmin), the file extension, the symbol-suffix,
+# and an optional `node --check` syntax pass on JS.
+
+# Minify a source file with the kind-specific minifier.
+minify_source() {
+    local kind="$1"
+    local src="$2"
+    case "$kind" in
+        css)
+            python3 -c "
+import csscompressor
+with open('$src', 'r') as f:
+    print(csscompressor.compress(f.read()), end='')
+"
+            ;;
+        js)
+            python3 -c "
+import rjsmin
+with open('$src', 'r') as f:
+    print(rjsmin.jsmin(f.read()), end='')
+"
+            ;;
+        *)
+            echo "minify_source: unknown kind '$kind'" >&2
+            return 1
+            ;;
+    esac
+}
+
+# Optional source-level syntax check (currently JS only, via node --check).
+# Echoes errors prefixed with the supplied human label and returns non-zero
+# on failure. Always succeeds for kinds without a checker.
+syntax_check_source() {
+    local kind="$1"
+    local src="$2"
+    local label="$3"
+    [[ "$kind" != "js" ]] && return 0
+    command -v node &> /dev/null || return 0
+    if ! node --check "$src" 2>/dev/null; then
+        echo "  ✗ $label has syntax errors:"
+        node --check "$src" 2>&1 | sed 's/^/    /'
+        return 1
+    fi
+    return 0
+}
+
+# Process every source file of one kind (css|js): minify, gzip, and store
+# results into the kind-specific associative arrays. Handles chunked bundles,
+# plain bundles, and standalone files identically across CSS and JS.
+process_asset_kind() {
+    local kind="$1"
+    local -n files_arr="$2"
+    local upper="${kind^^}"
+    local -n contents_ref="${upper}_CONTENTS"
+    local -n gzip_ref="${upper}_GZIP_CONTENTS"
+    local -n chunk_flags_ref="${upper}_CHUNK_FLAGS"
+    local -n chunk_names_ref="${upper}_CHUNK_NAMES"
+    local -n bundle_chunks_ref="${upper}_BUNDLE_CHUNKS"
+
+    local src_file raw_name filename bundle_manifest
+    for src_file in "${files_arr[@]}"; do
+        raw_name=$(basename "$src_file" ".${kind}")
+        filename="${raw_name//[.-]/_}"
+        bundle_manifest="${src_file}.bundle"
+
+        # --- Chunked bundle path (manifest contains [chunk:NAME ...] markers) ---
+        if bundle_has_chunk_markers "$bundle_manifest"; then
+            echo "Bundling ${upper} (chunked): $raw_name.${kind} (from $(basename "$bundle_manifest"))..."
+
+            local chunk_paths=() chunk_flags=() chunk_names=()
+            if ! concatenate_bundle_chunked "$bundle_manifest" chunk_paths chunk_flags chunk_names; then
+                echo "  ✗ Failed to parse bundle manifest $bundle_manifest"
+                exit 1
+            fi
+
+            local chunk_keys=""
+            local ci chunk_path chunk_flag chunk_name chunk_key
+            local chunk_orig_size chunk_minified chunk_min_size chunk_gzipped chunk_gz_size
+            for ci in "${!chunk_paths[@]}"; do
+                chunk_path="${chunk_paths[$ci]}"
+                chunk_flag="${chunk_flags[$ci]}"
+                chunk_name="${chunk_names[$ci]}"
+                chunk_key="${filename}_${chunk_name}"
+
+                if ! syntax_check_source "$kind" "$chunk_path" "Bundle chunk [${chunk_name}] (${chunk_flag:-always})"; then
+                    rm -f "${chunk_paths[@]}"
+                    exit 1
+                fi
+
+                echo "  Minifying chunk [${chunk_name}] (${chunk_flag:-always})..."
+                chunk_orig_size=$(wc -c <"$chunk_path")
+                chunk_minified=$(minify_source "$kind" "$chunk_path")
+                rm -f "$chunk_path"
+
+                contents_ref["$chunk_key"]="$chunk_minified"
+                chunk_flags_ref["$chunk_key"]="$chunk_flag"
+                chunk_names_ref["$chunk_key"]="$chunk_name"
+                chunk_min_size=$(echo -n "$chunk_minified" | wc -c)
+
+                chunk_gzipped=$(gzip_to_c_array "$chunk_minified")
+                gzip_ref["$chunk_key"]="$chunk_gzipped"
+                chunk_gz_size=$(echo -n "$chunk_minified" | gzip -9 -c | wc -c)
+
+                ORIGINAL_SIZES["${kind}_${chunk_key}"]=$chunk_orig_size
+                PROCESSED_SIZES["${kind}_${chunk_key}"]=$chunk_min_size
+                GZIPPED_SIZES["${kind}_${chunk_key}"]=$chunk_gz_size
+
+                chunk_keys+="$chunk_key "
+            done
+            bundle_chunks_ref["$filename"]="${chunk_keys% }"
+            continue
+        fi
+
+        # --- Plain bundle / single-file path ---
+        local source="$src_file"
+        if concatenate_bundle "$bundle_manifest" source; then
+            echo "Bundling ${upper}: $raw_name.${kind} (from $(basename "$bundle_manifest"))..."
+            if ! syntax_check_source "$kind" "$source" "Concatenated bundle $raw_name.${kind}"; then
+                rm -f "$source"
+                exit 1
+            fi
+        fi
+
+        echo "Minifying ${upper}: $raw_name.${kind}..."
+        local content original_size minified minified_size gzipped gzipped_size
+        content=$(cat "$source")
+        original_size=$(echo -n "$content" | wc -c)
+        minified=$(minify_source "$kind" "$source")
+
+        # Cleanup temp file if it was a bundle
+        [[ "$source" != "$src_file" ]] && rm -f "$source"
+
+        contents_ref["$filename"]="$minified"
+        minified_size=$(echo -n "$minified" | wc -c)
+
+        gzipped=$(gzip_to_c_array "$minified")
+        gzip_ref["$filename"]="$gzipped"
+        gzipped_size=$(echo -n "$minified" | gzip -9 -c | wc -c)
+
+        ORIGINAL_SIZES["${kind}_${filename}"]=$original_size
+        PROCESSED_SIZES["${kind}_${filename}"]=$minified_size
+        GZIPPED_SIZES["${kind}_${filename}"]=$gzipped_size
+    done
+}
+
+# Emit 2^N chunked-bundle variants for one kind (css|js) under a single
+# PROGMEM symbol name with #if guards. Mirrors the original JS/CSS variant
+# loops; both kinds use the same combinatorial structure.
+emit_chunked_variants() {
+    local kind="$1"
+    local upper="${kind^^}"
+    local -n bundle_chunks_ref="${upper}_BUNDLE_CHUNKS"
+    local -n chunk_flags_ref="${upper}_CHUNK_FLAGS"
+    local -n contents_ref="${upper}_CONTENTS"
+
+    local bundle_name chunks ckey f n_flags n_variants v b cond if_expr
+    local flag include cflag variant_tmp variant_orig_size variant_gz_size variant_gz
+    for bundle_name in "${!bundle_chunks_ref[@]}"; do
+        chunks="${bundle_chunks_ref[$bundle_name]}"
+
+        local -a unique_flags=()
+        local -A seen_flags=()
+        for ckey in $chunks; do
+            f="${chunk_flags_ref[$ckey]:-}"
+            if [[ -n "$f" && -z "${seen_flags[$f]:-}" ]]; then
+                unique_flags+=("$f")
+                seen_flags["$f"]=1
+            fi
+        done
+        n_flags=${#unique_flags[@]}
+        if [[ $n_flags -gt 3 ]]; then
+            echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 3 supported)." >&2
+            echo "     Each flag doubles flash cost across boards; consolidate chunks instead." >&2
+            unset unique_flags seen_flags
+            exit 1
+        fi
+        n_variants=$((1 << n_flags))
+        echo "Building variants for ${bundle_name}_${kind} (${n_flags} unique flags, ${n_variants} variant(s))..."
+
+        cat >> "$OUTPUT_FILE" << EOF
+
+// ${upper} bundle variants for ${bundle_name}.${kind}
+// Chunks: $(echo $chunks)
+// Unique flags: ${unique_flags[*]:-<none>}
+// Each board build matches exactly one #if branch below.
+EOF
+
+        for ((v=0; v<n_variants; v++)); do
+            if_expr=""
+            for ((b=0; b<n_flags; b++)); do
+                flag="${unique_flags[$b]}"
+                if (( (v >> b) & 1 )); then
+                    cond="$flag"
+                else
+                    cond="!$flag"
+                fi
+                if [[ -z "$if_expr" ]]; then
+                    if_expr="$cond"
+                else
+                    if_expr="$if_expr && $cond"
+                fi
+            done
+
+            variant_tmp=$(mktemp /tmp/bundle_variant_XXXXXX)
+            for ckey in $chunks; do
+                cflag="${chunk_flags_ref[$ckey]:-}"
+                include=0
+                if [[ -z "$cflag" ]]; then
+                    include=1
+                else
+                    for ((b=0; b<n_flags; b++)); do
+                        if [[ "${unique_flags[$b]}" == "$cflag" ]]; then
+                            if (( (v >> b) & 1 )); then include=1; fi
+                            break
+                        fi
+                    done
+                fi
+                if [[ $include -eq 1 ]]; then
+                    printf '%s\n' "${contents_ref[$ckey]}" >> "$variant_tmp"
+                fi
+            done
+
+            variant_orig_size=$(wc -c <"$variant_tmp")
+            variant_gz_size=$(gzip -9 -c <"$variant_tmp" | wc -c)
+            variant_gz=$(gzip_to_c_array "$(cat "$variant_tmp")")
+            rm -f "$variant_tmp"
+
+            if [[ $n_flags -eq 0 ]]; then
+                cat >> "$OUTPUT_FILE" << EOF
+const uint8_t ${bundle_name}_${kind}_gz[] PROGMEM = {
+${variant_gz}
+};
+const size_t ${bundle_name}_${kind}_gz_len = sizeof(${bundle_name}_${kind}_gz);
+
+EOF
+            else
+                cat >> "$OUTPUT_FILE" << EOF
+#if ${if_expr}
+const uint8_t ${bundle_name}_${kind}_gz[] PROGMEM = {
+${variant_gz}
+};
+const size_t ${bundle_name}_${kind}_gz_len = sizeof(${bundle_name}_${kind}_gz);
+#endif // ${if_expr}
+
+EOF
+            fi
+            printf "  variant %d/%d [%s]: %d -> %d bytes\n" "$((v+1))" "$n_variants" "${if_expr:-always}" "$variant_orig_size" "$variant_gz_size"
+        done
+
+        unset unique_flags seen_flags
+    done
+}
+
 # Process HTML files (template substitution + minification)
 for html_file in "${HTML_FILES[@]}"; do
     filename=$(basename "$html_file" .html)
@@ -639,96 +899,6 @@ declare -A CSS_CHUNK_FLAGS
 declare -A CSS_CHUNK_NAMES
 declare -A CSS_BUNDLE_CHUNKS
 
-# Process CSS files (minify, with bundle support)
-for css_file in "${CSS_FILES[@]}"; do
-    raw_name=$(basename "$css_file" .css)
-    filename="${raw_name//[.-]/_}"
-
-    bundle_manifest="${css_file}.bundle"
-
-    # --- Chunked bundle path (manifest contains [chunk:NAME] markers) ---
-    if bundle_has_chunk_markers "$bundle_manifest"; then
-        echo "Bundling CSS (chunked): $raw_name.css (from $(basename "$bundle_manifest"))..."
-
-        chunk_paths=()
-        chunk_flags=()
-        chunk_names=()
-        if ! concatenate_bundle_chunked "$bundle_manifest" chunk_paths chunk_flags chunk_names; then
-            echo "  ✗ Failed to parse bundle manifest $bundle_manifest"
-            exit 1
-        fi
-
-        chunk_keys=""
-        for ci in "${!chunk_paths[@]}"; do
-            chunk_path="${chunk_paths[$ci]}"
-            chunk_flag="${chunk_flags[$ci]}"
-            chunk_name="${chunk_names[$ci]}"
-            chunk_key="${filename}_${chunk_name}"
-
-            echo "  Minifying chunk [${chunk_name}] (${chunk_flag:-always})..."
-            chunk_orig_size=$(wc -c <"$chunk_path")
-
-            chunk_minified=$(python3 -c "
-import csscompressor
-with open('$chunk_path', 'r') as f:
-    css = f.read()
-    print(csscompressor.compress(css), end='')
-")
-            rm -f "$chunk_path"
-
-            CSS_CONTENTS["$chunk_key"]="$chunk_minified"
-            CSS_CHUNK_FLAGS["$chunk_key"]="$chunk_flag"
-            CSS_CHUNK_NAMES["$chunk_key"]="$chunk_name"
-            chunk_min_size=$(echo -n "$chunk_minified" | wc -c)
-
-            chunk_gzipped=$(gzip_to_c_array "$chunk_minified")
-            CSS_GZIP_CONTENTS["$chunk_key"]="$chunk_gzipped"
-            chunk_gz_size=$(echo -n "$chunk_minified" | gzip -9 -c | wc -c)
-
-            ORIGINAL_SIZES["css_$chunk_key"]=$chunk_orig_size
-            PROCESSED_SIZES["css_$chunk_key"]=$chunk_min_size
-            GZIPPED_SIZES["css_$chunk_key"]=$chunk_gz_size
-
-            chunk_keys+="$chunk_key "
-        done
-        CSS_BUNDLE_CHUNKS["$filename"]="${chunk_keys% }"
-        continue
-    fi
-
-    # --- Plain bundle / single-file path ---
-    css_source="$css_file"
-    if concatenate_bundle "$bundle_manifest" css_source; then
-        echo "Bundling CSS: $raw_name.css (from $(basename "$bundle_manifest"))..."
-    fi
-
-    echo "Minifying CSS: $raw_name.css..."
-    content=$(cat "$css_source")
-    original_size=$(echo -n "$content" | wc -c)
-    
-    minified=$(python3 -c "
-import csscompressor
-with open('$css_source', 'r') as f:
-    css = f.read()
-    minified = csscompressor.compress(css)
-    print(minified, end='')
-")
-
-    # Cleanup temp file if it was a bundle
-    [[ "$css_source" != "$css_file" ]] && rm -f "$css_source"
-    
-    CSS_CONTENTS["$filename"]="$minified"
-    minified_size=$(echo -n "$minified" | wc -c)
-    
-    # Gzip compress
-    gzipped=$(gzip_to_c_array "$minified")
-    CSS_GZIP_CONTENTS["$filename"]="$gzipped"
-    gzipped_size=$(echo -n "$minified" | gzip -9 -c | wc -c)
-    
-    ORIGINAL_SIZES["css_$filename"]=$original_size
-    PROCESSED_SIZES["css_$filename"]=$minified_size
-    GZIPPED_SIZES["css_$filename"]=$gzipped_size
-done
-
 # Per-chunk feature-flag map for chunked JS bundles. Keys are JS_CONTENTS keys
 # (e.g. "portal_core"); values are HAS_* macro names (or empty for always-on).
 declare -A JS_CHUNK_FLAGS
@@ -738,115 +908,11 @@ declare -A JS_CHUNK_NAMES
 # in concatenation order. Used during header emission to write the chunks table.
 declare -A JS_BUNDLE_CHUNKS
 
-# Process JS files (minify, with bundle support)
-for js_file in "${JS_FILES[@]}"; do
-    raw_name=$(basename "$js_file" .js)
-    filename="${raw_name//[.-]/_}"
+# Process CSS and JS sources. Both kinds use the same pipeline:
+#   bundle (chunked or plain) -> minify -> gzip -> store in kind-specific maps.
+process_asset_kind css CSS_FILES
+process_asset_kind js JS_FILES
 
-    bundle_manifest="${js_file}.bundle"
-
-    # --- Chunked bundle path (manifest contains [HAS_*] markers) ---
-    if bundle_has_chunk_markers "$bundle_manifest"; then
-        echo "Bundling JS (chunked): $raw_name.js (from $(basename "$bundle_manifest"))..."
-
-        chunk_paths=()
-        chunk_flags=()
-        chunk_names=()
-        if ! concatenate_bundle_chunked "$bundle_manifest" chunk_paths chunk_flags chunk_names; then
-            echo "  ✗ Failed to parse bundle manifest $bundle_manifest"
-            exit 1
-        fi
-
-        chunk_keys=""
-        for ci in "${!chunk_paths[@]}"; do
-            chunk_path="${chunk_paths[$ci]}"
-            chunk_flag="${chunk_flags[$ci]}"
-            chunk_name="${chunk_names[$ci]}"
-            chunk_key="${filename}_${chunk_name}"
-
-            # Syntax-check the chunk independently
-            if command -v node &> /dev/null; then
-                if ! node --check "$chunk_path" 2>/dev/null; then
-                    echo "  ✗ Bundle chunk [${chunk_name}] (${chunk_flag:-always}) has syntax errors:"
-                    node --check "$chunk_path" 2>&1 | sed 's/^/    /'
-                    rm -f "${chunk_paths[@]}"
-                    exit 1
-                fi
-            fi
-
-            echo "  Minifying chunk [${chunk_name}] (${chunk_flag:-always})..."
-            chunk_orig_size=$(wc -c <"$chunk_path")
-
-            chunk_minified=$(python3 -c "
-import rjsmin
-with open('$chunk_path', 'r') as f:
-    js = f.read()
-    print(rjsmin.jsmin(js), end='')
-")
-            rm -f "$chunk_path"
-
-            JS_CONTENTS["$chunk_key"]="$chunk_minified"
-            JS_CHUNK_FLAGS["$chunk_key"]="$chunk_flag"
-            JS_CHUNK_NAMES["$chunk_key"]="$chunk_name"
-            chunk_min_size=$(echo -n "$chunk_minified" | wc -c)
-
-            chunk_gzipped=$(gzip_to_c_array "$chunk_minified")
-            JS_GZIP_CONTENTS["$chunk_key"]="$chunk_gzipped"
-            chunk_gz_size=$(echo -n "$chunk_minified" | gzip -9 -c | wc -c)
-
-            ORIGINAL_SIZES["js_$chunk_key"]=$chunk_orig_size
-            PROCESSED_SIZES["js_$chunk_key"]=$chunk_min_size
-            GZIPPED_SIZES["js_$chunk_key"]=$chunk_gz_size
-
-            chunk_keys+="$chunk_key "
-        done
-        JS_BUNDLE_CHUNKS["$filename"]="${chunk_keys% }"
-        continue
-    fi
-
-    # --- Plain bundle / single-file path ---
-    js_source="$js_file"
-    if concatenate_bundle "$bundle_manifest" js_source; then
-        echo "Bundling JS: $raw_name.js (from $(basename "$bundle_manifest"))..."
-
-        # Syntax-check the concatenated bundle
-        if command -v node &> /dev/null; then
-            if ! node --check "$js_source" 2>/dev/null; then
-                echo "  ✗ Concatenated bundle $raw_name.js has syntax errors:"
-                node --check "$js_source" 2>&1 | sed 's/^/    /'
-                rm -f "$js_source"
-                exit 1
-            fi
-        fi
-    fi
-
-    echo "Minifying JS: $raw_name.js..."
-    content=$(cat "$js_source")
-    original_size=$(echo -n "$content" | wc -c)
-    
-    minified=$(python3 -c "
-import rjsmin
-with open('$js_source', 'r') as f:
-    js = f.read()
-    minified = rjsmin.jsmin(js)
-    print(minified, end='')
-")
-
-    # Cleanup temp file if it was a bundle
-    [[ "$js_source" != "$js_file" ]] && rm -f "$js_source"
-    
-    JS_CONTENTS["$filename"]="$minified"
-    minified_size=$(echo -n "$minified" | wc -c)
-    
-    # Gzip compress
-    gzipped=$(gzip_to_c_array "$minified")
-    JS_GZIP_CONTENTS["$filename"]="$gzipped"
-    gzipped_size=$(echo -n "$minified" | gzip -9 -c | wc -c)
-    
-    ORIGINAL_SIZES["js_$filename"]=$original_size
-    PROCESSED_SIZES["js_$filename"]=$minified_size
-    GZIPPED_SIZES["js_$filename"]=$gzipped_size
-done
 
 echo
 
@@ -1119,207 +1185,11 @@ for filename in "${!JS_CONTENTS[@]}"; do
     fi
 done
 
-# Generate JS bundle variants. For each chunked bundle (e.g. portal_js):
-#   1. Collect unique HAS_*/IS_* flags used across chunks (capped at 3 -> 8 variants).
-#   2. For each 2^N combination, concatenate chunks whose flag is unset OR
-#      matches the combination, then gzip ONCE.
-#   3. Emit each variant as a #if-guarded PROGMEM array under the same
-#      symbol name (${bundle_name}_js_gz). Exactly one #if branch matches
-#      per build -> one combined blob, one HTTP request, one gzip member.
-for bundle_name in "${!JS_BUNDLE_CHUNKS[@]}"; do
-    chunks="${JS_BUNDLE_CHUNKS[$bundle_name]}"
-
-    declare -a unique_flags=()
-    declare -A seen_flags=()
-    for ckey in $chunks; do
-        f="${JS_CHUNK_FLAGS[$ckey]:-}"
-        if [[ -n "$f" && -z "${seen_flags[$f]:-}" ]]; then
-            unique_flags+=("$f")
-            seen_flags["$f"]=1
-        fi
-    done
-    n_flags=${#unique_flags[@]}
-    if [[ $n_flags -gt 3 ]]; then
-        echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 3 supported)." >&2
-        echo "     Each flag doubles flash cost across boards; consolidate chunks instead." >&2
-        unset unique_flags seen_flags
-        exit 1
-    fi
-    n_variants=$((1 << n_flags))
-    echo "Building variants for ${bundle_name}_js (${n_flags} unique flags, ${n_variants} variant(s))..."
-
-    cat >> "$OUTPUT_FILE" << EOF
-
-// JS bundle variants for ${bundle_name}.js
-// Chunks: $(echo $chunks)
-// Unique flags: ${unique_flags[*]:-<none>}
-// Each board build matches exactly one #if branch below.
-EOF
-
-    for ((v=0; v<n_variants; v++)); do
-        if_expr=""
-        for ((b=0; b<n_flags; b++)); do
-            flag="${unique_flags[$b]}"
-            if (( (v >> b) & 1 )); then
-                cond="$flag"
-            else
-                cond="!$flag"
-            fi
-            if [[ -z "$if_expr" ]]; then
-                if_expr="$cond"
-            else
-                if_expr="$if_expr && $cond"
-            fi
-        done
-
-        variant_tmp=$(mktemp /tmp/bundle_variant_XXXXXX)
-        for ckey in $chunks; do
-            cflag="${JS_CHUNK_FLAGS[$ckey]:-}"
-            include=0
-            if [[ -z "$cflag" ]]; then
-                include=1
-            else
-                for ((b=0; b<n_flags; b++)); do
-                    if [[ "${unique_flags[$b]}" == "$cflag" ]]; then
-                        if (( (v >> b) & 1 )); then include=1; fi
-                        break
-                    fi
-                done
-            fi
-            if [[ $include -eq 1 ]]; then
-                printf '%s\n' "${JS_CONTENTS[$ckey]}" >> "$variant_tmp"
-            fi
-        done
-
-        variant_orig_size=$(wc -c <"$variant_tmp")
-        variant_gz_size=$(gzip -9 -c <"$variant_tmp" | wc -c)
-        variant_gz=$(gzip_to_c_array "$(cat "$variant_tmp")")
-        rm -f "$variant_tmp"
-
-        if [[ $n_flags -eq 0 ]]; then
-            cat >> "$OUTPUT_FILE" << EOF
-const uint8_t ${bundle_name}_js_gz[] PROGMEM = {
-${variant_gz}
-};
-const size_t ${bundle_name}_js_gz_len = sizeof(${bundle_name}_js_gz);
-
-EOF
-        else
-            cat >> "$OUTPUT_FILE" << EOF
-#if ${if_expr}
-const uint8_t ${bundle_name}_js_gz[] PROGMEM = {
-${variant_gz}
-};
-const size_t ${bundle_name}_js_gz_len = sizeof(${bundle_name}_js_gz);
-#endif // ${if_expr}
-
-EOF
-        fi
-        printf "  variant %d/%d [%s]: %d -> %d bytes\n" "$((v+1))" "$n_variants" "${if_expr:-always}" "$variant_orig_size" "$variant_gz_size"
-    done
-
-    unset unique_flags seen_flags
-done
-
-# Generate CSS bundle variants — mirrors the JS chunked path above. For each
-# chunked CSS bundle (e.g. portal_all_css), emit one combined PROGMEM blob per
-# 2^N flag combination under the same symbol name (${bundle_name}_css_gz).
-# Exactly one #if branch matches per build, so device-class CSS contributes
-# nothing to non-matching boards' web_assets.h footprint.
-for bundle_name in "${!CSS_BUNDLE_CHUNKS[@]}"; do
-    chunks="${CSS_BUNDLE_CHUNKS[$bundle_name]}"
-
-    declare -a unique_flags=()
-    declare -A seen_flags=()
-    for ckey in $chunks; do
-        f="${CSS_CHUNK_FLAGS[$ckey]:-}"
-        if [[ -n "$f" && -z "${seen_flags[$f]:-}" ]]; then
-            unique_flags+=("$f")
-            seen_flags["$f"]=1
-        fi
-    done
-    n_flags=${#unique_flags[@]}
-    if [[ $n_flags -gt 3 ]]; then
-        echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 3 supported)." >&2
-        echo "     Each flag doubles flash cost across boards; consolidate chunks instead." >&2
-        unset unique_flags seen_flags
-        exit 1
-    fi
-    n_variants=$((1 << n_flags))
-    echo "Building variants for ${bundle_name}_css (${n_flags} unique flags, ${n_variants} variant(s))..."
-
-    cat >> "$OUTPUT_FILE" << EOF
-
-// CSS bundle variants for ${bundle_name}.css
-// Chunks: $(echo $chunks)
-// Unique flags: ${unique_flags[*]:-<none>}
-// Each board build matches exactly one #if branch below.
-EOF
-
-    for ((v=0; v<n_variants; v++)); do
-        if_expr=""
-        for ((b=0; b<n_flags; b++)); do
-            flag="${unique_flags[$b]}"
-            if (( (v >> b) & 1 )); then
-                cond="$flag"
-            else
-                cond="!$flag"
-            fi
-            if [[ -z "$if_expr" ]]; then
-                if_expr="$cond"
-            else
-                if_expr="$if_expr && $cond"
-            fi
-        done
-
-        variant_tmp=$(mktemp /tmp/bundle_variant_XXXXXX)
-        for ckey in $chunks; do
-            cflag="${CSS_CHUNK_FLAGS[$ckey]:-}"
-            include=0
-            if [[ -z "$cflag" ]]; then
-                include=1
-            else
-                for ((b=0; b<n_flags; b++)); do
-                    if [[ "${unique_flags[$b]}" == "$cflag" ]]; then
-                        if (( (v >> b) & 1 )); then include=1; fi
-                        break
-                    fi
-                done
-            fi
-            if [[ $include -eq 1 ]]; then
-                printf '%s\n' "${CSS_CONTENTS[$ckey]}" >> "$variant_tmp"
-            fi
-        done
-
-        variant_orig_size=$(wc -c <"$variant_tmp")
-        variant_gz_size=$(gzip -9 -c <"$variant_tmp" | wc -c)
-        variant_gz=$(gzip_to_c_array "$(cat "$variant_tmp")")
-        rm -f "$variant_tmp"
-
-        if [[ $n_flags -eq 0 ]]; then
-            cat >> "$OUTPUT_FILE" << EOF
-const uint8_t ${bundle_name}_css_gz[] PROGMEM = {
-${variant_gz}
-};
-const size_t ${bundle_name}_css_gz_len = sizeof(${bundle_name}_css_gz);
-
-EOF
-        else
-            cat >> "$OUTPUT_FILE" << EOF
-#if ${if_expr}
-const uint8_t ${bundle_name}_css_gz[] PROGMEM = {
-${variant_gz}
-};
-const size_t ${bundle_name}_css_gz_len = sizeof(${bundle_name}_css_gz);
-#endif // ${if_expr}
-
-EOF
-        fi
-        printf "  variant %d/%d [%s]: %d -> %d bytes\n" "$((v+1))" "$n_variants" "${if_expr:-always}" "$variant_orig_size" "$variant_gz_size"
-    done
-
-    unset unique_flags seen_flags
-done
+# Emit chunked JS+CSS bundle variants. Each bundle expands to 2^N #if-guarded
+# PROGMEM arrays under one symbol; exactly one branch matches per build, so
+# device-class assets contribute nothing to non-matching boards.
+emit_chunked_variants js
+emit_chunked_variants css
 
 # Generate fragment lookup table for runtime dispatch
 if [ ${#FRAGMENT_CONTENTS[@]} -gt 0 ]; then
