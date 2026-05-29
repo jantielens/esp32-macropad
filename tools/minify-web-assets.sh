@@ -473,9 +473,13 @@ gzip_to_c_array() {
     local temp_file=$(mktemp)
     local temp_gz=$(mktemp)
     
-    # Write content to temp file and gzip it
+    # Write content to temp file and gzip it.
+    # `-n` suppresses the original filename + mtime in the gzip header so the
+    # emitted byte stream is reproducible across runs and CI environments.
+    # The ESP32 gzip decoder ignores FNAME/MTIME, so this is purely a
+    # build-determinism improvement.
     echo -n "$content" > "$temp_file"
-    gzip -9 -c "$temp_file" > "$temp_gz"
+    gzip -9 -n -c "$temp_file" > "$temp_gz"
     
     # Convert to C byte array format
     xxd -i < "$temp_gz" | grep -v "unsigned" | sed 's/^  //'
