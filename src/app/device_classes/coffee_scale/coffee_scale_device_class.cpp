@@ -28,6 +28,10 @@
 #include "sensors/nau7802_sensor.cpp"
 #include "scale_hal.cpp"
 #include "scale_init.cpp"
+// Phase 3: ActionTypeDef registrations for "scale" and "brew" action types.
+// Each self-gates on HAS_DISPLAY && IS_COFFEE_SCALE internally.
+#include "scale_actions.cpp"
+#include "brew_actions.cpp"
 
 #include "sensors/hx711_sensor.h"
 #include "sensors/nau7802_sensor.h"
