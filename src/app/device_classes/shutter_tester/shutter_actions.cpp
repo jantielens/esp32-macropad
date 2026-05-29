@@ -12,6 +12,7 @@
 #if HAS_DISPLAY && IS_SHUTTER_TESTER
 
 #include "../../log_manager.h"
+#include "shutter_payload.h"
 #include "shutter_capture.h"
 #include "shutter_measure.h"
 #include "shutter_session.h"
@@ -25,13 +26,15 @@
 #define TAG "ShutterAction"
 
 static void shutter_parse(const JsonObject& a, ButtonAction& act) {
-    strlcpy(act.payload.shutter.command, a["shutter_command"] | "", sizeof(act.payload.shutter.command));
-    strlcpy(act.payload.shutter.value,   a["shutter_value"]   | "", sizeof(act.payload.shutter.value));
+    ShutterPayload& p = shutter_payload(act);
+    strlcpy(p.command, a["shutter_command"] | "", sizeof(p.command));
+    strlcpy(p.value,   a["shutter_value"]   | "", sizeof(p.value));
 }
 
 static void shutter_serialize(const ButtonAction& act, JsonObject obj) {
-    if (act.payload.shutter.command[0]) obj["shutter_command"] = act.payload.shutter.command;
-    if (act.payload.shutter.value[0])   obj["shutter_value"]   = act.payload.shutter.value;
+    const ShutterPayload& p = shutter_payload(act);
+    if (p.command[0]) obj["shutter_command"] = p.command;
+    if (p.value[0])   obj["shutter_value"]   = p.value;
 }
 
 #if HAS_MQTT
@@ -40,22 +43,22 @@ static void shutter_serialize(const ButtonAction& act, JsonObject obj) {
 // `command` is structural (parsed by the dispatcher's strcmp ladder) and is
 // never bindable.
 static void shutter_resolve_bindings(ButtonAction& act) {
-    char* field = act.payload.shutter.value;
+    char* field = shutter_payload(act).value;
     if (field[0] && binding_template_has_bindings(field)) {
         char tmp[BINDING_TEMPLATE_MAX_LEN];
         binding_template_resolve(field, tmp, sizeof(tmp));
-        strlcpy(field, tmp, sizeof(act.payload.shutter.value));
+        strlcpy(field, tmp, sizeof(shutter_payload(act).value));
     }
 }
 
 static bool shutter_has_binding(const ButtonAction& act) {
-    const char* f = act.payload.shutter.value;
+    const char* f = shutter_payload(act).value;
     return f[0] && memchr(f, '[', strlen(f)) != nullptr;
 }
 #endif
 
 static void shutter_dispatch(const ButtonAction& act, const char* label) {
-    const auto& sh = act.payload.shutter;
+    const ShutterPayload& sh = shutter_payload(act);
     const char* cmd = sh.command;
     if (strcmp(cmd, "set") == 0) {
         if (!shutter_measure_set_target(sh.value)) {

@@ -213,7 +213,7 @@ TEST(self_trigger_rejects_sess_stop) {
     ButtonAction act;
     memset(&act, 0, sizeof(act));
     strcpy(act.type, ACTION_TYPE_SHUTTER);
-    strcpy(act.payload.shutter.command, "sess_stop");
+    strcpy(shutter_payload(act).command, "sess_stop");
     ASSERT_TRUE(shutter_session_actions_is_self_trigger(act));
 }
 
@@ -221,7 +221,7 @@ TEST(self_trigger_rejects_sess_start) {
     ButtonAction act;
     memset(&act, 0, sizeof(act));
     strcpy(act.type, ACTION_TYPE_SHUTTER);
-    strcpy(act.payload.shutter.command, "sess_start");
+    strcpy(shutter_payload(act).command, "sess_start");
     ASSERT_TRUE(shutter_session_actions_is_self_trigger(act));
 }
 
@@ -229,7 +229,7 @@ TEST(self_trigger_allows_other_shutter_commands) {
     ButtonAction act;
     memset(&act, 0, sizeof(act));
     strcpy(act.type, ACTION_TYPE_SHUTTER);
-    strcpy(act.payload.shutter.command, "set");
+    strcpy(shutter_payload(act).command, "set");
     ASSERT_FALSE(shutter_session_actions_is_self_trigger(act));
 }
 
@@ -237,7 +237,7 @@ TEST(self_trigger_allows_non_shutter_action) {
     ButtonAction act;
     memset(&act, 0, sizeof(act));
     strcpy(act.type, "notify");
-    // payload.shutter is not the active arm here; the function must check
+    // device_class slot is not the active arm here; the function must check
     // act.type first and ignore payload contents.
     ASSERT_FALSE(shutter_session_actions_is_self_trigger(act));
 }

@@ -4,7 +4,8 @@
 
 #if IS_SHUTTER_TESTER
 
-#include "../../pad_config.h"  // ButtonAction, ACTION_TYPE_SHUTTER, MAX_BUTTON_ACTIONS
+#include "../../pad_config.h"  // ButtonAction, MAX_BUTTON_ACTIONS
+#include "shutter_payload.h"   // ACTION_TYPE_SHUTTER, shutter_payload()
 
 #include <string.h>
 
@@ -45,9 +46,10 @@ void shutter_session_actions_loop();
 // session start/stop and must be skipped.
 inline bool shutter_session_actions_is_self_trigger(const ButtonAction& act) {
     if (strcmp(act.type, ACTION_TYPE_SHUTTER) != 0) return false;
-    return strcmp(act.payload.shutter.command, "sess_stop")   == 0
-        || strcmp(act.payload.shutter.command, "sess_start")  == 0
-        || strcmp(act.payload.shutter.command, "sess_toggle") == 0;
+    const char* cmd = shutter_payload(act).command;
+    return strcmp(cmd, "sess_stop")   == 0
+        || strcmp(cmd, "sess_start")  == 0
+        || strcmp(cmd, "sess_toggle") == 0;
 }
 
 #endif // IS_SHUTTER_TESTER

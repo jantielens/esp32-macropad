@@ -125,7 +125,6 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_SOUND    "sound"
 #define ACTION_TYPE_NOTIFY   "notify"
 #define ACTION_TYPE_SYSTEM   "system"
-#define ACTION_TYPE_SHUTTER  "shutter"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -191,11 +190,20 @@ struct SystemPayload {
     char system_command[CONFIG_ACTION_TYPE_MAX_LEN];      // "reboot", "wifi_reconnect", "screensaver"
 };
 
-// Device-class payload arms. Conditionally included so every board ships
-// with exactly the arms its compile-time flags select — and so device-class
-// payload definitions live next to their dispatch code.
-#if IS_SHUTTER_TESTER
-#include "device_classes/shutter_tester/shutter_payload.h"
+// Opaque slot reserved for device-class action payloads. Each device class
+// registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
+// raw bytes to its payload struct at the parse/serialize/dispatch boundary —
+// see device_classes/shutter_tester/shutter_payload.h for the reference
+// pattern (struct + static_assert + inline accessor).
+//
+// Sized to fit today's largest device-class payload with headroom (today:
+// ShutterPayload at 76 B = CONFIG_TIMER_CMD_MAX_LEN(12) + CONFIG_BINDABLE_SHORT_LEN(64)).
+// Stays well under the dominant built-in arm (NotifyPayload at 394 B), so
+// this slot does not currently move sizeof(ActionPayload). A board that
+// needs more can raise this via board_overrides.h; never raise the default
+// to fit a single class — that would push cost onto every board.
+#ifndef ACTION_PAYLOAD_DEVICE_CLASS_BYTES
+#define ACTION_PAYLOAD_DEVICE_CLASS_BYTES 96
 #endif
 
 union ActionPayload {
@@ -209,9 +217,8 @@ union ActionPayload {
     SoundPayload      sound;        // type == ACTION_TYPE_SOUND
     NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
     SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
-#if IS_SHUTTER_TESTER
-    ShutterPayload    shutter;      // type == ACTION_TYPE_SHUTTER
-#endif
+    uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
+                                    // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, "" (none) carry no payload data — only the type tag.
 };
 
@@ -228,9 +235,9 @@ struct ButtonAction {
 static_assert(sizeof(ButtonAction) <= 420,
               "ButtonAction size budget exceeded (>420 bytes)");
 
-// Per-arm size dump for size-canary tests. Skipped under shutter build to keep
-// the macro shape stable across device classes (ShutterPayload printed
-// separately via its header when needed).
+// Per-arm size dump for size-canary tests. Lists built-in arms only;
+// device-class payloads share the opaque ACTION_PAYLOAD_DEVICE_CLASS_BYTES
+// slot and their static_asserts live in their own headers.
 #define ACTION_PAYLOAD_DUMP_ARMS(printf_fn) do { \
     printf_fn("  ButtonAction      = %zu\n", sizeof(ButtonAction));      \
     printf_fn("  ActionPayload     = %zu\n", sizeof(ActionPayload));     \
