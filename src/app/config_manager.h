@@ -113,12 +113,6 @@ struct DeviceConfig {
 		char screen_saver_wake_binding[CONFIG_SS_WAKE_BINDING_MAX_LEN]; // binding expression; wake on "ON"
 #endif
 
-#if IS_SHUTTER_TESTER
-		// Shutter-tester device-class fields live in the module-local
-		// ShutterTesterConfig singleton (see
-		// device_classes/shutter_tester/shutter_config.h). They are NOT stored
-		// in DeviceConfig; load/save runs via the DeviceClass.config_* hooks.
-#endif
 
 		// Validation flag (magic number to detect valid config)
 		uint32_t magic;

@@ -665,7 +665,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_utils.h
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
-  - src/app/config_manager.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
   - src/app/device_classes/shutter_tester/components/shutter_session_actions_component.cpp
