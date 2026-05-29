@@ -138,6 +138,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution — they work from an
 - `docs/dev/logging-guidelines.md` — Logging rules and format (LOGx macros, severity, modules)
 - `docs/dev/web-portal.md` — Web portal and REST API guide
 - `docs/dev/display-touch-architecture.md` — Display/touch HAL and screen architecture
+- `docs/dev/adding-a-device-class.md` — Device class extension contract (registry, aggregators, board overrides, optional subsystems)
 - `docs/pad-editor-guide.md` — Pad editor, binding templates, widgets, and real-world examples
 
 ### Configuration
