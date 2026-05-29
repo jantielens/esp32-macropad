@@ -1,4 +1,4 @@
-#include "portal_shutter_sessions.h"
+#include "board_config.h"
 
 #if IS_SHUTTER_TESTER
 
@@ -7,6 +7,7 @@
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
 #include "web_portal_utils.h"
+#include "web_portal_routes.h"
 #include "log_manager.h"
 #include "component_registry.h"
 
@@ -40,7 +41,7 @@ extern FsIndexedStore& shutter_session_get_store();
 // Route registration
 // ============================================================================
 
-void web_portal_sessions_register_routes(AsyncWebServer* server) {
+static void shutter_sessions_register(AsyncWebServer* server) {
     FsIndexedStore& store = shutter_session_get_store();
 
     // GET, DELETE standard routes (GET list, GET by id, DELETE by id).
@@ -235,5 +236,7 @@ void web_portal_sessions_register_routes(AsyncWebServer* server) {
 
     LOGI(TAG, "Registered /api/sessions routes");
 }
+
+REGISTER_ROUTES(shutter_sessions_register)
 
 #endif // IS_SHUTTER_TESTER

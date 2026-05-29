@@ -678,6 +678,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/shutter_binding.cpp
   - src/app/device_classes/shutter_tester/shutter_capture.cpp
   - src/app/device_classes/shutter_tester/shutter_capture.h
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
   - src/app/device_classes/shutter_tester/shutter_measure.cpp
   - src/app/device_classes/shutter_tester/shutter_measure.h
   - src/app/device_classes/shutter_tester/shutter_payload.h
@@ -689,9 +690,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/shutter_test_scripts.h
   - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/web/portal_shutter_sessions.cpp
-  - src/app/device_classes/shutter_tester/web/portal_shutter_sessions.h
   - src/app/device_classes/shutter_tester/web/portal_shutter_tests.cpp
-  - src/app/device_classes/shutter_tester/web/portal_shutter_tests.h
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
   - src/app/device_classes/shutter_tester_device_class.cpp
   - src/app/pad_config.h
@@ -699,7 +698,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen.h
   - src/app/screens/pad_tile_builder.cpp
-  - src/app/web_portal_routes.cpp
   - src/app/widgets.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
@@ -800,12 +798,45 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SENSOR_I2C_SDA**
   - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S1**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S2**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S3**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S4**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S5**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S6**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S7**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S8**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S9**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_DEFAULT_OFFSET_X_MM**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_DEFAULT_OFFSET_Y_MM**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_DEFAULT_PRESET_ID**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_FILM_DIAGONAL_MM**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
 - **SHUTTER_POST_CAPTURE_SAMPLES**
   - src/app/device_classes/shutter_tester/shutter_adc.h
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
 - **SHUTTER_PRE_TRIGGER_SAMPLES**
   - src/app/device_classes/shutter_tester/shutter_adc.h
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
 - **SHUTTER_SENSOR_MAX**
   - src/app/device_classes/shutter_tester/shutter_capture.h
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_VERDICT_DEVIATION_FAIL**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_VERDICT_DEVIATION_WARNING**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
 - **ST7701_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **ST7701_DSI_HSYNC_BACK_PORCH**

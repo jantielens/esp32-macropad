@@ -1,9 +1,10 @@
-#include "portal_shutter_tests.h"
+#include "board_config.h"
 
 #if IS_SHUTTER_TESTER
 
 #include "../shutter_test_scripts.h"
 #include "web_portal_auth.h"
+#include "web_portal_routes.h"
 #include "component_registry.h"
 #include "log_manager.h"
 
@@ -142,12 +143,14 @@ static void handleGetTestList(AsyncWebServerRequest* request) {
 // Route registration
 // ============================================================================
 
-void web_portal_shutter_tests_register_routes(AsyncWebServer* server) {
+static void shutter_tests_register(AsyncWebServer* server) {
     server->on("/api/shutter/tests", HTTP_GET, handleGetTests);
     server->on("/api/shutter/tests", HTTP_PUT, handlePutTests,
                nullptr, handlePutTestsBody);
     server->on("/api/shutter/tests/list", HTTP_GET, handleGetTestList);
     LOGI(TAG, "Registered test script routes");
 }
+
+REGISTER_ROUTES(shutter_tests_register)
 
 #endif // IS_SHUTTER_TESTER

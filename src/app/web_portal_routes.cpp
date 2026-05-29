@@ -24,10 +24,27 @@
 #include "web_portal_sounds.h"
 #endif
 
-#if IS_SHUTTER_TESTER
-#include "device_classes/shutter_tester/web/portal_shutter_sessions.h"
-#include "device_classes/shutter_tester/web/portal_shutter_tests.h"
-#endif
+// ============================================================================
+// Route initializer registry — populated by REGISTER_ROUTES() in feature .cpp
+// files aggregated through route_components.cpp at the sketch root.
+// ============================================================================
+
+static constexpr uint8_t ROUTE_INIT_REGISTRY_MAX = 16;
+static RouteInitFn s_route_initializers[ROUTE_INIT_REGISTRY_MAX] = {};
+static uint8_t     s_route_initializer_count = 0;
+
+bool web_portal_routes_add(RouteInitFn fn) {
+    if (!fn) return false;
+    if (s_route_initializer_count >= ROUTE_INIT_REGISTRY_MAX) return false;
+    s_route_initializers[s_route_initializer_count++] = fn;
+    return true;
+}
+
+void web_portal_routes_register_all(AsyncWebServer* server) {
+    for (uint8_t i = 0; i < s_route_initializer_count; ++i) {
+        s_route_initializers[i](server);
+    }
+}
 
 void web_portal_register_routes(AsyncWebServer* server) {
 		auto handleCorsPreflight = [](AsyncWebServerRequest *request) {
@@ -200,10 +217,11 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
 #endif
 
-#if IS_SHUTTER_TESTER
-		web_portal_sessions_register_routes(server);
-		web_portal_shutter_tests_register_routes(server);
-#endif
+		// Feature- and device-class route initializers self-registered via
+		// REGISTER_ROUTES(). Run them before the generic component API so any
+		// exact-match routes they install take precedence over the wildcard
+		// component dispatcher.
+		web_portal_routes_register_all(server);
 
 		// Fragment serving — /api/section/{id}
 		// Uses wildcard so /api/section/wifi, /api/section/pad-editor, etc. all match.
