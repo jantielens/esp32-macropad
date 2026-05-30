@@ -298,6 +298,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/mqtt_audio.cpp
@@ -372,8 +373,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.cpp
   - src/app/data_stream.h
   - src/app/device_class_registry.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
   - src/app/device_classes/coffee_scale/brew_actions.cpp
   - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/device_classes/coffee_scale/scale_binding.cpp
   - src/app/device_classes/coffee_scale/sensors/hx711_sensor.cpp
   - src/app/device_classes/coffee_scale/sensors/nau7802_sensor.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
@@ -556,9 +559,19 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/widget.h
 - **HAS_SCALE**
+  - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_log.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_log.h
+  - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_manager.h
+  - src/app/device_classes/coffee_scale/brew/brew_template_loader.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_template_loader.h
+  - src/app/device_classes/coffee_scale/brew/brew_templates.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_templates.h
   - src/app/device_classes/coffee_scale/brew_actions.cpp
   - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
   - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/device_classes/coffee_scale/scale_binding.cpp
   - src/app/device_classes/coffee_scale/scale_hal.cpp
   - src/app/device_classes/coffee_scale/scale_hal.h
   - src/app/device_classes/coffee_scale/scale_init.cpp
@@ -710,10 +723,21 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
   - src/app/device_classes/coffee_scale/brew_actions.cpp
+  - src/app/device_classes/coffee_scale/coffee_scale_config.cpp
+  - src/app/device_classes/coffee_scale/coffee_scale_config.h
   - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
   - src/app/device_classes/coffee_scale/coffee_scale_device_class.cpp
   - src/app/device_classes/coffee_scale/coffee_scale_payload.h
+  - src/app/device_classes/coffee_scale/components/brew_templates_component.cpp
+  - src/app/device_classes/coffee_scale/components/brews_component.cpp
+  - src/app/device_classes/coffee_scale/components/coffee_scale_component.cpp
   - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/device_classes/coffee_scale/web/web_portal_brew_templates.cpp
+  - src/app/device_classes/coffee_scale/web/web_portal_brew_templates.h
+  - src/app/device_classes/coffee_scale/web/web_portal_brews.cpp
+  - src/app/device_classes/coffee_scale/web/web_portal_brews.h
+  - src/app/device_classes/coffee_scale/web/web_portal_scale.cpp
+  - src/app/device_classes/coffee_scale/web/web_portal_scale.h
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
 - **IS_SHUTTER_TESTER**

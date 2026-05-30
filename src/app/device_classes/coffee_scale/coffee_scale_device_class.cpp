@@ -49,6 +49,7 @@
 #include "scale_binding.h"
 #include "brew/brew_binding.h"
 #include "brew/brew_manager.h"
+#include "brew/brew_templates.h"
 #include "coffee_scale_config.h"
 
 #define TAG "CoffeeScale"
@@ -86,6 +87,7 @@ static void coffee_scale_register_sensors() {
 static void on_setup_late_hook(DeviceConfig * /*config*/, PowerMode /*current_mode*/) {
     scale_subsystem_init_storage();
     scale_subsystem_init();
+    brew_templates_init();
     brew_manager_init();
     scale_binding_init();
     brew_binding_init();

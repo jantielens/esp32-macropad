@@ -4,12 +4,16 @@
 
 #include "log_manager.h"
 #include "sensors/sensor_manager.h"
+#include "../coffee_scale_config.h"
+#include "config_manager.h"
 #include <SparkFun_Qwiic_Scale_NAU7802_Arduino_Library.h>
 #include <Wire.h>
 
 #define TAG "NAU7802"
 
 #include "scale_smoothing.h"
+
+extern DeviceConfig device_config;
 
 // ============================================================================
 // State
@@ -90,6 +94,11 @@ void nau7802_tare() {
 void nau7802_set_calibration(float factor) {
     s_cal_factor = factor;
     LOGI(TAG, "Calibration factor set: %.4f", factor);
+}
+
+void nau7802_set_offset(long offset) {
+    s_offset = offset;
+    LOGI(TAG, "Offset set: %ld", offset);
 }
 
 float nau7802_get_calibration_factor() { return s_cal_factor; }
@@ -194,25 +203,23 @@ static void nau7802_init_cb() {
         LOGW(TAG, "NAU7802 internal AFE calibration failed (continuing anyway)");
     }
 
-    // Phase 2: hardcoded runtime defaults; Phase 4 wires NVS load via
-    // DeviceClass.config_load into a CoffeeScaleConfig singleton.
-    s_cal_factor = 1.0f;
-    s_offset     = 0;
+    // Load calibration + offset from the coffee_scale_config singleton
+    // (populated earlier in setup() by coffee_scale_config_load from NVS).
+    // Mirrors the legacy feature/coffee-scale init pattern: persisted
+    // calibration survives reboots; first-boot (no NVS) yields cal=1.0/ofs=0
+    // and config_load already requested a tare in that case.
+    float cal = strtof(coffee_scale_config.scale_cal_factor, nullptr);
+    long  ofs = strtol(coffee_scale_config.scale_offset, nullptr, 10);
+    if (cal == 0.0f) cal = 1.0f;
+    s_cal_factor = cal;
+    s_offset     = ofs;
 
     s_available = true;
     LOGI(TAG, "NAU7802 ready (SDA=%d SCL=%d cal=%.4f ofs=%ld)",
          SENSOR_I2C_SDA, SENSOR_I2C_SCL, s_cal_factor, s_offset);
 
-    // Apply default smoothing preset (BALANCED). Phase 4 honors a persisted
-    // selection from CoffeeScaleConfig.
-    scale_smoothing_apply(SCALE_PRESET_BALANCED);
-
-    // Phase 2 auto-tare: with no NVS calibration to load, zero the scale at
-    // boot so first readings make physical sense. The log message marks this
-    // path distinctly so Phase 4 verification (NVS-loaded calibration) is
-    // unambiguous in the boot log.
-    LOGI(TAG, "Auto-tare on init (no calibration loaded from NVS)");
-    nau7802_tare();
+    // Apply persisted smoothing preset.
+    scale_smoothing_apply(coffee_scale_config.scale_smoothing);
 }
 
 static void nau7802_loop_cb() {
@@ -235,6 +242,21 @@ static void nau7802_loop_cb() {
             LOGW(TAG, "Deferred calibrate failed (zero raw delta)");
         }
         s_status = SCALE_IDLE;
+    }
+
+    // Persist calibration + offset to NVS when a tare or calibrate completed.
+    // Mirrors the legacy feature/coffee-scale persistence path: writes the
+    // current factor/offset into the coffee_scale_config singleton, then
+    // triggers a full config save which dispatches to coffee_scale_config_save.
+    if (s_persist_requested && s_available) {
+        s_persist_requested = false;
+        snprintf(coffee_scale_config.scale_cal_factor, COFFEE_SCALE_CAL_MAX_LEN,
+                 "%.4f", s_cal_factor);
+        snprintf(coffee_scale_config.scale_offset, COFFEE_SCALE_CAL_MAX_LEN,
+                 "%ld", s_offset);
+        config_manager_save(&device_config);
+        LOGI(TAG, "Calibration persisted to NVS (factor=%.4f offset=%ld)",
+             s_cal_factor, s_offset);
     }
 
     poll_once();

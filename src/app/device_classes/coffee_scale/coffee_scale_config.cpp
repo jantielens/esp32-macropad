@@ -51,10 +51,14 @@ void coffee_scale_config_load(Preferences& prefs) {
         coffee_scale_config.scale_smoothing = 1;
     }
 
-    // Apply calibration + smoothing live so subsequent sensor reads use them.
+    // Apply calibration + offset + smoothing live so subsequent sensor reads
+    // use them. scale_set_offset is a no-op for HX711 before sensor init
+    // (guarded on s_available); the sensor's own init_cb re-reads the strings.
     float factor = strtof(coffee_scale_config.scale_cal_factor, nullptr);
     if (factor == 0.0f) factor = 1.0f;
+    long offset = strtol(coffee_scale_config.scale_offset, nullptr, 10);
     scale_set_calibration(factor);
+    scale_set_offset(offset);
     scale_apply_preset(coffee_scale_config.scale_smoothing);
 
     LOGI(TAG, "Config loaded: cal=%s ofs=%s smoothing=%s (%u)",

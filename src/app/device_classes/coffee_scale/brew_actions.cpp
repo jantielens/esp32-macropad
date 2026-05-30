@@ -28,6 +28,8 @@
 
 #define TAG "BrewAction"
 
+// Wire format: typed two-field JSON {brew_command, brew_value} mapping
+// directly to BrewPayload — no string slicing, no mqtt_payload reuse.
 static void brew_parse(const JsonObject& a, ButtonAction& act) {
     BrewPayload& p = brew_payload(act);
     strlcpy(p.command, a["brew_command"] | "", sizeof(p.command));

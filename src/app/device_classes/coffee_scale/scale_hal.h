@@ -36,6 +36,11 @@ void scale_request_calibrate();
 // Apply a new calibration factor and persist to NVS.
 void scale_set_calibration(float factor);
 
+// Apply a previously-persisted zero offset (raw counts). Used by
+// coffee_scale_config_load to restore the offset across reboots so the
+// scale doesn't need to be re-tared on every power cycle.
+void scale_set_offset(long offset);
+
 // Get current calibration factor.
 float scale_get_calibration_factor();
 

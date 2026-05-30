@@ -53,42 +53,59 @@
         },
 
         // Show/hide groups when type changes
-        typeChanged: function(prefix, type, skipBrewPopulate) {
+        typeChanged: function(prefix, type) {
             var scaleGrp = document.getElementById(prefix + '-scale-group');
             if (scaleGrp) scaleGrp.style.display = (type === 'scale') ? '' : 'none';
             if (type === 'scale') _actionEditorScaleChanged(prefix);
             var brewGrp = document.getElementById(prefix + '-brew-group');
             if (brewGrp) brewGrp.style.display = (type === 'brew') ? '' : 'none';
-            if (type === 'brew' && !skipBrewPopulate) _actionEditorPopulateBrewCmd(prefix, 'advance');
+            if (type === 'brew') {
+                // load() runs before actionEditorTypeChanged() and may have stored a
+                // pending value to preserve. Use it once, then fall back to default.
+                var bc = document.getElementById(prefix + '-brew-cmd');
+                var pending = bc && bc.getAttribute('data-pending-value');
+                if (pending) {
+                    bc.removeAttribute('data-pending-value');
+                    _actionEditorPopulateBrewCmd(prefix, pending);
+                } else {
+                    _actionEditorPopulateBrewCmd(prefix, 'advance');
+                }
+            }
         },
 
         // Load action data into form fields
         load: function(prefix, action) {
-            if (action.type === 'scale' && action.payload) {
-                var sp = action.payload;
+            if (action.type === 'scale') {
+                var cmd = action.scale_command || 'tare';
+                var val = action.scale_value || '';
                 var el = document.getElementById(prefix + '-scale-cmd');
-                if (el) {
-                    if (sp === 'tare' || sp === '') {
-                        el.value = 'tare';
-                    } else if (sp === 'calibrate') {
-                        el.value = 'calibrate';
-                    } else if (sp.indexOf('cal_weight_set:') === 0) {
-                        el.value = 'cal_weight_set';
-                        var sv = document.getElementById(prefix + '-scale-set-value');
-                        if (sv) sv.value = sp.substring(15);
-                    } else if (sp.indexOf('cal_weight:') === 0) {
-                        el.value = 'cal_weight';
-                        var sd = document.getElementById(prefix + '-scale-delta');
-                        if (sd) sd.value = sp.substring(11);
-                    }
+                if (el) el.value = cmd;
+                if (cmd === 'cal_weight') {
+                    var sd = document.getElementById(prefix + '-scale-delta');
+                    if (sd) sd.value = val;
+                } else if (cmd === 'cal_weight_set') {
+                    var sv = document.getElementById(prefix + '-scale-set-value');
+                    if (sv) sv.value = val;
                 }
             } else {
                 var el = document.getElementById(prefix + '-scale-cmd');
                 if (el) el.value = 'tare';
             }
-            // Brew command — populate dropdown dynamically, then set value
-            var el = document.getElementById(prefix + '-brew-cmd');
-            if (el) _actionEditorPopulateBrewCmd(prefix, action.payload || 'start');
+            // Brew — reconstruct dropdown selection from typed fields.
+            // The dropdown encodes set_template as "set_template:<name>";
+            // all other commands are bare strings. Store the desired value as a
+            // data-attr so typeChanged() (called immediately after load) picks it
+            // up instead of overwriting with the default.
+            if (action.type === 'brew') {
+                var bc = document.getElementById(prefix + '-brew-cmd');
+                if (bc) {
+                    var cmd = action.brew_command || 'advance';
+                    var sel = (cmd === 'set_template' && action.brew_value)
+                        ? 'set_template:' + action.brew_value
+                        : cmd;
+                    bc.setAttribute('data-pending-value', sel);
+                }
+            }
         },
 
         // Build action data from form fields. Return object with fields, or null.
@@ -96,22 +113,28 @@
             if (type === 'scale') {
                 var act = {};
                 var scmd = document.getElementById(prefix + '-scale-cmd');
-                var scmdVal = scmd ? scmd.value : 'tare';
-                if (scmdVal === 'cal_weight') {
+                act.scale_command = scmd ? scmd.value : 'tare';
+                if (act.scale_command === 'cal_weight') {
                     var sd = document.getElementById(prefix + '-scale-delta');
-                    act.payload = 'cal_weight:' + ((sd && sd.value !== '') ? sd.value.trim() : '0');
-                } else if (scmdVal === 'cal_weight_set') {
+                    act.scale_value = (sd && sd.value !== '') ? sd.value.trim() : '0';
+                } else if (act.scale_command === 'cal_weight_set') {
                     var sv = document.getElementById(prefix + '-scale-set-value');
-                    act.payload = 'cal_weight_set:' + ((sv && sv.value !== '') ? sv.value.trim() : '1');
-                } else {
-                    act.payload = scmdVal;
+                    act.scale_value = (sv && sv.value !== '') ? sv.value.trim() : '1';
                 }
                 return act;
             }
             if (type === 'brew') {
                 var act = {};
                 var bc = document.getElementById(prefix + '-brew-cmd');
-                if (bc) act.payload = bc.value || 'start';
+                var raw = bc ? (bc.value || 'advance') : 'advance';
+                // Dropdown encodes "set_template:<name>" — split into typed fields.
+                var colon = raw.indexOf(':');
+                if (colon !== -1) {
+                    act.brew_command = raw.substring(0, colon);
+                    act.brew_value = raw.substring(colon + 1);
+                } else {
+                    act.brew_command = raw;
+                }
                 return act;
             }
             return null;

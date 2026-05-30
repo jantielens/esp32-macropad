@@ -4,11 +4,15 @@
 
 #include "log_manager.h"
 #include "sensors/sensor_manager.h"
+#include "../coffee_scale_config.h"
+#include "config_manager.h"
 #include <HX711.h>
 
 #define TAG "HX711"
 
 #include "scale_smoothing.h"
+
+extern DeviceConfig device_config;
 
 // ============================================================================
 // State
@@ -76,6 +80,12 @@ void hx711_set_calibration(float factor) {
     if (!s_available) return;
     s_scale.set_scale(factor);
     LOGI(TAG, "Calibration factor set: %.4f", factor);
+}
+
+void hx711_set_offset(long offset) {
+    if (!s_available) return;
+    s_scale.set_offset(offset);
+    LOGI(TAG, "Offset set: %ld", offset);
 }
 
 float hx711_get_calibration_factor() {
@@ -168,10 +178,14 @@ static void hx711_init_cb() {
         return;
     }
 
-    // Phase 2: hardcoded runtime defaults; Phase 4 wires NVS load via
-    // DeviceClass.config_load into a CoffeeScaleConfig singleton.
-    const float cal = 1.0f;
-    const long  ofs = 0;
+    // Load calibration + offset from the coffee_scale_config singleton
+    // (populated earlier in setup() by coffee_scale_config_load from NVS).
+    // Mirrors the legacy feature/coffee-scale init pattern: persisted
+    // calibration survives reboots; first-boot (no NVS) yields cal=1.0/ofs=0
+    // and config_load already requested a tare in that case.
+    float cal = strtof(coffee_scale_config.scale_cal_factor, nullptr);
+    long  ofs = strtol(coffee_scale_config.scale_offset, nullptr, 10);
+    if (cal == 0.0f) cal = 1.0f;
     s_scale.set_scale(cal);
     s_scale.set_offset(ofs);
 
@@ -179,16 +193,8 @@ static void hx711_init_cb() {
     LOGI(TAG, "HX711 ready (DOUT=%d SCK=%d cal=%.4f ofs=%ld)",
          HX711_DOUT_PIN, HX711_SCK_PIN, cal, ofs);
 
-    // Apply default smoothing preset (BALANCED). Phase 4 honors a persisted
-    // selection from CoffeeScaleConfig.
-    scale_smoothing_apply(SCALE_PRESET_BALANCED);
-
-    // Phase 2 auto-tare: with no NVS calibration to load, zero the scale at
-    // boot so first readings make physical sense. The log message marks this
-    // path distinctly so Phase 4 verification (NVS-loaded calibration) is
-    // unambiguous in the boot log.
-    LOGI(TAG, "Auto-tare on init (no calibration loaded from NVS)");
-    hx711_tare();
+    // Apply persisted smoothing preset.
+    scale_smoothing_apply(coffee_scale_config.scale_smoothing);
 }
 
 static void hx711_loop_cb() {
@@ -213,6 +219,21 @@ static void hx711_loop_cb() {
             LOGW(TAG, "Deferred calibrate failed (zero raw delta)");
         }
         s_status = SCALE_IDLE;
+    }
+
+    // Persist calibration + offset to NVS when a tare or calibrate completed.
+    // Mirrors the legacy feature/coffee-scale persistence path: writes the
+    // current factor/offset into the coffee_scale_config singleton, then
+    // triggers a full config save which dispatches to coffee_scale_config_save.
+    if (s_persist_requested && s_available) {
+        s_persist_requested = false;
+        snprintf(coffee_scale_config.scale_cal_factor, COFFEE_SCALE_CAL_MAX_LEN,
+                 "%.4f", s_scale.get_scale());
+        snprintf(coffee_scale_config.scale_offset, COFFEE_SCALE_CAL_MAX_LEN,
+                 "%ld", s_scale.get_offset());
+        config_manager_save(&device_config);
+        LOGI(TAG, "Calibration persisted to NVS (factor=%.4f offset=%ld)",
+             s_scale.get_scale(), s_scale.get_offset());
     }
 
     poll_once();

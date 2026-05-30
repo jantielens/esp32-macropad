@@ -19,6 +19,7 @@ void  scale_request_tare()              { hx711_request_tare(); }
 void  scale_request_tare_no_persist()   { hx711_request_tare_no_persist(); }
 void  scale_request_calibrate()         { hx711_request_calibrate(); }
 void  scale_set_calibration(float f)    { hx711_set_calibration(f); }
+void  scale_set_offset(long ofs)        { hx711_set_offset(ofs); }
 float scale_get_calibration_factor()    { return hx711_get_calibration_factor(); }
 long  scale_get_offset()                { return hx711_get_offset(); }
 float scale_get_value(int times)        { return hx711_get_value(times); }
@@ -43,6 +44,7 @@ void  scale_request_tare()              { nau7802_request_tare(); }
 void  scale_request_tare_no_persist()   { nau7802_request_tare_no_persist(); }
 void  scale_request_calibrate()         { nau7802_request_calibrate(); }
 void  scale_set_calibration(float f)    { nau7802_set_calibration(f); }
+void  scale_set_offset(long ofs)        { nau7802_set_offset(ofs); }
 float scale_get_calibration_factor()    { return nau7802_get_calibration_factor(); }
 long  scale_get_offset()                { return nau7802_get_offset(); }
 float scale_get_value(int times)        { return nau7802_get_value(times); }

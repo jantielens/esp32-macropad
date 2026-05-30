@@ -23,6 +23,8 @@
 
 #define TAG "ScaleAction"
 
+// Wire format: typed two-field JSON {scale_command, scale_value} mapping
+// directly to ScalePayload — no string slicing, no mqtt_payload reuse.
 static void scale_parse(const JsonObject& a, ButtonAction& act) {
     ScalePayload& p = scale_payload(act);
     strlcpy(p.command, a["scale_command"] | "", sizeof(p.command));

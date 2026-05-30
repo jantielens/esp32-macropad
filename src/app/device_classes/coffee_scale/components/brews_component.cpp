@@ -4,6 +4,6 @@
 #if IS_COFFEE_SCALE
 
 #include "component_registry.h"
-REGISTER_NAV_COMPONENT(brews, "brews", "scale", "Brews", 11, "brews")
+REGISTER_NAV_COMPONENT(brews, "brews", "coffee", "Brews", 11, "brews")
 
 #endif // IS_COFFEE_SCALE

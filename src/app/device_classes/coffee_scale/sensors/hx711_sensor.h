@@ -37,6 +37,9 @@ void hx711_request_calibrate();
 // Apply a new calibration factor and persist to NVS.
 void hx711_set_calibration(float factor);
 
+// Apply a previously-persisted zero offset (raw counts).
+void hx711_set_offset(long offset);
+
 // Get current calibration factor.
 float hx711_get_calibration_factor();
 

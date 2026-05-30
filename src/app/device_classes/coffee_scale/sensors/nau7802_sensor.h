@@ -19,6 +19,7 @@ void  nau7802_request_tare();
 void  nau7802_request_tare_no_persist();
 void  nau7802_request_calibrate();
 void  nau7802_set_calibration(float factor);
+void  nau7802_set_offset(long offset);
 float nau7802_get_calibration_factor();
 long  nau7802_get_offset();
 float nau7802_get_value(int times);

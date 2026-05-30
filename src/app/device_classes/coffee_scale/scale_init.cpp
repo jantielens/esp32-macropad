@@ -18,7 +18,7 @@ void scale_subsystem_init_storage() {
 
 void scale_subsystem_init() {
     // TODO Phase 4: scale_binding_init();
-    // TODO Phase 4: brew_templates_init();
+    // brew_templates_init() now called directly from coffee_scale_device_class.cpp
     // TODO Phase 4: brew_manager_init();
     // TODO Phase 4: brew_binding_init();
 }
