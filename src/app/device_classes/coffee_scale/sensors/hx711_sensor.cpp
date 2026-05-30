@@ -224,13 +224,6 @@ static void hx711_loop_cb() {
 #endif
 #endif
 
-    // Phase 2: persist path is stubbed. Surface a one-shot warning per
-    // request so calibration loss is visible in the log rather than silent.
-    if (s_persist_requested) {
-        s_persist_requested = false;
-        LOGW(TAG, "Phase 2: calibration persist not yet wired (Phase 4 will add NVS load/save via DeviceClass.config_save)");
-    }
-
 #if SCALE_PHASE2_DEBUG_LOG_HZ > 0
     if (s_available) {
         const uint32_t now = millis();
