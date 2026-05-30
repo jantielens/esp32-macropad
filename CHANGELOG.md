@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **Coffee Scale device class (`IS_COFFEE_SCALE`)** — new device class for ESP32-P4 espresso/pour-over scales, branded `ESP32-MP Coffee Scale` (SSID `ESP32-MP-SCALE-XXXXXX`). Aggregated under `src/app/device_classes/coffee_scale/` and gated by `IS_COFFEE_SCALE` so it adds zero footprint to other boards.
+* **Coffee Scale boards** — `jc4880p433-nau7802` (NAU7802 I2C 24-bit load-cell ADC) and `jc4880p433-hx711` (HX711 SPI load-cell amplifier), both on the GUITION JC4880P433 ESP32-P4 480×800 panel.
+* **Scale HAL + smoothing** — sensor-agnostic weight/flow API with EMA + dead-band smoothing and three smoothing presets (Stable / Balanced / Responsive), plus tare and cal-weight calibration flow.
+* **Brew engine** — count-up brew state machine (idle / active / done) with per-stage templates, a brew-template DSL, live series recording in PSRAM, and persisted brew logs.
+* **`scale` and `brew` action types** — `scale` (tare, calibrate, cal_weight adjust/set) and `brew` (start, next, advance, stop, reset, tare, set_template) action handlers registered via `REGISTER_ACTION_TYPE`.
+* **`[scale:*]` and `[brew:*]` binding schemes** — `[scale:weight|flow|status]` and `[brew:weight|flow_rate|timer|stage|template|ratio|stages_json|summary_json|…]` for pad widgets.
+* **Coffee Scale REST endpoints** — `/api/scale/*` (calibration), `/api/brews/*` (brew log list/import/export/delete), and `/api/brew-templates/*` (template CRUD).
+* **Developer doc: `docs/device-classes/coffee-scale/README.md`** — overview, supported boards, hardware setup, calibration flow, brew engine, action types, binding schemes, and REST endpoints. README "Device Classes" table gains a Coffee Scale row.
+
 ## [1.18.0] - 2026-05-28
 
 ### Added

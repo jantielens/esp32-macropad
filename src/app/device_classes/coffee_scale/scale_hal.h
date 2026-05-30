@@ -62,10 +62,6 @@ void scale_set_cal_weight(float value);
 // Run calibration using current cal_weight. Returns new factor, or 0 on error.
 float scale_calibrate_with_cal_weight();
 
-// Request deferred NVS persist of calibration data.
-// Phase 2: stubbed (logs a warning); Phase 4 wires it via DeviceClass.config_save.
-void scale_request_persist();
-
 // Get human-readable status string ("idle", "taring", "calibrating").
 const char* scale_get_status();
 

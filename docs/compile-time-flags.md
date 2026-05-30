@@ -377,8 +377,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/brew_actions.cpp
   - src/app/device_classes/coffee_scale/scale_actions.cpp
   - src/app/device_classes/coffee_scale/scale_binding.cpp
-  - src/app/device_classes/coffee_scale/sensors/hx711_sensor.cpp
-  - src/app/device_classes/coffee_scale/sensors/nau7802_sensor.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.h
@@ -574,8 +572,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/scale_binding.cpp
   - src/app/device_classes/coffee_scale/scale_hal.cpp
   - src/app/device_classes/coffee_scale/scale_hal.h
-  - src/app/device_classes/coffee_scale/scale_init.cpp
-  - src/app/device_classes/coffee_scale/scale_init.h
   - src/app/device_classes/coffee_scale/sensors/scale_smoothing.cpp
   - src/app/device_classes/coffee_scale/sensors/scale_smoothing.h
 - **HAS_SD_CARD**

@@ -22,9 +22,6 @@
 extern "C" {
 #endif
 
-// Initialize brew log (creates /brews/ dir if needed).
-void brew_log_init();
-
 // Save a completed brew.
 // tmpl is the active template at brew time (snapshot of targets is embedded
 // in the report so it stays self-contained). May be nullptr for free-pour.

@@ -31,7 +31,6 @@ static long  s_offset      = 0;
 static float s_cal_weight = 500.0f;
 
 // Deferred flags
-// Phase 2: persist path is stubbed — flag is consumed but logs a warning.
 static volatile bool s_persist_requested   = false;
 static volatile bool s_tare_requested      = false;
 static volatile bool s_tare_persist        = true;
@@ -40,12 +39,13 @@ static volatile bool s_calibrate_requested = false;
 enum ScaleStatus : uint8_t { SCALE_IDLE = 0, SCALE_TARING, SCALE_CALIBRATING };
 static volatile ScaleStatus s_status = SCALE_IDLE;
 
-// Phase 2 verification: periodic weight log rate (Hz). Set to 0 to silence.
-#ifndef SCALE_PHASE2_DEBUG_LOG_HZ
-#define SCALE_PHASE2_DEBUG_LOG_HZ 2
+// Periodic weight log rate (Hz) for diagnostics. Default 0 (silent); set to a
+// positive value at build time to stream live weight/flow over the serial log.
+#ifndef SCALE_DEBUG_LOG_HZ
+#define SCALE_DEBUG_LOG_HZ 0
 #endif
-#if SCALE_PHASE2_DEBUG_LOG_HZ > 0
-static uint32_t s_phase2_last_log_ms = 0;
+#if SCALE_DEBUG_LOG_HZ > 0
+static uint32_t s_debug_last_log_ms = 0;
 #endif
 
 // ============================================================================
@@ -261,18 +261,12 @@ static void nau7802_loop_cb() {
 
     poll_once();
 
-#if 0  // TODO Phase 4: brew engine — re-enable when brew_manager.h ports in
-#if HAS_DISPLAY
-    brew_tick();
-#endif
-#endif
-
-#if SCALE_PHASE2_DEBUG_LOG_HZ > 0
+#if SCALE_DEBUG_LOG_HZ > 0
     if (s_available) {
         const uint32_t now = millis();
-        const uint32_t period_ms = 1000u / SCALE_PHASE2_DEBUG_LOG_HZ;
-        if ((now - s_phase2_last_log_ms) >= period_ms) {
-            s_phase2_last_log_ms = now;
+        const uint32_t period_ms = 1000u / SCALE_DEBUG_LOG_HZ;
+        if ((now - s_debug_last_log_ms) >= period_ms) {
+            s_debug_last_log_ms = now;
             LOGI(TAG, "weight=%.2fg flow=%.2fg/s", s_smooth_state.weight_display, s_smooth_state.flow_rate);
         }
     }

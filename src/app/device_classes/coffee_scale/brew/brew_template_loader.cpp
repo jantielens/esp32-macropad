@@ -4,6 +4,7 @@
 
 #include "brew_template_dsl.h"
 #include "brew_templates.h"
+#include "brew_manager.h"
 #include "log_manager.h"
 
 #include <LittleFS.h>
@@ -71,6 +72,11 @@ void brew_template_loader_load() {
 }
 
 void brew_template_loader_reload() {
+    // Drop any active brew and the manager's cached template pointers BEFORE
+    // freeing dynamic templates, otherwise s_template / s_last_template would
+    // dangle into the storage clear_dynamic() is about to delete.
+    if (brew_get_phase() != BREW_IDLE) brew_reset();
+    brew_forget_templates();
     brew_templates_clear_dynamic();
     brew_template_loader_load();
 }

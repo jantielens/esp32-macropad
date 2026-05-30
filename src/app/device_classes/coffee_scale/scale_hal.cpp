@@ -27,7 +27,6 @@ float scale_get_cal_weight()            { return hx711_get_cal_weight(); }
 void  scale_adjust_cal_weight(float d)  { hx711_adjust_cal_weight(d); }
 void  scale_set_cal_weight(float v)     { hx711_set_cal_weight(v); }
 float scale_calibrate_with_cal_weight() { return hx711_calibrate_with_cal_weight(); }
-void  scale_request_persist()           { hx711_request_persist(); }
 const char* scale_get_status()          { return hx711_get_status(); }
 void  scale_apply_preset(uint8_t idx)   { hx711_apply_preset(idx); }
 float scale_get_weight_ema()            { return hx711_get_weight_ema(); }
@@ -52,7 +51,6 @@ float scale_get_cal_weight()            { return nau7802_get_cal_weight(); }
 void  scale_adjust_cal_weight(float d)  { nau7802_adjust_cal_weight(d); }
 void  scale_set_cal_weight(float v)     { nau7802_set_cal_weight(v); }
 float scale_calibrate_with_cal_weight() { return nau7802_calibrate_with_cal_weight(); }
-void  scale_request_persist()           { nau7802_request_persist(); }
 const char* scale_get_status()          { return nau7802_get_status(); }
 void  scale_apply_preset(uint8_t idx)   { nau7802_apply_preset(idx); }
 float scale_get_weight_ema()            { return nau7802_get_weight_ema(); }

@@ -74,20 +74,6 @@ static void evict_oldest() {
 }
 
 // ============================================================================
-// Init
-// ============================================================================
-
-void brew_log_init() {
-    s_prefs.begin(BREW_LOG_NVS_NAMESPACE, false);
-
-    if (!LittleFS.exists(BREW_LOG_DIR)) {
-        LittleFS.mkdir(BREW_LOG_DIR);
-    }
-
-    LOGI(TAG, "Init: next_id=%u, count=%u", (unsigned)next_id(), (unsigned)brew_log_count());
-}
-
-// ============================================================================
 // Save
 // ============================================================================
 

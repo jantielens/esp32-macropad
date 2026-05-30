@@ -205,6 +205,12 @@ int brew_format_timer(const char* fmt, char* out, size_t out_len);
 // Free the series buffer (called after brew_log_save completes).
 void brew_free_series();
 
+// Drop cached template pointers (s_template and s_last_template) so the
+// manager no longer references template storage. Call before a template
+// registry reload (brew_templates_clear_dynamic) frees dynamic templates,
+// otherwise the cached pointers dangle into freed memory.
+void brew_forget_templates();
+
 // ---- Init ----
 
 void brew_manager_init();

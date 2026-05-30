@@ -12,6 +12,7 @@
 
 #include <ArduinoJson.h>
 #include <LittleFS.h>
+#include <esp_heap_caps.h>
 
 #define TAG "BrewAPI"
 
@@ -208,8 +209,14 @@ void handleDeleteAllBrews(AsyncWebServerRequest* request) {
     uint16_t removed = 0;
 
     if (dir && dir.isDirectory()) {
-        // Collect filenames first (can't delete while iterating on some FS impls)
-        char names[BREW_LOG_MAX_BREWS][16];
+        // Collect filenames first (can't delete while iterating on some FS impls).
+        // Heap-allocate the name table rather than putting ~3.2 KB on the
+        // AsyncTCP handler stack.
+        char (*names)[16] = (char (*)[16])malloc(BREW_LOG_MAX_BREWS * sizeof(names[0]));
+        if (!names) {
+            web_portal_send_json_error(request, 503, "Out of memory");
+            return;
+        }
         uint16_t count = 0;
 
         File f = dir.openNextFile();
@@ -226,6 +233,7 @@ void handleDeleteAllBrews(AsyncWebServerRequest* request) {
             snprintf(path, sizeof(path), "%s/%s", BREW_LOG_DIR, names[i]);
             if (LittleFS.remove(path)) removed++;
         }
+        free(names);
     }
 
     fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
@@ -251,7 +259,10 @@ void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
             web_portal_send_json_error(request, 413, "Import too large (max 1MB)");
             return;
         }
-        uint8_t* buf = (uint8_t*)malloc(total + 1);
+        // Accumulate the upload (~1 MB max) in PSRAM, not internal RAM, so a
+        // large import can't OOM the heap on the P4 boards.
+        uint8_t* buf = (uint8_t*)heap_caps_malloc(total + 1,
+                                                  MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (!buf) {
             web_portal_send_json_error(request, 503, "Out of memory");
             return;
@@ -268,11 +279,17 @@ void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
         buf[total] = '\0';
         request->_tempObject = nullptr;  // we own the pointer now
 
-        // Parse — could be single object or array
-        // Use DynamicJsonDocument since import can be large
-        DynamicJsonDocument doc(total + 256);
-        DeserializationError err = deserializeJson(doc, (const char*)buf, total);
-        free(buf);
+        // Parse — could be single object or array. Build the JsonDocument in
+        // PSRAM via the shared helper so a large import doesn't exhaust the
+        // internal heap.
+        auto doc = make_psram_json_doc(total + 256);
+        if (!doc) {
+            heap_caps_free(buf);
+            web_portal_send_json_error(request, 503, "Out of memory");
+            return;
+        }
+        DeserializationError err = deserializeJson(*doc, (const char*)buf, total);
+        heap_caps_free(buf);
 
         if (err) {
             web_portal_send_json_error(request, 400, "Invalid JSON");
@@ -295,12 +312,12 @@ void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
             free(buf);
         };
 
-        if (doc.is<JsonArray>()) {
-            for (JsonObject brew : doc.as<JsonArray>()) {
+        if (doc->is<JsonArray>()) {
+            for (JsonObject brew : doc->as<JsonArray>()) {
                 importBrew(brew);
             }
-        } else if (doc.is<JsonObject>()) {
-            importBrew(doc.as<JsonObject>());
+        } else if (doc->is<JsonObject>()) {
+            importBrew(doc->as<JsonObject>());
         }
 
         fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());

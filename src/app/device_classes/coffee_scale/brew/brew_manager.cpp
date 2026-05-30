@@ -51,6 +51,15 @@ static BrewSample* s_series         = nullptr;
 static uint16_t    s_series_count   = 0;
 static uint32_t    s_last_sample_ms = 0;
 
+// Deferred series-free — brew_free_series() is called from the LVGL/action
+// task (brew_start/reset/stop), but the main loop's record_sample() writes
+// into s_series during brew_tick().  Freeing the buffer directly from the
+// action task would race the main task and risk a use-after-free.  We flag
+// the request here and perform the actual heap_caps_free in brew_tick(),
+// which runs on the main Arduino loop task alongside record_sample().
+// (Mirrors the s_save_pending pattern below.)
+static bool s_free_series_pending = false;
+
 // Markers
 static BrewMarker  s_markers[BREW_MARKER_MAX];
 static uint8_t     s_marker_count  = 0;
@@ -298,6 +307,16 @@ void brew_advance(const char* template_name) {
 // ============================================================================
 
 void brew_tick() {
+    // Deferred series-free — perform the heap_caps_free here on the main task
+    // (see s_free_series_pending) so it never races record_sample() below.
+    if (s_free_series_pending) {
+        s_free_series_pending = false;
+        if (s_series) {
+            heap_caps_free(s_series);
+            s_series = nullptr;
+        }
+    }
+
     // Deferred save — runs on main task (internal RAM stack, flash-safe)
     if (s_save_pending) {
         s_save_pending = false;
@@ -561,16 +580,27 @@ void brew_hint_template(const char* template_name) {
     s_last_template = tpl;
 }
 
+void brew_forget_templates() {
+    // Drop cached pointers before the template registry frees dynamic
+    // templates. brew_reset() (called separately) clears s_template but
+    // deliberately preserves s_last_template; this also drops that one so a
+    // reload can safely delete the storage both pointers reference.
+    s_template      = nullptr;
+    s_last_template = nullptr;
+}
+
 // ============================================================================
 // Series access
 // ============================================================================
 
 void brew_free_series() {
-    if (s_series) {
-        heap_caps_free(s_series);
-        s_series = nullptr;
-    }
+    // Zero the count synchronously so marker/sample indices computed right
+    // after this call (e.g. brew_start → enter_stage → emit_marker) start at
+    // 0.  Defer the actual heap_caps_free to brew_tick() on the main task so
+    // it can never race record_sample().  The buffer pointer stays valid
+    // until the next tick consumes the flag.
     s_series_count = 0;
+    if (s_series) s_free_series_pending = true;
 }
 
 // ============================================================================
@@ -611,6 +641,7 @@ void brew_manager_init() {
     s_dose_weight   = 0.0f;
     s_series        = nullptr;
     s_series_count  = 0;
+    s_free_series_pending = false;
     s_stage_enter_ms = 0;
     s_marker_count  = 0;
     s_capture_count = 0;

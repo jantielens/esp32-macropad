@@ -9,10 +9,10 @@
 #include <stdlib.h>
 
 namespace {
-// NEW NVS keys (Phase 4 redesign):
+// NVS keys:
 //   - all <= 14 chars (ESP-IDF NVS limit is 15 bytes incl. null = 14 chars).
-//   - sensor-agnostic `scale_` prefix (old `hx711_*` was wrong for NAU7802).
-//   - no backward-compat with the legacy feature/coffee-scale branch.
+//   - sensor-agnostic `scale_` prefix (works for both HX711 and NAU7802).
+//   - no backward-compat with any legacy key scheme.
 constexpr const char* KEY_SCALE_CAL    = "scale_cal";
 constexpr const char* KEY_SCALE_OFS    = "scale_ofs";
 constexpr const char* KEY_SCALE_SMOOTH = "scale_smooth";
@@ -67,11 +67,10 @@ void coffee_scale_config_load(Preferences& prefs) {
          SM_NAMES[coffee_scale_config.scale_smoothing],
          coffee_scale_config.scale_smoothing);
 
-    // Auto-tare-on-first-boot rule (Phase 4 carry-forward from Phase 3
-    // handoff): if no calibration data was persisted, the scale has never
-    // been zeroed against its physical platform. Request a tare so the next
-    // weight reading isn't garbage. User still needs to calibrate via portal
-    // for accurate readings.
+    // Auto-tare-on-first-boot rule: if no calibration data was persisted, the
+    // scale has never been zeroed against its physical platform. Request a
+    // tare so the next weight reading isn't garbage. User still needs to
+    // calibrate via portal for accurate readings.
     if (!have_cal) {
         LOGW(TAG, "No calibration in NVS — scale needs calibration via portal");
         scale_request_tare_no_persist();

@@ -7,10 +7,9 @@
 // class, with NVS load/save wired through the existing DeviceClass.config_*
 // hooks (see coffee_scale_device_class.cpp).
 //
-// NVS keys: redesigned for 15-char limit + sensor-agnostic naming. Old keys
-// were `hx711_cal` / `hx711_ofs` / `scale_sm`; the new scheme uses
-// `scale_cal` / `scale_ofs` / `scale_smooth` (Phase 4 of coffee-scale port,
-// per Jan's directive — clean break, no legacy compat).
+// NVS keys: redesigned for 15-char limit + sensor-agnostic naming. Keys use
+// the `scale_cal` / `scale_ofs` / `scale_smooth` scheme (sensor-agnostic,
+// no legacy compatibility).
 // ============================================================================
 #pragma once
 

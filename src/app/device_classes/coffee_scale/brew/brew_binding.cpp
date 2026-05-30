@@ -11,8 +11,30 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 #define TAG "BrewBind"
+
+// ============================================================================
+// Bounded JSON accumulation helper
+// ============================================================================
+// Appends a formatted fragment at buf[pos], advancing pos by the number of
+// bytes actually written (never past len). snprintf returns the would-be
+// length, so adding it unclamped lets pos run past the buffer end and makes
+// the subsequent (len - pos) underflow into a huge size_t — an OOB write.
+// This clamps every accumulation site instead.
+static inline void append_snprintf(char* buf, size_t len, size_t& pos,
+                                   const char* fmt, ...) {
+    if (pos >= len) return;
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf + pos, len - pos, fmt, ap);
+    va_end(ap);
+    if (n <= 0) return;
+    size_t avail = len - pos;
+    pos += ((size_t)n < avail) ? (size_t)n : avail;
+}
+
 
 // ============================================================================
 // Parse params: "key" or "key;format"
@@ -176,17 +198,15 @@ static bool lookup_value(const char* key, const char* fmt,
             } else {
                 color = "#555555";
             }
-            int n;
             if (is_active) {
-                n = snprintf(out + pos, out_len - pos,
+                append_snprintf(out, out_len, pos,
                     "{\"s\":{\"text\":\"> %s\",\"color\":\"%s\"}}",
                     s->name, color);
             } else {
-                n = snprintf(out + pos, out_len - pos,
+                append_snprintf(out, out_len, pos,
                     "{\"s\":{\"text\":\"%s\",\"color\":\"%s\"}}",
                     s->name, color);
             }
-            if (n > 0) pos += (size_t)n;
         }
         if (pos < out_len - 1) { out[pos++] = ']'; out[pos++] = '}'; }
         if (pos < out_len) out[pos] = '\0';
@@ -207,9 +227,8 @@ static bool lookup_value(const char* key, const char* fmt,
             char val[16];
             if (dose > 0.0f) snprintf(val, sizeof(val), "%.1f", dose);
             else strlcpy(val, "---", sizeof(val));
-            int n = snprintf(out + pos, out_len - pos,
+            append_snprintf(out, out_len, pos,
                 "{\"label\":\"Dose\",\"value\":\"%s\",\"unit\":\"g\"}", val);
-            if (n > 0) pos += (size_t)n;
         }
         // Water
         {
@@ -217,9 +236,8 @@ static bool lookup_value(const char* key, const char* fmt,
             if (phase == BREW_ACTIVE || phase == BREW_DONE)
                 snprintf(val, sizeof(val), "%.1f", water);
             else strlcpy(val, "---", sizeof(val));
-            int n = snprintf(out + pos, out_len - pos,
+            append_snprintf(out, out_len, pos,
                 ",{\"label\":\"Water\",\"value\":\"%s\",\"unit\":\"g\"}", val);
-            if (n > 0) pos += (size_t)n;
         }
         // Ratio
         {
@@ -227,17 +245,15 @@ static bool lookup_value(const char* key, const char* fmt,
             if (dose > 0.0f && (phase == BREW_ACTIVE || phase == BREW_DONE))
                 snprintf(val, sizeof(val), "1:%.1f", water / dose);
             else strlcpy(val, "---", sizeof(val));
-            int n = snprintf(out + pos, out_len - pos,
+            append_snprintf(out, out_len, pos,
                 ",{\"label\":\"Ratio\",\"value\":\"%s\",\"unit\":\"\"}", val);
-            if (n > 0) pos += (size_t)n;
         }
         // Time
         {
             const char* val = (phase == BREW_ACTIVE || phase == BREW_DONE)
                               ? timer_buf : "---";
-            int n = snprintf(out + pos, out_len - pos,
+            append_snprintf(out, out_len, pos,
                 ",{\"label\":\"Time\",\"value\":\"%s\",\"unit\":\"\"}", val);
-            if (n > 0) pos += (size_t)n;
         }
         // Named captures
         uint8_t cap_count = brew_get_capture_count();
@@ -246,10 +262,9 @@ static bool lookup_value(const char* key, const char* fmt,
             if (!c) continue;
             char val[16];
             snprintf(val, sizeof(val), "%.1f", c->value);
-            int n = snprintf(out + pos, out_len - pos,
+            append_snprintf(out, out_len, pos,
                 ",{\"label\":\"%s\",\"value\":\"%s\",\"unit\":\"%s\"}",
                 c->label, val, c->unit);
-            if (n > 0) pos += (size_t)n;
         }
         if (pos < out_len) out[pos++] = ']';
         if (pos < out_len) out[pos] = '\0';

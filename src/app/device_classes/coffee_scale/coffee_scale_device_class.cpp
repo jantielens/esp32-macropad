@@ -6,10 +6,8 @@
 // IS_COFFEE_SCALE gate, mirroring the shutter-tester aggregation pattern
 // (see device_classes/shutter_tester_device_class.cpp).
 //
-// Phase 2: sensors + scale HAL only. No actions, no brew engine, no portal
-// UI, no NVS config_load/save wiring (those land in Phases 3-6). Each
-// included .cpp gates its own contents on HAS_SCALE / HAS_SENSOR_* so this
-// aggregator does not need extra gating beyond IS_COFFEE_SCALE.
+// Each included .cpp gates its own contents on HAS_SCALE / HAS_SENSOR_* so
+// this aggregator does not need extra gating beyond IS_COFFEE_SCALE.
 
 #include "board_config.h"
 
@@ -23,17 +21,16 @@
 
 // Per-module translation units. Order: smoothing first (other drivers
 // reference it), then sensor backends, then scale HAL (depends on backend
-// headers), then scale_init (calls into future brew/binding subsystems).
+// headers).
 #include "sensors/scale_smoothing.cpp"
 #include "sensors/hx711_sensor.cpp"
 #include "sensors/nau7802_sensor.cpp"
 #include "scale_hal.cpp"
-#include "scale_init.cpp"
-// Phase 3: ActionTypeDef registrations for "scale" and "brew" action types.
+// ActionTypeDef registrations for "scale" and "brew" action types.
 // Each self-gates on HAS_DISPLAY && IS_COFFEE_SCALE internally.
 #include "scale_actions.cpp"
 #include "brew_actions.cpp"
-// Phase 4: brew engine + scale/brew binding schemes + NVS config singleton.
+// Brew engine + scale/brew binding schemes + NVS config singleton.
 #include "scale_binding.cpp"
 #include "coffee_scale_config.cpp"
 #include "brew/brew_template_dsl.cpp"
@@ -45,7 +42,6 @@
 
 #include "sensors/hx711_sensor.h"
 #include "sensors/nau7802_sensor.h"
-#include "scale_init.h"
 #include "scale_binding.h"
 #include "brew/brew_binding.h"
 #include "brew/brew_manager.h"
@@ -80,13 +76,9 @@ static void coffee_scale_register_sensors() {
 //
 // Fires AFTER LittleFS mount, AFTER WiFi/AP/portal init, AFTER web_portal_init,
 // and BEFORE the always-on path calls sensor_manager_init() / binding inits
-// (app.ino lines 407 / 423 / 464+). Phase 2 calls into the no-op skeleton
-// scale_subsystem_init_storage() + scale_subsystem_init() so Phase 4 can edit
-// the bodies in place without touching this aggregator.
+// (app.ino lines 407 / 423 / 464+).
 // ---------------------------------------------------------------------------
 static void on_setup_late_hook(DeviceConfig * /*config*/, PowerMode /*current_mode*/) {
-    scale_subsystem_init_storage();
-    scale_subsystem_init();
     brew_templates_init();
     brew_manager_init();
     scale_binding_init();

@@ -66,9 +66,8 @@ void hx711_set_cal_weight(float value);
 // Run calibration using current cal_weight. Returns new factor, or 0 on error.
 float hx711_calibrate_with_cal_weight();
 
-// Request deferred NVS persist of calibration data.
-// Phase 2: logs a warning and clears the request; Phase 4 wires actual NVS
-// persistence via DeviceClass.config_save.
+// Request deferred NVS persist of calibration data. Consumed in loop_cb on
+// the main task; logs a warning if no persist backend is wired.
 void hx711_request_persist();
 
 // Get human-readable status string ("idle", "taring", "calibrating").

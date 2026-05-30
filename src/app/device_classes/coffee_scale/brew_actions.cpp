@@ -3,10 +3,9 @@
 // REGISTER_ACTION_TYPE so action_dispatch.cpp / action_parse.cpp do not need
 // to know about the brew arm at compile time.
 //
-// Phase 3 ships with stub brew engine functions. Phase 4 will replace the
-// static-inline stubs at the top of this file with the real brew_manager.h
-// include + linkage. The dispatcher logic itself does not change between
-// phases.
+// The dispatcher resolves a brew command (start / next / stop / reset / tare /
+// advance / set_template) and drives the brew engine state machine in
+// brew_manager.
 //
 // Aggregated into the build via device_classes/coffee_scale/coffee_scale_device_class.cpp
 // under #if IS_COFFEE_SCALE.

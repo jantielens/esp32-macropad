@@ -1,9 +1,7 @@
 #pragma once
 
 // Smoothing primitives for scale sensors (EMA + dead-band + windowed flow rate).
-// Ported verbatim from feature/coffee-scale during Phase 2 of the
-// release/1.19.1 port. Gated by HAS_SCALE so non-coffee-scale builds get an
-// empty translation unit.
+// Gated by HAS_SCALE so non-coffee-scale builds get an empty translation unit.
 
 #include "board_config.h"
 
