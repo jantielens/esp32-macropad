@@ -13,3 +13,6 @@ portal-all.css
 
 # [chunk:shutter IS_SHUTTER_TESTER]
 portal_shutter.css
+
+# [chunk:coffee_scale IS_COFFEE_SCALE]
+portal_brews.css

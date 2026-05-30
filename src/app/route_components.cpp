@@ -19,3 +19,9 @@
 #include "device_classes/shutter_tester/web/portal_shutter_sessions.cpp"
 #include "device_classes/shutter_tester/web/portal_shutter_tests.cpp"
 #endif
+
+#if IS_COFFEE_SCALE
+#include "device_classes/coffee_scale/web/web_portal_scale.cpp"
+#include "device_classes/coffee_scale/web/web_portal_brews.cpp"
+#include "device_classes/coffee_scale/web/web_portal_brew_templates.cpp"
+#endif

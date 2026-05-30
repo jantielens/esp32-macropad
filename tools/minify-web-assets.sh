@@ -596,9 +596,11 @@ emit_chunked_variants() {
             fi
         done
         n_flags=${#unique_flags[@]}
-        if [[ $n_flags -gt 3 ]]; then
-            echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 3 supported)." >&2
-            echo "     Each flag doubles flash cost across boards; consolidate chunks instead." >&2
+        if [[ $n_flags -gt 4 ]]; then
+            echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 4 supported)." >&2
+            echo "     Each flag doubles the number of gzipped variants in web_assets.h" >&2
+            echo "     (variants are #if-guarded so only one links per board, but source" >&2
+            echo "     size and build time grow). Consolidate chunks instead if possible." >&2
             unset unique_flags seen_flags
             exit 1
         fi

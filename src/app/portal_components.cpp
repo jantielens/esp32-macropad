@@ -69,6 +69,13 @@
 #include "device_classes/shutter_tester/shutter_config.cpp"
 #endif // IS_SHUTTER_TESTER
 
+// --- Coffee Scale components ---
+#if IS_COFFEE_SCALE
+#include "device_classes/coffee_scale/components/coffee_scale_component.cpp"
+#include "device_classes/coffee_scale/components/brews_component.cpp"
+#include "device_classes/coffee_scale/components/brew_templates_component.cpp"
+#endif // IS_COFFEE_SCALE
+
 // --- E-Paper-gated components ---
 // Split into one component per nav entry (Status / Image & Schedule /
 // Status Overlay / VCOM) — all share the "epaper" category. Image and

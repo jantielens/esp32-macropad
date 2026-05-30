@@ -92,3 +92,20 @@ portal.js
 # only invoked when an e-paper fragment is loaded, so ordering relative to
 # the shell chunk is immaterial.
 epaper_init.js
+
+# [chunk:coffee_scale_actions IS_COFFEE_SCALE]
+# Coffee Scale action-editor extensions. Registers "scale" + "brew" types
+# with the shared editor via the _actionEditorExtensions hook array. Must come
+# after the actions chunk (which defines _actionEditorExtensions).
+portal_action_editor_scale.js
+
+# [chunk:coffee_scale_pages IS_COFFEE_SCALE]
+# Coffee Scale portal pages: scale calibration, brew session list/detail, and
+# brew template editor. Each module installs its own init_<id>_fragment()
+# handler that portal_fragment_init.js invokes when its fragment loads.
+# portal_brews_init.js must come first because it calls registerConfigFields()
+# to extend the shared config save loop with the scale_smooth NVS key.
+portal_brews_init.js
+portal_brews.js
+portal_brews_charts.js
+portal_brews_templates.js

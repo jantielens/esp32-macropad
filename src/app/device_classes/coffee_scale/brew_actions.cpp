@@ -18,6 +18,7 @@
 #include "../../log_manager.h"
 #include "coffee_scale_payload.h"
 #include "scale_hal.h"
+#include "brew/brew_manager.h"
 
 #if HAS_MQTT
 #include "../../binding_template.h"
@@ -26,32 +27,6 @@
 #include <string.h>
 
 #define TAG "BrewAction"
-
-#if HAS_SCALE
-// ---------------------------------------------------------------------------
-// Phase 3 brew-engine stubs. Replaced in Phase 4 by an include of the real
-// brew_manager.h. Kept static-inline here so they are local to this TU and
-// drop cleanly when the real header arrives (no symbol-conflict risk).
-// ---------------------------------------------------------------------------
-static inline void brew_hint_template(const char* tpl) {
-    LOGW(TAG, "brew_hint_template('%s') — Phase 4 brew engine not yet ported", tpl ? tpl : "");
-}
-static inline void brew_advance(void*) {
-    LOGW(TAG, "brew_advance — Phase 4 brew engine not yet ported");
-}
-static inline void brew_start(void*) {
-    LOGW(TAG, "brew_start — Phase 4 brew engine not yet ported");
-}
-static inline void brew_next() {
-    LOGW(TAG, "brew_next — Phase 4 brew engine not yet ported");
-}
-static inline void brew_stop() {
-    LOGW(TAG, "brew_stop — Phase 4 brew engine not yet ported");
-}
-static inline void brew_reset() {
-    LOGW(TAG, "brew_reset — Phase 4 brew engine not yet ported");
-}
-#endif // HAS_SCALE
 
 static void brew_parse(const JsonObject& a, ButtonAction& act) {
     BrewPayload& p = brew_payload(act);

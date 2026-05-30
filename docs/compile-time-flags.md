@@ -372,6 +372,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.cpp
   - src/app/data_stream.h
   - src/app/device_class_registry.cpp
+  - src/app/device_classes/coffee_scale/brew_actions.cpp
+  - src/app/device_classes/coffee_scale/scale_actions.cpp
   - src/app/device_classes/coffee_scale/sensors/hx711_sensor.cpp
   - src/app/device_classes/coffee_scale/sensors/nau7802_sensor.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
@@ -510,6 +512,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/data_stream.cpp
   - src/app/data_stream.h
+  - src/app/device_classes/coffee_scale/brew_actions.cpp
+  - src/app/device_classes/coffee_scale/scale_actions.cpp
   - src/app/device_classes/epaper/epaper_mqtt.cpp
   - src/app/device_classes/epaper/epaper_mqtt.h
   - src/app/device_classes/epaper_device_class.cpp
@@ -552,7 +556,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/widget.h
 - **HAS_SCALE**
+  - src/app/device_classes/coffee_scale/brew_actions.cpp
   - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+  - src/app/device_classes/coffee_scale/scale_actions.cpp
   - src/app/device_classes/coffee_scale/scale_hal.cpp
   - src/app/device_classes/coffee_scale/scale_hal.h
   - src/app/device_classes/coffee_scale/scale_init.cpp
@@ -703,8 +709,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
+  - src/app/device_classes/coffee_scale/brew_actions.cpp
   - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
   - src/app/device_classes/coffee_scale/coffee_scale_device_class.cpp
+  - src/app/device_classes/coffee_scale/coffee_scale_payload.h
+  - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/portal_components.cpp
+  - src/app/route_components.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
