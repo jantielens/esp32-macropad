@@ -282,6 +282,18 @@ echo "=== Running unit tests: epaper_battery ==="
 ./tests/bin/test_epaper_battery
 echo
 
+echo "=== Building guard: coffee_scale command length ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_COFFEE_SCALE=true \
+    -include tests/board_config.h \
+    -I src/app \
+    tests/test_coffee_scale_cmd_len.cpp \
+    -o tests/bin/test_coffee_scale_cmd_len
+
+echo "=== Running guard: coffee_scale command length ==="
+./tests/bin/test_coffee_scale_cmd_len
+echo
+
 echo "=== Running guard: branding mirror (C++ <-> bash) ==="
 ./tests/test_branding_mirror.sh
 echo
