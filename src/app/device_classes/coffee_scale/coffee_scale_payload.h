@@ -22,21 +22,23 @@
 #define ACTION_TYPE_SCALE "scale"
 #define ACTION_TYPE_BREW  "brew"
 
-// Local command-field width. CONFIG_TIMER_CMD_MAX_LEN (12) is too small for
+// Per-type command-field widths. CONFIG_TIMER_CMD_MAX_LEN (12) is too small for
 // "set_template" (13 incl. NUL) and "cal_weight_set" (15 incl. NUL), causing
-// silent strlcpy truncation and "unknown cmd" dispatch failures.
-#define BREW_SCALE_CMD_MAX_LEN 16
+// silent strlcpy truncation and "unknown cmd" dispatch failures. Scale and brew
+// are independent action types, so each owns its own sizing constant.
+#define SCALE_CMD_MAX_LEN 16   // longest: "cal_weight_set" (14 + null). Update if new command strings exceed this length.
+#define BREW_CMD_MAX_LEN  13   // longest: "set_template" (12 + null). Update if new command strings exceed this length.
 
 struct ScalePayload {
     // "tare", "calibrate", "cal_weight", "cal_weight_set"
-    char command[BREW_SCALE_CMD_MAX_LEN];
+    char command[SCALE_CMD_MAX_LEN];
     // Numeric string (delta or absolute grams), or empty for tare/calibrate
     char value[CONFIG_BINDABLE_SHORT_LEN];
 };
 
 struct BrewPayload {
     // "set_template", "advance", "start", "next", "stop", "reset", "tare"
-    char command[BREW_SCALE_CMD_MAX_LEN];
+    char command[BREW_CMD_MAX_LEN];
     // Template name (bindable) for set_template; empty for other commands
     char value[CONFIG_BINDABLE_SHORT_LEN];
 };
