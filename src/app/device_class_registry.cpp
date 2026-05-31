@@ -18,6 +18,8 @@ DeviceClass device_class_detect() {
     return DeviceClass::SHUTTER_TESTER;
 #elif IS_COFFEE_SCALE
     return DeviceClass::COFFEE_SCALE;
+#elif IS_DARKROOM_TIMER
+    return DeviceClass::DARKROOM_TIMER;
 #elif HAS_EPAPER
     return DeviceClass::EPAPER;
 #elif !HAS_DISPLAY
@@ -37,6 +39,7 @@ static const DeviceClassDescriptor DESCRIPTORS[] = {
     { DeviceClass::HEADLESS,       "Headless",       "HEADLESS", "ESP32-MP Headless"       },
     { DeviceClass::SHUTTER_TESTER, "Shutter Tester", "SHUTTER",  "ESP32-MP Shutter Tester" },
     { DeviceClass::COFFEE_SCALE,   "Coffee Scale",   "SCALE",    "ESP32-MP Coffee Scale"   },
+    { DeviceClass::DARKROOM_TIMER, "Darkroom Timer", "DARKROOM", "ESP32-MP Darkroom Timer" },
 };
 
 static const size_t DESCRIPTOR_COUNT = sizeof(DESCRIPTORS) / sizeof(DESCRIPTORS[0]);
