@@ -177,6 +177,26 @@ build/
 
 > **Disk usage**: each board's intermediate cache is ~170 MB, so 6 boards use ~1 GB total. `./clean.sh` removes the entire `build/` tree including all intermediate caches.
 
+### Compiler Cache (ccache)
+
+The per-board `intermediate/` cache only helps when the build directory is preserved. It is invalidated by a clean checkout, `./clean.sh`, or touching a widely-included header. For those cases, `build.sh` supports an optional [ccache](https://ccache.dev/) layer that caches compiled object files keyed on preprocessed source — independent of the build directory and shared across all boards of the same architecture (the large ESP32 core and LVGL objects are identical between, e.g., the S3 and P4 builds).
+
+ccache is **off by default** so local and CI behavior are unchanged. Enable it per-invocation:
+
+```bash
+USE_CCACHE=1 ./build.sh jc4880p433
+```
+
+Behavior:
+
+- Requires the `ccache` binary on `PATH`; if missing, the build prints a warning and proceeds without caching.
+- `build.sh` reads the installed core's `recipe.{c,cpp}.o.pattern` from its `platform.txt` and prepends `ccache` to them via `--build-property`, so it works regardless of the ESP32 core version with no PATH shims or symlinks.
+- Cache size defaults to `CCACHE_MAXSIZE=10G` (override via the environment) to hold multiple cores/architectures.
+- Inspect effectiveness with `ccache -s` (a wiped-build-dir rebuild typically shows >95% hits).
+
+This is most valuable on a **dedicated build host** (for example, a faster LAN machine that offloads builds from a thermally-throttled laptop). To enable it permanently on such a host, export `USE_CCACHE=1` in the shell profile rather than passing it each time.
+
+
 ### Board-Specific Configuration
 
 The build system supports optional board-specific configuration using compile-time defines and conditional compilation.
