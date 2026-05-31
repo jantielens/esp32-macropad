@@ -385,6 +385,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/brew_actions.cpp
   - src/app/device_classes/coffee_scale/scale_actions.cpp
   - src/app/device_classes/coffee_scale/scale_binding.cpp
+  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.h
@@ -523,6 +524,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.h
   - src/app/device_classes/coffee_scale/brew_actions.cpp
   - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
   - src/app/device_classes/epaper/epaper_mqtt.cpp
   - src/app/device_classes/epaper/epaper_mqtt.h
   - src/app/device_classes/epaper_device_class.cpp
@@ -609,6 +611,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/scale_hal.cpp
   - src/app/device_classes/coffee_scale/sensors/nau7802_sensor.cpp
   - src/app/device_classes/coffee_scale/sensors/nau7802_sensor.h
+- **HAS_SENSOR_TSL2591**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
 - **HAS_SOUND_PLAYER**
   - src/app/action_dispatch.cpp
   - src/app/app.ino
@@ -748,6 +752,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+  - src/app/device_classes/darkroom_timer/darkroom_timer_device_class.cpp
+  - src/app/device_classes/darkroom_timer/darkroom_timer_payload.h
+  - src/app/device_classes/darkroom_timer/relay_controller.cpp
+  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
+  - src/app/device_classes/darkroom_timer/web_portal_relay.cpp
   - src/app/route_components.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
@@ -1007,6 +1017,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/drivers/gt911_touch_driver.cpp
   - src/app/drivers/wire_cst816s_touch_driver.cpp
+- **TSL2591_I2C_BUS**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+- **TSL2591_I2C_FREQUENCY**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+- **TSL2591_I2C_SCL**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+- **TSL2591_I2C_SDA**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
 - **UI_SCALE_TIER**
   - src/app/board_config.h
 - **USE_SD_STORAGE**

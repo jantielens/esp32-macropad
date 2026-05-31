@@ -1,4 +1,9 @@
-// Relay action configuration REST API — GET/PUT /api/config/relay.
+// Relay action configuration REST API — GET/PUT /api/relay.
+//
+// Uses a top-level /api/relay namespace (not /api/config/relay) because the
+// core /api/config GET route is a prefix matcher and would otherwise swallow
+// the GET — mirrors the per-device-class /api/scale, /api/brews, /api/shutter
+// namespacing convention.
 //
 // Self-registers its AsyncWebServer routes via REGISTER_ROUTES() (see
 // web_portal_routes.h), mirroring the shutter-tester web route modules. The
@@ -81,8 +86,8 @@ static void handlePutRelayConfigBody(AsyncWebServerRequest* request, uint8_t* da
 }
 
 static void relay_register(AsyncWebServer* server) {
-    server->on("/api/config/relay", HTTP_GET, handleGetRelayConfig);
-    server->on("/api/config/relay", HTTP_PUT,
+    server->on("/api/relay", HTTP_GET, handleGetRelayConfig);
+    server->on("/api/relay", HTTP_PUT,
                // Request handler fires after all body chunks — frees per-request state.
                [](AsyncWebServerRequest* request) {
                    if (request->_tempObject) {
