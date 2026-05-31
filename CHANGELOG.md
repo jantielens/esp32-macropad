@@ -24,6 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **`[scale:*]` and `[brew:*]` binding schemes** — `[scale:weight|flow|status]` and `[brew:weight|flow_rate|timer|stage|template|ratio|stages_json|summary_json|…]` for pad widgets.
 * **Coffee Scale REST endpoints** — `/api/scale/*` (calibration), `/api/brews/*` (brew log list/import/export/delete), and `/api/brew-templates/*` (template CRUD).
 * **Developer doc: `docs/device-classes/coffee-scale/README.md`** — overview, supported boards, hardware setup, calibration flow, brew engine, action types, binding schemes, and REST endpoints. README "Device Classes" table gains a Coffee Scale row.
+* **Darkroom Timer device class (`IS_DARKROOM_TIMER`)** — new device class for analog-darkroom enlarger control, branded `ESP32-MP Darkroom Timer` (SSID `ESP32-MP-DARKROOM-XXXXXX`). Aggregated under `src/app/device_classes/darkroom_timer/` and gated by `IS_DARKROOM_TIMER` so it adds zero footprint to other boards.
+* **Darkroom Timer board** — `jc4880p433-darkroom` (GUITION JC4880P433 ESP32-P4 480×800 panel) with a TSL2591 light sensor for paper metering and Shelly Wi-Fi relays for enlarger / safelight control.
+* **Three timer engines** — expose timer (with dry-down compensation), f-stop test strip, and light meter (enlargement-factor compensation), all active simultaneously on the darkroom board.
+* **`expose`, `strip`, `meter`, `print`, and `shelly` action types** — exposure, test-strip, metering, print-log, and relay action handlers registered via `REGISTER_ACTION_TYPE`. The legacy `mem` action type is removed.
+* **`[expose:*]`, `[strip:*]`, `[meter:*]`, and `[print:*]` binding schemes** — live timer, metering, and print-log data for pad widgets.
+* **Print logging** — print-session log with exposure details, starred status, and notes, persisted to the `Storage` facade as a 500-entry FIFO ring buffer (`DARKROOM_PRINT_LOG_MAX`), with NVS counter keys.
+* **Relay controller** — generic relay abstraction with a Shelly HTTP backend, configured through the `shelly` action and the darkroom portal page.
+* **Darkroom Timer REST endpoints** — `/api/relay` (relay slot config) and `/api/prints` (print-log list / detail / notes / delete / export).
+* **Developer doc: `docs/device-classes/darkroom-timer/README.md`** — overview, supported board, hardware setup, timer engines, action types, binding schemes, print logging, and relay control. README "Device Classes" table gains a Darkroom Timer row. (See [issue #31](https://github.com/jantielens/esp32-macropad/issues/31) for the follow-up to make the asset bundler treat mutually-exclusive device-class flags as a single group.)
 
 ## [1.18.0] - 2026-05-28
 

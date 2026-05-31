@@ -28,4 +28,5 @@
 
 #if IS_DARKROOM_TIMER
 #include "device_classes/darkroom_timer/web_portal_relay.cpp"
+#include "device_classes/darkroom_timer/web_portal_prints.cpp"
 #endif

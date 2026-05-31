@@ -1,0 +1,40 @@
+<div class="section-header">
+  <h2>🖨️ Print Log</h2>
+  <p>Darkroom print session history with exposure details and notes.</p>
+</div>
+
+<!-- Print List View -->
+<section id="prints-list-view">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-secondary prints-btn" id="prints-export-btn">Export All</button>
+            <button type="button" class="btn btn-danger prints-btn" id="prints-clear-btn">Clear All</button>
+        </div>
+    </div>
+    <p style="font-size:13px; color:#86868b; margin:0 0 16px 0;" id="prints-summary"></p>
+    <div id="prints-list"></div>
+</section>
+
+<!-- Print Detail View (hidden by default) -->
+<section id="prints-detail-view" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <button type="button" class="btn btn-secondary prints-btn" id="prints-back-btn">← Back</button>
+        <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-danger prints-btn" id="prints-delete-btn">Delete</button>
+        </div>
+    </div>
+    <!-- Hero card -->
+    <div id="detail-hero"></div>
+    <!-- Exposure section -->
+    <div id="detail-exposure" style="margin-top:16px;"></div>
+    <!-- Segments (test strip only) -->
+    <div id="detail-segments" style="display:none; margin-top:16px;"></div>
+    <!-- Metering context section -->
+    <div id="detail-metering" style="margin-top:16px;"></div>
+    <!-- Notes -->
+    <div style="margin-top:16px;">
+        <label for="detail-notes" style="font-weight:600; font-size:14px; display:block; margin-bottom:6px;">Notes</label>
+        <textarea id="detail-notes" rows="3" style="width:100%; box-sizing:border-box; font-size:14px; padding:8px; border:1px solid #d1d1d6; border-radius:8px; resize:vertical; font-family:inherit;"></textarea>
+        <button type="button" class="btn btn-secondary prints-btn" id="prints-save-notes-btn" style="margin-top:6px;">Save Notes</button>
+    </div>
+</section>

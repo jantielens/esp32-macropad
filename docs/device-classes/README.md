@@ -9,6 +9,8 @@ The ESP32 Macropad firmware compiles for multiple hardware classes from a single
 | `epaper`         | `ESP32-MP E-Paper`        | `inkplate5v2`                                             | Battery-powered e-paper display with hourly schedules and image carousel.                                   |
 | `headless`       | `ESP32-MP Headless`       | `esp32c3-withsensors`                                     | Sensor / bridge node — MQTT telemetry, BTHome BLE beacons, no display.                                      |
 | `shutter_tester` | `ESP32-MP Shutter Tester` | `jc4880p433-shutter`                                      | Specialized capture rig measuring camera shutter speeds via an ADC sensor array. See [shutter-tester/](shutter-tester/README.md). |
+| `coffee_scale`   | `ESP32-MP Coffee Scale`   | `jc4880p433-nau7802`, `jc4880p433-hx711`                  | Connected espresso / pour-over scale with a stage-based brew engine and weight logging. See [coffee-scale/](coffee-scale/README.md). |
+| `darkroom_timer` | `ESP32-MP Darkroom Timer` | `jc4880p433-darkroom`                                     | Enlarger exposure timer with f-stop test strips, light metering, relay control, and a print session log. See [darkroom-timer/](darkroom-timer/README.md). |
 
 ## How class detection works
 
@@ -16,10 +18,12 @@ The ESP32 Macropad firmware compiles for multiple hardware classes from a single
 flowchart TD
     Board[board_config.h + board_overrides.h] --> Flags{Flag ladder}
     Flags -->|IS_SHUTTER_TESTER| Shutter[shutter_tester]
+    Flags -->|IS_COFFEE_SCALE| Coffee[coffee_scale]
+    Flags -->|IS_DARKROOM_TIMER| Darkroom[darkroom_timer]
     Flags -->|HAS_EPAPER| EPaper[epaper]
     Flags -->|HAS_DISPLAY| Macropad[macropad]
     Flags -->|else| Headless[headless]
-    Shutter & EPaper & Macropad & Headless --> Reg[device_class_registry.cpp DESCRIPTORS]
+    Shutter & Coffee & Darkroom & EPaper & Macropad & Headless --> Reg[device_class_registry.cpp DESCRIPTORS]
     Reg --> Brand[Branding, default device name, AP SSID, HA mdl, web portal title]
 ```
 
@@ -28,3 +32,5 @@ The single source of truth is `device_class_detect()` and the `DESCRIPTORS[]` ta
 ## Per-class documentation
 
 - [shutter-tester/](shutter-tester/README.md) — Shutter Tester device class
+- [coffee-scale/](coffee-scale/README.md) — Coffee Scale device class
+- [darkroom-timer/](darkroom-timer/README.md) — Darkroom Timer device class

@@ -109,3 +109,16 @@ portal_brews_init.js
 portal_brews.js
 portal_brews_charts.js
 portal_brews_templates.js
+
+# [chunk:darkroom_actions IS_DARKROOM_TIMER]
+# Darkroom Timer action-editor extension. Registers the expose/strip/meter/
+# print/shelly types with the shared editor via the _actionEditorExtensions
+# hook array. Must come after the actions chunk (which defines the hook).
+portal_action_editor_darkroom.js
+
+# [chunk:darkroom_pages IS_DARKROOM_TIMER]
+# Darkroom Timer portal pages: relay-config init + print session log viewer.
+# portal_darkroom_init.js owns the relay-slot editor helpers and the
+# init_<id>_fragment() handlers that portal_fragment_init.js invokes on load.
+portal_darkroom_init.js
+portal_prints.js

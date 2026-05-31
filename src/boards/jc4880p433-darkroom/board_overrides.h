@@ -28,4 +28,16 @@
 #define TSL2591_I2C_SCL       51
 #define TSL2591_I2C_FREQUENCY 400000
 
+// ============================================================================
+// Web portal — promote the Darkroom category to the primary nav position
+// ============================================================================
+// Lands the portal on the darkroom relay/config page and surfaces a welcome
+// hero card, matching the shutter-tester / coffee-scale primary-category
+// pattern. The fragment id must match a REGISTER_NAV_COMPONENT entry in the
+// "darkroom" category (see device_classes/darkroom_timer/components/).
+#define PORTAL_PRIMARY_FRAGMENT "darkroom"
+#define PORTAL_PRIMARY_CATEGORY "darkroom"
+#define PORTAL_PRIMARY_LABEL    "Darkroom Timer"
+#define PORTAL_PRIMARY_ICON     "\xf0\x9f\x94\xb4"  // 🔴
+
 #endif // BOARD_OVERRIDES_JC4880P433_DARKROOM_H

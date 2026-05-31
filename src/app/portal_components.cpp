@@ -76,6 +76,12 @@
 #include "device_classes/coffee_scale/components/brew_templates_component.cpp"
 #endif // IS_COFFEE_SCALE
 
+// --- Darkroom Timer components ---
+#if IS_DARKROOM_TIMER
+#include "device_classes/darkroom_timer/components/darkroom_component.cpp"
+#include "device_classes/darkroom_timer/components/prints_component.cpp"
+#endif // IS_DARKROOM_TIMER
+
 // --- E-Paper-gated components ---
 // Split into one component per nav entry (Status / Image & Schedule /
 // Status Overlay / VCOM) — all share the "epaper" category. Image and

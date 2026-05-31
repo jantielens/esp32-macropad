@@ -596,11 +596,14 @@ emit_chunked_variants() {
             fi
         done
         n_flags=${#unique_flags[@]}
-        if [[ $n_flags -gt 4 ]]; then
-            echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 4 supported)." >&2
+        if [[ $n_flags -gt 5 ]]; then
+            echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 5 supported)." >&2
             echo "     Each flag doubles the number of gzipped variants in web_assets.h" >&2
             echo "     (variants are #if-guarded so only one links per board, but source" >&2
-            echo "     size and build time grow). Consolidate chunks instead if possible." >&2
+            echo "     size and build time grow). The IS_* device-class flags are mutually" >&2
+            echo "     exclusive, so the variant count is pessimistic; a future generator" >&2
+            echo "     change can collapse them into one N-way group. Until then, consolidate" >&2
+            echo "     chunks instead if possible." >&2
             unset unique_flags seen_flags
             exit 1
         fi
@@ -905,6 +908,8 @@ asset_feature_flag() {
             echo "IS_SHUTTER_TESTER" ;;
         portal_action_editor_scale|portal_brews|portal_brews_charts|portal_brews_init|portal_brews_templates)
             echo "IS_COFFEE_SCALE" ;;
+        darkroom|prints|portal_action_editor_darkroom|portal_darkroom_init|portal_prints|portal_darkroom)
+            echo "IS_DARKROOM_TIMER" ;;
         *)
             echo "" ;;
     esac

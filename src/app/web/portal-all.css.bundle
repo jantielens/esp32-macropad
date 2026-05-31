@@ -16,3 +16,6 @@ portal_shutter.css
 
 # [chunk:coffee_scale IS_COFFEE_SCALE]
 portal_brews.css
+
+# [chunk:darkroom_timer IS_DARKROOM_TIMER]
+portal_darkroom.css
