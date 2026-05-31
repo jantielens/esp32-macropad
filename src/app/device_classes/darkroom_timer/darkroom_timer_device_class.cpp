@@ -17,13 +17,30 @@
 #include "log_manager.h"
 #include "power_config.h"
 
-// Per-module translation units.
+// Per-module translation units. Order: low-level driver + persistence first
+// (engines reference them), then the engines, then the ActionTypeDef
+// registrations. Each .cpp self-gates on IS_DARKROOM_TIMER (and HAS_DISPLAY
+// for the action files) internally.
 #include "relay_controller.cpp"
-// ActionTypeDef registration for the "shelly" action type. Self-gates on
-// HAS_DISPLAY && IS_DARKROOM_TIMER internally.
+#include "sensors/tsl2591_sensor.cpp"
+#include "print_log.cpp"
+#include "meter.cpp"
+#include "expose_timer.cpp"
+#include "test_strip.cpp"
+// ActionTypeDef registrations. Each self-gates on HAS_DISPLAY &&
+// IS_DARKROOM_TIMER internally.
 #include "shelly_actions.cpp"
+#include "expose_actions.cpp"
+#include "test_strip_actions.cpp"
+#include "meter_actions.cpp"
+#include "print_log_actions.cpp"
 
 #include "relay_controller.h"
+#include "sensors/tsl2591_sensor.h"
+#include "print_log.h"
+#include "meter.h"
+#include "expose_timer.h"
+#include "test_strip.h"
 
 #define TAG "DarkroomTimer"
 
@@ -37,11 +54,21 @@
 static void on_setup_late_hook(DeviceConfig* /*config*/, PowerMode /*current_mode*/) {
     relay_controller_init();
     relay_load_config();
+    tsl2591_init();
+    print_log_init();
+    meter_init();
+    expose_timer_init();
+    test_strip_init();
 }
 
-// Drain deferred (non-shelly) relay actions on the main loop pump.
+// Drain deferred relay actions and advance the darkroom engines on the main
+// loop pump (cheap state-machine advances + deferred flash I/O).
 static void on_loop_hook() {
     relay_loop();
+    meter_loop();
+    expose_timer_tick();
+    test_strip_tick();
+    print_log_loop();
 }
 
 static const DeviceClass kDarkroomTimerClass = {

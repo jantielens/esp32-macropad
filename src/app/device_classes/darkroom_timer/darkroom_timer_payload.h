@@ -45,4 +45,93 @@ inline const ShellyPayload& shelly_payload(const ButtonAction& act) {
     return *reinterpret_cast<const ShellyPayload*>(act.payload.device_class);
 }
 
+// ============================================================================
+// Command/value action payloads (expose, strip, meter, print)
+// ============================================================================
+// Each darkroom engine action carries a short command verb plus an optional
+// value argument. Command buffers are sized to 20 bytes to fit the longest
+// verb "adjust_countdown" (16 chars + nul) — matching the field-proven
+// CONFIG_TIMER_CMD_MAX_LEN=20 from the legacy branch. Value buffers are 16
+// bytes (matching CONFIG_VALUE_MAX_LEN, which supports "{step}" templates).
+//
+// All four payloads share the same layout but keep distinct type names and
+// accessors so the storage cost and wire-strings stay inside this device
+// class. Each is well under ACTION_PAYLOAD_DEVICE_CLASS_BYTES (96).
+
+// ── expose: single-exposure countdown timer ─────────────────────────
+#define ACTION_TYPE_EXPOSE     "expose"
+#define EXPOSE_CMD_MAX_LEN     20
+#define EXPOSE_VALUE_MAX_LEN   16
+
+struct ExposePayload {
+    char command[EXPOSE_CMD_MAX_LEN];
+    char value[EXPOSE_VALUE_MAX_LEN];
+};
+static_assert(sizeof(ExposePayload) <= ACTION_PAYLOAD_DEVICE_CLASS_BYTES,
+              "ExposePayload exceeds ACTION_PAYLOAD_DEVICE_CLASS_BYTES — raise it via board_overrides.h");
+
+inline ExposePayload& expose_payload(ButtonAction& act) {
+    return *reinterpret_cast<ExposePayload*>(act.payload.device_class);
+}
+inline const ExposePayload& expose_payload(const ButtonAction& act) {
+    return *reinterpret_cast<const ExposePayload*>(act.payload.device_class);
+}
+
+// ── strip: f-stop test strip sequencer ──────────────────────────────
+#define ACTION_TYPE_STRIP      "strip"
+#define STRIP_CMD_MAX_LEN      20
+#define STRIP_VALUE_MAX_LEN    16
+
+struct StripPayload {
+    char command[STRIP_CMD_MAX_LEN];
+    char value[STRIP_VALUE_MAX_LEN];
+};
+static_assert(sizeof(StripPayload) <= ACTION_PAYLOAD_DEVICE_CLASS_BYTES,
+              "StripPayload exceeds ACTION_PAYLOAD_DEVICE_CLASS_BYTES — raise it via board_overrides.h");
+
+inline StripPayload& strip_payload(ButtonAction& act) {
+    return *reinterpret_cast<StripPayload*>(act.payload.device_class);
+}
+inline const StripPayload& strip_payload(const ButtonAction& act) {
+    return *reinterpret_cast<const StripPayload*>(act.payload.device_class);
+}
+
+// ── meter: light metering (SBR → grade) ─────────────────────────────
+#define ACTION_TYPE_METER      "meter"
+#define METER_CMD_MAX_LEN      20
+#define METER_VALUE_MAX_LEN    16
+
+struct MeterPayload {
+    char command[METER_CMD_MAX_LEN];
+    char value[METER_VALUE_MAX_LEN];
+};
+static_assert(sizeof(MeterPayload) <= ACTION_PAYLOAD_DEVICE_CLASS_BYTES,
+              "MeterPayload exceeds ACTION_PAYLOAD_DEVICE_CLASS_BYTES — raise it via board_overrides.h");
+
+inline MeterPayload& meter_payload(ButtonAction& act) {
+    return *reinterpret_cast<MeterPayload*>(act.payload.device_class);
+}
+inline const MeterPayload& meter_payload(const ButtonAction& act) {
+    return *reinterpret_cast<const MeterPayload*>(act.payload.device_class);
+}
+
+// ── print: print session log ────────────────────────────────────────
+#define ACTION_TYPE_PRINT      "print"
+#define PRINT_CMD_MAX_LEN      20
+#define PRINT_VALUE_MAX_LEN    16
+
+struct PrintPayload {
+    char command[PRINT_CMD_MAX_LEN];
+    char value[PRINT_VALUE_MAX_LEN];
+};
+static_assert(sizeof(PrintPayload) <= ACTION_PAYLOAD_DEVICE_CLASS_BYTES,
+              "PrintPayload exceeds ACTION_PAYLOAD_DEVICE_CLASS_BYTES — raise it via board_overrides.h");
+
+inline PrintPayload& print_payload(ButtonAction& act) {
+    return *reinterpret_cast<PrintPayload*>(act.payload.device_class);
+}
+inline const PrintPayload& print_payload(const ButtonAction& act) {
+    return *reinterpret_cast<const PrintPayload*>(act.payload.device_class);
+}
+
 #endif // IS_DARKROOM_TIMER
