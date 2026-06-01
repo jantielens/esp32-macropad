@@ -43,6 +43,12 @@ static void print_dispatch(const ButtonAction& act, const char* label) {
     print_log_dispatch(p.command, p.value);
 }
 
+// Numeric rocker drives adjust_* commands; substitute {step} into the value.
+static void print_substitute_step(ButtonAction& act, float step) {
+    PrintPayload& p = print_payload(act);
+    action_substitute_step_field(p.value, sizeof(p.value), step);
+}
+
 static const ActionTypeDef print_action_type = {
     /* type_name        */ ACTION_TYPE_PRINT,
     /* parse            */ print_parse,
@@ -52,6 +58,7 @@ static const ActionTypeDef print_action_type = {
     /* has_binding      */ nullptr,
 #endif
     /* dispatch         */ print_dispatch,
+    /* substitute_step  */ print_substitute_step,
 };
 
 REGISTER_ACTION_TYPE(print_action_type);

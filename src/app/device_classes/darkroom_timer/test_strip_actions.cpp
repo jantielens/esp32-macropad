@@ -43,6 +43,12 @@ static void strip_dispatch(const ButtonAction& act, const char* label) {
     test_strip_dispatch(p.command, p.value);
 }
 
+// Numeric rocker drives adjust_* commands; substitute {step} into the value.
+static void strip_substitute_step(ButtonAction& act, float step) {
+    StripPayload& p = strip_payload(act);
+    action_substitute_step_field(p.value, sizeof(p.value), step);
+}
+
 static const ActionTypeDef strip_action_type = {
     /* type_name        */ ACTION_TYPE_STRIP,
     /* parse            */ strip_parse,
@@ -52,6 +58,7 @@ static const ActionTypeDef strip_action_type = {
     /* has_binding      */ nullptr,
 #endif
     /* dispatch         */ strip_dispatch,
+    /* substitute_step  */ strip_substitute_step,
 };
 
 REGISTER_ACTION_TYPE(strip_action_type);

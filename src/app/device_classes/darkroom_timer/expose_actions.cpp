@@ -42,6 +42,12 @@ static void expose_dispatch(const ButtonAction& act, const char* label) {
     expose_timer_dispatch(p.command, p.value);
 }
 
+// Numeric rocker drives adjust_* commands; substitute {step} into the value.
+static void expose_substitute_step(ButtonAction& act, float step) {
+    ExposePayload& p = expose_payload(act);
+    action_substitute_step_field(p.value, sizeof(p.value), step);
+}
+
 static const ActionTypeDef expose_action_type = {
     /* type_name        */ ACTION_TYPE_EXPOSE,
     /* parse            */ expose_parse,
@@ -51,6 +57,7 @@ static const ActionTypeDef expose_action_type = {
     /* has_binding      */ nullptr,
 #endif
     /* dispatch         */ expose_dispatch,
+    /* substitute_step  */ expose_substitute_step,
 };
 
 REGISTER_ACTION_TYPE(expose_action_type);

@@ -176,6 +176,21 @@ echo "=== Running unit tests: action_bindings ==="
 ./tests/bin/test_action_bindings
 echo
 
+echo "=== Building unit tests: action_registry_step ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_action_registry_step.cpp \
+    src/app/action_registry.cpp \
+    src/app/binding_template.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_registry_step -lm
+
+echo "=== Running unit tests: action_registry_step ==="
+./tests/bin/test_action_registry_step
+echo
+
 echo "=== Building unit tests: component_registry ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \

@@ -43,6 +43,12 @@ static void meter_action_dispatch(const ButtonAction& act, const char* label) {
     meter_dispatch(p.command, p.value);
 }
 
+// Numeric rocker drives adjust_* commands; substitute {step} into the value.
+static void meter_substitute_step(ButtonAction& act, float step) {
+    MeterPayload& p = meter_payload(act);
+    action_substitute_step_field(p.value, sizeof(p.value), step);
+}
+
 static const ActionTypeDef meter_action_type = {
     /* type_name        */ ACTION_TYPE_METER,
     /* parse            */ meter_parse,
@@ -52,6 +58,7 @@ static const ActionTypeDef meter_action_type = {
     /* has_binding      */ nullptr,
 #endif
     /* dispatch         */ meter_action_dispatch,
+    /* substitute_step  */ meter_substitute_step,
 };
 
 REGISTER_ACTION_TYPE(meter_action_type);

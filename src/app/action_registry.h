@@ -20,7 +20,8 @@
 // All function pointers may be nullptr. parse/serialize are mandatory for
 // types with payload data; resolve_bindings/has_binding are only needed when
 // the type has bindable string fields; dispatch is mandatory for types that
-// produce side effects.
+// produce side effects; substitute_step is only needed when the type has a
+// numeric value field that should accept the numeric rocker's {step} token.
 
 struct ActionTypeDef {
     const char* type_name;                                                  // matches ButtonAction::type
@@ -31,10 +32,16 @@ struct ActionTypeDef {
     bool (*has_binding)(const ButtonAction& act);                           // quick '[' scan
 #endif
     void (*dispatch)(const ButtonAction& act, const char* label);           // execute side effects
+    void (*substitute_step)(ButtonAction& act, float step);                 // numeric rocker {step} -> signed value
 };
 
 void action_type_register(const ActionTypeDef* type);
 const ActionTypeDef* action_type_find(const char* type_name);
+
+// Replace every "{step}" token in a char buffer with the signed step value.
+// Canonical helper shared by the numeric rocker and device-class action types
+// so {step} substitution behaves identically everywhere.
+void action_substitute_step_field(char* field, size_t field_size, float step);
 
 // Auto-register an ActionTypeDef instance via a static constructor.
 #define REGISTER_ACTION_TYPE(var)                                              \

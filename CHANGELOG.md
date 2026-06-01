@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Darkroom Timer REST endpoints** — `/api/relay` (relay slot config) and `/api/prints` (print-log list / detail / notes / delete / export).
 * **Developer doc: `docs/device-classes/darkroom-timer/README.md`** — overview, supported board, hardware setup, timer engines, action types, binding schemes, print logging, and relay control. README "Device Classes" table gains a Darkroom Timer row. (See [issue #31](https://github.com/jantielens/esp32-macropad/issues/31) for the follow-up to make the asset bundler treat mutually-exclusive device-class flags as a single group.)
 
+### Fixed
+
+* **Numeric rocker `{step}` substitution for device-class actions** — the numeric rocker widget now substitutes its signed `{step}` value into device-class action value fields (e.g. darkroom `strip`/`expose`/`meter`/`print` `adjust_*` commands and the coffee-scale `scale` `cal_weight` adjust) via a new `substitute_step` hook on `ActionTypeDef`. Previously only built-in action types (`mqtt`, `key`, `volume`, `brightness`, `timer`) were handled, so device-class actions received the literal string `{step}`.
+* **Action type registry capacity** — raised `MAX_ACTION_TYPES` from 4 to 8 so all five darkroom action types register; previously the fifth registration was silently dropped.
+
 ## [1.18.0] - 2026-05-28
 
 ### Added
