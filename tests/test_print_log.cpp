@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdarg>
+#include <ctime>
 #include <map>
 #include <string>
 #include <vector>
@@ -53,14 +54,15 @@ extern "C" size_t strlcpy(char* dst, const char* src, size_t siz) {
 // ---------------------------------------------------------------------------
 static time_t s_mock_time = 0;  // 0 = no NTP
 
-// Override time() for the CUT
-extern "C" time_t time(time_t* t) {
+// Override time() for the CUT. Must match glibc's exception specifier
+// (declared __THROW / noexcept via <ctime>) or the definitions conflict.
+extern "C" time_t time(time_t* t) noexcept {
     if (t) *t = s_mock_time;
     return s_mock_time;
 }
 
 // Override localtime_r for the CUT
-extern "C" struct tm* localtime_r(const time_t* timep, struct tm* result) {
+extern "C" struct tm* localtime_r(const time_t* timep, struct tm* result) noexcept {
     *result = *localtime(timep);
     return result;
 }
