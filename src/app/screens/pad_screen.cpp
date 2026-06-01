@@ -15,9 +15,7 @@
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
 #endif
-#if IS_SHUTTER_TESTER
-#include "../device_classes/shutter_tester/shutter_capture.h"
-#endif
+#include "../device_class.h"
 
 #include <esp_heap_caps.h>
 #include <string.h>
@@ -65,11 +63,8 @@ PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
       btnStateBindings(nullptr), btnStateBindingCount(0),
       pageBindings(nullptr), pageBindingCount(0),
       arraysAllocated(false),
-      cachedGeneration(UINT32_MAX), tilesBuilt(false) {
-#if IS_SHUTTER_TESTER
-    hasShutterConsumer = false;
-    shutterEngineHeld = false;
-#endif
+      cachedGeneration(UINT32_MAX), tilesBuilt(false),
+      padHoldMask(0), padHeldMask(0) {
     wakeScreen[0] = '\0';
     pageBgTemplate[0] = '\0';
     pageBgDefault = 0x000000;
@@ -171,18 +166,12 @@ void PadScreen::show() {
         lv_screen_load(screen);
     }
 
-#if IS_SHUTTER_TESTER
-    // Acquire the shutter ADC engine if this pad is already known to use it.
+    // Acquire any device-class engine this pad is already known to consume.
     // On the very first show() of a freshly-constructed PadScreen, tiles have
-    // not been built yet, so hasShutterConsumer is still false; in that case
-    // update() will perform the acquire after buildTiles() completes. Acquire
-    // is reference-counted and idempotent for paired show()/hide() calls.
-    if (hasShutterConsumer && !shutterEngineHeld) {
-        if (shutter_capture_acquire("pad_screen")) {
-            shutterEngineHeld = true;
-        }
-    }
-#endif
+    // not been built yet, so padHoldMask is still 0; in that case update()
+    // performs the acquire after buildTiles() completes. Acquire is
+    // reference-counted and idempotent for paired show()/hide() calls.
+    reconcilePadHold("pad_screen");
 
     // Clear last-rendered text so the first poll after navigating back
     // re-renders current store values.
@@ -211,16 +200,11 @@ void PadScreen::hide() {
             image_fetch_pause_slot(tiles[i].image_slot);
     }
 #endif
-#if IS_SHUTTER_TESTER
-    // Release iff this instance actually acquired. Tracking with a separate
-    // flag (rather than re-reading hasShutterConsumer) keeps acquire/release
-    // balanced when buildTiles() runs after show() or when a config rebuild
-    // flipped hasShutterConsumer between the matching acquire and this hide.
-    if (shutterEngineHeld) {
-        shutter_capture_release("pad_screen");
-        shutterEngineHeld = false;
-    }
-#endif
+    // Release every device-class engine this instance is holding. Tracking
+    // padHeldMask separately from padHoldMask keeps acquire/release balanced
+    // when buildTiles() runs after show() or when a config rebuild flipped the
+    // consumer set between the matching acquire and this hide.
+    releaseAllPadHold("pad_screen");
 }
 
 void PadScreen::update() {
@@ -251,20 +235,60 @@ void PadScreen::update() {
     cachedGeneration = gen;
     buildTiles();
 
-#if IS_SHUTTER_TESTER
-    // buildTiles() just (re)evaluated hasShutterConsumer. Reconcile the
-    // acquire state: this covers (a) the first update() after a freshly-
-    // constructed pad's show(), and (b) live config rebuilds that add or
-    // remove shutter bindings while the pad is visible.
-    if (hasShutterConsumer && !shutterEngineHeld) {
-        if (shutter_capture_acquire("pad_screen")) {
-            shutterEngineHeld = true;
+    // buildTiles() just (re)evaluated padHoldMask. Reconcile the acquire
+    // state: this covers (a) the first update() after a freshly-constructed
+    // pad's show(), and (b) live config rebuilds that add or remove a
+    // device-class binding while the pad is visible.
+    reconcilePadHold("pad_screen");
+}
+
+// ============================================================================
+// Device-class engine-hold (generic pad binding-scheme hold)
+// ============================================================================
+
+bool PadScreen::padHasScheme(const char* scheme) const {
+    if (!scheme || !scheme[0]) return false;
+    for (uint8_t i = 0; i < tileCount; i++) {
+        const ButtonTile& t = tiles[i];
+        for (uint8_t w = 0; w < MAX_WIDGET_BINDINGS; w++) {
+            if (strstr(t.widget_binding[w], scheme)) return true;
         }
-    } else if (!hasShutterConsumer && shutterEngineHeld) {
-        shutter_capture_release("pad_screen");
-        shutterEngineHeld = false;
     }
-#endif
+    for (uint16_t i = 0; i < bindingCount; i++)
+        if (strstr(bindings[i].templ, scheme)) return true;
+    for (uint16_t i = 0; i < colorBindingCount; i++)
+        if (strstr(colorBindings[i].templ, scheme)) return true;
+    for (uint16_t i = 0; i < numberBindingCount; i++)
+        if (strstr(numberBindings[i].templ, scheme)) return true;
+    for (uint16_t i = 0; i < btnStateBindingCount; i++)
+        if (strstr(btnStateBindings[i].templ, scheme)) return true;
+    return false;
+}
+
+void PadScreen::reconcilePadHold(const char* tag) {
+    for (unsigned c = 0; c < device_class_count(); c++) {
+        const DeviceClass* dc = device_class_get(c);
+        if (!dc || !dc->pad_hold_acquire || !dc->pad_hold_release) continue;
+        uint8_t bit = (uint8_t)(1u << c);
+        bool want = (padHoldMask & bit) != 0;
+        bool held = (padHeldMask & bit) != 0;
+        if (want && !held) {
+            if (dc->pad_hold_acquire(tag)) padHeldMask |= bit;
+        } else if (!want && held) {
+            dc->pad_hold_release(tag);
+            padHeldMask &= (uint8_t)~bit;
+        }
+    }
+}
+
+void PadScreen::releaseAllPadHold(const char* tag) {
+    for (unsigned c = 0; c < device_class_count(); c++) {
+        uint8_t bit = (uint8_t)(1u << c);
+        if (!(padHeldMask & bit)) continue;
+        const DeviceClass* dc = device_class_get(c);
+        if (dc && dc->pad_hold_release) dc->pad_hold_release(tag);
+    }
+    padHeldMask = 0;
 }
 
 // ============================================================================

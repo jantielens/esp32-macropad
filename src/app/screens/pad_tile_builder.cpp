@@ -2,6 +2,7 @@
 #include "../display_manager.h"
 #include "../icon_store.h"
 #include "../log_manager.h"
+#include "../device_class.h"
 #include <esp_heap_caps.h>
 #include <string.h>
 
@@ -497,55 +498,27 @@ void PadScreen::buildTiles() {
 
     free(cfg);
 
-#if IS_SHUTTER_TESTER
-    // Detect whether any tile on this pad has a *live* shutter binding so
-    // show()/hide() can hold the ADC engine only when needed.
+    // Detect device-class engine-hold consumers: any registered device class
+    // that declares a pad_hold_scheme (e.g. "[shutter:") whose binding token
+    // appears on this pad keeps its hardware engine running while the pad is
+    // visible. Generic — no device class is named here.
     //
     // Only bindings (label/color/number/btn-state/widget) count: they resolve
     // every poll cycle and would render "---" without the engine running.
-    //
-    // Shutter *actions* (tap/long-press) are intentionally NOT scanned — they
-    // fire on demand, and their handlers (session start, alignment start, …)
-    // acquire the engine themselves. A nav pad that merely hosts a "start
-    // session" button should not keep the ADC active while idle.
-    hasShutterConsumer = false;
-    const char* shutter_reason = nullptr;
-    int shutter_tile = -1;
-    for (uint8_t i = 0; i < tileCount && !hasShutterConsumer; i++) {
-        const ButtonTile& t = tiles[i];
-        for (uint8_t w = 0; w < MAX_WIDGET_BINDINGS; w++) {
-            if (strstr(t.widget_binding[w], "[shutter:")) {
-                hasShutterConsumer = true; shutter_reason = "widget binding"; shutter_tile = i; break;
-            }
+    // Device-class *actions* (tap/long-press) are intentionally NOT scanned —
+    // they fire on demand and their handlers acquire the engine themselves, so
+    // a nav pad that merely hosts a "start session" button should not keep the
+    // engine active while idle (padHasScheme() only walks binding arrays).
+    padHoldMask = 0;
+    for (unsigned c = 0; c < device_class_count(); c++) {
+        const DeviceClass* dc = device_class_get(c);
+        if (!dc || !dc->pad_hold_scheme || !dc->pad_hold_acquire) continue;
+        if (padHasScheme(dc->pad_hold_scheme)) {
+            padHoldMask |= (uint8_t)(1u << c);
+            LOGI(TAG, "Page %u: device-class '%s' consumer detected — will hold engine while visible",
+                 pageIndex, dc->name);
         }
     }
-    if (!hasShutterConsumer) {
-        for (uint16_t i = 0; i < bindingCount && !hasShutterConsumer; i++) {
-            if (strstr(bindings[i].templ, "[shutter:")) {
-                hasShutterConsumer = true; shutter_reason = "label/value binding"; shutter_tile = -1;
-            }
-        }
-        for (uint16_t i = 0; i < colorBindingCount && !hasShutterConsumer; i++) {
-            if (strstr(colorBindings[i].templ, "[shutter:")) {
-                hasShutterConsumer = true; shutter_reason = "color binding"; shutter_tile = colorBindings[i].tileIndex;
-            }
-        }
-        for (uint16_t i = 0; i < numberBindingCount && !hasShutterConsumer; i++) {
-            if (strstr(numberBindings[i].templ, "[shutter:")) {
-                hasShutterConsumer = true; shutter_reason = "number binding"; shutter_tile = numberBindings[i].tileIndex;
-            }
-        }
-        for (uint16_t i = 0; i < btnStateBindingCount && !hasShutterConsumer; i++) {
-            if (strstr(btnStateBindings[i].templ, "[shutter:")) {
-                hasShutterConsumer = true; shutter_reason = "btn-state binding"; shutter_tile = btnStateBindings[i].tileIndex;
-            }
-        }
-    }
-    if (hasShutterConsumer) {
-        LOGI(TAG, "Page %u: shutter consumer detected (%s on tile %d) — will hold ADC while visible",
-             pageIndex, shutter_reason, shutter_tile);
-    }
-#endif
 
     tilesBuilt = true;
 

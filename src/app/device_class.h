@@ -88,6 +88,19 @@ struct DeviceClass {
 		// always-on/periodic paths). Duty-cycle classes typically publish from
 		// inside `run_duty_cycle` using their own helpers instead of this hook.
 		void (*mqtt_publish_state)(MqttManager &mqtt);
+
+		// Pad engine-hold (optional) -------------------------------------------
+		// A class that drives a hardware engine (e.g. an ADC) needed only while
+		// a pad consuming its binding scheme is on screen declares the scheme's
+		// token prefix here (e.g. "[shutter:"). The generic pad screen scans
+		// each visible pad's bindings; when the prefix is present it calls
+		// `pad_hold_acquire` on show and `pad_hold_release` on hide/removal.
+		// Both are reference-counted by the class and receive a debug holder
+		// tag. A NULL `pad_hold_scheme` (or NULL hooks) disables the mechanism.
+		// This keeps device-class hardware lifetime out of the core screen code.
+		const char *pad_hold_scheme;
+		bool (*pad_hold_acquire)(const char *holder);
+		void (*pad_hold_release)(const char *holder);
 };
 
 // Registration ----------------------------------------------------------------

@@ -149,6 +149,9 @@ static const DeviceClass kShutterTesterClass = {
 		/* config_api_set */    config_api_set_hook,
 		/* mqtt_on_discovery */ nullptr,
 		/* mqtt_publish_state */ nullptr,
+		/* pad_hold_scheme */   "[shutter:",
+		/* pad_hold_acquire */  shutter_capture_acquire,
+		/* pad_hold_release */  shutter_capture_release,
 };
 
 void shutter_tester_device_class_register() {

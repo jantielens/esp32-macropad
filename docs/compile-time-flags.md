@@ -817,9 +817,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester_device_class.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
-  - src/app/screens/pad_screen.cpp
-  - src/app/screens/pad_screen.h
-  - src/app/screens/pad_tile_builder.cpp
   - src/app/widgets.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
