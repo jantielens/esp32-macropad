@@ -38,16 +38,36 @@ fi
 board_has_display() {
     local board_name="$1"
     local overrides_file="$SCRIPT_DIR/src/boards/$board_name/board_overrides.h"
+    _override_defines_display "$overrides_file"
+}
+
+# Recursively check an override file — and any base-board override files it
+# pulls in via `#include "../<base>/board_overrides.h"` — for an explicit
+# `#define HAS_DISPLAY true`. Device-class variant boards (e.g.
+# jc4880p433-shutter) inherit HAS_DISPLAY from their base board rather than
+# redefining it, so a flat grep of the variant file alone would miss it.
+_override_defines_display() {
+    local file="$1"
 
     # Default config has HAS_DISPLAY=false; require explicit override.
-    if [[ ! -f "$overrides_file" ]]; then
+    if [[ ! -f "$file" ]]; then
         return 1
     fi
 
     # Match: #define HAS_DISPLAY true (allow whitespace)
-    if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_DISPLAY[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+    if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_DISPLAY[[:space:]]+true[[:space:]]*$' "$file"; then
         return 0
     fi
+
+    # Follow base-board inheritance via relative #include of board_overrides.h.
+    local dir inc inc_path
+    dir="$(dirname "$file")"
+    while IFS= read -r inc; do
+        inc_path="$(cd "$dir" && realpath -m "$inc" 2>/dev/null)"
+        if [[ -n "$inc_path" ]] && _override_defines_display "$inc_path"; then
+            return 0
+        fi
+    done < <(grep -oE '#include[[:space:]]+"[^"]*board_overrides\.h"' "$file" | sed -E 's/.*"([^"]*)".*/\1/')
 
     return 1
 }
