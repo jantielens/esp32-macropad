@@ -906,7 +906,7 @@ asset_feature_flag() {
             echo "HAS_EPAPER" ;;
         shutter|shutter_tests|shutter_sessions|shutter_session_actions)
             echo "IS_SHUTTER_TESTER" ;;
-        portal_action_editor_scale|portal_brews|portal_brews_charts|portal_brews_init|portal_brews_templates)
+        scale|brews|brew_templates|portal_action_editor_scale|portal_brews|portal_brews_charts|portal_brews_init|portal_brews_templates)
             echo "IS_COFFEE_SCALE" ;;
         darkroom|prints|portal_action_editor_darkroom|portal_darkroom_init|portal_prints|portal_darkroom)
             echo "IS_DARKROOM_TIMER" ;;
