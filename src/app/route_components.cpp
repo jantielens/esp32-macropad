@@ -25,3 +25,8 @@
 #include "device_classes/coffee_scale/web/web_portal_brews.cpp"
 #include "device_classes/coffee_scale/web/web_portal_brew_templates.cpp"
 #endif
+
+#if IS_DARKROOM_TIMER
+#include "device_classes/darkroom_timer/web_portal_relay.cpp"
+#include "device_classes/darkroom_timer/web_portal_prints.cpp"
+#endif

@@ -55,6 +55,13 @@ static bool scale_has_binding(const ButtonAction& act) {
 }
 #endif
 
+// Numeric rocker drives cal_weight with a signed delta; substitute {step}
+// into the value field so the rocker step reaches scale_adjust_cal_weight().
+static void scale_substitute_step(ButtonAction& act, float step) {
+    ScalePayload& p = scale_payload(act);
+    action_substitute_step_field(p.value, sizeof(p.value), step);
+}
+
 #if HAS_SCALE
 static void scale_dispatch(const ButtonAction& act, const char* label) {
     const ScalePayload& sp = scale_payload(act);
@@ -100,6 +107,7 @@ static const ActionTypeDef scale_action_type = {
     /* has_binding      */ scale_has_binding,
 #endif
     /* dispatch         */ scale_dispatch,
+    /* substitute_step  */ scale_substitute_step,
 };
 
 REGISTER_ACTION_TYPE(scale_action_type);

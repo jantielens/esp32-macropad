@@ -346,7 +346,7 @@ for board_name in "${boards[@]}"; do
     display_size=$(jq -r '.display.size // ""' "$metadata_file")
 
     case "$device_class" in
-      macropad|epaper|headless|shutter_tester|coffee_scale) ;;
+      macropad|epaper|headless|shutter_tester|coffee_scale|darkroom_timer) ;;
       *)
         echo "WARNING: Unknown device_class '$device_class' in $metadata_file, defaulting to 'macropad'" >&2
         device_class="macropad"

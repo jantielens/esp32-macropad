@@ -25,7 +25,7 @@ enum class DeviceClass {
     HEADLESS,
     SHUTTER_TESTER,
     COFFEE_SCALE,
-    // Future variants go here: DARKROOM_TIMER, ...
+    DARKROOM_TIMER,
 };
 
 struct DeviceClassDescriptor {

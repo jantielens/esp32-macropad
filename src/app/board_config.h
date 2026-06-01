@@ -80,6 +80,15 @@
 #define IS_COFFEE_SCALE false
 #endif
 
+// Darkroom-timer product variant. When true the firmware compiles the
+// enlarger/safelight relay controller, the TSL2591 metering sensor, and the
+// darkroom timer engines + portal pages — and the device identifies as the
+// "Darkroom Timer" device class (see device_class_registry). Off by default;
+// enabled per-board via src/boards/<name>/board_overrides.h.
+#ifndef IS_DARKROOM_TIMER
+#define IS_DARKROOM_TIMER false
+#endif
+
 // Enable e-paper wake-button handling (ext0 wake plus short/long press).
 #ifndef HAS_EPAPER_WAKE_BUTTON
 #define HAS_EPAPER_WAKE_BUTTON false
@@ -377,6 +386,16 @@
 // those overrides are preserved by the #ifndef guards in the header.
 #if IS_COFFEE_SCALE
 #include "device_classes/coffee_scale/coffee_scale_defaults.h"
+#endif
+
+// Darkroom Timer defaults (HAS_SENSOR_TSL2591, TSL2591_I2C_BUS/SDA/SCL/FREQUENCY)
+// are owned by the darkroom_timer device class and live in
+// src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h. Pulled in
+// only on darkroom-timer builds so the macros never leak into other device
+// classes; board override files may still pre-define any of them and those
+// overrides are preserved by the #ifndef guards in the header.
+#if IS_DARKROOM_TIMER
+#include "device_classes/darkroom_timer/darkroom_timer_defaults.h"
 #endif
 
 // ============================================================================

@@ -1,0 +1,27 @@
+/* Darkroom Timer device-class portal styles.
+ *
+ * The print-log and relay-config fragments rely mostly on shared portal
+ * classes plus a few inline styles. This file owns the darkroom-specific
+ * selectors so future UI can grow here instead of re-bleeding into the shared
+ * portal-custom.css. Bundled via [chunk:darkroom_timer IS_DARKROOM_TIMER].
+ */
+
+/* Print log action buttons — keep a consistent compact footprint. */
+.prints-btn {
+  white-space: nowrap;
+}
+
+/* Print list rows — hover affordance over the shared surface tint. */
+.prints-row {
+  transition: background 0.12s ease;
+}
+
+.prints-row:hover {
+  background: var(--portal-surface-hover, rgba(120, 120, 128, 0.16));
+}
+
+/* Starred print marker in list + detail. */
+.prints-row .prints-star,
+#detail-star-btn {
+  color: #ffd700;
+}

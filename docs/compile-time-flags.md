@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 207
+Total flags: 213
 
 ### Features (HAS_*)
 
@@ -45,6 +45,7 @@ Total flags: 207
 - **HAS_SENSOR_HX711** default: `false` — HX711 strain-gauge amplifier (bit-banged digital protocol).
 - **HAS_SENSOR_LD2410_OUT** default: `false` — Enable LD2410 OUT pin presence sensor adapter.
 - **HAS_SENSOR_NAU7802** default: `false` — NAU7802 24-bit I2C load-cell ADC.
+- **HAS_SENSOR_TSL2591** default: `false` — TSL2591 high-dynamic-range I2C light sensor (used for enlarger metering).
 - **HAS_SOUND_PLAYER** default: `HAS_AUDIO` — Defaults to HAS_AUDIO — enable audio to get sound player support.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 
@@ -107,6 +108,8 @@ Total flags: 207
 - **TOUCH_I2C_SDA** default: `(no default)` — Touch I2C SDA pin.
 - **TOUCH_INT** default: `(no default)` — Touch interrupt pin (-1 = not connected).
 - **TOUCH_RST** default: `-1` — Touch reset pin (-1 = no hardware reset, GT911 boots normally).
+- **TSL2591_I2C_SCL** default: `-1` — TSL2591 SCL pin. -1 disables the driver even when HAS_SENSOR_TSL2591 is true.
+- **TSL2591_I2C_SDA** default: `-1` — TSL2591 SDA pin. -1 disables the driver even when HAS_SENSOR_TSL2591 is true.
 
 ### Limits & Tuning
 
@@ -132,6 +135,7 @@ Total flags: 207
 - **TFT_BACKLIGHT_PWM_FREQ** default: `1000` — Lower frequencies give wider dimming range but may cause audible coil whine.
 - **TFT_SPI_FREQ_HZ** default: `(no default)` — QSPI clock frequency (Hz).
 - **TOUCH_I2C_FREQ_HZ** default: `(no default)` — I2C frequency (Hz).
+- **TSL2591_I2C_FREQUENCY** default: `400000` — TSL2591 I2C bus clock. The sensor tops out at 400 kHz (fast mode).
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS** default: `5000` — Timeout for an incomplete /api/config upload (ms) before freeing the buffer.
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES** default: `4096` — Max JSON body size accepted by /api/config.
 - **WIFI_MAX_ATTEMPTS** default: `3` — Maximum WiFi connection attempts at boot before falling back.
@@ -164,6 +168,7 @@ Total flags: 207
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
 - **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
+- **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
@@ -241,6 +246,7 @@ Total flags: 207
 - **TOUCH_I2C_ADDR_ALT** default: `(no default)` — Optional alternate address (GT911 can be 0x5D or 0x14 depending on INT strap).
 - **TOUCH_I2C_BUS** default: `1` — ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
 - **TOUCH_I2C_PORT** default: `(no default)` — I2C controller index.
+- **TSL2591_I2C_BUS** default: `0` — reads off the touch controller's bus so metering never blocks touch polling.
 - **UI_SCALE_TIER** default: `UI_SCALE_MEDIUM` — Default UI scale tier (boards override in board_overrides.h)
 - **USE_SD_STORAGE** default: `false` — flash cache-disable starving the framebuffer DMA.
 - **WIFI_REBOOT_AFTER_MS** default: `600000` — Total outage before controlled device reboot.
@@ -254,19 +260,20 @@ Total flags: 207
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ✅ | ? | ✅ |  |  |  |  |  | ? | ✅ |
-| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  | ? | ✅ |
-| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ | ? | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ? | ✅ |
-| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  | ? |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
+| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -282,6 +289,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc4880p433-shutter | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-hx711 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-nau7802 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-darkroom | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | — | — |
 | inkplate5v2 | — | — |
@@ -299,6 +307,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
+  - src/app/device_classes/darkroom_timer/expose_timer.cpp
+  - src/app/device_classes/darkroom_timer/test_strip.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/mqtt_audio.cpp
@@ -377,6 +387,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/brew_actions.cpp
   - src/app/device_classes/coffee_scale/scale_actions.cpp
   - src/app/device_classes/coffee_scale/scale_binding.cpp
+  - src/app/device_classes/darkroom_timer/expose_actions.cpp
+  - src/app/device_classes/darkroom_timer/meter_actions.cpp
+  - src/app/device_classes/darkroom_timer/print_log.cpp
+  - src/app/device_classes/darkroom_timer/print_log_actions.cpp
+  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
+  - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.h
@@ -515,6 +531,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.h
   - src/app/device_classes/coffee_scale/brew_actions.cpp
   - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/device_classes/darkroom_timer/expose_actions.cpp
+  - src/app/device_classes/darkroom_timer/meter_actions.cpp
+  - src/app/device_classes/darkroom_timer/print_log_actions.cpp
+  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
+  - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
   - src/app/device_classes/epaper/epaper_mqtt.cpp
   - src/app/device_classes/epaper/epaper_mqtt.h
   - src/app/device_classes/epaper_device_class.cpp
@@ -601,6 +622,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/scale_hal.cpp
   - src/app/device_classes/coffee_scale/sensors/nau7802_sensor.cpp
   - src/app/device_classes/coffee_scale/sensors/nau7802_sensor.h
+- **HAS_SENSOR_TSL2591**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
 - **HAS_SOUND_PLAYER**
   - src/app/action_dispatch.cpp
   - src/app/app.ino
@@ -734,6 +757,28 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/web/web_portal_brews.h
   - src/app/device_classes/coffee_scale/web/web_portal_scale.cpp
   - src/app/device_classes/coffee_scale/web/web_portal_scale.h
+  - src/app/portal_components.cpp
+  - src/app/route_components.cpp
+- **IS_DARKROOM_TIMER**
+  - src/app/board_config.h
+  - src/app/device_class_registry.cpp
+  - src/app/device_classes.cpp
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+  - src/app/device_classes/darkroom_timer/darkroom_timer_device_class.cpp
+  - src/app/device_classes/darkroom_timer/darkroom_timer_payload.h
+  - src/app/device_classes/darkroom_timer/expose_actions.cpp
+  - src/app/device_classes/darkroom_timer/expose_timer.cpp
+  - src/app/device_classes/darkroom_timer/meter.cpp
+  - src/app/device_classes/darkroom_timer/meter_actions.cpp
+  - src/app/device_classes/darkroom_timer/print_log.cpp
+  - src/app/device_classes/darkroom_timer/print_log.h
+  - src/app/device_classes/darkroom_timer/print_log_actions.cpp
+  - src/app/device_classes/darkroom_timer/relay_controller.cpp
+  - src/app/device_classes/darkroom_timer/sensors/tsl2591_sensor.cpp
+  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
+  - src/app/device_classes/darkroom_timer/test_strip.cpp
+  - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
+  - src/app/device_classes/darkroom_timer/web_portal_relay.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
 - **IS_SHUTTER_TESTER**
@@ -994,6 +1039,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/drivers/gt911_touch_driver.cpp
   - src/app/drivers/wire_cst816s_touch_driver.cpp
+- **TSL2591_I2C_BUS**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+  - src/app/device_classes/darkroom_timer/sensors/tsl2591_sensor.cpp
+- **TSL2591_I2C_FREQUENCY**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+- **TSL2591_I2C_SCL**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+- **TSL2591_I2C_SDA**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
 - **UI_SCALE_TIER**
   - src/app/board_config.h
 - **USE_SD_STORAGE**

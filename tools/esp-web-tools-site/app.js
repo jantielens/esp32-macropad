@@ -40,6 +40,12 @@
       description:
         'Touch-screen kitchen scale for coffee brewing. Reads load-cell sensors (HX711 or NAU7802), runs configurable brew templates with pour-by-pour timing and weight targets, and logs brews to the web portal.',
     },
+    {
+      key: 'darkroom_timer',
+      title: 'Darkroom Timer',
+      description:
+        'Touch-screen enlarger timer for analog darkroom printing. Controls enlarger and safelight relays over Wi-Fi (Shelly), meters paper exposure with a TSL2591 light sensor, and runs configurable print timing sequences from the web portal.',
+    },
   ];
 
   const initialBoards = Array.from(container.querySelectorAll(':scope > .board'));

@@ -176,6 +176,21 @@ echo "=== Running unit tests: action_bindings ==="
 ./tests/bin/test_action_bindings
 echo
 
+echo "=== Building unit tests: action_registry_step ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_action_registry_step.cpp \
+    src/app/action_registry.cpp \
+    src/app/binding_template.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_registry_step -lm
+
+echo "=== Running unit tests: action_registry_step ==="
+./tests/bin/test_action_registry_step
+echo
+
 echo "=== Building unit tests: component_registry ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \
@@ -292,6 +307,41 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running guard: coffee_scale command length ==="
 ./tests/bin/test_coffee_scale_cmd_len
+echo
+
+echo "=== Building unit tests: expose_dry_down ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_DARKROOM_TIMER=1 -DHAS_AUDIO=0 \
+    -I tests -I src/app -I src/app/device_classes/darkroom_timer \
+    tests/test_expose_dry_down.cpp \
+    -o tests/bin/test_expose_dry_down -lm
+
+echo "=== Running unit tests: expose_dry_down ==="
+./tests/bin/test_expose_dry_down
+echo
+
+echo "=== Building unit tests: meter_mag ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_DARKROOM_TIMER=1 \
+    -I tests -I src/app -I src/app/device_classes/darkroom_timer \
+    tests/test_meter_mag.cpp \
+    -o tests/bin/test_meter_mag -lm
+
+echo "=== Running unit tests: meter_mag ==="
+./tests/bin/test_meter_mag
+echo
+
+echo "=== Building unit tests: print_log ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_DARKROOM_TIMER=1 \
+    -I tests/print_log_overrides \
+    -I tests -I src/app -I src/app/device_classes/darkroom_timer \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_print_log.cpp \
+    -o tests/bin/test_print_log -lm
+
+echo "=== Running unit tests: print_log ==="
+./tests/bin/test_print_log
 echo
 
 echo "=== Running guard: branding mirror (C++ <-> bash) ==="
