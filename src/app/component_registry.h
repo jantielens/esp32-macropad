@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // Max components the registry can hold (static array, no heap allocation)
-#define MAX_PORTAL_COMPONENTS 24
+#define MAX_PORTAL_COMPONENTS 32
 
 // Custom action definition — dispatched by (name, method) pair
 struct ComponentAction {

@@ -113,6 +113,7 @@ struct DeviceConfig {
 		char screen_saver_wake_binding[CONFIG_SS_WAKE_BINDING_MAX_LEN]; // binding expression; wake on "ON"
 #endif
 
+
 		// Validation flag (magic number to detect valid config)
 		uint32_t magic;
 };

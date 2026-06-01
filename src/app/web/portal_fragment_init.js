@@ -1,21 +1,10 @@
 // portal_fragment_init.js — Init functions called by portal_nav.js after fragment load.
 // Convention: window['init_' + itemId.replace(/-/g, '_') + '_fragment']()
 // Each function populates fragment fields and attaches event listeners.
-
-// ============================================================================
-// Extensible config-field registration
-// ============================================================================
 //
-// Per-feature modules (e.g. e-paper, future device classes) register the NVS
-// keys their fragments edit via window.registerConfigFields([...]).
-// saveFragmentConfig() merges the registered set with the static core list
-// before scraping the DOM, so device-class modules can ship their own keys
-// without editing this file.
-window.__extra_config_fields = window.__extra_config_fields || [];
-window.registerConfigFields = function (names) {
-    if (!names || !names.length) return;
-    Array.prototype.push.apply(window.__extra_config_fields, names);
-};
+// Note: window.registerConfigFields() and window.__extra_config_fields are
+// defined in portal_core.js (always-on, first chunk) so device-class chunks
+// that load before the shell chunk can register fields at module top-level.
 
 // ============================================================================
 // Shared: config save helper (no FormData needed)

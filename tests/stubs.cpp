@@ -18,3 +18,11 @@ extern "C" size_t strlcpy(char* dst, const char* src, size_t siz) {
     return len;
 }
 #endif
+
+#if IS_SHUTTER_TESTER
+// Weak stubs for shutter_session_actions hooks called from shutter_session.cpp.
+// Real implementation lives in src/app/shutter_session_actions.cpp which has
+// flash / FreeRTOS / LVGL dependencies that the host tests do not link.
+void shutter_session_actions_dispatch_start() {}
+void shutter_session_actions_notify_complete() {}
+#endif

@@ -9,7 +9,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Build System**: Custom bash scripts wrapping `arduino-cli` (installed locally to `./bin/`)
 - **Sketch Location**: Main Arduino file at `src/app/app.ino`
 - **Board Configuration**: `src/app/board_config.h` (defaults) + `src/boards/[board-name]/board_overrides.h` (per-board overrides). Uses `#if HAS_xxx` conditional compilation.
-- **Device Class Branding** (`device_class_registry.h` + `class_branding.h`): Compile-time device class derived from `HAS_EPAPER` / `HAS_DISPLAY` (`macropad` / `epaper` / `headless`). Single source of truth: `device_class_detect()` (one `#if` ladder) plus the `DESCRIPTORS[]` table in `src/app/device_class_registry.cpp` hold every branding string for every class; `class_branding.{h,cpp}` are thin `const char*` wrappers. Drives web portal title, default device name, AP SSID, HTTP auth realm, HA `mdl`, and the ESP Web Tools flash page card label. Bash mirror in `config.sh` (`device_class_for_board`, `device_class_brand_prefix`); drift is caught by `tests/test_branding_mirror.sh`. Per-board flash-page metadata in `src/boards/<board>/metadata.json`. See `docs/dev/build-and-release-process.md` → Device Class Branding.
+- **Device Class Branding** (`device_class_registry.h` + `class_branding.h`): Compile-time device class resolved by `device_class_detect()`'s `#if` ladder (in precedence order): `IS_SHUTTER_TESTER` → `IS_COFFEE_SCALE` → `IS_DARKROOM_TIMER` → `HAS_EPAPER` → `!HAS_DISPLAY` (headless) → else `macropad`. The specialized `IS_*` product variants take precedence over the display-capability fallbacks. Single source of truth: `device_class_detect()` (one `#if` ladder) plus the `DESCRIPTORS[]` table in `src/app/device_class_registry.cpp` hold every branding string for every class; `class_branding.{h,cpp}` are thin `const char*` wrappers. Drives web portal title, default device name, AP SSID, HTTP auth realm, HA `mdl`, and the ESP Web Tools flash page card label. Bash mirror in `config.sh` (`device_class_for_board`, `device_class_brand_prefix`); drift is caught by `tests/test_branding_mirror.sh`. Per-board flash-page metadata in `src/boards/<board>/metadata.json`. See `docs/dev/build-and-release-process.md` → Device Class Branding.
 - **Display & Touch**: HAL-based architecture with LVGL. See `docs/dev/display-touch-architecture.md` and `.github/instructions/display-touch.instructions.md`.
 - **Image Fetch** (`HAS_IMAGE_FETCH`): Slot-based FreeRTOS background HTTP(S) image fetcher with JPEG/PNG decode, bilinear scaling, and MJPEG streaming.
 - **Storage Facade** (`storage.h`): Compile-time `Storage` macro resolves to `LittleFS` (default) or `SD_MMC` when `USE_SD_STORAGE` is enabled. All persistent file I/O (pad configs, icons, sounds, boot/swipe/timer/button-default configs, indexed stores) goes through this facade. SD card path mounts SDMMC Slot 0 in `sd_storage_mount()` and halts boot with a splash if the card is missing. Throttled usage publish via `storage_publish_usage()`.
@@ -54,6 +54,8 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 | esp32-p4-lcd4b | ESP32-P4 | 720×720 MIPI-DSI + GT911 | 32MB + 32MB PSRAM |
 | jc4880p433 | ESP32-P4 | 480×800 MIPI-DSI ST7701 + GT911 | 16MB + 32MB PSRAM |
 | jc1060p470c | ESP32-P4 | 1024×600 MIPI-DSI JD9165 + GT911 | 16MB + 32MB PSRAM |
+
+The table lists the base hardware variants. Several **device-class variant boards** reuse a base board's hardware while selecting a specialized `IS_*` device class via `board_overrides.h` — e.g. `jc4880p433-shutter` (Shutter Tester), `jc4880p433-darkroom` (Darkroom Timer), `jc4880p433-nau7802` / `jc4880p433-hx711` (Coffee Scale). Run `./build.sh` with no argument or `list_boards()` in `config.sh` for the full target list.
 
 ## Critical Developer Workflows
 
@@ -138,6 +140,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution — they work from an
 - `docs/dev/logging-guidelines.md` — Logging rules and format (LOGx macros, severity, modules)
 - `docs/dev/web-portal.md` — Web portal and REST API guide
 - `docs/dev/display-touch-architecture.md` — Display/touch HAL and screen architecture
+- `docs/dev/adding-a-device-class.md` — Device class extension contract (registry, aggregators, board overrides, optional subsystems)
 - `docs/pad-editor-guide.md` — Pad editor, binding templates, widgets, and real-world examples
 
 ### Configuration

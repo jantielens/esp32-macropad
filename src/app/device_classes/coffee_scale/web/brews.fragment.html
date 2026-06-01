@@ -1,0 +1,121 @@
+<div class="section-header">
+  <h2>☕ Brews</h2>
+  <p>Brew history, charts, and analysis.</p>
+</div>
+
+<!-- List View -->
+<div id="brew-list-view">
+    <!-- Stats Banner -->
+    <div class="brew-stats" id="brew-stats">
+        <div class="brew-stat-box">
+            <span class="brew-stat-value" id="stat-count">--</span>
+            <span class="brew-stat-label">brews</span>
+        </div>
+        <div class="brew-stat-box">
+            <span class="brew-stat-value" id="stat-avg-time">--</span>
+            <span class="brew-stat-label">avg time</span>
+        </div>
+        <div class="brew-stat-box">
+            <span class="brew-stat-value" id="stat-avg-weight">--</span>
+            <span class="brew-stat-label">avg water</span>
+        </div>
+    </div>
+
+    <!-- Action Bar -->
+    <div class="brew-action-bar">
+        <button type="button" class="btn btn-secondary btn-sm" id="brew-export-all-btn">Export All</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="brew-import-btn">Import</button>
+        <input type="file" accept=".json" id="brew-import-file" style="display:none;">
+        <button type="button" class="btn btn-danger btn-sm" id="brew-clear-all-btn">Clear All</button>
+    </div>
+
+    <!-- Brew Cards Container -->
+    <div id="brew-cards"></div>
+
+    <!-- Empty State -->
+    <div id="brew-empty" class="brew-empty" style="display:none;">
+        <p>☕ No brews yet — start your first brew from the device!</p>
+    </div>
+</div>
+
+<!-- Detail View -->
+<div id="brew-detail-view" style="display:none;">
+    <button type="button" class="btn btn-secondary btn-sm brew-back-btn" id="brew-back-btn">← Back</button>
+
+    <div class="section">
+        <h2 id="brew-detail-name">Brew</h2>
+        <div class="brew-detail-date" id="brew-detail-date"></div>
+
+        <!-- Fields Grid -->
+        <div class="brew-fields-grid" id="brew-detail-fields"></div>
+
+        <!-- Derived Metrics (computed client-side from series) -->
+        <div class="brew-derived-row" id="brew-derived-metrics" style="display:none;"></div>
+
+        <!-- Per-stage Flow Stats (target vs actual) -->
+        <div id="brew-phase-flow-stats" style="display:none;"></div>
+    </div>
+
+    <!-- Combined Chart + Phases -->
+    <div class="section" id="brew-chart-section">
+        <h2>Weight &amp; Flow</h2>
+        <div class="brew-chart-container">
+            <canvas id="brew-combo-chart"></canvas>
+            <div class="brew-chart-fallback" id="brew-combo-fallback" style="display:none;">
+                Charts require internet connection for first load
+            </div>
+        </div>
+        <div class="brew-combo-legend">
+            <div class="brew-combo-legend-row">
+                <span class="brew-combo-legend-label">Weight:</span>
+                <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#667eea;"></span>actual (g)</span>
+                <span class="brew-flow-legend-item" id="brew-legend-ideal" style="display:none;"><span class="brew-legend-line" style="background:none;border-top:1.5px dotted rgba(102,126,234,0.5);"></span>target</span>
+            </div>
+            <div class="brew-combo-legend-row">
+                <span class="brew-combo-legend-label">Flow:</span>
+                <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#9E9E9E;"></span>&lt;1.5 idle</span>
+                <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#66BB6A;"></span>1.5–3 slow</span>
+                <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#FFA726;"></span>3–5 medium</span>
+                <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#EF5350;"></span>&gt;5 fast</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weight Chart -->
+    <div class="section brew-chart-collapsible">
+        <h2 class="brew-chart-toggle" id="brew-weight-toggle">Weight <span class="brew-toggle-icon">▸</span></h2>
+        <div class="brew-chart-body" id="brew-weight-body" style="display:none;">
+            <div class="brew-chart-container">
+                <canvas id="brew-weight-chart"></canvas>
+                <div class="brew-chart-fallback" id="brew-weight-fallback" style="display:none;">
+                    Charts require internet connection for first load
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flow Rate Chart -->
+    <div class="section brew-chart-collapsible">
+        <h2 class="brew-chart-toggle" id="brew-flow-toggle">Flow Rate <span class="brew-toggle-icon">▸</span></h2>
+        <div class="brew-chart-body" id="brew-flow-body" style="display:none;">
+            <div class="brew-chart-container">
+                <canvas id="brew-flow-chart"></canvas>
+                <div class="brew-chart-fallback" id="brew-flow-fallback" style="display:none;">
+                    Charts require internet connection for first load
+                </div>
+            </div>
+            <div class="brew-flow-legend">
+                <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#9E9E9E;"></span>&lt;1.5 idle</span>
+                <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#66BB6A;"></span>1.5–3 slow</span>
+                <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#FFA726;"></span>3–5 medium</span>
+                <span class="brew-flow-legend-item"><span class="brew-legend-line" style="background:#EF5350;"></span>&gt;5 fast</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail Actions -->
+    <div class="brew-detail-actions">
+        <button type="button" class="btn btn-secondary btn-sm" id="brew-export-one-btn">Export</button>
+        <button type="button" class="btn btn-danger btn-sm" id="brew-delete-one-btn">Delete</button>
+    </div>
+</div>

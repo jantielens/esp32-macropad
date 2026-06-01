@@ -73,10 +73,9 @@ static ButtonAction round_trip(const char* json_str) {
 TEST(empty_json) {
     ButtonAction act = parse_from_string("{}");
     ASSERT_STR(act.type, "");
-    ASSERT_STR(act.screen_id, "");
-    ASSERT_STR(act.mqtt_topic, "");
-    ASSERT_EQ(act.beep_volume, 0);
-    ASSERT_EQ(act.sound_volume, 0);
+    // With type=="" no arm is active; spot-check zero-init of a couple arms.
+    ASSERT_EQ(act.payload.beep.beep_volume, 0);
+    ASSERT_EQ(act.payload.sound.sound_volume, 0);
 }
 
 TEST(empty_to_json_produces_empty_object) {
@@ -91,7 +90,7 @@ TEST(empty_to_json_produces_empty_object) {
 TEST(type_only) {
     ButtonAction act = parse_from_string("{\"type\":\"back\"}");
     ASSERT_STR(act.type, "back");
-    ASSERT_STR(act.screen_id, "");
+    // back carries no payload
 }
 
 // ============================================================================
@@ -101,13 +100,13 @@ TEST(type_only) {
 TEST(screen_action_parse) {
     ButtonAction act = parse_from_string("{\"type\":\"screen\",\"target\":\"pad_3\"}");
     ASSERT_STR(act.type, "screen");
-    ASSERT_STR(act.screen_id, "pad_3");
+    ASSERT_STR(act.payload.screen.screen_id, "pad_3");
 }
 
 TEST(screen_action_round_trip) {
     ButtonAction act = round_trip("{\"type\":\"screen\",\"target\":\"pad_0\"}");
     ASSERT_STR(act.type, "screen");
-    ASSERT_STR(act.screen_id, "pad_0");
+    ASSERT_STR(act.payload.screen.screen_id, "pad_0");
 }
 
 // ============================================================================
@@ -118,16 +117,16 @@ TEST(mqtt_action_parse) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"mqtt\",\"topic\":\"home/light\",\"payload\":\"ON\"}");
     ASSERT_STR(act.type, "mqtt");
-    ASSERT_STR(act.mqtt_topic, "home/light");
-    ASSERT_STR(act.mqtt_payload, "ON");
+    ASSERT_STR(act.payload.mqtt.mqtt_topic, "home/light");
+    ASSERT_STR(act.payload.mqtt.mqtt_payload, "ON");
 }
 
 TEST(mqtt_action_round_trip) {
     ButtonAction act = round_trip(
         "{\"type\":\"mqtt\",\"topic\":\"home/light\",\"payload\":\"toggle\"}");
     ASSERT_STR(act.type, "mqtt");
-    ASSERT_STR(act.mqtt_topic, "home/light");
-    ASSERT_STR(act.mqtt_payload, "toggle");
+    ASSERT_STR(act.payload.mqtt.mqtt_topic, "home/light");
+    ASSERT_STR(act.payload.mqtt.mqtt_payload, "toggle");
 }
 
 // ============================================================================
@@ -138,13 +137,13 @@ TEST(key_action_parse) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"key\",\"sequence\":\"Ctrl+C\"}");
     ASSERT_STR(act.type, "key");
-    ASSERT_STR(act.key_sequence, "Ctrl+C");
+    ASSERT_STR(act.payload.key.key_sequence, "Ctrl+C");
 }
 
 TEST(key_action_round_trip) {
     ButtonAction act = round_trip("{\"type\":\"key\",\"sequence\":\"Alt+Tab\"}");
     ASSERT_STR(act.type, "key");
-    ASSERT_STR(act.key_sequence, "Alt+Tab");
+    ASSERT_STR(act.payload.key.key_sequence, "Alt+Tab");
 }
 
 // ============================================================================
@@ -155,16 +154,16 @@ TEST(beep_action_parse) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"beep\",\"beep_pattern\":\"1000:200 100 500:300\",\"beep_volume\":75}");
     ASSERT_STR(act.type, "beep");
-    ASSERT_STR(act.beep_pattern, "1000:200 100 500:300");
-    ASSERT_EQ(act.beep_volume, 75);
+    ASSERT_STR(act.payload.beep.beep_pattern, "1000:200 100 500:300");
+    ASSERT_EQ(act.payload.beep.beep_volume, 75);
 }
 
 TEST(beep_action_round_trip) {
     ButtonAction act = round_trip(
         "{\"type\":\"beep\",\"beep_pattern\":\"440:500\",\"beep_volume\":50}");
     ASSERT_STR(act.type, "beep");
-    ASSERT_STR(act.beep_pattern, "440:500");
-    ASSERT_EQ(act.beep_volume, 50);
+    ASSERT_STR(act.payload.beep.beep_pattern, "440:500");
+    ASSERT_EQ(act.payload.beep.beep_volume, 50);
 }
 
 TEST(beep_zero_volume_not_serialized) {
@@ -185,16 +184,16 @@ TEST(sound_action_parse) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"sound\",\"sound_file\":\"doorbell\",\"sound_volume\":80}");
     ASSERT_STR(act.type, "sound");
-    ASSERT_STR(act.sound_file, "doorbell");
-    ASSERT_EQ(act.sound_volume, 80);
+    ASSERT_STR(act.payload.sound.sound_file, "doorbell");
+    ASSERT_EQ(act.payload.sound.sound_volume, 80);
 }
 
 TEST(sound_action_round_trip) {
     ButtonAction act = round_trip(
         "{\"type\":\"sound\",\"sound_file\":\"startup\",\"sound_volume\":100}");
     ASSERT_STR(act.type, "sound");
-    ASSERT_STR(act.sound_file, "startup");
-    ASSERT_EQ(act.sound_volume, 100);
+    ASSERT_STR(act.payload.sound.sound_file, "startup");
+    ASSERT_EQ(act.payload.sound.sound_volume, 100);
 }
 
 TEST(sound_zero_volume_not_serialized) {
@@ -215,22 +214,22 @@ TEST(volume_set_action_parse) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"volume\",\"volume_mode\":\"set\",\"volume_value\":\"60\"}");
     ASSERT_STR(act.type, "volume");
-    ASSERT_STR(act.volume_mode, "set");
-    ASSERT_STR(act.volume_value, "60");
+    ASSERT_STR(act.payload.volume.volume_mode, "set");
+    ASSERT_STR(act.payload.volume.volume_value, "60");
 }
 
 TEST(volume_adjust_action_round_trip) {
     ButtonAction act = round_trip(
         "{\"type\":\"volume\",\"volume_mode\":\"adjust\",\"volume_value\":\"-10\"}");
     ASSERT_STR(act.type, "volume");
-    ASSERT_STR(act.volume_mode, "adjust");
-    ASSERT_STR(act.volume_value, "-10");
+    ASSERT_STR(act.payload.volume.volume_mode, "adjust");
+    ASSERT_STR(act.payload.volume.volume_value, "-10");
 }
 
 TEST(volume_adjust_step_placeholder) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"volume\",\"volume_mode\":\"adjust\",\"volume_value\":\"{step}\"}");
-    ASSERT_STR(act.volume_value, "{step}");
+    ASSERT_STR(act.payload.volume.volume_value, "{step}");
 }
 
 // ============================================================================
@@ -241,16 +240,16 @@ TEST(brightness_set_action_parse) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"brightness\",\"brightness_mode\":\"set\",\"brightness_value\":\"75\"}");
     ASSERT_STR(act.type, "brightness");
-    ASSERT_STR(act.brightness_mode, "set");
-    ASSERT_STR(act.brightness_value, "75");
+    ASSERT_STR(act.payload.brightness.brightness_mode, "set");
+    ASSERT_STR(act.payload.brightness.brightness_value, "75");
 }
 
 TEST(brightness_adjust_action_round_trip) {
     ButtonAction act = round_trip(
         "{\"type\":\"brightness\",\"brightness_mode\":\"adjust\",\"brightness_value\":\"-5\"}");
     ASSERT_STR(act.type, "brightness");
-    ASSERT_STR(act.brightness_mode, "adjust");
-    ASSERT_STR(act.brightness_value, "-5");
+    ASSERT_STR(act.payload.brightness.brightness_mode, "adjust");
+    ASSERT_STR(act.payload.brightness.brightness_value, "-5");
 }
 
 TEST(brightness_empty_value_not_serialized) {
@@ -271,26 +270,26 @@ TEST(timer_action_parse) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"toggle\"}");
     ASSERT_STR(act.type, "timer");
-    ASSERT_EQ(act.timer_id, 1);
-    ASSERT_STR(act.timer_command, "toggle");
+    ASSERT_EQ(act.payload.timer.timer_id, 1);
+    ASSERT_STR(act.payload.timer.timer_command, "toggle");
 }
 
 TEST(timer_adjust_action_round_trip) {
     ButtonAction act = round_trip(
         "{\"type\":\"timer\",\"timer_id\":2,\"timer_command\":\"adjust\",\"timer_value\":\"30\"}");
     ASSERT_STR(act.type, "timer");
-    ASSERT_EQ(act.timer_id, 2);
-    ASSERT_STR(act.timer_command, "adjust");
-    ASSERT_STR(act.timer_value, "30");
+    ASSERT_EQ(act.payload.timer.timer_id, 2);
+    ASSERT_STR(act.payload.timer.timer_command, "adjust");
+    ASSERT_STR(act.payload.timer.timer_value, "30");
 }
 
 TEST(timer_set_action_round_trip) {
     ButtonAction act = round_trip(
         "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"set\",\"timer_value\":\"300\"}");
     ASSERT_STR(act.type, "timer");
-    ASSERT_EQ(act.timer_id, 1);
-    ASSERT_STR(act.timer_command, "set");
-    ASSERT_STR(act.timer_value, "300");
+    ASSERT_EQ(act.payload.timer.timer_id, 1);
+    ASSERT_STR(act.payload.timer.timer_command, "set");
+    ASSERT_STR(act.payload.timer.timer_value, "300");
 }
 
 TEST(timer_fields_serialized_properly) {
@@ -344,10 +343,8 @@ TEST(back_action_round_trip) {
 
 TEST(missing_optional_fields) {
     ButtonAction act = parse_from_string("{\"type\":\"beep\"}");
-    ASSERT_STR(act.beep_pattern, "");
-    ASSERT_EQ(act.beep_volume, 0);
-    ASSERT_STR(act.sound_file, "");
-    ASSERT_EQ(act.sound_volume, 0);
+    ASSERT_STR(act.payload.beep.beep_pattern, "");
+    ASSERT_EQ(act.payload.beep.beep_volume, 0);
 }
 
 // ============================================================================
@@ -363,44 +360,69 @@ TEST(compact_serialization) {
     ASSERT_STR(obj["type"].as<const char*>(), "back");
 }
 
-TEST(all_fields_populated) {
-    // A contrived action with every field set (not a realistic combo, but tests completeness)
-    const char* json =
-        "{\"type\":\"mqtt\",\"target\":\"pad_1\",\"topic\":\"t\",\"payload\":\"p\","
-        "\"sequence\":\"Ctrl+A\",\"beep_pattern\":\"500:100\",\"beep_volume\":42,"
-        "\"volume_mode\":\"set\",\"volume_value\":\"55\","
-        "\"brightness_mode\":\"adjust\",\"brightness_value\":\"-15\","
-        "\"timer_id\":2,\"timer_command\":\"adjust\",\"timer_value\":\"30\","
-        "\"sound_file\":\"alert\",\"sound_volume\":90,"
-        "\"notify_text\":\"hello\",\"notify_duration_ms\":\"5000\","
-        "\"notify_text_color\":\"#ff0000\",\"notify_bg_color\":\"#00ff00\","
-        "\"notify_border_color\":\"#0000ff\",\"notify_opacity\":90,"
-        "\"notify_font_size\":24,\"notify_location\":\"top\"}";
-    ButtonAction act = round_trip(json);
-    ASSERT_STR(act.type, "mqtt");
-    ASSERT_STR(act.screen_id, "pad_1");
-    ASSERT_STR(act.mqtt_topic, "t");
-    ASSERT_STR(act.mqtt_payload, "p");
-    ASSERT_STR(act.key_sequence, "Ctrl+A");
-    ASSERT_STR(act.beep_pattern, "500:100");
-    ASSERT_EQ(act.beep_volume, 42);
-    ASSERT_STR(act.volume_mode, "set");
-    ASSERT_STR(act.volume_value, "55");
-    ASSERT_STR(act.brightness_mode, "adjust");
-    ASSERT_STR(act.brightness_value, "-15");
-    ASSERT_EQ(act.timer_id, 2);
-    ASSERT_STR(act.timer_command, "adjust");
-    ASSERT_STR(act.timer_value, "30");
-    ASSERT_STR(act.sound_file, "alert");
-    ASSERT_EQ(act.sound_volume, 90);
-    ASSERT_STR(act.notify_text, "hello");
-    ASSERT_STR(act.notify_duration_ms, "5000");
-    ASSERT_STR(act.notify_text_color, "#ff0000");
-    ASSERT_STR(act.notify_bg_color, "#00ff00");
-    ASSERT_STR(act.notify_border_color, "#0000ff");
-    ASSERT_EQ(act.notify_opacity, 90);
-    ASSERT_EQ(act.notify_font_size, 24);
-    ASSERT_STR(act.notify_location, "top");
+TEST(per_type_round_trips_cover_all_arms) {
+    // ButtonAction is a discriminated union — only one arm is valid at a time,
+    // so the previous "all fields at once" test no longer makes sense. This
+    // test instead round-trips one action of each type and asserts the active
+    // arm survives parse→serialize→parse.
+    {
+        ButtonAction a = round_trip("{\"type\":\"screen\",\"target\":\"pad_1\"}");
+        ASSERT_STR(a.payload.screen.screen_id, "pad_1");
+    }
+    {
+        ButtonAction a = round_trip("{\"type\":\"mqtt\",\"topic\":\"t\",\"payload\":\"p\"}");
+        ASSERT_STR(a.payload.mqtt.mqtt_topic, "t");
+        ASSERT_STR(a.payload.mqtt.mqtt_payload, "p");
+    }
+    {
+        ButtonAction a = round_trip("{\"type\":\"key\",\"sequence\":\"Ctrl+A\"}");
+        ASSERT_STR(a.payload.key.key_sequence, "Ctrl+A");
+    }
+    {
+        ButtonAction a = round_trip("{\"type\":\"beep\",\"beep_pattern\":\"500:100\",\"beep_volume\":42}");
+        ASSERT_STR(a.payload.beep.beep_pattern, "500:100");
+        ASSERT_EQ(a.payload.beep.beep_volume, 42);
+    }
+    {
+        ButtonAction a = round_trip("{\"type\":\"volume\",\"volume_mode\":\"set\",\"volume_value\":\"55\"}");
+        ASSERT_STR(a.payload.volume.volume_mode, "set");
+        ASSERT_STR(a.payload.volume.volume_value, "55");
+    }
+    {
+        ButtonAction a = round_trip("{\"type\":\"brightness\",\"brightness_mode\":\"adjust\",\"brightness_value\":\"-15\"}");
+        ASSERT_STR(a.payload.brightness.brightness_mode, "adjust");
+        ASSERT_STR(a.payload.brightness.brightness_value, "-15");
+    }
+    {
+        ButtonAction a = round_trip("{\"type\":\"timer\",\"timer_id\":2,\"timer_command\":\"adjust\",\"timer_value\":\"30\"}");
+        ASSERT_EQ(a.payload.timer.timer_id, 2);
+        ASSERT_STR(a.payload.timer.timer_command, "adjust");
+        ASSERT_STR(a.payload.timer.timer_value, "30");
+    }
+    {
+        ButtonAction a = round_trip("{\"type\":\"sound\",\"sound_file\":\"alert\",\"sound_volume\":90}");
+        ASSERT_STR(a.payload.sound.sound_file, "alert");
+        ASSERT_EQ(a.payload.sound.sound_volume, 90);
+    }
+    {
+        ButtonAction a = round_trip(
+            "{\"type\":\"notify\",\"notify_text\":\"hello\",\"notify_duration_ms\":\"5000\","
+            "\"notify_text_color\":\"#ff0000\",\"notify_bg_color\":\"#00ff00\","
+            "\"notify_border_color\":\"#0000ff\",\"notify_opacity\":90,"
+            "\"notify_font_size\":24,\"notify_location\":\"top\"}");
+        ASSERT_STR(a.payload.notify.notify_text, "hello");
+        ASSERT_STR(a.payload.notify.notify_duration_ms, "5000");
+        ASSERT_STR(a.payload.notify.notify_text_color, "#ff0000");
+        ASSERT_STR(a.payload.notify.notify_bg_color, "#00ff00");
+        ASSERT_STR(a.payload.notify.notify_border_color, "#0000ff");
+        ASSERT_EQ(a.payload.notify.notify_opacity, 90);
+        ASSERT_EQ(a.payload.notify.notify_font_size, 24);
+        ASSERT_STR(a.payload.notify.notify_location, "top");
+    }
+    {
+        ButtonAction a = round_trip("{\"type\":\"system\",\"system_command\":\"reboot\"}");
+        ASSERT_STR(a.payload.system.system_command, "reboot");
+    }
 }
 
 // ============================================================================
@@ -414,14 +436,14 @@ TEST(notify_action_parse) {
         "\"notify_bg_color\":\"#2e1a1a\",\"notify_border_color\":\"#5a2a2a\","
         "\"notify_opacity\":90,\"notify_font_size\":18,\"notify_location\":\"top\"}");
     ASSERT_STR(act.type, "notify");
-    ASSERT_STR(act.notify_text, "Power high!");
-    ASSERT_STR(act.notify_duration_ms, "5000");
-    ASSERT_STR(act.notify_text_color, "#ffa0a0");
-    ASSERT_STR(act.notify_bg_color, "#2e1a1a");
-    ASSERT_STR(act.notify_border_color, "#5a2a2a");
-    ASSERT_EQ(act.notify_opacity, 90);
-    ASSERT_EQ(act.notify_font_size, 18);
-    ASSERT_STR(act.notify_location, "top");
+    ASSERT_STR(act.payload.notify.notify_text, "Power high!");
+    ASSERT_STR(act.payload.notify.notify_duration_ms, "5000");
+    ASSERT_STR(act.payload.notify.notify_text_color, "#ffa0a0");
+    ASSERT_STR(act.payload.notify.notify_bg_color, "#2e1a1a");
+    ASSERT_STR(act.payload.notify.notify_border_color, "#5a2a2a");
+    ASSERT_EQ(act.payload.notify.notify_opacity, 90);
+    ASSERT_EQ(act.payload.notify.notify_font_size, 18);
+    ASSERT_STR(act.payload.notify.notify_location, "top");
 }
 
 TEST(notify_action_round_trip) {
@@ -430,10 +452,10 @@ TEST(notify_action_round_trip) {
         "\"notify_duration_ms\":\"0\",\"notify_bg_color\":\"#333333\","
         "\"notify_location\":\"center\"}");
     ASSERT_STR(act.type, "notify");
-    ASSERT_STR(act.notify_text, "Test msg");
-    ASSERT_STR(act.notify_duration_ms, "0");
-    ASSERT_STR(act.notify_bg_color, "#333333");
-    ASSERT_STR(act.notify_location, "center");
+    ASSERT_STR(act.payload.notify.notify_text, "Test msg");
+    ASSERT_STR(act.payload.notify.notify_duration_ms, "0");
+    ASSERT_STR(act.payload.notify.notify_bg_color, "#333333");
+    ASSERT_STR(act.payload.notify.notify_location, "center");
 }
 
 TEST(notify_zero_opacity_not_serialized) {
@@ -449,13 +471,13 @@ TEST(notify_zero_opacity_not_serialized) {
 TEST(notify_minimal_only_text) {
     ButtonAction act = round_trip("{\"type\":\"notify\",\"notify_text\":\"hello\"}");
     ASSERT_STR(act.type, "notify");
-    ASSERT_STR(act.notify_text, "hello");
-    ASSERT_STR(act.notify_duration_ms, "");
-    ASSERT_STR(act.notify_text_color, "");
-    ASSERT_STR(act.notify_bg_color, "");
-    ASSERT_EQ(act.notify_opacity, 0);
-    ASSERT_EQ(act.notify_font_size, 0);
-    ASSERT_STR(act.notify_location, "");
+    ASSERT_STR(act.payload.notify.notify_text, "hello");
+    ASSERT_STR(act.payload.notify.notify_duration_ms, "");
+    ASSERT_STR(act.payload.notify.notify_text_color, "");
+    ASSERT_STR(act.payload.notify.notify_bg_color, "");
+    ASSERT_EQ(act.payload.notify.notify_opacity, 0);
+    ASSERT_EQ(act.payload.notify.notify_font_size, 0);
+    ASSERT_STR(act.payload.notify.notify_location, "");
 }
 
 // ============================================================================
@@ -467,13 +489,13 @@ TEST(notify_minimal_only_text) {
 TEST(system_action_parse) {
     ButtonAction act = parse_from_string("{\"type\":\"system\",\"system_command\":\"reboot\"}");
     ASSERT_STR(act.type, "system");
-    ASSERT_STR(act.system_command, "reboot");
+    ASSERT_STR(act.payload.system.system_command, "reboot");
 }
 
 TEST(system_action_round_trip) {
     ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"wifi_reconnect\"}");
     ASSERT_STR(act.type, "system");
-    ASSERT_STR(act.system_command, "wifi_reconnect");
+    ASSERT_STR(act.payload.system.system_command, "wifi_reconnect");
 }
 
 TEST(system_command_not_serialized_when_empty) {
@@ -491,7 +513,7 @@ TEST(system_command_not_serialized_when_empty) {
 TEST(system_action_screensaver) {
     ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"screensaver\"}");
     ASSERT_STR(act.type, "system");
-    ASSERT_STR(act.system_command, "screensaver");
+    ASSERT_STR(act.payload.system.system_command, "screensaver");
 }
 
 int main() {
@@ -551,7 +573,7 @@ int main() {
     printf("\n--- Edge cases ---\n");
     RUN(missing_optional_fields);
     RUN(compact_serialization);
-    RUN(all_fields_populated);
+    RUN(per_type_round_trips_cover_all_arms);
 
     printf("\n--- Notify action ---\n");
     RUN(notify_action_parse);

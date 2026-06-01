@@ -103,11 +103,40 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_parse.cpp \
     src/app/action_parse.cpp \
+    src/app/action_registry.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_action_parse
 
 echo "=== Running unit tests: action_parse ==="
 ./tests/bin/test_action_parse
+echo
+
+echo "=== Building size guard: action_sizes ==="
+g++ -std=c++17 -Wall -Wextra -Wno-unused \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_action_sizes.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_sizes
+
+echo "=== Running size guard: action_sizes ==="
+./tests/bin/test_action_sizes
+echo
+
+echo "=== Building unit tests: shutter_session_actions ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app -I src/app/device_classes/shutter_tester \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_shutter_session_actions.cpp \
+    src/app/action_parse.cpp \
+    src/app/action_registry.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_shutter_session_actions
+
+echo "=== Running unit tests: shutter_session_actions ==="
+./tests/bin/test_shutter_session_actions
 echo
 
 echo "=== Building unit tests: wifi_reconnect ==="
@@ -147,6 +176,21 @@ echo "=== Running unit tests: action_bindings ==="
 ./tests/bin/test_action_bindings
 echo
 
+echo "=== Building unit tests: action_registry_step ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_action_registry_step.cpp \
+    src/app/action_registry.cpp \
+    src/app/binding_template.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_registry_step -lm
+
+echo "=== Running unit tests: action_registry_step ==="
+./tests/bin/test_action_registry_step
+echo
+
 echo "=== Building unit tests: component_registry ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \
@@ -158,6 +202,55 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running unit tests: component_registry ==="
 ./tests/bin/test_component_registry
+echo
+
+echo "=== Building unit tests: shutter_curtain_stats ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app -I src/app/device_classes/shutter_tester \
+    tests/test_shutter_curtain_stats.cpp \
+    src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp \
+    -o tests/bin/test_shutter_curtain_stats -lm
+
+echo "=== Running unit tests: shutter_curtain_stats ==="
+./tests/bin/test_shutter_curtain_stats
+echo
+
+echo "=== Building unit tests: shutter_capture ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_SHUTTER_TESTER=true \
+    -include tests/log_manager.h \
+    -I tests -I src/app -I src/app/device_classes/shutter_tester \
+    tests/test_shutter_capture.cpp \
+    -o tests/bin/test_shutter_capture
+
+echo "=== Running unit tests: shutter_capture ==="
+./tests/bin/test_shutter_capture
+echo
+
+echo "=== Building unit tests: shutter_measure ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_SHUTTER_TESTER=true \
+    -include tests/log_manager.h \
+    -I tests -I src/app -I src/app/device_classes/shutter_tester \
+    tests/test_shutter_measure.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_shutter_measure -lm
+
+echo "=== Running unit tests: shutter_measure ==="
+./tests/bin/test_shutter_measure
+echo
+
+echo "=== Building unit tests: shutter_binding ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_DISPLAY=true -DIS_SHUTTER_TESTER=true \
+    -include tests/log_manager.h \
+    -I tests -I src/app -I src/app/device_classes/shutter_tester \
+    tests/test_shutter_binding.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_shutter_binding -lm
+
+echo "=== Running unit tests: shutter_binding ==="
+./tests/bin/test_shutter_binding
 echo
 
 echo "=== Building unit tests: list_provider ==="
@@ -175,6 +268,25 @@ echo "=== Running unit tests: list_provider ==="
 ./tests/bin/test_list_provider
 echo
 
+echo "=== Building unit tests: shutter_session ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -Wno-deprecated-declarations \
+    -DIS_SHUTTER_TESTER=true \
+    -include tests/log_manager.h \
+    -I tests/shutter_session_overrides \
+    -I tests \
+    -I src -I src/app -I src/app/device_classes/shutter_tester \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_shutter_session.cpp \
+    src/app/device_classes/shutter_tester/shutter_session.cpp \
+    src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_shutter_session -lm
+
+echo "=== Running unit tests: shutter_session ==="
+./tests/bin/test_shutter_session
+echo
+
 echo "=== Building unit tests: epaper_battery ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \
@@ -183,6 +295,53 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running unit tests: epaper_battery ==="
 ./tests/bin/test_epaper_battery
+echo
+
+echo "=== Building guard: coffee_scale command length ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_COFFEE_SCALE=true \
+    -include tests/board_config.h \
+    -I src/app \
+    tests/test_coffee_scale_cmd_len.cpp \
+    -o tests/bin/test_coffee_scale_cmd_len
+
+echo "=== Running guard: coffee_scale command length ==="
+./tests/bin/test_coffee_scale_cmd_len
+echo
+
+echo "=== Building unit tests: expose_dry_down ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_DARKROOM_TIMER=1 -DHAS_AUDIO=0 \
+    -I tests -I src/app -I src/app/device_classes/darkroom_timer \
+    tests/test_expose_dry_down.cpp \
+    -o tests/bin/test_expose_dry_down -lm
+
+echo "=== Running unit tests: expose_dry_down ==="
+./tests/bin/test_expose_dry_down
+echo
+
+echo "=== Building unit tests: meter_mag ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_DARKROOM_TIMER=1 \
+    -I tests -I src/app -I src/app/device_classes/darkroom_timer \
+    tests/test_meter_mag.cpp \
+    -o tests/bin/test_meter_mag -lm
+
+echo "=== Running unit tests: meter_mag ==="
+./tests/bin/test_meter_mag
+echo
+
+echo "=== Building unit tests: print_log ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DIS_DARKROOM_TIMER=1 \
+    -I tests/print_log_overrides \
+    -I tests -I src/app -I src/app/device_classes/darkroom_timer \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_print_log.cpp \
+    -o tests/bin/test_print_log -lm
+
+echo "=== Running unit tests: print_log ==="
+./tests/bin/test_print_log
 echo
 
 echo "=== Running guard: branding mirror (C++ <-> bash) ==="

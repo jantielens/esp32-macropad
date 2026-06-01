@@ -1898,3 +1898,4 @@ input[type="text"].label-style-input {
   top: calc(var(--portal-header-height-desktop, 120px) + 12px);
   bottom: auto;
 }
+

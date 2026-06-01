@@ -2,6 +2,7 @@
 #include "../display_manager.h"
 #include "../icon_store.h"
 #include "../log_manager.h"
+#include "../device_class.h"
 #include <esp_heap_caps.h>
 #include <string.h>
 
@@ -496,6 +497,29 @@ void PadScreen::buildTiles() {
 #endif
 
     free(cfg);
+
+    // Detect device-class engine-hold consumers: any registered device class
+    // that declares a pad_hold_scheme (e.g. "[shutter:") whose binding token
+    // appears on this pad keeps its hardware engine running while the pad is
+    // visible. Generic — no device class is named here.
+    //
+    // Only bindings (label/color/number/btn-state/widget) count: they resolve
+    // every poll cycle and would render "---" without the engine running.
+    // Device-class *actions* (tap/long-press) are intentionally NOT scanned —
+    // they fire on demand and their handlers acquire the engine themselves, so
+    // a nav pad that merely hosts a "start session" button should not keep the
+    // engine active while idle (padHasScheme() only walks binding arrays).
+    padHoldMask = 0;
+    for (unsigned c = 0; c < device_class_count(); c++) {
+        const DeviceClass* dc = device_class_get(c);
+        if (!dc || !dc->pad_hold_scheme || !dc->pad_hold_acquire) continue;
+        if (padHasScheme(dc->pad_hold_scheme)) {
+            padHoldMask |= (uint8_t)(1u << c);
+            LOGI(TAG, "Page %u: device-class '%s' consumer detected — will hold engine while visible",
+                 pageIndex, dc->name);
+        }
+    }
+
     tilesBuilt = true;
 
     LOGI(TAG, "Page %u: built %u tiles (%dx%d display)", pageIndex, tileCount, disp_w, disp_h);

@@ -28,6 +28,24 @@
       description:
         'No display \u2014 a sensor / bridge node. Publishes telemetry over MQTT, broadcasts BTHome BLE beacons, and exposes the same web portal for configuration. Useful for distributed sensors, BLE-to-MQTT bridges, and remote actuator nodes.',
     },
+    {
+      key: 'shutter_tester',
+      title: 'Shutter Tester',
+      description:
+        'Specialized capture rig for measuring camera shutter speeds. ADC sensor array reads the light pulse from a film-plane LED bar, computes exposure times across the frame, and stores test sessions for review in the web portal.',
+    },
+    {
+      key: 'coffee_scale',
+      title: 'Coffee Scale',
+      description:
+        'Touch-screen kitchen scale for coffee brewing. Reads load-cell sensors (HX711 or NAU7802), runs configurable brew templates with pour-by-pour timing and weight targets, and logs brews to the web portal.',
+    },
+    {
+      key: 'darkroom_timer',
+      title: 'Darkroom Timer',
+      description:
+        'Touch-screen enlarger timer for analog darkroom printing. Controls enlarger and safelight relays over Wi-Fi (Shelly), meters paper exposure with a TSL2591 light sensor, and runs configurable print timing sequences from the web portal.',
+    },
   ];
 
   const initialBoards = Array.from(container.querySelectorAll(':scope > .board'));

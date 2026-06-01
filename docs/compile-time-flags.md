@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 182
+Total flags: 213
 
 ### Features (HAS_*)
 
@@ -38,10 +38,14 @@ Total flags: 182
 - **HAS_EPAPER_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext0 wake plus short/long press).
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
+- **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.
 - **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
 - **HAS_SENSOR_DUMMY** default: `false` — Enable dummy sensor adapter (synthetic values for testing).
+- **HAS_SENSOR_HX711** default: `false` — HX711 strain-gauge amplifier (bit-banged digital protocol).
 - **HAS_SENSOR_LD2410_OUT** default: `false` — Enable LD2410 OUT pin presence sensor adapter.
+- **HAS_SENSOR_NAU7802** default: `false` — NAU7802 24-bit I2C load-cell ADC.
+- **HAS_SENSOR_TSL2591** default: `false` — TSL2591 high-dynamic-range I2C light sensor (used for enlarger metering).
 - **HAS_SOUND_PLAYER** default: `HAS_AUDIO` — Defaults to HAS_AUDIO — enable audio to get sound player support.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 
@@ -61,6 +65,8 @@ Total flags: 182
 - **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin.
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
 - **EPAPER_BUTTON_PIN** default: `36` — (typical Inkplate wiring uses GPIO36 with an external pullup).
+- **HX711_DOUT_PIN** default: `-1` — HX711 data-out pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
+- **HX711_SCK_PIN** default: `-1` — HX711 clock pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.
 - **LCD_B1_PIN** default: `(no default)` — RGB Blue 1 pin.
 - **LCD_B2_PIN** default: `(no default)` — RGB Blue 2 pin.
@@ -102,6 +108,8 @@ Total flags: 182
 - **TOUCH_I2C_SDA** default: `(no default)` — Touch I2C SDA pin.
 - **TOUCH_INT** default: `(no default)` — Touch interrupt pin (-1 = not connected).
 - **TOUCH_RST** default: `-1` — Touch reset pin (-1 = no hardware reset, GT911 boots normally).
+- **TSL2591_I2C_SCL** default: `-1` — TSL2591 SCL pin. -1 disables the driver even when HAS_SENSOR_TSL2591 is true.
+- **TSL2591_I2C_SDA** default: `-1` — TSL2591 SDA pin. -1 disables the driver even when HAS_SENSOR_TSL2591 is true.
 
 ### Limits & Tuning
 
@@ -127,6 +135,7 @@ Total flags: 182
 - **TFT_BACKLIGHT_PWM_FREQ** default: `1000` — Lower frequencies give wider dimming range but may cause audible coil whine.
 - **TFT_SPI_FREQ_HZ** default: `(no default)` — QSPI clock frequency (Hz).
 - **TOUCH_I2C_FREQ_HZ** default: `(no default)` — I2C frequency (Hz).
+- **TSL2591_I2C_FREQUENCY** default: `400000` — TSL2591 I2C bus clock. The sensor tops out at 400 kHz (fast mode).
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS** default: `5000` — Timeout for an incomplete /api/config upload (ms) before freeing the buffer.
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES** default: `4096` — Max JSON body size accepted by /api/config.
 - **WIFI_MAX_ATTEMPTS** default: `3` — Maximum WiFi connection attempts at boot before falling back.
@@ -158,6 +167,9 @@ Total flags: 182
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
+- **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
+- **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
+- **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
 - **JD9165_DSI_HSYNC_PULSE_WIDTH** default: `24` — HSYNC pulse width in pixel clocks.
@@ -190,6 +202,24 @@ Total flags: 182
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
 - **SD_PROBE_ON_BOOT** default: `false` — listing, write/read round-trip). Intended for new-board bring-up only.
+- **SHUTTER_ADC_PIN_S1** default: `-1` — ADC input pin for shutter sensor 1.
+- **SHUTTER_ADC_PIN_S2** default: `-1` — ADC input pin for shutter sensor 2.
+- **SHUTTER_ADC_PIN_S3** default: `-1` — ADC input pin for shutter sensor 3.
+- **SHUTTER_ADC_PIN_S4** default: `-1` — ADC input pin for shutter sensor 4 (used by 4-corner presets).
+- **SHUTTER_ADC_PIN_S5** default: `-1` — ADC input pin for shutter sensor 5 — reserved for future presets.
+- **SHUTTER_ADC_PIN_S6** default: `-1` — ADC input pin for shutter sensor 6 — reserved for future presets.
+- **SHUTTER_ADC_PIN_S7** default: `-1` — ADC input pin for shutter sensor 7 — reserved for future presets.
+- **SHUTTER_ADC_PIN_S8** default: `-1` — ADC input pin for shutter sensor 8 — reserved for future presets.
+- **SHUTTER_ADC_PIN_S9** default: `-1` — ADC input pin for shutter sensor 9 — reserved for future presets.
+- **SHUTTER_DEFAULT_OFFSET_X_MM** default: `11.2f` — (S1/S3), in mm.
+- **SHUTTER_DEFAULT_OFFSET_Y_MM** default: `7.4f` — (S1/S3), in mm.
+- **SHUTTER_DEFAULT_PRESET_ID** default: `"direct_3_line"` — "direct_4_corner". See shutter_capture.h for the preset registry.
+- **SHUTTER_FILM_DIAGONAL_MM** default: `43.27f` — 35mm film diagonal for full-frame capping projection (sqrt(36² + 24²)).
+- **SHUTTER_POST_CAPTURE_SAMPLES** default: `4096` — Post-pulse sample count (kept here as a fallback; boards typically override).
+- **SHUTTER_PRE_TRIGGER_SAMPLES** default: `4096` — Pre-trigger sample count (kept here as a fallback; boards typically override).
+- **SHUTTER_SENSOR_MAX** default: `9` — position buffer). Runtime behavior is driven by the active preset.
+- **SHUTTER_VERDICT_DEVIATION_FAIL** default: `0.500f` — Deviation verdict threshold (stops): values above this are a definite FAIL.
+- **SHUTTER_VERDICT_DEVIATION_WARNING** default: `0.333f` — Deviation verdict threshold (stops): values at or below this are PASS.
 - **ST7701_DSI_HSYNC_BACK_PORCH** default: `42` — HSYNC back porch in pixel clocks.
 - **ST7701_DSI_HSYNC_FRONT_PORCH** default: `42` — HSYNC front porch in pixel clocks.
 - **ST7701_DSI_HSYNC_PULSE_WIDTH** default: `12` — HSYNC pulse width in pixel clocks.
@@ -216,6 +246,7 @@ Total flags: 182
 - **TOUCH_I2C_ADDR_ALT** default: `(no default)` — Optional alternate address (GT911 can be 0x5D or 0x14 depending on INT strap).
 - **TOUCH_I2C_BUS** default: `1` — ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
 - **TOUCH_I2C_PORT** default: `(no default)` — I2C controller index.
+- **TSL2591_I2C_BUS** default: `0` — reads off the touch controller's bus so metering never blocks touch polling.
 - **UI_SCALE_TIER** default: `UI_SCALE_MEDIUM` — Default UI scale tier (boards override in board_overrides.h)
 - **USE_SD_STORAGE** default: `false` — flash cache-disable starving the framebuffer DMA.
 - **WIFI_REBOOT_AFTER_MS** default: `600000` — Total outage before controlled device reboot.
@@ -229,16 +260,20 @@ Total flags: 182
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_LD2410_OUT | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ |
-| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ |  |  | ✅ |  | ? |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ |  |  |  |  |  |  |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
+| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -251,6 +286,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-shutter | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-hx711 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-nau7802 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-darkroom | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | — | — |
 | inkplate5v2 | — | — |
@@ -267,6 +306,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
+  - src/app/device_classes/darkroom_timer/expose_timer.cpp
+  - src/app/device_classes/darkroom_timer/test_strip.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/mqtt_audio.cpp
@@ -328,6 +370,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_list.h
   - src/app/action_parse.cpp
   - src/app/action_parse.h
+  - src/app/action_registry.cpp
+  - src/app/action_registry.h
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/boot_actions.cpp
@@ -339,6 +383,24 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.cpp
   - src/app/data_stream.h
   - src/app/device_class_registry.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
+  - src/app/device_classes/coffee_scale/brew_actions.cpp
+  - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/device_classes/coffee_scale/scale_binding.cpp
+  - src/app/device_classes/darkroom_timer/expose_actions.cpp
+  - src/app/device_classes/darkroom_timer/meter_actions.cpp
+  - src/app/device_classes/darkroom_timer/print_log.cpp
+  - src/app/device_classes/darkroom_timer/print_log_actions.cpp
+  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
+  - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
+  - src/app/device_classes/darkroom_timer/web_portal_prints.cpp
+  - src/app/device_classes/shutter_tester/shutter_actions.cpp
+  - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
+  - src/app/device_classes/shutter_tester/shutter_align_binding.h
+  - src/app/device_classes/shutter_tester/shutter_binding.cpp
+  - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
+  - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
+  - src/app/device_classes/shutter_tester_device_class.cpp
   - src/app/device_telemetry.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
@@ -462,14 +524,23 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_firmware.cpp
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
+  - src/app/action_registry.h
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/data_stream.cpp
   - src/app/data_stream.h
+  - src/app/device_classes/coffee_scale/brew_actions.cpp
+  - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/device_classes/darkroom_timer/expose_actions.cpp
+  - src/app/device_classes/darkroom_timer/meter_actions.cpp
+  - src/app/device_classes/darkroom_timer/print_log_actions.cpp
+  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
+  - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
   - src/app/device_classes/epaper/epaper_mqtt.cpp
   - src/app/device_classes/epaper/epaper_mqtt.h
   - src/app/device_classes/epaper_device_class.cpp
+  - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_telemetry.cpp
   - src/app/display_manager.cpp
   - src/app/display_task.cpp
@@ -507,6 +578,24 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/widget.h
+- **HAS_SCALE**
+  - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_log.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_log.h
+  - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_manager.h
+  - src/app/device_classes/coffee_scale/brew/brew_template_loader.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_template_loader.h
+  - src/app/device_classes/coffee_scale/brew/brew_templates.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_templates.h
+  - src/app/device_classes/coffee_scale/brew_actions.cpp
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+  - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/device_classes/coffee_scale/scale_binding.cpp
+  - src/app/device_classes/coffee_scale/scale_hal.cpp
+  - src/app/device_classes/coffee_scale/scale_hal.h
+  - src/app/device_classes/coffee_scale/sensors/scale_smoothing.cpp
+  - src/app/device_classes/coffee_scale/sensors/scale_smoothing.h
 - **HAS_SD_CARD**
   - src/app/board_config.h
 - **HAS_SENSOR_BME280**
@@ -518,10 +607,24 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/sensors/dummy_sensor.h
+- **HAS_SENSOR_HX711**
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+  - src/app/device_classes/coffee_scale/coffee_scale_device_class.cpp
+  - src/app/device_classes/coffee_scale/scale_hal.cpp
+  - src/app/device_classes/coffee_scale/sensors/hx711_sensor.cpp
+  - src/app/device_classes/coffee_scale/sensors/hx711_sensor.h
 - **HAS_SENSOR_LD2410_OUT**
   - src/app/board_config.h
   - src/app/sensors.cpp
   - src/app/sensors/ld2410_out_sensor.cpp
+- **HAS_SENSOR_NAU7802**
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+  - src/app/device_classes/coffee_scale/coffee_scale_device_class.cpp
+  - src/app/device_classes/coffee_scale/scale_hal.cpp
+  - src/app/device_classes/coffee_scale/sensors/nau7802_sensor.cpp
+  - src/app/device_classes/coffee_scale/sensors/nau7802_sensor.h
+- **HAS_SENSOR_TSL2591**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
 - **HAS_SOUND_PLAYER**
   - src/app/action_dispatch.cpp
   - src/app/app.ino
@@ -631,6 +734,90 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
+- **HX711_DOUT_PIN**
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+- **HX711_SCK_PIN**
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+- **IS_COFFEE_SCALE**
+  - src/app/board_config.h
+  - src/app/device_class_registry.cpp
+  - src/app/device_classes.cpp
+  - src/app/device_classes/coffee_scale/brew_actions.cpp
+  - src/app/device_classes/coffee_scale/coffee_scale_config.cpp
+  - src/app/device_classes/coffee_scale/coffee_scale_config.h
+  - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+  - src/app/device_classes/coffee_scale/coffee_scale_device_class.cpp
+  - src/app/device_classes/coffee_scale/coffee_scale_payload.h
+  - src/app/device_classes/coffee_scale/components/brew_templates_component.cpp
+  - src/app/device_classes/coffee_scale/components/brews_component.cpp
+  - src/app/device_classes/coffee_scale/components/coffee_scale_component.cpp
+  - src/app/device_classes/coffee_scale/scale_actions.cpp
+  - src/app/device_classes/coffee_scale/web/web_portal_brew_templates.cpp
+  - src/app/device_classes/coffee_scale/web/web_portal_brew_templates.h
+  - src/app/device_classes/coffee_scale/web/web_portal_brews.cpp
+  - src/app/device_classes/coffee_scale/web/web_portal_brews.h
+  - src/app/device_classes/coffee_scale/web/web_portal_scale.cpp
+  - src/app/device_classes/coffee_scale/web/web_portal_scale.h
+  - src/app/portal_components.cpp
+  - src/app/route_components.cpp
+- **IS_DARKROOM_TIMER**
+  - src/app/board_config.h
+  - src/app/device_class_registry.cpp
+  - src/app/device_classes.cpp
+  - src/app/device_classes/darkroom_timer/components/darkroom_component.cpp
+  - src/app/device_classes/darkroom_timer/components/prints_component.cpp
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+  - src/app/device_classes/darkroom_timer/darkroom_timer_device_class.cpp
+  - src/app/device_classes/darkroom_timer/darkroom_timer_payload.h
+  - src/app/device_classes/darkroom_timer/expose_actions.cpp
+  - src/app/device_classes/darkroom_timer/expose_timer.cpp
+  - src/app/device_classes/darkroom_timer/meter.cpp
+  - src/app/device_classes/darkroom_timer/meter_actions.cpp
+  - src/app/device_classes/darkroom_timer/print_log.cpp
+  - src/app/device_classes/darkroom_timer/print_log.h
+  - src/app/device_classes/darkroom_timer/print_log_actions.cpp
+  - src/app/device_classes/darkroom_timer/relay_controller.cpp
+  - src/app/device_classes/darkroom_timer/sensors/tsl2591_sensor.cpp
+  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
+  - src/app/device_classes/darkroom_timer/test_strip.cpp
+  - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
+  - src/app/device_classes/darkroom_timer/web_portal_prints.cpp
+  - src/app/device_classes/darkroom_timer/web_portal_relay.cpp
+  - src/app/portal_components.cpp
+  - src/app/route_components.cpp
+- **IS_SHUTTER_TESTER**
+  - src/app/board_config.h
+  - src/app/device_class_registry.cpp
+  - src/app/device_classes.cpp
+  - src/app/device_classes/shutter_tester/components/shutter_session_actions_component.cpp
+  - src/app/device_classes/shutter_tester/shutter_actions.cpp
+  - src/app/device_classes/shutter_tester/shutter_adc.cpp
+  - src/app/device_classes/shutter_tester/shutter_adc.h
+  - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
+  - src/app/device_classes/shutter_tester/shutter_align_binding.h
+  - src/app/device_classes/shutter_tester/shutter_binding.cpp
+  - src/app/device_classes/shutter_tester/shutter_capture.cpp
+  - src/app/device_classes/shutter_tester/shutter_capture.h
+  - src/app/device_classes/shutter_tester/shutter_config.cpp
+  - src/app/device_classes/shutter_tester/shutter_config.h
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+  - src/app/device_classes/shutter_tester/shutter_measure.cpp
+  - src/app/device_classes/shutter_tester/shutter_measure.h
+  - src/app/device_classes/shutter_tester/shutter_payload.h
+  - src/app/device_classes/shutter_tester/shutter_session.cpp
+  - src/app/device_classes/shutter_tester/shutter_session.h
+  - src/app/device_classes/shutter_tester/shutter_session_actions.cpp
+  - src/app/device_classes/shutter_tester/shutter_session_actions.h
+  - src/app/device_classes/shutter_tester/shutter_test_scripts.cpp
+  - src/app/device_classes/shutter_tester/shutter_test_scripts.h
+  - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
+  - src/app/device_classes/shutter_tester/web/portal_shutter_sessions.cpp
+  - src/app/device_classes/shutter_tester/web/portal_shutter_tests.cpp
+  - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
+  - src/app/device_classes/shutter_tester_device_class.cpp
+  - src/app/portal_components.cpp
+  - src/app/route_components.cpp
+  - src/app/widgets.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **JD9165_DSI_HSYNC_BACK_PORCH**
@@ -730,6 +917,45 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SENSOR_I2C_SDA**
   - src/app/board_config.h
+- **SHUTTER_ADC_PIN_S1**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S2**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S3**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S4**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S5**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S6**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S7**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S8**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_ADC_PIN_S9**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_DEFAULT_OFFSET_X_MM**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_DEFAULT_OFFSET_Y_MM**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_DEFAULT_PRESET_ID**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_FILM_DIAGONAL_MM**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_POST_CAPTURE_SAMPLES**
+  - src/app/device_classes/shutter_tester/shutter_adc.h
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_PRE_TRIGGER_SAMPLES**
+  - src/app/device_classes/shutter_tester/shutter_adc.h
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_SENSOR_MAX**
+  - src/app/device_classes/shutter_tester/shutter_capture.h
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_VERDICT_DEVIATION_FAIL**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
+- **SHUTTER_VERDICT_DEVIATION_WARNING**
+  - src/app/device_classes/shutter_tester/shutter_defaults.h
 - **ST7701_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **ST7701_DSI_HSYNC_BACK_PORCH**
@@ -814,6 +1040,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/drivers/gt911_touch_driver.cpp
   - src/app/drivers/wire_cst816s_touch_driver.cpp
+- **TSL2591_I2C_BUS**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+  - src/app/device_classes/darkroom_timer/sensors/tsl2591_sensor.cpp
+- **TSL2591_I2C_FREQUENCY**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+- **TSL2591_I2C_SCL**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
+- **TSL2591_I2C_SDA**
+  - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
 - **UI_SCALE_TIER**
   - src/app/board_config.h
 - **USE_SD_STORAGE**

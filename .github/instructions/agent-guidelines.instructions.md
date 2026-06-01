@@ -32,6 +32,7 @@ After every significant change, the agent must:
    - `README.md` — Main project documentation
    - `docs/dev/web-portal.md` — Web portal and REST API guide
    - `docs/dev/display-touch-architecture.md` — Display/touch HAL and screen architecture
+   - `docs/dev/adding-a-device-class.md` — Device class extension contract
    - `docs/dev/scripts.md` — Script usage guide
    - `docs/dev/library-management.md` — Library management guide
    - `docs/dev/build-and-release-process.md` — Project branding, build system, and release workflow guide

@@ -1,0 +1,46 @@
+<div class="section-header">
+  <h2>⚖️ Calibration</h2>
+  <p>Calibration, scale settings, and live status.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <span class="fs-3 fw-bold" id="scale-weight">--</span>
+      <span class="text-muted" id="scale-unit">g</span>
+      <span class="badge bg-secondary" id="scale-flow-badge" style="display:none;"></span>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="scale-tare-btn">Tare</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="scale-calibrate-btn">Calibrate…</button>
+    </div>
+  </div>
+</div>
+<div class="card mb-3" id="scale-calibrate-panel" style="display:none;">
+  <div class="card-body">
+    <p class="form-text mb-2">Place a known weight on the scale and enter its mass below.</p>
+    <div class="input-group mb-2">
+      <input type="number" class="form-control" id="scale-cal-weight" placeholder="e.g. 100" min="1" step="0.1">
+      <span class="input-group-text">g</span>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-primary btn-sm" id="scale-cal-confirm-btn">Calibrate</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="scale-cal-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="scale_smoothing">Scale Smoothing</label>
+      <select class="form-select" id="scale_smoothing" name="scale_smoothing">
+        <option value="0">Stable — minimal flicker, best for dosing</option>
+        <option value="1">Balanced — smooth with good responsiveness</option>
+        <option value="2">Responsive — fastest reaction, some jitter</option>
+      </select>
+      <div class="form-text">Controls weight display smoothing and flow rate averaging. Changes apply immediately without reboot.</div>
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="scale-save-btn">Save</button>
+    </div>
+  </div>
+</div>

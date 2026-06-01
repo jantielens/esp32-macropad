@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-05-28
+ms.date: 2026-06-01
 ms.topic: reference
 ---
 
@@ -12,7 +12,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.19.0] - 2026-06-01
+
+This release promotes three specialized firmware builds — **Coffee Scale**, **Darkroom Timer**, and **Shutter Tester** — into the main project as first-class device classes. Each is selected at compile time by an `IS_*` flag, aggregated under `src/app/device_classes/<class>/`, and gated so it adds zero footprint to every other board built from the same source tree. The shared device-class branding, portal aggregation, action-type registry, and binding-scheme registry introduced in 1.17.0–1.18.0 are what made these three classes drop in cleanly.
+
+### Added
+
+#### Coffee Scale device class
+
+* **`IS_COFFEE_SCALE` device class** — a connected espresso / pour-over scale branded `ESP32-MP Coffee Scale` (SSID `ESP32-MP-SCALE-XXXXXX`), on two ESP32-P4 boards: `jc4880p433-nau7802` (NAU7802 I2C 24-bit load-cell ADC) and `jc4880p433-hx711` (HX711 load-cell amplifier), both on the GUITION JC4880P433 480×800 panel.
+* **Scale HAL + smoothing** — sensor-agnostic weight / flow API with EMA + dead-band smoothing, three presets (Stable / Balanced / Responsive), and a tare + cal-weight calibration flow.
+* **Brew engine** — count-up state machine (idle / active / done) with per-stage templates, a brew-template DSL, live weight-series recording in PSRAM, and persisted brew logs.
+* **`scale` and `brew` action types** — `scale` (tare, calibrate, cal_weight adjust/set) and `brew` (start, next, advance, stop, reset, tare, set_template) for buttons, widgets, and swipe.
+* **`[scale:*]` and `[brew:*]` binding schemes** — `[scale:weight|flow|status]` and `[brew:weight|flow_rate|timer|stage|template|ratio|stages_json|summary_json|…]` for pad widgets.
+* **REST endpoints** — `/api/scale/*` (calibration), `/api/brews/*` (brew-log list / import / export / delete), and `/api/brew-templates/*` (template CRUD), plus a web portal scale-calibration page, brew browser, and template editor.
+* **Documentation** — `docs/device-classes/coffee-scale/README.md` and a Coffee Scale row in the "Device Classes" table.
+
+#### Darkroom Timer device class
+
+* **`IS_DARKROOM_TIMER` device class** — an analog-darkroom enlarger controller branded `ESP32-MP Darkroom Timer` (SSID `ESP32-MP-DARKROOM-XXXXXX`), on `jc4880p433-darkroom` (GUITION JC4880P433 ESP32-P4 480×800 panel) with a TSL2591 light sensor for paper metering and Shelly Wi-Fi relays for enlarger / safelight control.
+* **Three concurrent timer engines** — expose timer (with dry-down compensation), f-stop test strip, and light meter (enlargement-factor compensation), all active at once.
+* **`expose`, `strip`, `meter`, `print`, and `shelly` action types** — exposure, test-strip, metering, print-log, and relay control for buttons, widgets, and swipe.
+* **`[expose:*]`, `[strip:*]`, `[meter:*]`, and `[print:*]` binding schemes** — live timer, metering, and print-log data for pad widgets.
+* **Print logging** — print-session log with exposure details, starred status, and notes, persisted to the `Storage` facade as a 500-entry FIFO ring buffer (`DARKROOM_PRINT_LOG_MAX`).
+* **Relay controller** — generic relay abstraction with a Shelly HTTP backend, configured through the `shelly` action and the darkroom portal page.
+* **REST endpoints** — `/api/relay` (relay slot config) and `/api/prints` (print-log list / detail / notes / delete / export).
+* **Documentation** — `docs/device-classes/darkroom-timer/README.md` and a Darkroom Timer row in the "Device Classes" table.
+
+#### Shutter Tester device class
+
+* **`IS_SHUTTER_TESTER` device class** — a precision camera-shutter-speed instrument branded `ESP32-MP Shutter Tester` (SSID `ESP32-MP-SHUTTER-XXXXXX`), on `jc4880p433-shutter` (GUITION JC4880P433 ESP32-P4 480×800 panel, SD-MMC storage).
+* **ADC capture engine** — 1, 3, or 4 photodiodes on dedicated ADC pins (selected by preset), sampled continuously at ~27.7 kHz with triggered captures and pre/post buffers.
+* **Shutter analysis** — computes open time at each sensor position and derives curtain timing and pass/fail verdicts for focal-plane shutters, with geometry projection across the film plane.
+* **`shutter` action type and `[shutter:*]` binding scheme** — capture control and live result data for buttons, widgets, and pad bindings.
+* **Session storage + browser** — capture sessions persist to the SD card and stream large captures to flash; REST endpoints `/api/shutter/tests`, `/api/shutter/tests/list`, `/api/sessions`, and `/api/sessions/{id}` back a web-portal session browser.
+* **Documentation** — `docs/device-classes/shutter-tester/README.md` and a Shutter Tester row in the "Device Classes" table.
+
+### Changed
+
+* **Action type registry capacity** — `MAX_ACTION_TYPES` raised from 4 to 8 so the larger device-class action sets (e.g. the five darkroom action types) all register.
+
+### Removed
+
+* **Legacy `mem` action type** — superseded by the device-class action handlers.
+
+### Fixed
+
+* **Partial UI after darkroom print-log save** — saving a print session blanks the DSI panel (panel sleep + framebuffer zeroing) to avoid flash-write flicker, but on wake LVGL's dirty-area tracking still believed the screen was painted, so only self-invalidating widgets repainted and the rest stayed black until the next navigation. The blank/restore window now forces a full-screen invalidate on wake so the entire UI repaints into the freshly-blanked framebuffers.
+* **Numeric rocker `{step}` substitution for device-class actions** — the numeric rocker widget now substitutes its signed `{step}` value into device-class action value fields (e.g. darkroom `strip` / `expose` / `meter` / `print` `adjust_*` commands and the coffee-scale `scale` `cal_weight` adjust) via a new `substitute_step` hook on `ActionTypeDef`. Previously only the built-in action types (`mqtt`, `key`, `volume`, `brightness`, `timer`) were handled, so device-class actions received the literal string `{step}`.
 
 ## [1.18.0] - 2026-05-28
 

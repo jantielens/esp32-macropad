@@ -38,16 +38,36 @@ fi
 board_has_display() {
     local board_name="$1"
     local overrides_file="$SCRIPT_DIR/src/boards/$board_name/board_overrides.h"
+    _override_defines_display "$overrides_file"
+}
+
+# Recursively check an override file — and any base-board override files it
+# pulls in via `#include "../<base>/board_overrides.h"` — for an explicit
+# `#define HAS_DISPLAY true`. Device-class variant boards (e.g.
+# jc4880p433-shutter) inherit HAS_DISPLAY from their base board rather than
+# redefining it, so a flat grep of the variant file alone would miss it.
+_override_defines_display() {
+    local file="$1"
 
     # Default config has HAS_DISPLAY=false; require explicit override.
-    if [[ ! -f "$overrides_file" ]]; then
+    if [[ ! -f "$file" ]]; then
         return 1
     fi
 
     # Match: #define HAS_DISPLAY true (allow whitespace)
-    if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_DISPLAY[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+    if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_DISPLAY[[:space:]]+true[[:space:]]*$' "$file"; then
         return 0
     fi
+
+    # Follow base-board inheritance via relative #include of board_overrides.h.
+    local dir inc inc_path
+    dir="$(dirname "$file")"
+    while IFS= read -r inc; do
+        inc_path="$(cd "$dir" && realpath -m "$inc" 2>/dev/null)"
+        if [[ -n "$inc_path" ]] && _override_defines_display "$inc_path"; then
+            return 0
+        fi
+    done < <(grep -oE '#include[[:space:]]+"[^"]*board_overrides\.h"' "$file" | sed -E 's/.*"([^"]*)".*/\1/')
 
     return 1
 }
@@ -94,6 +114,71 @@ should_generate_png_assets() {
     done
 
     return 1
+}
+
+# ----------------------------------------------------------------------------
+# Optional compiler cache (ccache) support
+# ----------------------------------------------------------------------------
+# When USE_CCACHE=1 and the `ccache` binary is available, prepend ccache to the
+# core's C/C++ compile recipes. This caches object files keyed on preprocessed
+# source, so unchanged translation units (notably the large ESP32 core and LVGL)
+# are not recompiled — even across boards of the same architecture, or after a
+# board switch invalidates arduino-cli's own intermediate sketch cache.
+#
+# Recommended for dedicated build hosts (e.g. a LAN build server). Off by
+# default so local and CI behavior are unchanged.
+#
+# Implementation: rather than hardcode the (version-specific) recipe strings, we
+# read the installed core's recipe.{c,cpp}.o.pattern from its platform.txt and
+# prepend "ccache " to each. The {compiler.path}/{flags}/... placeholders are
+# re-expanded by arduino-cli, so ccache runs as a prefix around the real
+# compiler with no PATH manipulation or symlink shims.
+#
+# Populates the global CCACHE_FLAGS array with --build-property overrides.
+CCACHE_FLAGS=()
+compute_ccache_flags() {
+    local fqbn="$1"
+    CCACHE_FLAGS=()
+
+    [[ "${USE_CCACHE:-0}" == "1" ]] || return 0
+
+    if ! command -v ccache >/dev/null 2>&1; then
+        echo -e "${YELLOW}USE_CCACHE=1 but 'ccache' is not installed; building without cache.${NC}"
+        return 0
+    fi
+
+    # Give the cache enough room for multiple ESP32 cores/architectures.
+    export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-10G}"
+
+    # Resolve the platform.txt for this FQBN's core so we prepend ccache to the
+    # exact recipes the installed core uses (version-independent).
+    local vendor arch rest data_dir platform_txt
+    vendor="${fqbn%%:*}"
+    rest="${fqbn#*:}"
+    arch="${rest%%:*}"
+    data_dir="$("$ARDUINO_CLI" config get directories.data 2>/dev/null)"
+    if [[ -z "$data_dir" ]]; then
+        data_dir="$HOME/.arduino15"
+    fi
+    platform_txt="$(ls -d "$data_dir/packages/$vendor/hardware/$arch/"*/platform.txt 2>/dev/null | sort -V | tail -n1)"
+    if [[ -z "$platform_txt" || ! -f "$platform_txt" ]]; then
+        echo -e "${YELLOW}ccache: could not locate platform.txt for $vendor:$arch; building without cache.${NC}"
+        return 0
+    fi
+
+    local c_recipe cpp_recipe
+    c_recipe="$(grep -E '^recipe\.c\.o\.pattern=' "$platform_txt" | head -n1 | cut -d'=' -f2-)"
+    cpp_recipe="$(grep -E '^recipe\.cpp\.o\.pattern=' "$platform_txt" | head -n1 | cut -d'=' -f2-)"
+    if [[ -z "$c_recipe" || -z "$cpp_recipe" ]]; then
+        echo -e "${YELLOW}ccache: could not read compile recipes from platform.txt; building without cache.${NC}"
+        return 0
+    fi
+
+    CCACHE_FLAGS=(
+        --build-property "recipe.c.o.pattern=ccache $c_recipe"
+        --build-property "recipe.cpp.o.pattern=ccache $cpp_recipe"
+    )
+    echo -e "${GREEN}Cache:     ccache enabled (CCACHE_MAXSIZE=$CCACHE_MAXSIZE)${NC}"
 }
 
 # Build a single board
@@ -231,6 +316,9 @@ build_board() {
         fi
     fi
 
+    # Optional ccache wrapper around the core's compile recipes (USE_CCACHE=1).
+    compute_ccache_flags "$fqbn"
+
     # Per-board intermediate build path so switching boards does not thrash the
     # shared arduino-cli sketch cache (see GitHub issue #25).
     local board_intermediate_path="$board_build_path/intermediate"
@@ -246,6 +334,7 @@ build_board() {
         --build-path "$board_intermediate_path" \
         "${EXTRA_FLAGS[@]}" \
         "${BUILD_PROPS_ARR[@]}" \
+        "${CCACHE_FLAGS[@]}" \
         --output-dir "$board_build_path" \
         "$SKETCH_PATH" 2>&1)
     build_exit_code=$?

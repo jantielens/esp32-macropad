@@ -1,0 +1,19 @@
+{
+  "device_class": "shutter_tester",
+  "board_label": "JC4880P433 Shutter",
+  "description": "Guition JC4880P433 — 4.3\" 480x800 MIPI-DSI ST7701 IPS with GT911 capacitive touch. ESP32-P4 variant with BPW34 photodiode array (3- or 4-sensor film-plane shutter speed measurement).",
+  "chip_family": "ESP32-P4",
+  "flash_mb": 16,
+  "psram_mb": 32,
+  "wireless": {
+    "wifi": true,
+    "ble": true,
+    "notes": "WiFi/BLE via ESP-Hosted ESP32-C6 over SDIO"
+  },
+  "display": {
+    "size": "4.3\"",
+    "resolution": "480x800",
+    "type": "MIPI-DSI",
+    "touch": true
+  }
+}

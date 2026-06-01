@@ -59,6 +59,29 @@
 #include "components/sounds_component.cpp"
 #endif // HAS_SOUND_PLAYER
 
+// --- Shutter Tester components ---
+#if IS_SHUTTER_TESTER
+#include "device_classes/shutter_tester/components/shutter_component.cpp"
+#include "device_classes/shutter_tester/components/shutter_session_actions_component.cpp"
+// Module-local config singleton + DeviceClass.config_* hook implementations.
+// Aggregated here (per project convention: one aggregation file per
+// subsystem; portal_components.cpp owns non-route shutter-tester TUs).
+#include "device_classes/shutter_tester/shutter_config.cpp"
+#endif // IS_SHUTTER_TESTER
+
+// --- Coffee Scale components ---
+#if IS_COFFEE_SCALE
+#include "device_classes/coffee_scale/components/coffee_scale_component.cpp"
+#include "device_classes/coffee_scale/components/brews_component.cpp"
+#include "device_classes/coffee_scale/components/brew_templates_component.cpp"
+#endif // IS_COFFEE_SCALE
+
+// --- Darkroom Timer components ---
+#if IS_DARKROOM_TIMER
+#include "device_classes/darkroom_timer/components/darkroom_component.cpp"
+#include "device_classes/darkroom_timer/components/prints_component.cpp"
+#endif // IS_DARKROOM_TIMER
+
 // --- E-Paper-gated components ---
 // Split into one component per nav entry (Status / Image & Schedule /
 // Status Overlay / VCOM) — all share the "epaper" category. Image and

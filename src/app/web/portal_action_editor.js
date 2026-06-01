@@ -6,6 +6,11 @@
 // provides shared HTML generation, load/save, and type-change handlers so that
 // adding a new action type requires exactly one code change.
 
+// Extension modules (e.g. portal_action_editor_shutter.js) can register into
+// _actionEditorExtensions to add action types without modifying this file.
+// Each extension provides: options, groups, typeChanged, load, build hooks.
+var _actionEditorExtensions = [];
+
 // Generate the HTML for one action editor instance.
 // prefix: unique ID prefix (e.g. "pad-edit-action", "swipe-right")
 // label:  optional label shown above the type dropdown (e.g. "Tap Action")
@@ -27,6 +32,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="timer">Timer Control</option>';
     h += '<option value="notify">Show Notification</option>';
     h += '<option value="system">System Command</option>';
+    _actionEditorExtensions.forEach(function(ext) { if (ext.options) h += ext.options(); });
     h += '</select>';
     if (opts.showBleHint) {
         h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
@@ -188,6 +194,8 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<small>Positive increases, negative decreases. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
     h += '</div>';
     h += '</div>';
+    // Extension-contributed groups (e.g. shutter command UI on shutter-tester builds)
+    _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
     return h;
 }
 
@@ -230,6 +238,8 @@ function actionEditorTypeChanged(prefix) {
     if (['notify', 'mqtt', 'key', 'beep', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
     if (type === 'system') actionEditorSystemChanged(prefix);
+    // Extension-contributed type-change hooks (e.g. shutter group visibility)
+    _actionEditorExtensions.forEach(function(ext) { if (ext.typeChanged) ext.typeChanged(prefix, type); });
 }
 
 // Show/hide system command sub-fields based on the command dropdown.
@@ -380,6 +390,8 @@ function actionEditorLoad(prefix, action) {
         el = document.getElementById(prefix + '-system-command');
         if (el) el.value = action.system_command || 'reboot';
     }
+    // Extension-contributed load hooks (e.g. shutter field population)
+    _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
     actionEditorTypeChanged(prefix);
 }
 
@@ -470,6 +482,13 @@ function actionEditorBuild(prefix) {
             }
         }
     }
+    // Extension-contributed build hooks (e.g. shutter merges shutter_command/shutter_value).
+    _actionEditorExtensions.forEach(function(ext) {
+        if (ext.build) {
+            var extra = ext.build(prefix, type);
+            if (extra) { for (var k in extra) act[k] = extra[k]; }
+        }
+    });
     return act;
 }
 

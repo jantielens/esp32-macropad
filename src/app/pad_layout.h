@@ -1,4 +1,5 @@
-#pragma once
+#ifndef PAD_LAYOUT_H
+#define PAD_LAYOUT_H
 
 #include "board_config.h"
 #include "pad_config.h"
@@ -207,3 +208,5 @@ static inline void pad_compute_grid(
         out_rects[i].h = rs * tile_h + (rs - 1) * gap;
     }
 }
+
+#endif // PAD_LAYOUT_H

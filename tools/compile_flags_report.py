@@ -573,6 +573,14 @@ def cmd_build(args: argparse.Namespace) -> None:
     lv_conf_h = root / "src" / "app" / "lv_conf.h"
 
     defaults, _unconditional = parse_board_config_defaults(board_config_h)
+    # Merge in defaults from device-class default headers so per-board summaries
+    # reflect macros owned by, e.g., shutter_tester/shutter_defaults.h.
+    device_classes_dir = root / "src" / "app" / "device_classes"
+    if device_classes_dir.exists():
+        for defaults_h in sorted(device_classes_dir.rglob("*_defaults.h")):
+            dc_defaults, _ = parse_board_config_defaults(defaults_h)
+            for k, v in dc_defaults.items():
+                defaults.setdefault(k, v)
     lv_conf_defines = set(parse_all_defines(lv_conf_h).keys())
 
     overrides_path = root / "src" / "boards" / board / "board_overrides.h"
@@ -699,6 +707,18 @@ def cmd_md(args: argparse.Namespace) -> None:
     boards = parse_boards_from_config_files(config_sh, config_project_sh)
     defaults, _unconditional = parse_board_config_defaults(board_config_h)
     descriptions = parse_board_config_descriptions(board_config_h)
+
+    # Pull defaults + descriptions from device-class default headers
+    # (e.g. src/app/device_classes/shutter_tester/shutter_defaults.h). These
+    # own their macros' #ifndef defaults and the comment lines above them.
+    device_classes_dir = root / "src" / "app" / "device_classes"
+    if device_classes_dir.exists():
+        for defaults_h in sorted(device_classes_dir.rglob("*_defaults.h")):
+            dc_defaults, _ = parse_board_config_defaults(defaults_h)
+            for k, v in dc_defaults.items():
+                defaults.setdefault(k, v)
+            dc_desc = parse_board_config_descriptions(defaults_h)
+            descriptions = merge_descriptions_prefer_first(descriptions, dc_desc)
 
     lv_conf_defines = set(parse_all_defines(lv_conf_h).keys())
 

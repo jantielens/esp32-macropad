@@ -138,6 +138,18 @@ private:
     // --- Lightweight state (kept even when evicted) ---
     uint32_t cachedGeneration; // Last seen pad_config generation
     bool tilesBuilt;
+    // Bitmask (by device-class registration index) of registered device
+    // classes whose pad_hold_scheme binding token appears on this pad.
+    // Recomputed in buildTiles(); drives engine acquire/release in
+    // show()/update()/hide() so a class-owned hardware engine (e.g. the
+    // shutter ADC) runs only while a consuming pad is visible. Generic — no
+    // device class is named here.
+    uint8_t padHoldMask;
+    // Bitmask of device classes whose engine this PadScreen instance is
+    // currently holding. Kept separate from padHoldMask so acquire/release
+    // stay balanced when buildTiles() runs after show() or a config rebuild
+    // flips the consumer set while the pad is visible.
+    uint8_t padHeldMask;
     char wakeScreen[CONFIG_SCREEN_ID_MAX_LEN]; // Cached wake_screen from config
     char pageBgTemplate[CONFIG_COLOR_MAX_LEN];     // Page background color/binding
     uint32_t pageBgDefault;                        // Fallback page bg color
@@ -156,6 +168,14 @@ private:
 #if HAS_IMAGE_FETCH
     void pollImageFrames();
 #endif
+
+    // Device-class engine-hold helpers (generic pad binding-scheme hold).
+    // padHasScheme() scans every binding on this pad for the given token
+    // prefix; reconcilePadHold() acquires/releases each class's engine to
+    // match padHoldMask; releaseAllPadHold() drops every held engine.
+    bool padHasScheme(const char* scheme) const;
+    void reconcilePadHold(const char* tag);
+    void releaseAllPadHold(const char* tag);
 
     // Event callbacks
     static void onTap(lv_event_t* e);

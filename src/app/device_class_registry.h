@@ -23,7 +23,9 @@ enum class DeviceClass {
     MACROPAD,
     EPAPER,
     HEADLESS,
-    // Future variants go here: DARKROOM_TIMER, SHUTTER_TESTER, COFFEE_SCALE
+    SHUTTER_TESTER,
+    COFFEE_SCALE,
+    DARKROOM_TIMER,
 };
 
 struct DeviceClassDescriptor {

@@ -4,6 +4,7 @@
 
 #include "../log_manager.h"
 #include "../action_parse.h"
+#include "../action_registry.h"
 #include "numericrocker_zones.h"
 #include <string.h>
 
@@ -161,30 +162,30 @@ static void numericrocker_destroy(WidgetState* state) {
 
 // ---- {step} substitution helpers (used by pad_screen_events.cpp) ----
 
-// Replace all occurrences of "{step}" in a char buffer with the signed value.
-static void substitute_step_in_field(char* field, size_t field_size, float step) {
-    const char* token = "{step}";
-    const size_t token_len = 6;
-    char tmp[24];
-    snprintf(tmp, sizeof(tmp), "%g", step);
-    size_t repl_len = strlen(tmp);
-
-    char* pos = strstr(field, token);
-    while (pos) {
-        size_t tail_len = strlen(pos + token_len);
-        if ((size_t)(pos - field) + repl_len + tail_len >= field_size) return;
-        memmove(pos + repl_len, pos + token_len, tail_len + 1);
-        memcpy(pos, tmp, repl_len);
-        pos = strstr(pos + repl_len, token);
-    }
-}
-
 void numericrocker_substitute_step(ButtonAction* act, float step) {
-    substitute_step_in_field(act->mqtt_payload, sizeof(act->mqtt_payload), step);
-    substitute_step_in_field(act->key_sequence, sizeof(act->key_sequence), step);
-    substitute_step_in_field(act->volume_value, sizeof(act->volume_value), step);
-    substitute_step_in_field(act->brightness_value, sizeof(act->brightness_value), step);
-    substitute_step_in_field(act->timer_value, sizeof(act->timer_value), step);
+    // Type-dispatched: only touch the active union arm.
+    if (strcmp(act->type, ACTION_TYPE_MQTT) == 0) {
+        action_substitute_step_field(act->payload.mqtt.mqtt_payload,
+                                     sizeof(act->payload.mqtt.mqtt_payload), step);
+    } else if (strcmp(act->type, ACTION_TYPE_KEY) == 0) {
+        action_substitute_step_field(act->payload.key.key_sequence,
+                                     sizeof(act->payload.key.key_sequence), step);
+    } else if (strcmp(act->type, ACTION_TYPE_VOLUME) == 0) {
+        action_substitute_step_field(act->payload.volume.volume_value,
+                                     sizeof(act->payload.volume.volume_value), step);
+    } else if (strcmp(act->type, ACTION_TYPE_BRIGHTNESS) == 0) {
+        action_substitute_step_field(act->payload.brightness.brightness_value,
+                                     sizeof(act->payload.brightness.brightness_value), step);
+    } else if (strcmp(act->type, ACTION_TYPE_TIMER) == 0) {
+        action_substitute_step_field(act->payload.timer.timer_value,
+                                     sizeof(act->payload.timer.timer_value), step);
+    } else {
+        // Device-class action types store their value in the opaque
+        // payload arm; delegate to the registered handler so {step} reaches
+        // fields shared code cannot see (e.g. darkroom strip/expose/meter).
+        const ActionTypeDef* def = action_type_find(act->type);
+        if (def && def->substitute_step) def->substitute_step(*act, step);
+    }
 }
 
 // ---- Registration ----

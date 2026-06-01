@@ -15,9 +15,14 @@ enum LogLevel : uint8_t {
     LOG_LEVEL_DEBUG = 4,
 };
 
-#define LOGE(module, format, ...) ((void)0)
-#define LOGW(module, format, ...) ((void)0)
-#define LOGI(module, format, ...) ((void)0)
-#define LOGD(module, format, ...) ((void)0)
+// Variadic template noop — evaluates all arguments (satisfying -Werror=unused-variable
+// for variables used only in log calls) but emits no code at runtime.
+template<typename... Args>
+inline void log_noop(Args&&...) {}
+
+#define LOGE(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
+#define LOGW(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
+#define LOGI(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
+#define LOGD(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
 
 #endif // LOG_MANAGER_H

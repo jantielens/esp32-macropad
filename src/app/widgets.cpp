@@ -18,4 +18,8 @@
 #include "widgets/numericrocker_widget.cpp"
 #include "widgets/list_widget.cpp"
 
+#if IS_SHUTTER_TESTER
+#include "device_classes/shutter_tester/widgets/waveform_widget.cpp"
+#endif
+
 #endif // HAS_DISPLAY

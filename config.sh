@@ -60,6 +60,10 @@ declare -A FQBN_TARGETS=(
     ["jc3636w518"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3636W518 (16MB + OPI PSRAM)
     ["esp32-p4-lcd4b"]="esp32:esp32:esp32p4:FlashSize=32M,PSRAM=enabled,PartitionScheme=ota_8mb_32MB" # ESP32-P4 Waveshare WIFI6-Touch-LCD-4B (720x720 MIPI-DSI + GT911 touch; 32MB + 32MB PSRAM)
     ["jc4880p433"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 (480x800 MIPI-DSI ST7701 + GT911 touch; 16MB + 32MB PSRAM)
+    ["jc4880p433-shutter"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + BPW34 photodiode array (Shutter Tester variant)
+    ["jc4880p433-hx711"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + HX711 load cell amplifier (Coffee Scale variant)
+    ["jc4880p433-nau7802"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + NAU7802 I2C load cell ADC (Coffee Scale variant)
+    ["jc4880p433-darkroom"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + TSL2591 light sensor + Shelly relays (Darkroom Timer variant)
     ["jc1060p470c"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC1060P470C (1024x600 MIPI-DSI JD9165 + GT911 touch; 16MB + 32MB PSRAM)
     ["esp32c3-withsensors"]="esp32:esp32:nologo_esp32c3_super_mini:CDCOnBoot=cdc,PartitionScheme=ota_2mb" # ESP32-C3 Super Mini headless sensor node (no display; HAS_BLE + sensors)
     ["inkplate5v2"]="Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb" # Soldered Inkplate 5V2 (ESP32 classic, 5.17" 720x1280 3-bit grayscale e-paper; 4MB flash + 4MB QSPI PSRAM)
@@ -232,10 +236,13 @@ get_fqbn_for_board() {
 # tests/test_branding_mirror.sh.
 device_class_brand_prefix() {
     case "$1" in
-        macropad) echo "ESP32 Macropad" ;;
-        epaper)   echo "ESP32-MP E-Paper" ;;
-        headless) echo "ESP32-MP Headless" ;;
-        *)        echo "" ;;
+        macropad)       echo "ESP32 Macropad" ;;
+        epaper)         echo "ESP32-MP E-Paper" ;;
+        headless)       echo "ESP32-MP Headless" ;;
+        shutter_tester) echo "ESP32-MP Shutter Tester" ;;
+        coffee_scale)   echo "ESP32-MP Coffee Scale" ;;
+        darkroom_timer) echo "ESP32-MP Darkroom Timer" ;;
+        *)              echo "" ;;
     esac
 }
 
@@ -250,6 +257,19 @@ device_class_for_board() {
     local board_name="$1"
     local overrides_file="$SCRIPT_DIR/src/boards/$board_name/board_overrides.h"
     if [[ -f "$overrides_file" ]]; then
+        # IS_* product variants take precedence over hardware-detected classes.
+        if grep -qE '^[[:space:]]*#define[[:space:]]+IS_SHUTTER_TESTER[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+            echo "shutter_tester"
+            return
+        fi
+        if grep -qE '^[[:space:]]*#define[[:space:]]+IS_COFFEE_SCALE[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+            echo "coffee_scale"
+            return
+        fi
+        if grep -qE '^[[:space:]]*#define[[:space:]]+IS_DARKROOM_TIMER[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+            echo "darkroom_timer"
+            return
+        fi
         if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_EPAPER[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
             echo "epaper"
             return

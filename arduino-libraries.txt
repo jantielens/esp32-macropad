@@ -31,6 +31,11 @@ PubSubClient@2.8
 # Sensors
 Adafruit BME280 Library
 Adafruit Unified Sensor
+Adafruit TSL2591 Library
+
+# Coffee Scale device class — load-cell ADCs
+SparkFun Qwiic Scale NAU7802 Arduino Library@1.0.6
+HX711 Arduino Library@0.7.5
 
 # Display (TFT_eSPI for ESP32-2432S028R CYD and compatible displays)
 TFT_eSPI@2.5.43

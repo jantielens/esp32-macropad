@@ -1,0 +1,33 @@
+<!-- Shutter guided test definitions fragment.
+     Monospace textarea for editing guided test definitions. -->
+
+<div class="section-header">
+  <h2>🧪 Guided Test Definitions</h2>
+  <p>Define guided test sessions with specific speeds and shot counts.</p>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div id="shutter-tests-loading" class="text-muted small mb-2">Loading…</div>
+    <div id="shutter-tests-editor" style="display:none">
+      <textarea id="shutter-tests-textarea" class="form-control mb-2"
+                rows="20"
+                style="font-family:monospace;font-size:0.85rem;white-space:pre;overflow-wrap:normal;overflow-x:auto"
+                spellcheck="false"
+                placeholder="# Example test script&#10;name: my-test|My Camera Test&#10;shots_per_speed: 3&#10;1/1000s&#10;1/500s&#10;1/250s"></textarea>
+      <div id="shutter-tests-validation" class="small mb-2" style="display:none"></div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-primary btn-sm" onclick="shutterTestsSave()">💾 Save</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="shutterTestsReload()">↩ Reload</button>
+      </div>
+      <div id="shutter-tests-status" class="small mt-2" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div id="shutter-tests-list-card" class="card mb-3" style="display:none">
+  <div class="card-body">
+    <h5>Parsed Tests</h5>
+    <div id="shutter-tests-parsed-list" class="small"></div>
+  </div>
+</div>
