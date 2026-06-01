@@ -393,6 +393,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/print_log_actions.cpp
   - src/app/device_classes/darkroom_timer/shelly_actions.cpp
   - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
+  - src/app/device_classes/darkroom_timer/web_portal_prints.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.cpp
   - src/app/device_classes/shutter_tester/shutter_align_binding.h
@@ -763,6 +764,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
+  - src/app/device_classes/darkroom_timer/components/darkroom_component.cpp
+  - src/app/device_classes/darkroom_timer/components/prints_component.cpp
   - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
   - src/app/device_classes/darkroom_timer/darkroom_timer_device_class.cpp
   - src/app/device_classes/darkroom_timer/darkroom_timer_payload.h
@@ -778,6 +781,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/shelly_actions.cpp
   - src/app/device_classes/darkroom_timer/test_strip.cpp
   - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
+  - src/app/device_classes/darkroom_timer/web_portal_prints.cpp
   - src/app/device_classes/darkroom_timer/web_portal_relay.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
