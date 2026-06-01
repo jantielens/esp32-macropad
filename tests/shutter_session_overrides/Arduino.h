@@ -53,6 +53,12 @@ inline String operator+(const char* lhs, const String& rhs) {
 }
 
 // glibc lacks strlcpy; provide BSD-style truncating copy.
+// On newer glibc (2.38+) strlcpy is declared with __attribute__((nonnull)),
+// which our fallback inherits; the internal NULL guards then trip
+// -Werror=nonnull-compare. Keep the guards for older toolchains but silence
+// the diagnostic around the definition.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnonnull-compare"
 extern "C" inline size_t strlcpy(char* dst, const char* src, size_t dst_size) {
     size_t src_len = src ? strlen(src) : 0;
     if (dst_size > 0) {
@@ -62,5 +68,6 @@ extern "C" inline size_t strlcpy(char* dst, const char* src, size_t dst_size) {
     }
     return src_len;
 }
+#pragma GCC diagnostic pop
 
 #endif // ARDUINO_H
