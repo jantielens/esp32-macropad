@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Partial UI after darkroom print-log save** — saving a print session blanks the DSI panel (panel sleep + framebuffer zeroing) to avoid flash-write flicker, but on wake LVGL's dirty-area tracking still believed the screen was painted, so only self-invalidating widgets repainted and the rest stayed black until the next navigation. The blank/restore window now forces a full-screen invalidate on wake so the entire UI repaints into the freshly-blanked framebuffers.
 * **Numeric rocker `{step}` substitution for device-class actions** — the numeric rocker widget now substitutes its signed `{step}` value into device-class action value fields (e.g. darkroom `strip`/`expose`/`meter`/`print` `adjust_*` commands and the coffee-scale `scale` `cal_weight` adjust) via a new `substitute_step` hook on `ActionTypeDef`. Previously only built-in action types (`mqtt`, `key`, `volume`, `brightness`, `timer`) were handled, so device-class actions received the literal string `{step}`.
 * **Action type registry capacity** — raised `MAX_ACTION_TYPES` from 4 to 8 so all five darkroom action types register; previously the fifth registration was silently dropped.
 

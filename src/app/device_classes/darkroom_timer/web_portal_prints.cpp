@@ -61,6 +61,13 @@ static void restore_display(uint8_t saved) {
     if (displayManager && displayManager->getDriver()) {
         displayManager->lock();
         displayManager->getDriver()->displayWake();
+        // displaySleep() zeroes both DPI framebuffers, but LVGL's dirty-area
+        // tracking still believes the screen is painted, so it would only
+        // redraw self-invalidating widgets — leaving the rest black until the
+        // next navigation. Force a full-screen invalidate so the entire UI
+        // repaints into the freshly-blanked framebuffers.
+        lv_obj_t* scr = lv_screen_active();
+        if (scr) lv_obj_invalidate(scr);
         displayManager->unlock();
     }
     if (saved > 0) display_manager_set_backlight_brightness(saved);
