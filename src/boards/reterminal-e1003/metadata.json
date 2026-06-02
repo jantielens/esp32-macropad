@@ -1,0 +1,18 @@
+{
+  "device_class": "epaper",
+  "board_label": "reTerminal E1003",
+  "description": "Seeed reTerminal E1003 — 10.3\" 1404x1872 16-level grayscale IT8951 e-paper, ESP32-S3, battery-powered with USB-C charging. Designed for ultra-low-power, sunlight-readable dashboards.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 32,
+  "psram_mb": 8,
+  "wireless": {
+    "wifi": true,
+    "ble": false
+  },
+  "display": {
+    "size": "10.3\"",
+    "resolution": "1404x1872",
+    "type": "E-Paper",
+    "touch": false
+  }
+}

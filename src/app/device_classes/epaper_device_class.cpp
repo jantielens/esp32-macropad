@@ -39,6 +39,9 @@ extern MqttManager mqtt_manager;
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <time.h>
+#if HAS_EPAPER_WAKE_BUTTON
+#include <driver/rtc_io.h>  // rtc_gpio_pullup_en for deep-sleep button wake
+#endif
 #if HAS_EPAPER_FRONTLIGHT
 #include <esp_task_wdt.h>
 #endif
@@ -54,6 +57,7 @@ EpaperConfig g_epaper_config = {};
 static const char *kNvsNamespace      = "device_cfg";
 static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
+static const char *kKeyCrcEnabled     = "ep_crc_en";
 static const char *kKeyOverlayEn      = "ep_ovl_en";
 static const char *kKeyOverlayPos     = "ep_ovl_pos";
 static const char *kKeyOverlayCol     = "ep_ovl_col";
@@ -167,6 +171,7 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.epaper_url[0] = '\0';
 		g_epaper_config.epaper_rotation = 0;
 		g_epaper_config.epaper_last_crc32 = 0;
+		g_epaper_config.epaper_crc32_enabled = false;
 		g_epaper_config.epaper_overlay_enabled = false;
 		g_epaper_config.epaper_overlay_position = 3;
 		g_epaper_config.epaper_overlay_color = 0;
@@ -194,6 +199,7 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		g_epaper_config.epaper_rotation = prefs.getUChar(kKeyRotation, 0);
 		if (g_epaper_config.epaper_rotation > 3) g_epaper_config.epaper_rotation = 0;
 		g_epaper_config.epaper_last_crc32 = prefs.getUInt(kKeyCrc32, 0);
+		g_epaper_config.epaper_crc32_enabled = prefs.getBool(kKeyCrcEnabled, false);
 
 		g_epaper_config.epaper_overlay_enabled = prefs.getBool(kKeyOverlayEn, false);
 		g_epaper_config.epaper_overlay_position = prefs.getUChar(kKeyOverlayPos, 3);
@@ -230,6 +236,7 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putUChar(kKeyRotation, g_epaper_config.epaper_rotation);
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_last_crc32);
+		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_crc32_enabled);
 		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_overlay_enabled);
 		prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_overlay_position);
 		prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_overlay_color);
@@ -260,6 +267,7 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) {
 		root["caps"]["epaper"] = true;
 		root["epaper_rotation"] = g_epaper_config.epaper_rotation;
+		root["epaper_crc32_enabled"] = g_epaper_config.epaper_crc32_enabled;
 		root["epaper_overlay_enabled"] = g_epaper_config.epaper_overlay_enabled;
 		root["epaper_overlay_position"] = g_epaper_config.epaper_overlay_position;
 		root["epaper_overlay_color"] = g_epaper_config.epaper_overlay_color;
@@ -290,8 +298,9 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 						: (uint8_t)(body["epaper_rotation"] | 0);
 				if (v > 3) v = 0;
 				g_epaper_config.epaper_rotation = v;
-		}
-		if (body.containsKey("epaper_overlay_enabled")) {
+		}		if (body.containsKey("epaper_crc32_enabled")) {
+			g_epaper_config.epaper_crc32_enabled = body["epaper_crc32_enabled"] | false;
+		}		if (body.containsKey("epaper_overlay_enabled")) {
 				g_epaper_config.epaper_overlay_enabled = body["epaper_overlay_enabled"] | false;
 		}
 		if (body.containsKey("epaper_overlay_position")) {
@@ -398,11 +407,20 @@ static void wake_classify_hook(bool *handled, bool *force_config) {
 static void sleep_prepare_hook(uint32_t *seconds_inout) {
 		// E-paper button-only mode: when wake_seconds is 0, keep it at 0 so
 		// power_manager_sleep_for() can skip timer wake and rely on class-owned
-		// wake sources (ext0 here). The core clamps 0->1 only when no class owns
+		// wake sources (ext1 here). The core clamps 0->1 only when no class owns
 		// the active power mode.
 		(void)seconds_inout;
 #if HAS_EPAPER_WAKE_BUTTON
-		esp_sleep_enable_ext0_wakeup((gpio_num_t)EPAPER_BUTTON_PIN, 0);
+		// Match the Seeed reTerminal LowPower_DeepSleep reference: use ext1 (more
+		// robust than ext0 on the ESP32-S3) and enable the RTC-domain pull-up so
+		// the active-low button line stays HIGH while asleep. The board's HW
+		// pull-up is disabled in the RTC domain during deep sleep, so without
+		// rtc_gpio_pullup_en() the line can drift and the falling edge is never
+		// latched -- the press appears to do nothing.
+		const gpio_num_t wake_pin = (gpio_num_t)EPAPER_BUTTON_PIN;
+		rtc_gpio_pullup_en(wake_pin);
+		rtc_gpio_pulldown_dis(wake_pin);
+		esp_sleep_enable_ext1_wakeup(1ULL << EPAPER_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
 #endif
 }
 
@@ -480,6 +498,7 @@ static void on_loop_hook() {
 // block plus the splash decisions that lived in app.ino).
 // ---------------------------------------------------------------------------
 static bool run_duty_cycle_hook(DeviceConfig *config) {
+		LOGI("Epaper", "[spike] run_duty_cycle_hook entry");
 		// Splash policy (moved from app.ino):
 		//   - Cold boot: always show the boot splash so a freshly plugged-in
 		//     device gets proof of life.
@@ -506,8 +525,11 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// voltage before burning ~80 mA on WiFi for 5+ seconds. Below 3.2 V
 		// the panel waveform + radio together risk a brownout reset, so paint
 		// a "low battery" status frame and go back to sleep.
+		LOGI("Epaper", "[spike] splash done; entering battery gate");
 		if (epaper_driver_begin()) {
+				LOGI("Epaper", "[spike] driver begin ok; reading battery");
 				const uint16_t mv = epaper_driver_battery_mv();
+				LOGI("Epaper", "[spike] battery mv=%u", mv);
 				if (mv > 0 && mv < 3200) {
 						const uint8_t pct = epaper_battery_percent(mv);
 						epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
@@ -518,11 +540,14 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						return true;
 				}
 				epaper_driver_sleep();
+		} else {
+				LOGW("Epaper", "[spike] driver begin returned false");
 		}
 
 		// WiFi -> CRC check -> conditional draw -> sleep. Each checkpoint feeds
 		// the RTC-retained timing budget so the portal can show a per-cycle
 		// breakdown.
+		LOGI("Epaper", "[spike] battery gate passed; connecting WiFi");
 		const bool connected = wifi_manager_connect(config, true);
 		if (!connected) {
 				const uint32_t backoff = power_manager_note_wifi_failure(

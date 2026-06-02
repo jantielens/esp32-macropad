@@ -12,6 +12,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+* **Seeed reTerminal E1003 e-paper board (`reterminal-e1003`)** — a second `epaper` device-class target: a 10.3" 1404×1872 16-level grayscale panel driven by an IT8951 controller on an ESP32-S3 (XIAO form factor, 32 MB flash + 8 MB OPI PSRAM). The driver is self-contained (raw IT8951 HSPI sequences plus a 4 bpp PSRAM framebuffer wrapped in Adafruit_GFX) and decodes dashboard images with JPEGDEC straight to 16-level grayscale at the panel's native resolution — no on-device scaling, prioritizing the battery-powered refresh path. Shares the existing e-paper duty-cycle runtime (scheduled wake, CRC-skip refresh, status overlay, deep sleep) and Refresh-button wake. The portal VCOM page is inert on this board (IT8951 VCOM is set internally), degrading gracefully. Seeed_GxEPD2 is git-installed by `setup.sh`; `Adafruit GFX Library` and `JPEGDEC` are added as registry dependencies. See [docs/epaper-guide.md](docs/epaper-guide.md).
+
 ## [1.19.0] - 2026-06-01
 
 This release promotes three specialized firmware builds — **Coffee Scale**, **Darkroom Timer**, and **Shutter Tester** — into the main project as first-class device classes. Each is selected at compile time by an `IS_*` flag, aggregated under `src/app/device_classes/<class>/`, and gated so it adds zero footprint to every other board built from the same source tree. The shared device-class branding, portal aggregation, action-type registry, and binding-scheme registry introduced in 1.17.0–1.18.0 are what made these three classes drop in cleanly.

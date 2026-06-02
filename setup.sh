@@ -78,6 +78,19 @@ if grep -q '"Inkplate_Boards' "$SCRIPT_DIR_EARLY/config.sh" \
     arduino-cli lib install "InkplateLibrary"
 fi
 
+# Install Seeed_GxEPD2 for the reTerminal E1003 e-paper target. This library is
+# NOT in the Arduino registry (only upstream GxEPD2, which lacks IT8951
+# support), so it is installed from git. Skipped silently if no reTerminal
+# board is present in FQBN_TARGETS.
+if grep -q '"reterminal-e1003"' "$SCRIPT_DIR_EARLY/config.sh" \
+        || ([[ -f "$SCRIPT_DIR_EARLY/config.project.sh" ]] && grep -q '"reterminal-e1003"' "$SCRIPT_DIR_EARLY/config.project.sh"); then
+    echo "Installing Seeed_GxEPD2 (git; reTerminal E1003 IT8951 support)..."
+    # git-url installs require the unsafe-install flag.
+    arduino-cli config set library.enable_unsafe_install true
+    arduino-cli lib install --git-url https://github.com/Seeed-Projects/Seeed_GxEPD2.git \
+        || echo "Warning: Seeed_GxEPD2 install failed (reterminal-e1003 builds will fail until installed)"
+fi
+
 # Install/register template-provided custom partition schemes.
 #
 # This is required for any board FQBN using `PartitionScheme=...`.

@@ -89,8 +89,9 @@ ESP32 Macropad runs on these ESP32 development boards:
 | **Guition JC4880P433** | ESP32-P4 | 4.3" IPS LCD | 800 × 480 | Rectangle |
 | **Guition JC1060P470C** | ESP32-P4 | 7.0" IPS LCD | 1024 × 600 | Rectangle |
 | **Soldered Inkplate 5V2** | ESP32 | 5.17" 3-bit grayscale e-paper | 720 × 1280 | Portrait |
+| **Seeed reTerminal E1003** | ESP32-S3 | 10.3" 16-level grayscale e-paper | 1404 × 1872 | Portrait |
 
-Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2 is the current non-touch e-paper target.
+Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2 and Seeed reTerminal E1003 are the current non-touch e-paper targets.
 
 ### Device Classes
 

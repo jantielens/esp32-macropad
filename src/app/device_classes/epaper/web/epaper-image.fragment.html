@@ -19,6 +19,11 @@
         <option value="3">270°</option>
       </select>
     </div>
+    <div class="mb-3 form-check">
+      <input type="checkbox" class="form-check-input" id="epaper_crc32_enabled" name="epaper_crc32_enabled">
+      <label class="form-check-label" for="epaper_crc32_enabled">Use CRC32 change detection</label>
+      <div class="form-text">When enabled, the device fetches a small <code>&lt;image-url&gt;.crc32</code> sidecar before each refresh and skips the slow panel redraw when the image is unchanged. Leave off if your server does not publish CRC32 sidecars.</div>
+    </div>
     <div class="table-responsive mt-3">
       <table class="table table-sm align-middle">
         <thead>
@@ -27,6 +32,7 @@
             <th scope="col">Image URL</th>
             <th scope="col" style="width: 170px;">Duration (s)</th>
             <th scope="col" style="width: 90px;">Stay</th>
+            <th scope="col" style="width: 110px;">Action</th>
           </tr>
         </thead>
         <tbody>
@@ -35,34 +41,40 @@
             <td><input type="url" class="form-control" name="ep_c0_url" maxlength="255" placeholder="https://example.com/image-1.png"></td>
             <td><input type="number" class="form-control" name="ep_c0_int" min="1" max="86400" placeholder="900"></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c0_stay"></td>
+            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="0">Show now</button></td>
           </tr>
           <tr>
             <td>2</td>
             <td><input type="url" class="form-control" name="ep_c1_url" maxlength="255" placeholder="https://example.com/image-2.png"></td>
             <td><input type="number" class="form-control" name="ep_c1_int" min="1" max="86400" placeholder="900"></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c1_stay"></td>
+            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="1">Show now</button></td>
           </tr>
           <tr>
             <td>3</td>
             <td><input type="url" class="form-control" name="ep_c2_url" maxlength="255" placeholder="https://example.com/image-3.png"></td>
             <td><input type="number" class="form-control" name="ep_c2_int" min="1" max="86400" placeholder="900"></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c2_stay"></td>
+            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="2">Show now</button></td>
           </tr>
           <tr>
             <td>4</td>
             <td><input type="url" class="form-control" name="ep_c3_url" maxlength="255" placeholder="https://example.com/image-4.png"></td>
             <td><input type="number" class="form-control" name="ep_c3_int" min="1" max="86400" placeholder="900"></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c3_stay"></td>
+            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="3">Show now</button></td>
           </tr>
           <tr>
             <td>5</td>
             <td><input type="url" class="form-control" name="ep_c4_url" maxlength="255" placeholder="https://example.com/image-5.png"></td>
             <td><input type="number" class="form-control" name="ep_c4_int" min="1" max="86400" placeholder="900"></td>
             <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c4_stay"></td>
+            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="4">Show now</button></td>
           </tr>
         </tbody>
       </table>
     </div>
+    <div id="epaper-show-now-status" class="form-text" style="min-height:1.2em;"></div>
     <div class="form-text">Fill top-to-bottom. Empty URLs are skipped. <code>Stay</code> keeps showing that image when content is unchanged.</div>
     <div class="form-text">Duration is required for each configured slot and applies while that slot is active.</div>
   </div>

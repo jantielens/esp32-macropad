@@ -9,19 +9,23 @@ ms.topic: concept
 
 The e-paper device class is the low-power, non-interactive branch of ESP32 Macropad.
 
-Instead of rendering an LVGL user interface and waiting for touch input, an e-paper device wakes on demand, refreshes one or more configured full-screen images, and returns to deep sleep. The current board target is the Soldered Inkplate 5V2.
+Instead of rendering an LVGL user interface and waiting for touch input, an e-paper device wakes on demand, refreshes one or more configured full-screen images, and returns to deep sleep. The current board targets are the Soldered Inkplate 5V2 and the Seeed reTerminal E1003.
 
 This guide holds the detailed e-paper-specific material. Generic project docs, such as the README and changelog, stay intentionally high level so they do not become a second copy of the same evolving information.
 
 ## Current Scope
 
-The current implementation targets one board and one usage model:
+The current implementation targets two boards and one usage model:
 
-* Board: Inkplate 5V2
-* SoC: ESP32 classic
-* Display: 720 × 1280 3-bit grayscale e-paper
+| Board | SoC | Display | Decode |
+|---|---|---|---|
+| Inkplate 5V2 | ESP32 classic | 720 × 1280 3-bit grayscale | Inkplate library |
+| Seeed reTerminal E1003 | ESP32-S3 | 1404 × 1872 16-level grayscale (IT8951) | JPEGDEC, native resolution |
+
 * Interaction model: non-touch, battery-oriented dashboard
 * Render model: fetch the current remote image slot, draw it, sleep
+
+The reTerminal E1003 driver assumes the server delivers a JPEG already at the panel's native resolution and decodes it directly to 16-level grayscale — there is no on-device scaling, by design, to keep the battery-powered refresh path fast.
 
 The shared web portal is still used for setup and configuration, but the runtime behavior is intentionally much simpler than the interactive display class.
 
@@ -49,7 +53,7 @@ flowchart TD
 
 ## Board Profile
 
-The Inkplate 5V2 is materially different from the interactive boards in this repository.
+The e-paper boards are materially different from the interactive boards in this repository.
 
 * `HAS_EPAPER` is enabled
 * `HAS_DISPLAY` is disabled
@@ -70,7 +74,7 @@ Each refresh cycle uses the same high-level sequence:
 4. Compare the sidecar value to the last successfully displayed CRC.
 5. Skip the panel refresh when the CRC is unchanged, unless the refresh was explicitly forced.
 6. Clear the framebuffer so the boot splash or low-battery screen does not bleed through at the configured rotation.
-7. Draw the image with the Inkplate library.
+7. Draw the image with the board driver (Inkplate library on the 5V2; JPEGDEC → IT8951 framebuffer on the reTerminal E1003).
 8. Composite the status overlay on top of the image.
 9. Trigger the panel refresh.
 10. Read battery voltage.
@@ -78,7 +82,7 @@ Each refresh cycle uses the same high-level sequence:
 12. Put the panel to sleep.
 13. Enter ESP32 deep sleep until the next wake.
 
-The image itself is fetched and decoded by the Inkplate library. The firmware does not implement a custom PNG, JPEG, or dithering pipeline for this board class.
+On the Inkplate 5V2, the image is fetched and decoded by the Inkplate library. On the reTerminal E1003, the firmware fetches the JPEG over HTTP(S) and decodes it with JPEGDEC straight into the 16-level grayscale framebuffer at native resolution (no scaling or dithering).
 
 A refresh is always forced (CRC skip is bypassed) when any of these is true:
 

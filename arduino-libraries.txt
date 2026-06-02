@@ -43,3 +43,9 @@ lvgl@9.5.0
 
 # Display (Arduino_GFX for JC3248W535, JC3636W518, and other QSPI displays)
 GFX Library for Arduino@1.6.5
+
+# E-Paper (Seeed reTerminal E1003 — IT8951 grayscale panel via Seeed_GxEPD2)
+# Note: Seeed_GxEPD2 is not in the Arduino registry and is git-installed by
+# setup.sh (see the reTerminal block there). These two are its registry deps.
+Adafruit GFX Library
+JPEGDEC

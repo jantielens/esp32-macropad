@@ -8,7 +8,7 @@
 #   --full        Flash bootloader + partitions + boot_app0 + app at the correct offsets (preserves NVS by default)
 #   --app-only    Flash only the app binary at the correct app offset
 #   --merged      Flash merged image at 0x0 (destructive; will overwrite NVS on most layouts)
-#   --baud <rate> Set esptool baud rate for full/app-only/merged/erase (default: auto; retries at 115200 on failure)
+#   --baud <rate> Set esptool baud rate for full/app-only/merged/erase (default: auto; steps down 460800/230400/115200 on failure)
 #   --erase-flash Erase entire flash before flashing (destructive)
 #   --erase-nvs   Erase only the NVS partition before flashing (requires partitions.bin)
 #
@@ -34,7 +34,7 @@ Options:
     --full        Flash bootloader + partitions + boot_app0 + app at the correct offsets (preserves NVS by default)
     --app-only    Flash only the app binary at the correct app offset
     --merged      Flash merged image at 0x0 (destructive; overwrites NVS on most layouts)
-        --baud <rate> Set esptool baud rate (default: auto; retries at 115200 on failure)
+        --baud <rate> Set esptool baud rate (default: auto; steps down 460800/230400/115200 on failure)
   --erase-flash Erase entire flash before flashing
   --erase-nvs   Erase only the NVS partition before flashing
   -h, --help    Show help
@@ -360,22 +360,40 @@ flash_with_esptool() {
     local baud_rate="$4"
     shift 4
 
-    local rc=0
-    if [[ "$esptool_cmd" == *.py ]]; then
-        python3 "$esptool_cmd" --chip "$chip_type" --port "$port" --baud "$baud_rate" "$@" || rc=$?
-    else
-        "$esptool_cmd" --chip "$chip_type" --port "$port" --baud "$baud_rate" "$@" || rc=$?
-    fi
+    # Descending fallback ladder. Many USB-UART bridges (notably CH340/CH341,
+    # used on the reTerminal E1003 and similar boards) negotiate 921600 during
+    # the stub handshake but then corrupt the data stream at that speed. Rather
+    # than dropping straight to a painfully slow 115200, step down through
+    # intermediate speeds that these bridges handle reliably.
+    local ladder=(921600 460800 230400 115200)
 
-    if [[ $rc -ne 0 && "$baud_rate" != "115200" ]]; then
-        echo -e "${YELLOW}esptool failed at baud $baud_rate; retrying at 115200...${NC}" >&2
+    run_esptool() {
+        local b="$1"
+        shift
         if [[ "$esptool_cmd" == *.py ]]; then
-            python3 "$esptool_cmd" --chip "$chip_type" --port "$port" --baud 115200 "$@"
+            python3 "$esptool_cmd" --chip "$chip_type" --port "$port" --baud "$b" "$@"
         else
-            "$esptool_cmd" --chip "$chip_type" --port "$port" --baud 115200 "$@"
+            "$esptool_cmd" --chip "$chip_type" --port "$port" --baud "$b" "$@"
         fi
-        return $?
-    fi
+    }
+
+    local rc=0
+    run_esptool "$baud_rate" "$@" && return 0
+    rc=$?
+
+    # Retry at progressively lower speeds below the one that just failed.
+    local b
+    for b in "${ladder[@]}"; do
+        if (( b >= baud_rate )); then
+            continue
+        fi
+        echo -e "${YELLOW}esptool failed at baud $baud_rate; retrying at $b...${NC}" >&2
+        if run_esptool "$b" "$@"; then
+            return 0
+        fi
+        rc=$?
+        baud_rate="$b"
+    done
 
     return $rc
 }

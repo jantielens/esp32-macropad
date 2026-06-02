@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 213
+Total flags: 216
 
 ### Features (HAS_*)
 
@@ -64,6 +64,8 @@ Total flags: 213
 
 - **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin.
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
+- **EPAPER_BATTERY_ADC_PIN** default: `(no default)` — ADC pin for the battery sense divider (GPIO1 on the E1003).
+- **EPAPER_BATTERY_ENABLE_PIN** default: `(no default)` — Drive HIGH ~5ms before sampling to gate the battery divider on (GPIO40 on E1003).
 - **EPAPER_BUTTON_PIN** default: `36` — (typical Inkplate wiring uses GPIO36 with an external pullup).
 - **HX711_DOUT_PIN** default: `-1` — HX711 data-out pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **HX711_SCK_PIN** default: `-1` — HX711 clock pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
@@ -162,6 +164,7 @@ Total flags: 213
 - **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
+- **EPAPER_BATTERY_DIVIDER** default: `(no default)` — Voltage divider ratio applied to the raw ADC millivolt reading.
 - **EPAPER_FAST_REFRESH** default: `false` — button wakes skip straight to the image fetch to avoid the second waveform.
 - **HEALTH_HISTORY_ENABLED** default: `1` — Enable device-side health history ring buffer for charting in the web portal
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
@@ -274,6 +277,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -293,6 +297,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | — | — |
 | inkplate5v2 | — | — |
+| reterminal-e1003 | — | — |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)

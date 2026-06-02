@@ -24,11 +24,12 @@ RTC_DATA_ATTR static uint32_t g_refresh_count = 0;
 
 static EpaperRefreshOutcome s_last_outcome = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 
-EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
+static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const char* image_url,
+		bool force, bool allow_crc, bool persist_crc) {
 		EpaperRefreshOutcome out = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 		const uint32_t t0 = millis();
 
-		if (!config || strlen(g_epaper_config.epaper_url) == 0) {
+		if (!config || !image_url || strlen(image_url) == 0) {
 				LOGW("Epaper", "Refresh skipped: no URL configured");
 				s_last_outcome = out;
 				return out;
@@ -37,10 +38,11 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		// Compare sidecar CRC against last-known value to avoid unnecessary
 		// 10-30s panel refreshes. Skipped on force=true (portal "Refresh now")
 		// to avoid wasting 1-5s of sidecar retries when the user explicitly
-		// asks for a redraw.
+		// asks for a redraw, and only attempted when the user has opted in via
+		// the "Use CRC32 change detection" setting (default off).
 		EpaperCrcFetchResult crc_fetch = {0, 0, 0};
-		if (!force) {
-				crc_fetch = epaper_crc32_fetch_sidecar(g_epaper_config.epaper_url);
+		if (allow_crc && !force && g_epaper_config.epaper_crc32_enabled) {
+				crc_fetch = epaper_crc32_fetch_sidecar(image_url);
 		}
 		const uint32_t fresh_crc = crc_fetch.crc;
 		out.crc_used = fresh_crc;
@@ -49,7 +51,8 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		// Treat HTTP status 0 (begin/connect failure) and negative (HTTPClient
 		// error codes such as HTTPC_ERROR_CONNECTION_REFUSED) as transport-level
 		// failures, distinct from "server returned a non-200 response".
-		const bool sidecar_transport_failed = !force && crc_fetch.http_status <= 0;
+		const bool sidecar_transport_failed =
+				allow_crc && !force && g_epaper_config.epaper_crc32_enabled && crc_fetch.http_status <= 0;
 
 		if (!force && fresh_crc != 0 && fresh_crc == g_epaper_config.epaper_last_crc32) {
 				out.result = EpaperRefreshResult::Skipped;
@@ -106,7 +109,7 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 				esp_task_wdt_delete(nullptr);
 		}
 
-		const bool drew = epaper_driver_draw_url(g_epaper_config.epaper_url);
+		const bool drew = epaper_driver_draw_url(image_url);
 
 		if (drew) {
 				// Switch to the user's configured rotation so the overlay lands in
@@ -151,7 +154,7 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		}
 
 		// Persist CRC so subsequent wakes can short-circuit when unchanged.
-		if (fresh_crc != 0 && fresh_crc != g_epaper_config.epaper_last_crc32) {
+		if (persist_crc && fresh_crc != 0 && fresh_crc != g_epaper_config.epaper_last_crc32) {
 				g_epaper_config.epaper_last_crc32 = fresh_crc;
 				epaper_config_persist_crc(fresh_crc);
 		}
@@ -169,6 +172,16 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		++g_refresh_count;
 		s_last_outcome = out;
 		return out;
+}
+
+EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
+		return epaper_refresh_run_url(config, g_epaper_config.epaper_url,
+				force, true /*allow_crc*/, true /*persist_crc*/);
+}
+
+EpaperRefreshOutcome epaper_refresh_show_url(DeviceConfig* config, const char* image_url) {
+		return epaper_refresh_run_url(config, image_url,
+				true /*force*/, false /*allow_crc*/, false /*persist_crc*/);
 }
 
 uint32_t epaper_refresh_last_unix() {

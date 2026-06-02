@@ -26,6 +26,7 @@ struct EpaperConfig {
 		char epaper_url[CONFIG_EPAPER_URL_MAX_LEN];   // resolved runtime URL for current carousel slot (not user-configured)
 		uint8_t epaper_rotation;                      // 0..3, default 0
 		uint32_t epaper_last_crc32;                   // CRC32 of last successfully rendered image (0 = none)
+		bool epaper_crc32_enabled;                    // fetch "<url>.crc32" sidecar to skip unchanged refreshes (default false)
 
 		// On-image status overlay
 		bool epaper_overlay_enabled;                  // default false
