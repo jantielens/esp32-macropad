@@ -130,19 +130,53 @@ def _flatten_to_rgb(img: Image.Image) -> Image.Image:
     return img.convert("RGB")
 
 
-def fit_rgb_to_panel(img: Image.Image, width: int = PANEL_W, height: int = PANEL_H) -> Image.Image:
+# Resampling filters offered for the panel-fit downscale. NEAREST is the historical
+# default (matches the CLI tool and avoids resample blur before dithering); the
+# others trade hard edges for smoother detail. Keys are the stable names stored in
+# meta and submitted by the upload form. Order here is the order shown in the UI.
+RESAMPLERS: dict[str, Image.Resampling] = {
+    "nearest": Image.Resampling.NEAREST,
+    "box": Image.Resampling.BOX,
+    "bilinear": Image.Resampling.BILINEAR,
+    "hamming": Image.Resampling.HAMMING,
+    "bicubic": Image.Resampling.BICUBIC,
+    "lanczos": Image.Resampling.LANCZOS,
+}
+DEFAULT_RESAMPLER = "nearest"
+
+
+def resampler_choices() -> list[str]:
+    """Stable resampler names for the upload UI (in display order)."""
+    return list(RESAMPLERS.keys())
+
+
+def resolve_resampler(name: str | None) -> Image.Resampling:
+    """Map a resampler name to its PIL filter, falling back to the default."""
+    return RESAMPLERS.get((name or "").lower(), RESAMPLERS[DEFAULT_RESAMPLER])
+
+
+def fit_rgb_to_panel(
+    img: Image.Image,
+    width: int = PANEL_W,
+    height: int = PANEL_H,
+    *,
+    resample: Image.Resampling | None = None,
+) -> Image.Image:
     """Flatten transparency over white and cover-crop to the panel size.
 
-    Uses NEAREST resampling to match the CLI tool (avoids resample blur before
-    dithering). Revisit on the panel if smoother downscales are preferred.
+    ``resample`` selects the downscale filter (default NEAREST, matching the CLI
+    tool: avoids resample blur before dithering). Smoother filters (BICUBIC,
+    LANCZOS) retain more detail at the cost of softer edges -- experiment per
+    image via the upload page.
     """
     img = _flatten_to_rgb(img)
+    resample = resample or RESAMPLERS[DEFAULT_RESAMPLER]
 
     if img.size != (width, height):
         scale = max(width / img.width, height / img.height)
         resized_w = max(width, ceil(img.width * scale))
         resized_h = max(height, ceil(img.height * scale))
-        img = img.resize((resized_w, resized_h), Image.Resampling.NEAREST)
+        img = img.resize((resized_w, resized_h), resample)
 
         left = (resized_w - width) // 2
         top = (resized_h - height) // 2
@@ -400,15 +434,17 @@ def encode_g16p(
     crop: dict | None = None,
     gamma: float = CAL_GAMMA,
     highlights: float = CAL_HIGHLIGHTS,
+    resampler: str | None = None,
 ) -> tuple[bytes, Image.Image]:
     """Full upload pipeline: orientation -> fit -> calibrated tone -> dither -> G16P.
 
     Returns ``(g16p_bytes, preview_L)`` where ``preview_L`` is the post-tone,
     pre-pack grayscale image suitable for generating a gallery thumbnail.
+    ``resampler`` names the panel-fit downscale filter (see ``RESAMPLERS``).
     """
     oriented = apply_orientation(img, transform or {})
     framed = apply_crop(oriented, crop)
-    rgb = fit_rgb_to_panel(framed, width, height)
+    rgb = fit_rgb_to_panel(framed, width, height, resample=resolve_resampler(resampler))
     gray = calibrated_gray_levels(rgb, width=width, height=height, gamma=gamma, highlights=highlights)
     preview = gray_levels_to_preview(gray, width, height)
     nibbles = _dither_to_nibbles(gray, width, height)

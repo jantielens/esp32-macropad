@@ -200,6 +200,21 @@
             {% if knob.help %}<div class="form-text">{{ knob.help }}</div>{% endif %}
           </div>
           {% endfor %}
+          {% if resamplers %}
+          <div class="mb-1">
+            <label for="resampler" class="form-label fw-semibold mb-1">Downscale filter</label>
+            <select class="form-select" id="resampler" name="resampler">
+              {% for r in resamplers %}
+              <option value="{{ r }}" {% if r == resampler_default %}selected{% endif %}>{{ r|capitalize }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">
+              How the image is resized to the panel before dithering. <strong>Nearest</strong> keeps
+              hard edges (default); <strong>Lanczos</strong>/<strong>Bicubic</strong> retain more
+              detail but soften edges. Experiment to see what looks best on the panel.
+            </div>
+          </div>
+          {% endif %}
         </section>
 
         <!-- 4 · Caption -->

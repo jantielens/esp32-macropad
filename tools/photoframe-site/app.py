@@ -203,6 +203,8 @@ def upload_form(request: Request, device_id: str) -> Response:
             "knobs": knobs.to_client(),
             "device_aspect": device.width / device.height,
             "display_gamma": gray16.PREVIEW_DISPLAY_GAMMA,
+            "resamplers": gray16.resampler_choices(),
+            "resampler_default": gray16.DEFAULT_RESAMPLER,
         },
     )
 
@@ -254,6 +256,7 @@ def upload_submit(
     caption: str = Form(""),
     knob_values: str = Form(""),
     crop_values: str = Form(""),
+    resampler: str = Form(""),
 ) -> Response:
     config = cfg.load_config()
     user = _require_user(request, config)
@@ -269,16 +272,22 @@ def upload_submit(
         knob_raw = {}
     knob_vals = knobs.parse_values(knob_raw)
 
+    # Resampler is a categorical (non-knob) server-side choice; normalize unknown
+    # values to the default so meta always records the filter actually used.
+    resampler = resampler.strip().lower()
+    if resampler not in gray16.RESAMPLERS:
+        resampler = gray16.DEFAULT_RESAMPLER
+
     crop = _parse_json_object(crop_values)
     raw = file.file.read()
     try:
         with Image.open(io.BytesIO(raw)) as src:
             src.load()
             logger.info(
-                "upload device=%s src=%dx%d transform=%s crop=%s gamma=%.3f highlights=%.3f",
+                "upload device=%s src=%dx%d transform=%s crop=%s gamma=%.3f highlights=%.3f resampler=%s",
                 device_id, src.width, src.height, device.image_transform,
                 gray16.describe_crop(crop, src.width, src.height),
-                knob_vals["gamma"], knob_vals["highlights"],
+                knob_vals["gamma"], knob_vals["highlights"], resampler,
             )
             g16p_bytes, preview = gray16.encode_g16p(
                 src,
@@ -288,6 +297,7 @@ def upload_submit(
                 crop=crop,
                 gamma=knob_vals["gamma"],
                 highlights=knob_vals["highlights"],
+                resampler=resampler,
             )
     except Exception as exc:  # noqa: BLE001 - surface decode/encode failure to user
         return templates.TemplateResponse(
@@ -296,6 +306,8 @@ def upload_submit(
              "knobs": knobs.to_client(),
              "device_aspect": device.width / device.height,
              "display_gamma": gray16.PREVIEW_DISPLAY_GAMMA,
+             "resamplers": gray16.resampler_choices(),
+             "resampler_default": gray16.DEFAULT_RESAMPLER,
              "error": f"Could not process image: {exc}"},
             status_code=400,
         )
@@ -325,6 +337,7 @@ def upload_submit(
         "uploader": user.email,
         "knobs": knob_vals,
         "crop": crop or {},
+        "resampler": resampler,
     }
     store.store_image(device.container_sas_url, image_id, g16p_bytes, thumb_png, meta)
     return RedirectResponse(f"/photos?device_id={device_id}", status_code=303)
