@@ -1,0 +1,599 @@
+{% extends "base.html" %}
+{% block title %}Upload · {{ device_id }}{% endblock %}
+{% block content %}
+<style>
+  .upload-flow {
+    --accent: #6d28d9;
+    --accent-2: #db2777;
+  }
+  .upload-flow .step {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    background: var(--bs-body-bg);
+    padding: 1.25rem 1.25rem 1.4rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: box-shadow .15s ease, border-color .15s ease;
+  }
+  .upload-flow .step:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 .2rem rgba(109, 40, 217, .15);
+  }
+  .upload-flow .step-head {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin-bottom: .9rem;
+  }
+  .upload-flow .step-num {
+    flex: 0 0 auto;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 2px 6px rgba(109, 40, 217, .35);
+  }
+  .upload-flow .step-title {
+    font-weight: 800;
+    letter-spacing: .02em;
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  .upload-flow .form-control,
+  .upload-flow .form-select {
+    border-radius: .75rem;
+    padding: .7rem .9rem;
+  }
+  .upload-flow .form-range { accent-color: var(--accent); }
+  .upload-flow input[type="checkbox"].form-check-input:checked {
+    background-color: var(--accent);
+    border-color: var(--accent);
+  }
+  .upload-flow .btn-upload {
+    border: 0;
+    border-radius: .85rem;
+    padding: .85rem 1rem;
+    font-weight: 800;
+    font-size: 1.1rem;
+    letter-spacing: .02em;
+    color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 6px 18px rgba(109, 40, 217, .35);
+    transition: transform .08s ease, box-shadow .15s ease;
+  }
+  .upload-flow .btn-upload:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(109, 40, 217, .45);
+    color: #fff;
+  }
+  .upload-flow .btn-upload:active { transform: translateY(0); }
+  .upload-flow .ghost-link {
+    --bs-btn-color: var(--accent);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  #send-overlay {
+    /* --accent lives on .upload-flow; this overlay is outside that scope, so
+       redeclare the accents here or the progress-bar gradient resolves to nothing. */
+    --accent: #6d28d9;
+    --accent-2: #db2777;
+    position: fixed;
+    inset: 0;
+    z-index: 1080;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(17, 12, 34, .72);
+    backdrop-filter: blur(4px);
+  }
+  #send-overlay.show { display: flex; }
+  #send-overlay .send-card {
+    width: min(90vw, 22rem);
+    border-radius: 1.25rem;
+    background: var(--bs-body-bg);
+    padding: 1.75rem 1.5rem;
+    text-align: center;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .4);
+  }
+  #send-overlay .send-emoji { font-size: 2.5rem; line-height: 1; }
+  #send-overlay .send-title { font-weight: 800; margin: .6rem 0 .15rem; }
+  #send-overlay .progress {
+    height: .6rem;
+    border-radius: 1rem;
+    overflow: hidden;
+    position: relative;
+    background: rgba(109, 40, 217, .15);
+  }
+  #send-overlay .progress-bar {
+    height: 100%;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    transition: width .2s ease;
+  }
+  /* Indeterminate "processing" state: a slice that slides across, since the
+     determinate width no longer applies once the bytes are all on the server. */
+  #send-overlay .progress.indeterminate .progress-bar {
+    position: absolute;
+    width: 40%;
+    transition: none;
+    animation: send-indet 1.1s ease-in-out infinite;
+  }
+  @keyframes send-indet {
+    0%   { left: -45%; }
+    100% { left: 100%; }
+  }
+</style>
+<div class="row justify-content-center upload-flow">
+  <div class="col-12 col-md-8 col-lg-6">
+    <a href="/photos?device_id={{ device_id }}" class="ghost-link small d-inline-block mb-2">&larr; Gallery</a>
+    <h1 class="h3 fw-bold mb-1">Upload to {{ device_id }}</h1>
+    <p class="text-body-secondary mb-4">Four quick steps and you're on the wall. 🖼️</p>
+    {% if error %}
+    <div class="alert alert-danger rounded-3">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/upload" enctype="multipart/form-data" id="upload-form">
+      <input type="hidden" name="device_id" value="{{ device_id }}">
+      <input type="hidden" name="knob_values" id="knob_values" value="">
+      <input type="hidden" name="crop_values" id="crop_values" value="">
+
+      <div class="d-flex flex-column gap-3">
+
+        <!-- 1 · Choose file -->
+        <section class="step">
+          <div class="step-head">
+            <span class="step-num">1</span>
+            <h2 class="step-title">Choose a photo</h2>
+          </div>
+          <input type="file" id="file" name="file" accept="image/*" required class="visually-hidden">
+          <label for="file" class="btn btn-upload w-100 mb-0">📷 Pick an image</label>
+        </section>
+
+        <!-- 2 · Preview & framing -->
+        <section class="step">
+          <div class="step-head">
+            <span class="step-num">2</span>
+            <h2 class="step-title">Preview &amp; framing</h2>
+          </div>
+          <div id="preview-wrap" class="border rounded-3 bg-dark d-flex align-items-center justify-content-center"
+               style="aspect-ratio: {{ device_aspect|default(4 / 3) }}; overflow: hidden; touch-action:none; -webkit-user-select:none; user-select:none; cursor:grab;">
+            <canvas id="preview" style="width:100%; height:100%; object-fit:contain; display:none;"></canvas>
+            <span id="preview-status" class="text-secondary small p-3 text-center">
+              Choose an image to preview how it will look on the panel.
+            </span>
+          </div>
+          <div id="zoom-row" class="mt-3" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center">
+              <label for="crop-zoom" class="form-label fw-semibold mb-0">Zoom &amp; drag to frame</label>
+              <button type="button" class="btn btn-link btn-sm p-0 ghost-link" id="reset-crop">Reset framing</button>
+            </div>
+            <input type="range" class="form-range" id="crop-zoom" min="0.3" max="3" step="0.01" value="1">
+            <div class="form-text">
+              Drag to reposition; zoom out to fit the whole image (white bars fill the rest).
+            </div>
+          </div>
+          <div class="form-text">
+            Grayscale and tone-adjusted like the panel. Final dithering is applied on upload.
+          </div>
+        </section>
+
+        <!-- 3 · Adjustments -->
+        <section class="step">
+          <div class="step-head">
+            <span class="step-num">3</span>
+            <h2 class="step-title">Adjustments</h2>
+            <button type="button" class="btn btn-link btn-sm p-0 ms-auto ghost-link" id="reset-knobs">Reset</button>
+          </div>
+          {% for knob in knobs %}
+          <div class="mb-3">
+            <div class="d-flex justify-content-between">
+              <label for="knob_{{ knob.id }}" class="form-label fw-semibold mb-0">{{ knob.label }}</label>
+              <span class="badge text-bg-light font-monospace" id="knobval_{{ knob.id }}"></span>
+            </div>
+            <input type="range" class="form-range knob-input" id="knob_{{ knob.id }}"
+                   data-knob-id="{{ knob.id }}" data-default="{{ knob.default }}"
+                   min="{{ knob.min }}" max="{{ knob.max }}" step="{{ knob.step }}"
+                   value="{{ knob.default }}">
+            {% if knob.help %}<div class="form-text">{{ knob.help }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </section>
+
+        <!-- 4 · Caption -->
+        <section class="step">
+          <div class="step-head">
+            <span class="step-num">4</span>
+            <h2 class="step-title">Caption <span class="fw-normal text-body-secondary fs-6">(optional)</span></h2>
+          </div>
+          <input type="text" class="form-control form-control-lg" id="caption" name="caption" maxlength="200"
+                 placeholder="Give it a name…">
+        </section>
+
+        <!-- 5 · Rotation & lifetime -->
+        <section class="step">
+          <div class="step-head">
+            <span class="step-num">5</span>
+            <h2 class="step-title">Rotation &amp; lifetime</h2>
+          </div>
+          <div class="form-check form-switch fs-5 mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="permanent" name="permanent" checked>
+            <label class="form-check-label fs-6" for="permanent">
+              <span class="fw-semibold">Keep in rotation</span> after showing. Uncheck to show once, then discard.
+            </label>
+          </div>
+          <div>
+            <label for="ttl_hours" class="form-label fw-semibold">Auto-remove after <span
+                class="fw-normal text-body-secondary">(hours, optional)</span></label>
+            <input type="number" class="form-control" id="ttl_hours" name="ttl_hours" min="0" step="0.5"
+                   placeholder="never">
+            <div class="form-text">Independent of the option above. Leave blank to keep until you delete it.</div>
+          </div>
+        </section>
+
+        <button type="submit" class="btn btn-upload w-100">Send it to the wall →</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="send-overlay" role="alertdialog" aria-live="assertive" aria-busy="true">
+  <div class="send-card">
+    <div class="send-emoji" id="send-emoji">🚀</div>
+    <div class="send-title" id="send-title">Sending to the wall…</div>
+    <p class="text-body-secondary small mb-3" id="send-sub">Uploading your photo</p>
+    <div class="progress" id="send-progress" role="progressbar" aria-label="Upload progress">
+      <div class="progress-bar" id="send-bar" style="width:0%"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // Knob descriptors from the server-side registry (knobs.py). The browser renders
+  // sliders from this and rebuilds the tone LUT live, with no per-knob JS.
+  var KNOBS = {{ knobs|tojson }};
+  var DEVICE_ID = {{ device_id|tojson }};
+  var DEVICE_ASPECT = {{ device_aspect|default(4 / 3)|tojson }};
+
+  // --- Tone twin: mirrors gray16._build_tone_lut (post-auto-stretch portion). ---
+  // The /preview-base PNG is already oriented, cover-cropped, luma'd and
+  // auto-stretched, so here black=0/white=255 and we only apply the tone knobs.
+  // MUST stay in sync with gray16.py; guarded by tests/test_knobs.py.
+  var HIGHLIGHT_BUMP_EXP = 6.0;
+  var HIGHLIGHT_BUMP_PEAK =
+    (Math.pow(HIGHLIGHT_BUMP_EXP / (HIGHLIGHT_BUMP_EXP + 1.0), HIGHLIGHT_BUMP_EXP)) /
+    (HIGHLIGHT_BUMP_EXP + 1.0);
+
+  function buildLut(values) {
+    var gamma = values.gamma;
+    var highlights = values.highlights;
+    var invGamma = gamma > 0 ? 1.0 / gamma : 1.0;
+    var lut = new Uint8ClampedArray(256);
+    for (var v = 0; v < 256; v++) {
+      var norm = v / 255.0;
+      var toned = Math.pow(norm, invGamma);
+      if (highlights !== 0.0) {
+        var bump = (Math.pow(toned, HIGHLIGHT_BUMP_EXP) * (1.0 - toned)) / HIGHLIGHT_BUMP_PEAK;
+        toned += highlights * bump;
+        if (toned < 0.0) toned = 0.0;
+        else if (toned > 1.0) toned = 1.0;
+      }
+      lut[v] = Math.round(toned * 255.0);
+    }
+    return lut;
+  }
+
+  // --- Preview-only panel display correction -----------------------------------
+  // The real E1003 e-paper panel renders its gray levels noticeably lighter than
+  // an sRGB monitor, so the untouched preview looks darker than the device. This
+  // LUT nudges the on-screen preview lighter to approximate the panel's response.
+  // It is a DISPLAY correction only: it is applied AFTER buildLut() and never
+  // affects the encoded G16P or the tone-curve parity test. gamma < 1 lightens.
+  // The gamma comes from the server (gray16.PREVIEW_DISPLAY_GAMMA) so this live
+  // preview and the baked gallery thumbnail share one definition.
+  var PREVIEW_DISPLAY_GAMMA = {{ display_gamma|default(0.75)|tojson }};
+  var DISPLAY_LUT = (function () {
+    var lut = new Uint8ClampedArray(256);
+    for (var v = 0; v < 256; v++) {
+      lut[v] = Math.round(Math.pow(v / 255.0, PREVIEW_DISPLAY_GAMMA) * 255.0);
+    }
+    return lut;
+  })();
+
+  var fileInput = document.getElementById("file");
+  var canvas = document.getElementById("preview");
+  var statusEl = document.getElementById("preview-status");
+  var knobValuesField = document.getElementById("knob_values");
+  var previewWrap = document.getElementById("preview-wrap");
+  var zoomRow = document.getElementById("zoom-row");
+  var cropZoom = document.getElementById("crop-zoom");
+  var cropField = document.getElementById("crop_values");
+  var ctx = canvas.getContext("2d");
+  var offscreen = document.createElement("canvas");
+  var octx = offscreen.getContext("2d", { willReadFrequently: true });
+  var rafPending = false;
+
+  // --- Framing (option B: pan/zoom a device-aspect window over the base) -------
+  // The server sends ONE base PNG: the WHOLE oriented image (its own aspect),
+  // auto-stretched at identity tone. The browser pans/zooms a device-aspect
+  // window over it entirely client-side -- no refetch -- so brightness stays
+  // stable while framing. The window rect is reported to the server as a
+  // normalized crop {x,y,w,h} in source coords; it may extend OUTSIDE [0,1] when
+  // zoomed out, and the server white-pads those margins into letterbox bars.
+  var baseBitmap = null;
+  var baseW = 0, baseH = 0;
+  var aspectRatio = 1;     // r = DEVICE_ASPECT / imageAspect
+  var coverH = 1, fitH = 1; // window height (frac of source H) at cover / fit
+  var zoom = 1;             // 1 = cover (default); < 1 zooms out toward fit (letterbox)
+  var centerX = 0.5, centerY = 0.5;
+
+  function configureForBase() {
+    var imageAspect = baseW / baseH;
+    aspectRatio = DEVICE_ASPECT / imageAspect;
+    coverH = aspectRatio <= 1 ? 1 : 1 / aspectRatio;
+    fitH = aspectRatio <= 1 ? 1 / aspectRatio : 1;
+    var zMin = coverH / fitH; // <= 1: full image fits with letterbox bars
+    zoom = 1;
+    centerX = 0.5;
+    centerY = 0.5;
+    cropZoom.min = zMin.toFixed(4);
+    cropZoom.max = "3";
+    cropZoom.value = "1";
+    zoomRow.style.display = "";
+  }
+
+  function windowSize() {
+    var h = coverH / zoom;
+    return { w: aspectRatio * h, h: h };
+  }
+
+  function clampCenter(w, h) {
+    centerX = w <= 1 ? Math.min(Math.max(centerX, w / 2), 1 - w / 2) : 0.5;
+    centerY = h <= 1 ? Math.min(Math.max(centerY, h / 2), 1 - h / 2) : 0.5;
+  }
+
+  function setStatus(msg) {
+    statusEl.textContent = msg;
+    statusEl.style.display = msg ? "" : "none";
+    canvas.style.display = msg ? "none" : "block";
+  }
+
+  function currentValues() {
+    var values = {};
+    KNOBS.forEach(function (k) {
+      var el = document.getElementById("knob_" + k.id);
+      values[k.id] = parseFloat(el.value);
+    });
+    return values;
+  }
+
+  function syncBadges(values) {
+    KNOBS.forEach(function (k) {
+      var badge = document.getElementById("knobval_" + k.id);
+      if (badge) badge.textContent = Number(values[k.id]).toFixed(2);
+    });
+  }
+
+  function render() {
+    var values = currentValues();
+    knobValuesField.value = JSON.stringify(values);
+    syncBadges(values);
+    if (!baseBitmap) return;
+
+    // Combined LUT: tone curve, then panel display correction. White (255) maps
+    // to white, so the letterbox bars stay clean.
+    var tone = buildLut(values);
+    var combined = new Uint8ClampedArray(256);
+    for (var v = 0; v < 256; v++) combined[v] = DISPLAY_LUT[tone[v]];
+
+    var win = windowSize();
+    clampCenter(win.w, win.h);
+    var x = centerX - win.w / 2;
+    var y = centerY - win.h / 2;
+    cropField.value = JSON.stringify({ x: x, y: y, w: win.w, h: win.h });
+
+    var bw = Math.max(1, Math.round(win.w * baseW));
+    var bh = Math.max(1, Math.round(win.h * baseH));
+    offscreen.width = bw;
+    offscreen.height = bh;
+    octx.fillStyle = "#ffffff"; // uncovered margins become letterbox bars
+    octx.fillRect(0, 0, bw, bh);
+    octx.drawImage(baseBitmap, -x * baseW, -y * baseH);
+
+    var img = octx.getImageData(0, 0, bw, bh);
+    var data = img.data;
+    for (var i = 0; i < data.length; i += 4) {
+      var g = combined[data[i]];
+      data[i] = g;
+      data[i + 1] = g;
+      data[i + 2] = g;
+      data[i + 3] = 255;
+    }
+    canvas.width = bw;
+    canvas.height = bh;
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function scheduleRender() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function () {
+      rafPending = false;
+      render();
+    });
+  }
+
+  function loadBase(file) {
+    setStatus("Rendering preview\u2026");
+    var fd = new FormData();
+    fd.append("device_id", DEVICE_ID);
+    fd.append("file", file);
+    fetch("/preview-base", { method: "POST", body: fd })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error("status " + resp.status);
+        return resp.blob();
+      })
+      .then(function (blob) { return createImageBitmap(blob); })
+      .then(function (bmp) {
+        baseBitmap = bmp;
+        baseW = bmp.width;
+        baseH = bmp.height;
+        configureForBase();
+        setStatus("");
+        render();
+      })
+      .catch(function () {
+        baseBitmap = null;
+        zoomRow.style.display = "none";
+        setStatus("Preview unavailable. You can still upload.");
+      });
+  }
+
+  fileInput.addEventListener("change", function () {
+    if (!(fileInput.files && fileInput.files[0])) {
+      baseBitmap = null;
+      zoomRow.style.display = "none";
+      cropField.value = "";
+      setStatus("Choose an image to preview how it will look on the panel.");
+      return;
+    }
+    loadBase(fileInput.files[0]);
+  });
+
+  // Drag to pan the window across the base (clamped where there is freedom).
+  var dragging = false, startX = 0, startY = 0, startCx = 0, startCy = 0;
+  previewWrap.addEventListener("pointerdown", function (e) {
+    if (!baseBitmap) return;
+    dragging = true;
+    previewWrap.setPointerCapture(e.pointerId);
+    previewWrap.style.cursor = "grabbing";
+    startX = e.clientX; startY = e.clientY;
+    startCx = centerX; startCy = centerY;
+    e.preventDefault();
+  });
+  previewWrap.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    var rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    var win = windowSize();
+    centerX = startCx - ((e.clientX - startX) / rect.width) * win.w;
+    centerY = startCy - ((e.clientY - startY) / rect.height) * win.h;
+    scheduleRender();
+  });
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    previewWrap.style.cursor = "grab";
+  }
+  previewWrap.addEventListener("pointerup", endDrag);
+  previewWrap.addEventListener("pointercancel", endDrag);
+
+  cropZoom.addEventListener("input", function () {
+    zoom = parseFloat(cropZoom.value);
+    scheduleRender();
+  });
+
+  document.getElementById("reset-crop").addEventListener("click", function () {
+    zoom = 1;
+    centerX = 0.5;
+    centerY = 0.5;
+    cropZoom.value = "1";
+    render();
+  });
+
+  document.querySelectorAll(".knob-input").forEach(function (el) {
+    el.addEventListener("input", scheduleRender);
+  });
+
+  document.getElementById("reset-knobs").addEventListener("click", function () {
+    document.querySelectorAll(".knob-input").forEach(function (el) {
+      el.value = el.getAttribute("data-default");
+    });
+    render();
+  });
+
+  // --- Submit with progress overlay -------------------------------------------
+  // A plain form POST navigates immediately and gives no feedback while the
+  // server decodes, encodes G16P, and uploads to blob storage. Submit via XHR so
+  // we can show real upload progress, then an indeterminate "processing" phase
+  // once the bytes are sent. Success is a 303 to the gallery (XHR follows it, so
+  // responseURL lands on /photos); an error re-renders this page, which we swap
+  // in via document.write so its inline script re-runs.
+  var form = document.getElementById("upload-form");
+  var overlay = document.getElementById("send-overlay");
+  var sendProgress = document.getElementById("send-progress");
+  var sendBar = document.getElementById("send-bar");
+  var sendTitle = document.getElementById("send-title");
+  var sendSub = document.getElementById("send-sub");
+  var sendEmoji = document.getElementById("send-emoji");
+
+  function setBarDeterminate(pct) {
+    sendProgress.classList.remove("indeterminate");
+    sendBar.style.width = pct + "%";
+  }
+  function setBarIndeterminate() {
+    sendBar.style.width = "40%"; // matches the sliding slice in CSS
+    sendProgress.classList.add("indeterminate");
+  }
+
+  form.addEventListener("submit", function (e) {
+    if (!form.reportValidity()) return; // let native validation block it
+    e.preventDefault();
+
+    overlay.classList.add("show");
+    sendEmoji.textContent = "🚀";
+    sendTitle.textContent = "Sending to the wall…";
+    sendSub.textContent = "Uploading your photo";
+    setBarDeterminate(0);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", form.getAttribute("action"), true);
+
+    xhr.upload.addEventListener("progress", function (ev) {
+      if (ev.lengthComputable) {
+        setBarDeterminate(Math.round((ev.loaded / ev.total) * 100));
+      }
+    });
+    xhr.upload.addEventListener("load", function () {
+      // Bytes are on the server; the slow part now is decode + encode + blob put.
+      sendTitle.textContent = "Processing…";
+      sendSub.textContent = "Converting and saving to the panel";
+      setBarIndeterminate();
+    });
+
+    xhr.addEventListener("load", function () {
+      var url = xhr.responseURL || "";
+      if (xhr.status >= 200 && xhr.status < 300 && url.indexOf("/photos") !== -1) {
+        window.location.assign(url); // success: follow the redirect to the gallery
+        return;
+      }
+      // Error: the server re-rendered this upload page. Swap it in so the inline
+      // script re-runs and the error alert shows.
+      document.open();
+      document.write(xhr.responseText);
+      document.close();
+    });
+
+    xhr.addEventListener("error", function () { showSendError(); });
+    xhr.addEventListener("abort", function () { showSendError(); });
+
+    function showSendError() {
+      sendEmoji.textContent = "⚠️";
+      sendTitle.textContent = "Upload failed";
+      sendSub.textContent = "Check your connection and try again.";
+      setBarDeterminate(0);
+      setTimeout(function () { overlay.classList.remove("show"); }, 2500);
+    }
+
+    xhr.send(new FormData(form));
+  });
+
+  // Initialize hidden field + badges so a submit without touching sliders is valid.
+  render();
+})();
+</script>
+{% endblock %}
