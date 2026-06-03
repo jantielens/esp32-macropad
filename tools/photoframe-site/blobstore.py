@@ -61,6 +61,7 @@ def upload_blob(
     blob_name: str,
     payload: bytes,
     content_type: str = "application/octet-stream",
+    metadata: Optional[dict] = None,
 ) -> None:
     url = build_blob_url(container_sas_url, blob_name)
     req = urllib_request.Request(url, method="PUT", data=payload)
@@ -68,10 +69,36 @@ def upload_blob(
     req.add_header("x-ms-version", API_VERSION)
     req.add_header("Content-Type", content_type)
     req.add_header("Content-Length", str(len(payload)))
+    # x-ms-meta-* pairs ride on the blob itself, so selection state stays
+    # blob-authoritative and is readable via List Blobs (no per-blob GET).
+    for key, value in (metadata or {}).items():
+        req.add_header(f"x-ms-meta-{key}", str(value))
     try:
         with urllib_request.urlopen(req, timeout=120) as resp:
             if resp.status not in (200, 201):
                 raise BlobError(resp.status, "unexpected status uploading blob")
+    except error.HTTPError as e:
+        raise BlobError(e.code, _redacted(url)) from e
+    except error.URLError as e:
+        raise BlobError(0, f"network error: {e.reason}") from e
+
+
+def set_blob_metadata(container_sas_url: str, blob_name: str, metadata: dict) -> None:
+    """Replace a blob's x-ms-meta-* metadata (Set Blob Metadata; headers only).
+
+    Cheap headers-only PUT used to update selection state (last_shown_at /
+    served_at) without rewriting the ~1.3 MB payload.
+    """
+    url = build_blob_url(container_sas_url, blob_name) + "&comp=metadata"
+    req = urllib_request.Request(url, method="PUT", data=b"")
+    req.add_header("x-ms-version", API_VERSION)
+    req.add_header("Content-Length", "0")
+    for key, value in (metadata or {}).items():
+        req.add_header(f"x-ms-meta-{key}", str(value))
+    try:
+        with urllib_request.urlopen(req, timeout=30) as resp:
+            if resp.status not in (200, 201):
+                raise BlobError(resp.status, "unexpected status setting metadata")
     except error.HTTPError as e:
         raise BlobError(e.code, _redacted(url)) from e
     except error.URLError as e:
@@ -143,6 +170,61 @@ def list_blobs(container_sas_url: str, prefix: str, *, max_results: int = 1000) 
         if not marker:
             break
     return names
+
+
+def list_blobs_with_metadata(
+    container_sas_url: str, prefix: str, *, max_results: int = 1000
+) -> dict[str, dict]:
+    """List blobs under ``prefix``, returning ``{name: {meta_key: value}}``.
+
+    Uses List Blobs with ``include=metadata`` so every blob's x-ms-meta-* pairs
+    come back inline in a single response -- one round-trip for the whole
+    container instead of a GET per blob. Blobs with no metadata map to ``{}``.
+    """
+    container, token = _split_sas(container_sas_url)
+    marker: Optional[str] = None
+    out: dict[str, dict] = {}
+    while True:
+        query = (
+            token
+            + "&restype=container&comp=list"
+            + "&include=metadata"
+            + f"&maxresults={max_results}"
+            + "&prefix="
+            + parse.quote(prefix, safe="")
+        )
+        if marker:
+            query += "&marker=" + parse.quote(marker, safe="")
+        url = f"{container}?{query}"
+        req = urllib_request.Request(url, method="GET")
+        req.add_header("x-ms-version", API_VERSION)
+        try:
+            with urllib_request.urlopen(req, timeout=30) as resp:
+                body = resp.read()
+        except error.HTTPError as e:
+            raise BlobError(e.code, _redacted(url)) from e
+        except error.URLError as e:
+            raise BlobError(0, f"network error: {e.reason}") from e
+        root = ET.fromstring(body)
+        for blob in root.findall(".//{*}Blob"):
+            name_el = blob.find("{*}Name")
+            if name_el is None or not name_el.text:
+                continue
+            md: dict = {}
+            meta_el = blob.find("{*}Metadata")
+            if meta_el is not None:
+                for child in meta_el:
+                    # Azure title-cases metadata names in the List response
+                    # (Permanent, Last_Shown_At). Metadata names are
+                    # case-insensitive, so normalize to lowercase for callers.
+                    tag = child.tag.split("}")[-1].lower()
+                    md[tag] = child.text or ""
+            out[name_el.text] = md
+        marker_elem = root.find(".//{*}NextMarker")
+        marker = marker_elem.text if (marker_elem is not None and marker_elem.text) else None
+        if not marker:
+            break
+    return out
 
 
 # --- JSON convenience wrappers ------------------------------------------------

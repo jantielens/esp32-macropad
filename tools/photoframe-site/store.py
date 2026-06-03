@@ -70,6 +70,40 @@ def is_expired(meta: dict, *, at: Optional[datetime] = None) -> bool:
     return (at or datetime.now(timezone.utc)) >= expires
 
 
+# --- Selection metadata (stamped on the .g16p blob) ---------------------------
+#
+# The fields /api/next needs to choose an image -- permanent, expires_at,
+# last_shown_at, served_at -- are stamped as x-ms-meta-* pairs on the canonical
+# .g16p blob so select_next() can read them all in one List Blobs call instead
+# of a GET per image. The per-image .json remains the human-facing record of
+# truth (captions, knobs, crop); these are a denormalized projection of its
+# selection-relevant subset, kept in sync on every mutation that touches them.
+
+
+def selection_blob_metadata(meta: dict) -> dict:
+    """Project the selection-relevant fields into x-ms-meta string pairs.
+
+    Null/absent timestamps are omitted (absence == None on read); ``permanent``
+    is always present so its key doubles as the "metadata is stamped" marker.
+    """
+    md = {"permanent": "1" if meta.get("permanent", False) else "0"}
+    for key in ("expires_at", "last_shown_at", "served_at"):
+        value = meta.get(key)
+        if value:
+            md[key] = str(value)
+    return md
+
+
+def _selection_from_blob_metadata(md: dict) -> dict:
+    """Inverse of selection_blob_metadata: reconstruct selection fields."""
+    return {
+        "permanent": md.get("permanent") == "1",
+        "expires_at": md.get("expires_at") or None,
+        "last_shown_at": md.get("last_shown_at") or None,
+        "served_at": md.get("served_at") or None,
+    }
+
+
 # --- Queue (soft-state) -------------------------------------------------------
 
 
@@ -138,7 +172,13 @@ def store_image(
     enqueue: bool = True,
 ) -> None:
     """Persist a new image (blob + thumb + meta) and optionally enqueue it."""
-    bs.upload_blob(sas, g16p_name(image_id), g16p_bytes, content_type="application/octet-stream")
+    bs.upload_blob(
+        sas,
+        g16p_name(image_id),
+        g16p_bytes,
+        content_type="application/octet-stream",
+        metadata=selection_blob_metadata(meta),
+    )
     bs.upload_blob(sas, thumb_name(image_id), thumb_png, content_type="image/png")
     write_meta(sas, image_id, meta)
     if enqueue:
@@ -153,33 +193,62 @@ def store_image(
 def select_next(sas: str) -> Optional[str]:
     """Pick the next image id to serve, or None.
 
-    Order: first servable id in the queue, then least-recently-shown permanent image
-    (rotation). Skips expired images and queued ids with no backing blob. Cleans up
-    expired images opportunistically.
+    Order: first servable id in the queue, then least-recently-shown permanent
+    image (rotation). Skips expired images and queued ids with no backing blob.
+    Cleans up expired images opportunistically.
+
+    Selection reads are metadata-only: a single List Blobs (include=metadata)
+    call returns every image's selection state, so the cost is ~2 round-trips
+    flat (list + queue) regardless of gallery size.
     """
     now = datetime.now(timezone.utc)
-    existing = set(list_image_ids(sas))
+
+    # 1 round-trip: every image blob's selection metadata, inline.
+    blobs = bs.list_blobs_with_metadata(sas, IMAGE_PREFIX)
+    metas: dict[str, dict] = {}
+    for name, md in blobs.items():
+        if not name.endswith(G16P_EXT):
+            continue
+        image_id = name[len(IMAGE_PREFIX):-len(G16P_EXT)]
+        if not is_valid_id(image_id):
+            continue
+        if "permanent" in md:
+            metas[image_id] = _selection_from_blob_metadata(md)
+        else:
+            # Backfill: image uploaded before metadata stamping existed. Read its
+            # .json once and stamp the blob so subsequent polls are metadata-only.
+            full = read_meta(sas, image_id) or {}
+            bs.set_blob_metadata(sas, g16p_name(image_id), selection_blob_metadata(full))
+            metas[image_id] = {
+                "permanent": bool(full.get("permanent", False)),
+                "expires_at": full.get("expires_at"),
+                "last_shown_at": full.get("last_shown_at"),
+                "served_at": full.get("served_at"),
+            }
+
+    existing = set(metas.keys())
 
     # 0) Deferred one-shot reap: a one-shot served on a previous poll kept its
     # blob alive so the /api/next redirect target stayed valid while the device
-    # fetched it. Delete it now — the device (which sleeps between cycles) has
+    # fetched it. Delete it now -- the device (which sleeps between cycles) has
     # long since downloaded it, and it was dequeued at serve time so it will
     # never be selected again.
     for image_id in list(existing):
-        meta = read_meta(sas, image_id) or {}
-        if not meta.get("permanent", False) and meta.get("served_at"):
+        sel = metas[image_id]
+        if not sel.get("permanent") and sel.get("served_at"):
             delete_image(sas, image_id)
             existing.discard(image_id)
+            metas.pop(image_id, None)
 
     # 1) Queue: first non-expired id that still has a backing blob.
     for image_id in read_queue(sas):
         if image_id not in existing:
             queue_remove(sas, image_id)  # stale pointer
             continue
-        meta = read_meta(sas, image_id) or {}
-        if is_expired(meta, at=now):
+        if is_expired(metas[image_id], at=now):
             delete_image(sas, image_id)
             existing.discard(image_id)
+            metas.pop(image_id, None)
             continue
         return image_id
 
@@ -187,13 +256,13 @@ def select_next(sas: str) -> Optional[str]:
     best_id: Optional[str] = None
     best_shown: Optional[datetime] = None
     for image_id in existing:
-        meta = read_meta(sas, image_id) or {}
-        if is_expired(meta, at=now):
+        sel = metas[image_id]
+        if is_expired(sel, at=now):
             delete_image(sas, image_id)
             continue
-        if not meta.get("permanent", False):
+        if not sel.get("permanent"):
             continue
-        shown = _parse_iso(meta.get("last_shown_at"))
+        shown = _parse_iso(sel.get("last_shown_at"))
         # nulls (never shown) sort first
         if best_id is None or (
             best_shown is not None and (shown is None or shown < best_shown)
@@ -206,14 +275,16 @@ def select_next(sas: str) -> Optional[str]:
 def mark_served(sas: str, image_id: str, meta: dict) -> None:
     """Apply serve-time effects: stamp last_shown_at; one-shot dequeue (deferred delete)."""
     if meta.get("permanent", False):
+        # Permanent: stamp last_shown_at so rotation advances.
         meta["last_shown_at"] = now_iso()
-        write_meta(sas, image_id, meta)
-        queue_remove(sas, image_id)
     else:
         # One-shot: dequeue so it is never selected again, but keep the blob so
         # the /api/next redirect (or proxy fetch) can still deliver it. The
         # `served_at` stamp marks it for reaping on the next poll once the device
-        # has finished downloading — deleting it here would 404 the redirect.
+        # has finished downloading -- deleting it here would 404 the redirect.
         meta["served_at"] = now_iso()
-        write_meta(sas, image_id, meta)
-        queue_remove(sas, image_id)
+    write_meta(sas, image_id, meta)
+    # Keep the blob's selection metadata in lock-step with the .json so the next
+    # poll's metadata-only read sees the updated last_shown_at / served_at.
+    bs.set_blob_metadata(sas, g16p_name(image_id), selection_blob_metadata(meta))
+    queue_remove(sas, image_id)
