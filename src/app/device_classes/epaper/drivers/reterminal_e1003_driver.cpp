@@ -110,6 +110,25 @@
 #define EPAPER_BATTERY_DIVIDER 2.0f  // typical 1:1 resistor divider
 #endif
 
+// IT8951 host-write SPI clock. The Seeed reference runs ~12 MHz; some IT8951
+// boards tolerate higher, which shrinks the ~1.2s frame upload proportionally.
+// Bumped to 14 MHz; raise further only after verifying no corruption/banding
+// on the panel. A board_overrides.h can override per board.
+#ifndef EPAPER_SPI_HZ
+#define EPAPER_SPI_HZ 14000000
+#endif
+
+// G16P payload integrity check. The server stamps a CRC32 over the packed
+// nibble payload at upload time; the firmware can re-verify it before pushing
+// the frame to the panel. The image is delivered over HTTPS, whose AEAD
+// already authenticates every byte end-to-end, so this CRC is largely
+// redundant for transport corruption and costs a full ~1.3 MB pass (~290 ms)
+// on the wake hot path. Disabled by default for faster wakes; flip to 1 to
+// re-enable (e.g. when serving over plain HTTP or chasing a PSRAM bit-rot bug).
+#ifndef EPAPER_VERIFY_CRC32
+#define EPAPER_VERIFY_CRC32 0
+#endif
+
 namespace {
 
 // IT8951 command set (subset used by this driver).
@@ -191,7 +210,7 @@ private:
 
 Gray16Canvas* s_canvas = nullptr;
 SPIClass s_spi(HSPI);
-SPISettings s_spi_set(10000000, MSBFIRST, SPI_MODE0);
+SPISettings s_spi_set(EPAPER_SPI_HZ, MSBFIRST, SPI_MODE0);
 bool s_began = false;
 bool s_power_on = false;  // IT8951 power state (SYS_RUN vs sleep); mirrors Seeed's _power_is_on guard
 uint32_t s_img_buf_addr = 0;
@@ -282,12 +301,14 @@ void set_temperature(uint16_t t) {
 // that never raises HRDY, deadlocking wait_hrdy().
 void power_on() {
 		if (s_power_on) return;
+		const uint32_t t0 = millis();
 		digitalWrite(EPAPER_PIN_TFT_ENABLE, HIGH);
 		digitalWrite(EPAPER_PIN_ITE_ENABLE, HIGH);
 		delay(10);
 		write_cmd16(CMD_SYS_RUN);
 		wait_hrdy();
 		s_power_on = true;
+		LOGI("Epaper", "IT8951 power_on %lu ms", (unsigned long)(millis() - t0));
 }
 
 // Upload the 4 bpp framebuffer to the IT8951 in its native 4 BPP little-endian
@@ -392,6 +413,7 @@ static inline uint32_t read_le32(const uint8_t* p) {
 				((uint32_t)p[3] << 24);
 }
 
+#if EPAPER_VERIFY_CRC32
 uint32_t crc32_update(uint32_t crc, const uint8_t* data, size_t len) {
 		crc = ~crc;
 		for (size_t i = 0; i < len; i++) {
@@ -402,6 +424,7 @@ uint32_t crc32_update(uint32_t crc, const uint8_t* data, size_t len) {
 		}
 		return ~crc;
 }
+#endif
 
 bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
 		if (!data || len < G16P_HEADER_SIZE) return false;
@@ -425,15 +448,26 @@ bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
 		}
 
 		const uint8_t* payload = data + G16P_HEADER_SIZE;
+#if EPAPER_VERIFY_CRC32
+		const uint32_t t_crc = millis();
 		const uint32_t actual_crc = crc32_update(0, payload, G16P_PAYLOAD_SIZE);
 		if (actual_crc != expected_crc) {
 				LOGW("Epaper", "G16P CRC mismatch expected=0x%08lX actual=0x%08lX",
 						 (unsigned long)expected_crc, (unsigned long)actual_crc);
 				return false;
 		}
+		const uint32_t crc_ms = millis() - t_crc;
+#else
+		(void)expected_crc;
+		const uint32_t crc_ms = 0;  // CRC verification disabled (see EPAPER_VERIFY_CRC32)
+#endif
 
+		const uint32_t t_cpy = millis();
 		memcpy(s_canvas->buffer(), payload, G16P_PAYLOAD_SIZE);
-		LOGI("Epaper", "G16P prepared image loaded (%lu bytes)", (unsigned long)G16P_PAYLOAD_SIZE);
+		LOGI("Epaper", "G16P loaded (%lu bytes): crc32 %lums, memcpy %lums",
+				 (unsigned long)G16P_PAYLOAD_SIZE,
+				 (unsigned long)crc_ms,
+				 (unsigned long)(millis() - t_cpy));
 		return true;
 }
 
@@ -688,6 +722,23 @@ void jpeg_decode_worker(void* arg) {
 		for (;;) vTaskDelay(portMAX_DELAY);
 }
 
+// Pre-warm worker: brings the IT8951 rails up (power_on, ~1.6s of HRDY wait)
+// concurrently with the HTTP download so the panel is hot when bytes land.
+// SPI (panel) and WiFi (download) use independent buses, so no contention.
+struct PrewarmCtx {
+		TaskHandle_t caller;
+};
+
+constexpr uint32_t PREWARM_STACK_WORDS = 2048;  // 8 KB PSRAM stack (power_on only)
+
+void prewarm_worker(void* arg) {
+		PrewarmCtx* ctx = (PrewarmCtx*)arg;
+		power_on();
+		xTaskNotifyGive(ctx->caller);
+		// Block until the caller deletes us (same pattern as jpeg_decode_worker).
+		for (;;) vTaskDelay(portMAX_DELAY);
+}
+
 }  // namespace
 
 
@@ -747,9 +798,34 @@ void epaper_driver_set_rotation(uint8_t rotation) {
 bool epaper_driver_draw_url(const char* url) {
 		if (!s_began || !s_canvas || !url || !*url) return false;
 
+		// Pre-warm the IT8951 (power_on ~1.6s of rail boot + HRDY wait) on a
+		// background task that runs concurrently with the HTTP download, so the
+		// panel is ready when bytes arrive and epaper_driver_display()'s power_on()
+		// collapses to a guarded no-op. SPI and WiFi don't share a bus. Joined
+		// before returning on every path so the task/stack are always reaped.
+		PrewarmCtx pctx = { xTaskGetCurrentTaskHandle() };
+		TaskHandle_t pworker = nullptr;
+		RtosTaskPsramAlloc palloc = {};
+		const bool prewarm_spawned = rtos_create_task_psram_stack(
+				prewarm_worker, "epwarm", PREWARM_STACK_WORDS, &pctx, 5, &pworker, &palloc);
+		if (!prewarm_spawned) {
+				LOGW("Epaper", "pre-warm spawn failed; power_on will run inline at display");
+		}
+
 		uint8_t* data = nullptr;
 		size_t len = 0;
-		if (!http_download(url, &data, &len)) return false;
+		const bool dl_ok = http_download(url, &data, &len);
+
+		// Join the pre-warm worker (notifies after power_on completes), then reap
+		// its TCB/stack. Done regardless of download result.
+		if (prewarm_spawned) {
+				ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+				vTaskDelete(pworker);
+				if (palloc.stack) heap_caps_free(palloc.stack);
+				if (palloc.tcb) heap_caps_free(palloc.tcb);
+		}
+
+		if (!dl_ok) return false;
 
 		const bool is_g16p = (len >= sizeof(G16P_MAGIC) &&
 				memcmp(data, G16P_MAGIC, sizeof(G16P_MAGIC)) == 0);

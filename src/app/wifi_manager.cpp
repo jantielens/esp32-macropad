@@ -18,6 +18,12 @@ static bool g_early_init_done = false;
 
 // WiFi retry settings (boot-time only)
 static constexpr unsigned long WIFI_BACKOFF_BASE = 3000; // 3 seconds base
+// Minimum acceptable RSSI for a cached-AP fast connect. Above this floor the
+// cached connect is accepted and the scan is skipped (the warm-wake happy
+// path). At or below it, the cached AP is treated as too weak and we fall
+// through to a full scan to find a stronger AP. Conservative so a stationary
+// device with a decent link never pays the scan cost.
+static constexpr int          WIFI_CACHED_RSSI_FLOOR = -78; // dBm
 static constexpr unsigned long WIFI_CHECK_INTERVAL_MS = 10000; // 10 seconds (safety-net poll)
 static constexpr unsigned long WIFI_PING_INTERVAL_MS  = 30000; // 30 seconds between pings
 static constexpr int          WIFI_PING_FAIL_THRESHOLD = 3;    // consecutive failures before reconnect
@@ -332,11 +338,21 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 
 				WiFi.begin(config->wifi_ssid, config->wifi_password, g_cached_channel, g_cached_bssid);
 				if (wait_for_connection(3000)) {
-						LOGI("WiFi", "Connected (cached AP)");
-						return true;
+						const int rssi = WiFi.RSSI();
+						if (rssi > WIFI_CACHED_RSSI_FLOOR) {
+								LOGI("WiFi", "Connected (cached AP, %d dBm)", rssi);
+								return true;
+						}
+						// Connected but the link is weak. A scan may surface a stronger
+						// AP for the same SSID; drop this association and fall through.
+						LOGW("WiFi", "Cached AP weak (%d dBm <= %d); scanning for stronger AP",
+								 rssi, WIFI_CACHED_RSSI_FLOOR);
+						g_cached_valid = false;
+						WiFi.disconnect(false);
+						delay(100);
+				} else {
+						LOGW("WiFi", "Cached AP failed; scanning");
 				}
-
-				LOGW("WiFi", "Cached AP failed; scanning");
 		}
 
 		#ifdef CONFIG_IDF_TARGET_ESP32P4
