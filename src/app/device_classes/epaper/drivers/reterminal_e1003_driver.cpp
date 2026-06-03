@@ -115,10 +115,10 @@
 
 // IT8951 host-write SPI clock. The Seeed reference runs ~12 MHz; some IT8951
 // boards tolerate higher, which shrinks the ~1.2s frame upload proportionally.
-// Bumped to 14 MHz; raise further only after verifying no corruption/banding
+// Bumped to 18 MHz; raise further only after verifying no corruption/banding
 // on the panel. A board_overrides.h can override per board.
 #ifndef EPAPER_SPI_HZ
-#define EPAPER_SPI_HZ 14000000
+#define EPAPER_SPI_HZ 18000000
 #endif
 
 // G16P payload integrity check. The server stamps a CRC32 over the packed
@@ -993,6 +993,39 @@ void prewarm_worker(void* arg) {
 		for (;;) vTaskDelay(portMAX_DELAY);
 }
 
+// Handle bundle for a pre-warm task so it can be started concurrently with a
+// non-HSPI operation (WiFi resolve or download) and reaped afterwards.
+struct Prewarm {
+		PrewarmCtx ctx;          // must outlive the task; reaped in prewarm_join
+		TaskHandle_t worker;
+		RtosTaskPsramAlloc alloc;
+		bool spawned;
+};
+
+// Start power_on() on a background HSPI task. Caller MUST prewarm_join() before
+// touching the HSPI bus (SD read or panel upload), since power_on drives it.
+void prewarm_start(Prewarm* pw) {
+		pw->ctx.caller = xTaskGetCurrentTaskHandle();
+		pw->worker = nullptr;
+		pw->alloc = {};
+		pw->spawned = rtos_create_task_psram_stack(
+				prewarm_worker, "epwarm", PREWARM_STACK_WORDS, &pw->ctx, 5, &pw->worker,
+				&pw->alloc);
+		if (!pw->spawned)
+				LOGW("Epaper", "pre-warm spawn failed; power_on will run inline at display");
+}
+
+// Wait for power_on() to finish, then free the task TCB/stack. No-op if the
+// task was never spawned, so it is always safe to call.
+void prewarm_join(Prewarm* pw) {
+		if (!pw->spawned) return;
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		vTaskDelete(pw->worker);
+		if (pw->alloc.stack) heap_caps_free(pw->alloc.stack);
+		if (pw->alloc.tcb) heap_caps_free(pw->alloc.tcb);
+		pw->spawned = false;
+}
+
 }  // namespace
 
 
@@ -1074,11 +1107,23 @@ bool epaper_driver_draw_url(const char* url) {
 		String blob_url;
 		char img_id[64] = {0};
 		if (s_sd_cache_enabled) {
+				// Hide the ~1.6s panel power-on under the network resolve: power_on
+				// drives the HSPI panel bus while http_resolve waits on WiFi -- two
+				// independent buses, so they run concurrently. Join before any HSPI
+				// access (the SD read below) so the bus is free. On a cache hit this
+				// removes power_on from the critical path entirely; on a miss the panel
+				// is simply hot before the body download starts (no regression, since
+				// the resolve already runs before the download either way).
+				Prewarm pw = {};
+				prewarm_start(&pw);
+				const bool resolved =
+						http_resolve(url, blob_url, img_id, sizeof(img_id)) && img_id[0];
+				prewarm_join(&pw);  // power_on done; HSPI now free for the SD read
+
 				// Resolve the /api/next redirect to a blob URL + content-stable id
 				// WITHOUT downloading the body, then try the SD cache. A hit skips the
-				// slow HTTP body GET entirely; the SD read uses the panel's HSPI bus,
-				// so the pre-warm worker (which also drives HSPI) must NOT run here.
-				if (http_resolve(url, blob_url, img_id, sizeof(img_id)) && img_id[0]) {
+				// slow HTTP body GET entirely.
+				if (resolved) {
 						if (sd_cache_read(img_id, &data, &len)) {
 								from_cache = true;
 								LOGI("Epaper", "SD cache hit: %s", img_id);
@@ -1094,15 +1139,10 @@ bool epaper_driver_draw_url(const char* url) {
 				// background task that runs concurrently with the HTTP download, so the
 				// panel is ready when bytes arrive and epaper_driver_display()'s
 				// power_on() collapses to a guarded no-op. SPI and WiFi don't share a
-				// bus. Joined before continuing so the task/stack are always reaped.
-				PrewarmCtx pctx = { xTaskGetCurrentTaskHandle() };
-				TaskHandle_t pworker = nullptr;
-				RtosTaskPsramAlloc palloc = {};
-				const bool prewarm_spawned = rtos_create_task_psram_stack(
-						prewarm_worker, "epwarm", PREWARM_STACK_WORDS, &pctx, 5, &pworker, &palloc);
-				if (!prewarm_spawned) {
-						LOGW("Epaper", "pre-warm spawn failed; power_on will run inline at display");
-				}
+				// bus. Skipped when the panel is already warm (the SD-cache resolve
+				// above prewarmed it); prewarm_join is a no-op in that case.
+				Prewarm pw = {};
+				if (!s_power_on) prewarm_start(&pw);
 
 				// On a cache miss we may already have resolved the blob URL; download it
 				// directly to skip the redirect hop. Otherwise download the original URL.
@@ -1114,12 +1154,7 @@ bool epaper_driver_draw_url(const char* url) {
 
 				// Join the pre-warm worker (notifies after power_on completes), then reap
 				// its TCB/stack. Done regardless of download result.
-				if (prewarm_spawned) {
-						ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-						vTaskDelete(pworker);
-						if (palloc.stack) heap_caps_free(palloc.stack);
-						if (palloc.tcb) heap_caps_free(palloc.tcb);
-				}
+				prewarm_join(&pw);
 
 				if (!dl_ok) return false;
 		}
