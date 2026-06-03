@@ -24,6 +24,13 @@
       <label class="form-check-label" for="epaper_crc32_enabled">Use CRC32 change detection</label>
       <div class="form-text">When enabled, the device fetches a small <code>&lt;image-url&gt;.crc32</code> sidecar before each refresh and skips the slow panel redraw when the image is unchanged. Leave off if your server does not publish CRC32 sidecars.</div>
     </div>
+    <div class="mb-3 form-check" id="epaper_sd_cache_row" hidden>
+      <input type="checkbox" class="form-check-input" id="epaper_sd_cache_enabled" name="epaper_sd_cache_enabled">
+      <label class="form-check-label" for="epaper_sd_cache_enabled">Cache images on SD card</label>
+      <div class="form-text">When enabled, rendered images are stored on the microSD card. On a later visit to the same image the device reads it from SD instead of downloading it again, cutting several seconds off the wake time. Requires an inserted microSD card.
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="epaper_clear_sd_cache">Clear SD cache</button>
+      </div>
+    </div>
     <div class="table-responsive mt-3">
       <table class="table table-sm align-middle">
         <thead>

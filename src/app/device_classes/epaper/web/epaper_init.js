@@ -10,6 +10,7 @@ if (typeof window.registerConfigFields === 'function') {
     window.registerConfigFields([
         'epaper_rotation',
         'epaper_crc32_enabled',
+        'epaper_sd_cache_enabled',
         'epaper_overlay_enabled', 'epaper_overlay_position',
         'epaper_overlay_color', 'epaper_overlay_items',
         'epaper_frontlight_brightness', 'epaper_frontlight_duration_s',
@@ -238,6 +239,11 @@ window.init_epaper_image_fragment = function () {
 
                 setNamedValue('epaper_crc32_enabled', !!cfg.epaper_crc32_enabled);
 
+                // SD cache is only meaningful on boards that compiled it in.
+                var sdRow = document.getElementById('epaper_sd_cache_row');
+                if (sdRow) sdRow.hidden = !cfg.epaper_sd_cache_supported;
+                setNamedValue('epaper_sd_cache_enabled', !!cfg.epaper_sd_cache_enabled);
+
                 var arr = Array.isArray(cfg.epaper_carousel) ? cfg.epaper_carousel : [];
                 for (var i = 0; i < 5; i++) {
                     var row = arr[i] || {};
@@ -275,6 +281,20 @@ window.init_epaper_image_fragment = function () {
         setQuickHours(8, 17);
     });
 
+    var clearSdBtn = document.getElementById('epaper_clear_sd_cache');
+    if (clearSdBtn) clearSdBtn.addEventListener('click', function () {
+        if (!window.confirm('Delete all cached images from the SD card?')) return;
+        clearSdBtn.disabled = true;
+        fetch('/api/component/epaper-image/clear-sd-cache', { method: 'POST' })
+            .then(function (r) { return r.json().catch(function () { return null; }); })
+            .then(function (res) {
+                showMessage(res && res.success ? 'SD cache cleared' : 'Failed to clear SD cache',
+                            res && res.success ? 'success' : 'error');
+            })
+            .catch(function () { showMessage('Failed to clear SD cache', 'error'); })
+            .finally(function () { clearSdBtn.disabled = false; });
+    });
+
     function buildCarouselPayload() {
         var out = [];
         for (var i = 0; i < 5; i++) {
@@ -299,6 +319,7 @@ window.init_epaper_image_fragment = function () {
             'operating_mode',
             'epaper_rotation',
             'epaper_crc32_enabled',
+            'epaper_sd_cache_enabled',
             'wifi_backoff_max_seconds',
             'epaper_frontlight_brightness', 'epaper_frontlight_duration_s'
         ];

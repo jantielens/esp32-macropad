@@ -9,6 +9,7 @@
 
 #include "component_registry.h"
 #include "config_manager.h"
+#include "device_classes/epaper/epaper_driver.h"
 #include "device_classes/epaper/epaper_refresh.h"
 #include "log_manager.h"
 #include "web_portal_auth.h"
@@ -69,8 +70,18 @@ static void epaper_image_show_url_post(AsyncWebServerRequest* request) {
     epaper_image_result_json(request, out);
 }
 
+static void epaper_image_clear_cache_post(AsyncWebServerRequest* request) {
+    if (!portal_auth_gate(request)) return;
+    LOGI("API", "POST /api/component/epaper-image/clear-sd-cache");
+    const bool ok = epaper_driver_sd_cache_clear();
+    request->send(ok ? 200 : 500, "application/json",
+                  ok ? "{\"success\":true,\"message\":\"SD cache cleared\"}"
+                     : "{\"success\":false,\"message\":\"SD cache unavailable\"}");
+}
+
 static const ComponentAction epaper_image_actions[] = {
     {"show-url", HTTP_POST, epaper_image_show_url_post, nullptr},
+    {"clear-sd-cache", HTTP_POST, epaper_image_clear_cache_post, nullptr},
 };
 
 static ComponentDef epaper_image_component = {

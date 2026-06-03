@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 216
+Total flags: 219
 
 ### Features (HAS_*)
 
@@ -67,6 +67,9 @@ Total flags: 216
 - **EPAPER_BATTERY_ADC_PIN** default: `(no default)` — ADC pin for the battery sense divider (GPIO1 on the E1003).
 - **EPAPER_BATTERY_ENABLE_PIN** default: `(no default)` — Drive HIGH ~5ms before sampling to gate the battery divider on (GPIO40 on E1003).
 - **EPAPER_BUTTON_PIN** default: `36` — (typical Inkplate wiring uses GPIO36 with an external pullup).
+- **EPAPER_SD_CS_PIN** default: `(no default)` — default; enable via the portal (Image & Schedule -> "Cache images on SD").
+- **EPAPER_SD_DET_PIN** default: `(no default)` — microSD card-detect input (reads LOW when a card is inserted).
+- **EPAPER_SD_EN_PIN** default: `(no default)` — microSD power-enable gate (drive HIGH ~5 ms before mounting the card).
 - **HX711_DOUT_PIN** default: `-1` — HX711 data-out pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **HX711_SCK_PIN** default: `-1` — HX711 clock pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.
@@ -728,6 +731,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **EPAPER_FAST_REFRESH**
   - src/app/board_config.h
+- **EPAPER_SD_CS_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+  - src/app/device_classes/epaper_device_class.cpp
+- **EPAPER_SD_DET_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
 - **HEALTH_HISTORY_ENABLED**
   - src/app/app.ino
   - src/app/board_config.h

@@ -36,6 +36,23 @@ void epaper_driver_sleep();
 uint16_t epaper_driver_battery_mv();
 
 // ----------------------------------------------------------------------------
+// Optional SD image cache (boards with a shared-bus microSD slot only).
+// When enabled, epaper_driver_draw_url() serves the image straight from SD on
+// a cache hit (skipping the multi-second HTTP body download) and stages a
+// freshly downloaded image for write-back. All three are no-ops on boards
+// without an SD cache.
+// ----------------------------------------------------------------------------
+// Enable/disable SD caching for subsequent draw_url() calls (call before draw).
+void epaper_driver_set_sd_cache_enabled(bool enabled);
+// Write the image staged by the last successful download to SD. Call after
+// epaper_driver_display() so the ~1-2 s write lands in the awake tail rather
+// than the wake-to-visible path. No-op when nothing is staged.
+void epaper_driver_cache_flush();
+// Wipe the on-SD image cache (portal "Clear SD cache" action). Returns true
+// when the cache was cleared (or was already empty).
+bool epaper_driver_sd_cache_clear();
+
+// ----------------------------------------------------------------------------
 // GFX primitives — thin pass-through to the underlying Adafruit_GFX panel.
 // Used by status screens (boot splash, error, low battery, config) and the
 // on-image overlay. All are no-ops when the panel has not been begun.

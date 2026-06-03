@@ -36,6 +36,19 @@
 // --- E-paper device class ---------------------------------------------------
 #define HAS_EPAPER true
 
+// --- microSD image cache (shares the panel HSPI bus) -----------------------
+// The microSD slot reuses the IT8951 SPI bus (SCK=7 / MISO=8 / MOSI=9) with
+// its own chip-select. SD_EN gates card power (drive HIGH ~5 ms before mount)
+// and SD_DET reads LOW when a card is inserted. Defining EPAPER_SD_CS_PIN
+// compiles in the optional SD image cache in the e-paper driver, which lets a
+// cache hit skip the multi-second HTTP image download. Disabled at runtime by
+// default; enable via the portal (Image & Schedule -> "Cache images on SD").
+#define EPAPER_SD_CS_PIN  14
+// microSD power-enable gate (drive HIGH ~5 ms before mounting the card).
+#define EPAPER_SD_EN_PIN  39
+// microSD card-detect input (reads LOW when a card is inserted).
+#define EPAPER_SD_DET_PIN 15
+
 // A front-panel user button wakes the device from deep sleep. The E1003 has
 // three user buttons wired to RTC-capable ESP32-S3 GPIOs, all active-low with
 // onboard pull-ups (read LOW when pressed), which matches the ext1 wake level

@@ -58,6 +58,7 @@ static const char *kNvsNamespace      = "device_cfg";
 static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
 static const char *kKeyCrcEnabled     = "ep_crc_en";
+static const char *kKeySdCacheEn      = "ep_sd_en";
 static const char *kKeyOverlayEn      = "ep_ovl_en";
 static const char *kKeyOverlayPos     = "ep_ovl_pos";
 static const char *kKeyOverlayCol     = "ep_ovl_col";
@@ -172,6 +173,7 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.epaper_rotation = 0;
 		g_epaper_config.epaper_last_crc32 = 0;
 		g_epaper_config.epaper_crc32_enabled = false;
+		g_epaper_config.epaper_sd_cache_enabled = false;
 		g_epaper_config.epaper_overlay_enabled = false;
 		g_epaper_config.epaper_overlay_position = 3;
 		g_epaper_config.epaper_overlay_color = 0;
@@ -200,6 +202,7 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		if (g_epaper_config.epaper_rotation > 3) g_epaper_config.epaper_rotation = 0;
 		g_epaper_config.epaper_last_crc32 = prefs.getUInt(kKeyCrc32, 0);
 		g_epaper_config.epaper_crc32_enabled = prefs.getBool(kKeyCrcEnabled, false);
+		g_epaper_config.epaper_sd_cache_enabled = prefs.getBool(kKeySdCacheEn, false);
 
 		g_epaper_config.epaper_overlay_enabled = prefs.getBool(kKeyOverlayEn, false);
 		g_epaper_config.epaper_overlay_position = prefs.getUChar(kKeyOverlayPos, 3);
@@ -237,6 +240,7 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putUChar(kKeyRotation, g_epaper_config.epaper_rotation);
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_last_crc32);
 		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_crc32_enabled);
+		prefs.putBool(kKeySdCacheEn, g_epaper_config.epaper_sd_cache_enabled);
 		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_overlay_enabled);
 		prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_overlay_position);
 		prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_overlay_color);
@@ -268,6 +272,14 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 		root["caps"]["epaper"] = true;
 		root["epaper_rotation"] = g_epaper_config.epaper_rotation;
 		root["epaper_crc32_enabled"] = g_epaper_config.epaper_crc32_enabled;
+		root["epaper_sd_cache_enabled"] = g_epaper_config.epaper_sd_cache_enabled;
+		root["epaper_sd_cache_supported"] = (bool)
+#ifdef EPAPER_SD_CS_PIN
+			true
+#else
+			false
+#endif
+			;
 		root["epaper_overlay_enabled"] = g_epaper_config.epaper_overlay_enabled;
 		root["epaper_overlay_position"] = g_epaper_config.epaper_overlay_position;
 		root["epaper_overlay_color"] = g_epaper_config.epaper_overlay_color;
@@ -300,6 +312,8 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 				g_epaper_config.epaper_rotation = v;
 		}		if (body.containsKey("epaper_crc32_enabled")) {
 			g_epaper_config.epaper_crc32_enabled = body["epaper_crc32_enabled"] | false;
+		}		if (body.containsKey("epaper_sd_cache_enabled")) {
+			g_epaper_config.epaper_sd_cache_enabled = body["epaper_sd_cache_enabled"] | false;
 		}		if (body.containsKey("epaper_overlay_enabled")) {
 				g_epaper_config.epaper_overlay_enabled = body["epaper_overlay_enabled"] | false;
 		}

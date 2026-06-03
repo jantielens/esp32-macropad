@@ -28,6 +28,9 @@
 #include <HTTPClient.h>
 #include <JPEGDEC.h>
 #include <SPI.h>
+#ifdef EPAPER_SD_CS_PIN
+#include <SD.h>
+#endif
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <math.h>
@@ -658,6 +661,257 @@ bool http_download(const char* url, uint8_t** out_buf, size_t* out_len) {
 		return false;  // redirect loop exhausted without a 200
 }
 
+#ifdef EPAPER_SD_CS_PIN
+// ---------------------------------------------------------------------------
+// Optional microSD image cache. The card shares the IT8951 HSPI bus (same
+// SCK/MISO/MOSI as the panel) with its own chip-select, so SD and panel SPI
+// must never interleave: every cache op reads/writes the full .g16p into PSRAM
+// then releases the bus before the panel touches it. The panel SPI bus is
+// re-initialised after each unmount because SD.end() tears the bus down.
+// ---------------------------------------------------------------------------
+bool s_sd_cache_enabled = false;  // runtime toggle, set from config before draw
+bool s_sd_mounted = false;
+
+// Image staged by the last successful download, awaiting write-back to SD
+// after the frame is on screen. Owned here; freed by the flush/discard.
+uint8_t* s_sd_pending_buf = nullptr;
+size_t   s_sd_pending_len = 0;
+char     s_sd_pending_id[64] = {0};
+
+void sd_cache_discard_pending() {
+		if (s_sd_pending_buf) heap_caps_free(s_sd_pending_buf);
+		s_sd_pending_buf = nullptr;
+		s_sd_pending_len = 0;
+		s_sd_pending_id[0] = '\0';
+}
+
+// Restore the panel's HSPI bus + CS after an SD op (SD.end() deinitialises it).
+void sd_restore_panel_bus() {
+		s_spi.begin(EPAPER_PIN_SCK, EPAPER_PIN_MISO, EPAPER_PIN_MOSI, -1);
+		pinMode(EPAPER_PIN_CS, OUTPUT);
+		digitalWrite(EPAPER_PIN_CS, HIGH);
+}
+
+bool sd_cache_mount() {
+		if (s_sd_mounted) return true;
+		// The SD rail is powered up front in epaper_driver_begin() so the card has
+		// had the whole panel-init time to settle. Re-assert power here defensively
+		// (cheap) and give a short extra ramp in case begin() ran only moments ago.
+		pinMode(EPAPER_SD_EN_PIN, OUTPUT);
+		digitalWrite(EPAPER_SD_EN_PIN, HIGH);
+		delay(250);
+#ifdef EPAPER_SD_DET_PIN
+		pinMode(EPAPER_SD_DET_PIN, INPUT_PULLUP);
+		if (digitalRead(EPAPER_SD_DET_PIN) == HIGH) {  // HIGH = no card inserted
+				LOGW("Epaper", "SD cache: no card detected");
+				digitalWrite(EPAPER_SD_EN_PIN, LOW);
+				return false;
+		}
+#endif
+		// Deselect the panel before handing the shared bus to the SD library. No
+		// wait_hrdy() here: nothing is driving the panel at mount time (we are
+		// between WiFi connect and the first draw), so polling HRDY only burns its
+		// full 3 s timeout. The proven Seeed reference also skips it.
+		digitalWrite(EPAPER_PIN_CS, HIGH);
+		// Re-init the shared HSPI bus exactly like the Seeed reference: ss = -1.
+		// SD.begin(CS, spi) below owns the chip-select itself; the panel uses the
+		// same SS=-1 bus, so this keeps a single consistent bus configuration.
+		s_spi.end();
+		s_spi.begin(EPAPER_PIN_SCK, EPAPER_PIN_MISO, EPAPER_PIN_MOSI, -1);
+		// Mount at 20 MHz: cardType=0 was a power-settle problem (now fixed by the
+		// rail ramp above), not a clock-integrity one, so the shared bus tolerates
+		// the panel's working frequency. This cuts the 1.3 MB cache read from ~3 s
+		// (at 4 MHz) to under 1 s.
+		if (!SD.begin(EPAPER_SD_CS_PIN, s_spi, 20000000)) {
+				// Distinguish a card-init failure (bus/power/wiring) from a FAT
+				// mount failure (card formatted wrong). cardType()==NONE means the
+				// SPI handshake never completed, so reformatting would not help.
+				const uint8_t ct = SD.cardType();
+				LOGW("Epaper", "SD cache: SD.begin failed (cardType=%u: %s)", ct,
+						 ct == CARD_NONE ? "no card init - check bus/power"
+														 : "card OK but FAT mount failed - reformat FAT32");
+				sd_restore_panel_bus();
+				// Leave SD_EN HIGH: the rail stays powered while the device is awake
+				// (it drops naturally on deep sleep). Power-cycling here would force a
+				// fresh ramp and reintroduce the cardType=0 settle problem.
+				return false;
+		}
+		s_sd_mounted = true;
+		return true;
+}
+
+void sd_cache_unmount() {
+		if (!s_sd_mounted) return;
+		SD.end();
+		s_sd_mounted = false;
+		sd_restore_panel_bus();
+		// SD_EN stays HIGH while awake; the rail powers down on deep sleep. Keeping
+		// it powered avoids a cold re-ramp on the next mount within the same wake.
+}
+
+void sd_cache_path(const char* id, char* out, size_t out_sz) {
+		snprintf(out, out_sz, "/cache/%s.g16p", id);
+}
+
+// Parse the blob id out of a redirect Location like
+// "https://.../<container>/images/<id>.g16p?<sas>". Returns false when the
+// URL is not an images/<id>.g16p target (e.g. a non-blob redirect).
+bool parse_image_id(const char* loc, char* out, size_t out_sz) {
+		const char* p = strstr(loc, "images/");
+		if (!p) return false;
+		p += 7;  // strlen("images/")
+		const char* end = strstr(p, ".g16p");
+		if (!end || end <= p) return false;
+		const size_t n = (size_t)(end - p);
+		if (n + 1 > out_sz) return false;
+		memcpy(out, p, n);
+		out[n] = '\0';
+		return true;
+}
+
+// Issue the /api/next GET and resolve its 302 to the blob URL + image id,
+// WITHOUT downloading the 1.3 MB body. Lets the caller decide hit/miss before
+// paying for the slow body GET. Returns false on any non-redirect response;
+// the caller then falls back to a normal http_download() of the original URL.
+bool http_resolve(const char* url, String& out_blob_url, char* out_id, size_t id_sz) {
+		String current = url;
+		const int kMaxRedirects = 3;
+		for (int hop = 0; hop <= kMaxRedirects; ++hop) {
+				const bool is_https = current.startsWith("https://");
+				HTTPClient http;
+				WiFiClientSecure secure;
+				WiFiClient plain;
+				bool begin_ok = false;
+				if (is_https) {
+						secure.setInsecure();
+						begin_ok = http.begin(secure, current);
+				} else {
+						begin_ok = http.begin(plain, current);
+				}
+				if (!begin_ok) return false;
+				http.setTimeout(8000);
+				const char* collect[] = {"Location"};
+				http.collectHeaders(collect, 1);
+				const int code = http.GET();
+				if (code == HTTP_CODE_MOVED_PERMANENTLY || code == HTTP_CODE_FOUND ||
+						code == HTTP_CODE_SEE_OTHER || code == HTTP_CODE_TEMPORARY_REDIRECT ||
+						code == HTTP_CODE_PERMANENT_REDIRECT) {
+						String loc = http.header("Location");
+						http.end();
+						if (loc.length() == 0) return false;
+						if (parse_image_id(loc.c_str(), out_id, id_sz)) {
+								out_blob_url = loc;
+								return true;
+						}
+						if (hop == kMaxRedirects) return false;
+						current = loc;
+						delay(50);
+						continue;
+				}
+				http.end();
+				return false;  // 200/4xx/5xx: not a redirect we can resolve a blob id from
+		}
+		return false;
+}
+
+// Read /cache/<id>.g16p fully into a fresh PSRAM buffer. Returns false (and
+// leaves *out_buf null) on miss or any read error.
+bool sd_cache_read(const char* id, uint8_t** out_buf, size_t* out_len) {
+		*out_buf = nullptr;
+		*out_len = 0;
+		if (!sd_cache_mount()) return false;
+		char path[96];
+		sd_cache_path(id, path, sizeof(path));
+		bool ok = false;
+		File f = SD.open(path, FILE_READ);
+		if (f) {
+				const size_t sz = f.size();
+				if (sz > 0) {
+						uint8_t* buf = (uint8_t*)heap_caps_malloc(sz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+						if (buf) {
+								const uint32_t t0 = millis();
+								const size_t got = f.read(buf, sz);
+								if (got == sz) {
+										*out_buf = buf;
+										*out_len = sz;
+										ok = true;
+										LOGI("Epaper", "SD cache read %u bytes in %lu ms",
+												 (unsigned)sz, (unsigned long)(millis() - t0));
+								} else {
+										heap_caps_free(buf);
+										LOGW("Epaper", "SD cache read short (%u/%u)", (unsigned)got, (unsigned)sz);
+								}
+						} else {
+								LOGW("Epaper", "SD cache read alloc failed (%u bytes)", (unsigned)sz);
+						}
+				}
+				f.close();
+		}
+		sd_cache_unmount();
+		return ok;
+}
+
+// Write data to /cache/<id>.g16p atomically (tmp file + rename).
+bool sd_cache_write(const char* id, const uint8_t* data, size_t len) {
+		if (!data || len == 0) return false;
+		if (!sd_cache_mount()) return false;
+		bool ok = false;
+		SD.mkdir("/cache");
+		char path[96], tmp[96];
+		sd_cache_path(id, path, sizeof(path));
+		snprintf(tmp, sizeof(tmp), "/cache/%s.tmp", id);
+		SD.remove(tmp);
+		File f = SD.open(tmp, FILE_WRITE);
+		if (f) {
+				const uint32_t t0 = millis();
+				const size_t wrote = f.write(data, len);
+				f.close();
+				if (wrote == len) {
+						SD.remove(path);  // rename won't overwrite an existing file
+						if (SD.rename(tmp, path)) {
+								ok = true;
+								LOGI("Epaper", "SD cache wrote %u bytes in %lu ms",
+										 (unsigned)len, (unsigned long)(millis() - t0));
+						} else {
+								LOGW("Epaper", "SD cache rename failed");
+								SD.remove(tmp);
+						}
+				} else {
+						LOGW("Epaper", "SD cache write short (%u/%u)", (unsigned)wrote, (unsigned)len);
+						SD.remove(tmp);
+				}
+		} else {
+				LOGW("Epaper", "SD cache: open tmp for write failed");
+		}
+		sd_cache_unmount();
+		return ok;
+}
+
+// Delete every file under /cache and remove the directory.
+bool sd_cache_clear_impl() {
+		if (!sd_cache_mount()) return false;
+		bool ok = true;
+		File dir = SD.open("/cache");
+		if (dir && dir.isDirectory()) {
+				File entry = dir.openNextFile();
+				while (entry) {
+						String nm = entry.name();  // basename or full path, core-dependent
+						const bool isdir = entry.isDirectory();
+						entry.close();
+						if (!isdir) {
+								String full = nm.startsWith("/") ? nm : (String("/cache/") + nm);
+								if (!SD.remove(full)) ok = false;
+						}
+						entry = dir.openNextFile();
+				}
+				dir.close();
+				SD.rmdir("/cache");
+		}
+		sd_cache_unmount();
+		return ok;
+}
+#endif // EPAPER_SD_CS_PIN
+
 // Scan a JPEG's markers for a progressive Start-Of-Frame (SOF2/6/10/14).
 // JPEGDEC's progressive decoder is unreliable and faults on some images
 // (LoadStoreError inside JPEGDecodeMCU_P), so the caller detects and skips
@@ -761,6 +1015,19 @@ bool epaper_driver_begin() {
 		pinMode(EPAPER_PIN_ITE_ENABLE, OUTPUT);
 		digitalWrite(EPAPER_PIN_ITE_ENABLE, HIGH);
 
+#ifdef EPAPER_SD_CS_PIN
+		// Power the shared-bus MicroSD rail at panel begin, exactly like the Seeed
+		// reference does in setup(). The card then gets the full panel-init duration
+		// (HW reset + SYS_RUN + first clear, well over a second) to complete its
+		// internal power-up ramp before sd_cache_mount() ever calls SD.begin(). A
+		// 50 ms settle inside the mount was too short and left SD.begin returning
+		// cardType=0 (card never finished SPI init).
+		pinMode(EPAPER_SD_CS_PIN, OUTPUT);
+		digitalWrite(EPAPER_SD_CS_PIN, HIGH);  // deselect SD on the shared bus
+		pinMode(EPAPER_SD_EN_PIN, OUTPUT);
+		digitalWrite(EPAPER_SD_EN_PIN, HIGH);  // power on, leave on while awake
+#endif
+
 		s_spi.begin(EPAPER_PIN_SCK, EPAPER_PIN_MISO, EPAPER_PIN_MOSI, -1);
 
 #if EPAPER_PIN_RES >= 0
@@ -798,41 +1065,81 @@ void epaper_driver_set_rotation(uint8_t rotation) {
 bool epaper_driver_draw_url(const char* url) {
 		if (!s_began || !s_canvas || !url || !*url) return false;
 
-		// Pre-warm the IT8951 (power_on ~1.6s of rail boot + HRDY wait) on a
-		// background task that runs concurrently with the HTTP download, so the
-		// panel is ready when bytes arrive and epaper_driver_display()'s power_on()
-		// collapses to a guarded no-op. SPI and WiFi don't share a bus. Joined
-		// before returning on every path so the task/stack are always reaped.
-		PrewarmCtx pctx = { xTaskGetCurrentTaskHandle() };
-		TaskHandle_t pworker = nullptr;
-		RtosTaskPsramAlloc palloc = {};
-		const bool prewarm_spawned = rtos_create_task_psram_stack(
-				prewarm_worker, "epwarm", PREWARM_STACK_WORDS, &pctx, 5, &pworker, &palloc);
-		if (!prewarm_spawned) {
-				LOGW("Epaper", "pre-warm spawn failed; power_on will run inline at display");
-		}
-
 		uint8_t* data = nullptr;
 		size_t len = 0;
-		const bool dl_ok = http_download(url, &data, &len);
-
-		// Join the pre-warm worker (notifies after power_on completes), then reap
-		// its TCB/stack. Done regardless of download result.
-		if (prewarm_spawned) {
-				ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-				vTaskDelete(pworker);
-				if (palloc.stack) heap_caps_free(palloc.stack);
-				if (palloc.tcb) heap_caps_free(palloc.tcb);
+		bool from_cache = false;
+#ifdef EPAPER_SD_CS_PIN
+		// Clear any image staged by a previous draw that was never flushed.
+		sd_cache_discard_pending();
+		String blob_url;
+		char img_id[64] = {0};
+		if (s_sd_cache_enabled) {
+				// Resolve the /api/next redirect to a blob URL + content-stable id
+				// WITHOUT downloading the body, then try the SD cache. A hit skips the
+				// slow HTTP body GET entirely; the SD read uses the panel's HSPI bus,
+				// so the pre-warm worker (which also drives HSPI) must NOT run here.
+				if (http_resolve(url, blob_url, img_id, sizeof(img_id)) && img_id[0]) {
+						if (sd_cache_read(img_id, &data, &len)) {
+								from_cache = true;
+								LOGI("Epaper", "SD cache hit: %s", img_id);
+						} else {
+								LOGI("Epaper", "SD cache miss: %s", img_id);
+						}
+				}
 		}
+#endif
 
-		if (!dl_ok) return false;
+		if (!from_cache) {
+				// Pre-warm the IT8951 (power_on ~1.6s of rail boot + HRDY wait) on a
+				// background task that runs concurrently with the HTTP download, so the
+				// panel is ready when bytes arrive and epaper_driver_display()'s
+				// power_on() collapses to a guarded no-op. SPI and WiFi don't share a
+				// bus. Joined before continuing so the task/stack are always reaped.
+				PrewarmCtx pctx = { xTaskGetCurrentTaskHandle() };
+				TaskHandle_t pworker = nullptr;
+				RtosTaskPsramAlloc palloc = {};
+				const bool prewarm_spawned = rtos_create_task_psram_stack(
+						prewarm_worker, "epwarm", PREWARM_STACK_WORDS, &pctx, 5, &pworker, &palloc);
+				if (!prewarm_spawned) {
+						LOGW("Epaper", "pre-warm spawn failed; power_on will run inline at display");
+				}
+
+				// On a cache miss we may already have resolved the blob URL; download it
+				// directly to skip the redirect hop. Otherwise download the original URL.
+				const char* dl_url = url;
+#ifdef EPAPER_SD_CS_PIN
+				if (blob_url.length() > 0) dl_url = blob_url.c_str();
+#endif
+				const bool dl_ok = http_download(dl_url, &data, &len);
+
+				// Join the pre-warm worker (notifies after power_on completes), then reap
+				// its TCB/stack. Done regardless of download result.
+				if (prewarm_spawned) {
+						ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+						vTaskDelete(pworker);
+						if (palloc.stack) heap_caps_free(palloc.stack);
+						if (palloc.tcb) heap_caps_free(palloc.tcb);
+				}
+
+				if (!dl_ok) return false;
+		}
 
 		const bool is_g16p = (len >= sizeof(G16P_MAGIC) &&
 				memcmp(data, G16P_MAGIC, sizeof(G16P_MAGIC)) == 0);
 		if (is_g16p) {
 				const bool ok = load_g16p_to_canvas(data, len);
-			heap_caps_free(data);
-			return ok;
+#ifdef EPAPER_SD_CS_PIN
+				// Stage a freshly downloaded image for write-back to SD after display.
+				// Transfer buffer ownership to the pending slot (don't free below).
+				if (ok && !from_cache && s_sd_cache_enabled && img_id[0]) {
+						s_sd_pending_buf = data;
+						s_sd_pending_len = len;
+						strlcpy(s_sd_pending_id, img_id, sizeof(s_sd_pending_id));
+						data = nullptr;
+				}
+#endif
+				if (data) heap_caps_free(data);
+				return ok;
 		}
 
 		// JPEGDEC's progressive decoder faults on some images (the duty-cycle
@@ -926,6 +1233,35 @@ uint16_t epaper_driver_battery_mv() {
 		return (uint16_t)((float)raw_mv * EPAPER_BATTERY_DIVIDER);
 #else
 		return 0;
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// SD image cache HAL surface (see epaper_driver.h). All no-ops on boards
+// without EPAPER_SD_CS_PIN.
+// ---------------------------------------------------------------------------
+void epaper_driver_set_sd_cache_enabled(bool enabled) {
+#ifdef EPAPER_SD_CS_PIN
+		s_sd_cache_enabled = enabled;
+#else
+		(void)enabled;
+#endif
+}
+
+void epaper_driver_cache_flush() {
+#ifdef EPAPER_SD_CS_PIN
+		if (s_sd_pending_buf && s_sd_pending_id[0]) {
+				sd_cache_write(s_sd_pending_id, s_sd_pending_buf, s_sd_pending_len);
+		}
+		sd_cache_discard_pending();
+#endif
+}
+
+bool epaper_driver_sd_cache_clear() {
+#ifdef EPAPER_SD_CS_PIN
+		return sd_cache_clear_impl();
+#else
+		return false;
 #endif
 }
 

@@ -109,6 +109,10 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 				esp_task_wdt_delete(nullptr);
 		}
 
+		// Serve from / write to the SD image cache per the user's setting. On a
+		// cache hit this lets draw_url() skip the multi-second HTTP body download.
+		epaper_driver_set_sd_cache_enabled(g_epaper_config.epaper_sd_cache_enabled);
+
 		const bool drew = epaper_driver_draw_url(image_url);
 
 		if (drew) {
@@ -119,6 +123,10 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 				// pushing the frame. Pure framebuffer draws — no panel waveform yet.
 				epaper_overlay_render(out.battery_mv, (uint32_t)(millis() - t0));
 				epaper_driver_display();
+				// Write a freshly downloaded image back to the SD cache now that the
+				// frame is on screen, keeping the slow write off the wake-to-visible
+				// path. No-op on a cache hit or when SD caching is unsupported/off.
+				epaper_driver_cache_flush();
 		}
 
 		if (wdt_was_attached) {

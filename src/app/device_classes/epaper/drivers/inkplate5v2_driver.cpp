@@ -99,6 +99,11 @@ uint16_t epaper_driver_battery_mv() {
 		return (uint16_t)(v * 1000.0);
 }
 
+// SD image cache is unsupported on this board (no shared-bus SD slot) — stubs.
+void epaper_driver_set_sd_cache_enabled(bool /*enabled*/) {}
+void epaper_driver_cache_flush() {}
+bool epaper_driver_sd_cache_clear() { return false; }
+
 // ---------------------------------------------------------------------------
 // GFX primitives — pass-through to Adafruit_GFX methods inherited by Inkplate.
 // ---------------------------------------------------------------------------
