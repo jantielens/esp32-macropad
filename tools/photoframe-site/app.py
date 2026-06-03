@@ -149,6 +149,11 @@ def gallery(request: Request, device_id: str) -> Response:
     items = []
     for image_id in store.list_image_ids(device.container_sas_url):
         meta = store.read_meta(device.container_sas_url, image_id) or {}
+        # Hide one-shots that have already been served: their blob lingers only
+        # until the next poll reaps it (deferred delete keeps the serve redirect
+        # valid), but to the user the image is spent and should be gone.
+        if not meta.get("permanent", False) and meta.get("served_at"):
+            continue
         items.append({
             "id": image_id,
             "caption": meta.get("caption", ""),
@@ -403,7 +408,7 @@ def photos_queue_clear(
 
 
 @app.get("/api/next")
-def api_next(device_id: str, key: str) -> Response:
+def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
     config = cfg.load_config()
     device = config.device(device_id)
     if device is None or not cfg.verify_device_key(key, device.api_key):
@@ -414,15 +419,29 @@ def api_next(device_id: str, key: str) -> Response:
     if image_id is None:
         return Response(status_code=204)
 
-    data = bs.download_blob(sas, store.g16p_name(image_id))
-    if data is None:
+    meta = store.read_meta(sas, image_id)
+    if meta is None:
         # Raced with a delete; tell the device to retry rather than serving garbage.
         store.queue_remove(sas, image_id)
         return Response(status_code=204)
 
-    meta = store.read_meta(sas, image_id) or {"permanent": False}
     store.mark_served(sas, image_id, meta)
 
+    blob_url = bs.build_blob_url(sas, store.g16p_name(image_id))
+
+    # Default path: redirect the device to the blob's own SAS URL so it pulls
+    # the ~1.3 MB payload straight from Azure Blob Storage instead of routing it
+    # through this single-core app (which would copy the bytes Blob -> app ->
+    # device, doubling transfer time). The container SAS the device receives is
+    # scoped to its own container, so this exposes no other device's data.
+    # `?proxy=1` forces the legacy inline-bytes path for debugging or clients
+    # that cannot follow redirects.
+    if not proxy:
+        return RedirectResponse(blob_url, status_code=302)
+
+    data = bs.download_blob(sas, store.g16p_name(image_id))
+    if data is None:
+        return Response(status_code=204)
     return Response(
         data,
         media_type="application/octet-stream",

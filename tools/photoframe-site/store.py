@@ -160,6 +160,17 @@ def select_next(sas: str) -> Optional[str]:
     now = datetime.now(timezone.utc)
     existing = set(list_image_ids(sas))
 
+    # 0) Deferred one-shot reap: a one-shot served on a previous poll kept its
+    # blob alive so the /api/next redirect target stayed valid while the device
+    # fetched it. Delete it now — the device (which sleeps between cycles) has
+    # long since downloaded it, and it was dequeued at serve time so it will
+    # never be selected again.
+    for image_id in list(existing):
+        meta = read_meta(sas, image_id) or {}
+        if not meta.get("permanent", False) and meta.get("served_at"):
+            delete_image(sas, image_id)
+            existing.discard(image_id)
+
     # 1) Queue: first non-expired id that still has a backing blob.
     for image_id in read_queue(sas):
         if image_id not in existing:
@@ -193,10 +204,16 @@ def select_next(sas: str) -> Optional[str]:
 
 
 def mark_served(sas: str, image_id: str, meta: dict) -> None:
-    """Apply serve-time effects: stamp last_shown_at; one-shot delete or dequeue."""
+    """Apply serve-time effects: stamp last_shown_at; one-shot dequeue (deferred delete)."""
     if meta.get("permanent", False):
         meta["last_shown_at"] = now_iso()
         write_meta(sas, image_id, meta)
         queue_remove(sas, image_id)
     else:
-        delete_image(sas, image_id)
+        # One-shot: dequeue so it is never selected again, but keep the blob so
+        # the /api/next redirect (or proxy fetch) can still deliver it. The
+        # `served_at` stamp marks it for reaping on the next poll once the device
+        # has finished downloading — deleting it here would 404 the redirect.
+        meta["served_at"] = now_iso()
+        write_meta(sas, image_id, meta)
+        queue_remove(sas, image_id)

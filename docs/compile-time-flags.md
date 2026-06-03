@@ -483,6 +483,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/components/epaper_status_component.cpp
   - src/app/device_classes/epaper/components/epaper_vcom_component.cpp
   - src/app/device_classes/epaper/drivers/inkplate5v2_driver.cpp
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
   - src/app/device_classes/epaper/epaper_carousel.cpp
   - src/app/device_classes/epaper/epaper_carousel.h
   - src/app/device_classes/epaper/epaper_config.h
@@ -717,6 +718,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
 - **DISPLAY_SHAPE**
   - src/app/board_config.h
+- **EPAPER_BATTERY_ADC_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+- **EPAPER_BATTERY_DIVIDER**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+- **EPAPER_BATTERY_ENABLE_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_BUTTON_PIN**
   - src/app/board_config.h
 - **EPAPER_FAST_REFRESH**
