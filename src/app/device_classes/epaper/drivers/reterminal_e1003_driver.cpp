@@ -34,6 +34,7 @@
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <math.h>
+#include <miniz.h>  // esp_rom tinfl_decompress_mem_to_mem (raw DEFLATE)
 #include <string.h>
 
 // Bundled Inter fonts (shared with the Inkplate driver; resolved via the
@@ -152,7 +153,16 @@ constexpr uint8_t IT8951_ROTATE_0 = 0;
 constexpr uint8_t G16P_VERSION = 1;
 constexpr size_t G16P_HEADER_SIZE = 18;
 constexpr size_t G16P_PAYLOAD_SIZE = (size_t)EPAPER_PANEL_W * EPAPER_PANEL_H / 2;
+constexpr size_t G16P_TOTAL_SIZE = G16P_HEADER_SIZE + G16P_PAYLOAD_SIZE;
 const uint8_t G16P_MAGIC[4] = {'G', '1', '6', 'P'};
+
+// G16Z: compressed transport wrapper for a G16P blob. 4-byte magic followed by
+// a raw DEFLATE stream (no zlib/gzip header) of the complete G16P bytes. The
+// server emits this at upload time so the device pulls ~0.3-0.5x the bytes off
+// the wire; the firmware inflates straight into a fixed-size G16P buffer with
+// the ROM's malloc-free tinfl. Raw G16P (uncompressed) is still accepted for
+// backward compatibility with blobs uploaded before this format existed.
+const uint8_t G16Z_MAGIC[4] = {'G', '1', '6', 'Z'};
 
 // Translate a HAL 3-bit grayscale color (0..7, 0=black .. 7=white) into the
 // canvas' 4-bit grayscale (0..15). Used by every primitive so status screens
@@ -471,6 +481,58 @@ bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
 				 (unsigned long)G16P_PAYLOAD_SIZE,
 				 (unsigned long)crc_ms,
 				 (unsigned long)(millis() - t_cpy));
+		return true;
+}
+
+// Inflate a G16Z container (4-byte magic + raw DEFLATE of a full G16P blob)
+// into a freshly-allocated PSRAM buffer holding the reconstructed G16P bytes.
+// The whole compressed input and the exact output size are known up front, so
+// a single tinfl_decompress() call into a non-wrapping output buffer suffices.
+// The tinfl_decompressor state embeds a 32 KB dictionary (~33 KB total), far
+// too large for the loop task stack, so it is heap-allocated rather than using
+// the stack-based tinfl_decompress_mem_to_mem() helper. On success fills
+// *out_buf/*out_len (caller frees with heap_caps_free).
+bool inflate_g16z(const uint8_t* data, size_t len, uint8_t** out_buf, size_t* out_len) {
+		*out_buf = nullptr;
+		*out_len = 0;
+		if (!data || len <= sizeof(G16Z_MAGIC)) return false;
+
+		uint8_t* dst = (uint8_t*)heap_caps_malloc(G16P_TOTAL_SIZE,
+				MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+		if (!dst) {
+				LOGW("Epaper", "G16Z inflate buffer alloc failed (%u bytes)",
+						 (unsigned)G16P_TOTAL_SIZE);
+				return false;
+		}
+		tinfl_decompressor* decomp = (tinfl_decompressor*)heap_caps_malloc(
+				sizeof(tinfl_decompressor), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+		if (!decomp) {
+				LOGW("Epaper", "G16Z decompressor alloc failed (%u bytes)",
+						 (unsigned)sizeof(tinfl_decompressor));
+				heap_caps_free(dst);
+				return false;
+		}
+
+		const uint32_t t0 = millis();
+		tinfl_init(decomp);
+		size_t in_bytes = len - sizeof(G16Z_MAGIC);  // all input present
+		size_t out_bytes = G16P_TOTAL_SIZE;          // output buffer capacity
+		const tinfl_status st = tinfl_decompress(
+				decomp, data + sizeof(G16Z_MAGIC), &in_bytes,
+				dst, dst, &out_bytes,
+				TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
+		heap_caps_free(decomp);
+
+		if (st != TINFL_STATUS_DONE || out_bytes != G16P_TOTAL_SIZE) {
+				LOGW("Epaper", "G16Z inflate failed (status=%d produced=%u expected=%u)",
+						 (int)st, (unsigned)out_bytes, (unsigned)G16P_TOTAL_SIZE);
+				heap_caps_free(dst);
+				return false;
+		}
+		LOGI("Epaper", "G16Z inflated %u -> %u bytes in %lu ms",
+				 (unsigned)len, (unsigned)out_bytes, (unsigned long)(millis() - t0));
+		*out_buf = dst;
+		*out_len = out_bytes;
 		return true;
 }
 
@@ -1159,12 +1221,31 @@ bool epaper_driver_draw_url(const char* url) {
 				if (!dl_ok) return false;
 		}
 
-		const bool is_g16p = (len >= sizeof(G16P_MAGIC) &&
-				memcmp(data, G16P_MAGIC, sizeof(G16P_MAGIC)) == 0);
+		// G16Z (compressed G16P): inflate into a separate buffer and render from
+		// that, but keep the on-wire bytes in `data` so the SD cache stores the
+		// small compressed payload (a later cache hit re-enters this same path and
+		// inflates again). Falls back to treating `data` as raw G16P / JPEG when
+		// the magic is absent, so pre-compression blobs still render.
+		const bool is_g16z = (len >= sizeof(G16Z_MAGIC) &&
+				memcmp(data, G16Z_MAGIC, sizeof(G16Z_MAGIC)) == 0);
+		const uint8_t* g16p = data;
+		size_t g16p_len = len;
+		uint8_t* inflated = nullptr;
+		if (is_g16z) {
+				if (!inflate_g16z(data, len, &inflated, &g16p_len)) {
+						heap_caps_free(data);
+						return false;
+				}
+				g16p = inflated;
+		}
+
+		const bool is_g16p = (g16p_len >= sizeof(G16P_MAGIC) &&
+				memcmp(g16p, G16P_MAGIC, sizeof(G16P_MAGIC)) == 0);
 		if (is_g16p) {
-				const bool ok = load_g16p_to_canvas(data, len);
+				const bool ok = load_g16p_to_canvas(g16p, g16p_len);
+				if (inflated) heap_caps_free(inflated);
 #ifdef EPAPER_SD_CS_PIN
-				// Stage a freshly downloaded image for write-back to SD after display.
+				// Stage the on-wire bytes for write-back to SD after display.
 				// Transfer buffer ownership to the pending slot (don't free below).
 				if (ok && !from_cache && s_sd_cache_enabled && img_id[0]) {
 						s_sd_pending_buf = data;
@@ -1175,6 +1256,15 @@ bool epaper_driver_draw_url(const char* url) {
 #endif
 				if (data) heap_caps_free(data);
 				return ok;
+		}
+
+		// Inflated successfully but the result was not a valid G16P frame — a
+		// malformed container. Bail rather than feeding deflate output to JPEGDEC.
+		if (inflated) {
+				LOGW("Epaper", "G16Z payload was not a valid G16P frame: %s", url);
+				heap_caps_free(inflated);
+				heap_caps_free(data);
+				return false;
 		}
 
 		// JPEGDEC's progressive decoder faults on some images (the duty-cycle

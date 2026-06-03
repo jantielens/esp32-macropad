@@ -30,6 +30,13 @@ PANEL_H = 1404
 MAGIC = b"G16P"
 VERSION = 1
 
+# G16Z transport wrapper: 4-byte magic + a raw DEFLATE stream (no zlib/gzip
+# header) of the complete G16P bytes. Stored at upload time so the device pulls
+# ~0.3-0.5x the bytes; the firmware inflates straight into its fixed-size G16P
+# buffer with the ROM's malloc-free tinfl. The device still accepts raw G16P, so
+# pre-existing uncompressed blobs keep rendering.
+G16Z_MAGIC = b"G16Z"
+
 # Lightroom-style tone curve defaults (see the CLI tool for the rationale).
 CAL_BLACK_PCT = 0.5
 CAL_WHITE_PCT = 99.5
@@ -449,3 +456,20 @@ def encode_g16p(
     preview = gray_levels_to_preview(gray, width, height)
     nibbles = _dither_to_nibbles(gray, width, height)
     return pack_g16p(nibbles, width, height), preview
+
+
+def wrap_g16z(g16p_bytes: bytes, *, level: int = 9) -> bytes:
+    """Wrap G16P bytes as a G16Z transport container, or return them unchanged.
+
+    Produces ``G16Z_MAGIC + raw_deflate(g16p_bytes)``. Raw DEFLATE (wbits=-15)
+    omits the zlib/gzip header so the firmware can inflate with no header
+    parsing. If compression does not actually shrink the blob (e.g. an
+    incompressible frame), the original G16P bytes are returned so the wire
+    never grows.
+    """
+    compressor = zlib.compressobj(level, zlib.DEFLATED, -15)
+    body = compressor.compress(g16p_bytes) + compressor.flush()
+    wrapped = G16Z_MAGIC + body
+    if len(wrapped) >= len(g16p_bytes):
+        return g16p_bytes
+    return wrapped

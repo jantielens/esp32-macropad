@@ -344,7 +344,7 @@ def upload_submit(
         "crop": crop or {},
         "resampler": resampler,
     }
-    store.store_image(device.container_sas_url, image_id, g16p_bytes, thumb_png, meta)
+    store.store_image(device.container_sas_url, image_id, gray16.wrap_g16z(g16p_bytes), thumb_png, meta)
     return RedirectResponse(f"/photos?device_id={device_id}", status_code=303)
 
 
