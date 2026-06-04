@@ -207,7 +207,7 @@ def upload_form(request: Request, device_id: str) -> Response:
             "device_id": device_id,
             "knobs": knobs.to_client(),
             "device_aspect": device.width / device.height,
-            "display_gamma": gray16.PREVIEW_DISPLAY_GAMMA,
+            "panel_response": list(gray16.PANEL_RESPONSE_E1003_GC16_V32),
             "resamplers": gray16.resampler_choices(),
             "resampler_default": gray16.DEFAULT_RESAMPLER,
         },
@@ -289,10 +289,13 @@ def upload_submit(
         with Image.open(io.BytesIO(raw)) as src:
             src.load()
             logger.info(
-                "upload device=%s src=%dx%d transform=%s crop=%s gamma=%.3f highlights=%.3f resampler=%s",
+                "upload device=%s src=%dx%d transform=%s crop=%s gamma=%.3f highlights=%.3f "
+                "brightness=%.3f contrast=%.3f calibration=%.0f resampler=%s",
                 device_id, src.width, src.height, device.image_transform,
                 gray16.describe_crop(crop, src.width, src.height),
-                knob_vals["gamma"], knob_vals["highlights"], resampler,
+                knob_vals["gamma"], knob_vals["highlights"],
+                knob_vals["brightness"], knob_vals["contrast"],
+                knob_vals["panel_calibration"], resampler,
             )
             g16p_bytes, preview = gray16.encode_g16p(
                 src,
@@ -302,6 +305,9 @@ def upload_submit(
                 crop=crop,
                 gamma=knob_vals["gamma"],
                 highlights=knob_vals["highlights"],
+                brightness=knob_vals["brightness"],
+                contrast=knob_vals["contrast"],
+                panel_calibration=knob_vals["panel_calibration"],
                 resampler=resampler,
             )
     except Exception as exc:  # noqa: BLE001 - surface decode/encode failure to user
@@ -310,7 +316,7 @@ def upload_submit(
             {"request": request, "user": user, "device_id": device_id,
              "knobs": knobs.to_client(),
              "device_aspect": device.width / device.height,
-             "display_gamma": gray16.PREVIEW_DISPLAY_GAMMA,
+             "panel_response": list(gray16.PANEL_RESPONSE_E1003_GC16_V32),
              "resamplers": gray16.resampler_choices(),
              "resampler_default": gray16.DEFAULT_RESAMPLER,
              "error": f"Could not process image: {exc}"},

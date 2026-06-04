@@ -1,14 +1,16 @@
 """Calibrated E1003 Gray16 (G16P) image pipeline.
 
 Copied from ``tools/epaper-prep-gray16.py`` so the photoframe site and the CLI
-share the exact same panel calibration. The tonal path is intentionally fixed:
+share the exact same panel calibration. The tonal path:
 
-    BT.709 luma -> percentile auto-stretch -> gamma -> anchored highlights bump
-    -> nearest-16 + Floyd-Steinberg error diffusion -> G16P pack
+    BT.709 luma -> percentile auto-stretch -> tone curve (gamma + highlights +
+    brightness/contrast) -> measured panel calibration (desired -> source) ->
+    nearest-16 + Floyd-Steinberg error diffusion -> G16P pack
 
-IT8951 Gray16 is monotonic (nibble 0x0 = black, 0xF = white), so tone-curved luma
-maps straight to nibble value. Keep this module dependency-light (Pillow + stdlib)
-and in lockstep with the CLI tool; do not "improve" the curve here in isolation.
+IT8951 Gray16 is monotonic (nibble 0x0 = black, 0xF = white). The panel renders
+midtones lighter than a linear source ramp, so the measured inverse LUT
+(PANEL_RESPONSE_E1003_GC16_V32) maps desired perceptual gray to the source level
+that actually reproduces it. Keep this module dependency-light (Pillow + stdlib).
 
 NOTE (greenfield): this is a verbatim copy for the MVE. The long-term plan is to
 extract a single shared module imported by both the tool and the site.
@@ -19,7 +21,7 @@ from __future__ import annotations
 import struct
 import zlib
 from array import array
-from math import ceil, isfinite
+from math import ceil, floor, isfinite
 
 from PIL import Image
 
@@ -37,15 +39,36 @@ VERSION = 1
 # pre-existing uncompressed blobs keep rendering.
 G16Z_MAGIC = b"G16Z"
 
-# Lightroom-style tone curve defaults (see the CLI tool for the rationale).
+# Tone curve defaults. With the measured panel calibration now applied by default
+# (CAL_PANEL_STRENGTH below), gamma is neutral (1.0) and highlights are flat: the
+# old gamma=0.8 was a hand-tuned proxy for the panel's lighter-than-sRGB midtone
+# response, which the measured inverse LUT now corrects directly. Stacking both
+# would double-correct.
 CAL_BLACK_PCT = 0.5
 CAL_WHITE_PCT = 99.5
-CAL_GAMMA = 0.8
-CAL_HIGHLIGHTS = -0.1
+CAL_GAMMA = 1.0
+CAL_HIGHLIGHTS = 0.0
+CAL_BRIGHTNESS = 0.0
+CAL_CONTRAST = 1.0
+CAL_PANEL_STRENGTH = 1.0
 HIGHLIGHT_BUMP_EXP = 6.0
 _HIGHLIGHT_BUMP_PEAK = (
     (HIGHLIGHT_BUMP_EXP / (HIGHLIGHT_BUMP_EXP + 1.0)) ** HIGHLIGHT_BUMP_EXP
 ) / (HIGHLIGHT_BUMP_EXP + 1.0)
+
+# Measured E1003 (IT8951 / GC16) tonal response, normalized 0..1 per source gray
+# level (16 levels, source = index * 17). Bench measurement v3.2: each entry is the
+# panel's reflectance when fed that source level, endpoints normalized so black=0
+# and white=1, enforced monotone. The panel renders midtones LIGHTER than the
+# linear source ramp, so a perceptually-even ramp needs a non-linear inverse.
+# Single source of truth: both the encode-time inverse LUT and the preview
+# forward LUT are derived from this array (here and, mirrored, in upload.html).
+# To calibrate a different panel/waveform, re-run the bench toolkit in
+# tools/panel-calibration/ and paste the new normalized_Y_envelope values here.
+PANEL_RESPONSE_E1003_GC16_V32 = (
+    0.0000, 0.0565, 0.1582, 0.2281, 0.3547, 0.4394, 0.5577, 0.6194,
+    0.7095, 0.7538, 0.8016, 0.8437, 0.8703, 0.9029, 0.9503, 1.0000,
+)
 
 
 # --- Low-level helpers --------------------------------------------------------
@@ -102,27 +125,113 @@ def _percentile_bounds(gray: array, low_pct: float, high_pct: float) -> tuple[in
     return black, white
 
 
-def _build_tone_lut(black: int, white: int, gamma: float, highlights: float = 0.0) -> array:
+def _build_tone_lut(
+    black: int,
+    white: int,
+    gamma: float,
+    highlights: float = 0.0,
+    brightness: float = 0.0,
+    contrast: float = 1.0,
+) -> array:
     lut = array("h", [0]) * 256
     span = white - black
     inv_gamma = 1.0 / gamma if gamma > 0 else 1.0
     for value in range(256):
         if value <= black:
-            lut[value] = 0
+            norm = 0.0
         elif value >= white:
-            lut[value] = 255
+            norm = 1.0
         else:
             norm = (value - black) / span
-            toned = norm ** inv_gamma
-            if highlights != 0.0:
-                bump = (toned ** HIGHLIGHT_BUMP_EXP) * (1.0 - toned) / _HIGHLIGHT_BUMP_PEAK
-                toned += highlights * bump
-                if toned < 0.0:
-                    toned = 0.0
-                elif toned > 1.0:
-                    toned = 1.0
-            lut[value] = _clamp_u8(round(toned * 255))
+        toned = norm ** inv_gamma
+        if highlights != 0.0:
+            bump = (toned ** HIGHLIGHT_BUMP_EXP) * (1.0 - toned) / _HIGHLIGHT_BUMP_PEAK
+            toned += highlights * bump
+        if contrast != 1.0:
+            toned = (toned - 0.5) * contrast + 0.5
+        if brightness != 0.0:
+            toned += brightness
+        if toned < 0.0:
+            toned = 0.0
+        elif toned > 1.0:
+            toned = 1.0
+        lut[value] = _clamp_u8(round(toned * 255))
     return lut
+
+
+# --- Panel response calibration ----------------------------------------------
+#
+# The pipeline produces *desired* perceptual gray; the panel renders each source
+# level non-linearly (PANEL_RESPONSE_E1003_GC16_V32). To hit the desired tone we
+# feed the panel the source level whose measured reflectance matches the target.
+# The inverse LUT (desired 8-bit -> source 8-bit) does this; it is applied AFTER
+# the tone curve and BEFORE dithering so error diffusion still smooths gradients.
+# The forward LUT (source 8-bit -> reflectance 8-bit) is the display simulation:
+# it shows how a given source level actually looks on the panel, replacing the old
+# eyeballed PREVIEW_DISPLAY_GAMMA. Both are mirrored in upload.html.
+
+
+def _build_panel_inverse_lut(response: tuple[float, ...]) -> array:
+    """desired perceptual gray (0..255) -> source gray (0..255) to feed the panel.
+
+    Linear interpolation along the (monotone) measured response, inverted: for
+    each desired reflectance find the source whose predicted reflectance matches.
+    """
+    lut = array("h", [0]) * 256
+    last = len(response) - 1
+    for desired in range(256):
+        target = desired / 255.0
+        if target <= response[0]:
+            lut[desired] = 0
+        elif target >= response[last]:
+            lut[desired] = 255
+        else:
+            for k in range(last):
+                if response[k] <= target <= response[k + 1]:
+                    denom = response[k + 1] - response[k]
+                    frac = 0.0 if denom <= 0.0 else (target - response[k]) / denom
+                    src = (k + frac) * 17.0
+                    lut[desired] = _clamp_u8(round(src))
+                    break
+    return lut
+
+
+def _build_panel_forward_lut(response: tuple[float, ...]) -> array:
+    """source gray (0..255) -> rendered reflectance (0..255): the display sim."""
+    lut = array("h", [0]) * 256
+    last = len(response) - 1
+    for source in range(256):
+        pos = source / 17.0
+        k = int(floor(pos))
+        if k >= last:
+            reflectance = response[last]
+        else:
+            frac = pos - k
+            reflectance = response[k] + frac * (response[k + 1] - response[k])
+        lut[source] = _clamp_u8(round(reflectance * 255.0))
+    return lut
+
+
+_PANEL_INVERSE_LUT = _build_panel_inverse_lut(PANEL_RESPONSE_E1003_GC16_V32)
+_PANEL_FORWARD_LUT = _build_panel_forward_lut(PANEL_RESPONSE_E1003_GC16_V32)
+
+
+def apply_panel_calibration(gray: array, strength: float = 1.0) -> None:
+    """Map desired perceptual gray to panel source levels in place.
+
+    ``strength`` blends between identity (0.0, calibration off) and the full
+    measured inverse (1.0, default). Values in between let a future UI dial back
+    the correction without an all-or-nothing switch.
+    """
+    if strength <= 0.0:
+        return
+    full = strength >= 1.0
+    for i in range(len(gray)):
+        desired = _clamp_u8(gray[i])
+        src = _PANEL_INVERSE_LUT[desired]
+        if not full:
+            src = _clamp_u8(round(desired * (1.0 - strength) + src * strength))
+        gray[i] = src
 
 
 # --- Image fit ----------------------------------------------------------------
@@ -336,17 +445,27 @@ def calibrated_gray_levels(
     height: int = PANEL_H,
     gamma: float = CAL_GAMMA,
     highlights: float = CAL_HIGHLIGHTS,
+    brightness: float = CAL_BRIGHTNESS,
+    contrast: float = CAL_CONTRAST,
+    panel_calibration: float = CAL_PANEL_STRENGTH,
     auto_stretch: bool = True,
 ) -> array:
-    """Return the tone-curved (pre-dither) 8-bit luma for an already-fit RGB image."""
+    """Return the (pre-dither) 8-bit source luma for an already-fit RGB image.
+
+    Applies the tone curve, then the measured panel calibration (desired ->
+    source) when ``panel_calibration`` > 0, so the returned values are what the
+    panel should be fed -- ready for nearest-16 + dithering.
+    """
     gray = _luma_array(rgb, width, height)
     if auto_stretch:
         black, white = _percentile_bounds(gray, CAL_BLACK_PCT, CAL_WHITE_PCT)
     else:
         black, white = 0, 255
-    tone_lut = _build_tone_lut(black, white, gamma, highlights)
+    tone_lut = _build_tone_lut(black, white, gamma, highlights, brightness, contrast)
     for i in range(width * height):
         gray[i] = tone_lut[_clamp_u8(gray[i])]
+    if panel_calibration > 0.0:
+        apply_panel_calibration(gray, panel_calibration)
     return gray
 
 
@@ -355,23 +474,19 @@ def gray_levels_to_preview(gray: array, width: int, height: int) -> Image.Image:
     return Image.frombytes("L", (width, height), bytes(_clamp_u8(v) for v in gray))
 
 
-# Display-simulation gamma: the real E1003 e-paper panel renders its gray levels
-# noticeably lighter than an sRGB monitor, so the encoded (device-faithful) tone
-# looks darker on screen than on the panel. This gamma (<1 lightens) approximates
-# the panel's response for on-screen previews and gallery thumbnails. It is a
-# DISPLAY-ONLY correction: never apply it before encoding G16P. Single source of
-# truth -- the upload page reads this value from the server so the live JS preview
-# and the baked thumbnail stay in sync.
-PREVIEW_DISPLAY_GAMMA = 0.75
-_DISPLAY_SIM_LUT = bytes(
-    _clamp_u8(round((v / 255.0) ** PREVIEW_DISPLAY_GAMMA * 255.0)) for v in range(256)
-)
+# Display simulation: the real E1003 panel renders each source gray level lighter
+# than an sRGB monitor (PANEL_RESPONSE_E1003_GC16_V32). The forward LUT maps a
+# source level to how it actually appears, so previews and gallery thumbnails look
+# like the panel instead of like the raw encoded bytes. This replaces the old
+# eyeballed PREVIEW_DISPLAY_GAMMA with measured data. DISPLAY-ONLY: never apply it
+# before encoding G16P. Mirror of the browser forward LUT in upload.html.
+_DISPLAY_SIM_LUT = bytes(_PANEL_FORWARD_LUT[v] for v in range(256))
 
 
 def simulate_display(img: Image.Image) -> Image.Image:
-    """Lighten an 'L' image to approximate how the e-paper panel renders it.
+    """Render an 'L' source image the way the e-paper panel would display it.
 
-    Mirror of the browser DISPLAY_LUT in upload.html (same PREVIEW_DISPLAY_GAMMA).
+    Mirror of the browser forward LUT in upload.html (same measured response).
     Display-only: used for gallery thumbnails so they match the live preview.
     """
     return img.convert("L").point(_DISPLAY_SIM_LUT)
@@ -412,7 +527,11 @@ def full_base(
         pv_h = max_edge
         pv_w = max(1, round(max_edge * src_w / src_h))
     small = rgb.resize((pv_w, pv_h), Image.Resampling.NEAREST)
-    gray = calibrated_gray_levels(small, width=pv_w, height=pv_h, gamma=1.0, highlights=0.0)
+    # Identity tone, calibration OFF: the browser applies the tone knobs, the
+    # panel calibration, and the forward display sim live on top of this base.
+    gray = calibrated_gray_levels(
+        small, width=pv_w, height=pv_h, gamma=1.0, highlights=0.0, panel_calibration=0.0
+    )
     return gray_levels_to_preview(gray, pv_w, pv_h)
 
 
@@ -441,18 +560,31 @@ def encode_g16p(
     crop: dict | None = None,
     gamma: float = CAL_GAMMA,
     highlights: float = CAL_HIGHLIGHTS,
+    brightness: float = CAL_BRIGHTNESS,
+    contrast: float = CAL_CONTRAST,
+    panel_calibration: float = CAL_PANEL_STRENGTH,
     resampler: str | None = None,
 ) -> tuple[bytes, Image.Image]:
     """Full upload pipeline: orientation -> fit -> calibrated tone -> dither -> G16P.
 
     Returns ``(g16p_bytes, preview_L)`` where ``preview_L`` is the post-tone,
-    pre-pack grayscale image suitable for generating a gallery thumbnail.
-    ``resampler`` names the panel-fit downscale filter (see ``RESAMPLERS``).
+    post-calibration (source-level) grayscale image; ``simulate_display`` turns it
+    into a panel-faithful gallery thumbnail. ``resampler`` names the panel-fit
+    downscale filter (see ``RESAMPLERS``).
     """
     oriented = apply_orientation(img, transform or {})
     framed = apply_crop(oriented, crop)
     rgb = fit_rgb_to_panel(framed, width, height, resample=resolve_resampler(resampler))
-    gray = calibrated_gray_levels(rgb, width=width, height=height, gamma=gamma, highlights=highlights)
+    gray = calibrated_gray_levels(
+        rgb,
+        width=width,
+        height=height,
+        gamma=gamma,
+        highlights=highlights,
+        brightness=brightness,
+        contrast=contrast,
+        panel_calibration=panel_calibration,
+    )
     preview = gray_levels_to_preview(gray, width, height)
     nibbles = _dither_to_nibbles(gray, width, height)
     return pack_g16p(nibbles, width, height), preview

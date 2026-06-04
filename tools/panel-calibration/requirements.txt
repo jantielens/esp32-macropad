@@ -1,0 +1,7 @@
+# Panel tone-response calibration toolkit dependencies.
+# Bench-only; intentionally separate from the firmware build.
+numpy
+Pillow
+matplotlib
+rawpy
+opencv-python

@@ -21,7 +21,12 @@ import gray16  # noqa: E402
 import knobs  # noqa: E402
 
 
-def _js_twin_lut(gamma: float, highlights: float) -> list[int]:
+def _js_twin_lut(
+    gamma: float,
+    highlights: float,
+    brightness: float = 0.0,
+    contrast: float = 1.0,
+) -> list[int]:
     """Faithful Python mirror of the browser buildLut() in upload.html.
 
     Uses JS Math.round semantics (round-half-up) so any difference from the
@@ -37,11 +42,56 @@ def _js_twin_lut(gamma: float, highlights: float) -> list[int]:
         if highlights != 0.0:
             bump = (math.pow(toned, exp) * (1.0 - toned)) / peak
             toned += highlights * bump
-            if toned < 0.0:
-                toned = 0.0
-            elif toned > 1.0:
-                toned = 1.0
+        if contrast != 1.0:
+            toned = (toned - 0.5) * contrast + 0.5
+        if brightness != 0.0:
+            toned += brightness
+        if toned < 0.0:
+            toned = 0.0
+        elif toned > 1.0:
+            toned = 1.0
         lut.append(_js_round(toned * 255.0))
+    return lut
+
+
+def _clamp_u8(value: int) -> int:
+    return 0 if value < 0 else 255 if value > 255 else value
+
+
+def _js_panel_inverse_lut(resp: tuple[float, ...]) -> list[int]:
+    """Mirror of buildPanelInverseLut() in upload.html."""
+    last = len(resp) - 1
+    lut = []
+    for d in range(256):
+        target = d / 255.0
+        if target <= resp[0]:
+            lut.append(0)
+            continue
+        if target >= resp[last]:
+            lut.append(255)
+            continue
+        for k in range(last):
+            if resp[k] <= target <= resp[k + 1]:
+                denom = resp[k + 1] - resp[k]
+                frac = 0.0 if denom <= 0.0 else (target - resp[k]) / denom
+                lut.append(_clamp_u8(_js_round((k + frac) * 17.0)))
+                break
+    return lut
+
+
+def _js_panel_forward_lut(resp: tuple[float, ...]) -> list[int]:
+    """Mirror of buildPanelForwardLut() in upload.html."""
+    last = len(resp) - 1
+    lut = []
+    for s in range(256):
+        pos = s / 17.0
+        k = int(math.floor(pos))
+        if k >= last:
+            reflectance = resp[last]
+        else:
+            frac = pos - k
+            reflectance = resp[k] + frac * (resp[k + 1] - resp[k])
+        lut.append(_clamp_u8(_js_round(reflectance * 255.0)))
     return lut
 
 
@@ -51,15 +101,38 @@ def _js_round(x: float) -> int:
 
 def test_tone_curve_parity() -> None:
     """JS twin matches gray16 LUT (black=0, white=255) within rounding tolerance."""
-    for gamma in (0.4, 0.8, 1.0, 1.5, 2.0):
-        for highlights in (-0.5, -0.1, 0.0, 0.25, 0.5):
-            authoritative = gray16._build_tone_lut(0, 255, gamma, highlights)
-            twin = _js_twin_lut(gamma, highlights)
-            max_diff = max(abs(a - b) for a, b in zip(authoritative, twin))
-            assert max_diff <= 1, (
-                f"tone curve drift at gamma={gamma}, highlights={highlights}: "
-                f"max |delta|={max_diff} (JS twin must mirror gray16._build_tone_lut)"
-            )
+    for gamma in (0.4, 1.0, 2.0):
+        for highlights in (-0.5, 0.0, 0.5):
+            for brightness in (-0.2, 0.0, 0.2):
+                for contrast in (0.75, 1.0, 1.25):
+                    authoritative = gray16._build_tone_lut(
+                        0, 255, gamma, highlights, brightness, contrast
+                    )
+                    twin = _js_twin_lut(gamma, highlights, brightness, contrast)
+                    max_diff = max(abs(a - b) for a, b in zip(authoritative, twin))
+                    assert max_diff <= 1, (
+                        f"tone curve drift at gamma={gamma}, highlights={highlights}, "
+                        f"brightness={brightness}, contrast={contrast}: "
+                        f"max |delta|={max_diff} (JS twin must mirror gray16._build_tone_lut)"
+                    )
+
+
+def test_panel_inverse_lut_js_parity() -> None:
+    """buildPanelInverseLut() in upload.html mirrors gray16._build_panel_inverse_lut."""
+    resp = gray16.PANEL_RESPONSE_E1003_GC16_V32
+    authoritative = gray16._build_panel_inverse_lut(resp)
+    twin = _js_panel_inverse_lut(resp)
+    max_diff = max(abs(a - b) for a, b in zip(authoritative, twin))
+    assert max_diff <= 1, f"panel inverse LUT drift: max |delta|={max_diff}"
+
+
+def test_panel_forward_lut_js_parity() -> None:
+    """buildPanelForwardLut() in upload.html mirrors gray16._build_panel_forward_lut."""
+    resp = gray16.PANEL_RESPONSE_E1003_GC16_V32
+    authoritative = gray16._build_panel_forward_lut(resp)
+    twin = _js_panel_forward_lut(resp)
+    max_diff = max(abs(a - b) for a, b in zip(authoritative, twin))
+    assert max_diff <= 1, f"panel forward LUT drift: max |delta|={max_diff}"
 
 
 def test_js_constants_match_gray16() -> None:
@@ -69,20 +142,53 @@ def test_js_constants_match_gray16() -> None:
     )
 
 
-def test_display_sim_lut_matches_gamma() -> None:
-    """gray16.simulate_display mirrors the JS DISPLAY_LUT (same gamma + rounding).
+def test_display_sim_lut_matches_forward() -> None:
+    """gray16.simulate_display renders the measured panel forward response.
 
-    Both the live JS preview and the baked gallery thumbnail must lighten the
-    image identically, so the panel-simulation LUT must equal pow(v/255, gamma).
+    Both the live JS preview and the baked gallery thumbnail simulate the panel
+    with the same measured forward LUT, so simulate_display must equal the
+    authoritative forward LUT and the JS twin (within rounding).
     """
     from PIL import Image
 
-    gamma = gray16.PREVIEW_DISPLAY_GAMMA
+    resp = gray16.PANEL_RESPONSE_E1003_GC16_V32
+    forward = gray16._build_panel_forward_lut(resp)
+    twin = _js_panel_forward_lut(resp)
     ramp = Image.frombytes("L", (256, 1), bytes(range(256)))
     out = list(gray16.simulate_display(ramp).getdata())
     for v in range(256):
-        expected = _js_round(math.pow(v / 255.0, gamma) * 255.0)
-        assert out[v] == expected, (v, out[v], expected)
+        assert out[v] == forward[v], (v, out[v], forward[v])
+        assert abs(out[v] - twin[v]) <= 1, (v, out[v], twin[v])
+
+
+def test_panel_calibration_identity_when_off() -> None:
+    """strength 0 is a no-op (calibration toggle off keeps the desired gray)."""
+    from array import array
+
+    gray = array("h", list(range(256)))
+    gray16.apply_panel_calibration(gray, 0.0)
+    assert list(gray) == list(range(256))
+
+
+def test_panel_calibration_darkens_midtones() -> None:
+    """The panel renders midtones light, so calibration feeds a darker source."""
+    from array import array
+
+    gray = array("h", [128])
+    gray16.apply_panel_calibration(gray, 1.0)
+    assert gray[0] < 128
+
+
+def test_panel_calibration_preserves_endpoints_and_monotonicity() -> None:
+    """Black->black, white->white, and the mapping never decreases."""
+    from array import array
+
+    gray = array("h", list(range(256)))
+    gray16.apply_panel_calibration(gray, 1.0)
+    assert gray[0] == 0
+    assert gray[255] == 255
+    for i in range(1, 256):
+        assert gray[i] >= gray[i - 1]
 
 
 def test_knob_defaults_track_pipeline() -> None:
@@ -90,6 +196,29 @@ def test_knob_defaults_track_pipeline() -> None:
     defaults = knobs.defaults()
     assert defaults["gamma"] == gray16.CAL_GAMMA
     assert defaults["highlights"] == gray16.CAL_HIGHLIGHTS
+    assert defaults["brightness"] == gray16.CAL_BRIGHTNESS
+    assert defaults["contrast"] == gray16.CAL_CONTRAST
+    assert defaults["panel_calibration"] == gray16.CAL_PANEL_STRENGTH
+
+
+def test_panel_calibration_default_on() -> None:
+    """Calibration ships on by default (the measured correction is the baseline)."""
+    assert gray16.CAL_PANEL_STRENGTH == 1.0
+    assert knobs.defaults()["panel_calibration"] == 1.0
+
+
+def test_to_client_exposes_knob_type() -> None:
+    """The template needs each knob's control type to render switch vs slider."""
+    by_id = {k["id"]: k for k in knobs.to_client()}
+    assert by_id["panel_calibration"]["type"] == "toggle"
+    assert by_id["gamma"]["type"] == "range"
+
+
+def test_parse_values_toggle() -> None:
+    """The calibration toggle parses to 0.0/1.0 and falls back to its default."""
+    assert knobs.parse_values({"panel_calibration": "1"})["panel_calibration"] == 1.0
+    assert knobs.parse_values({"panel_calibration": "0"})["panel_calibration"] == 0.0
+    assert knobs.parse_values({})["panel_calibration"] == gray16.CAL_PANEL_STRENGTH
 
 
 def test_parse_values_clamps_and_falls_back() -> None:

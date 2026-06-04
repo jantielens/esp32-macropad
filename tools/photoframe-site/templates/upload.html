@@ -188,6 +188,15 @@
             <button type="button" class="btn btn-link btn-sm p-0 ms-auto ghost-link" id="reset-knobs">Reset</button>
           </div>
           {% for knob in knobs %}
+          {% if knob.type == 'toggle' %}
+          <div class="mb-3 form-check form-switch">
+            <input class="form-check-input knob-input" type="checkbox" role="switch"
+                   id="knob_{{ knob.id }}" data-knob-id="{{ knob.id }}" data-default="{{ knob.default }}"
+                   {% if knob.default >= 0.5 %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="knob_{{ knob.id }}">{{ knob.label }}</label>
+            {% if knob.help %}<div class="form-text">{{ knob.help }}</div>{% endif %}
+          </div>
+          {% else %}
           <div class="mb-3">
             <div class="d-flex justify-content-between">
               <label for="knob_{{ knob.id }}" class="form-label fw-semibold mb-0">{{ knob.label }}</label>
@@ -199,6 +208,7 @@
                    value="{{ knob.default }}">
             {% if knob.help %}<div class="form-text">{{ knob.help }}</div>{% endif %}
           </div>
+          {% endif %}
           {% endfor %}
           {% if resamplers %}
           <div class="mb-1">
@@ -286,6 +296,8 @@
   function buildLut(values) {
     var gamma = values.gamma;
     var highlights = values.highlights;
+    var brightness = values.brightness;
+    var contrast = values.contrast;
     var invGamma = gamma > 0 ? 1.0 / gamma : 1.0;
     var lut = new Uint8ClampedArray(256);
     for (var v = 0; v < 256; v++) {
@@ -294,30 +306,60 @@
       if (highlights !== 0.0) {
         var bump = (Math.pow(toned, HIGHLIGHT_BUMP_EXP) * (1.0 - toned)) / HIGHLIGHT_BUMP_PEAK;
         toned += highlights * bump;
-        if (toned < 0.0) toned = 0.0;
-        else if (toned > 1.0) toned = 1.0;
       }
+      if (contrast !== 1.0) toned = (toned - 0.5) * contrast + 0.5;
+      if (brightness !== 0.0) toned += brightness;
+      if (toned < 0.0) toned = 0.0;
+      else if (toned > 1.0) toned = 1.0;
       lut[v] = Math.round(toned * 255.0);
     }
     return lut;
   }
 
-  // --- Preview-only panel display correction -----------------------------------
-  // The real E1003 e-paper panel renders its gray levels noticeably lighter than
-  // an sRGB monitor, so the untouched preview looks darker than the device. This
-  // LUT nudges the on-screen preview lighter to approximate the panel's response.
-  // It is a DISPLAY correction only: it is applied AFTER buildLut() and never
-  // affects the encoded G16P or the tone-curve parity test. gamma < 1 lightens.
-  // The gamma comes from the server (gray16.PREVIEW_DISPLAY_GAMMA) so this live
-  // preview and the baked gallery thumbnail share one definition.
-  var PREVIEW_DISPLAY_GAMMA = {{ display_gamma|default(0.75)|tojson }};
-  var DISPLAY_LUT = (function () {
+  // --- Panel response (measured) -----------------------------------------------
+  // Mirrors gray16's _build_panel_inverse_lut / _build_panel_forward_lut, both
+  // derived from PANEL_RESPONSE_E1003_GC16_V32. The INVERSE maps desired gray to
+  // the source level the panel must be fed (the encode-time calibration); the
+  // FORWARD maps a source level to how it actually renders (the display sim).
+  // Together they make the preview show what the panel will produce. Guarded by
+  // tests/test_knobs.py; keep in sync with gray16.py.
+  var PANEL_RESPONSE = {{ panel_response|default([])|tojson }};
+
+  function buildPanelInverseLut(resp) {
+    var last = resp.length - 1;
     var lut = new Uint8ClampedArray(256);
-    for (var v = 0; v < 256; v++) {
-      lut[v] = Math.round(Math.pow(v / 255.0, PREVIEW_DISPLAY_GAMMA) * 255.0);
+    for (var d = 0; d < 256; d++) {
+      var target = d / 255.0;
+      if (target <= resp[0]) { lut[d] = 0; continue; }
+      if (target >= resp[last]) { lut[d] = 255; continue; }
+      for (var k = 0; k < last; k++) {
+        if (resp[k] <= target && target <= resp[k + 1]) {
+          var denom = resp[k + 1] - resp[k];
+          var frac = denom <= 0.0 ? 0.0 : (target - resp[k]) / denom;
+          lut[d] = Math.round((k + frac) * 17.0);
+          break;
+        }
+      }
     }
     return lut;
-  })();
+  }
+
+  function buildPanelForwardLut(resp) {
+    var last = resp.length - 1;
+    var lut = new Uint8ClampedArray(256);
+    for (var s = 0; s < 256; s++) {
+      var pos = s / 17.0;
+      var k = Math.floor(pos);
+      var refl;
+      if (k >= last) refl = resp[last];
+      else { var frac = pos - k; refl = resp[k] + frac * (resp[k + 1] - resp[k]); }
+      lut[s] = Math.round(refl * 255.0);
+    }
+    return lut;
+  }
+
+  var PANEL_INVERSE_LUT = buildPanelInverseLut(PANEL_RESPONSE);
+  var PANEL_FORWARD_LUT = buildPanelForwardLut(PANEL_RESPONSE);
 
   var fileInput = document.getElementById("file");
   var canvas = document.getElementById("preview");
@@ -381,7 +423,11 @@
     var values = {};
     KNOBS.forEach(function (k) {
       var el = document.getElementById("knob_" + k.id);
-      values[k.id] = parseFloat(el.value);
+      if (k.type === "toggle") {
+        values[k.id] = el.checked ? 1 : 0;
+      } else {
+        values[k.id] = parseFloat(el.value);
+      }
     });
     return values;
   }
@@ -399,11 +445,18 @@
     syncBadges(values);
     if (!baseBitmap) return;
 
-    // Combined LUT: tone curve, then panel display correction. White (255) maps
-    // to white, so the letterbox bars stay clean.
+    // Combined LUT: tone curve -> panel calibration (desired -> source) -> panel
+    // forward display sim (source -> on-screen). When calibration is off, the
+    // source IS the desired gray, so the preview shows the panel's uncorrected
+    // (lighter midtone) response. White (255) maps to white, so letterbox bars
+    // stay clean.
     var tone = buildLut(values);
+    var calOn = values.panel_calibration >= 0.5;
     var combined = new Uint8ClampedArray(256);
-    for (var v = 0; v < 256; v++) combined[v] = DISPLAY_LUT[tone[v]];
+    for (var v = 0; v < 256; v++) {
+      var src = calOn ? PANEL_INVERSE_LUT[tone[v]] : tone[v];
+      combined[v] = PANEL_FORWARD_LUT[src];
+    }
 
     var win = windowSize();
     clampCenter(win.w, win.h);
@@ -522,11 +575,16 @@
 
   document.querySelectorAll(".knob-input").forEach(function (el) {
     el.addEventListener("input", scheduleRender);
+    el.addEventListener("change", scheduleRender);
   });
 
   document.getElementById("reset-knobs").addEventListener("click", function () {
     document.querySelectorAll(".knob-input").forEach(function (el) {
-      el.value = el.getAttribute("data-default");
+      if (el.type === "checkbox") {
+        el.checked = parseFloat(el.getAttribute("data-default")) >= 0.5;
+      } else {
+        el.value = el.getAttribute("data-default");
+      }
     });
     render();
   });

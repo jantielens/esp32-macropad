@@ -33,6 +33,9 @@ class Knob:
     # "tone": applied live via the browser tone-curve LUT (mirrors gray16 math).
     # "base": changes the server-rendered base; browser must refetch on change.
     tier: str
+    # "range": a slider. "toggle": a 0/1 switch (rendered as a checkbox, parsed as
+    # 0.0/1.0). The control type only affects rendering/parsing, not the math.
+    type: str = "range"
     help: str = ""
 
     def clamp(self, value: float) -> float:
@@ -42,14 +45,36 @@ class Knob:
 # Order here is the order shown in the upload form.
 KNOBS: tuple[Knob, ...] = (
     Knob(
-        id="gamma",
-        label="Gamma",
-        min=0.4,
-        max=2.0,
-        step=0.05,
-        default=gray16.CAL_GAMMA,
+        id="panel_calibration",
+        label="Panel calibration",
+        min=0.0,
+        max=1.0,
+        step=1.0,
+        default=gray16.CAL_PANEL_STRENGTH,
         tier="tone",
-        help="Lower brightens midtones; higher darkens them.",
+        type="toggle",
+        help="Correct for the panel's measured tonal response. Leave on for the "
+        "most natural-looking photos; turn off to send the raw tone curve.",
+    ),
+    Knob(
+        id="brightness",
+        label="Brightness",
+        min=-0.2,
+        max=0.2,
+        step=0.02,
+        default=gray16.CAL_BRIGHTNESS,
+        tier="tone",
+        help="Shift the whole image lighter or darker.",
+    ),
+    Knob(
+        id="contrast",
+        label="Contrast",
+        min=0.75,
+        max=1.25,
+        step=0.05,
+        default=gray16.CAL_CONTRAST,
+        tier="tone",
+        help="Higher deepens shadows and brightens highlights; lower flattens.",
     ),
     Knob(
         id="highlights",
@@ -60,6 +85,16 @@ KNOBS: tuple[Knob, ...] = (
         default=gray16.CAL_HIGHLIGHTS,
         tier="tone",
         help="Negative recovers blown highlights; positive lifts them.",
+    ),
+    Knob(
+        id="gamma",
+        label="Gamma",
+        min=0.4,
+        max=2.0,
+        step=0.05,
+        default=gray16.CAL_GAMMA,
+        tier="tone",
+        help="Lower brightens midtones; higher darkens them.",
     ),
 )
 
