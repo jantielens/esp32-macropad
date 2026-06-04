@@ -34,7 +34,6 @@
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <math.h>
-#include <miniz.h>  // esp_rom tinfl_decompress_mem_to_mem (raw DEFLATE)
 #include <string.h>
 
 // Bundled Inter fonts (shared with the Inkplate driver; resolved via the
@@ -116,10 +115,10 @@
 
 // IT8951 host-write SPI clock. The Seeed reference runs ~12 MHz; some IT8951
 // boards tolerate higher, which shrinks the ~1.2s frame upload proportionally.
-// Bumped to 18 MHz; raise further only after verifying no corruption/banding
+// Bumped to 14 MHz; raise further only after verifying no corruption/banding
 // on the panel. A board_overrides.h can override per board.
 #ifndef EPAPER_SPI_HZ
-#define EPAPER_SPI_HZ 18000000
+#define EPAPER_SPI_HZ 14000000
 #endif
 
 // G16P payload integrity check. The server stamps a CRC32 over the packed
@@ -153,16 +152,7 @@ constexpr uint8_t IT8951_ROTATE_0 = 0;
 constexpr uint8_t G16P_VERSION = 1;
 constexpr size_t G16P_HEADER_SIZE = 18;
 constexpr size_t G16P_PAYLOAD_SIZE = (size_t)EPAPER_PANEL_W * EPAPER_PANEL_H / 2;
-constexpr size_t G16P_TOTAL_SIZE = G16P_HEADER_SIZE + G16P_PAYLOAD_SIZE;
 const uint8_t G16P_MAGIC[4] = {'G', '1', '6', 'P'};
-
-// G16Z: compressed transport wrapper for a G16P blob. 4-byte magic followed by
-// a raw DEFLATE stream (no zlib/gzip header) of the complete G16P bytes. The
-// server emits this at upload time so the device pulls ~0.3-0.5x the bytes off
-// the wire; the firmware inflates straight into a fixed-size G16P buffer with
-// the ROM's malloc-free tinfl. Raw G16P (uncompressed) is still accepted for
-// backward compatibility with blobs uploaded before this format existed.
-const uint8_t G16Z_MAGIC[4] = {'G', '1', '6', 'Z'};
 
 // Translate a HAL 3-bit grayscale color (0..7, 0=black .. 7=white) into the
 // canvas' 4-bit grayscale (0..15). Used by every primitive so status screens
@@ -484,58 +474,6 @@ bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
 		return true;
 }
 
-// Inflate a G16Z container (4-byte magic + raw DEFLATE of a full G16P blob)
-// into a freshly-allocated PSRAM buffer holding the reconstructed G16P bytes.
-// The whole compressed input and the exact output size are known up front, so
-// a single tinfl_decompress() call into a non-wrapping output buffer suffices.
-// The tinfl_decompressor state embeds a 32 KB dictionary (~33 KB total), far
-// too large for the loop task stack, so it is heap-allocated rather than using
-// the stack-based tinfl_decompress_mem_to_mem() helper. On success fills
-// *out_buf/*out_len (caller frees with heap_caps_free).
-bool inflate_g16z(const uint8_t* data, size_t len, uint8_t** out_buf, size_t* out_len) {
-		*out_buf = nullptr;
-		*out_len = 0;
-		if (!data || len <= sizeof(G16Z_MAGIC)) return false;
-
-		uint8_t* dst = (uint8_t*)heap_caps_malloc(G16P_TOTAL_SIZE,
-				MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-		if (!dst) {
-				LOGW("Epaper", "G16Z inflate buffer alloc failed (%u bytes)",
-						 (unsigned)G16P_TOTAL_SIZE);
-				return false;
-		}
-		tinfl_decompressor* decomp = (tinfl_decompressor*)heap_caps_malloc(
-				sizeof(tinfl_decompressor), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-		if (!decomp) {
-				LOGW("Epaper", "G16Z decompressor alloc failed (%u bytes)",
-						 (unsigned)sizeof(tinfl_decompressor));
-				heap_caps_free(dst);
-				return false;
-		}
-
-		const uint32_t t0 = millis();
-		tinfl_init(decomp);
-		size_t in_bytes = len - sizeof(G16Z_MAGIC);  // all input present
-		size_t out_bytes = G16P_TOTAL_SIZE;          // output buffer capacity
-		const tinfl_status st = tinfl_decompress(
-				decomp, data + sizeof(G16Z_MAGIC), &in_bytes,
-				dst, dst, &out_bytes,
-				TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
-		heap_caps_free(decomp);
-
-		if (st != TINFL_STATUS_DONE || out_bytes != G16P_TOTAL_SIZE) {
-				LOGW("Epaper", "G16Z inflate failed (status=%d produced=%u expected=%u)",
-						 (int)st, (unsigned)out_bytes, (unsigned)G16P_TOTAL_SIZE);
-				heap_caps_free(dst);
-				return false;
-		}
-		LOGI("Epaper", "G16Z inflated %u -> %u bytes in %lu ms",
-				 (unsigned)len, (unsigned)out_bytes, (unsigned long)(millis() - t0));
-		*out_buf = dst;
-		*out_len = out_bytes;
-		return true;
-}
-
 // Decode callback: store JPEGDEC's 8-bit grayscale output in the dither buffer
 // (preferred) or, when no dither buffer is available, write the rounded 4-bit
 // nibble straight into the canvas. No scaling -- the image is assumed to be
@@ -756,12 +694,10 @@ void sd_restore_panel_bus() {
 
 bool sd_cache_mount() {
 		if (s_sd_mounted) return true;
-		// The SD rail is powered up front in epaper_driver_begin() so the card has
-		// had the whole panel-init time to settle. Re-assert power here defensively
-		// (cheap) and give a short extra ramp in case begin() ran only moments ago.
+		// Power the card and let the rail settle before talking to it.
 		pinMode(EPAPER_SD_EN_PIN, OUTPUT);
 		digitalWrite(EPAPER_SD_EN_PIN, HIGH);
-		delay(250);
+		delay(5);
 #ifdef EPAPER_SD_DET_PIN
 		pinMode(EPAPER_SD_DET_PIN, INPUT_PULLUP);
 		if (digitalRead(EPAPER_SD_DET_PIN) == HIGH) {  // HIGH = no card inserted
@@ -770,32 +706,12 @@ bool sd_cache_mount() {
 				return false;
 		}
 #endif
-		// Deselect the panel before handing the shared bus to the SD library. No
-		// wait_hrdy() here: nothing is driving the panel at mount time (we are
-		// between WiFi connect and the first draw), so polling HRDY only burns its
-		// full 3 s timeout. The proven Seeed reference also skips it.
+		// Deselect the panel before handing the shared bus to the SD library.
 		digitalWrite(EPAPER_PIN_CS, HIGH);
-		// Re-init the shared HSPI bus exactly like the Seeed reference: ss = -1.
-		// SD.begin(CS, spi) below owns the chip-select itself; the panel uses the
-		// same SS=-1 bus, so this keeps a single consistent bus configuration.
-		s_spi.end();
-		s_spi.begin(EPAPER_PIN_SCK, EPAPER_PIN_MISO, EPAPER_PIN_MOSI, -1);
-		// Mount at 20 MHz: cardType=0 was a power-settle problem (now fixed by the
-		// rail ramp above), not a clock-integrity one, so the shared bus tolerates
-		// the panel's working frequency. This cuts the 1.3 MB cache read from ~3 s
-		// (at 4 MHz) to under 1 s.
-		if (!SD.begin(EPAPER_SD_CS_PIN, s_spi, 20000000)) {
-				// Distinguish a card-init failure (bus/power/wiring) from a FAT
-				// mount failure (card formatted wrong). cardType()==NONE means the
-				// SPI handshake never completed, so reformatting would not help.
-				const uint8_t ct = SD.cardType();
-				LOGW("Epaper", "SD cache: SD.begin failed (cardType=%u: %s)", ct,
-						 ct == CARD_NONE ? "no card init - check bus/power"
-														 : "card OK but FAT mount failed - reformat FAT32");
+		if (!SD.begin(EPAPER_SD_CS_PIN, s_spi)) {
+				LOGW("Epaper", "SD cache: SD.begin failed");
 				sd_restore_panel_bus();
-				// Leave SD_EN HIGH: the rail stays powered while the device is awake
-				// (it drops naturally on deep sleep). Power-cycling here would force a
-				// fresh ramp and reintroduce the cardType=0 settle problem.
+				digitalWrite(EPAPER_SD_EN_PIN, LOW);
 				return false;
 		}
 		s_sd_mounted = true;
@@ -807,8 +723,7 @@ void sd_cache_unmount() {
 		SD.end();
 		s_sd_mounted = false;
 		sd_restore_panel_bus();
-		// SD_EN stays HIGH while awake; the rail powers down on deep sleep. Keeping
-		// it powered avoids a cold re-ramp on the next mount within the same wake.
+		digitalWrite(EPAPER_SD_EN_PIN, LOW);  // drop card power between accesses
 }
 
 void sd_cache_path(const char* id, char* out, size_t out_sz) {
@@ -1055,39 +970,6 @@ void prewarm_worker(void* arg) {
 		for (;;) vTaskDelay(portMAX_DELAY);
 }
 
-// Handle bundle for a pre-warm task so it can be started concurrently with a
-// non-HSPI operation (WiFi resolve or download) and reaped afterwards.
-struct Prewarm {
-		PrewarmCtx ctx;          // must outlive the task; reaped in prewarm_join
-		TaskHandle_t worker;
-		RtosTaskPsramAlloc alloc;
-		bool spawned;
-};
-
-// Start power_on() on a background HSPI task. Caller MUST prewarm_join() before
-// touching the HSPI bus (SD read or panel upload), since power_on drives it.
-void prewarm_start(Prewarm* pw) {
-		pw->ctx.caller = xTaskGetCurrentTaskHandle();
-		pw->worker = nullptr;
-		pw->alloc = {};
-		pw->spawned = rtos_create_task_psram_stack(
-				prewarm_worker, "epwarm", PREWARM_STACK_WORDS, &pw->ctx, 5, &pw->worker,
-				&pw->alloc);
-		if (!pw->spawned)
-				LOGW("Epaper", "pre-warm spawn failed; power_on will run inline at display");
-}
-
-// Wait for power_on() to finish, then free the task TCB/stack. No-op if the
-// task was never spawned, so it is always safe to call.
-void prewarm_join(Prewarm* pw) {
-		if (!pw->spawned) return;
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-		vTaskDelete(pw->worker);
-		if (pw->alloc.stack) heap_caps_free(pw->alloc.stack);
-		if (pw->alloc.tcb) heap_caps_free(pw->alloc.tcb);
-		pw->spawned = false;
-}
-
 }  // namespace
 
 
@@ -1109,19 +991,6 @@ bool epaper_driver_begin() {
 		digitalWrite(EPAPER_PIN_TFT_ENABLE, HIGH);
 		pinMode(EPAPER_PIN_ITE_ENABLE, OUTPUT);
 		digitalWrite(EPAPER_PIN_ITE_ENABLE, HIGH);
-
-#ifdef EPAPER_SD_CS_PIN
-		// Power the shared-bus MicroSD rail at panel begin, exactly like the Seeed
-		// reference does in setup(). The card then gets the full panel-init duration
-		// (HW reset + SYS_RUN + first clear, well over a second) to complete its
-		// internal power-up ramp before sd_cache_mount() ever calls SD.begin(). A
-		// 50 ms settle inside the mount was too short and left SD.begin returning
-		// cardType=0 (card never finished SPI init).
-		pinMode(EPAPER_SD_CS_PIN, OUTPUT);
-		digitalWrite(EPAPER_SD_CS_PIN, HIGH);  // deselect SD on the shared bus
-		pinMode(EPAPER_SD_EN_PIN, OUTPUT);
-		digitalWrite(EPAPER_SD_EN_PIN, HIGH);  // power on, leave on while awake
-#endif
 
 		s_spi.begin(EPAPER_PIN_SCK, EPAPER_PIN_MISO, EPAPER_PIN_MOSI, -1);
 
@@ -1169,23 +1038,11 @@ bool epaper_driver_draw_url(const char* url) {
 		String blob_url;
 		char img_id[64] = {0};
 		if (s_sd_cache_enabled) {
-				// Hide the ~1.6s panel power-on under the network resolve: power_on
-				// drives the HSPI panel bus while http_resolve waits on WiFi -- two
-				// independent buses, so they run concurrently. Join before any HSPI
-				// access (the SD read below) so the bus is free. On a cache hit this
-				// removes power_on from the critical path entirely; on a miss the panel
-				// is simply hot before the body download starts (no regression, since
-				// the resolve already runs before the download either way).
-				Prewarm pw = {};
-				prewarm_start(&pw);
-				const bool resolved =
-						http_resolve(url, blob_url, img_id, sizeof(img_id)) && img_id[0];
-				prewarm_join(&pw);  // power_on done; HSPI now free for the SD read
-
 				// Resolve the /api/next redirect to a blob URL + content-stable id
 				// WITHOUT downloading the body, then try the SD cache. A hit skips the
-				// slow HTTP body GET entirely.
-				if (resolved) {
+				// slow HTTP body GET entirely; the SD read uses the panel's HSPI bus,
+				// so the pre-warm worker (which also drives HSPI) must NOT run here.
+				if (http_resolve(url, blob_url, img_id, sizeof(img_id)) && img_id[0]) {
 						if (sd_cache_read(img_id, &data, &len)) {
 								from_cache = true;
 								LOGI("Epaper", "SD cache hit: %s", img_id);
@@ -1201,10 +1058,15 @@ bool epaper_driver_draw_url(const char* url) {
 				// background task that runs concurrently with the HTTP download, so the
 				// panel is ready when bytes arrive and epaper_driver_display()'s
 				// power_on() collapses to a guarded no-op. SPI and WiFi don't share a
-				// bus. Skipped when the panel is already warm (the SD-cache resolve
-				// above prewarmed it); prewarm_join is a no-op in that case.
-				Prewarm pw = {};
-				if (!s_power_on) prewarm_start(&pw);
+				// bus. Joined before continuing so the task/stack are always reaped.
+				PrewarmCtx pctx = { xTaskGetCurrentTaskHandle() };
+				TaskHandle_t pworker = nullptr;
+				RtosTaskPsramAlloc palloc = {};
+				const bool prewarm_spawned = rtos_create_task_psram_stack(
+						prewarm_worker, "epwarm", PREWARM_STACK_WORDS, &pctx, 5, &pworker, &palloc);
+				if (!prewarm_spawned) {
+						LOGW("Epaper", "pre-warm spawn failed; power_on will run inline at display");
+				}
 
 				// On a cache miss we may already have resolved the blob URL; download it
 				// directly to skip the redirect hop. Otherwise download the original URL.
@@ -1216,36 +1078,22 @@ bool epaper_driver_draw_url(const char* url) {
 
 				// Join the pre-warm worker (notifies after power_on completes), then reap
 				// its TCB/stack. Done regardless of download result.
-				prewarm_join(&pw);
+				if (prewarm_spawned) {
+						ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+						vTaskDelete(pworker);
+						if (palloc.stack) heap_caps_free(palloc.stack);
+						if (palloc.tcb) heap_caps_free(palloc.tcb);
+				}
 
 				if (!dl_ok) return false;
 		}
 
-		// G16Z (compressed G16P): inflate into a separate buffer and render from
-		// that, but keep the on-wire bytes in `data` so the SD cache stores the
-		// small compressed payload (a later cache hit re-enters this same path and
-		// inflates again). Falls back to treating `data` as raw G16P / JPEG when
-		// the magic is absent, so pre-compression blobs still render.
-		const bool is_g16z = (len >= sizeof(G16Z_MAGIC) &&
-				memcmp(data, G16Z_MAGIC, sizeof(G16Z_MAGIC)) == 0);
-		const uint8_t* g16p = data;
-		size_t g16p_len = len;
-		uint8_t* inflated = nullptr;
-		if (is_g16z) {
-				if (!inflate_g16z(data, len, &inflated, &g16p_len)) {
-						heap_caps_free(data);
-						return false;
-				}
-				g16p = inflated;
-		}
-
-		const bool is_g16p = (g16p_len >= sizeof(G16P_MAGIC) &&
-				memcmp(g16p, G16P_MAGIC, sizeof(G16P_MAGIC)) == 0);
+		const bool is_g16p = (len >= sizeof(G16P_MAGIC) &&
+				memcmp(data, G16P_MAGIC, sizeof(G16P_MAGIC)) == 0);
 		if (is_g16p) {
-				const bool ok = load_g16p_to_canvas(g16p, g16p_len);
-				if (inflated) heap_caps_free(inflated);
+				const bool ok = load_g16p_to_canvas(data, len);
 #ifdef EPAPER_SD_CS_PIN
-				// Stage the on-wire bytes for write-back to SD after display.
+				// Stage a freshly downloaded image for write-back to SD after display.
 				// Transfer buffer ownership to the pending slot (don't free below).
 				if (ok && !from_cache && s_sd_cache_enabled && img_id[0]) {
 						s_sd_pending_buf = data;
@@ -1256,15 +1104,6 @@ bool epaper_driver_draw_url(const char* url) {
 #endif
 				if (data) heap_caps_free(data);
 				return ok;
-		}
-
-		// Inflated successfully but the result was not a valid G16P frame — a
-		// malformed container. Bail rather than feeding deflate output to JPEGDEC.
-		if (inflated) {
-				LOGW("Epaper", "G16Z payload was not a valid G16P frame: %s", url);
-				heap_caps_free(inflated);
-				heap_caps_free(data);
-				return false;
 		}
 
 		// JPEGDEC's progressive decoder faults on some images (the duty-cycle
