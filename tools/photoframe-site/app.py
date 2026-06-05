@@ -105,6 +105,7 @@ def index(request: Request) -> Response:
     if user is None:
         return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(
+        request,
         "devices.html",
         {"request": request, "user": user, "devices": list(user.devices)},
     )
@@ -113,7 +114,7 @@ def index(request: Request) -> Response:
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request, error: Optional[str] = None) -> Response:
     return templates.TemplateResponse(
-        "login.html", {"request": request, "error": error}
+        request, "login.html", {"request": request, "error": error}
     )
 
 
@@ -175,6 +176,7 @@ def gallery(request: Request, device_id: str) -> Response:
     ]
 
     return templates.TemplateResponse(
+        request,
         "gallery.html",
         {"request": request, "user": user, "device_id": device_id,
          "items": items, "queue": queue},
@@ -200,6 +202,7 @@ def upload_form(request: Request, device_id: str) -> Response:
     user = _require_user(request, config)
     device = _require_device(user, config, device_id)
     return templates.TemplateResponse(
+        request,
         "upload.html",
         {
             "request": request,
@@ -312,6 +315,7 @@ def upload_submit(
             )
     except Exception as exc:  # noqa: BLE001 - surface decode/encode failure to user
         return templates.TemplateResponse(
+            request,
             "upload.html",
             {"request": request, "user": user, "device_id": device_id,
              "knobs": knobs.to_client(),
