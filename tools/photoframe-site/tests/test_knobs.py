@@ -26,6 +26,7 @@ def _js_twin_lut(
     highlights: float,
     brightness: float = 0.0,
     contrast: float = 1.0,
+    midtone: float = 0.0,
 ) -> list[int]:
     """Faithful Python mirror of the browser buildLut() in upload.html.
 
@@ -35,6 +36,11 @@ def _js_twin_lut(
     exp = 6.0
     peak = (math.pow(exp / (exp + 1.0), exp)) / (exp + 1.0)
     inv_gamma = 1.0 / gamma if gamma > 0 else 1.0
+    sig_lo = 0.0
+    sig_span = 1.0
+    if midtone > 0.0:
+        sig_lo = 1.0 / (1.0 + math.exp(midtone * 0.5))
+        sig_span = (1.0 / (1.0 + math.exp(-midtone * 0.5))) - sig_lo
     lut = []
     for v in range(256):
         norm = v / 255.0
@@ -44,6 +50,8 @@ def _js_twin_lut(
             toned += highlights * bump
         if contrast != 1.0:
             toned = (toned - 0.5) * contrast + 0.5
+        if midtone > 0.0:
+            toned = (1.0 / (1.0 + math.exp(-midtone * (toned - 0.5))) - sig_lo) / sig_span
         if brightness != 0.0:
             toned += brightness
         if toned < 0.0:
@@ -105,16 +113,19 @@ def test_tone_curve_parity() -> None:
         for highlights in (-0.5, 0.0, 0.5):
             for brightness in (-0.2, 0.0, 0.2):
                 for contrast in (0.75, 1.0, 1.25):
-                    authoritative = gray16._build_tone_lut(
-                        0, 255, gamma, highlights, brightness, contrast
-                    )
-                    twin = _js_twin_lut(gamma, highlights, brightness, contrast)
-                    max_diff = max(abs(a - b) for a, b in zip(authoritative, twin))
-                    assert max_diff <= 1, (
-                        f"tone curve drift at gamma={gamma}, highlights={highlights}, "
-                        f"brightness={brightness}, contrast={contrast}: "
-                        f"max |delta|={max_diff} (JS twin must mirror gray16._build_tone_lut)"
-                    )
+                    for midtone in (0.0, 2.0, 6.0):
+                        authoritative = gray16._build_tone_lut(
+                            0, 255, gamma, highlights, brightness, contrast, midtone
+                        )
+                        twin = _js_twin_lut(
+                            gamma, highlights, brightness, contrast, midtone
+                        )
+                        max_diff = max(abs(a - b) for a, b in zip(authoritative, twin))
+                        assert max_diff <= 1, (
+                            f"tone curve drift at gamma={gamma}, highlights={highlights}, "
+                            f"brightness={brightness}, contrast={contrast}, midtone={midtone}: "
+                            f"max |delta|={max_diff} (JS twin must mirror gray16._build_tone_lut)"
+                        )
 
 
 def test_panel_inverse_lut_js_parity() -> None:
@@ -198,6 +209,7 @@ def test_knob_defaults_track_pipeline() -> None:
     assert defaults["highlights"] == gray16.CAL_HIGHLIGHTS
     assert defaults["brightness"] == gray16.CAL_BRIGHTNESS
     assert defaults["contrast"] == gray16.CAL_CONTRAST
+    assert defaults["midtone"] == gray16.CAL_MIDTONE
     assert defaults["panel_calibration"] == gray16.CAL_PANEL_STRENGTH
 
 

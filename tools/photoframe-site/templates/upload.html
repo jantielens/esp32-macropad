@@ -75,6 +75,128 @@
     font-weight: 700;
     text-decoration: none;
   }
+  /* Sticky commit bar: always-in-view keep-in-rotation + auto-remove + send.
+     Bold, label-light, big tap targets; opaque so content scrolls beneath it. */
+  .upload-flow .action-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1030;
+    margin: .25rem -.15rem 0;
+    padding: .7rem;
+    padding-bottom: calc(.7rem + env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1.1rem;
+    box-shadow: 0 -8px 28px rgba(17, 12, 34, .16);
+  }
+  .upload-flow .bar-toggle {
+    flex: 0 0 auto;
+    width: 3.1rem;
+    height: 3.1rem;
+    border-radius: .85rem;
+    display: grid;
+    place-items: center;
+    font-size: 1.4rem;
+    cursor: pointer;
+    user-select: none;
+    border: 2px solid var(--accent);
+    background: rgba(109, 40, 217, .12);
+    color: var(--accent);
+    transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, color .12s ease;
+  }
+  .upload-flow .bar-toggle:hover { box-shadow: 0 0 0 .15rem rgba(109, 40, 217, .18); }
+  .upload-flow .bar-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* "Always" state: neutral/grey, since nothing is timed. */
+  .upload-flow .bar-toggle.is-always {
+    border-color: var(--bs-border-color);
+    background: var(--bs-secondary-bg);
+    color: var(--bs-secondary-color);
+  }
+  .upload-flow .bar-life {
+    /* flex-basis 0 (not auto) so width is set by the flex ratio, not the label
+       text; this stops the bar from resizing/jumping as the duration cycles. */
+    flex: 2 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .15rem;
+    height: 3.1rem;
+    padding: 0 .35rem;
+    border-radius: .85rem;
+    border: 2px solid var(--bs-border-color);
+    background: var(--bs-secondary-bg);
+  }
+  .upload-flow .bar-step {
+    flex: 0 0 auto;
+    width: 2.1rem;
+    height: 2.4rem;
+    border: 0;
+    border-radius: .6rem;
+    background: transparent;
+    color: var(--accent);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .upload-flow .bar-step:hover:not(:disabled) { background: rgba(109, 40, 217, .12); }
+  .upload-flow .bar-step:disabled { color: var(--bs-secondary-color); opacity: .35; cursor: default; }
+  .upload-flow .bar-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .upload-flow .bar-life-label {
+    flex: 1 1 auto;
+    text-align: center;
+    font-weight: 800;
+    font-size: 1.05rem;
+    letter-spacing: .01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .upload-flow .action-bar .btn-upload {
+    /* Content-independent basis so the send button keeps a steady width as the
+       duration label cycles; smaller grow than .bar-life so it stays compact. */
+    flex: 1 1 0;
+    height: 3.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.02rem;
+    padding: .25rem .9rem;
+    box-shadow: 0 4px 14px rgba(109, 40, 217, .35);
+  }
+  /* Sticky preview: pinned to the top edge so the image stays in view while the
+     user scrolls down to the adjustment knobs (Excel-style frozen row). The
+     wrapper is full-width and opaque so scrolled content is covered behind the
+     centered image; a soft bottom shadow separates it from the content beneath. */
+  .upload-flow .preview-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    padding: .4rem 0 .55rem;
+    background: var(--bs-body-bg);
+  }
+  .upload-flow .preview-sticky.is-pinned {
+    box-shadow: 0 10px 22px -12px rgba(17, 12, 34, .45);
+  }
+  /* Width-first sizing so aspect-ratio is always honored: the box fills the
+     column width and derives its height from the device aspect, capped via
+     max-width so the height never exceeds ~46vh. This keeps the box exactly at
+     the panel aspect on every viewport (no gray letterbox from object-fit), and
+     the drag-to-frame pointer math stays exact. */
+  .upload-flow .preview-box {
+    aspect-ratio: var(--dev-aspect, 4 / 3);
+    width: 100%;
+    max-width: calc(46vh * var(--dev-aspect, 4 / 3));
+    margin-inline: auto;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: grab;
+  }
   #send-overlay {
     /* --accent lives on .upload-flow; this overlay is outside that scope, so
        redeclare the accents here or the progress-bar gradient resolves to nothing. */
@@ -152,20 +274,24 @@
           <label for="file" class="btn btn-upload w-100 mb-0">📷 Pick an image</label>
         </section>
 
+        <!-- Preview (sticky: clamps to the top edge while scrolling to the knobs) -->
+        <div class="preview-sticky" id="preview-sticky">
+          <div id="preview-wrap" class="preview-box border rounded-3 bg-dark d-flex align-items-center justify-content-center"
+               style="--dev-aspect: {{ device_aspect|default(4 / 3) }};">
+            <canvas id="preview" style="width:100%; height:100%; object-fit:fill; display:none;"></canvas>
+            <span id="preview-status" class="text-secondary small p-3 text-center">
+              Choose an image to preview how it will look on the panel.
+            </span>
+          </div>
+        </div>
+
         <!-- 2 · Preview & framing -->
         <section class="step">
           <div class="step-head">
             <span class="step-num">2</span>
             <h2 class="step-title">Preview &amp; framing</h2>
           </div>
-          <div id="preview-wrap" class="border rounded-3 bg-dark d-flex align-items-center justify-content-center"
-               style="aspect-ratio: {{ device_aspect|default(4 / 3) }}; overflow: hidden; touch-action:none; -webkit-user-select:none; user-select:none; cursor:grab;">
-            <canvas id="preview" style="width:100%; height:100%; object-fit:contain; display:none;"></canvas>
-            <span id="preview-status" class="text-secondary small p-3 text-center">
-              Choose an image to preview how it will look on the panel.
-            </span>
-          </div>
-          <div id="zoom-row" class="mt-3" style="display:none;">
+          <div id="zoom-row" style="display:none;">
             <div class="d-flex justify-content-between align-items-center">
               <label for="crop-zoom" class="form-label fw-semibold mb-0">Zoom &amp; drag to frame</label>
               <button type="button" class="btn btn-link btn-sm p-0 ghost-link" id="reset-crop">Reset framing</button>
@@ -177,6 +303,19 @@
           </div>
           <div class="form-text">
             Grayscale and tone-adjusted like the panel. Final dithering is applied on upload.
+          </div>
+          <div id="histo-wrap" class="mt-3" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label fw-semibold mb-0">Panel tonal coverage</label>
+              <span class="small text-body-secondary font-monospace" id="histo-readout"></span>
+            </div>
+            <canvas id="histogram" height="64" class="border rounded-3 bg-dark"
+                    style="width:100%; height:64px; display:block;"></canvas>
+            <div class="form-text">
+              Each bar is one of the panel's 16 grey levels, shown in that level's
+              actual shade. Tall bars at the far left and right mean the photo
+              reaches pure black &amp; white; a gap there is what makes a photo look muted.
+            </div>
           </div>
         </section>
 
@@ -237,28 +376,23 @@
                  placeholder="Give it a name…">
         </section>
 
-        <!-- 5 · Rotation & lifetime -->
-        <section class="step">
-          <div class="step-head">
-            <span class="step-num">5</span>
-            <h2 class="step-title">Rotation &amp; lifetime</h2>
-          </div>
-          <div class="form-check form-switch fs-5 mb-3">
-            <input class="form-check-input" type="checkbox" role="switch" id="permanent" name="permanent" checked>
-            <label class="form-check-label fs-6" for="permanent">
-              <span class="fw-semibold">Keep in rotation</span> after showing. Uncheck to show once, then discard.
-            </label>
-          </div>
-          <div>
-            <label for="ttl_hours" class="form-label fw-semibold">Auto-remove after <span
-                class="fw-normal text-body-secondary">(hours, optional)</span></label>
-            <input type="number" class="form-control" id="ttl_hours" name="ttl_hours" min="0" step="0.5"
-                   placeholder="never">
-            <div class="form-text">Independent of the option above. Leave blank to keep until you delete it.</div>
-          </div>
-        </section>
+        <!-- Sticky commit bar: lifetime (always <-> timed ladder) + send -->
+        <div class="action-bar">
+          <input type="hidden" name="permanent" id="permanent" value="1">
+          <input type="hidden" name="ttl_hours" id="ttl_hours" value="">
 
-        <button type="submit" class="btn btn-upload w-100">Send it to the wall →</button>
+          <button type="button" class="bar-toggle" id="life-toggle" role="switch" aria-checked="false"
+                  title="Switch between keeping always and auto-removing after a while"
+                  aria-label="Auto-remove after a while">&#8734;</button>
+
+          <div class="bar-life">
+            <button type="button" class="bar-step" id="life-down" aria-label="Shorter lifetime">&#9660;</button>
+            <span class="bar-life-label" id="life-label" aria-live="polite">Keep always</span>
+            <button type="button" class="bar-step" id="life-up" aria-label="Longer lifetime">&#9650;</button>
+          </div>
+
+          <button type="submit" class="btn btn-upload">Send it</button>
+        </div>
       </div>
     </form>
   </div>
@@ -298,7 +432,13 @@
     var highlights = values.highlights;
     var brightness = values.brightness;
     var contrast = values.contrast;
+    var midtone = values.midtone;
     var invGamma = gamma > 0 ? 1.0 / gamma : 1.0;
+    var sigLo = 0.0, sigSpan = 1.0;
+    if (midtone > 0.0) {
+      sigLo = 1.0 / (1.0 + Math.exp(midtone * 0.5));
+      sigSpan = (1.0 / (1.0 + Math.exp(-midtone * 0.5))) - sigLo;
+    }
     var lut = new Uint8ClampedArray(256);
     for (var v = 0; v < 256; v++) {
       var norm = v / 255.0;
@@ -308,6 +448,7 @@
         toned += highlights * bump;
       }
       if (contrast !== 1.0) toned = (toned - 0.5) * contrast + 0.5;
+      if (midtone > 0.0) toned = (1.0 / (1.0 + Math.exp(-midtone * (toned - 0.5))) - sigLo) / sigSpan;
       if (brightness !== 0.0) toned += brightness;
       if (toned < 0.0) toned = 0.0;
       else if (toned > 1.0) toned = 1.0;
@@ -372,6 +513,10 @@
   var ctx = canvas.getContext("2d");
   var offscreen = document.createElement("canvas");
   var octx = offscreen.getContext("2d", { willReadFrequently: true });
+  var histoWrap = document.getElementById("histo-wrap");
+  var histoCanvas = document.getElementById("histogram");
+  var hctx = histoCanvas.getContext("2d");
+  var histoReadout = document.getElementById("histo-readout");
   var rafPending = false;
 
   // --- Framing (option B: pan/zoom a device-aspect window over the base) -------
@@ -401,6 +546,7 @@
     cropZoom.max = "3";
     cropZoom.value = "1";
     zoomRow.style.display = "";
+    histoWrap.style.display = "";
   }
 
   function windowSize() {
@@ -439,6 +585,53 @@
     });
   }
 
+  // Live 16-level panel histogram: how the dithered output occupies the panel's
+  // 16 grey levels. Bars are drawn in each level's actual reflectance shade; the
+  // two end bars are outlined when non-empty to flag that the photo reaches the
+  // black/white rails (the cure for a "muted" look).
+  function drawHistogram(hist, total) {
+    var cssW = histoCanvas.clientWidth || 320;
+    var dpr = window.devicePixelRatio || 1;
+    histoCanvas.width = Math.round(cssW * dpr);
+    histoCanvas.height = Math.round(64 * dpr);
+    hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    hctx.clearRect(0, 0, cssW, 64);
+
+    var maxCount = 1;
+    var used = 0;
+    for (var k = 0; k < 16; k++) {
+      if (hist[k] > maxCount) maxCount = hist[k];
+      if (hist[k] > 0) used++;
+    }
+    var gap = 2;
+    var barW = (cssW - gap * 15) / 16;
+    var maxH = 60;
+    for (var b = 0; b < 16; b++) {
+      var refl = PANEL_FORWARD_LUT[b * 17];
+      var bx = b * (barW + gap);
+      // sqrt scaling so a small-but-present level stays visible; >=2px when used.
+      var h = hist[b] > 0 ? Math.max(2, Math.sqrt(hist[b] / maxCount) * maxH) : 0;
+      hctx.fillStyle = "rgb(" + refl + "," + refl + "," + refl + ")";
+      hctx.fillRect(bx, 62 - h, barW, h);
+      if ((b === 0 || b === 15) && hist[b] > 0) {
+        hctx.strokeStyle = "#5eb1ff";
+        hctx.lineWidth = 1.5;
+        hctx.strokeRect(bx + 0.75, 62 - h + 0.75, barW - 1.5, h - 1.5);
+      }
+    }
+
+    if (total > 0) {
+      var blackPct = (hist[0] / total) * 100;
+      var whitePct = (hist[15] / total) * 100;
+      histoReadout.textContent =
+        blackPct.toFixed(1) + "% black \u00b7 " +
+        whitePct.toFixed(1) + "% white \u00b7 " +
+        used + "/16 levels";
+    } else {
+      histoReadout.textContent = "";
+    }
+  }
+
   function render() {
     var values = currentValues();
     knobValuesField.value = JSON.stringify(values);
@@ -453,9 +646,12 @@
     var tone = buildLut(values);
     var calOn = values.panel_calibration >= 0.5;
     var combined = new Uint8ClampedArray(256);
+    var levelLut = new Uint8Array(256); // base grey -> panel level index (0..15)
     for (var v = 0; v < 256; v++) {
       var src = calOn ? PANEL_INVERSE_LUT[tone[v]] : tone[v];
       combined[v] = PANEL_FORWARD_LUT[src];
+      var lvl = Math.round(src / 17);
+      levelLut[v] = lvl < 0 ? 0 : lvl > 15 ? 15 : lvl;
     }
 
     var win = windowSize();
@@ -474,8 +670,11 @@
 
     var img = octx.getImageData(0, 0, bw, bh);
     var data = img.data;
+    var hist = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     for (var i = 0; i < data.length; i += 4) {
-      var g = combined[data[i]];
+      var base = data[i];
+      hist[levelLut[base]]++;
+      var g = combined[base];
       data[i] = g;
       data[i + 1] = g;
       data[i + 2] = g;
@@ -484,6 +683,7 @@
     canvas.width = bw;
     canvas.height = bh;
     ctx.putImageData(img, 0, 0);
+    drawHistogram(hist, (data.length / 4) | 0);
   }
 
   function scheduleRender() {
@@ -517,6 +717,7 @@
       .catch(function () {
         baseBitmap = null;
         zoomRow.style.display = "none";
+        histoWrap.style.display = "none";
         setStatus("Preview unavailable. You can still upload.");
       });
   }
@@ -525,12 +726,82 @@
     if (!(fileInput.files && fileInput.files[0])) {
       baseBitmap = null;
       zoomRow.style.display = "none";
+      histoWrap.style.display = "none";
       cropField.value = "";
       setStatus("Choose an image to preview how it will look on the panel.");
       return;
     }
     loadBase(fileInput.files[0]);
   });
+
+  // --- Lifetime control: one ladder from "once" -> finite TTLs -> "always" -----
+  // A single stepped choice mapped onto the existing permanent / ttl_hours hidden
+  // fields, so the backend contract is unchanged. The toggle jumps to/from the
+  // "always" end; the steppers walk the ladder. NOTE: bool("0") is True server-
+  // side, so the non-permanent ("once") stop MUST emit an empty permanent value.
+  var LIFE_LADDER = [
+    { label: "Once",     perm: "",  ttl: "" },
+    { label: "1 hour",   perm: "1", ttl: "1" },
+    { label: "6 hours",  perm: "1", ttl: "6" },
+    { label: "12 hours", perm: "1", ttl: "12" },
+    { label: "24 hours", perm: "1", ttl: "24" },
+    { label: "48 hours", perm: "1", ttl: "48" },
+    { label: "1 week",   perm: "1", ttl: "168" },
+    { label: "1 month",  perm: "1", ttl: "720" },
+    { label: "Always",   perm: "1", ttl: "" }
+  ];
+  var LIFE_ALWAYS = LIFE_LADDER.length - 1;
+  var LIFE_DEFAULT = 4;          // 24 hours
+  var lifeIndex = LIFE_DEFAULT;
+  var lifeLastFinite = LIFE_DEFAULT; // remembered across an "always" detour
+
+  var permField = document.getElementById("permanent");
+  var ttlField = document.getElementById("ttl_hours");
+  var lifeToggle = document.getElementById("life-toggle");
+  var lifeDown = document.getElementById("life-down");
+  var lifeUp = document.getElementById("life-up");
+  var lifeLabel = document.getElementById("life-label");
+
+  function syncLifetime() {
+    var stop = LIFE_LADDER[lifeIndex];
+    permField.value = stop.perm;
+    ttlField.value = stop.ttl;
+    lifeLabel.textContent = stop.label;
+    var isAlways = lifeIndex === LIFE_ALWAYS;
+    lifeToggle.innerHTML = isAlways ? "\u221e" : "\u23f1"; // infinity vs stopwatch
+    lifeToggle.classList.toggle("is-always", isAlways);
+    lifeToggle.setAttribute("aria-checked", isAlways ? "false" : "true");
+    lifeDown.disabled = lifeIndex <= 0;
+    lifeUp.disabled = lifeIndex >= LIFE_ALWAYS;
+    if (lifeIndex !== LIFE_ALWAYS) lifeLastFinite = lifeIndex;
+  }
+
+  lifeToggle.addEventListener("click", function () {
+    lifeIndex = (lifeIndex === LIFE_ALWAYS) ? lifeLastFinite : LIFE_ALWAYS;
+    syncLifetime();
+  });
+  lifeDown.addEventListener("click", function () {
+    if (lifeIndex > 0) { lifeIndex--; syncLifetime(); }
+  });
+  lifeUp.addEventListener("click", function () {
+    if (lifeIndex < LIFE_ALWAYS) { lifeIndex++; syncLifetime(); }
+  });
+  syncLifetime();
+
+  // Toggle a shadow on the sticky preview only while it is actually pinned to the
+  // top edge (top hits 0), so it reads as a flat panel when in normal flow.
+  var previewSticky = document.getElementById("preview-sticky");
+  var pinTick = false;
+  function updatePinned() {
+    pinTick = false;
+    previewSticky.classList.toggle("is-pinned", previewSticky.getBoundingClientRect().top <= 0);
+  }
+  window.addEventListener("scroll", function () {
+    if (pinTick) return;
+    pinTick = true;
+    requestAnimationFrame(updatePinned);
+  }, { passive: true });
+  updatePinned();
 
   // Drag to pan the window across the base (clamped where there is freedom).
   var dragging = false, startX = 0, startY = 0, startCx = 0, startCy = 0;

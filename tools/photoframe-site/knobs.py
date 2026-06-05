@@ -77,6 +77,17 @@ KNOBS: tuple[Knob, ...] = (
         help="Higher deepens shadows and brightens highlights; lower flattens.",
     ),
     Knob(
+        id="midtone",
+        label="Midtone contrast",
+        min=0.0,
+        max=6.0,
+        step=0.5,
+        default=gray16.CAL_MIDTONE,
+        tier="tone",
+        help="Spreads muted midtones toward black and white with a soft rolloff, "
+        "so flat photos use more of the panel's 16 levels without clipping detail.",
+    ),
+    Knob(
         id="highlights",
         label="Highlights",
         min=-0.5,

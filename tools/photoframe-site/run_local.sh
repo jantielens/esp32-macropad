@@ -2,8 +2,8 @@
 # Run the photoframe site locally against real cloud blob storage.
 #
 # Prereqs (once):
-#   python3 -m venv .venv && source .venv/bin/activate
-#   pip install -r requirements.txt
+#   (the virtualenv is created and dependencies installed automatically on the
+#    first run; nothing to do by hand)
 #
 # Configure once:
 #   cp config.example.json config.local.json   # then edit with your SAS URLs + hashes
@@ -12,11 +12,30 @@
 # Then just:
 #   ./run_local.sh
 #
-# This script auto-loads ./config.local.json and persists a dev SECRET_KEY to
+# On first run this creates ./.venv and installs requirements.txt into it; every
+# run activates ./.venv unless you are already inside an activated virtualenv. It
+# also auto-loads ./config.local.json and persists a dev SECRET_KEY to
 # ./.secret_key (gitignored) so restarts don't invalidate your login session.
 # Override either by exporting CONFIG_JSON / SECRET_KEY before running.
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# Activate the local virtualenv, creating + installing it on first run. Skip if
+# we are already inside a venv (VIRTUAL_ENV set) so an externally-activated env
+# is respected.
+if [[ -z "${VIRTUAL_ENV:-}" ]]; then
+  if [[ ! -d .venv ]]; then
+    echo "Creating virtualenv in ./.venv ..." >&2
+    python3 -m venv .venv
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+    pip install --upgrade pip >/dev/null
+    pip install -r requirements.txt
+  else
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+  fi
+fi
 
 # Default CONFIG_JSON to the local config file if not already set.
 if [[ -z "${CONFIG_JSON:-}" ]]; then

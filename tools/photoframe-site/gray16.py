@@ -21,7 +21,7 @@ from __future__ import annotations
 import struct
 import zlib
 from array import array
-from math import ceil, floor, isfinite
+from math import ceil, exp, floor, isfinite
 
 from PIL import Image
 
@@ -50,6 +50,11 @@ CAL_GAMMA = 1.0
 CAL_HIGHLIGHTS = 0.0
 CAL_BRIGHTNESS = 0.0
 CAL_CONTRAST = 1.0
+# Sigmoidal midtone contrast strength (0 = identity). Unlike the linear CAL_CONTRAST
+# this steepens the midtone slope while rolling off softly near black/white instead
+# of hard-clipping -- it reallocates the panel's scarce 16 levels into the midtones
+# where photo detail lives. Default off so it is purely opt-in.
+CAL_MIDTONE = 0.0
 CAL_PANEL_STRENGTH = 1.0
 HIGHLIGHT_BUMP_EXP = 6.0
 _HIGHLIGHT_BUMP_PEAK = (
@@ -132,10 +137,18 @@ def _build_tone_lut(
     highlights: float = 0.0,
     brightness: float = 0.0,
     contrast: float = 1.0,
+    midtone: float = 0.0,
 ) -> array:
     lut = array("h", [0]) * 256
     span = white - black
     inv_gamma = 1.0 / gamma if gamma > 0 else 1.0
+    # Sigmoidal midtone contrast: a logistic curve steepened by `midtone`, then
+    # normalized so it passes through (0,0), (0.5,0.5), (1,1). midtone=0 is identity.
+    sig_lo = 0.0
+    sig_span = 1.0
+    if midtone > 0.0:
+        sig_lo = 1.0 / (1.0 + exp(midtone * 0.5))
+        sig_span = (1.0 / (1.0 + exp(-midtone * 0.5))) - sig_lo
     for value in range(256):
         if value <= black:
             norm = 0.0
@@ -149,6 +162,8 @@ def _build_tone_lut(
             toned += highlights * bump
         if contrast != 1.0:
             toned = (toned - 0.5) * contrast + 0.5
+        if midtone > 0.0:
+            toned = (1.0 / (1.0 + exp(-midtone * (toned - 0.5))) - sig_lo) / sig_span
         if brightness != 0.0:
             toned += brightness
         if toned < 0.0:
@@ -447,6 +462,7 @@ def calibrated_gray_levels(
     highlights: float = CAL_HIGHLIGHTS,
     brightness: float = CAL_BRIGHTNESS,
     contrast: float = CAL_CONTRAST,
+    midtone: float = CAL_MIDTONE,
     panel_calibration: float = CAL_PANEL_STRENGTH,
     auto_stretch: bool = True,
 ) -> array:
@@ -461,7 +477,9 @@ def calibrated_gray_levels(
         black, white = _percentile_bounds(gray, CAL_BLACK_PCT, CAL_WHITE_PCT)
     else:
         black, white = 0, 255
-    tone_lut = _build_tone_lut(black, white, gamma, highlights, brightness, contrast)
+    tone_lut = _build_tone_lut(
+        black, white, gamma, highlights, brightness, contrast, midtone
+    )
     for i in range(width * height):
         gray[i] = tone_lut[_clamp_u8(gray[i])]
     if panel_calibration > 0.0:
@@ -526,7 +544,13 @@ def full_base(
     else:
         pv_h = max_edge
         pv_w = max(1, round(max_edge * src_w / src_h))
-    small = rgb.resize((pv_w, pv_h), Image.Resampling.NEAREST)
+    # Quality downscale for the on-screen base: this preview is never dithered
+    # (dither is applied only at the final encode), so NEAREST here would only add
+    # aliasing/grain with no benefit. LANCZOS averages neighboring pixels for a
+    # smooth, representative preview. The final encode still uses the user-selected
+    # panel-fit resampler (default NEAREST), so a tight crop may look slightly
+    # crisper/harder than this base.
+    small = rgb.resize((pv_w, pv_h), Image.Resampling.LANCZOS)
     # Identity tone, calibration OFF: the browser applies the tone knobs, the
     # panel calibration, and the forward display sim live on top of this base.
     gray = calibrated_gray_levels(
@@ -562,6 +586,7 @@ def encode_g16p(
     highlights: float = CAL_HIGHLIGHTS,
     brightness: float = CAL_BRIGHTNESS,
     contrast: float = CAL_CONTRAST,
+    midtone: float = CAL_MIDTONE,
     panel_calibration: float = CAL_PANEL_STRENGTH,
     resampler: str | None = None,
 ) -> tuple[bytes, Image.Image]:
@@ -583,6 +608,7 @@ def encode_g16p(
         highlights=highlights,
         brightness=brightness,
         contrast=contrast,
+        midtone=midtone,
         panel_calibration=panel_calibration,
     )
     preview = gray_levels_to_preview(gray, width, height)

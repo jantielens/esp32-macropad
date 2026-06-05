@@ -293,11 +293,11 @@ def upload_submit(
             src.load()
             logger.info(
                 "upload device=%s src=%dx%d transform=%s crop=%s gamma=%.3f highlights=%.3f "
-                "brightness=%.3f contrast=%.3f calibration=%.0f resampler=%s",
+                "brightness=%.3f contrast=%.3f midtone=%.3f calibration=%.0f resampler=%s",
                 device_id, src.width, src.height, device.image_transform,
                 gray16.describe_crop(crop, src.width, src.height),
                 knob_vals["gamma"], knob_vals["highlights"],
-                knob_vals["brightness"], knob_vals["contrast"],
+                knob_vals["brightness"], knob_vals["contrast"], knob_vals["midtone"],
                 knob_vals["panel_calibration"], resampler,
             )
             g16p_bytes, preview = gray16.encode_g16p(
@@ -310,6 +310,7 @@ def upload_submit(
                 highlights=knob_vals["highlights"],
                 brightness=knob_vals["brightness"],
                 contrast=knob_vals["contrast"],
+                midtone=knob_vals["midtone"],
                 panel_calibration=knob_vals["panel_calibration"],
                 resampler=resampler,
             )
