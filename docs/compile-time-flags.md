@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 219
+Total flags: 220
 
 ### Features (HAS_*)
 
@@ -255,6 +255,7 @@ Total flags: 219
 - **TSL2591_I2C_BUS** default: `0` — reads off the touch controller's bus so metering never blocks touch polling.
 - **UI_SCALE_TIER** default: `UI_SCALE_MEDIUM` — Default UI scale tier (boards override in board_overrides.h)
 - **USE_SD_STORAGE** default: `false` — flash cache-disable starving the framebuffer DMA.
+- **WIFI_CACHED_RSSI_FLOOR_DBM** default: `-78` — installation that always sits at the edge of one AP.
 - **WIFI_REBOOT_AFTER_MS** default: `600000` — Total outage before controlled device reboot.
 - **WIFI_TIER1_DURATION_MS** default: `60000` — Tier 1: SDK auto-reconnect window — device takes no active reconnect action.
 - **WIFI_TIER2_BACKOFF_BASE_MS** default: `10000` — Tier 2 exponential backoff: initial retry interval.
@@ -736,6 +737,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper_device_class.cpp
 - **EPAPER_SD_DET_PIN**
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+- **EPAPER_SD_EN_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
 - **HEALTH_HISTORY_ENABLED**
   - src/app/app.ino
   - src/app/board_config.h
@@ -1083,6 +1086,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS**
   - src/app/board_config.h
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES**
+  - src/app/board_config.h
+- **WIFI_CACHED_RSSI_FLOOR_DBM**
   - src/app/board_config.h
 - **WIFI_MAX_ATTEMPTS**
   - src/app/board_config.h
