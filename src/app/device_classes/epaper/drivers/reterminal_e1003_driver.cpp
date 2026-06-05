@@ -157,10 +157,12 @@ const uint8_t G16P_MAGIC[4] = {'G', '1', '6', 'P'};
 // G16Z: compressed transport wrapper for a G16P blob. 4-byte magic followed by
 // a raw DEFLATE stream (no zlib/gzip header) of the complete G16P bytes. The
 // server emits this at upload time so the device pulls ~0.3-0.5x the bytes off
-// the wire; the firmware inflates straight into a fixed-size G16P buffer with
-// the ROM's malloc-free tinfl. Raw G16P (uncompressed) is still accepted for
-// backward compatibility with blobs uploaded before this format existed, and
-// the SD cache always stores the inflated G16P so cache hits skip re-inflate.
+// the wire; the firmware inflates into a heap G16P buffer with the ROM's
+// malloc-free tinfl. Raw G16P (uncompressed) is still accepted for backward
+// compatibility with blobs uploaded before this format existed. The SD cache
+// stores the original (compressed) transport bytes, so a cache hit reads the
+// small blob off the shared HSPI bus and re-inflates in PSRAM -- far cheaper
+// than the extra SD read time a full-size G16P would cost.
 const uint8_t G16Z_MAGIC[4] = {'G', '1', '6', 'Z'};
 
 // Translate a HAL 3-bit grayscale color (0..7, 0=black .. 7=white) into the
@@ -1014,33 +1016,39 @@ bool epaper_driver_draw_url(const char* url) {
 				prewarm_join(&pw);
 
 				if (!dl_ok) return false;
+		}
 
-				// Inflate a compressed G16Z transport wrapper into raw G16P. Only
-				// freshly downloaded blobs can be G16Z; the SD cache always stores the
-				// inflated G16P, so a cache hit skips this entirely. Replacing `data`
-				// with the inflated frame means both the canvas load and the SD
-				// write-back below operate on the uncompressed G16P.
-				if (len >= sizeof(G16Z_MAGIC) &&
-						memcmp(data, G16Z_MAGIC, sizeof(G16Z_MAGIC)) == 0) {
-						uint8_t* inflated = nullptr;
+		// `data`/`len` now holds the transport bytes -- either a compressed G16Z
+		// wrapper or a raw G16P frame, from a fresh download or the SD cache. The
+		// SD cache stores the *compressed* blob (whatever the server sent), so a
+		// cache hit must inflate too. Inflate into a separate buffer and render
+		// from that, but keep the original (possibly compressed) bytes for the SD
+		// write-back so the on-disk cache stays small (~0.4 MB vs ~1.3 MB): a later
+		// hit then reads far fewer bytes off the shared HSPI bus and inflates in
+		// PSRAM, which is much cheaper than the extra SD read time.
+		const bool is_g16z = (len >= sizeof(G16Z_MAGIC) &&
+				memcmp(data, G16Z_MAGIC, sizeof(G16Z_MAGIC)) == 0);
+		const bool is_g16p = (len >= sizeof(G16P_MAGIC) &&
+				memcmp(data, G16P_MAGIC, sizeof(G16P_MAGIC)) == 0);
+		if (is_g16z || is_g16p) {
+				const uint8_t* frame = data;
+				size_t frame_len = len;
+				uint8_t* inflated = nullptr;
+				if (is_g16z) {
 						size_t inflated_len = 0;
 						if (!inflate_g16z(data, len, &inflated, &inflated_len)) {
 								heap_caps_free(data);
 								return false;
 						}
-						heap_caps_free(data);  // drop the compressed wire bytes
-						data = inflated;       // render & cache the inflated G16P
-						len = inflated_len;
+						frame = inflated;
+						frame_len = inflated_len;
 				}
-		}
-
-		const bool is_g16p = (len >= sizeof(G16P_MAGIC) &&
-				memcmp(data, G16P_MAGIC, sizeof(G16P_MAGIC)) == 0);
-		if (is_g16p) {
-				const bool ok = load_g16p_to_canvas(data, len);
+				const bool ok = load_g16p_to_canvas(frame, frame_len);
+				if (inflated) heap_caps_free(inflated);
 #ifdef EPAPER_SD_CS_PIN
-				// Stage a freshly downloaded image for write-back to SD after display.
-				// Transfer buffer ownership to the pending slot (don't free below).
+				// Stage the original transport bytes (compressed G16Z when the server
+				// sent it) for write-back to SD after display. Transfer buffer
+				// ownership to the pending slot (don't free below).
 				if (ok && !from_cache && epaper_sd_cache_is_enabled() && img_id[0]) {
 						epaper_sd_cache_stage_pending(img_id, data, len);
 						data = nullptr;

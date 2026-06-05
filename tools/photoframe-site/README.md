@@ -146,8 +146,9 @@ buffer with the ROM's malloc-free tinfl, then renders the reconstructed G16P. If
 compression does not actually shrink a frame, the server stores raw G16P
 instead, so the wire never grows. The firmware also still accepts raw G16P, so
 uncompressed blobs keep rendering. On firmware builds with the SD image cache,
-the device writes back the **inflated** G16P, so a later cache hit skips both the
-re-download and the re-inflate.
+the device writes back the original **compressed** G16Z blob, so a later cache
+hit skips the re-download and reads only ~0.4 MB off the card (vs ~1.3 MB for a
+full G16P) before re-inflating in PSRAM.
 
 The panel response curve (`PANEL_RESPONSE_*` in `gray16.py`) is produced once
 per panel during bring-up by the
