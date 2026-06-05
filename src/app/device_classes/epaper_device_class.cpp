@@ -434,7 +434,15 @@ static void sleep_prepare_hook(uint32_t *seconds_inout) {
 		const gpio_num_t wake_pin = (gpio_num_t)EPAPER_BUTTON_PIN;
 		rtc_gpio_pullup_en(wake_pin);
 		rtc_gpio_pulldown_dis(wake_pin);
+		// The original ESP32 (Inkplate) only defines ESP_EXT1_WAKEUP_ALL_LOW; the
+		// ANY_LOW logic mode is S3/C-series only. For a single-GPIO wake mask the
+		// two are semantically identical (one selected pin going low satisfies both
+		// "all" and "any"), so pick whichever the target SoC's enum exposes.
+#if CONFIG_IDF_TARGET_ESP32
+		esp_sleep_enable_ext1_wakeup(1ULL << EPAPER_BUTTON_PIN, ESP_EXT1_WAKEUP_ALL_LOW);
+#else
 		esp_sleep_enable_ext1_wakeup(1ULL << EPAPER_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
 #endif
 }
 
