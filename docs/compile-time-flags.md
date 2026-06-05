@@ -505,6 +505,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_schedule.h
   - src/app/device_classes/epaper/epaper_screens.cpp
   - src/app/device_classes/epaper/epaper_screens.h
+  - src/app/device_classes/epaper/epaper_sd_cache.cpp
+  - src/app/device_classes/epaper/epaper_sd_cache.h
   - src/app/device_classes/epaper/epaper_timing.cpp
   - src/app/device_classes/epaper/epaper_timing.h
   - src/app/device_classes/epaper_device_class.cpp
@@ -734,6 +736,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **EPAPER_SD_CS_PIN**
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+  - src/app/device_classes/epaper/epaper_sd_cache.cpp
+  - src/app/device_classes/epaper/epaper_sd_cache.h
   - src/app/device_classes/epaper_device_class.cpp
 - **EPAPER_SD_DET_PIN**
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp

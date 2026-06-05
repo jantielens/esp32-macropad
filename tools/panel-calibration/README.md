@@ -1,5 +1,15 @@
 # Panel tone-response calibration
 
+> **One-shot bring-up tooling, not a runtime dependency.** This toolkit is run
+> by hand on a workstation to characterize a new e-paper panel during board
+> bring-up. Nothing here is compiled into the firmware or called at runtime: the
+> measured result is a 16-entry curve that gets pasted into
+> [`../photoframe-site/gray16.py`](../photoframe-site/gray16.py) once per panel.
+> The captured artifacts in this folder (the `sample-regions-v3.2.json` geometry
+> manifest, the generator, and the sampler) are retained for reproducibility so
+> the `PANEL_RESPONSE_E1003_GC16_V32` curve can be regenerated or a different
+> panel calibrated later.
+
 Measure how a 16-level grayscale e-paper panel actually reproduces tone, and emit
 the lookup tables that correct it. This is the toolkit that produced the
 `PANEL_RESPONSE_E1003_GC16_V32` curve baked into

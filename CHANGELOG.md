@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-06-01
+ms.date: 2026-06-05
 ms.topic: reference
 ---
 
@@ -12,11 +12,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.20.0] - 2026-06-05
 
 ### Added
 
-* **Seeed reTerminal E1003 e-paper board (`reterminal-e1003`)** — a second `epaper` device-class target: a 10.3" 1404×1872 16-level grayscale panel driven by an IT8951 controller on an ESP32-S3 (XIAO form factor, 32 MB flash + 8 MB OPI PSRAM). The driver is self-contained (raw IT8951 HSPI sequences plus a 4 bpp PSRAM framebuffer wrapped in Adafruit_GFX) and decodes dashboard images with JPEGDEC straight to 16-level grayscale at the panel's native resolution — no on-device scaling, prioritizing the battery-powered refresh path. Shares the existing e-paper duty-cycle runtime (scheduled wake, CRC-skip refresh, status overlay, deep sleep) and Refresh-button wake. The portal VCOM page is inert on this board (IT8951 VCOM is set internally), degrading gracefully. Seeed_GxEPD2 is git-installed by `setup.sh`; `Adafruit GFX Library` and `JPEGDEC` are added as registry dependencies. See [docs/epaper-guide.md](docs/epaper-guide.md).
+* **Seeed reTerminal E1003 e-paper board (`reterminal-e1003`)** — a second `epaper` device-class target: a 10.3" 1404×1872 16-level grayscale panel driven by an IT8951 controller on an ESP32-S3 (XIAO form factor, 32 MB flash + 8 MB OPI PSRAM). The driver is self-contained (raw IT8951 HSPI sequences plus a 4 bpp PSRAM framebuffer wrapped in Adafruit_GFX) and draws dashboard images at the panel's native resolution with no on-device scaling, prioritizing the battery-powered refresh path. It accepts a server-supplied **G16P** payload (pre-dithered 4 bpp packed nibbles, copied straight into the framebuffer) as the fast path, and falls back to decoding a baseline JPEG with JPEGDEC and Floyd–Steinberg dithering on-device. Shares the existing e-paper duty-cycle runtime (scheduled wake, CRC-skip refresh, status overlay, deep sleep) and Refresh-button wake. The portal VCOM page is inert on this board (IT8951 VCOM is set internally), degrading gracefully. Seeed_GxEPD2 is git-installed by `setup.sh`; `Adafruit GFX Library` and `JPEGDEC` are added as registry dependencies. See [docs/epaper-guide.md](docs/epaper-guide.md).
+* **SD image cache for e-paper boards** — an optional downloaded-blob cache for e-paper device-class boards that expose a microSD slot on the panel's shared SPI bus, gated by the `EPAPER_SD_CS_PIN` compile-time flag (enabled on `reterminal-e1003`, compiled out on `inkplate5v2`). On a cache hit the firmware reads the G16P blob from SD and skips the ~1.3 MB HTTP body download; on a miss the blob is written back to the card on the awake tail so the write stays out of the wake-to-visible path. A **Cache images on SD** portal toggle (NVS key `ep_sd_en`, default off) and a **Clear SD cache** action control it; the toggle is shown only on boards that report the capability. See [docs/epaper-guide.md](docs/epaper-guide.md#sd-image-cache).
+* **Compressed G16Z image transport for e-paper boards** — the e-paper firmware and the bundled [`tools/photoframe-site`](tools/photoframe-site/README.md) reference server support an optional raw-DEFLATE `G16Z` wrapper around the G16P framebuffer (`G16Z` magic + raw DEFLATE of the full G16P bytes). The server compresses each upload when it shrinks the payload, so the device pulls ~0.3–0.5× the bytes off WiFi and inflates straight into a fixed-size PSRAM buffer with the ROM's malloc-free tinfl before rendering the reconstructed G16P. Raw (uncompressed) G16P blobs are still accepted. On boards with the SD image cache, the **inflated** G16P is written back, so a later cache hit skips both the re-download and the re-inflate. Added a [`tools/photoframe-site/README.md`](tools/photoframe-site/README.md) documenting the server as a sample reference implementation, and clarified [`tools/panel-calibration/README.md`](tools/panel-calibration/README.md) as one-shot bring-up tooling.
+
+### Changed
+
+* **Cached-AP RSSI floor is now configurable** — the WiFi reconnect path's signal-strength floor for trusting a cached access point is exposed as the `WIFI_CACHED_RSSI_FLOOR_DBM` compile-time flag (default `-78`) instead of a hard-coded constant, so boards with marginal antennas can tune it via `board_overrides.h`. See [docs/compile-time-flags.md](docs/compile-time-flags.md).
 
 ## [1.19.0] - 2026-06-01
 

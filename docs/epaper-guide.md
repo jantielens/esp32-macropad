@@ -1,7 +1,7 @@
 ---
 title: E-Paper Guide
 description: Detailed guide for the ESP32 Macropad e-paper device class, including hardware model, wake behavior, image refresh flow, portal configuration, and current limitations.
-ms.date: 2026-05-25
+ms.date: 2026-06-05
 ms.topic: concept
 ---
 
@@ -20,12 +20,16 @@ The current implementation targets two boards and one usage model:
 | Board | SoC | Display | Decode |
 |---|---|---|---|
 | Inkplate 5V2 | ESP32 classic | 720 × 1280 3-bit grayscale | Inkplate library |
-| Seeed reTerminal E1003 | ESP32-S3 | 1404 × 1872 16-level grayscale (IT8951) | JPEGDEC, native resolution |
+| Seeed reTerminal E1003 | ESP32-S3 | 1404 × 1872 16-level grayscale (IT8951) | G16P fast path, or JPEGDEC + dither, at native resolution |
 
 * Interaction model: non-touch, battery-oriented dashboard
 * Render model: fetch the current remote image slot, draw it, sleep
 
-The reTerminal E1003 driver assumes the server delivers a JPEG already at the panel's native resolution and decodes it directly to 16-level grayscale — there is no on-device scaling, by design, to keep the battery-powered refresh path fast.
+The reTerminal E1003 driver assumes the server delivers an image already at the panel's native resolution — there is no on-device scaling, by design, to keep the battery-powered refresh path fast. It accepts three transport formats:
+
+* **G16P** (preferred) — a small magic-stamped header (`G16P`, version, width, height, payload length, CRC32) followed by the panel's 4&nbsp;bpp packed-nibble framebuffer. Because the server has already done the tone mapping and Floyd–Steinberg dithering, the firmware copies the nibbles straight into the framebuffer with no JPEG decode and no large working buffer — the fastest, lowest-power wake path. The optional `EPAPER_VERIFY_CRC32` compile flag (default off) checks the payload CRC before drawing.
+* **G16Z** (compressed G16P) — a `G16Z` magic followed by a header-less (raw) DEFLATE stream of the complete G16P bytes. The server emits this when compression shrinks the payload, so the device pulls ~0.3–0.5× the bytes off WiFi and inflates it into a fixed-size PSRAM buffer with the ROM's malloc-free tinfl before rendering the reconstructed G16P. On boards with the SD image cache, the **inflated** G16P is what gets written back, so a later cache hit skips both the re-download and the re-inflate.
+* **Baseline JPEG** — when the blob is neither G16P nor G16Z, the firmware decodes it with JPEGDEC straight into a 16-level grayscale framebuffer and applies Floyd–Steinberg dithering on-device. Progressive JPEGs are rejected up front, so the image endpoint must emit baseline JPEGs.
 
 The shared web portal is still used for setup and configuration, but the runtime behavior is intentionally much simpler than the interactive display class.
 
@@ -74,7 +78,7 @@ Each refresh cycle uses the same high-level sequence:
 4. Compare the sidecar value to the last successfully displayed CRC.
 5. Skip the panel refresh when the CRC is unchanged, unless the refresh was explicitly forced.
 6. Clear the framebuffer so the boot splash or low-battery screen does not bleed through at the configured rotation.
-7. Draw the image with the board driver (Inkplate library on the 5V2; JPEGDEC → IT8951 framebuffer on the reTerminal E1003).
+7. Draw the image with the board driver (Inkplate library on the 5V2; G16P direct copy or JPEGDEC → IT8951 framebuffer on the reTerminal E1003).
 8. Composite the status overlay on top of the image.
 9. Trigger the panel refresh.
 10. Read battery voltage.
@@ -82,7 +86,7 @@ Each refresh cycle uses the same high-level sequence:
 12. Put the panel to sleep.
 13. Enter ESP32 deep sleep until the next wake.
 
-On the Inkplate 5V2, the image is fetched and decoded by the Inkplate library. On the reTerminal E1003, the firmware fetches the JPEG over HTTP(S) and decodes it with JPEGDEC straight into the 16-level grayscale framebuffer at native resolution (no scaling or dithering).
+On the Inkplate 5V2, the image is fetched and decoded by the Inkplate library. On the reTerminal E1003, the firmware fetches the blob over HTTP(S): a G16P payload is copied straight into the 16-level grayscale framebuffer (no decode), while a baseline JPEG is decoded with JPEGDEC and Floyd–Steinberg dithered into the framebuffer. Either way the image is drawn at the panel's native resolution with no scaling.
 
 A refresh is always forced (CRC skip is bypassed) when any of these is true:
 
@@ -327,6 +331,25 @@ Config Mode uses the same portal idle-timeout mechanism as the rest of the proje
 
 On the Inkplate board, the default portal idle timeout is 300 seconds. That gives you enough time to join the access point, configure WiFi, and set the image URL without leaving the device awake indefinitely on battery power.
 
+## SD Image Cache
+
+The SD image cache is a **device-class capability** for e-paper boards that expose a microSD slot on the *same* SPI bus as the panel controller. It is gated by the `EPAPER_SD_CS_PIN` compile-time flag and lives in the shared `epaper/epaper_sd_cache` module, so any future e-paper board can opt in from its `board_overrides.h` without touching a driver. Among the current targets only the reTerminal E1003 qualifies; the Inkplate 5V2 has no shared-bus SD slot, so the entire cache is compiled out there.
+
+It is a downloaded-blob cache, not a generic image store. It caches the decoded **G16P** framebuffer the firmware renders for a refresh — if the server sent a compressed G16Z blob, the firmware inflates it first and caches the inflated G16P, so a cache hit skips both the re-download and the re-inflate. The entry is keyed by the content-stable image id parsed from the publisher's redirect URL and stored on the card as `/cache/<id>.g16p`.
+
+How a cached refresh works:
+
+1. The firmware resolves the image redirect to a blob URL and content id **without** downloading the ~1.3&nbsp;MB body.
+2. On a cache **hit**, the blob is read straight from SD and the slow HTTP body download is skipped entirely &mdash; the main battery win.
+3. On a cache **miss**, the blob is downloaded over HTTP(S), drawn, and then staged in PSRAM. The write-back to SD happens on the awake tail (after the panel is already showing the image), so the ~1&ndash;2&nbsp;s card write does not sit in the wake-to-visible path.
+
+Because the microSD card and the IT8951 panel share one SPI bus, the cache never calls `SPI.begin()` itself &mdash; the driver owns the bus. After every `SD.end()` the cache module invokes a driver-supplied `restore_panel_bus()` callback that re-initializes the panel's SPI bus and chip-select, so an SD-cache hit followed by a panel refresh draws a clean image rather than garbage.
+
+The cache is controlled from the portal:
+
+* A **Cache images on SD** toggle on the Image Sources page enables or disables it (persisted to the NVS key `ep_sd_en`, default off). The toggle row is shown only when the build reports the `epaper_sd_cache_supported` capability &mdash; it is hidden on the Inkplate 5V2.
+* A **Clear SD cache** action deletes every cached blob; the next refresh repopulates the card.
+
 ## Current Limitations
 
 The e-paper device class is intentionally narrow in this first version.
@@ -335,9 +358,9 @@ Current limitations include:
 
 * Public image URLs only
 * Full refresh only, no partial-update pipeline
-* No local cache or offline image fallback
+* No offline image fallback when the network is unreachable (the SD blob cache speeds up repeated images on boards with a shared-bus microSD slot, but is not an offline carousel)
 * No touch UI runtime
-* No local image storage; all carousel slots point to remote URLs
+* Carousel slots all point to remote URLs; the SD cache stores only previously fetched blobs, not user-managed local images
 * Hourly schedule uses a fixed UTC offset rather than full timezone rules (DST must be adjusted manually)
 
 Those constraints keep the runtime predictable and power efficient while the device class matures.
