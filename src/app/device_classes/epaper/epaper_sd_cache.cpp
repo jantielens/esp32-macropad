@@ -24,7 +24,7 @@
 namespace {
 
 // Hardware wiring captured by epaper_sd_cache_init().
-EpaperSdCacheConfig s_cfg = {nullptr, -1, -1, -1, nullptr};
+EpaperSdCacheConfig s_cfg = {nullptr, -1, -1, -1, nullptr, nullptr};
 
 bool s_enabled = false;  // runtime toggle, set from config before draw
 bool s_mounted = false;
@@ -39,6 +39,21 @@ void restore_panel_bus() {
 		if (s_cfg.restore_panel_bus) s_cfg.restore_panel_bus();
 }
 
+void prepare_sd_bus() {
+		if (s_cfg.prepare_sd_bus) s_cfg.prepare_sd_bus();
+}
+
+// Mount the shared-bus microSD card. Clock for the SD half of the bus: the card
+// shares the panel's HSPI lines, and the proven Seeed bring-up runs the card at
+// 20 MHz, which keeps the 1.3 MB cache read under ~1 s instead of ~3 s at the
+// 4 MHz default.
+constexpr uint32_t SD_MOUNT_HZ = 20000000;
+// The card's power rail needs time to settle after EN goes HIGH before the SPI
+// handshake will complete. An earlier 5 ms ramp was too short and made
+// SD.begin() report cardType=0 (handshake never completed) on every wake; the
+// original working bring-up used 250 ms.
+constexpr uint32_t SD_POWER_SETTLE_MS = 250;
+
 bool sd_cache_mount() {
 		if (s_mounted) return true;
 		if (!s_cfg.bus || s_cfg.cs_pin < 0) return false;
@@ -46,7 +61,7 @@ bool sd_cache_mount() {
 		if (s_cfg.en_pin >= 0) {
 				pinMode(s_cfg.en_pin, OUTPUT);
 				digitalWrite(s_cfg.en_pin, HIGH);
-				delay(5);
+				delay(SD_POWER_SETTLE_MS);
 		}
 		if (s_cfg.det_pin >= 0) {
 				pinMode(s_cfg.det_pin, INPUT_PULLUP);
@@ -56,11 +71,22 @@ bool sd_cache_mount() {
 						return false;
 				}
 		}
-		if (!SD.begin(s_cfg.cs_pin, *s_cfg.bus)) {
-				LOGW("Epaper", "SD cache: SD.begin failed");
+		// Deselect the panel and re-init the shared bus exactly as the owning
+		// driver requires before handing it to the SD library.
+		prepare_sd_bus();
+		if (!SD.begin(s_cfg.cs_pin, *s_cfg.bus, SD_MOUNT_HZ)) {
+				// Distinguish a card-init failure (bus/power/wiring) from a FAT mount
+				// failure (card formatted wrong). cardType()==NONE means the SPI
+				// handshake never completed, so reformatting would not help.
+				const uint8_t ct = SD.cardType();
+				LOGW("Epaper", "SD cache: SD.begin failed (cardType=%u: %s)", ct,
+						 ct == CARD_NONE ? "no card init - check bus/power"
+														 : "card OK but FAT mount failed - reformat FAT32");
 				// SD.begin may have reconfigured the bus even on failure; restore it.
 				restore_panel_bus();
-				if (s_cfg.en_pin >= 0) digitalWrite(s_cfg.en_pin, LOW);
+				// Leave the rail powered: power-cycling here forces a fresh ramp and
+				// reintroduces the settle problem on the next mount attempt. It drops
+				// naturally on deep sleep.
 				return false;
 		}
 		s_mounted = true;
@@ -74,7 +100,10 @@ void sd_cache_unmount() {
 		// SD.end() tears the shared SPI bus down; the panel driver must re-init it
 		// before the next panel access or the refresh draws garbage.
 		restore_panel_bus();
-		if (s_cfg.en_pin >= 0) digitalWrite(s_cfg.en_pin, LOW);  // drop card power between accesses
+		// Keep the SD rail powered while the device is awake. The E1003 card rail
+		// needs the long early-boot settle window; dropping EN here makes a later
+		// post-refresh write-back retry with only the short mount-time ramp and
+		// SD.begin() falls back to cardType=0.
 }
 
 void sd_cache_path(const char* id, char* out, size_t out_sz) {
@@ -137,6 +166,17 @@ bool sd_cache_write(const char* id, const uint8_t* data, size_t len) {
 
 void epaper_sd_cache_init(const EpaperSdCacheConfig& cfg) {
 		s_cfg = cfg;
+		// Power the SD rail HIGH up front so it has the whole panel-init + WiFi-
+		// connect window (several seconds) to settle before the first mount. The
+		// card's switching regulator needs far longer than the in-mount 250 ms
+		// ramp to come up cleanly; without this early power-up SD.begin() reports
+		// cardType=0 (SPI handshake never completed) on every wake. The rail drops
+		// naturally on deep sleep. Driver init runs once at begin(), so this is a
+		// one-time cost on the boot path, not per-refresh.
+		if (s_cfg.en_pin >= 0) {
+				pinMode(s_cfg.en_pin, OUTPUT);
+				digitalWrite(s_cfg.en_pin, HIGH);
+		}
 }
 
 void epaper_sd_cache_set_enabled(bool enabled) {

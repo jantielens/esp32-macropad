@@ -49,6 +49,7 @@ struct EpaperSdCacheConfig {
 		int cs_pin;                   // SD chip-select
 		int en_pin;                   // card power-enable, driven HIGH to mount (-1 if always powered)
 		int det_pin;                  // card-detect, reads LOW when a card is inserted (-1 if none)
+		void (*prepare_sd_bus)();     // deselect panel + re-init shared bus before SD.begin()
 		void (*restore_panel_bus)();  // re-init the panel SPI bus + CS after every SD.end()
 };
 
