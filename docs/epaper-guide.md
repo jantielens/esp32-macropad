@@ -45,10 +45,12 @@ flowchart TD
 
     Force --> Wifi[Connect WiFi]
     Normal --> Wifi
-    Wifi --> Sidecar[Fetch image sidecar CRC]
+    Wifi --> CrcEn{CRC change\ndetection on?}
+    CrcEn -->|No| Draw[Draw remote image]
+    CrcEn -->|Yes| Sidecar[Fetch image sidecar CRC]
     Sidecar --> Compare{CRC changed?}
     Compare -->|No| Sleep[Deep sleep]
-    Compare -->|Yes| Draw[Draw remote image]
+    Compare -->|Yes| Draw
     Draw --> Panel[Refresh panel]
     Panel --> Sleep
     Config --> Portal[Run web portal until idle timeout]
@@ -74,9 +76,9 @@ Each refresh cycle uses the same high-level sequence:
 
 1. Connect to WiFi.
 2. On cold boot only, kick SNTP and wait up to 2 s for the first time sync so the status overlay timestamp is meaningful on the very first refresh. The ESP32 RTC keeps wall-clock through deep sleep, so subsequent wakes skip the wait.
-3. Fetch `<image-url>.crc32`.
+3. When **CRC change detection** is enabled (portal toggle, default off — see [Image and Sidecar Contract](#image-and-sidecar-contract)), fetch `<image-url>.crc32`.
 4. Compare the sidecar value to the last successfully displayed CRC.
-5. Skip the panel refresh when the CRC is unchanged, unless the refresh was explicitly forced.
+5. Skip the panel refresh when the CRC is unchanged, unless the refresh was explicitly forced. With change detection disabled, every scheduled wake redraws the panel.
 6. Clear the framebuffer so the boot splash or low-battery screen does not bleed through at the configured rotation.
 7. Draw the image with the board driver (Inkplate library on the 5V2; G16P direct copy or JPEGDEC → IT8951 framebuffer on the reTerminal E1003).
 8. Composite the status overlay on top of the image.
@@ -105,6 +107,8 @@ Supported image formats:
 * BMP
 
 The change-detection sidecar is fetched from the same path with `.crc32` appended.
+
+Change detection is controlled by the **Use CRC32 change detection** toggle on the Image Sources page (persisted to NVS, default off). When it is off, the firmware skips the `.crc32` fetch entirely and redraws the panel on every scheduled wake; when it is on, an unchanged CRC short-circuits the refresh to save a panel update and battery. A forced refresh (cold boot, WAKE button, or the portal `Refresh e-paper now` action) always bypasses the skip regardless of the toggle.
 
 Examples:
 
@@ -335,7 +339,7 @@ On the Inkplate board, the default portal idle timeout is 300 seconds. That give
 
 The SD image cache is a **device-class capability** for e-paper boards that expose a microSD slot on the *same* SPI bus as the panel controller. It is gated by the `EPAPER_SD_CS_PIN` compile-time flag and lives in the shared `epaper/epaper_sd_cache` module, so any future e-paper board can opt in from its `board_overrides.h` without touching a driver. Among the current targets only the reTerminal E1003 qualifies; the Inkplate 5V2 has no shared-bus SD slot, so the entire cache is compiled out there.
 
-It is a downloaded-blob cache, not a generic image store. It caches the original transport blob the publisher served — a compressed **G16Z** wrapper when the server sent one, or a raw **G16P** framebuffer otherwise. A cache hit skips the re-download and reads the small blob off the card (~0.4 MB for G16Z vs ~1.3 MB for G16P), then re-inflates in PSRAM if needed, which is far cheaper than the extra SD read a full-size frame would cost. The entry is keyed by the content-stable image id parsed from the publisher's redirect URL and stored on the card as `/cache/<id>.g16p`.
+It is a downloaded-blob cache, not a generic image store. It caches the original transport blob the publisher served — a compressed **G16Z** wrapper when the server sent one, or a raw **G16P** framebuffer otherwise. A cache hit skips the re-download and reads the small blob off the card (~0.4 MB for G16Z vs ~1.3 MB for G16P), then re-inflates in PSRAM if needed, which is far cheaper than the extra SD read a full-size frame would cost. The entry is keyed by the content-stable image id parsed from the publisher's redirect URL and stored on the card as `/cache/<id>.g16z`.
 
 How a cached refresh works:
 

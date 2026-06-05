@@ -106,8 +106,12 @@ void sd_cache_unmount() {
 		// SD.begin() falls back to cardType=0.
 }
 
+// Local cache file holds the original transport blob as downloaded -- normally
+// G16Z (raw-DEFLATE compressed) but a plain G16P frame when the server found it
+// incompressible. Both are self-describing via their 4-byte magic and feed back
+// through the same decode on read, so the file uses a neutral .g16z extension.
 void sd_cache_path(const char* id, char* out, size_t out_sz) {
-		snprintf(out, out_sz, "/cache/%s.g16p", id);
+		snprintf(out, out_sz, "/cache/%s.g16z", id);
 }
 
 // Parse the blob id out of a redirect Location like
@@ -126,7 +130,7 @@ bool parse_image_id(const char* loc, char* out, size_t out_sz) {
 		return true;
 }
 
-// Atomic write to /cache/<id>.g16p (tmp file + rename).
+// Atomic write to /cache/<id>.g16z (tmp file + rename).
 bool sd_cache_write(const char* id, const uint8_t* data, size_t len) {
 		if (!data || len == 0) return false;
 		if (!sd_cache_mount()) return false;
@@ -232,7 +236,7 @@ bool epaper_sd_cache_resolve(const char* url, String& out_blob_url,
 		return false;
 }
 
-// Read /cache/<id>.g16p fully into a fresh PSRAM buffer. Returns false (and
+// Read /cache/<id>.g16z fully into a fresh PSRAM buffer. Returns false (and
 // leaves *out_buf null) on miss or any read error.
 bool epaper_sd_cache_read(const char* id, uint8_t** out_buf, size_t* out_len) {
 		*out_buf = nullptr;

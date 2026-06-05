@@ -69,7 +69,7 @@ bool epaper_sd_cache_is_enabled();
 bool epaper_sd_cache_resolve(const char* url, String& out_blob_url,
                              char* out_id, size_t id_sz);
 
-// Read /cache/<id>.g16p fully into a fresh PSRAM buffer (caller frees with
+// Read /cache/<id>.g16z fully into a fresh PSRAM buffer (caller frees with
 // heap_caps_free). Returns false (and leaves *out_buf null) on miss/read error.
 bool epaper_sd_cache_read(const char* id, uint8_t** out_buf, size_t* out_len);
 

@@ -520,7 +520,6 @@ static void on_loop_hook() {
 // block plus the splash decisions that lived in app.ino).
 // ---------------------------------------------------------------------------
 static bool run_duty_cycle_hook(DeviceConfig *config) {
-		LOGI("Epaper", "[spike] run_duty_cycle_hook entry");
 		// Splash policy (moved from app.ino):
 		//   - Cold boot: always show the boot splash so a freshly plugged-in
 		//     device gets proof of life.
@@ -550,7 +549,6 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// read the cell up front and then overlap the slow panel init with the
 		// WiFi connect; boards whose sense is gated behind begin() (Inkplate)
 		// must power the panel up first.
-		LOGI("Epaper", "[spike] splash done; entering battery gate");
 
 		auto low_battery_sleep = [&](uint16_t mv) {
 				const uint8_t pct = epaper_battery_percent(mv);
@@ -564,7 +562,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		bool begin_started = false;  // true once begin_async() has been kicked off
 		if (epaper_driver_battery_ready_before_begin()) {
 				const uint16_t mv = epaper_driver_battery_mv();
-				LOGI("Epaper", "[spike] early battery mv=%u", mv);
+				LOGI("Epaper", "Battery %u mV (early read)", mv);
 				if (mv > 0 && mv < 3200) {
 						epaper_driver_begin();  // bring panel up to paint the status frame
 						low_battery_sleep(mv);
@@ -576,7 +574,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				begin_started = true;
 		} else if (epaper_driver_begin()) {
 				const uint16_t mv = epaper_driver_battery_mv();
-				LOGI("Epaper", "[spike] battery mv=%u", mv);
+				LOGI("Epaper", "Battery %u mV", mv);
 				if (mv > 0 && mv < 3200) {
 						low_battery_sleep(mv);
 						return true;
@@ -585,19 +583,20 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				// so the draw-path power_on() collapses to a guarded no-op (the slow
 				// ~1.6 s IT8951 power-on is paid once, here, not again in the draw).
 		} else {
-				LOGW("Epaper", "[spike] driver begin returned false");
+				LOGW("Epaper", "driver begin returned false");
 		}
 
 		// WiFi -> CRC check -> conditional draw -> sleep. Each checkpoint feeds
 		// the RTC-retained timing budget so the portal can show a per-cycle
 		// breakdown. On early-battery boards the background panel init started
 		// above runs concurrently with this association.
-		LOGI("Epaper", "[spike] battery gate passed; connecting WiFi");
 		const bool connected = wifi_manager_connect(config, true);
 
 		// Ensure panel init has finished (and reap its task) before any later
 		// draw. No-op on boards where begin() ran synchronously above.
-		if (begin_started) epaper_driver_begin_join();
+		if (begin_started && !epaper_driver_begin_join()) {
+				LOGW("Epaper", "driver begin returned false");
+		}
 
 		if (!connected) {
 				const uint32_t backoff = power_manager_note_wifi_failure(

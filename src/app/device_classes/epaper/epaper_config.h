@@ -27,7 +27,7 @@ struct EpaperConfig {
 		uint8_t epaper_rotation;                      // 0..3, default 0
 		uint32_t epaper_last_crc32;                   // CRC32 of last successfully rendered image (0 = none)
 		bool epaper_crc32_enabled;                    // fetch "<url>.crc32" sidecar to skip unchanged refreshes (default false)
-		bool epaper_sd_cache_enabled;                 // cache rendered .g16p images on microSD to skip the HTTP download on a cache hit (default false; only effective on boards with EPAPER_SD_CS_PIN)
+		bool epaper_sd_cache_enabled;                 // cache downloaded image blobs (G16Z/G16P) on microSD to skip the HTTP download on a cache hit (default false; only effective on boards with EPAPER_SD_CS_PIN)
 
 		// On-image status overlay
 		bool epaper_overlay_enabled;                  // default false
