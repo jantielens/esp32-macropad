@@ -64,6 +64,15 @@ bool epaper_driver_begin() {
 		return true;
 }
 
+// No background-init path on this board: begin_async() runs begin() inline and
+// join() returns the cached result. Battery sense is gated behind begin() (the
+// Inkplate library reads it through the panel), so the duty-cycle hook must
+// power the panel up before reading the cell.
+static bool s_begin_result = false;
+void epaper_driver_begin_async() { s_begin_result = epaper_driver_begin(); }
+bool epaper_driver_begin_join() { return s_begin_result; }
+bool epaper_driver_battery_ready_before_begin() { return false; }
+
 void epaper_driver_set_rotation(uint8_t rotation) {
 		if (!s_began || !s_display) return;
 		s_display->setRotation(rotation & 0x3);

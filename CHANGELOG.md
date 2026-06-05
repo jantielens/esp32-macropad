@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Faster e-paper wake-to-visible path** — the duty-cycle hook now overlaps the slow panel power-up with the WiFi association instead of running them back to back. On boards whose battery sense is independent of the panel rails (E1003), the cell voltage is read and the low-battery gate runs up front, then panel init runs on a background PSRAM-stack task concurrently with the WiFi connect (two independent buses), shaving roughly the shorter of the two off the critical path. Boards whose battery sense is gated behind panel init (Inkplate) keep the original ordering with no behavior change. The hook also no longer sleeps and re-powers the panel between the healthy-battery gate and the draw, so the ~1.6 s IT8951 power-on is paid once per wake rather than twice. New `epaper_driver_begin_async()` / `epaper_driver_begin_join()` / `epaper_driver_battery_ready_before_begin()` HAL entry points back the overlap.
 * **Cached-AP RSSI floor is now configurable** — the WiFi reconnect path's signal-strength floor for trusting a cached access point is exposed as the `WIFI_CACHED_RSSI_FLOOR_DBM` compile-time flag (default `-78`) instead of a hard-coded constant, so boards with marginal antennas can tune it via `board_overrides.h`. See [docs/compile-time-flags.md](docs/compile-time-flags.md).
 
 ## [1.19.0] - 2026-06-01

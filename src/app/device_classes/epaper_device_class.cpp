@@ -543,39 +543,62 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				});
 		}
 
-		// Low-battery gate: power-cycle the panel briefly to read the cell
-		// voltage before burning ~80 mA on WiFi for 5+ seconds. Below 3.2 V
-		// the panel waveform + radio together risk a brownout reset, so paint
-		// a "low battery" status frame and go back to sleep.
+		// Low-battery gate: read the cell voltage before burning ~80 mA on WiFi
+		// for 5+ seconds. Below 3.2 V the panel waveform + radio together risk a
+		// brownout reset, so paint a "low battery" status frame and go back to
+		// sleep. Boards whose battery sense is independent of the panel (E1003)
+		// read the cell up front and then overlap the slow panel init with the
+		// WiFi connect; boards whose sense is gated behind begin() (Inkplate)
+		// must power the panel up first.
 		LOGI("Epaper", "[spike] splash done; entering battery gate");
-		if (epaper_driver_begin()) {
-				LOGI("Epaper", "[spike] driver begin ok; reading battery");
+
+		auto low_battery_sleep = [&](uint16_t mv) {
+				const uint8_t pct = epaper_battery_percent(mv);
+				epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
+				epaper_screen_low_battery(mv, pct);
+				epaper_driver_display();
+				epaper_driver_sleep();
+				power_manager_sleep_for(600);
+		};
+
+		bool begin_started = false;  // true once begin_async() has been kicked off
+		if (epaper_driver_battery_ready_before_begin()) {
+				const uint16_t mv = epaper_driver_battery_mv();
+				LOGI("Epaper", "[spike] early battery mv=%u", mv);
+				if (mv > 0 && mv < 3200) {
+						epaper_driver_begin();  // bring panel up to paint the status frame
+						low_battery_sleep(mv);
+						return true;
+				}
+				// Healthy: start panel init on a background task so it overlaps the
+				// WiFi connect below. Joined before the first draw.
+				epaper_driver_begin_async();
+				begin_started = true;
+		} else if (epaper_driver_begin()) {
 				const uint16_t mv = epaper_driver_battery_mv();
 				LOGI("Epaper", "[spike] battery mv=%u", mv);
 				if (mv > 0 && mv < 3200) {
-						const uint8_t pct = epaper_battery_percent(mv);
-						epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
-						epaper_screen_low_battery(mv, pct);
-						epaper_driver_display();
-						epaper_driver_sleep();
-						power_manager_sleep_for(600);
+						low_battery_sleep(mv);
 						return true;
 				}
-				// Healthy battery: leave the panel powered. begin() already raised
-				// the rails (the slow ~1.6 s IT8951 power-on cost is paid here, once),
-				// so sleeping now only to re-power in the draw path would pay that cost
-				// a second time on the wake-critical path. The panel idles powered
-				// through the WiFi connect; deep sleep at the end of the cycle cuts the
-				// rail. The draw-path power_on() collapses to a guarded no-op.
+				// Healthy: panel already up; leave it powered through the WiFi connect
+				// so the draw-path power_on() collapses to a guarded no-op (the slow
+				// ~1.6 s IT8951 power-on is paid once, here, not again in the draw).
 		} else {
 				LOGW("Epaper", "[spike] driver begin returned false");
 		}
 
 		// WiFi -> CRC check -> conditional draw -> sleep. Each checkpoint feeds
 		// the RTC-retained timing budget so the portal can show a per-cycle
-		// breakdown.
+		// breakdown. On early-battery boards the background panel init started
+		// above runs concurrently with this association.
 		LOGI("Epaper", "[spike] battery gate passed; connecting WiFi");
 		const bool connected = wifi_manager_connect(config, true);
+
+		// Ensure panel init has finished (and reap its task) before any later
+		// draw. No-op on boards where begin() ran synchronously above.
+		if (begin_started) epaper_driver_begin_join();
+
 		if (!connected) {
 				const uint32_t backoff = power_manager_note_wifi_failure(
 						epaper_current_slot_duration_seconds(),

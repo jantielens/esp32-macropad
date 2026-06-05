@@ -36,6 +36,25 @@ void epaper_driver_sleep();
 uint16_t epaper_driver_battery_mv();
 
 // ----------------------------------------------------------------------------
+// Optional asynchronous panel init (wake-time overlap).
+// ----------------------------------------------------------------------------
+// epaper_driver_begin_async() kicks off epaper_driver_begin() so the caller can
+// run independent work (e.g. the WiFi association) concurrently with the slow
+// panel power-up. epaper_driver_begin_join() blocks until init has finished and
+// returns the begin() result. The pair is always safe to call: on boards
+// without a background-init path, begin_async() runs begin() synchronously and
+// join() simply returns the cached result.
+//
+// epaper_driver_battery_ready_before_begin() reports whether the board can read
+// the battery voltage before the panel is begun. When true the duty-cycle hook
+// reads the cell and runs its low-battery gate up front, then overlaps panel
+// init with the WiFi connect. When false (e.g. panels whose battery sense is
+// gated behind begin()), the caller must begin() the panel first.
+void epaper_driver_begin_async();
+bool epaper_driver_begin_join();
+bool epaper_driver_battery_ready_before_begin();
+
+// ----------------------------------------------------------------------------
 // Optional SD image cache (boards with a shared-bus microSD slot only).
 // When enabled, epaper_driver_draw_url() serves the image straight from SD on
 // a cache hit (skipping the multi-second HTTP body download) and stages a

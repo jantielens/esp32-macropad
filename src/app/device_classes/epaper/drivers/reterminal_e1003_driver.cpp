@@ -946,6 +946,72 @@ bool epaper_driver_begin() {
 		return true;
 }
 
+// ---------------------------------------------------------------------------
+// Asynchronous panel init (wake-time WiFi overlap).
+// begin() drives the HSPI panel bus and allocates the 1.25 MB canvas in PSRAM
+// (~1.87 s). Running it on a background PSRAM-stack task lets the duty-cycle
+// hook associate WiFi (radio bus, ~1.7 s) concurrently -- the two use
+// independent buses, so they overlap without contention. Same task pattern as
+// the pre-warm worker, which is proven safe for HSPI on this board.
+// ---------------------------------------------------------------------------
+namespace {
+struct BeginCtx {
+		TaskHandle_t caller;
+		bool ok;
+};
+constexpr uint32_t BEGIN_STACK_WORDS = 4096;  // 16 KB PSRAM stack (full init)
+BeginCtx s_begin_ctx = {};
+TaskHandle_t s_begin_worker = nullptr;
+RtosTaskPsramAlloc s_begin_alloc = {};
+bool s_begin_spawned = false;
+bool s_begin_result = false;
+
+void begin_worker(void* arg) {
+		BeginCtx* ctx = (BeginCtx*)arg;
+		ctx->ok = epaper_driver_begin();
+		xTaskNotifyGive(ctx->caller);
+		// Block until the caller deletes us (same pattern as prewarm_worker), so
+		// it can free the static stack/TCB without a self-delete cleanup race.
+		for (;;) vTaskDelay(portMAX_DELAY);
+}
+}  // namespace
+
+void epaper_driver_begin_async() {
+		if (s_began) {  // already initialized; nothing to overlap
+				s_begin_result = true;
+				s_begin_spawned = false;
+				return;
+		}
+		s_begin_ctx.caller = xTaskGetCurrentTaskHandle();
+		s_begin_ctx.ok = false;
+		s_begin_worker = nullptr;
+		s_begin_alloc = {};
+		s_begin_spawned = rtos_create_task_psram_stack(
+				begin_worker, "epbegin", BEGIN_STACK_WORDS, &s_begin_ctx, 5,
+				&s_begin_worker, &s_begin_alloc);
+		if (!s_begin_spawned) {
+				// Spawn failed: run begin() inline so the panel is still ready. The
+				// overlap is lost but correctness is preserved.
+				LOGW("Epaper", "async begin spawn failed; running begin() inline");
+				s_begin_result = epaper_driver_begin();
+		}
+}
+
+bool epaper_driver_begin_join() {
+		if (!s_begin_spawned) return s_begin_result;
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		vTaskDelete(s_begin_worker);
+		if (s_begin_alloc.stack) heap_caps_free(s_begin_alloc.stack);
+		if (s_begin_alloc.tcb) heap_caps_free(s_begin_alloc.tcb);
+		s_begin_spawned = false;
+		s_begin_result = s_begin_ctx.ok;
+		return s_begin_result;
+}
+
+// Battery sense (GPIO1 ADC + GPIO40 enable) is independent of the panel rails
+// and HSPI bus, so the cell voltage can be read before begin().
+bool epaper_driver_battery_ready_before_begin() { return true; }
+
 void epaper_driver_set_rotation(uint8_t rotation) {
 		if (!s_began || !s_canvas) return;
 		s_canvas->setRotation(rotation & 0x3);
