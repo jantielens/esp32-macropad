@@ -561,7 +561,12 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						power_manager_sleep_for(600);
 						return true;
 				}
-				epaper_driver_sleep();
+				// Healthy battery: leave the panel powered. begin() already raised
+				// the rails (the slow ~1.6 s IT8951 power-on cost is paid here, once),
+				// so sleeping now only to re-power in the draw path would pay that cost
+				// a second time on the wake-critical path. The panel idles powered
+				// through the WiFi connect; deep sleep at the end of the cycle cuts the
+				// rail. The draw-path power_on() collapses to a guarded no-op.
 		} else {
 				LOGW("Epaper", "[spike] driver begin returned false");
 		}
