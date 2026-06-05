@@ -146,6 +146,8 @@ The Inkplate wake button has two meanings:
 
 The long-press threshold is 2.5 seconds.
 
+A short-press refresh always wins over the hourly schedule. Even when the current local hour is disabled in the schedule (a timer wake at that hour would sleep without drawing), a button wake bypasses the schedule gate and refreshes the image, then resumes normal scheduled sleeping on the next timer wake.
+
 Button wake classification is done once at boot. That prevents the refresh path and the config-mode path from re-interpreting the same physical press differently later in startup.
 
 ## Status Overlay
@@ -269,7 +271,7 @@ The e-paper duty cycle measures and retains a per-wake timing budget in RTC memo
 The e-paper device wakes from either the RTC timer or the WAKE button. The current UI no longer exposes a separate global "wake every" control; the wake cadence is driven by the active slot's Duration.
 
 * Slot Duration controls how long the device sleeps after showing that slot.
-* The schedule can still disable refreshes for selected local hours.
+* The schedule can still disable refreshes for selected local hours. A WAKE-button press overrides the schedule and refreshes anyway; only timer wakes honor the disabled hours.
 * Button-only operation remains possible when the timer wake is intentionally disabled in firmware behavior.
 
 ### Sleep-Time Compensation

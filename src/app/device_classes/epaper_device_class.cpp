@@ -637,8 +637,20 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		epaper_timing_last.boot_to_wifi_ms = t_wifi_done;
 		epaper_timing_last.wifi_rssi = (int16_t)WiFi.RSSI();
 
-		// Schedule check BEFORE image fetch: if disabled at this hour, sleep and skip refresh
-		if (g_epaper_config.schedule_hours != 0x00FFFFFF) {
+		// A WAKE-button press always wins over the schedule: the user is
+		// actively looking at the panel and expects fresh content, so a button
+		// wake bypasses the schedule gate below and forces a refresh even
+		// outside the enabled hours.
+		const bool cold_boot = !power_manager_is_deep_sleep_wake();
+#if HAS_EPAPER_WAKE_BUTTON
+		const bool button_wake = epaper_button_is_button_wake();
+#else
+		const bool button_wake = false;
+#endif
+
+		// Schedule check BEFORE image fetch: if disabled at this hour, sleep and
+		// skip refresh. Skipped on a button wake so the button always refreshes.
+		if (g_epaper_config.schedule_hours != 0x00FFFFFF && !button_wake) {
 				if (!epaper_schedule_should_refresh(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr))) {
 						uint32_t sleep_s = epaper_schedule_seconds_to_next(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr));
 						LOGI("Epaper", "Schedule: disabled at this hour; sleeping %u seconds", sleep_s);
@@ -651,12 +663,12 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// splash, so a CRC-match skip would leave the user staring at the
 		// splash. Button wakes also force a refresh -- the user is actively
 		// looking at the panel and expects fresh content.
-		const bool cold_boot = !power_manager_is_deep_sleep_wake();
 #if HAS_EPAPER_WAKE_BUTTON
-		const bool force_refresh = cold_boot || epaper_button_is_button_wake();
+		const bool force_refresh = cold_boot || button_wake;
 #else
 		const bool force_refresh = cold_boot;
 #endif
+
 
 		if (!epaper_resolve_current_url()) {
 				LOGW("Epaper", "Refresh skipped: no carousel URL configured");
