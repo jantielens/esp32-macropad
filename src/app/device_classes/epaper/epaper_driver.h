@@ -41,6 +41,11 @@ uint16_t epaper_driver_battery_mv();
 // a cache hit (skipping the multi-second HTTP body download) and stages a
 // freshly downloaded image for write-back. All three are no-ops on boards
 // without an SD cache.
+//
+// On boards that define EPAPER_SD_CS_PIN the driver implements these as thin
+// pass-throughs to the shared epaper_sd_cache module. On boards without it,
+// they resolve to inline no-ops provided by epaper_sd_cache.h (included below)
+// — the single source of truth, so individual drivers do not define stubs.
 // ----------------------------------------------------------------------------
 // Enable/disable SD caching for subsequent draw_url() calls (call before draw).
 void epaper_driver_set_sd_cache_enabled(bool enabled);
@@ -51,6 +56,10 @@ void epaper_driver_cache_flush();
 // Wipe the on-SD image cache (portal "Clear SD cache" action). Returns true
 // when the cache was cleared (or was already empty).
 bool epaper_driver_sd_cache_clear();
+
+// Provides the module API on SD boards, and the inline no-op fallbacks for the
+// three vtable functions above on boards without EPAPER_SD_CS_PIN.
+#include "epaper_sd_cache.h"
 
 // ----------------------------------------------------------------------------
 // GFX primitives — thin pass-through to the underlying Adafruit_GFX panel.

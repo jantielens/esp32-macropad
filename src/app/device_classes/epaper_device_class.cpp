@@ -788,6 +788,7 @@ void epaper_device_class_register() {
 #include "epaper/epaper_refresh.cpp"
 #include "epaper/epaper_schedule.cpp"
 #include "epaper/epaper_screens.cpp"
+#include "epaper/epaper_sd_cache.cpp"
 #include "epaper/epaper_timing.cpp"
 
 #endif // HAS_EPAPER
