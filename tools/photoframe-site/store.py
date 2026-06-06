@@ -23,8 +23,19 @@ import blobstore as bs
 IMAGE_PREFIX = "images/"
 QUEUE_BLOB = "state/queue.json"
 G16P_EXT = ".g16p"
+JPEG_EXT = ".jpg"
 THUMB_SUFFIX = "__thumb.png"
 META_EXT = ".json"
+
+# Canonical-image extensions, keyed by output format (see config.py). g16z keeps
+# the historical .g16p extension so existing E1003 blobs stay valid; jpeg uses
+# .jpg so on-device image libraries (Inkplate) pick the right decoder by URL.
+FORMAT_EXT = {"g16z": G16P_EXT, "jpeg": JPEG_EXT}
+DEFAULT_IMAGE_EXT = G16P_EXT
+# All extensions we may have written, for format-agnostic scans/cleanup.
+KNOWN_IMAGE_EXTS = (G16P_EXT, JPEG_EXT)
+# Content type per format, for the canonical blob upload.
+FORMAT_CONTENT_TYPE = {"g16z": "application/octet-stream", "jpeg": "image/jpeg"}
 
 # Image ids are server-minted; restrict to a safe charset to prevent blob-name
 # injection / path traversal when building URLs.
@@ -35,8 +46,40 @@ def is_valid_id(image_id: str) -> bool:
     return bool(_ID_RE.match(image_id))
 
 
+def format_ext(image_format: Optional[str]) -> str:
+    """Canonical-blob extension for an output format (default .g16p)."""
+    return FORMAT_EXT.get((image_format or "").lower(), DEFAULT_IMAGE_EXT)
+
+
+def meta_image_ext(meta: dict) -> str:
+    """Canonical-blob extension implied by a per-image meta's ``format`` field."""
+    return format_ext(meta.get("format"))
+
+
+def image_name(image_id: str, ext: str = DEFAULT_IMAGE_EXT) -> str:
+    return f"{IMAGE_PREFIX}{image_id}{ext}"
+
+
 def g16p_name(image_id: str) -> str:
-    return f"{IMAGE_PREFIX}{image_id}{G16P_EXT}"
+    return image_name(image_id, G16P_EXT)
+
+
+def _split_image_name(name: str) -> Optional[tuple[str, str]]:
+    """Split a blob name into ``(image_id, ext)`` for canonical image blobs only.
+
+    Returns None for thumbnails, meta JSON, non-image blobs, or invalid ids.
+    """
+    if not name.startswith(IMAGE_PREFIX):
+        return None
+    rest = name[len(IMAGE_PREFIX):]
+    if rest.endswith(THUMB_SUFFIX) or rest.endswith(META_EXT):
+        return None
+    for ext in KNOWN_IMAGE_EXTS:
+        if rest.endswith(ext):
+            image_id = rest[:-len(ext)]
+            if is_valid_id(image_id):
+                return image_id, ext
+    return None
 
 
 def thumb_name(image_id: str) -> str:
@@ -143,20 +186,24 @@ def write_meta(sas: str, image_id: str, meta: dict) -> None:
 
 
 def list_image_ids(sas: str) -> list[str]:
-    """All image ids that have a canonical G16P blob."""
+    """All image ids that have a canonical image blob (any known format)."""
     names = bs.list_blobs(sas, IMAGE_PREFIX)
     ids: list[str] = []
     for name in names:
-        if name.endswith(G16P_EXT):
-            image_id = name[len(IMAGE_PREFIX):-len(G16P_EXT)]
-            if is_valid_id(image_id):
-                ids.append(image_id)
+        split = _split_image_name(name)
+        if split:
+            ids.append(split[0])
     return ids
 
 
 def delete_image(sas: str, image_id: str) -> None:
-    """Remove an image's blob, thumb, meta, and any queue reference."""
-    bs.delete_blob(sas, g16p_name(image_id))
+    """Remove an image's blob(s), thumb, meta, and any queue reference.
+
+    Deletes every known canonical extension (delete_blob tolerates 404) so the
+    format does not need to be known at delete time.
+    """
+    for ext in KNOWN_IMAGE_EXTS:
+        bs.delete_blob(sas, image_name(image_id, ext))
     bs.delete_blob(sas, thumb_name(image_id))
     bs.delete_blob(sas, meta_name(image_id))
     queue_remove(sas, image_id)
@@ -165,18 +212,27 @@ def delete_image(sas: str, image_id: str) -> None:
 def store_image(
     sas: str,
     image_id: str,
-    g16p_bytes: bytes,
+    image_bytes: bytes,
     thumb_png: bytes,
     meta: dict,
     *,
     enqueue: bool = True,
 ) -> None:
-    """Persist a new image (blob + thumb + meta) and optionally enqueue it."""
+    """Persist a new image (blob + thumb + meta) and optionally enqueue it.
+
+    The canonical blob's extension and content type are derived from the meta's
+    ``format`` field (default g16z/.g16p).
+    """
+    image_format = meta.get("format")
+    ext = meta_image_ext(meta)
+    content_type = FORMAT_CONTENT_TYPE.get(
+        (image_format or "").lower(), "application/octet-stream"
+    )
     bs.upload_blob(
         sas,
-        g16p_name(image_id),
-        g16p_bytes,
-        content_type="application/octet-stream",
+        image_name(image_id, ext),
+        image_bytes,
+        content_type=content_type,
         metadata=selection_blob_metadata(meta),
     )
     bs.upload_blob(sas, thumb_name(image_id), thumb_png, content_type="image/png")
@@ -207,18 +263,17 @@ def select_next(sas: str) -> Optional[str]:
     blobs = bs.list_blobs_with_metadata(sas, IMAGE_PREFIX)
     metas: dict[str, dict] = {}
     for name, md in blobs.items():
-        if not name.endswith(G16P_EXT):
+        split = _split_image_name(name)
+        if not split:
             continue
-        image_id = name[len(IMAGE_PREFIX):-len(G16P_EXT)]
-        if not is_valid_id(image_id):
-            continue
+        image_id, _ext = split
         if "permanent" in md:
             metas[image_id] = _selection_from_blob_metadata(md)
         else:
             # Backfill: image uploaded before metadata stamping existed. Read its
             # .json once and stamp the blob so subsequent polls are metadata-only.
             full = read_meta(sas, image_id) or {}
-            bs.set_blob_metadata(sas, g16p_name(image_id), selection_blob_metadata(full))
+            bs.set_blob_metadata(sas, name, selection_blob_metadata(full))
             metas[image_id] = {
                 "permanent": bool(full.get("permanent", False)),
                 "expires_at": full.get("expires_at"),
@@ -286,5 +341,5 @@ def mark_served(sas: str, image_id: str, meta: dict) -> None:
     write_meta(sas, image_id, meta)
     # Keep the blob's selection metadata in lock-step with the .json so the next
     # poll's metadata-only read sees the updated last_shown_at / served_at.
-    bs.set_blob_metadata(sas, g16p_name(image_id), selection_blob_metadata(meta))
+    bs.set_blob_metadata(sas, image_name(image_id, meta_image_ext(meta)), selection_blob_metadata(meta))
     queue_remove(sas, image_id)

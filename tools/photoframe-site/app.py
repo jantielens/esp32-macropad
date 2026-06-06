@@ -104,10 +104,23 @@ def index(request: Request) -> Response:
     user = _current_user(request, config)
     if user is None:
         return RedirectResponse("/login", status_code=303)
+    devices = []
+    for device_id in user.devices:
+        device = config.device(device_id)
+        if device is None:
+            devices.append({"id": device_id, "missing": True})
+            continue
+        devices.append({
+            "id": device_id,
+            "format": device.image_format,
+            "format_label": "JPEG" if device.image_format == cfg.FORMAT_JPEG else "G16Z",
+            "resolution": f"{device.width}\u00d7{device.height}",
+            "jpeg_quality": device.jpeg_quality if device.image_format == cfg.FORMAT_JPEG else None,
+        })
     return templates.TemplateResponse(
         request,
         "devices.html",
-        {"request": request, "user": user, "devices": list(user.devices)},
+        {"request": request, "user": user, "devices": devices},
     )
 
 
@@ -204,16 +217,7 @@ def upload_form(request: Request, device_id: str) -> Response:
     return templates.TemplateResponse(
         request,
         "upload.html",
-        {
-            "request": request,
-            "user": user,
-            "device_id": device_id,
-            "knobs": knobs.to_client(),
-            "device_aspect": device.width / device.height,
-            "panel_response": list(gray16.PANEL_RESPONSE_E1003_GC16_V32),
-            "resamplers": gray16.resampler_choices(),
-            "resampler_default": gray16.DEFAULT_RESAMPLER,
-        },
+        _upload_context(request, user, device),
     )
 
 
@@ -288,47 +292,71 @@ def upload_submit(
 
     crop = _parse_json_object(crop_values)
     raw = file.file.read()
+    is_jpeg = device.image_format == cfg.FORMAT_JPEG
     try:
         with Image.open(io.BytesIO(raw)) as src:
             src.load()
-            logger.info(
-                "upload device=%s src=%dx%d transform=%s crop=%s gamma=%.3f highlights=%.3f "
-                "brightness=%.3f contrast=%.3f midtone=%.3f calibration=%.0f resampler=%s",
-                device_id, src.width, src.height, device.image_transform,
-                gray16.describe_crop(crop, src.width, src.height),
-                knob_vals["gamma"], knob_vals["highlights"],
-                knob_vals["brightness"], knob_vals["contrast"], knob_vals["midtone"],
-                knob_vals["panel_calibration"], resampler,
-            )
-            g16p_bytes, preview = gray16.encode_g16p(
-                src,
-                width=device.width,
-                height=device.height,
-                transform=device.image_transform,
-                crop=crop,
-                gamma=knob_vals["gamma"],
-                highlights=knob_vals["highlights"],
-                brightness=knob_vals["brightness"],
-                contrast=knob_vals["contrast"],
-                midtone=knob_vals["midtone"],
-                panel_calibration=knob_vals["panel_calibration"],
-                resampler=resampler,
-            )
+            if is_jpeg:
+                # Resize-only profile: reuse the panel-agnostic tone curve, but no
+                # E1003 calibration or dither -- the device library dithers on-panel.
+                logger.info(
+                    "upload device=%s src=%dx%d transform=%s crop=%s format=jpeg "
+                    "quality=%d gamma=%.3f highlights=%.3f brightness=%.3f contrast=%.3f "
+                    "midtone=%.3f resampler=%s",
+                    device_id, src.width, src.height, device.image_transform,
+                    gray16.describe_crop(crop, src.width, src.height),
+                    device.jpeg_quality, knob_vals["gamma"], knob_vals["highlights"],
+                    knob_vals["brightness"], knob_vals["contrast"], knob_vals["midtone"],
+                    resampler,
+                )
+                image_bytes, preview = gray16.encode_jpeg(
+                    src,
+                    width=device.width,
+                    height=device.height,
+                    transform=device.image_transform,
+                    crop=crop,
+                    resampler=resampler,
+                    quality=device.jpeg_quality,
+                    gamma=knob_vals["gamma"],
+                    highlights=knob_vals["highlights"],
+                    brightness=knob_vals["brightness"],
+                    contrast=knob_vals["contrast"],
+                    midtone=knob_vals["midtone"],
+                )
+            else:
+                logger.info(
+                    "upload device=%s src=%dx%d transform=%s crop=%s gamma=%.3f highlights=%.3f "
+                    "brightness=%.3f contrast=%.3f midtone=%.3f calibration=%.0f resampler=%s",
+                    device_id, src.width, src.height, device.image_transform,
+                    gray16.describe_crop(crop, src.width, src.height),
+                    knob_vals["gamma"], knob_vals["highlights"],
+                    knob_vals["brightness"], knob_vals["contrast"], knob_vals["midtone"],
+                    knob_vals["panel_calibration"], resampler,
+                )
+                g16p_bytes, preview = gray16.encode_g16p(
+                    src,
+                    width=device.width,
+                    height=device.height,
+                    transform=device.image_transform,
+                    crop=crop,
+                    gamma=knob_vals["gamma"],
+                    highlights=knob_vals["highlights"],
+                    brightness=knob_vals["brightness"],
+                    contrast=knob_vals["contrast"],
+                    midtone=knob_vals["midtone"],
+                    panel_calibration=knob_vals["panel_calibration"],
+                    resampler=resampler,
+                )
+                image_bytes = gray16.wrap_g16z(g16p_bytes)
     except Exception as exc:  # noqa: BLE001 - surface decode/encode failure to user
         return templates.TemplateResponse(
             request,
             "upload.html",
-            {"request": request, "user": user, "device_id": device_id,
-             "knobs": knobs.to_client(),
-             "device_aspect": device.width / device.height,
-             "panel_response": list(gray16.PANEL_RESPONSE_E1003_GC16_V32),
-             "resamplers": gray16.resampler_choices(),
-             "resampler_default": gray16.DEFAULT_RESAMPLER,
-             "error": f"Could not process image: {exc}"},
+            _upload_context(request, user, device, error=f"Could not process image: {exc}"),
             status_code=400,
         )
 
-    thumb_png = _make_thumbnail(preview)
+    thumb_png = _make_thumbnail(preview, simulate=not is_jpeg)
 
     is_permanent = bool(permanent)
     # permanent and expiry are independent axes: a permanent image stays in
@@ -345,17 +373,19 @@ def upload_submit(
     image_id = _mint_id()
     meta = {
         "id": image_id,
+        "format": device.image_format,
         "permanent": is_permanent,
         "expires_at": expires_at,
         "last_shown_at": None,
         "caption": caption.strip(),
         "uploaded_at": store.now_iso(),
         "uploader": user.email,
-        "knobs": knob_vals,
+        # JPEG reuses the tone knobs but not the panel-calibration toggle.
+        "knobs": {k: v for k, v in knob_vals.items() if k != "panel_calibration"} if is_jpeg else knob_vals,
         "crop": crop or {},
         "resampler": resampler,
     }
-    store.store_image(device.container_sas_url, image_id, gray16.wrap_g16z(g16p_bytes), thumb_png, meta)
+    store.store_image(device.container_sas_url, image_id, image_bytes, thumb_png, meta)
     return RedirectResponse(f"/photos?device_id={device_id}", status_code=303)
 
 
@@ -438,7 +468,9 @@ def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
 
     store.mark_served(sas, image_id, meta)
 
-    blob_url = bs.build_blob_url(sas, store.g16p_name(image_id))
+    image_format = meta.get("format", "g16z")
+    blob_name = store.image_name(image_id, store.meta_image_ext(meta))
+    blob_url = bs.build_blob_url(sas, blob_name)
 
     # Default path: redirect the device to the blob's own SAS URL so it pulls
     # the ~1.3 MB payload straight from Azure Blob Storage instead of routing it
@@ -450,13 +482,17 @@ def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
     if not proxy:
         return RedirectResponse(blob_url, status_code=302)
 
-    data = bs.download_blob(sas, store.g16p_name(image_id))
+    data = bs.download_blob(sas, blob_name)
     if data is None:
         return Response(status_code=204)
+    if image_format == "jpeg":
+        media_type, header_format = "image/jpeg", "jpeg"
+    else:
+        media_type, header_format = "application/octet-stream", "g16p"
     return Response(
         data,
-        media_type="application/octet-stream",
-        headers={"X-Image-Format": "g16p", "Cache-Control": "no-store"},
+        media_type=media_type,
+        headers={"X-Image-Format": header_format, "Cache-Control": "no-store"},
     )
 
 
@@ -484,11 +520,37 @@ def _parse_json_object(raw: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _make_thumbnail(preview: Image.Image) -> bytes:
-    # Lighten to match the on-screen "simulated" preview (and the real panel),
-    # rather than the darker device-faithful encode. Display-only correction.
-    img = gray16.simulate_display(preview)
+def _make_thumbnail(preview: Image.Image, *, simulate: bool = True) -> bytes:
+    # For the calibrated g16z path, lighten to match the on-screen "simulated"
+    # preview (and the real panel) rather than the darker device-faithful encode.
+    # The resize-only jpeg path applies no panel curve, so the fitted grayscale
+    # image is already display-faithful -- thumbnail it as-is.
+    img = gray16.simulate_display(preview) if simulate else preview.copy()
     img.thumbnail((THUMB_MAX, THUMB_MAX), Image.Resampling.LANCZOS)
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+def _upload_context(request: Request, user, device, **extra) -> dict:
+    """Template context for upload.html, adapted to the device's output format.
+
+    The resize-only jpeg profile reuses the panel-agnostic tone knobs but hides
+    the E1003 panel-calibration toggle and panel response, so its preview shows
+    the tone curve without panel simulation (the device does its own dither). The
+    resampler choice always applies (it governs the resize filter).
+    """
+    is_jpeg = device.image_format == cfg.FORMAT_JPEG
+    context = {
+        "request": request,
+        "user": user,
+        "device_id": device.device_id,
+        "image_format": device.image_format,
+        "knobs": knobs.to_client(include_panel_only=not is_jpeg),
+        "device_aspect": device.width / device.height,
+        "panel_response": [] if is_jpeg else list(gray16.PANEL_RESPONSE_E1003_GC16_V32),
+        "resamplers": gray16.resampler_choices(),
+        "resampler_default": gray16.DEFAULT_RESAMPLER,
+    }
+    context.update(extra)
+    return context

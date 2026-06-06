@@ -18,6 +18,7 @@ extract a single shared module imported by both the tool and the site.
 
 from __future__ import annotations
 
+import io
 import struct
 import zlib
 from array import array
@@ -614,6 +615,61 @@ def encode_g16p(
     preview = gray_levels_to_preview(gray, width, height)
     nibbles = _dither_to_nibbles(gray, width, height)
     return pack_g16p(nibbles, width, height), preview
+
+
+JPEG_QUALITY_DEFAULT = 90
+
+
+def encode_jpeg(
+    img: Image.Image,
+    *,
+    width: int = PANEL_W,
+    height: int = PANEL_H,
+    transform: dict | None = None,
+    crop: dict | None = None,
+    resampler: str | None = None,
+    quality: int = JPEG_QUALITY_DEFAULT,
+    grayscale: bool = True,
+    gamma: float = CAL_GAMMA,
+    highlights: float = CAL_HIGHLIGHTS,
+    brightness: float = CAL_BRIGHTNESS,
+    contrast: float = CAL_CONTRAST,
+    midtone: float = CAL_MIDTONE,
+) -> tuple[bytes, Image.Image]:
+    """Resize-and-tone pipeline for panels whose firmware library does its own
+    dither (e.g. Inkplate): orientation -> crop -> fit -> auto-stretch + tone -> JPEG.
+
+    Reuses the panel-agnostic half of the calibrated pipeline (percentile
+    auto-stretch and the gamma/highlights/brightness/contrast/midtone tone curve)
+    but deliberately skips the E1003 panel calibration and the Floyd-Steinberg
+    dither -- the device's image library reproduces the final tones on-panel.
+    ``grayscale`` (default, for mono e-paper) applies the tone curve and emits an
+    8-bit JPEG; ``grayscale=False`` keeps colour and skips the (luma-based) tone
+    curve. Always emits a BASELINE (non-progressive) JPEG. Returns
+    ``(jpeg_bytes, preview_L)`` where ``preview_L`` is the toned 8-bit grayscale
+    image used for the gallery thumbnail.
+    """
+    oriented = apply_orientation(img, transform or {})
+    framed = apply_crop(oriented, crop)
+    rgb = fit_rgb_to_panel(framed, width, height, resample=resolve_resampler(resampler))
+    if grayscale:
+        gray = calibrated_gray_levels(
+            rgb,
+            width=width,
+            height=height,
+            gamma=gamma,
+            highlights=highlights,
+            brightness=brightness,
+            contrast=contrast,
+            midtone=midtone,
+            panel_calibration=0.0,
+        )
+        out = gray_levels_to_preview(gray, width, height)
+    else:
+        out = rgb
+    buffer = io.BytesIO()
+    out.save(buffer, format="JPEG", quality=int(quality), optimize=True, progressive=False)
+    return buffer.getvalue(), out.convert("L")
 
 
 def wrap_g16z(g16p_bytes: bytes, *, level: int = 9) -> bytes:

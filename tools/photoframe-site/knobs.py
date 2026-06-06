@@ -36,6 +36,10 @@ class Knob:
     # "range": a slider. "toggle": a 0/1 switch (rendered as a checkbox, parsed as
     # 0.0/1.0). The control type only affects rendering/parsing, not the math.
     type: str = "range"
+    # Panel-specific: applies the E1003's measured panel response and is meaningless
+    # for devices that do their own grayscale/dither (e.g. Inkplate JPEG). Such
+    # knobs are hidden from the upload UI for non-g16z output formats.
+    panel_only: bool = False
     help: str = ""
 
     def clamp(self, value: float) -> float:
@@ -53,6 +57,7 @@ KNOBS: tuple[Knob, ...] = (
         default=gray16.CAL_PANEL_STRENGTH,
         tier="tone",
         type="toggle",
+        panel_only=True,
         help="Correct for the panel's measured tonal response. Leave on for the "
         "most natural-looking photos; turn off to send the raw tone curve.",
     ),
@@ -85,7 +90,7 @@ KNOBS: tuple[Knob, ...] = (
         default=gray16.CAL_MIDTONE,
         tier="tone",
         help="Spreads muted midtones toward black and white with a soft rolloff, "
-        "so flat photos use more of the panel's 16 levels without clipping detail.",
+        "so flat photos use more of the tonal range without clipping detail.",
     ),
     Knob(
         id="highlights",
@@ -139,6 +144,11 @@ def parse_values(raw: dict[str, str | float | None]) -> dict[str, float]:
     return result
 
 
-def to_client() -> list[dict]:
-    """Serializable knob descriptors for the upload template / browser."""
-    return [asdict(k) for k in KNOBS]
+def to_client(*, include_panel_only: bool = True) -> list[dict]:
+    """Serializable knob descriptors for the upload template / browser.
+
+    ``include_panel_only=False`` drops panel-specific knobs (panel calibration),
+    used for resize-only output formats (e.g. Inkplate JPEG) whose device handles
+    its own tonal response.
+    """
+    return [asdict(k) for k in KNOBS if include_panel_only or not k.panel_only]

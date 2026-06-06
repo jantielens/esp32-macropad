@@ -46,6 +46,16 @@ _HASH_PREFIX = "pbkdf2_sha256"
 DEFAULT_WIDTH = 1872
 DEFAULT_HEIGHT = 1404
 
+# Output format profile. ``g16z`` is the calibrated/dithered E1003 transport and
+# stays the default so existing devices are byte-identical. ``jpeg`` is a
+# resize-only profile for panels whose firmware library does its own grayscale +
+# dither (e.g. Inkplate).
+FORMAT_G16Z = "g16z"
+FORMAT_JPEG = "jpeg"
+SUPPORTED_FORMATS = (FORMAT_G16Z, FORMAT_JPEG)
+DEFAULT_FORMAT = FORMAT_G16Z
+DEFAULT_JPEG_QUALITY = 90
+
 
 class ConfigError(RuntimeError):
     """Raised when CONFIG_JSON is missing or malformed."""
@@ -59,6 +69,8 @@ class Device:
     width: int
     height: int
     image_transform: dict
+    image_format: str = DEFAULT_FORMAT
+    jpeg_quality: int = DEFAULT_JPEG_QUALITY
 
 
 @dataclass(frozen=True)
@@ -116,6 +128,19 @@ def load_config() -> Config:
             raise ConfigError(f"device '{device_id}' needs container_sas_url and api_key")
         resolution = entry.get("resolution") or {}
         transform = entry.get("image_transform") or {}
+        output = entry.get("output") or {}
+        image_format = str(output.get("format", DEFAULT_FORMAT)).lower()
+        if image_format not in SUPPORTED_FORMATS:
+            raise ConfigError(
+                f"device '{device_id}' has unsupported output.format '{image_format}' "
+                f"(expected one of {', '.join(SUPPORTED_FORMATS)})"
+            )
+        try:
+            jpeg_quality = int(output.get("jpeg_quality", DEFAULT_JPEG_QUALITY))
+        except (TypeError, ValueError):
+            raise ConfigError(f"device '{device_id}' output.jpeg_quality must be an integer")
+        if not 1 <= jpeg_quality <= 100:
+            raise ConfigError(f"device '{device_id}' output.jpeg_quality must be 1..100")
         devices[device_id] = Device(
             device_id=device_id,
             container_sas_url=str(sas),
@@ -127,6 +152,8 @@ def load_config() -> Config:
                 "mirror_x": bool(transform.get("mirror_x", False)),
                 "mirror_y": bool(transform.get("mirror_y", False)),
             },
+            image_format=image_format,
+            jpeg_quality=jpeg_quality,
         )
 
     users: dict[str, User] = {}

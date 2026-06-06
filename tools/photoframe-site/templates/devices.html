@@ -4,16 +4,27 @@
 <h1 class="h3 mb-4">Your devices</h1>
 {% if devices %}
 <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
-  {% for device_id in devices %}
+  {% for device in devices %}
   <div class="col">
     <div class="card h-100 shadow-sm">
       <div class="card-body">
-        <h2 class="h5 card-title">{{ device_id }}</h2>
-        <p class="card-text text-body-secondary small">E1003 photoframe</p>
+        <h2 class="h5 card-title mb-2">{{ device.id }}</h2>
+        {% if device.missing %}
+        <span class="badge rounded-pill text-bg-danger">Not configured</span>
+        {% else %}
+        <div class="d-flex flex-wrap gap-1">
+          <span class="badge rounded-pill {{ 'text-bg-info' if device.format == 'jpeg' else 'text-bg-secondary' }}"
+                title="Output format">{{ device.format_label }}</span>
+          <span class="badge rounded-pill text-bg-light border" title="Panel resolution">{{ device.resolution }}</span>
+          {% if device.jpeg_quality %}
+          <span class="badge rounded-pill text-bg-light border" title="JPEG quality">Q{{ device.jpeg_quality }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
       <div class="card-footer bg-transparent d-flex gap-2">
-        <a class="btn btn-sm btn-primary" href="/photos?device_id={{ device_id }}">Gallery</a>
-        <a class="btn btn-sm btn-outline-secondary" href="/upload?device_id={{ device_id }}">Upload</a>
+        <a class="btn btn-sm btn-primary" href="/photos?device_id={{ device.id }}">Gallery</a>
+        <a class="btn btn-sm btn-outline-secondary" href="/upload?device_id={{ device.id }}">Upload</a>
       </div>
     </div>
   </div>

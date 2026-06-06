@@ -48,6 +48,26 @@
     padding: .7rem .9rem;
   }
   .upload-flow .form-range { accent-color: var(--accent); }
+  /* Treat a vertical swipe that starts on a slider as a page scroll, not a drag,
+     so scrolling past the adjustment knobs no longer changes their value by
+     accident. Horizontal drags still adjust the slider. Extra vertical padding
+     widens the dead-zone between rows to make a clean scroll-grab easier. */
+  .upload-flow .form-range {
+    touch-action: pan-y;
+    padding-block: .35rem;
+  }
+  /* Reserved scroll lane: sliders sit in an inset track so a thumb-width strip on
+     each side is always control-free and safe to swipe-scroll past. The faint
+     side tint marks the lane as a scroll target without drawing too much
+     attention. Only the slider is inset; its label and help text stay full width. */
+  .upload-flow .slider-lane {
+    padding-inline: 2.5rem;
+    background:
+      linear-gradient(to right, rgba(109, 40, 217, .05), rgba(109, 40, 217, 0)) left / 2.5rem 100% no-repeat,
+      linear-gradient(to left, rgba(109, 40, 217, .05), rgba(109, 40, 217, 0)) right / 2.5rem 100% no-repeat;
+    border-radius: .5rem;
+  }
+  .upload-flow .slider-lane .form-range { margin-bottom: 0; }
   .upload-flow input[type="checkbox"].form-check-input:checked {
     background-color: var(--accent);
     border-color: var(--accent);
@@ -177,6 +197,10 @@
     z-index: 1020;
     padding: .4rem 0 .55rem;
     background: var(--bs-body-bg);
+    /* Round the bottom corners so the opaque cover (and its shadow) that content
+       slides under matches the rounded preview instead of showing hard edges. */
+    border-bottom-left-radius: var(--bs-border-radius-lg, .5rem);
+    border-bottom-right-radius: var(--bs-border-radius-lg, .5rem);
   }
   .upload-flow .preview-sticky.is-pinned {
     box-shadow: 0 10px 22px -12px rgba(17, 12, 34, .45);
@@ -296,25 +320,37 @@
               <label for="crop-zoom" class="form-label fw-semibold mb-0">Zoom &amp; drag to frame</label>
               <button type="button" class="btn btn-link btn-sm p-0 ghost-link" id="reset-crop">Reset framing</button>
             </div>
-            <input type="range" class="form-range" id="crop-zoom" min="0.3" max="3" step="0.01" value="1">
+            <div class="slider-lane">
+              <input type="range" class="form-range" id="crop-zoom" min="0.3" max="3" step="0.01" value="1">
+            </div>
             <div class="form-text">
               Drag to reposition; zoom out to fit the whole image (white bars fill the rest).
             </div>
           </div>
           <div class="form-text">
+            {% if image_format == 'jpeg' %}
+            Grayscale and tone-adjusted preview. Your device handles the final dithering on its own screen.
+            {% else %}
             Grayscale and tone-adjusted like the panel. Final dithering is applied on upload.
+            {% endif %}
           </div>
           <div id="histo-wrap" class="mt-3" style="display:none;">
             <div class="d-flex justify-content-between align-items-center mb-1">
-              <label class="form-label fw-semibold mb-0">Panel tonal coverage</label>
+              <label class="form-label fw-semibold mb-0">Tonal coverage</label>
               <span class="small text-body-secondary font-monospace" id="histo-readout"></span>
             </div>
             <canvas id="histogram" height="64" class="border rounded-3 bg-dark"
                     style="width:100%; height:64px; display:block;"></canvas>
             <div class="form-text">
+              {% if image_format == 'jpeg' %}
+              Each bar is a slice of the grey range, shown in its own shade. Tall bars at the
+              far left and right mean the photo reaches pure black &amp; white; a gap there is
+              what makes a photo look muted.
+              {% else %}
               Each bar is one of the panel's 16 grey levels, shown in that level's
               actual shade. Tall bars at the far left and right mean the photo
               reaches pure black &amp; white; a gap there is what makes a photo look muted.
+              {% endif %}
             </div>
           </div>
         </section>
@@ -324,7 +360,7 @@
           <div class="step-head">
             <span class="step-num">3</span>
             <h2 class="step-title">Adjustments</h2>
-            <button type="button" class="btn btn-link btn-sm p-0 ms-auto ghost-link" id="reset-knobs">Reset</button>
+            {% if knobs %}<button type="button" class="btn btn-link btn-sm p-0 ms-auto ghost-link" id="reset-knobs">Reset</button>{% endif %}
           </div>
           {% for knob in knobs %}
           {% if knob.type == 'toggle' %}
@@ -341,10 +377,12 @@
               <label for="knob_{{ knob.id }}" class="form-label fw-semibold mb-0">{{ knob.label }}</label>
               <span class="badge text-bg-light font-monospace" id="knobval_{{ knob.id }}"></span>
             </div>
-            <input type="range" class="form-range knob-input" id="knob_{{ knob.id }}"
-                   data-knob-id="{{ knob.id }}" data-default="{{ knob.default }}"
-                   min="{{ knob.min }}" max="{{ knob.max }}" step="{{ knob.step }}"
-                   value="{{ knob.default }}">
+            <div class="slider-lane">
+              <input type="range" class="form-range knob-input" id="knob_{{ knob.id }}"
+                     data-knob-id="{{ knob.id }}" data-default="{{ knob.default }}"
+                     min="{{ knob.min }}" max="{{ knob.max }}" step="{{ knob.step }}"
+                     value="{{ knob.default }}">
+            </div>
             {% if knob.help %}<div class="form-text">{{ knob.help }}</div>{% endif %}
           </div>
           {% endif %}
@@ -417,6 +455,9 @@
   var KNOBS = {{ knobs|tojson }};
   var DEVICE_ID = {{ device_id|tojson }};
   var DEVICE_ASPECT = {{ device_aspect|default(4 / 3)|tojson }};
+  // Output format: 'g16z' (calibrated + dithered E1003) or 'jpeg' (resize-only;
+  // the device library does grayscale + dither). Drives the preview path.
+  var IMAGE_FORMAT = {{ image_format|default('g16z')|tojson }};
 
   // --- Tone twin: mirrors gray16._build_tone_lut (post-auto-stretch portion). ---
   // The /preview-base PNG is already oriented, cover-cropped, luma'd and
@@ -585,11 +626,12 @@
     });
   }
 
-  // Live 16-level panel histogram: how the dithered output occupies the panel's
-  // 16 grey levels. Bars are drawn in each level's actual reflectance shade; the
+  // Live tonal histogram. For g16z it is a 16-level PANEL coverage meter (bars in
+  // each panel level's measured reflectance shade); for jpeg it is a generic
+  // 16-bucket luma distribution (bars in their own bin's grey). Either way the
   // two end bars are outlined when non-empty to flag that the photo reaches the
   // black/white rails (the cure for a "muted" look).
-  function drawHistogram(hist, total) {
+  function drawHistogram(hist, total, isJpeg) {
     var cssW = histoCanvas.clientWidth || 320;
     var dpr = window.devicePixelRatio || 1;
     histoCanvas.width = Math.round(cssW * dpr);
@@ -607,7 +649,8 @@
     var barW = (cssW - gap * 15) / 16;
     var maxH = 60;
     for (var b = 0; b < 16; b++) {
-      var refl = PANEL_FORWARD_LUT[b * 17];
+      // g16z: panel reflectance of level b. jpeg: the bin's own nominal grey.
+      var refl = isJpeg ? Math.min(255, b * 17) : PANEL_FORWARD_LUT[b * 17];
       var bx = b * (barW + gap);
       // sqrt scaling so a small-but-present level stays visible; >=2px when used.
       var h = hist[b] > 0 ? Math.max(2, Math.sqrt(hist[b] / maxCount) * maxH) : 0;
@@ -625,8 +668,8 @@
       var whitePct = (hist[15] / total) * 100;
       histoReadout.textContent =
         blackPct.toFixed(1) + "% black \u00b7 " +
-        whitePct.toFixed(1) + "% white \u00b7 " +
-        used + "/16 levels";
+        whitePct.toFixed(1) + "% white" +
+        (isJpeg ? "" : " \u00b7 " + used + "/16 levels");
     } else {
       histoReadout.textContent = "";
     }
@@ -642,16 +685,30 @@
     // forward display sim (source -> on-screen). When calibration is off, the
     // source IS the desired gray, so the preview shows the panel's uncorrected
     // (lighter midtone) response. White (255) maps to white, so letterbox bars
-    // stay clean.
-    var tone = buildLut(values);
-    var calOn = values.panel_calibration >= 0.5;
+    // stay clean. Resize-only (jpeg) devices apply the same tone curve but no
+    // panel calibration and no forward display sim -- the device dithers
+    // on-screen -- so the histogram bins the toned output into even luma slices
+    // instead of the panel's 16 measured levels.
+    var isJpeg = IMAGE_FORMAT === "jpeg";
     var combined = new Uint8ClampedArray(256);
-    var levelLut = new Uint8Array(256); // base grey -> panel level index (0..15)
-    for (var v = 0; v < 256; v++) {
-      var src = calOn ? PANEL_INVERSE_LUT[tone[v]] : tone[v];
-      combined[v] = PANEL_FORWARD_LUT[src];
-      var lvl = Math.round(src / 17);
-      levelLut[v] = lvl < 0 ? 0 : lvl > 15 ? 15 : lvl;
+    var levelLut = new Uint8Array(256); // base grey -> histogram bucket (0..15)
+    if (isJpeg) {
+      var jpegTone = buildLut(values);
+      for (var v = 0; v < 256; v++) {
+        combined[v] = jpegTone[v];
+        // No panel quantization on this path; bucket the toned output into 16
+        // even luma bins purely for the tonal-distribution histogram.
+        levelLut[v] = jpegTone[v] >> 4;
+      }
+    } else {
+      var tone = buildLut(values);
+      var calOn = values.panel_calibration >= 0.5;
+      for (var v = 0; v < 256; v++) {
+        var src = calOn ? PANEL_INVERSE_LUT[tone[v]] : tone[v];
+        combined[v] = PANEL_FORWARD_LUT[src];
+        var lvl = Math.round(src / 17);
+        levelLut[v] = lvl < 0 ? 0 : lvl > 15 ? 15 : lvl;
+      }
     }
 
     var win = windowSize();
@@ -683,7 +740,7 @@
     canvas.width = bw;
     canvas.height = bh;
     ctx.putImageData(img, 0, 0);
-    drawHistogram(hist, (data.length / 4) | 0);
+    drawHistogram(hist, (data.length / 4) | 0, isJpeg);
   }
 
   function scheduleRender() {
@@ -849,7 +906,8 @@
     el.addEventListener("change", scheduleRender);
   });
 
-  document.getElementById("reset-knobs").addEventListener("click", function () {
+  var resetKnobsBtn = document.getElementById("reset-knobs");
+  if (resetKnobsBtn) resetKnobsBtn.addEventListener("click", function () {
     document.querySelectorAll(".knob-input").forEach(function (el) {
       if (el.type === "checkbox") {
         el.checked = parseFloat(el.getAttribute("data-default")) >= 0.5;
