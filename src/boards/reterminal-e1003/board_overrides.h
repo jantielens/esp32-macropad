@@ -73,6 +73,10 @@
 // The reTerminal E1003 has no frontlight hardware.
 #define HAS_EPAPER_FRONTLIGHT false
 
+// The IT8951 manages VCOM internally — there is no user-programmable bias, so
+// the portal VCOM page is hidden on this board.
+#define HAS_EPAPER_VCOM false
+
 // --- E-paper refresh speed classification --------------------------------
 // The IT8951 GC16 full refresh on this 10.3" panel completes in ~1-3 s, fast
 // enough that showing transient splashes for state changes is a UX win rather

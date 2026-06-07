@@ -42,6 +42,9 @@
 // Inkplate 5 V2 has no frontlight hardware.
 #define HAS_EPAPER_FRONTLIGHT false
 
+// TPS65186 PMIC stores a user-programmable VCOM bias — expose the portal page.
+#define HAS_EPAPER_VCOM true
+
 // --- E-paper refresh speed classification --------------------------------
 // The Inkplate 5 V2 (720x1280 3-bit) completes a full waveform in ~1 s,
 // fast enough that showing transient splashes for state changes is a UX

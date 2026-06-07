@@ -6,7 +6,7 @@
 
 #include "board_config.h"
 
-#if HAS_EPAPER
+#if HAS_EPAPER && HAS_EPAPER_VCOM
 
 #include "component_registry.h"
 #include "device_classes/epaper/epaper_driver.h"
@@ -117,4 +117,4 @@ static ComponentDef epaper_vcom_component = {
 
 REGISTER_COMPONENT(epaper_vcom);
 
-#endif // HAS_EPAPER
+#endif // HAS_EPAPER && HAS_EPAPER_VCOM

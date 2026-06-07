@@ -105,6 +105,13 @@
 #define HAS_EPAPER_FRONTLIGHT false
 #endif
 
+// Only TPS65186-backed panels (Inkplate) expose a user-programmable VCOM;
+// panels that manage VCOM internally (e.g. IT8951) leave this false.
+// Enable the portal VCOM calibration page (TPS65186/Inkplate panels only).
+#ifndef HAS_EPAPER_VCOM
+#define HAS_EPAPER_VCOM false
+#endif
+
 // E-paper full-refresh speed classification. When true, the boot path shows
 // a short "Refreshing" splash on button wakes (OG inkplate-dashboard pattern).
 // When false (default — most e-paper panels need 6-10 s per full refresh),

@@ -45,6 +45,9 @@
 // here to keep the duty-cycle wake path minimal.
 #define HAS_EPAPER_FRONTLIGHT false
 
+// TPS65186 PMIC stores a user-programmable VCOM bias — expose the portal page.
+#define HAS_EPAPER_VCOM true
+
 // --- E-paper refresh speed classification --------------------------------
 // The Inkplate 6FLICK (1024x758 3-bit) completes a full waveform in ~1.26 s,
 // fast enough that showing transient splashes for state changes is a UX win

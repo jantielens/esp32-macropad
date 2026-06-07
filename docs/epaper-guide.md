@@ -163,6 +163,8 @@ Every successful refresh composites a small status chip on top of the dashboard 
 
 ## VCOM Calibration
 
+The VCOM page is present only on boards that compile with `HAS_EPAPER_VCOM=true` &mdash; the TPS65186-backed Inkplate boards. Panels that manage VCOM internally (e.g. the IT8951 on the reTerminal E1003) keep `HAS_EPAPER_VCOM=false`, so the nav page is hidden entirely.
+
 The Inkplate's TPS65186 PMIC stores a panel-specific VCOM bias voltage in its on-board EEPROM. The value is printed on the e-paper ribbon cable and only needs to be set once per device.
 
 The portal exposes three actions under the VCOM card on the E-Paper page:
