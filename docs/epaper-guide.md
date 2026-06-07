@@ -9,7 +9,7 @@ ms.topic: concept
 
 The e-paper device class is the low-power, non-interactive branch of ESP32 Macropad.
 
-Instead of rendering an LVGL user interface and waiting for touch input, an e-paper device wakes on demand, refreshes one or more configured full-screen images, and returns to deep sleep. The current board targets are the Soldered Inkplate 5V2 and the Seeed reTerminal E1003.
+Instead of rendering an LVGL user interface and waiting for touch input, an e-paper device wakes on demand, refreshes one or more configured full-screen images, and returns to deep sleep. The current board targets are the Soldered Inkplate 5V2, the Soldered Inkplate 6FLICK, and the Seeed reTerminal E1003.
 
 This guide holds the detailed e-paper-specific material. Generic project docs, such as the README and changelog, stay intentionally high level so they do not become a second copy of the same evolving information.
 
@@ -20,6 +20,7 @@ The current implementation targets two boards and one usage model:
 | Board | SoC | Display | Decode |
 |---|---|---|---|
 | Inkplate 5V2 | ESP32 classic | 720 × 1280 3-bit grayscale | Inkplate library |
+| Inkplate 6FLICK | ESP32 classic | 1024 × 758 3-bit grayscale | Inkplate library |
 | Seeed reTerminal E1003 | ESP32-S3 | 1404 × 1872 16-level grayscale (IT8951) | G16P fast path, or JPEGDEC + dither, at native resolution |
 
 * Interaction model: non-touch, battery-oriented dashboard
@@ -88,7 +89,7 @@ Each refresh cycle uses the same high-level sequence:
 12. Put the panel to sleep.
 13. Enter ESP32 deep sleep until the next wake.
 
-On the Inkplate 5V2, the image is fetched and decoded by the Inkplate library. On the reTerminal E1003, the firmware fetches the blob over HTTP(S): a G16P payload is copied straight into the 16-level grayscale framebuffer (no decode), while a baseline JPEG is decoded with JPEGDEC and Floyd–Steinberg dithered into the framebuffer. Either way the image is drawn at the panel's native resolution with no scaling.
+On the Inkplate 5V2 and Inkplate 6FLICK, the image is fetched and decoded by the Inkplate library. On the reTerminal E1003, the firmware fetches the blob over HTTP(S): a G16P payload is copied straight into the 16-level grayscale framebuffer (no decode), while a baseline JPEG is decoded with JPEGDEC and Floyd–Steinberg dithered into the framebuffer. Either way the image is drawn at the panel's native resolution with no scaling.
 
 A refresh is always forced (CRC skip is bypassed) when any of these is true:
 

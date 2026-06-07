@@ -472,14 +472,20 @@ def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
     blob_name = store.image_name(image_id, store.meta_image_ext(meta))
     blob_url = bs.build_blob_url(sas, blob_name)
 
-    # Default path: redirect the device to the blob's own SAS URL so it pulls
-    # the ~1.3 MB payload straight from Azure Blob Storage instead of routing it
-    # through this single-core app (which would copy the bytes Blob -> app ->
-    # device, doubling transfer time). The container SAS the device receives is
-    # scoped to its own container, so this exposes no other device's data.
-    # `?proxy=1` forces the legacy inline-bytes path for debugging or clients
-    # that cannot follow redirects.
-    if not proxy:
+    # Delivery is controlled per device by `serve_mode` (config knob), not the
+    # image format. `redirect` (default) 302s the device straight to the blob's
+    # SAS URL so it pulls the payload from Azure Blob Storage instead of routing
+    # it through this single-core app (which would copy bytes Blob -> app ->
+    # device, doubling transfer time). Use `inline` for clients that cannot
+    # follow HTTP redirects -- e.g. the InkplateLibrary image loader
+    # (downloadFile/downloadFileHTTPS) defaults to HTTPC_DISABLE_FOLLOW_REDIRECTS,
+    # so a 302 would be decoded as the (non-image) redirect body and fail.
+    # `?proxy=1` forces the inline path for debugging regardless of serve_mode.
+    redirect_ok = device.serve_mode == cfg.SERVE_REDIRECT
+
+    # The container SAS the device receives is scoped to its own container, so
+    # redirecting exposes no other device's data.
+    if not proxy and redirect_ok:
         return RedirectResponse(blob_url, status_code=302)
 
     data = bs.download_blob(sas, blob_name)

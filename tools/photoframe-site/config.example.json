@@ -11,13 +11,22 @@
       "api_key": "replace-with-a-long-random-device-pull-key",
       "resolution": { "width": 1280, "height": 720 },
       "image_transform": { "rotate_deg": 0, "mirror_x": false, "mirror_y": false },
-      "output": { "format": "jpeg", "jpeg_quality": 90 }
+      "output": { "format": "jpeg", "jpeg_quality": 90 },
+      "serve_mode": "inline"
+    },
+    "inkplate6flick-1": {
+      "container_sas_url": "https://YOURACCOUNT.blob.core.windows.net/inkplate6flick-1?sv=...&sig=...",
+      "api_key": "replace-with-a-long-random-device-pull-key",
+      "resolution": { "width": 1024, "height": 758 },
+      "image_transform": { "rotate_deg": 0, "mirror_x": false, "mirror_y": false },
+      "output": { "format": "jpeg", "jpeg_quality": 90 },
+      "serve_mode": "inline"
     }
   },
   "users": {
     "owner@example.com": {
       "password_hash": "pbkdf2_sha256$200000$<salt_hex>$<hash_hex>",
-      "devices": ["E1003-1", "inkplate-1"]
+      "devices": ["E1003-1", "inkplate-1", "inkplate6flick-1"]
     }
   }
 }

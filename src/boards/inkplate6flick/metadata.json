@@ -1,0 +1,18 @@
+{
+  "device_class": "epaper",
+  "board_label": "Inkplate6Flick",
+  "description": "Soldered Inkplate 6FLICK — 6.0\" 1024x758 3-bit grayscale e-paper touchscreen with frontlight, battery-powered with USB-C charging. Designed for ultra-low-power, sunlight-readable dashboards.",
+  "chip_family": "ESP32",
+  "flash_mb": 4,
+  "psram_mb": 8,
+  "wireless": {
+    "wifi": true,
+    "ble": false
+  },
+  "display": {
+    "size": "6.0\"",
+    "resolution": "1024x758",
+    "type": "E-Paper",
+    "touch": false
+  }
+}

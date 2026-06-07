@@ -72,17 +72,45 @@ def test_bad_quality_rejected():
         raise AssertionError(f"expected ConfigError for jpeg_quality={bad!r}")
 
 
+# --- config: serve_mode -------------------------------------------------------
+
+
+def test_default_serve_mode_is_redirect():
+    config = _load({"E1003-1": dict(_BASE_DEVICE)})
+    assert config.device("E1003-1").serve_mode == cfg.SERVE_REDIRECT == "redirect"
+
+
+def test_serve_mode_inline_parsed():
+    config = _load({"ink-1": dict(_BASE_DEVICE, serve_mode="inline")})
+    assert config.device("ink-1").serve_mode == cfg.SERVE_INLINE == "inline"
+
+
+def test_serve_mode_is_case_insensitive():
+    config = _load({"ink-1": dict(_BASE_DEVICE, serve_mode="INLINE")})
+    assert config.device("ink-1").serve_mode == "inline"
+
+
+def test_unknown_serve_mode_rejected():
+    try:
+        _load({"x": dict(_BASE_DEVICE, serve_mode="proxy")})
+    except cfg.ConfigError:
+        return
+    raise AssertionError("expected ConfigError for unknown serve_mode")
+
+
 # --- gray16.encode_jpeg -------------------------------------------------------
 
 
-def test_encode_jpeg_is_baseline_grayscale_at_device_size():
+def test_encode_jpeg_is_baseline_3component_at_device_size():
     src = Image.new("RGB", (200, 150), (180, 90, 40))
     data, preview = gray16.encode_jpeg(src, width=320, height=240, quality=80)
-    assert preview.mode == "L"
+    assert preview.mode == "L"  # gallery thumbnail stays grayscale
     out = Image.open(io.BytesIO(data))
     assert out.format == "JPEG"
     assert out.size == (320, 240)
-    assert out.mode in ("L",)  # grayscale (default)
+    # Encoded as 3-component RGB (YCbCr) so Inkplate's TJpgDec can decode it; a
+    # single-component grayscale JPEG is rejected by that decoder.
+    assert out.mode == "RGB"
     # Baseline, not progressive (E1003 firmware and simple loaders need baseline).
     assert "progression" not in out.info
 
@@ -160,7 +188,7 @@ if __name__ == "__main__":
     test_format_is_case_insensitive()
     test_unknown_format_rejected()
     test_bad_quality_rejected()
-    test_encode_jpeg_is_baseline_grayscale_at_device_size()
+    test_encode_jpeg_is_baseline_3component_at_device_size()
     test_encode_jpeg_colour_when_grayscale_false()
     test_encode_jpeg_quality_affects_size()
     test_encode_jpeg_applies_tone_curve()

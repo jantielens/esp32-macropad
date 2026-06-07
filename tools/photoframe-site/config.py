@@ -56,6 +56,16 @@ SUPPORTED_FORMATS = (FORMAT_G16Z, FORMAT_JPEG)
 DEFAULT_FORMAT = FORMAT_G16Z
 DEFAULT_JPEG_QUALITY = 90
 
+# How ``/api/next`` delivers the payload to the device. ``redirect`` (default)
+# 302s the device straight to the blob's SAS URL (zero-copy, fastest) and suits
+# clients that follow HTTP redirects (e.g. our own E1003 firmware). ``inline``
+# streams the bytes through the app, for clients that cannot follow redirects
+# (e.g. the InkplateLibrary image loader, which defaults to no-follow).
+SERVE_REDIRECT = "redirect"
+SERVE_INLINE = "inline"
+SUPPORTED_SERVE_MODES = (SERVE_REDIRECT, SERVE_INLINE)
+DEFAULT_SERVE_MODE = SERVE_REDIRECT
+
 
 class ConfigError(RuntimeError):
     """Raised when CONFIG_JSON is missing or malformed."""
@@ -71,6 +81,7 @@ class Device:
     image_transform: dict
     image_format: str = DEFAULT_FORMAT
     jpeg_quality: int = DEFAULT_JPEG_QUALITY
+    serve_mode: str = DEFAULT_SERVE_MODE
 
 
 @dataclass(frozen=True)
@@ -141,6 +152,12 @@ def load_config() -> Config:
             raise ConfigError(f"device '{device_id}' output.jpeg_quality must be an integer")
         if not 1 <= jpeg_quality <= 100:
             raise ConfigError(f"device '{device_id}' output.jpeg_quality must be 1..100")
+        serve_mode = str(entry.get("serve_mode", DEFAULT_SERVE_MODE)).lower()
+        if serve_mode not in SUPPORTED_SERVE_MODES:
+            raise ConfigError(
+                f"device '{device_id}' has unsupported serve_mode '{serve_mode}' "
+                f"(expected one of {', '.join(SUPPORTED_SERVE_MODES)})"
+            )
         devices[device_id] = Device(
             device_id=device_id,
             container_sas_url=str(sas),
@@ -154,6 +171,7 @@ def load_config() -> Config:
             },
             image_format=image_format,
             jpeg_quality=jpeg_quality,
+            serve_mode=serve_mode,
         )
 
     users: dict[str, User] = {}

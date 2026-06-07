@@ -821,6 +821,7 @@ void epaper_device_class_register() {
 // whole device class lives in one folder.
 #include "epaper/epaper_crc32.cpp"
 #include "epaper/epaper_carousel.cpp"
+#include "epaper/epaper_http.cpp"
 #include "epaper/epaper_drivers.cpp"
 #include "epaper/epaper_mqtt.cpp"
 #include "epaper/epaper_overlay.cpp"

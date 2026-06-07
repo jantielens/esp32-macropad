@@ -81,6 +81,15 @@ python3 hash_password.py   # mint a password_hash to paste into a user account
 - **`resolution`** — the panel's native pixel dimensions. Uploaded images are
   encoded to exactly this size; the matching `image_transform` rotation/mirror
   orients the source to the panel.
+- **`output`** _(optional)_ — output profile. `{ "format": "g16z" }` (default)
+  is the calibrated/dithered E1003 transport. `{ "format": "jpeg",
+  "jpeg_quality": 90 }` is a resize + tone-only grayscale JPEG for panels whose
+  firmware library does its own dithering (e.g. Inkplate).
+- **`serve_mode`** _(optional)_ — how `/api/next` delivers the payload.
+  `"redirect"` (default) 302s the device straight to the blob SAS URL (zero-copy,
+  fastest; suits clients that follow HTTP redirects, like the E1003 firmware).
+  `"inline"` streams the bytes through the app, for clients that **cannot** follow
+  redirects — e.g. the InkplateLibrary image loader, which defaults to no-follow.
 - **`users`** — web-UI accounts. `password_hash` is a `pbkdf2_sha256` string
   produced by `hash_password.py`. Each user lists the device IDs it may manage.
 
@@ -104,8 +113,8 @@ GET /api/next?device_id=<id>&key=<api_key>&proxy=0
 
 | Response | Meaning |
 |---|---|
-| `302 Found` (default) | Redirect (`Location:`) to the blob's own SAS URL. The device pulls the ~1.3&nbsp;MB G16P payload **straight from blob storage**, not through this app. |
-| `200 OK` with `proxy=1` | Inline body: the raw G16P bytes, `Content-Type: application/octet-stream`, header `X-Image-Format: g16p`. Legacy/debug path for clients that cannot follow redirects. |
+| `302 Found` (default) | Redirect (`Location:`) to the blob's own SAS URL. The device pulls the ~1.3&nbsp;MB G16P payload **straight from blob storage**, not through this app. Sent when the device's `serve_mode` is `redirect` (the default) and `proxy=0`. |
+| `200 OK` (inline) | Inline body: the raw image bytes, with `X-Image-Format` (`g16p` or `jpeg`) and the matching `Content-Type`. Sent when the device's `serve_mode` is `inline`, or when `proxy=1` is passed. Use for clients that cannot follow redirects (e.g. Inkplate). |
 | `204 No Content` | No image is queued for this device. The firmware keeps the current panel contents and sleeps. |
 | `401 Unauthorized` | Unknown `device_id` or `key` mismatch. |
 

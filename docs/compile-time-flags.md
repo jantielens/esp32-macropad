@@ -281,6 +281,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
 | reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
@@ -301,6 +302,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | — | — |
 | inkplate5v2 | — | — |
+| inkplate6flick | — | — |
 | reterminal-e1003 | — | — |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
@@ -486,7 +488,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/components/epaper_overlay_component.cpp
   - src/app/device_classes/epaper/components/epaper_status_component.cpp
   - src/app/device_classes/epaper/components/epaper_vcom_component.cpp
-  - src/app/device_classes/epaper/drivers/inkplate5v2_driver.cpp
+  - src/app/device_classes/epaper/drivers/inkplate_driver.cpp
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
   - src/app/device_classes/epaper/epaper_carousel.cpp
   - src/app/device_classes/epaper/epaper_carousel.h
@@ -513,7 +515,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
 - **HAS_EPAPER_FRONTLIGHT**
   - src/app/board_config.h
-  - src/app/device_classes/epaper/drivers/inkplate5v2_driver.cpp
+  - src/app/device_classes/epaper/drivers/inkplate_driver.cpp
   - src/app/device_classes/epaper/epaper_driver.h
   - src/app/device_classes/epaper_device_class.cpp
 - **HAS_EPAPER_WAKE_BUTTON**

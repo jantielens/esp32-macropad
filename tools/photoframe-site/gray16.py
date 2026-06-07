@@ -668,7 +668,14 @@ def encode_jpeg(
     else:
         out = rgb
     buffer = io.BytesIO()
-    out.save(buffer, format="JPEG", quality=int(quality), optimize=True, progressive=False)
+    # Always encode a 3-component (YCbCr) JPEG. Inkplate's bundled TJpgDec only
+    # decodes 3-component JPEGs and rejects single-component grayscale JPEGs
+    # (JDR_FMT3 -> drawJpegFromBuffer returns 0). Saving an 'L' image straight to
+    # JPEG yields exactly such a 1-component file, so convert the tone-mapped
+    # grayscale to RGB first. The panel dithers to grayscale on-device, so the
+    # visible result is identical; the size cost over a 1-component JPEG is small.
+    encode_src = out if out.mode == "RGB" else out.convert("RGB")
+    encode_src.save(buffer, format="JPEG", quality=int(quality), optimize=True, progressive=False)
     return buffer.getvalue(), out.convert("L")
 
 
