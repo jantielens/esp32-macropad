@@ -28,11 +28,11 @@ from simulate_selection import build_ids, simulate  # noqa: E402
 DEFAULT_POOLS = [20, 50, 100, 200, 500, 1000]
 
 
-def run_pool(perm: int, temp: int, *, n: int, shows: int) -> dict:
+def run_pool(perm: int, temp: int, *, n: int, shows: int, floor: int = 2) -> dict:
     """Simulate one permanent-pool size; draws scale so coverage is comparable."""
     draws = max(perm, temp) * shows
     perm_ids, temp_ids = build_ids(perm, temp)
-    result = simulate(perm_ids, temp_ids, n=n, draws=draws)
+    result = simulate(perm_ids, temp_ids, n=n, draws=draws, floor=floor)
     counts = result["counts"]
     total = sum(counts.values()) or 1
     temp_set = result["temp_set"]
@@ -58,27 +58,31 @@ def main() -> int:
     )
     p.add_argument("--pools", type=int, nargs="+", default=DEFAULT_POOLS,
                    help="permanent-pool sizes to sweep (default: 20 50 100 200 500 1000)")
-    p.add_argument("--temp", type=int, default=1, help="number of temporary photos (fixed)")
+    p.add_argument("--temp", type=int, default=1,
+                   help="number of featured photos (temporary and/or fresh), fixed")
     p.add_argument("--n", type=int, default=4, help="temp_min_spacing knob (>=2)")
+    p.add_argument("--max-share", type=int, default=50, dest="max_share",
+                   help="max featured-bucket share %% (caps share at 1/ceil(100/pct))")
     p.add_argument("--shows", type=int, default=8,
                    help="target shows per photo; draws = max(pool, temp) * shows (default 8)")
     args = p.parse_args()
 
     n = max(2, args.n)
     k = args.temp
-    target = min(1.0 / n, 1.0 / (2 * k)) if k else 0.0
-    spacing = store.temp_slot_spacing(n, k) if k else 0
+    floor = store.share_pct_to_floor(args.max_share)
+    target = min(1.0 / n, 1.0 / (floor * k)) if k else 0.0
+    spacing = store.temp_slot_spacing(n, k, floor) if k else 0
     print(
-        f"Sweep: temp photos={k}  knob n={n}  shows/photo={args.shows}\n"
-        f"Temp slot every {spacing} displays -> target per-temp share "
-        f"min(1/n, 1/2k) = {target*100:.1f}%  (should stay flat as pool grows)\n"
+        f"Sweep: featured photos={k}  knob n={n}  max-share={args.max_share}%  shows/photo={args.shows}\n"
+        f"Featured slot every {spacing} displays -> target per-photo share "
+        f"min(1/n, 1/floor*k) = {target*100:.1f}%  (should stay flat as pool grows)\n"
     )
     header = f"{'perm':>6} {'draws':>7} {'temp/photo':>11} {'perm_mean':>10} {'perm_spread':>20}"
     print(header)
     print("-" * len(header))
 
     for perm in sorted(args.pools):
-        m = run_pool(perm, k, n=n, shows=args.shows)
+        m = run_pool(perm, k, n=n, shows=args.shows, floor=floor)
         spread = f"[{m['perm_lo']*100:.3f}%..{m['perm_hi']*100:.3f}%]"
         print(
             f"{m['perm']:>6} {m['draws']:>7} {m['per_temp']*100:>10.2f}% "

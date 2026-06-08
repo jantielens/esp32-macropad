@@ -110,12 +110,19 @@ def index(request: Request) -> Response:
         if device is None:
             devices.append({"id": device_id, "missing": True})
             continue
+        params = _resolve_selection_params(device)
         devices.append({
             "id": device_id,
             "format": device.image_format,
             "format_label": "JPEG" if device.image_format == cfg.FORMAT_JPEG else "G16Z",
             "resolution": f"{device.width}\u00d7{device.height}",
             "jpeg_quality": device.jpeg_quality if device.image_format == cfg.FORMAT_JPEG else None,
+            "temp_min_spacing": params["temp_min_spacing"],
+            "temp_min_spacing_overridden": params["temp_min_spacing_overridden"],
+            "fresh_window_days": params["fresh_window_days"],
+            "fresh_window_days_overridden": params["fresh_window_days_overridden"],
+            "max_temp_share_pct": params["max_temp_share_pct"],
+            "max_temp_share_pct_overridden": params["max_temp_share_pct_overridden"],
         })
     return templates.TemplateResponse(
         request,
@@ -161,6 +168,7 @@ def gallery(request: Request, device_id: str) -> Response:
     device = _require_device(user, config, device_id)
 
     items = []
+    fresh_window_days = _resolve_selection_params(device)["fresh_window_days"]
     for image_id in store.list_image_ids(device.container_sas_url):
         meta = store.read_meta(device.container_sas_url, image_id) or {}
         # Hide one-shots that have already been served: their blob lingers only
@@ -170,6 +178,7 @@ def gallery(request: Request, device_id: str) -> Response:
             continue
         expires_at = meta.get("expires_at")
         expires_in, expired = _expiry_label(expires_at)
+        fresh_in, fresh = _fresh_label(meta, window_days=fresh_window_days)
         items.append({
             "id": image_id,
             "caption": meta.get("caption", ""),
@@ -177,6 +186,8 @@ def gallery(request: Request, device_id: str) -> Response:
             "expires_at": expires_at,
             "expires_in": expires_in,
             "expired": expired,
+            "fresh": fresh,
+            "fresh_in": fresh_in,
             "last_shown_at": meta.get("last_shown_at"),
             "uploaded_at": meta.get("uploaded_at"),
             "knobs": meta.get("knobs") or {},
@@ -211,16 +222,15 @@ def settings_form(request: Request, device_id: str) -> Response:
     user = _require_user(request, config)
     device = _require_device(user, config, device_id)
 
-    effective_spacing, spacing_overridden = _resolve_temp_spacing(device)
-
     return templates.TemplateResponse(
         request,
         "settings.html",
         {"request": request, "user": user, "device_id": device_id,
-         "temp_min_spacing": effective_spacing,
-         "temp_min_spacing_default": device.temp_min_spacing,
-         "temp_min_spacing_overridden": spacing_overridden,
-         "min_temp_min_spacing": cfg.MIN_TEMP_MIN_SPACING},
+         "min_temp_min_spacing": cfg.MIN_TEMP_MIN_SPACING,
+         "min_fresh_window_days": cfg.MIN_FRESH_WINDOW_DAYS,
+         "min_max_temp_share_pct": cfg.MIN_MAX_TEMP_SHARE_PCT,
+         "max_max_temp_share_pct": cfg.MAX_MAX_TEMP_SHARE_PCT,
+         **_resolve_selection_params(device)},
     )
 
 
@@ -478,13 +488,16 @@ def photos_settings(
     request: Request,
     device_id: str = Form(...),
     temp_min_spacing: str = Form(""),
+    fresh_window_days: str = Form(""),
+    max_temp_share_pct: str = Form(""),
     reset: str = Form(""),
 ) -> Response:
-    """Save (or reset) the per-device temporary-photo cadence override.
+    """Save (or reset) the per-device selection overrides.
 
     Persists to disposable blob soft-state (store.write_settings) so owners can
-    tune cadence from the device config page without editing CONFIG_JSON.
-    ``reset`` clears the override, falling back to the device's configured default.
+    tune the rotation from the device config page without editing CONFIG_JSON.
+    ``reset`` clears every override, falling back to the device's configured
+    defaults. Blank or invalid fields are ignored (the current value is kept).
     """
     config = cfg.load_config()
     user = _require_user(request, config)
@@ -492,12 +505,16 @@ def photos_settings(
     sas = device.container_sas_url
     settings = store.read_settings(sas)
     if reset:
-        settings.pop("temp_min_spacing", None)
+        for key in ("temp_min_spacing", "fresh_window_days", "max_temp_share_pct"):
+            settings.pop(key, None)
     else:
-        try:
-            settings["temp_min_spacing"] = max(cfg.MIN_TEMP_MIN_SPACING, int(temp_min_spacing))
-        except (TypeError, ValueError):
-            pass  # ignore invalid input; keep the current setting
+        _apply_int_setting(settings, "temp_min_spacing", temp_min_spacing,
+                           minimum=cfg.MIN_TEMP_MIN_SPACING)
+        _apply_int_setting(settings, "fresh_window_days", fresh_window_days,
+                           minimum=cfg.MIN_FRESH_WINDOW_DAYS)
+        _apply_int_setting(settings, "max_temp_share_pct", max_temp_share_pct,
+                           minimum=cfg.MIN_MAX_TEMP_SHARE_PCT,
+                           maximum=cfg.MAX_MAX_TEMP_SHARE_PCT)
     store.write_settings(sas, settings)
     return RedirectResponse(f"/settings?device_id={device_id}", status_code=303)
 
@@ -513,8 +530,13 @@ def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
         return Response("Unauthorized", status_code=401)
 
     sas = device.container_sas_url
-    spacing, _ = _resolve_temp_spacing(device)
-    image_id = store.select_next(sas, temp_min_spacing=spacing)
+    params = _resolve_selection_params(device)
+    image_id = store.select_next(
+        sas,
+        temp_min_spacing=params["temp_min_spacing"],
+        fresh_window_days=params["fresh_window_days"],
+        max_temp_share_pct=params["max_temp_share_pct"],
+    )
     if image_id is None:
         return Response(status_code=204)
 
@@ -573,21 +595,70 @@ def _mint_id() -> str:
     return f"{stamp}-{secrets.token_hex(4)}"
 
 
-def _resolve_temp_spacing(device: cfg.Device) -> tuple[int, bool]:
-    """Effective temporary-photo cadence: per-device UI override, else config default.
+def _resolve_int_override(
+    settings: dict, key: str, default: int, *, minimum: int, maximum: Optional[int] = None
+) -> tuple[int, bool]:
+    """Effective value for one selection knob: clamped UI override, else default.
 
-    The override lives in disposable blob soft-state (store.read_settings) so an
-    owner can tune cadence from the gallery without editing CONFIG_JSON. An
-    absent/invalid override falls back to the device's configured default.
-    Returns (spacing, overridden).
+    Returns (value, overridden). An absent or unparseable override falls back to
+    the device's configured default.
     """
-    override = store.read_settings(device.container_sas_url).get("temp_min_spacing")
-    if override is None:
-        return device.temp_min_spacing, False
+    raw = settings.get(key)
+    if raw is None:
+        return default, False
     try:
-        return max(cfg.MIN_TEMP_MIN_SPACING, int(override)), True
+        value = int(raw)
     except (TypeError, ValueError):
-        return device.temp_min_spacing, False
+        return default, False
+    value = max(minimum, value)
+    if maximum is not None:
+        value = min(maximum, value)
+    return value, True
+
+
+def _resolve_selection_params(device: cfg.Device) -> dict:
+    """Effective selection knobs (UI overrides over config defaults) as a context dict.
+
+    Overrides live in disposable blob soft-state (store.read_settings) so an owner
+    can tune the rotation from the config page without editing CONFIG_JSON. The
+    returned dict carries each knob's effective value, its device default, and an
+    ``*_overridden`` flag for the template, plus the values select_next consumes.
+    """
+    settings = store.read_settings(device.container_sas_url)
+    spacing, sp_ov = _resolve_int_override(
+        settings, "temp_min_spacing", device.temp_min_spacing,
+        minimum=cfg.MIN_TEMP_MIN_SPACING)
+    window, fw_ov = _resolve_int_override(
+        settings, "fresh_window_days", device.fresh_window_days,
+        minimum=cfg.MIN_FRESH_WINDOW_DAYS)
+    share, ms_ov = _resolve_int_override(
+        settings, "max_temp_share_pct", device.max_temp_share_pct,
+        minimum=cfg.MIN_MAX_TEMP_SHARE_PCT, maximum=cfg.MAX_MAX_TEMP_SHARE_PCT)
+    return {
+        "temp_min_spacing": spacing,
+        "temp_min_spacing_default": device.temp_min_spacing,
+        "temp_min_spacing_overridden": sp_ov,
+        "fresh_window_days": window,
+        "fresh_window_days_default": device.fresh_window_days,
+        "fresh_window_days_overridden": fw_ov,
+        "max_temp_share_pct": share,
+        "max_temp_share_pct_default": device.max_temp_share_pct,
+        "max_temp_share_pct_overridden": ms_ov,
+    }
+
+
+def _apply_int_setting(
+    settings: dict, key: str, raw: str, *, minimum: int, maximum: Optional[int] = None
+) -> None:
+    """Set settings[key] from a clamped form value; ignore blank/invalid input."""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return  # blank or non-numeric: keep the current setting
+    value = max(minimum, value)
+    if maximum is not None:
+        value = min(maximum, value)
+    settings[key] = value
 
 
 def _expiry_label(expires_at: Optional[str]) -> tuple[Optional[str], bool]:
@@ -616,6 +687,31 @@ def _expiry_label(expires_at: Optional[str]) -> tuple[Optional[str], bool]:
     if hours:
         return f"{hours}h {minutes}m", False
     return f"{minutes}m", False
+
+
+def _fresh_label(meta: dict, *, window_days: int) -> tuple[Optional[str], bool]:
+    """Human 'fresh time left' string and fresh flag for a permanent photo.
+
+    A newly uploaded permanent photo is featured for window_days after upload
+    (see store.is_fresh) before graduating into normal rotation. Returns
+    (label, fresh): label is a short 'Nd Nh' / 'Nh Nm' / 'Nm' string of time left
+    in the window, or (None, False) when the photo is not fresh.
+    """
+    now = datetime.now(timezone.utc)
+    if not store.is_fresh(meta, now=now, window_days=window_days):
+        return None, False
+    uploaded = store._parse_iso(meta.get("uploaded_at"))
+    if uploaded is None:  # is_fresh already validated this, but stay defensive
+        return None, False
+    secs = max(0, int((uploaded + timedelta(days=window_days) - now).total_seconds()))
+    days, rem = divmod(secs, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes = rem // 60
+    if days:
+        return f"{days}d {hours}h", True
+    if hours:
+        return f"{hours}h {minutes}m", True
+    return f"{minutes}m", True
 
 
 def _parse_json_object(raw: str) -> dict:

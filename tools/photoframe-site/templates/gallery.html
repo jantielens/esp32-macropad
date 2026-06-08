@@ -78,6 +78,10 @@
           {% else %}
           <span class="badge text-bg-success">Permanent</span>
           {% endif %}
+          {% if item.fresh %}
+          <span class="badge text-bg-primary"
+                title="Featured in the fresh window, then graduates to normal rotation">Fresh &middot; {{ item.fresh_in }} left</span>
+          {% endif %}
           {% if item.expires_at %}
             {% if item.expired %}
             <span class="badge text-bg-danger" title="Expired {{ item.expires_at }}">Expired</span>

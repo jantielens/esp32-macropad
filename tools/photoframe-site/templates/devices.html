@@ -20,6 +20,20 @@
           <span class="badge rounded-pill text-bg-light border" title="JPEG quality">Q{{ device.jpeg_quality }}</span>
           {% endif %}
         </div>
+        <dl class="row small text-body-secondary mb-0 mt-3 g-0">
+          <dt class="col-7 fw-normal">Featured spacing</dt>
+          <dd class="col-5 text-end mb-1">
+            {{ device.temp_min_spacing }}{% if device.temp_min_spacing_overridden %}<span class="badge text-bg-secondary ms-1" title="Overrides the config default">override</span>{% endif %}
+          </dd>
+          <dt class="col-7 fw-normal">Fresh window</dt>
+          <dd class="col-5 text-end mb-1">
+            {{ device.fresh_window_days }}d{% if device.fresh_window_days_overridden %}<span class="badge text-bg-secondary ms-1" title="Overrides the config default">override</span>{% endif %}
+          </dd>
+          <dt class="col-7 fw-normal">Max featured share</dt>
+          <dd class="col-5 text-end mb-0">
+            {{ device.max_temp_share_pct }}%{% if device.max_temp_share_pct_overridden %}<span class="badge text-bg-secondary ms-1" title="Overrides the config default">override</span>{% endif %}
+          </dd>
+        </dl>
         {% endif %}
       </div>
       <div class="card-footer bg-transparent d-flex gap-2">

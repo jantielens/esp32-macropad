@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import blobstore as bs
@@ -133,7 +133,7 @@ def selection_blob_metadata(meta: dict) -> dict:
     is always present so its key doubles as the "metadata is stamped" marker.
     """
     md = {"permanent": "1" if meta.get("permanent", False) else "0"}
-    for key in ("expires_at", "last_shown_at", "served_at"):
+    for key in ("expires_at", "last_shown_at", "served_at", "uploaded_at"):
         value = meta.get(key)
         if value:
             md[key] = str(value)
@@ -147,6 +147,7 @@ def _selection_from_blob_metadata(md: dict) -> dict:
         "expires_at": md.get("expires_at") or None,
         "last_shown_at": md.get("last_shown_at") or None,
         "served_at": md.get("served_at") or None,
+        "uploaded_at": md.get("uploaded_at") or None,
     }
 
 
@@ -301,14 +302,43 @@ def store_image(
 # drive the offline simulator/sweep.
 
 
-def temp_slot_spacing(n: int, k: int) -> int:
-    """Displays between temporary slots for k temporary photos at knob n.
+def temp_slot_spacing(n: int, k: int, floor: int = 2) -> int:
+    """Displays between featured slots for k featured photos at knob n.
 
-    Each temporary photo should repeat at most once per n displays, so the bucket
-    fires every ceil(n / k) displays. Floored at 2 because alternation (one
-    permanent between temporaries) caps the bucket at 50%.
+    Each featured photo should repeat at most once per n displays, so the bucket
+    fires every ceil(n / k) displays. Floored at ``floor`` (default 2) to cap the
+    featured bucket's combined share: one permanent between featured slots caps it
+    at 50%, a floor of 4 at 25%, etc. (see share_pct_to_floor).
     """
-    return max(2, math.ceil(n / max(1, k)))
+    return max(floor, math.ceil(n / max(1, k)))
+
+
+def share_pct_to_floor(pct: int) -> int:
+    """Spacing floor that caps the featured bucket at ~pct% of displays (pure).
+
+    A featured slot fires at most once per ``floor`` displays, so the bucket's
+    share is 1/floor. floor = ceil(100/pct) keeps the actual share <= pct
+    (50 -> 2, 25 -> 4, 33 -> 4, 100 -> 1). Floored at 1.
+    """
+    return max(1, math.ceil(100 / max(1, pct)))
+
+
+def is_fresh(sel: dict, *, now: datetime, window_days: int) -> bool:
+    """Whether a permanent (no-expiry) photo is still in its post-upload boost window.
+
+    Fresh photos join the featured bucket so a newly uploaded photo is shown often
+    for a while instead of being lost at 1/pool odds, then graduate into normal
+    permanent rotation automatically once uploaded_at ages past the window. A
+    window of 0 (or a missing uploaded_at) means "never fresh".
+    """
+    if window_days <= 0:
+        return False
+    if not sel.get("permanent") or sel.get("expires_at"):
+        return False
+    uploaded = _parse_iso(sel.get("uploaded_at"))
+    if uploaded is None:
+        return False
+    return (now - uploaded) < timedelta(days=window_days)
 
 
 def _lru_id(items: list) -> Optional[str]:
@@ -332,34 +362,37 @@ def bucket_schedule_pick(
     *,
     temp_countdown: int,
     n: int,
+    floor: int = 2,
 ) -> tuple:
-    """Pick the next rotation image from the permanent/temporary buckets (pure).
+    """Pick the next rotation image from the permanent/featured buckets (pure).
 
     perm / temp are lists of (id, last_shown_at | None) for eligible images in
-    each bucket. temp_countdown is displays remaining until the next temporary
-    slot (soft-state). n is the per-device min spacing.
+    each bucket; ``temp`` is the featured bucket (temporary + fresh photos).
+    temp_countdown is displays remaining until the next featured slot (soft-state).
+    n is the per-device min spacing; ``floor`` caps the featured bucket's combined
+    share (see share_pct_to_floor).
 
     Returns (chosen_id, source, new_countdown) where source is "permanent",
     "temporary", or None when nothing is eligible.
 
-    Cadence: when both buckets are populated, a temporary photo is served once
-    every temp_slot_spacing(n, len(temp)) displays and a permanent fills the rest;
-    within the temporary bucket the least-recently-shown photo rotates, so
-    multiple temporaries share the slot fairly. Fallbacks: only permanents ->
-    100% permanent; only temporaries -> they rotate among themselves (a missing
+    Cadence: when both buckets are populated, a featured photo is served once
+    every temp_slot_spacing(n, len(temp), floor) displays and a permanent fills the
+    rest; within the featured bucket the least-recently-shown photo rotates, so
+    multiple featured photos share the slot fairly. Fallbacks: only permanents ->
+    100% permanent; only featured -> they rotate among themselves (a missing
     permanent must not blank the screen).
     """
     if not perm and not temp:
         return None, None, temp_countdown
     if not temp:
-        # No temporary photos: pure permanent rotation; reset so a freshly added
-        # temporary photo is immediately due.
+        # No featured photos: pure permanent rotation; reset so a freshly added
+        # featured photo is immediately due.
         return _lru_id(perm), "permanent", 0
     if not perm:
-        # No separators available; rotate temporaries among themselves.
+        # No separators available; rotate featured photos among themselves.
         return _lru_id(temp), "temporary", temp_countdown
     if temp_countdown <= 0:
-        spacing = temp_slot_spacing(n, len(temp))
+        spacing = temp_slot_spacing(n, len(temp), floor)
         return _lru_id(temp), "temporary", spacing - 1
     return _lru_id(perm), "permanent", temp_countdown - 1
 
@@ -367,16 +400,26 @@ def bucket_schedule_pick(
 # --- Selection for /api/next --------------------------------------------------
 
 
-def select_next(sas: str, *, temp_min_spacing: int = 4) -> Optional[str]:
+def select_next(
+    sas: str,
+    *,
+    temp_min_spacing: int = 4,
+    fresh_window_days: int = 7,
+    max_temp_share_pct: int = 50,
+) -> Optional[str]:
     """Pick the next image id to serve, or None.
 
     Order: first servable id in the queue (explicit one-shots), then the
-    two-bucket round-robin rotation (permanent vs temporary photos). Skips
-    expired images and queued ids with no backing blob, reaping expired blobs
-    opportunistically.
+    two-bucket round-robin rotation. The featured bucket holds temporary photos
+    (those with an expiry) and fresh photos (permanent photos uploaded within
+    fresh_window_days); permanent photos past the window form the everyday pool.
+    Skips expired images and queued ids with no backing blob, reaping expired
+    blobs opportunistically.
 
-    temp_min_spacing is the per-device cadence knob: a temporary photo (one with
-    an expiry) repeats at most once per this many displays.
+    temp_min_spacing is the per-device cadence knob: a featured photo repeats at
+    most once per this many displays. fresh_window_days sets how long a new photo
+    stays featured (0 disables). max_temp_share_pct caps the featured bucket's
+    combined share (via share_pct_to_floor), bounding bulk-upload bursts.
 
     Selection reads are metadata-only: a single List Blobs (include=metadata)
     call returns every image's selection state, so the cost is ~3 round-trips
@@ -404,6 +447,7 @@ def select_next(sas: str, *, temp_min_spacing: int = 4) -> Optional[str]:
                 "expires_at": full.get("expires_at"),
                 "last_shown_at": full.get("last_shown_at"),
                 "served_at": full.get("served_at"),
+                "uploaded_at": full.get("uploaded_at"),
             }
 
     existing = set(metas.keys())
@@ -432,11 +476,13 @@ def select_next(sas: str, *, temp_min_spacing: int = 4) -> Optional[str]:
             continue
         return image_id
 
-    # 2) Two-bucket round-robin rotation. Permanent photos (no expiry) and
-    # temporary photos (have an expiry) alternate, with temporary slots spaced so
-    # any single temporary photo repeats at most once per `temp_min_spacing`
-    # displays. One-shots (`permanent=false`) are served via the queue only, never
-    # here. Expired images are reaped as we scan.
+    # 2) Two-bucket round-robin rotation. The featured bucket holds temporary
+    # photos (have an expiry) and fresh photos (permanent, uploaded within
+    # fresh_window_days); permanent photos past the window form the everyday pool.
+    # Featured slots are spaced so any single featured photo repeats at most once
+    # per `temp_min_spacing` displays, and max_temp_share_pct caps the bucket's
+    # combined share. One-shots (`permanent=false`) are served via the queue only,
+    # never here. Expired images are reaped as we scan.
     perm: list = []
     temp: list = []
     for image_id in sorted(existing):  # sorted -> deterministic LRU tie-break
@@ -447,14 +493,15 @@ def select_next(sas: str, *, temp_min_spacing: int = 4) -> Optional[str]:
         if not sel.get("permanent"):
             continue
         shown = _parse_iso(sel.get("last_shown_at"))
-        if sel.get("expires_at"):
-            temp.append((image_id, shown))
+        if sel.get("expires_at") or is_fresh(sel, now=now, window_days=fresh_window_days):
+            temp.append((image_id, shown))  # temporary or fresh -> featured bucket
         else:
             perm.append((image_id, shown))
 
     countdown = read_schedule(sas)
     chosen, _source, new_countdown = bucket_schedule_pick(
-        perm, temp, temp_countdown=countdown, n=temp_min_spacing
+        perm, temp, temp_countdown=countdown, n=temp_min_spacing,
+        floor=share_pct_to_floor(max_temp_share_pct),
     )
     if chosen is not None and new_countdown != countdown:
         write_schedule(sas, new_countdown)

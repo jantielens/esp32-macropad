@@ -161,6 +161,70 @@ def test_temp_share_is_pool_independent():
     assert abs(small - large) < 0.02
 
 
+# --- temp_slot_spacing: explicit floor ----------------------------------------
+
+def test_spacing_custom_floor_caps_share():
+    # A higher floor caps the featured bucket below 50%: floor 4 -> >=25% spacing.
+    assert store.temp_slot_spacing(3, 10, 4) == 4   # ceil(3/10)=1 -> floored to 4
+    assert store.temp_slot_spacing(8, 1, 4) == 8     # per-photo spacing still dominates
+    assert store.temp_slot_spacing(2, 10, 1) == 1    # floor 1 allows back-to-back featured
+
+
+# --- share_pct_to_floor -------------------------------------------------------
+
+def test_share_pct_to_floor_maps_percent():
+    # share = 1/floor; floor = ceil(100/pct) keeps actual share <= requested pct.
+    assert store.share_pct_to_floor(50) == 2
+    assert store.share_pct_to_floor(25) == 4
+    assert store.share_pct_to_floor(33) == 4   # 3.03 -> 4 (never exceeds 33%)
+    assert store.share_pct_to_floor(100) == 1
+    assert store.share_pct_to_floor(1) == 100
+
+
+# --- is_fresh -----------------------------------------------------------------
+
+def _perm(uploaded_minutes_ago, *, expires_at=None) -> dict:
+    sel = {"permanent": True, "expires_at": expires_at}
+    if uploaded_minutes_ago is not None:
+        sel["uploaded_at"] = (NOW - timedelta(minutes=uploaded_minutes_ago)).isoformat()
+    return sel
+
+
+def test_is_fresh_within_window():
+    assert store.is_fresh(_perm(60), now=NOW, window_days=7) is True
+
+
+def test_is_fresh_outside_window():
+    assert store.is_fresh(_perm(8 * 24 * 60), now=NOW, window_days=7) is False
+
+
+def test_is_fresh_disabled_window():
+    assert store.is_fresh(_perm(10), now=NOW, window_days=0) is False
+
+
+def test_is_fresh_needs_uploaded_at():
+    assert store.is_fresh(_perm(None), now=NOW, window_days=7) is False
+
+
+def test_is_fresh_temporary_is_not_fresh():
+    # A photo with an expiry is already featured as temporary; never doubled in.
+    sel = _perm(10, expires_at=(NOW + timedelta(hours=1)).isoformat())
+    assert store.is_fresh(sel, now=NOW, window_days=7) is False
+
+
+# --- bucket_schedule_pick: floor ----------------------------------------------
+
+def test_pick_featured_honors_floor():
+    # floor=4 caps the featured bucket at 25%: a due slot resets countdown to 3.
+    perm = [("P0", None)]
+    temp = [("T0", None)]
+    chosen, source, cd = store.bucket_schedule_pick(
+        perm, temp, temp_countdown=0, n=2, floor=4
+    )
+    assert chosen == "T0" and source == "temporary"
+    assert cd == store.temp_slot_spacing(2, 1, 4) - 1 == 3
+
+
 def _collect_tests():
     return [(name, obj) for name, obj in sorted(globals().items())
             if name.startswith("test_") and callable(obj)]

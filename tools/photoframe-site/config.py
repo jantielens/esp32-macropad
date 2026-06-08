@@ -74,6 +74,25 @@ DEFAULT_SERVE_MODE = SERVE_REDIRECT
 MIN_TEMP_MIN_SPACING = 2
 DEFAULT_TEMP_MIN_SPACING = 4
 
+# Fresh-photo window. A newly uploaded permanent photo (one with no expiry) is
+# treated as "fresh" for this many days after upload: it joins the featured
+# bucket alongside temporary photos and gets the same elevated, pool-independent
+# cadence, so a new photo is shown often instead of being lost at 1/pool odds.
+# Graduation is automatic and stateless -- derived from the photo's uploaded_at,
+# so once it ages past the window it drops into normal permanent rotation with no
+# event or extra stored state. 0 disables the fresh boost.
+MIN_FRESH_WINDOW_DAYS = 0
+DEFAULT_FRESH_WINDOW_DAYS = 7
+
+# Cap on the combined featured (temporary + fresh) bucket's share of displays.
+# Enforced as a spacing floor (at least one permanent between featured slots): a
+# share of P% maps to a floor of ceil(100/P), so 50% -> floor 2 (alternation),
+# 25% -> floor 4. This bounds the burst when many photos are featured at once
+# (e.g. a bulk upload of fresh photos). Clamped to 1..100.
+MIN_MAX_TEMP_SHARE_PCT = 1
+MAX_MAX_TEMP_SHARE_PCT = 100
+DEFAULT_MAX_TEMP_SHARE_PCT = 50
+
 
 class ConfigError(RuntimeError):
     """Raised when CONFIG_JSON is missing or malformed."""
@@ -91,6 +110,8 @@ class Device:
     jpeg_quality: int = DEFAULT_JPEG_QUALITY
     serve_mode: str = DEFAULT_SERVE_MODE
     temp_min_spacing: int = DEFAULT_TEMP_MIN_SPACING
+    fresh_window_days: int = DEFAULT_FRESH_WINDOW_DAYS
+    max_temp_share_pct: int = DEFAULT_MAX_TEMP_SHARE_PCT
 
 
 @dataclass(frozen=True)
@@ -174,6 +195,18 @@ def load_config() -> Config:
         # Alternation already caps the temporary bucket at 50%; clamp up so a
         # too-small value cannot ask for more than one-temp-every-other-display.
         temp_min_spacing = max(MIN_TEMP_MIN_SPACING, temp_min_spacing)
+        try:
+            fresh_window_days = int(entry.get("fresh_window_days", DEFAULT_FRESH_WINDOW_DAYS))
+        except (TypeError, ValueError):
+            raise ConfigError(f"device '{device_id}' fresh_window_days must be an integer")
+        fresh_window_days = max(MIN_FRESH_WINDOW_DAYS, fresh_window_days)
+        try:
+            max_temp_share_pct = int(entry.get("max_temp_share_pct", DEFAULT_MAX_TEMP_SHARE_PCT))
+        except (TypeError, ValueError):
+            raise ConfigError(f"device '{device_id}' max_temp_share_pct must be an integer")
+        max_temp_share_pct = min(
+            MAX_MAX_TEMP_SHARE_PCT, max(MIN_MAX_TEMP_SHARE_PCT, max_temp_share_pct)
+        )
         devices[device_id] = Device(
             device_id=device_id,
             container_sas_url=str(sas),
@@ -189,6 +222,8 @@ def load_config() -> Config:
             jpeg_quality=jpeg_quality,
             serve_mode=serve_mode,
             temp_min_spacing=temp_min_spacing,
+            fresh_window_days=fresh_window_days,
+            max_temp_share_pct=max_temp_share_pct,
         )
 
     users: dict[str, User] = {}

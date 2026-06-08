@@ -90,15 +90,27 @@ python3 hash_password.py   # mint a password_hash to paste into a user account
   fastest; suits clients that follow HTTP redirects, like the E1003 firmware).
   `"inline"` streams the bytes through the app, for clients that **cannot** follow
   redirects — e.g. the InkplateLibrary image loader, which defaults to no-follow.
-- **`temp_min_spacing`** _(optional, default `4`)_ — cadence knob for temporary
-  (expiring) photos. A temporary photo is shown at most once every this many
-  displays, so its share of screen time is the same whether the gallery has 20
-  photos or 1000. `4` means a single temporary photo takes ~1 in every 4
-  displays. Minimum `2` (one permanent always separates temporaries). This is the
-  default; owners can override it per device from the device **Config** page
-  (reached via the Config button on the devices page), saved to
+- **`temp_min_spacing`** _(optional, default `4`)_ — cadence knob for **featured**
+  photos (temporary/expiring photos plus newly uploaded "fresh" ones). A featured
+  photo is shown at most once every this many displays, so its share of screen
+  time is the same whether the gallery has 20 photos or 1000. `4` means a single
+  featured photo takes ~1 in every 4 displays. Minimum `2` (one permanent always
+  separates featured photos). Owners can override it per device from the device
+  **Config** page (reached via the Config button on the devices page), saved to
   `state/settings.json` with no redeploy. See
   [How the next image is chosen](#how-the-next-image-is-chosen).
+- **`fresh_window_days`** _(optional, default `7`)_ — how long a newly uploaded
+  permanent photo is **featured** after upload. For this many days the photo joins
+  the featured bucket and is shown often (instead of being lost at 1/pool odds),
+  then graduates into normal permanent rotation automatically once `uploaded_at`
+  ages past the window — no extra state, no graduation event. `0` disables the
+  fresh boost. Per-device override on the **Config** page.
+- **`max_temp_share_pct`** _(optional, default `50`)_ — caps the **combined** share
+  of the featured bucket (temporary + fresh), so a bulk upload of fresh photos
+  cannot take over the screen. `50` means at least every other display is a
+  permanent photo; `25` caps featured at a quarter of displays. Mapped to a
+  spacing floor of `ceil(100 / pct)` and only binds during large bursts. Per-device
+  override on the **Config** page.
 - **`users`** — web-UI accounts. `password_hash` is a `pbkdf2_sha256` string
   produced by `hash_password.py`. Each user lists the device IDs it may manage.
 
@@ -139,12 +151,12 @@ is unchanged.
 ## How the next image is chosen
 
 Each `/api/next` poll returns exactly one image. Selection is **blob-authoritative**:
-every photo's lifecycle state (`permanent`, `expires_at`, `last_shown_at`) is
-stamped as metadata on the image blob itself, so a single List Blobs call decides
-the next image regardless of gallery size. The only soft-state is the disposable
-`state/queue.json` (explicit "show next" order) and `state/schedule.json` (the
-temporary-slot countdown) — losing either just restarts cadence, never loses a
-photo.
+every photo's lifecycle state (`permanent`, `expires_at`, `last_shown_at`,
+`uploaded_at`) is stamped as metadata on the image blob itself, so a single List
+Blobs call decides the next image regardless of gallery size. The only soft-state
+is the disposable `state/queue.json` (explicit "show next" order) and
+`state/schedule.json` (the featured-slot countdown) — losing either just restarts
+cadence, never loses a photo.
 
 Selection runs in two tiers:
 
@@ -154,40 +166,64 @@ Selection runs in two tiers:
 
    | Bucket | Photos | Behaviour |
    |---|---|---|
-   | **Permanent** | `permanent`, no expiry | The everyday pool; least-recently-shown rotates evenly. |
-   | **Temporary** | `permanent` with an `expires_at` | Short-lived photos to feature while they last; auto-removed at expiry. |
+   | **Permanent** | `permanent`, no expiry, uploaded longer ago than the fresh window | The everyday pool; least-recently-shown rotates evenly. |
+   | **Featured** | photos with an `expires_at` **or** permanent photos uploaded within `fresh_window_days` | Short-lived or brand-new photos to spotlight; least-recently-shown rotates within the bucket. |
 
-   The two buckets interleave round-robin, but temporary slots are **spaced** so
-   any single temporary photo appears at most once every `temp_min_spacing` (`n`)
-   displays. The temporary slot fires every `max(2, ceil(n / k))` displays for
-   `k` temporary photos, which they share fairly (least-recently-shown within the
-   bucket).
+   The two buckets interleave round-robin, but featured slots are **spaced** so
+   any single featured photo appears at most once every `temp_min_spacing` (`n`)
+   displays. The featured slot fires every `max(floor, ceil(n / k))` displays for
+   `k` featured photos, which they share fairly (least-recently-shown within the
+   bucket). The `floor` comes from `max_temp_share_pct` (`ceil(100 / pct)`) and
+   caps the whole featured bucket — `50%` → floor `2`, `25%` → floor `4` — so a
+   burst of fresh photos can never crowd out the permanent pool.
 
-The key property: a temporary photo's share of screen time depends on `n`, **not
-on the size of the permanent pool**. With `n = 4`, one temporary photo holds ~25%
-of displays whether there are 20 permanent photos or 1000 — a guarantee a simple
-"boost weight" cannot make (its share dilutes as `boost / pool`). One permanent
-always separates temporaries, so the bucket caps at 50% (`n = 2`).
+**Fresh photos** are a *derived* membership in the featured bucket, not a third
+bucket: `is_fresh()` is simply "permanent, no expiry, and `uploaded_at` is within
+`fresh_window_days`". A newly uploaded photo is therefore spotlighted immediately
+and, once it ages past the window, drops back into permanent rotation on its own —
+no new persisted field and no graduation event. Because it accumulates
+`last_shown_at` while featured, it lands at the back of the permanent LRU on
+graduation (no second burst). Set `fresh_window_days = 0` to disable the boost.
 
-The knob `n` defaults from the device's `temp_min_spacing` config and can be
-retuned per device from the device **Config** page; the override is stored as
-disposable soft-state in `state/settings.json` and falls back to the config
-default if absent. The gallery badges each temporary photo with its remaining
-lifetime so owners can see what is in the temporary bucket.
+The key property: a featured photo's share of screen time depends on `n` and the
+cap, **not on the size of the permanent pool**. With `n = 4`, one featured photo
+holds ~25% of displays whether there are 20 permanent photos or 1000 — a guarantee
+a simple "boost weight" cannot make (its share dilutes as `boost / pool`). The
+`max_temp_share_pct` floor bounds the bucket even when many featured photos exist
+at once (`50%` at the default).
+
+The knobs default from the device's `temp_min_spacing`, `fresh_window_days`, and
+`max_temp_share_pct` config and can be retuned per device from the device
+**Config** page; the overrides are stored as disposable soft-state in
+`state/settings.json` and fall back to the config defaults if absent. The devices
+page shows each device's effective knobs (flagged when an override is in effect),
+and the gallery badges each temporary photo with its remaining lifetime and each
+**fresh** photo with the time left in its window, so owners can see what is in the
+featured bucket.
 
 ```text
-n=4, 1 temporary photo:   T P P P  T P P P  T P P P   (temp = 25%)
-n=3, 2 temporary photos:  T1 P  T2 P  T1 P  T2 P      (each temp = 25%, bucket = 50%)
+n=4, 1 featured photo:    T P P P  T P P P  T P P P   (featured = 25%)
+n=3, 2 featured photos:   T1 P  T2 P  T1 P  T2 P      (each = 25%, bucket = 50%)
 ```
 
 Two offline tools model this exact logic (the same pure `bucket_schedule_pick`
 the server uses, no Azure needed):
 
 ```bash
-python3 simulate_selection.py --perm 20 --temp 1 --n 4   # watch the interleave + shares
-python3 sweep_selection.py --temp 1 --n 4                # prove temp share is pool-independent
-python3 tests/test_selection.py                          # unit tests for the pure core
+python3 simulate_selection.py --perm 20 --temp 1 --n 4               # watch the interleave + shares
+python3 simulate_selection.py --perm 20 --temp 4 --n 4 --max-share 25 # cap the featured bucket at 25%
+python3 simulate_selection.py --fresh --perm 1000 --fresh-count 1     # fresh photo featured 7d, then graduates
+python3 simulate_selection.py --fresh --perm 1000 --fresh-count 50 --max-share 25  # bulk upload, capped
+python3 sweep_selection.py --temp 1 --n 4                            # prove featured share is pool-independent
+python3 tests/test_selection.py                                     # unit tests for the pure core
 ```
+
+The `--fresh` mode advances wall-clock so newly uploaded photos enter the featured
+bucket via `store.is_fresh` and then age out on their own. It prints a per-day
+share curve: a single new photo in a 1000-photo pool holds ~25% of displays for
+the 7-day window (vs ~0.1% without the boost), then drops to 0 as it graduates;
+with `--fresh-count 50 --max-share 25` the whole bucket stays capped at 25% so a
+bulk upload cannot crowd out the permanent pool.
 
 ## Image format: G16P (and JPEG)
 
