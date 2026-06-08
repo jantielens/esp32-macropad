@@ -195,7 +195,11 @@
     position: sticky;
     top: 0;
     z-index: 1020;
-    padding: .4rem 0 .55rem;
+    /* No bottom padding: when pinned, any bottom padding renders as a strip of
+       wrapper background below the dark preview box -- the "chin" that only
+       shows once the preview clamps to the top. The box's own rounded corners
+       and the pinned box-shadow provide the separation from content beneath. */
+    padding: .4rem 0 0;
     background: var(--bs-body-bg);
     /* Round the bottom corners so the opaque cover (and its shadow) that content
        slides under matches the rounded preview instead of showing hard edges. */
@@ -211,6 +215,7 @@
      the panel aspect on every viewport (no gray letterbox from object-fit), and
      the drag-to-frame pointer math stays exact. */
   .upload-flow .preview-box {
+    position: relative;
     aspect-ratio: var(--dev-aspect, 4 / 3);
     width: 100%;
     max-width: calc(46vh * var(--dev-aspect, 4 / 3));
@@ -220,6 +225,13 @@
     -webkit-user-select: none;
     user-select: none;
     cursor: grab;
+    /* Edge definition via outline, not border: the canvas is absolutely
+       positioned at inset:0 (the padding box), so a real border would inset the
+       canvas and leave the dark box showing as a 1px "chin" below the image.
+       outline sits outside the box model and traces the rounded edge with no
+       layout effect, so the canvas covers the full box. */
+    outline: var(--bs-border-width, 1px) solid var(--bs-border-color, rgba(0, 0, 0, .15));
+    outline-offset: calc(-1 * var(--bs-border-width, 1px));
   }
   #send-overlay {
     /* --accent lives on .upload-flow; this overlay is outside that scope, so
@@ -300,9 +312,9 @@
 
         <!-- Preview (sticky: clamps to the top edge while scrolling to the knobs) -->
         <div class="preview-sticky" id="preview-sticky">
-          <div id="preview-wrap" class="preview-box border rounded-3 bg-dark d-flex align-items-center justify-content-center"
+          <div id="preview-wrap" class="preview-box rounded-3 bg-dark d-flex align-items-center justify-content-center"
                style="--dev-aspect: {{ device_aspect|default(4 / 3) }};">
-            <canvas id="preview" style="width:100%; height:100%; object-fit:fill; display:none;"></canvas>
+            <canvas id="preview" style="position:absolute; inset:0; width:100%; height:100%; object-fit:fill; display:none;"></canvas>
             <span id="preview-status" class="text-secondary small p-3 text-center">
               Choose an image to preview how it will look on the panel.
             </span>
@@ -789,6 +801,13 @@
       return;
     }
     loadBase(fileInput.files[0]);
+    // Pull the sticky preview up to the top edge so the framing + adjustment
+    // steps below it are immediately in view -- the user picks a photo and the
+    // knobs are exposed without a manual scroll. rAF lets the preview unhide and
+    // lay out first so the scroll target has its final position.
+    requestAnimationFrame(function () {
+      previewSticky.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
 
   // --- Lifetime control: one ladder from "once" -> finite TTLs -> "always" -----
