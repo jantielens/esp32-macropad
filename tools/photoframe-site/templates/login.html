@@ -3,9 +3,9 @@
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-12 col-sm-8 col-md-5 col-lg-4">
-    <div class="card shadow-sm">
+    <div class="card section-card border-0">
       <div class="card-body p-4">
-        <h1 class="h4 mb-3 text-center">Sign in</h1>
+        <h1 class="h4 page-title mb-3 text-center">Sign in</h1>
         {% if error %}
         <div class="alert alert-danger py-2" role="alert">{{ error }}</div>
         {% endif %}
@@ -18,7 +18,7 @@
             <label for="password" class="form-label">Password</label>
             <input type="password" class="form-control" id="password" name="password" required>
           </div>
-          <button type="submit" class="btn btn-primary w-100">Sign in</button>
+          <button type="submit" class="btn btn-accent w-100">Sign in</button>
         </form>
       </div>
     </div>

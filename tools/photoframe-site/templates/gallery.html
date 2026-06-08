@@ -17,12 +17,12 @@
 </style>
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
   <div>
-    <a href="/" class="text-decoration-none small">&larr; Devices</a>
-    <h1 class="h3 mb-0">{{ device_id }}</h1>
+    <a href="/" class="ghost-link small">&larr; Devices</a>
+    <h1 class="h3 page-title mb-0">{{ device_id }}</h1>
   </div>
   <div class="d-flex gap-2">
-    <a class="btn btn-outline-secondary" href="/settings?device_id={{ device_id }}">Config</a>
-    <a class="btn btn-primary" href="/upload?device_id={{ device_id }}">Upload image</a>
+    <a class="btn btn-accent-soft" href="/settings?device_id={{ device_id }}">Config</a>
+    <a class="btn btn-accent" href="/upload?device_id={{ device_id }}">Upload image</a>
   </div>
 </div>
 
@@ -63,7 +63,7 @@
 <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-xl-4 g-3">
   {% for item in items %}
   <div class="col">
-    <div class="card h-100 shadow-sm">
+    <div class="card app-card h-100">
       <img src="/thumb?device_id={{ device_id }}&image_id={{ item.id }}"
            class="card-img-top bg-dark" alt="thumbnail" style="aspect-ratio: 4/3; object-fit: contain;">
       <div class="card-body">
@@ -89,27 +89,24 @@
             <span class="badge text-bg-secondary" title="Expires {{ item.expires_at }}">{{ item.expires_in }} left</span>
             {% endif %}
           {% endif %}
+          {% if item.in_rotation and item.exposure %}
+          <span class="badge text-bg-light border"
+                title="Estimated from ~{{ displays_per_day }} displays/day of recent activity, the current gallery, and this device's settings">{{ item.exposure }}</span>
+          {% endif %}
+          {% if item.knobs_adjusted %}
+          <span class="badge text-bg-light border"
+                title="Tone adjustments: {{ item.knobs_summary }}">Adjusted</span>
+          {% endif %}
         </div>
         <p class="card-text small text-body-secondary mb-0">
           {% if item.last_shown_at %}Shown {{ item.last_shown_at[:16] }}{% else %}Never shown{% endif %}
         </p>
-        {% if item.exposure %}
-        <p class="card-text small mb-0"
-           title="Estimate based on ~{{ displays_per_day }} displays/day from recent activity, the current gallery, and this device's settings">
-          <span aria-hidden="true">&#128065;</span> {{ item.exposure }}
-        </p>
-        {% endif %}
-        {% if item.knobs %}
-        <p class="card-text small text-body-secondary mb-0 font-monospace">
-          {% for key, value in item.knobs.items() %}{{ key }}={{ "%.2f"|format(value) }}{% if not loop.last %} · {% endif %}{% endfor %}
-        </p>
-        {% endif %}
       </div>
       <div class="card-footer bg-transparent d-flex gap-2">
         <form method="post" action="/photos/show-next" class="m-0">
           <input type="hidden" name="device_id" value="{{ device_id }}">
           <input type="hidden" name="image_id" value="{{ item.id }}">
-          <button class="btn btn-sm btn-outline-primary" type="submit">Show next</button>
+          <button class="btn btn-sm btn-accent-soft" type="submit">Show next</button>
         </form>
         <form method="post" action="/photos/delete" class="m-0"
               onsubmit="return confirm('Delete this image?');">

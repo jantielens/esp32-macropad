@@ -173,6 +173,7 @@ def gallery(request: Request, device_id: str) -> Response:
     n = params["temp_min_spacing"]
     floor = store.share_pct_to_floor(params["max_temp_share_pct"])
     now = datetime.now(timezone.utc)
+    knob_defaults = knobs.defaults()
     for image_id in store.list_image_ids(device.container_sas_url):
         meta = store.read_meta(device.container_sas_url, image_id) or {}
         # Hide one-shots that have already been served: their blob lingers only
@@ -188,6 +189,16 @@ def gallery(request: Request, device_id: str) -> Response:
         # rotate; those with an expiry or still fresh are in the featured bucket.
         in_rotation = permanent and not store.is_expired(meta, at=now)
         is_featured = in_rotation and (bool(expires_at) or fresh)
+        # Tone adjustments are kept off the card face (too technical): the full
+        # values go in a hover tooltip, and a single "Adjusted" badge shows only
+        # when the photo was tweaked away from the pipeline defaults.
+        saved_knobs = meta.get("knobs") or {}
+        knobs_adjusted = any(
+            kid in saved_knobs and abs(float(saved_knobs[kid]) - dv) > 1e-9
+            for kid, dv in knob_defaults.items())
+        knobs_summary = " · ".join(
+            f"{kid}={float(saved_knobs[kid]):.2f}"
+            for kid in knob_defaults if kid in saved_knobs)
         items.append({
             "id": image_id,
             "caption": meta.get("caption", ""),
@@ -199,10 +210,12 @@ def gallery(request: Request, device_id: str) -> Response:
             "fresh_in": fresh_in,
             "last_shown_at": meta.get("last_shown_at"),
             "uploaded_at": meta.get("uploaded_at"),
-            "knobs": meta.get("knobs") or {},
+            "knobs_adjusted": knobs_adjusted,
+            "knobs_summary": knobs_summary,
             "in_rotation": in_rotation,
             "is_featured": is_featured,
         })
+
     items.sort(key=lambda i: i.get("uploaded_at") or "", reverse=True)
 
     # Per-photo exposure hint: how often each photo is expected to show, given the
