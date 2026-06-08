@@ -397,6 +397,112 @@ def bucket_schedule_pick(
     return _lru_id(perm), "permanent", temp_countdown - 1
 
 
+# --- Expected-exposure estimates (gallery "how often is this shown" hints) -----
+#
+# The scheduler is deterministic, so a photo's *share* of displays is closed-form
+# arithmetic on the current gallery + config -- no simulation needed. Turning that
+# share into "per hour/day/week" needs a displays-per-day figure, which we infer
+# from recent last_shown_at history (the server never sees the device's poll
+# cadence directly). These are best-effort hints, not guarantees.
+
+
+def estimate_displays_per_day(
+    last_shown: list,
+    *,
+    now: Optional[datetime] = None,
+    default: float = 24.0,
+    lookback_days: float = 14.0,
+) -> float:
+    """Estimate displays/day from recent last_shown_at history (median serve gap).
+
+    Each serve stamps exactly one photo's last_shown_at, so the distinct recent
+    timestamps across the gallery sample the device's poll cadence. Uses the
+    median gap between consecutive serves (robust to downtime and outliers), and
+    falls back to ``default`` until at least two recent serves are available.
+
+    ``last_shown`` is an iterable of ISO strings and/or datetimes; None/blank and
+    entries older than ``lookback_days`` are ignored.
+    """
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=lookback_days)
+    times = []
+    for value in last_shown:
+        dt = value if isinstance(value, datetime) else _parse_iso(value)
+        if dt is not None and dt >= cutoff:
+            times.append(dt)
+    times = sorted(set(times))
+    if len(times) < 2:
+        return default
+    gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a]
+    if not gaps:
+        return default
+    gaps.sort()
+    mid = len(gaps) // 2
+    median = gaps[mid] if len(gaps) % 2 else (gaps[mid - 1] + gaps[mid]) / 2.0
+    if median <= 0:
+        return default
+    return 86400.0 / median
+
+
+def expected_share(
+    *,
+    is_featured: bool,
+    perm_count: int,
+    featured_count: int,
+    n: int,
+    floor: int,
+) -> float:
+    """Expected fraction of displays one photo receives under the scheduler.
+
+    Mirrors bucket_schedule_pick exactly: the featured slot fires every
+    ``s = temp_slot_spacing(n, k, floor)`` displays and is shared by the ``k``
+    featured photos (1/(s*k) each); the remaining s-1 of every s displays are
+    shared by the ``p`` permanents ((s-1)/(s*p) each). Degenerate buckets fall
+    back to even rotation within whichever bucket is non-empty.
+    """
+    p = max(0, perm_count)
+    k = max(0, featured_count)
+    if is_featured:
+        if k == 0:
+            return 0.0
+        if p == 0:
+            return 1.0 / k  # only featured photos -> they rotate among themselves
+        s = temp_slot_spacing(n, k, floor)
+        return 1.0 / (s * k)
+    if p == 0:
+        return 0.0
+    if k == 0:
+        return 1.0 / p  # no featured photos -> pure permanent rotation
+    s = temp_slot_spacing(n, k, floor)
+    return (s - 1) / (s * p)
+
+
+def frequency_label(share: float, displays_per_day: float) -> str:
+    """Short human 'how often is this shown' string from a share + cadence.
+
+    Picks the coarsest-but-still-meaningful horizon: a rate of >=1/hour reads as
+    '~N\u00d7/hour', >=1/day as '~N\u00d7/day', >=1/week as '~N\u00d7/week', and
+    anything rarer as an interval ('~once every N weeks'). Best-effort, not exact.
+    """
+    rate_day = max(0.0, share) * max(0.0, displays_per_day)
+    if rate_day <= 0.0:
+        return "not in rotation"
+    rate_hour = rate_day / 24.0
+    if rate_hour >= 1.0:
+        return f"~{round(rate_hour)}\u00d7/hour"
+    if rate_day >= 1.0:
+        return f"~{round(rate_day)}\u00d7/day"
+    rate_week = rate_day * 7.0
+    if rate_week >= 1.0:
+        return f"~{round(rate_week)}\u00d7/week"
+    interval_days = 1.0 / rate_day
+    if interval_days < 14:
+        return f"~once every {round(interval_days)} days"
+    if interval_days < 60:
+        return f"~once every {round(interval_days / 7)} weeks"
+    return f"~once every {round(interval_days / 30)} months"
+
+
 # --- Selection for /api/next --------------------------------------------------
 
 

@@ -93,6 +93,12 @@
         <p class="card-text small text-body-secondary mb-0">
           {% if item.last_shown_at %}Shown {{ item.last_shown_at[:16] }}{% else %}Never shown{% endif %}
         </p>
+        {% if item.exposure %}
+        <p class="card-text small mb-0"
+           title="Estimate based on ~{{ displays_per_day }} displays/day from recent activity, the current gallery, and this device's settings">
+          <span aria-hidden="true">&#128065;</span> {{ item.exposure }}
+        </p>
+        {% endif %}
         {% if item.knobs %}
         <p class="card-text small text-body-secondary mb-0 font-monospace">
           {% for key, value in item.knobs.items() %}{{ key }}={{ "%.2f"|format(value) }}{% if not loop.last %} · {% endif %}{% endfor %}

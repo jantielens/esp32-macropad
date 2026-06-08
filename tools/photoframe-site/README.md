@@ -201,6 +201,16 @@ and the gallery badges each temporary photo with its remaining lifetime and each
 **fresh** photo with the time left in its window, so owners can see what is in the
 featured bucket.
 
+Each gallery card also shows a best-effort **exposure hint** (e.g. "~6×/day",
+"~once every 8 weeks") so an owner can see how often a photo is expected to
+appear given the whole gallery and the device's settings. The *share* is
+closed-form (`store.expected_share`, the same arithmetic the scheduler implies);
+turning it into a per-hour/day/week rate uses a **displays-per-day estimate
+inferred from recent `last_shown_at` history** (`store.estimate_displays_per_day`
+takes the median gap between recent serves), since the server never sees the
+device's poll cadence directly. The hint is approximate and self-calibrates as
+the device serves more images.
+
 ```text
 n=4, 1 featured photo:    T P P P  T P P P  T P P P   (featured = 25%)
 n=3, 2 featured photos:   T1 P  T2 P  T1 P  T2 P      (each = 25%, bucket = 50%)

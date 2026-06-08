@@ -168,7 +168,11 @@ def gallery(request: Request, device_id: str) -> Response:
     device = _require_device(user, config, device_id)
 
     items = []
-    fresh_window_days = _resolve_selection_params(device)["fresh_window_days"]
+    params = _resolve_selection_params(device)
+    fresh_window_days = params["fresh_window_days"]
+    n = params["temp_min_spacing"]
+    floor = store.share_pct_to_floor(params["max_temp_share_pct"])
+    now = datetime.now(timezone.utc)
     for image_id in store.list_image_ids(device.container_sas_url):
         meta = store.read_meta(device.container_sas_url, image_id) or {}
         # Hide one-shots that have already been served: their blob lingers only
@@ -176,13 +180,18 @@ def gallery(request: Request, device_id: str) -> Response:
         # valid), but to the user the image is spent and should be gone.
         if not meta.get("permanent", False) and meta.get("served_at"):
             continue
+        permanent = bool(meta.get("permanent", False))
         expires_at = meta.get("expires_at")
         expires_in, expired = _expiry_label(expires_at)
         fresh_in, fresh = _fresh_label(meta, window_days=fresh_window_days)
+        # Rotation bucket, mirroring select_next: only un-expired permanents
+        # rotate; those with an expiry or still fresh are in the featured bucket.
+        in_rotation = permanent and not store.is_expired(meta, at=now)
+        is_featured = in_rotation and (bool(expires_at) or fresh)
         items.append({
             "id": image_id,
             "caption": meta.get("caption", ""),
-            "permanent": bool(meta.get("permanent", False)),
+            "permanent": permanent,
             "expires_at": expires_at,
             "expires_in": expires_in,
             "expired": expired,
@@ -191,8 +200,29 @@ def gallery(request: Request, device_id: str) -> Response:
             "last_shown_at": meta.get("last_shown_at"),
             "uploaded_at": meta.get("uploaded_at"),
             "knobs": meta.get("knobs") or {},
+            "in_rotation": in_rotation,
+            "is_featured": is_featured,
         })
     items.sort(key=lambda i: i.get("uploaded_at") or "", reverse=True)
+
+    # Per-photo exposure hint: how often each photo is expected to show, given the
+    # whole gallery + config. Share is closed-form (expected_share); cadence is
+    # inferred from recent last_shown_at history (the device's poll rate).
+    perm_count = sum(1 for i in items if i["in_rotation"] and not i["is_featured"])
+    featured_count = sum(1 for i in items if i["is_featured"])
+    displays_per_day = store.estimate_displays_per_day(
+        [i["last_shown_at"] for i in items], now=now)
+    for item in items:
+        if not item["permanent"]:
+            item["exposure"] = "Shown once, then removed"
+        elif not item["in_rotation"]:
+            item["exposure"] = "Not shown (expired)"
+        else:
+            share = store.expected_share(
+                is_featured=item["is_featured"], perm_count=perm_count,
+                featured_count=featured_count, n=n, floor=floor)
+            item["exposure"] = store.frequency_label(share, displays_per_day)
+
 
     # "What's next" strip: the queue in serve order (front = next), limited to ids
     # that still have a backing image. Captions are reused from the items above.
@@ -207,7 +237,8 @@ def gallery(request: Request, device_id: str) -> Response:
         request,
         "gallery.html",
         {"request": request, "user": user, "device_id": device_id,
-         "items": items, "queue": queue},
+         "items": items, "queue": queue,
+         "displays_per_day": round(displays_per_day, 1)},
     )
 
 

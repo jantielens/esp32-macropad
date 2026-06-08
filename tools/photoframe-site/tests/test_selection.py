@@ -225,6 +225,90 @@ def test_pick_featured_honors_floor():
     assert cd == store.temp_slot_spacing(2, 1, 4) - 1 == 3
 
 
+# --- estimate_displays_per_day ------------------------------------------------
+
+def test_displays_per_day_default_without_history():
+    assert store.estimate_displays_per_day([], now=NOW) == 24.0
+    assert store.estimate_displays_per_day([NOW.isoformat()], now=NOW) == 24.0
+
+
+def test_displays_per_day_hourly_history():
+    # Five serves one hour apart -> 24 displays/day.
+    times = [(NOW - timedelta(hours=h)).isoformat() for h in range(5)]
+    assert store.estimate_displays_per_day(times, now=NOW) == 24.0
+
+
+def test_displays_per_day_median_ignores_outlier_gap():
+    # 30-min cadence with one long downtime gap; median stays ~30 min -> 48/day.
+    times = [
+        NOW - timedelta(hours=10),       # outlier gap before this
+        NOW - timedelta(minutes=90),
+        NOW - timedelta(minutes=60),
+        NOW - timedelta(minutes=30),
+        NOW,
+    ]
+    assert store.estimate_displays_per_day(times, now=NOW) == 48.0
+
+
+def test_displays_per_day_ignores_old_history():
+    # Two serves but both older than the lookback window -> fall back to default.
+    times = [(NOW - timedelta(days=30)).isoformat(),
+             (NOW - timedelta(days=29)).isoformat()]
+    assert store.estimate_displays_per_day(times, now=NOW) == 24.0
+
+
+# --- expected_share -----------------------------------------------------------
+
+def test_expected_share_one_featured_among_many_permanents():
+    # n=4, k=1, p=1000 -> featured 1/(s*k)=1/4=25%; each permanent (s-1)/(s*p).
+    feat = store.expected_share(is_featured=True, perm_count=1000, featured_count=1, n=4, floor=2)
+    perm = store.expected_share(is_featured=False, perm_count=1000, featured_count=1, n=4, floor=2)
+    assert abs(feat - 0.25) < 1e-9
+    assert abs(perm - (3 / (4 * 1000))) < 1e-9
+
+
+def test_expected_share_shares_sum_to_one():
+    # Total featured + total permanent share must cover all displays.
+    p, k, n, floor = 50, 3, 4, 2
+    feat = store.expected_share(is_featured=True, perm_count=p, featured_count=k, n=n, floor=floor)
+    perm = store.expected_share(is_featured=False, perm_count=p, featured_count=k, n=n, floor=floor)
+    assert abs(feat * k + perm * p - 1.0) < 1e-9
+
+
+def test_expected_share_no_featured_is_even_permanent():
+    perm = store.expected_share(is_featured=False, perm_count=20, featured_count=0, n=4, floor=2)
+    assert abs(perm - 1 / 20) < 1e-9
+
+
+def test_expected_share_no_permanents_featured_rotate():
+    feat = store.expected_share(is_featured=True, perm_count=0, featured_count=4, n=4, floor=2)
+    assert abs(feat - 1 / 4) < 1e-9
+
+
+def test_expected_share_cap_floor_lowers_featured():
+    # max-share 25% -> floor 4 -> featured slot only every 4 even with 1 featured.
+    feat = store.expected_share(is_featured=True, perm_count=100, featured_count=1, n=2, floor=4)
+    assert abs(feat - 0.25) < 1e-9
+
+
+# --- frequency_label ----------------------------------------------------------
+
+def test_frequency_label_hourly_and_daily():
+    assert store.frequency_label(0.25, 24.0) == "~6\u00d7/day"
+    assert store.frequency_label(1.0, 48.0) == "~2\u00d7/hour"
+
+
+def test_frequency_label_weekly_and_rare():
+    # 0.075% at 24/day -> ~0.0126/day -> interval ~55 days -> "~once every 8 weeks".
+    assert store.frequency_label(0.00075, 24.0) == "~once every 8 weeks"
+    # A bit more often: ~1.5/week.
+    assert store.frequency_label(0.009, 24.0) == "~2\u00d7/week"
+
+
+def test_frequency_label_not_in_rotation():
+    assert store.frequency_label(0.0, 24.0) == "not in rotation"
+
+
 def _collect_tests():
     return [(name, obj) for name, obj in sorted(globals().items())
             if name.startswith("test_") and callable(obj)]
