@@ -228,6 +228,7 @@ python3 simulate_selection.py --fresh --perm 1000 --fresh-count 1     # fresh ph
 python3 simulate_selection.py --fresh --perm 1000 --fresh-count 50 --max-share 25  # bulk upload, capped
 python3 sweep_selection.py --temp 1 --n 4                            # prove featured share is pool-independent
 python3 tests/test_selection.py                                     # unit tests for the pure core
+python3 tests/test_security.py                                      # login throttle, SECRET_KEY fail-fast, headers
 ```
 
 The `--fresh` mode advances wall-clock so newly uploaded photos enter the featured

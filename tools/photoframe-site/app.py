@@ -13,6 +13,8 @@ import json
 import logging
 import os
 import secrets
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -44,12 +46,133 @@ app = FastAPI(title="E1003 Photoframe Site")
 # behind any TLS proxy). Leave it off for LAN/HTTP so login works there too.
 # Set COOKIE_SECURE=1 (or true/yes) in production app settings.
 _cookie_secure = os.environ.get("COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
+
+# SECRET_KEY signs the session cookie. In production (COOKIE_SECURE set, i.e.
+# served over HTTPS) it MUST be provided and stable: a per-process random key
+# would silently invalidate every session on each restart and break multi-worker
+# setups, so fail fast instead of degrading. For local HTTP dev, fall back to an
+# ephemeral key for convenience.
+_secret_key = os.environ.get("SECRET_KEY")
+if not _secret_key:
+    if _cookie_secure:
+        raise RuntimeError(
+            "SECRET_KEY is required in production (COOKIE_SECURE is set). "
+            "Set a stable, random SECRET_KEY app setting (e.g. `python3 -c "
+            "'import secrets; print(secrets.token_hex(32))'`)."
+        )
+    _secret_key = secrets.token_hex(32)
+    logger.warning(
+        "SECRET_KEY not set; using an ephemeral dev key (sessions reset on restart)."
+    )
+
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.environ.get("SECRET_KEY", secrets.token_hex(32)),
+    secret_key=_secret_key,
     https_only=_cookie_secure,
     same_site="lax",
 )
+
+
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    """Attach defense-in-depth response headers to every response.
+
+    The UI relies on inline <script>/<style> and inline event handlers plus the
+    jsdelivr CDN, so the CSP permits 'unsafe-inline' and that origin; it still
+    restricts other external sources and (via frame-ancestors) blocks framing.
+    HSTS is only sent over HTTPS (COOKIE_SECURE) to avoid pinning LAN/HTTP dev.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "img-src 'self' data: blob:; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'",
+    )
+    if _cookie_secure:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
+# --- Login throttle (in-process brute-force guard) ----------------------------
+# A small per-client-IP backoff so online password guessing is slowed without an
+# external service. State is in-memory, which fits the single-worker App Service
+# deployment (one process): it resets on restart and is best-effort, not a
+# distributed limiter. Failures past a free allowance trigger an exponential
+# lockout; a successful login clears the client's record.
+
+_LOGIN_FREE_ATTEMPTS = 5       # failures allowed before lockout kicks in
+_LOGIN_BASE_LOCK_S = 5.0       # first lockout duration (seconds)
+_LOGIN_MAX_LOCK_S = 15 * 60.0  # cap each lockout at 15 minutes
+_LOGIN_RESET_S = 15 * 60.0     # forget a client's failures after this idle gap
+
+
+class _LoginThrottle:
+    """In-memory exponential-backoff lockout keyed by client identifier."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # key -> [fail_count, locked_until_monotonic, last_seen_monotonic]
+        self._state: dict[str, list[float]] = {}
+
+    def _prune(self, now: float) -> None:
+        stale = [k for k, (_c, _u, seen) in self._state.items()
+                 if now - seen > _LOGIN_RESET_S]
+        for k in stale:
+            self._state.pop(k, None)
+
+    def retry_after(self, key: str) -> int:
+        """Seconds the client must wait, or 0 if a login attempt is allowed now."""
+        now = time.monotonic()
+        with self._lock:
+            entry = self._state.get(key)
+            if not entry:
+                return 0
+            _count, locked_until, _seen = entry
+            remaining = locked_until - now
+            return int(remaining) + 1 if remaining > 0 else 0
+
+    def record_failure(self, key: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            self._prune(now)
+            count, _until, _seen = self._state.get(key, [0.0, 0.0, now])
+            count += 1
+            over = int(count) - _LOGIN_FREE_ATTEMPTS
+            if over > 0:
+                lock = min(_LOGIN_MAX_LOCK_S, _LOGIN_BASE_LOCK_S * (2 ** (over - 1)))
+                locked_until = now + lock
+            else:
+                locked_until = 0.0
+            self._state[key] = [count, locked_until, now]
+
+    def record_success(self, key: str) -> None:
+        with self._lock:
+            self._state.pop(key, None)
+
+
+_login_throttle = _LoginThrottle()
+
+
+def _client_key(request: Request) -> str:
+    """Best-effort client identifier for throttling (first X-Forwarded-For hop)."""
+    # Behind Azure App Service the real client IP is the first entry in
+    # X-Forwarded-For; request.client is the platform proxy.
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    client = request.client
+    return client.host if client else "unknown"
 
 
 # --- Auth helpers -------------------------------------------------------------
@@ -144,10 +267,20 @@ def login_submit(
     email: str = Form(...),
     password: str = Form(...),
 ) -> Response:
+    key = _client_key(request)
+    if _login_throttle.retry_after(key) > 0:
+        # Locked out after repeated failures; reject without touching the config
+        # or running the (deliberately slow) PBKDF2 verification.
+        return RedirectResponse(
+            "/login?error=Too+many+attempts.+Please+wait+and+try+again.",
+            status_code=303,
+        )
     config = cfg.load_config()
     user = config.user(email.strip().lower())
     if user is None or not cfg.verify_password(password, user.password_hash):
+        _login_throttle.record_failure(key)
         return RedirectResponse("/login?error=Invalid+credentials", status_code=303)
+    _login_throttle.record_success(key)
     request.session["user"] = user.email
     return RedirectResponse("/", status_code=303)
 
