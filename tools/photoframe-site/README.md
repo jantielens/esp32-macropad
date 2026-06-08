@@ -152,11 +152,12 @@ is unchanged.
 
 Each `/api/next` poll returns exactly one image. Selection is **blob-authoritative**:
 every photo's lifecycle state (`permanent`, `expires_at`, `last_shown_at`,
-`uploaded_at`) is stamped as metadata on the image blob itself, so a single List
-Blobs call decides the next image regardless of gallery size. The only soft-state
-is the disposable `state/queue.json` (explicit "show next" order) and
-`state/schedule.json` (the featured-slot countdown) — losing either just restarts
-cadence, never loses a photo.
+`served_at`, `uploaded_at`, `format`) is stamped as metadata on the image blob
+itself, so a single List Blobs call decides the next image — and resolves its
+format — regardless of gallery size, with no per-image `.json` read on the hot
+path. The only soft-state is the disposable `state/queue.json` (explicit "show
+next" order) and `state/schedule.json` (the featured-slot countdown) — losing
+either just restarts cadence, never loses a photo.
 
 Selection runs in two tiers:
 
@@ -237,6 +238,58 @@ share curve: a single new photo in a 1000-photo pool holds ~25% of displays for
 the 7-day window (vs ~0.1% without the boost), then drops to 0 as it graduates;
 with `--fresh-count 50 --max-share 25` the whole bucket stays capped at 25% so a
 bulk upload cannot crowd out the permanent pool.
+
+## Measuring `/api/next` latency
+
+Every board polls `/api/next` on a cadence, so its latency multiplies across the
+fleet. The endpoint is instrumented two ways so you can see exactly where the
+time goes:
+
+- **`Server-Timing` response header** (always on, negligible cost). Each response
+  carries a per-phase breakdown — `config`, `fetch` (the four independent
+  selection reads run in parallel: settings, image list, queue, schedule),
+  `select`, `served`, `deliver`, plus `blob` (summed Azure Blob round-trips with
+  their count in `desc="n=.."`) and `total`. Because the reads overlap, `total`
+  is typically *less* than the summed `blob` time. Inspect it directly:
+
+  ```bash
+  curl -sD - -o /dev/null \
+    "$BASE/api/next?device_id=E1003-1&key=$KEY" | grep -i server-timing
+  ```
+
+- **`NEXT_PROFILE=1`** env flag — additionally logs the same breakdown for each
+  request (handy for `./run_local.sh` profiling). Off by default.
+
+The [`bench_next.py`](bench_next.py) harness drives the endpoint repeatedly and
+reports percentiles for both the client-side wall clock (connect / TTFB / total)
+and the server's `Server-Timing` phases. Credentials are read from
+`config.local.json`, never the command line, and the key is masked in output:
+
+```bash
+# Local app (./run_local.sh), decision-only (does not follow the 302 redirect,
+# so it times just the selection logic + serve-time writes):
+python3 bench_next.py --config config.local.json \
+    --base-url http://127.0.0.1:8080 --n 20
+
+# Deployed Azure app, full delivery path (proxy=1 streams the image inline):
+python3 bench_next.py --config config.local.json \
+    --base-url https://<app>.azurewebsites.net --mode full --n 20
+
+# Keep-alive vs fresh-per-request, to isolate connection-handshake cost:
+python3 bench_next.py --config config.local.json \
+    --base-url http://127.0.0.1:8080 --reuse
+```
+
+A normal poll makes ~6 Azure Blob REST round-trips, but the handler keeps them
+cheap two ways. [`blobstore.py`](blobstore.py) reuses a **keep-alive connection
+per host** (a burst of calls pays the TCP+TLS handshake once, not per call), and
+the handler **fans the four independent selection reads out in parallel** so
+their long-haul latency overlaps instead of serializing. Selection reuses the
+metadata the list call already returned (no per-image `read_meta` GET), and
+`served_at`/`format` are stamped on the blob so the serve path needs no extra
+reads. Running the bench both locally (dev machine → Azure Blob, long-haul
+handshakes) and on Azure (app co-located with Blob) separates algorithmic cost
+(round-trip *count*) from network distance.
 
 ## Image format: G16P (and JPEG)
 

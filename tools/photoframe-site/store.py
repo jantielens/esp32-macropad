@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import blobstore as bs
 
@@ -35,6 +35,9 @@ META_EXT = ".json"
 # .jpg so on-device image libraries (Inkplate) pick the right decoder by URL.
 FORMAT_EXT = {"g16z": G16P_EXT, "jpeg": JPEG_EXT}
 DEFAULT_IMAGE_EXT = G16P_EXT
+# Inverse of FORMAT_EXT: resolve the output format from a canonical blob's
+# extension so /api/next can derive media type + X-Image-Format without a meta GET.
+_EXT_FORMAT = {ext: fmt for fmt, ext in FORMAT_EXT.items()}
 # All extensions we may have written, for format-agnostic scans/cleanup.
 KNOWN_IMAGE_EXTS = (G16P_EXT, JPEG_EXT)
 # Content type per format, for the canonical blob upload.
@@ -57,6 +60,11 @@ def format_ext(image_format: Optional[str]) -> str:
 def meta_image_ext(meta: dict) -> str:
     """Canonical-blob extension implied by a per-image meta's ``format`` field."""
     return format_ext(meta.get("format"))
+
+
+def format_from_ext(ext: str) -> str:
+    """Output format implied by a canonical-blob extension (inverse of format_ext)."""
+    return _EXT_FORMAT.get((ext or "").lower(), "g16z")
 
 
 def image_name(image_id: str, ext: str = DEFAULT_IMAGE_EXT) -> str:
@@ -131,12 +139,18 @@ def selection_blob_metadata(meta: dict) -> dict:
 
     Null/absent timestamps are omitted (absence == None on read); ``permanent``
     is always present so its key doubles as the "metadata is stamped" marker.
+    ``format`` rides along so the canonical-blob extension and the served
+    ``X-Image-Format`` can be resolved from the List Blobs response alone, with
+    no per-image .json GET on the /api/next hot path.
     """
     md = {"permanent": "1" if meta.get("permanent", False) else "0"}
     for key in ("expires_at", "last_shown_at", "served_at", "uploaded_at"):
         value = meta.get(key)
         if value:
             md[key] = str(value)
+    image_format = meta.get("format")
+    if image_format:
+        md["format"] = str(image_format)
     return md
 
 
@@ -148,6 +162,7 @@ def _selection_from_blob_metadata(md: dict) -> dict:
         "last_shown_at": md.get("last_shown_at") or None,
         "served_at": md.get("served_at") or None,
         "uploaded_at": md.get("uploaded_at") or None,
+        "format": md.get("format") or None,
     }
 
 
@@ -240,6 +255,25 @@ def list_image_ids(sas: str) -> list[str]:
         if split:
             ids.append(split[0])
     return ids
+
+
+def list_selection_meta(sas: str) -> dict[str, dict]:
+    """Map every image id to its blob selection metadata (one List Blobs call).
+
+    Stamped images map to their reconstructed selection fields; unstamped (legacy)
+    images map to ``{}``. The gallery merges the mutable timestamps from here over
+    the per-image .json -- which select_next/mark_served no longer rewrites -- so
+    blob metadata stays the authority for last_shown_at / served_at.
+    """
+    blobs = bs.list_blobs_with_metadata(sas, IMAGE_PREFIX)
+    out: dict[str, dict] = {}
+    for name, md in blobs.items():
+        split = _split_image_name(name)
+        if not split:
+            continue
+        image_id = split[0]
+        out[image_id] = _selection_from_blob_metadata(md) if "permanent" in md else {}
+    return out
 
 
 def delete_image(sas: str, image_id: str) -> None:
@@ -506,14 +540,32 @@ def frequency_label(share: float, displays_per_day: float) -> str:
 # --- Selection for /api/next --------------------------------------------------
 
 
+class NextPick(NamedTuple):
+    """Result of select_next: which image to serve and how it was chosen.
+
+    ``ext`` is the canonical blob's extension (e.g. ``.g16p``/``.jpg``) and
+    ``sel_meta`` carries the selection fields plus a resolved ``format``, so the
+    handler can build the redirect URL, media type, and ``X-Image-Format`` header
+    -- and call mark_served -- without any per-image .json GET.
+    """
+
+    image_id: str
+    ext: str
+    sel_meta: dict
+    from_queue: bool
+
+
 def select_next(
     sas: str,
     *,
     temp_min_spacing: int = 4,
     fresh_window_days: int = 7,
     max_temp_share_pct: int = 50,
-) -> Optional[str]:
-    """Pick the next image id to serve, or None.
+    blobs: Optional[dict] = None,
+    queue: Optional[list] = None,
+    countdown: Optional[int] = None,
+) -> Optional[NextPick]:
+    """Pick the next image to serve as a NextPick, or None.
 
     Order: first servable id in the queue (explicit one-shots), then the
     two-bucket round-robin rotation. The featured bucket holds temporary photos
@@ -529,18 +581,24 @@ def select_next(
 
     Selection reads are metadata-only: a single List Blobs (include=metadata)
     call returns every image's selection state, so the cost is ~3 round-trips
-    flat (list + queue + schedule) regardless of gallery size.
+    flat (list + queue + schedule) regardless of gallery size. The handler may
+    pass already-fetched ``blobs``/``queue``/``countdown`` (e.g. read in parallel)
+    to fold those into the single fan-out; any left None are fetched here so
+    standalone callers keep working.
     """
     now = datetime.now(timezone.utc)
 
-    # 1 round-trip: every image blob's selection metadata, inline.
-    blobs = bs.list_blobs_with_metadata(sas, IMAGE_PREFIX)
+    # 1 round-trip (or reuse a prefetched one): every image blob's metadata.
+    if blobs is None:
+        blobs = bs.list_blobs_with_metadata(sas, IMAGE_PREFIX)
     metas: dict[str, dict] = {}
+    ext_by_id: dict[str, str] = {}
     for name, md in blobs.items():
         split = _split_image_name(name)
         if not split:
             continue
-        image_id, _ext = split
+        image_id, ext = split
+        ext_by_id[image_id] = ext
         if "permanent" in md:
             metas[image_id] = _selection_from_blob_metadata(md)
         else:
@@ -554,9 +612,18 @@ def select_next(
                 "last_shown_at": full.get("last_shown_at"),
                 "served_at": full.get("served_at"),
                 "uploaded_at": full.get("uploaded_at"),
+                "format": full.get("format"),
             }
 
     existing = set(metas.keys())
+
+    def _pick(image_id: str, *, from_queue: bool) -> NextPick:
+        ext = ext_by_id.get(image_id, DEFAULT_IMAGE_EXT)
+        sel = dict(metas[image_id])
+        # Format is authoritative from the on-disk extension; stamp it so the
+        # handler resolves media type + X-Image-Format without a .json GET.
+        sel["format"] = format_from_ext(ext)
+        return NextPick(image_id=image_id, ext=ext, sel_meta=sel, from_queue=from_queue)
 
     # 0) Deferred one-shot reap: a one-shot served on a previous poll kept its
     # blob alive so the /api/next redirect target stayed valid while the device
@@ -571,7 +638,9 @@ def select_next(
             metas.pop(image_id, None)
 
     # 1) Queue: first non-expired id that still has a backing blob.
-    for image_id in read_queue(sas):
+    if queue is None:
+        queue = read_queue(sas)
+    for image_id in queue:
         if image_id not in existing:
             queue_remove(sas, image_id)  # stale pointer
             continue
@@ -580,7 +649,7 @@ def select_next(
             existing.discard(image_id)
             metas.pop(image_id, None)
             continue
-        return image_id
+        return _pick(image_id, from_queue=True)
 
     # 2) Two-bucket round-robin rotation. The featured bucket holds temporary
     # photos (have an expiry) and fresh photos (permanent, uploaded within
@@ -604,29 +673,37 @@ def select_next(
         else:
             perm.append((image_id, shown))
 
-    countdown = read_schedule(sas)
+    if countdown is None:
+        countdown = read_schedule(sas)
     chosen, _source, new_countdown = bucket_schedule_pick(
         perm, temp, temp_countdown=countdown, n=temp_min_spacing,
         floor=share_pct_to_floor(max_temp_share_pct),
     )
     if chosen is not None and new_countdown != countdown:
         write_schedule(sas, new_countdown)
-    return chosen
+    if chosen is None:
+        return None
+    return _pick(chosen, from_queue=False)
 
 
-def mark_served(sas: str, image_id: str, meta: dict) -> None:
-    """Apply serve-time effects: stamp last_shown_at; one-shot dequeue (deferred delete)."""
-    if meta.get("permanent", False):
-        # Permanent: stamp last_shown_at so rotation advances.
-        meta["last_shown_at"] = now_iso()
+def mark_served(sas: str, image_id: str, sel_meta: dict, ext: str, *, from_queue: bool) -> None:
+    """Apply serve-time effects without a .json round-trip.
+
+    Stamps the mutable selection timestamp on the blob's x-ms-meta-* (which is
+    authoritative for last_shown_at / served_at -- the gallery merges these over
+    the frozen .json) and dequeues one-shots. ``sel_meta`` is the selection dict
+    returned by select_next; ``ext`` is the canonical blob extension; ``from_queue``
+    is True only for queue (one-shot) picks, so rotation picks skip queue_remove.
+
+    Permanent picks advance rotation via last_shown_at. One-shots stamp served_at
+    (marking them for deferred reap on the next poll) and dequeue, but keep the
+    blob alive so the /api/next redirect / proxy fetch can still deliver it.
+    """
+    if sel_meta.get("permanent", False):
+        sel_meta["last_shown_at"] = now_iso()
     else:
-        # One-shot: dequeue so it is never selected again, but keep the blob so
-        # the /api/next redirect (or proxy fetch) can still deliver it. The
-        # `served_at` stamp marks it for reaping on the next poll once the device
-        # has finished downloading -- deleting it here would 404 the redirect.
-        meta["served_at"] = now_iso()
-    write_meta(sas, image_id, meta)
-    # Keep the blob's selection metadata in lock-step with the .json so the next
-    # poll's metadata-only read sees the updated last_shown_at / served_at.
-    bs.set_blob_metadata(sas, image_name(image_id, meta_image_ext(meta)), selection_blob_metadata(meta))
-    queue_remove(sas, image_id)
+        sel_meta["served_at"] = now_iso()
+    bs.set_blob_metadata(sas, image_name(image_id, ext), selection_blob_metadata(sel_meta))
+    if from_queue:
+        queue_remove(sas, image_id)
+

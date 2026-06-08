@@ -3,7 +3,10 @@
 Each device owns one container; the site is given a ``container_sas_url`` of the
 form ``https://<account>.blob.core.windows.net/<container>?<sas-token>``. All
 access is by building per-blob URLs from that SAS and calling the REST endpoints
-directly with stdlib ``urllib`` -- no azure-storage SDK dependency.
+directly with stdlib ``http.client`` -- no azure-storage SDK dependency. A
+thread-local keep-alive connection per host is reused across calls so a burst of
+blob operations (e.g. one /api/next poll) pays the TCP+TLS handshake once
+instead of per call.
 
 Blob layout (single-copy, blob-authoritative):
 
@@ -15,11 +18,13 @@ Blob layout (single-copy, blob-authoritative):
 
 from __future__ import annotations
 
+import http.client
 import json
+import threading
+import time
 import xml.etree.ElementTree as ET
 from typing import Optional
-from urllib import error, parse
-from urllib import request as urllib_request
+from urllib import parse
 
 API_VERSION = "2020-10-02"
 
@@ -30,6 +35,175 @@ class BlobError(RuntimeError):
     def __init__(self, status: int, message: str) -> None:
         super().__init__(f"blob error {status}: {message}")
         self.status = status
+
+
+# --- Request profiling --------------------------------------------------------
+#
+# Optional per-request accounting of Azure Blob REST round-trips. The /api/next
+# handler arms it with profile_begin() (which returns a sink) and drains it with
+# profile_collect() to surface a Server-Timing breakdown. The sink is a
+# lock-guarded object rather than thread-local state so the round-trips a request
+# fans out across worker threads (parallel reads) all land in the same per-
+# request tally; use_profile_sink() binds that sink in a worker thread for the
+# duration of its work. When no sink is bound the spans are near-free no-ops, so
+# leaving the instrumentation in place costs nothing on un-profiled requests.
+
+_profile = threading.local()
+
+
+class _ProfileSink:
+    """Per-request, thread-safe tally of blob REST round-trips."""
+
+    __slots__ = ("_lock", "calls")
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.calls: list[tuple[str, float]] = []
+
+    def add(self, op: str, dur_ms: float) -> None:
+        with self._lock:
+            self.calls.append((op, dur_ms))
+
+    def summary(self) -> tuple[int, float, dict]:
+        with self._lock:
+            calls = list(self.calls)
+        total_ms = 0.0
+        per_op: dict[str, list] = {}
+        for op, dur in calls:
+            total_ms += dur
+            entry = per_op.setdefault(op, [0, 0.0])
+            entry[0] += 1
+            entry[1] += dur
+        return len(calls), total_ms, per_op
+
+
+def profile_begin() -> _ProfileSink:
+    """Arm blob round-trip profiling for the current request; return its sink."""
+    sink = _ProfileSink()
+    _profile.sink = sink
+    return sink
+
+
+def profile_collect() -> tuple[int, float, dict]:
+    """Disarm profiling; return ``(call_count, total_ms, {op: [count, ms]})``."""
+    sink = getattr(_profile, "sink", None)
+    _profile.sink = None
+    if sink is None:
+        return 0, 0.0, {}
+    return sink.summary()
+
+
+class use_profile_sink:
+    """Bind a parent request's profiling sink onto a worker thread."""
+
+    __slots__ = ("sink", "_prev")
+
+    def __init__(self, sink: Optional[_ProfileSink]) -> None:
+        self.sink = sink
+
+    def __enter__(self) -> "use_profile_sink":
+        self._prev = getattr(_profile, "sink", None)
+        _profile.sink = self.sink
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        _profile.sink = self._prev
+        return False
+
+
+class _profile_span:
+    """Context manager recording one blob REST round-trip when profiling is armed."""
+
+    __slots__ = ("op", "_t")
+
+    def __init__(self, op: str) -> None:
+        self.op = op
+
+    def __enter__(self) -> "_profile_span":
+        self._t = time.perf_counter()
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        sink = getattr(_profile, "sink", None)
+        if sink is not None:
+            sink.add(self.op, (time.perf_counter() - self._t) * 1000.0)
+        return False
+
+
+# --- Transport: pooled keep-alive connections ---------------------------------
+#
+# One persistent connection per (thread, host). All of a device's blobs live on
+# the same host, so a poll's ~handful of REST calls reuse a single TLS session.
+# Connections are thread-local: parallel reads run in their own worker threads
+# and so naturally get their own connections, with no cross-thread sharing of a
+# non-thread-safe http.client object.
+
+_pool = threading.local()
+
+
+def _conn_for(host: str, scheme: str, timeout: float) -> http.client.HTTPConnection:
+    conns = getattr(_pool, "conns", None)
+    if conns is None:
+        conns = {}
+        _pool.conns = conns
+    conn = conns.get(host)
+    if conn is None:
+        if scheme == "https":
+            conn = http.client.HTTPSConnection(host, timeout=timeout)
+        else:
+            conn = http.client.HTTPConnection(host, timeout=timeout)
+        conns[host] = conn
+    return conn
+
+
+def _drop_conn(host: str) -> None:
+    conns = getattr(_pool, "conns", None)
+    if conns and host in conns:
+        try:
+            conns[host].close()
+        except Exception:
+            pass
+        del conns[host]
+
+
+def _request(
+    method: str,
+    url: str,
+    *,
+    op: str,
+    headers: Optional[dict] = None,
+    data: Optional[bytes] = None,
+    timeout: float = 30.0,
+) -> tuple[int, dict, bytes]:
+    """Perform one Azure Blob REST call over a pooled keep-alive connection.
+
+    Returns ``(status, response_headers, body)``. HTTP error statuses (404, 5xx)
+    are returned, not raised -- callers map them to BlobError/None as needed. A
+    closed keep-alive socket (idle server-side timeout) is retried once on a
+    fresh connection; the calls are idempotent (overwriting PUTs, GET/DELETE).
+    """
+    parts = parse.urlsplit(url)
+    host = parts.netloc
+    scheme = parts.scheme
+    target = parts.path + (f"?{parts.query}" if parts.query else "")
+    hdrs = dict(headers or {})
+    last_exc: Optional[Exception] = None
+    for attempt in range(2):
+        conn = _conn_for(host, scheme, timeout)
+        try:
+            if conn.sock is not None:
+                conn.sock.settimeout(timeout)
+            with _profile_span(op):
+                conn.request(method, target, body=data, headers=hdrs)
+                resp = conn.getresponse()
+                body = resp.read()  # drain so the connection can be reused
+                status = resp.status
+                resp_headers = {k.lower(): v for k, v in resp.getheaders()}
+            return status, resp_headers, body
+        except (http.client.HTTPException, ConnectionError, TimeoutError, OSError) as exc:
+            last_exc = exc
+            _drop_conn(host)
+    raise BlobError(0, f"network error: {last_exc}")
 
 
 def _split_sas(container_sas_url: str) -> tuple[str, str]:
@@ -64,23 +238,19 @@ def upload_blob(
     metadata: Optional[dict] = None,
 ) -> None:
     url = build_blob_url(container_sas_url, blob_name)
-    req = urllib_request.Request(url, method="PUT", data=payload)
-    req.add_header("x-ms-blob-type", "BlockBlob")
-    req.add_header("x-ms-version", API_VERSION)
-    req.add_header("Content-Type", content_type)
-    req.add_header("Content-Length", str(len(payload)))
+    headers = {
+        "x-ms-blob-type": "BlockBlob",
+        "x-ms-version": API_VERSION,
+        "Content-Type": content_type,
+        "Content-Length": str(len(payload)),
+    }
     # x-ms-meta-* pairs ride on the blob itself, so selection state stays
     # blob-authoritative and is readable via List Blobs (no per-blob GET).
     for key, value in (metadata or {}).items():
-        req.add_header(f"x-ms-meta-{key}", str(value))
-    try:
-        with urllib_request.urlopen(req, timeout=120) as resp:
-            if resp.status not in (200, 201):
-                raise BlobError(resp.status, "unexpected status uploading blob")
-    except error.HTTPError as e:
-        raise BlobError(e.code, _redacted(url)) from e
-    except error.URLError as e:
-        raise BlobError(0, f"network error: {e.reason}") from e
+        headers[f"x-ms-meta-{key}"] = str(value)
+    status, _, _ = _request("PUT", url, op="upload", headers=headers, data=payload, timeout=120.0)
+    if status not in (200, 201):
+        raise BlobError(status, "unexpected status uploading blob")
 
 
 def set_blob_metadata(container_sas_url: str, blob_name: str, metadata: dict) -> None:
@@ -90,51 +260,36 @@ def set_blob_metadata(container_sas_url: str, blob_name: str, metadata: dict) ->
     served_at) without rewriting the ~1.3 MB payload.
     """
     url = build_blob_url(container_sas_url, blob_name) + "&comp=metadata"
-    req = urllib_request.Request(url, method="PUT", data=b"")
-    req.add_header("x-ms-version", API_VERSION)
-    req.add_header("Content-Length", "0")
+    headers = {"x-ms-version": API_VERSION, "Content-Length": "0"}
     for key, value in (metadata or {}).items():
-        req.add_header(f"x-ms-meta-{key}", str(value))
-    try:
-        with urllib_request.urlopen(req, timeout=30) as resp:
-            if resp.status not in (200, 201):
-                raise BlobError(resp.status, "unexpected status setting metadata")
-    except error.HTTPError as e:
-        raise BlobError(e.code, _redacted(url)) from e
-    except error.URLError as e:
-        raise BlobError(0, f"network error: {e.reason}") from e
+        headers[f"x-ms-meta-{key}"] = str(value)
+    status, _, _ = _request("PUT", url, op="set_meta", headers=headers, data=b"", timeout=30.0)
+    if status not in (200, 201):
+        raise BlobError(status, "unexpected status setting metadata")
 
 
 def download_blob(container_sas_url: str, blob_name: str) -> Optional[bytes]:
     """Return blob bytes, or ``None`` if the blob does not exist (404)."""
     url = build_blob_url(container_sas_url, blob_name)
-    req = urllib_request.Request(url, method="GET")
-    req.add_header("x-ms-version", API_VERSION)
-    try:
-        with urllib_request.urlopen(req, timeout=60) as resp:
-            return resp.read()
-    except error.HTTPError as e:
-        if e.code == 404:
-            return None
-        raise BlobError(e.code, _redacted(url)) from e
-    except error.URLError as e:
-        raise BlobError(0, f"network error: {e.reason}") from e
+    headers = {"x-ms-version": API_VERSION}
+    status, _, body = _request("GET", url, op="download", headers=headers, timeout=60.0)
+    if status == 404:
+        return None
+    if status not in (200, 206):
+        raise BlobError(status, _redacted(url))
+    return body
 
 
 def delete_blob(container_sas_url: str, blob_name: str) -> bool:
     """Delete a blob. Returns ``True`` if deleted, ``False`` if it was absent."""
     url = build_blob_url(container_sas_url, blob_name)
-    req = urllib_request.Request(url, method="DELETE")
-    req.add_header("x-ms-version", API_VERSION)
-    try:
-        with urllib_request.urlopen(req, timeout=30) as resp:
-            return resp.status in (200, 202)
-    except error.HTTPError as e:
-        if e.code == 404:
-            return False
-        raise BlobError(e.code, _redacted(url)) from e
-    except error.URLError as e:
-        raise BlobError(0, f"network error: {e.reason}") from e
+    headers = {"x-ms-version": API_VERSION}
+    status, _, _ = _request("DELETE", url, op="delete", headers=headers, timeout=30.0)
+    if status == 404:
+        return False
+    if status in (200, 202):
+        return True
+    raise BlobError(status, _redacted(url))
 
 
 def list_blobs(container_sas_url: str, prefix: str, *, max_results: int = 1000) -> list[str]:
@@ -152,15 +307,9 @@ def list_blobs(container_sas_url: str, prefix: str, *, max_results: int = 1000) 
         if marker:
             query += "&marker=" + parse.quote(marker, safe="")
         url = f"{container}?{query}"
-        req = urllib_request.Request(url, method="GET")
-        req.add_header("x-ms-version", API_VERSION)
-        try:
-            with urllib_request.urlopen(req, timeout=30) as resp:
-                body = resp.read()
-        except error.HTTPError as e:
-            raise BlobError(e.code, _redacted(url)) from e
-        except error.URLError as e:
-            raise BlobError(0, f"network error: {e.reason}") from e
+        status, _, body = _request("GET", url, op="list", headers={"x-ms-version": API_VERSION}, timeout=30.0)
+        if status != 200:
+            raise BlobError(status, _redacted(url))
         root = ET.fromstring(body)
         for elem in root.findall(".//{*}Blob/{*}Name"):
             if elem.text:
@@ -196,15 +345,9 @@ def list_blobs_with_metadata(
         if marker:
             query += "&marker=" + parse.quote(marker, safe="")
         url = f"{container}?{query}"
-        req = urllib_request.Request(url, method="GET")
-        req.add_header("x-ms-version", API_VERSION)
-        try:
-            with urllib_request.urlopen(req, timeout=30) as resp:
-                body = resp.read()
-        except error.HTTPError as e:
-            raise BlobError(e.code, _redacted(url)) from e
-        except error.URLError as e:
-            raise BlobError(0, f"network error: {e.reason}") from e
+        status, _, body = _request("GET", url, op="list_meta", headers={"x-ms-version": API_VERSION}, timeout=30.0)
+        if status != 200:
+            raise BlobError(status, _redacted(url))
         root = ET.fromstring(body)
         for blob in root.findall(".//{*}Blob"):
             name_el = blob.find("{*}Name")

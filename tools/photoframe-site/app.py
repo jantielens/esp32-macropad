@@ -15,6 +15,7 @@ import os
 import secrets
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -32,6 +33,18 @@ import store
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 THUMB_MAX = 360  # gallery thumbnail longest edge
+
+# When set (NEXT_PROFILE=1/true/yes) every /api/next response is logged with its
+# per-phase timing breakdown, in addition to the always-on Server-Timing header.
+# Off by default so production logs stay quiet; flip it on for local profiling.
+_NEXT_PROFILE_LOG = os.environ.get("NEXT_PROFILE", "").strip().lower() in ("1", "true", "yes")
+
+# Persistent worker pool for /api/next: the handler's independent blob reads
+# (settings, image list, queue, schedule) are fanned out across these threads so
+# their long-haul round-trips overlap instead of serializing. The pool is module-
+# level (not per-request) so each worker thread keeps its blobstore keep-alive
+# connection warm across requests; max_workers matches the four parallel reads.
+_NEXT_IO_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="next-io")
 
 logger = logging.getLogger("photoframe")
 if not logging.getLogger().handlers:
@@ -307,8 +320,17 @@ def gallery(request: Request, device_id: str) -> Response:
     floor = store.share_pct_to_floor(params["max_temp_share_pct"])
     now = datetime.now(timezone.utc)
     knob_defaults = knobs.defaults()
+    # mark_served stamps the mutable selection timestamps (last_shown_at /
+    # served_at) onto blob metadata only -- it no longer rewrites the .json on the
+    # /api/next hot path -- so blob metadata is authoritative for those. One List
+    # Blobs call fetches them all; merge them over each photo's (now-frozen) .json.
+    sel_by_id = store.list_selection_meta(device.container_sas_url)
     for image_id in store.list_image_ids(device.container_sas_url):
         meta = store.read_meta(device.container_sas_url, image_id) or {}
+        sel = sel_by_id.get(image_id) or {}
+        for key in ("last_shown_at", "served_at"):
+            if sel.get(key):
+                meta[key] = sel[key]
         # Hide one-shots that have already been served: their blob lingers only
         # until the next poll reaps it (deferred delete keeps the serve redirect
         # valid), but to the user the image is spent and should be gone.
@@ -701,32 +723,88 @@ def photos_settings(
 
 @app.get("/api/next")
 def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
+    # Per-request profiling: time each phase with perf_counter and count the
+    # underlying Azure Blob round-trips (blobstore.profile_*). The breakdown is
+    # always emitted as a Server-Timing response header so external benchmarks
+    # (tools/photoframe-site/bench_next.py) can attribute latency per phase
+    # without app changes; NEXT_PROFILE=1 additionally logs it.
+    t_start = time.perf_counter()
+    spans: list[tuple[str, float]] = []
+    sink = bs.profile_begin()
+
+    def _phase(label: str, t0: float) -> None:
+        spans.append((label, (time.perf_counter() - t0) * 1000.0))
+
+    def _bound(fn, *args):
+        # Run a blob read in a worker thread while attributing its round-trips to
+        # this request's profiling sink (the sink is shared, not thread-local).
+        def _run():
+            with bs.use_profile_sink(sink):
+                return fn(*args)
+        return _run
+
+    def finish(resp: Response) -> Response:
+        calls, blob_ms, _per_op = bs.profile_collect()
+        total_ms = (time.perf_counter() - t_start) * 1000.0
+        parts = [f"{label};dur={ms:.1f}" for label, ms in spans]
+        parts.append(f'blob;desc="n={calls}";dur={blob_ms:.1f}')
+        parts.append(f"total;dur={total_ms:.1f}")
+        resp.headers["Server-Timing"] = ", ".join(parts)
+        if _NEXT_PROFILE_LOG:
+            logger.info(
+                "/api/next device=%s total=%.1fms blob_calls=%d blob=%.1fms phases=[%s]",
+                device_id, total_ms, calls, blob_ms,
+                " ".join(f"{label}={ms:.1f}" for label, ms in spans),
+            )
+        return resp
+
+    t0 = time.perf_counter()
     config = cfg.load_config()
     device = config.device(device_id)
     if device is None or not cfg.verify_device_key(key, device.api_key):
-        return Response("Unauthorized", status_code=401)
+        return finish(Response("Unauthorized", status_code=401))
+    _phase("config", t0)
 
     sas = device.container_sas_url
-    params = _resolve_selection_params(device)
-    image_id = store.select_next(
+
+    # The four selection inputs are independent reads, so fan them out across the
+    # worker pool: settings, the image list (with metadata), the queue, and the
+    # rotation countdown. Each is a separate Azure Blob round-trip; overlapping
+    # them collapses ~4x the long-haul latency into roughly one. Each worker binds
+    # this request's profiling sink so the round-trips are still counted.
+    t0 = time.perf_counter()
+    f_settings = _NEXT_IO_POOL.submit(_bound(store.read_settings, sas))
+    f_blobs = _NEXT_IO_POOL.submit(_bound(bs.list_blobs_with_metadata, sas, store.IMAGE_PREFIX))
+    f_queue = _NEXT_IO_POOL.submit(_bound(store.read_queue, sas))
+    f_countdown = _NEXT_IO_POOL.submit(_bound(store.read_schedule, sas))
+    settings = f_settings.result()
+    blobs = f_blobs.result()
+    queue = f_queue.result()
+    countdown = f_countdown.result()
+    _phase("fetch", t0)
+
+    params = _resolve_selection_params_from(device, settings)
+
+    t0 = time.perf_counter()
+    pick = store.select_next(
         sas,
         temp_min_spacing=params["temp_min_spacing"],
         fresh_window_days=params["fresh_window_days"],
         max_temp_share_pct=params["max_temp_share_pct"],
+        blobs=blobs,
+        queue=queue,
+        countdown=countdown,
     )
-    if image_id is None:
-        return Response(status_code=204)
+    _phase("select", t0)
+    if pick is None:
+        return finish(Response(status_code=204))
 
-    meta = store.read_meta(sas, image_id)
-    if meta is None:
-        # Raced with a delete; tell the device to retry rather than serving garbage.
-        store.queue_remove(sas, image_id)
-        return Response(status_code=204)
+    t0 = time.perf_counter()
+    store.mark_served(sas, pick.image_id, pick.sel_meta, pick.ext, from_queue=pick.from_queue)
+    _phase("served", t0)
 
-    store.mark_served(sas, image_id, meta)
-
-    image_format = meta.get("format", "g16z")
-    blob_name = store.image_name(image_id, store.meta_image_ext(meta))
+    image_format = pick.sel_meta.get("format", "g16z")
+    blob_name = store.image_name(pick.image_id, pick.ext)
     blob_url = bs.build_blob_url(sas, blob_name)
 
     # Delivery is controlled per device by `serve_mode` (config knob), not the
@@ -743,20 +821,22 @@ def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
     # The container SAS the device receives is scoped to its own container, so
     # redirecting exposes no other device's data.
     if not proxy and redirect_ok:
-        return RedirectResponse(blob_url, status_code=302)
+        return finish(RedirectResponse(blob_url, status_code=302))
 
+    t0 = time.perf_counter()
     data = bs.download_blob(sas, blob_name)
+    _phase("deliver", t0)
     if data is None:
-        return Response(status_code=204)
+        return finish(Response(status_code=204))
     if image_format == "jpeg":
         media_type, header_format = "image/jpeg", "jpeg"
     else:
         media_type, header_format = "application/octet-stream", "g16p"
-    return Response(
+    return finish(Response(
         data,
         media_type=media_type,
         headers={"X-Image-Format": header_format, "Cache-Control": "no-store"},
-    )
+    ))
 
 
 @app.get("/healthz")
@@ -794,14 +874,25 @@ def _resolve_int_override(
 
 
 def _resolve_selection_params(device: cfg.Device) -> dict:
-    """Effective selection knobs (UI overrides over config defaults) as a context dict.
+    """Effective selection knobs as a context dict (reads settings, then resolves).
 
-    Overrides live in disposable blob soft-state (store.read_settings) so an owner
-    can tune the rotation from the config page without editing CONFIG_JSON. The
-    returned dict carries each knob's effective value, its device default, and an
-    ``*_overridden`` flag for the template, plus the values select_next consumes.
+    Thin wrapper over _resolve_selection_params_from for callers (e.g. the config
+    page) that have not already fetched settings. /api/next reads settings in its
+    parallel fan-out and calls _resolve_selection_params_from directly.
     """
     settings = store.read_settings(device.container_sas_url)
+    return _resolve_selection_params_from(device, settings)
+
+
+def _resolve_selection_params_from(device: cfg.Device, settings: dict) -> dict:
+    """Effective selection knobs (UI overrides over config defaults) from settings.
+
+    Pure projection over an already-fetched settings dict. Overrides live in
+    disposable blob soft-state (store.read_settings) so an owner can tune the
+    rotation from the config page without editing CONFIG_JSON. The returned dict
+    carries each knob's effective value, its device default, and an ``*_overridden``
+    flag for the template, plus the values select_next consumes.
+    """
     spacing, sp_ov = _resolve_int_override(
         settings, "temp_min_spacing", device.temp_min_spacing,
         minimum=cfg.MIN_TEMP_MIN_SPACING)
