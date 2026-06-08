@@ -20,7 +20,10 @@
     <a href="/" class="text-decoration-none small">&larr; Devices</a>
     <h1 class="h3 mb-0">{{ device_id }}</h1>
   </div>
-  <a class="btn btn-primary" href="/upload?device_id={{ device_id }}">Upload image</a>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="/settings?device_id={{ device_id }}">Config</a>
+    <a class="btn btn-primary" href="/upload?device_id={{ device_id }}">Upload image</a>
+  </div>
 </div>
 
 {% if queue %}
@@ -68,13 +71,19 @@
         <p class="card-text">{{ item.caption }}</p>
         {% endif %}
         <div class="d-flex flex-wrap gap-1 mb-1">
-          {% if item.permanent %}
-          <span class="badge text-bg-success">Permanent</span>
-          {% else %}
+          {% if not item.permanent %}
           <span class="badge text-bg-warning">One-shot</span>
+          {% elif item.expires_at %}
+          <span class="badge text-bg-info">Temporary</span>
+          {% else %}
+          <span class="badge text-bg-success">Permanent</span>
           {% endif %}
           {% if item.expires_at %}
-          <span class="badge text-bg-secondary">Expires</span>
+            {% if item.expired %}
+            <span class="badge text-bg-danger" title="Expired {{ item.expires_at }}">Expired</span>
+            {% else %}
+            <span class="badge text-bg-secondary" title="Expires {{ item.expires_at }}">{{ item.expires_in }} left</span>
+            {% endif %}
           {% endif %}
         </div>
         <p class="card-text small text-body-secondary mb-0">

@@ -66,6 +66,14 @@ SERVE_INLINE = "inline"
 SUPPORTED_SERVE_MODES = (SERVE_REDIRECT, SERVE_INLINE)
 DEFAULT_SERVE_MODE = SERVE_REDIRECT
 
+# Temporary-photo cadence knob. A temporary photo (one with an expiry) repeats at
+# most once per ``temp_min_spacing`` displays, so its on-screen share is
+# pool-size-independent (see store.bucket_schedule_pick). The default of 4 means
+# a single temporary photo takes ~1 in every 4 displays. Alternation caps the
+# temporary bucket at 50%, so values below 2 are meaningless and clamped up.
+MIN_TEMP_MIN_SPACING = 2
+DEFAULT_TEMP_MIN_SPACING = 4
+
 
 class ConfigError(RuntimeError):
     """Raised when CONFIG_JSON is missing or malformed."""
@@ -82,6 +90,7 @@ class Device:
     image_format: str = DEFAULT_FORMAT
     jpeg_quality: int = DEFAULT_JPEG_QUALITY
     serve_mode: str = DEFAULT_SERVE_MODE
+    temp_min_spacing: int = DEFAULT_TEMP_MIN_SPACING
 
 
 @dataclass(frozen=True)
@@ -158,6 +167,13 @@ def load_config() -> Config:
                 f"device '{device_id}' has unsupported serve_mode '{serve_mode}' "
                 f"(expected one of {', '.join(SUPPORTED_SERVE_MODES)})"
             )
+        try:
+            temp_min_spacing = int(entry.get("temp_min_spacing", DEFAULT_TEMP_MIN_SPACING))
+        except (TypeError, ValueError):
+            raise ConfigError(f"device '{device_id}' temp_min_spacing must be an integer")
+        # Alternation already caps the temporary bucket at 50%; clamp up so a
+        # too-small value cannot ask for more than one-temp-every-other-display.
+        temp_min_spacing = max(MIN_TEMP_MIN_SPACING, temp_min_spacing)
         devices[device_id] = Device(
             device_id=device_id,
             container_sas_url=str(sas),
@@ -172,6 +188,7 @@ def load_config() -> Config:
             image_format=image_format,
             jpeg_quality=jpeg_quality,
             serve_mode=serve_mode,
+            temp_min_spacing=temp_min_spacing,
         )
 
     users: dict[str, User] = {}

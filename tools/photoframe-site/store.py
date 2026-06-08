@@ -14,6 +14,7 @@ missing/corrupt queue, or a queued id with no backing blob, degrades to rotation
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timezone
 from typing import Optional
@@ -22,6 +23,8 @@ import blobstore as bs
 
 IMAGE_PREFIX = "images/"
 QUEUE_BLOB = "state/queue.json"
+SCHEDULE_BLOB = "state/schedule.json"
+SETTINGS_BLOB = "state/settings.json"
 G16P_EXT = ".g16p"
 JPEG_EXT = ".jpg"
 THUMB_SUFFIX = "__thumb.png"
@@ -174,6 +177,48 @@ def queue_unshift(sas: str, image_id: str) -> None:
     write_queue(sas, ids)
 
 
+# --- Scheduler soft-state -----------------------------------------------------
+#
+# The two-bucket scheduler (see bucket_schedule_pick) needs one integer between
+# polls: how many displays remain until the next temporary-photo slot. It lives
+# in its own disposable blob so a lost/corrupt value simply restarts the cadence
+# (temporary photos keep showing; only the phase resets) -- the image blobs stay
+# the sole authoritative state.
+
+
+def read_schedule(sas: str) -> int:
+    """Temp-slot countdown (disposable soft-state). Missing/corrupt -> 0 (temp due)."""
+    data = bs.download_json(sas, SCHEDULE_BLOB)
+    if isinstance(data, dict):
+        try:
+            return max(0, int(data.get("temp_countdown", 0)))
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
+def write_schedule(sas: str, temp_countdown: int) -> None:
+    bs.upload_json(sas, SCHEDULE_BLOB, {"temp_countdown": int(max(0, temp_countdown))})
+
+
+# --- Per-device settings (operator override) ----------------------------------
+#
+# A small map of per-device knobs the owner can tune from the gallery UI without
+# editing CONFIG_JSON (which the app only reads). Currently just temp_min_spacing,
+# the temporary-photo cadence. Absence falls back to the config default, so a
+# lost/corrupt blob degrades gracefully to the deployed configuration.
+
+
+def read_settings(sas: str) -> dict:
+    """Per-device UI settings override. Missing/corrupt -> {} (use config defaults)."""
+    data = bs.download_json(sas, SETTINGS_BLOB)
+    return data if isinstance(data, dict) else {}
+
+
+def write_settings(sas: str, settings: dict) -> None:
+    bs.upload_json(sas, SETTINGS_BLOB, settings)
+
+
 # --- Per-image meta -----------------------------------------------------------
 
 
@@ -243,19 +288,99 @@ def store_image(
         queue_unshift(sas, image_id)
 
 
+# --- Two-bucket rotation scheduler (pure) -------------------------------------
+#
+# Rotation photos split into two buckets by lifecycle:
+#   * permanent  -- permanent && no expiry  -> the everyday wallpaper pool
+#   * temporary  -- permanent && has expiry -> short-lived photos to feature
+# A temporary slot fires every `spacing` displays, where spacing is chosen so any
+# single temporary photo repeats at most once per `n` displays. This makes a
+# temporary photo's on-screen share independent of how big the permanent pool is
+# (the failing property of a weight multiplier, whose share is boost/pool). The
+# functions below are pure (no blob I/O) so they are unit-tested directly and
+# drive the offline simulator/sweep.
+
+
+def temp_slot_spacing(n: int, k: int) -> int:
+    """Displays between temporary slots for k temporary photos at knob n.
+
+    Each temporary photo should repeat at most once per n displays, so the bucket
+    fires every ceil(n / k) displays. Floored at 2 because alternation (one
+    permanent between temporaries) caps the bucket at 50%.
+    """
+    return max(2, math.ceil(n / max(1, k)))
+
+
+def _lru_id(items: list) -> Optional[str]:
+    """Least-recently-shown id from [(id, last_shown_at | None), ...].
+
+    Never-shown (None) sorts first; ties keep the first encountered, so callers
+    that pass a stably-ordered list get deterministic picks.
+    """
+    best: Optional[str] = None
+    best_t: Optional[datetime] = None
+    for image_id, shown in items:
+        if best is None or (best_t is not None and (shown is None or shown < best_t)):
+            best = image_id
+            best_t = shown
+    return best
+
+
+def bucket_schedule_pick(
+    perm: list,
+    temp: list,
+    *,
+    temp_countdown: int,
+    n: int,
+) -> tuple:
+    """Pick the next rotation image from the permanent/temporary buckets (pure).
+
+    perm / temp are lists of (id, last_shown_at | None) for eligible images in
+    each bucket. temp_countdown is displays remaining until the next temporary
+    slot (soft-state). n is the per-device min spacing.
+
+    Returns (chosen_id, source, new_countdown) where source is "permanent",
+    "temporary", or None when nothing is eligible.
+
+    Cadence: when both buckets are populated, a temporary photo is served once
+    every temp_slot_spacing(n, len(temp)) displays and a permanent fills the rest;
+    within the temporary bucket the least-recently-shown photo rotates, so
+    multiple temporaries share the slot fairly. Fallbacks: only permanents ->
+    100% permanent; only temporaries -> they rotate among themselves (a missing
+    permanent must not blank the screen).
+    """
+    if not perm and not temp:
+        return None, None, temp_countdown
+    if not temp:
+        # No temporary photos: pure permanent rotation; reset so a freshly added
+        # temporary photo is immediately due.
+        return _lru_id(perm), "permanent", 0
+    if not perm:
+        # No separators available; rotate temporaries among themselves.
+        return _lru_id(temp), "temporary", temp_countdown
+    if temp_countdown <= 0:
+        spacing = temp_slot_spacing(n, len(temp))
+        return _lru_id(temp), "temporary", spacing - 1
+    return _lru_id(perm), "permanent", temp_countdown - 1
+
+
 # --- Selection for /api/next --------------------------------------------------
 
 
-def select_next(sas: str) -> Optional[str]:
+def select_next(sas: str, *, temp_min_spacing: int = 4) -> Optional[str]:
     """Pick the next image id to serve, or None.
 
-    Order: first servable id in the queue, then least-recently-shown permanent
-    image (rotation). Skips expired images and queued ids with no backing blob.
-    Cleans up expired images opportunistically.
+    Order: first servable id in the queue (explicit one-shots), then the
+    two-bucket round-robin rotation (permanent vs temporary photos). Skips
+    expired images and queued ids with no backing blob, reaping expired blobs
+    opportunistically.
+
+    temp_min_spacing is the per-device cadence knob: a temporary photo (one with
+    an expiry) repeats at most once per this many displays.
 
     Selection reads are metadata-only: a single List Blobs (include=metadata)
-    call returns every image's selection state, so the cost is ~2 round-trips
-    flat (list + queue) regardless of gallery size.
+    call returns every image's selection state, so the cost is ~3 round-trips
+    flat (list + queue + schedule) regardless of gallery size.
     """
     now = datetime.now(timezone.utc)
 
@@ -307,10 +432,14 @@ def select_next(sas: str) -> Optional[str]:
             continue
         return image_id
 
-    # 2) Rotation: least-recently-shown permanent, non-expired image.
-    best_id: Optional[str] = None
-    best_shown: Optional[datetime] = None
-    for image_id in existing:
+    # 2) Two-bucket round-robin rotation. Permanent photos (no expiry) and
+    # temporary photos (have an expiry) alternate, with temporary slots spaced so
+    # any single temporary photo repeats at most once per `temp_min_spacing`
+    # displays. One-shots (`permanent=false`) are served via the queue only, never
+    # here. Expired images are reaped as we scan.
+    perm: list = []
+    temp: list = []
+    for image_id in sorted(existing):  # sorted -> deterministic LRU tie-break
         sel = metas[image_id]
         if is_expired(sel, at=now):
             delete_image(sas, image_id)
@@ -318,13 +447,18 @@ def select_next(sas: str) -> Optional[str]:
         if not sel.get("permanent"):
             continue
         shown = _parse_iso(sel.get("last_shown_at"))
-        # nulls (never shown) sort first
-        if best_id is None or (
-            best_shown is not None and (shown is None or shown < best_shown)
-        ):
-            best_id = image_id
-            best_shown = shown
-    return best_id
+        if sel.get("expires_at"):
+            temp.append((image_id, shown))
+        else:
+            perm.append((image_id, shown))
+
+    countdown = read_schedule(sas)
+    chosen, _source, new_countdown = bucket_schedule_pick(
+        perm, temp, temp_countdown=countdown, n=temp_min_spacing
+    )
+    if chosen is not None and new_countdown != countdown:
+        write_schedule(sas, new_countdown)
+    return chosen
 
 
 def mark_served(sas: str, image_id: str, meta: dict) -> None:

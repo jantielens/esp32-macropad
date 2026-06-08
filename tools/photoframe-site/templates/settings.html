@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Config · {{ device_id }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <div>
+    <a href="/" class="text-decoration-none small">&larr; Devices</a>
+    <h1 class="h3 mb-0">{{ device_id }} · Config</h1>
+  </div>
+  <a class="btn btn-outline-secondary" href="/photos?device_id={{ device_id }}">Gallery</a>
+</div>
+
+<section class="mb-4" style="max-width: 42rem;">
+  <div class="rounded-3 p-3 border">
+    <h2 class="h6 text-body-secondary text-uppercase fw-semibold mb-2">Rotation cadence</h2>
+    <form method="post" action="/settings" class="row g-2 align-items-end m-0">
+      <input type="hidden" name="device_id" value="{{ device_id }}">
+      <div class="col-auto">
+        <label class="form-label small mb-1" for="temp-spacing">Temporary photo spacing</label>
+        <input type="number" class="form-control form-control-sm" id="temp-spacing"
+               name="temp_min_spacing" min="{{ min_temp_min_spacing }}" step="1"
+               value="{{ temp_min_spacing }}" style="width: 6rem;">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-primary" type="submit">Save</button>
+      </div>
+      {% if temp_min_spacing_overridden %}
+      <div class="col-auto">
+        <button class="btn btn-sm btn-outline-secondary" type="submit" name="reset" value="1">Reset to default</button>
+      </div>
+      {% endif %}
+    </form>
+    <p class="form-text small mb-0">
+      A temporary photo (one with an expiry) repeats at most once every
+      <strong>{{ temp_min_spacing }}</strong> displays, so its share of screen time
+      stays the same no matter how big the gallery grows.
+      {% if temp_min_spacing_overridden %}Overrides the device default of {{ temp_min_spacing_default }}.{% else %}This is the device default.{% endif %}
+    </p>
+  </div>
+</section>
+{% endblock %}

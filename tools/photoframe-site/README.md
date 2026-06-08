@@ -90,6 +90,15 @@ python3 hash_password.py   # mint a password_hash to paste into a user account
   fastest; suits clients that follow HTTP redirects, like the E1003 firmware).
   `"inline"` streams the bytes through the app, for clients that **cannot** follow
   redirects — e.g. the InkplateLibrary image loader, which defaults to no-follow.
+- **`temp_min_spacing`** _(optional, default `4`)_ — cadence knob for temporary
+  (expiring) photos. A temporary photo is shown at most once every this many
+  displays, so its share of screen time is the same whether the gallery has 20
+  photos or 1000. `4` means a single temporary photo takes ~1 in every 4
+  displays. Minimum `2` (one permanent always separates temporaries). This is the
+  default; owners can override it per device from the device **Config** page
+  (reached via the Config button on the devices page), saved to
+  `state/settings.json` with no redeploy. See
+  [How the next image is chosen](#how-the-next-image-is-chosen).
 - **`users`** — web-UI accounts. `password_hash` is a `pbkdf2_sha256` string
   produced by `hash_password.py`. Each user lists the device IDs it may manage.
 
@@ -115,7 +124,7 @@ GET /api/next?device_id=<id>&key=<api_key>&proxy=0
 |---|---|
 | `302 Found` (default) | Redirect (`Location:`) to the blob's own SAS URL. The device pulls the ~1.3&nbsp;MB G16P payload **straight from blob storage**, not through this app. Sent when the device's `serve_mode` is `redirect` (the default) and `proxy=0`. |
 | `200 OK` (inline) | Inline body: the raw image bytes, with `X-Image-Format` (`g16p` or `jpeg`) and the matching `Content-Type`. Sent when the device's `serve_mode` is `inline`, or when `proxy=1` is passed. Use for clients that cannot follow redirects (e.g. Inkplate). |
-| `204 No Content` | No image is queued for this device. The firmware keeps the current panel contents and sleeps. |
+| `204 No Content` | No image is queued for this device, and the gallery is empty. The firmware keeps the current panel contents and sleeps. |
 | `401 Unauthorized` | Unknown `device_id` or `key` mismatch. |
 
 The default 302 path keeps the single-process app off the bulk transfer path.
@@ -126,6 +135,59 @@ downloading the body, so a cache hit skips the blob pull entirely.
 A separate `<image-url>.crc32` change-detection sidecar is part of the firmware
 contract; see the e-paper guide. The device skips a panel refresh when the CRC
 is unchanged.
+
+## How the next image is chosen
+
+Each `/api/next` poll returns exactly one image. Selection is **blob-authoritative**:
+every photo's lifecycle state (`permanent`, `expires_at`, `last_shown_at`) is
+stamped as metadata on the image blob itself, so a single List Blobs call decides
+the next image regardless of gallery size. The only soft-state is the disposable
+`state/queue.json` (explicit "show next" order) and `state/schedule.json` (the
+temporary-slot countdown) — losing either just restarts cadence, never loses a
+photo.
+
+Selection runs in two tiers:
+
+1. **Queue (explicit).** A freshly uploaded or "Show next" photo jumps to the
+   front of the queue and is served once, next.
+2. **Two-bucket rotation.** Everything else splits into two buckets by lifecycle:
+
+   | Bucket | Photos | Behaviour |
+   |---|---|---|
+   | **Permanent** | `permanent`, no expiry | The everyday pool; least-recently-shown rotates evenly. |
+   | **Temporary** | `permanent` with an `expires_at` | Short-lived photos to feature while they last; auto-removed at expiry. |
+
+   The two buckets interleave round-robin, but temporary slots are **spaced** so
+   any single temporary photo appears at most once every `temp_min_spacing` (`n`)
+   displays. The temporary slot fires every `max(2, ceil(n / k))` displays for
+   `k` temporary photos, which they share fairly (least-recently-shown within the
+   bucket).
+
+The key property: a temporary photo's share of screen time depends on `n`, **not
+on the size of the permanent pool**. With `n = 4`, one temporary photo holds ~25%
+of displays whether there are 20 permanent photos or 1000 — a guarantee a simple
+"boost weight" cannot make (its share dilutes as `boost / pool`). One permanent
+always separates temporaries, so the bucket caps at 50% (`n = 2`).
+
+The knob `n` defaults from the device's `temp_min_spacing` config and can be
+retuned per device from the device **Config** page; the override is stored as
+disposable soft-state in `state/settings.json` and falls back to the config
+default if absent. The gallery badges each temporary photo with its remaining
+lifetime so owners can see what is in the temporary bucket.
+
+```text
+n=4, 1 temporary photo:   T P P P  T P P P  T P P P   (temp = 25%)
+n=3, 2 temporary photos:  T1 P  T2 P  T1 P  T2 P      (each temp = 25%, bucket = 50%)
+```
+
+Two offline tools model this exact logic (the same pure `bucket_schedule_pick`
+the server uses, no Azure needed):
+
+```bash
+python3 simulate_selection.py --perm 20 --temp 1 --n 4   # watch the interleave + shares
+python3 sweep_selection.py --temp 1 --n 4                # prove temp share is pool-independent
+python3 tests/test_selection.py                          # unit tests for the pure core
+```
 
 ## Image format: G16P (and JPEG)
 

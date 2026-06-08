@@ -25,6 +25,9 @@
       <div class="card-footer bg-transparent d-flex gap-2">
         <a class="btn btn-sm btn-primary" href="/photos?device_id={{ device.id }}">Gallery</a>
         <a class="btn btn-sm btn-outline-secondary" href="/upload?device_id={{ device.id }}">Upload</a>
+        {% if not device.missing %}
+        <a class="btn btn-sm btn-outline-secondary ms-auto" href="/settings?device_id={{ device.id }}">Config</a>
+        {% endif %}
       </div>
     </div>
   </div>

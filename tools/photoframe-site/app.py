@@ -168,11 +168,15 @@ def gallery(request: Request, device_id: str) -> Response:
         # valid), but to the user the image is spent and should be gone.
         if not meta.get("permanent", False) and meta.get("served_at"):
             continue
+        expires_at = meta.get("expires_at")
+        expires_in, expired = _expiry_label(expires_at)
         items.append({
             "id": image_id,
             "caption": meta.get("caption", ""),
             "permanent": bool(meta.get("permanent", False)),
-            "expires_at": meta.get("expires_at"),
+            "expires_at": expires_at,
+            "expires_in": expires_in,
+            "expired": expired,
             "last_shown_at": meta.get("last_shown_at"),
             "uploaded_at": meta.get("uploaded_at"),
             "knobs": meta.get("knobs") or {},
@@ -193,6 +197,30 @@ def gallery(request: Request, device_id: str) -> Response:
         "gallery.html",
         {"request": request, "user": user, "device_id": device_id,
          "items": items, "queue": queue},
+    )
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_form(request: Request, device_id: str) -> Response:
+    """Per-device config page (rotation cadence and other tunables).
+
+    Kept off the gallery so the gallery stays focused on images. Reachable from
+    the Config button on the devices page.
+    """
+    config = cfg.load_config()
+    user = _require_user(request, config)
+    device = _require_device(user, config, device_id)
+
+    effective_spacing, spacing_overridden = _resolve_temp_spacing(device)
+
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {"request": request, "user": user, "device_id": device_id,
+         "temp_min_spacing": effective_spacing,
+         "temp_min_spacing_default": device.temp_min_spacing,
+         "temp_min_spacing_overridden": spacing_overridden,
+         "min_temp_min_spacing": cfg.MIN_TEMP_MIN_SPACING},
     )
 
 
@@ -445,6 +473,35 @@ def photos_queue_clear(
     return RedirectResponse(f"/photos?device_id={device_id}", status_code=303)
 
 
+@app.post("/settings")
+def photos_settings(
+    request: Request,
+    device_id: str = Form(...),
+    temp_min_spacing: str = Form(""),
+    reset: str = Form(""),
+) -> Response:
+    """Save (or reset) the per-device temporary-photo cadence override.
+
+    Persists to disposable blob soft-state (store.write_settings) so owners can
+    tune cadence from the device config page without editing CONFIG_JSON.
+    ``reset`` clears the override, falling back to the device's configured default.
+    """
+    config = cfg.load_config()
+    user = _require_user(request, config)
+    device = _require_device(user, config, device_id)
+    sas = device.container_sas_url
+    settings = store.read_settings(sas)
+    if reset:
+        settings.pop("temp_min_spacing", None)
+    else:
+        try:
+            settings["temp_min_spacing"] = max(cfg.MIN_TEMP_MIN_SPACING, int(temp_min_spacing))
+        except (TypeError, ValueError):
+            pass  # ignore invalid input; keep the current setting
+    store.write_settings(sas, settings)
+    return RedirectResponse(f"/settings?device_id={device_id}", status_code=303)
+
+
 # --- Device API ---------------------------------------------------------------
 
 
@@ -456,7 +513,8 @@ def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
         return Response("Unauthorized", status_code=401)
 
     sas = device.container_sas_url
-    image_id = store.select_next(sas)
+    spacing, _ = _resolve_temp_spacing(device)
+    image_id = store.select_next(sas, temp_min_spacing=spacing)
     if image_id is None:
         return Response(status_code=204)
 
@@ -513,6 +571,51 @@ def healthz() -> Response:
 def _mint_id() -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     return f"{stamp}-{secrets.token_hex(4)}"
+
+
+def _resolve_temp_spacing(device: cfg.Device) -> tuple[int, bool]:
+    """Effective temporary-photo cadence: per-device UI override, else config default.
+
+    The override lives in disposable blob soft-state (store.read_settings) so an
+    owner can tune cadence from the gallery without editing CONFIG_JSON. An
+    absent/invalid override falls back to the device's configured default.
+    Returns (spacing, overridden).
+    """
+    override = store.read_settings(device.container_sas_url).get("temp_min_spacing")
+    if override is None:
+        return device.temp_min_spacing, False
+    try:
+        return max(cfg.MIN_TEMP_MIN_SPACING, int(override)), True
+    except (TypeError, ValueError):
+        return device.temp_min_spacing, False
+
+
+def _expiry_label(expires_at: Optional[str]) -> tuple[Optional[str], bool]:
+    """Human 'time left' string and expired flag for an ISO expiry.
+
+    Returns (label, expired). label is a short 'Nd Nh' / 'Nh Nm' / 'Nm' string
+    while time remains, or None when there is no expiry or it has already passed
+    (callers render an explicit 'Expired' badge for the latter).
+    """
+    if not expires_at:
+        return None, False
+    try:
+        dt = datetime.fromisoformat(expires_at)
+    except ValueError:
+        return None, False
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    secs = int((dt - datetime.now(timezone.utc)).total_seconds())
+    if secs <= 0:
+        return None, True
+    days, rem = divmod(secs, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes = rem // 60
+    if days:
+        return f"{days}d {hours}h", False
+    if hours:
+        return f"{hours}h {minutes}m", False
+    return f"{minutes}m", False
 
 
 def _parse_json_object(raw: str) -> dict:
