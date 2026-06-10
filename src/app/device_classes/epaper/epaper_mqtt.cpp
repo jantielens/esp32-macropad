@@ -68,6 +68,7 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		JsonObject t = doc.createNestedObject("timing");
 		if (timing) {
 				t["boot_to_wifi_ms"]  = timing->boot_to_wifi_ms;
+				t["ntp_sync_ms"]      = timing->ntp_sync_ms;
 				t["crc_retry_count"]  = timing->crc_retry_count;
 				t["crc_to_draw_ms"]   = timing->crc_to_draw_ms;
 				t["draw_to_mqtt_ms"]  = timing->draw_to_mqtt_ms;
@@ -92,7 +93,7 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 }
 
 void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
-		// Publishes twelve retained HA discovery configs for the e-paper
+		// Publishes thirteen retained HA discovery configs for the e-paper
 		// telemetry surfaced under <base>/epaper/state. Entities are NOT marked
 		// entity_category="diagnostic" so they appear together in the main
 		// entity list of the device card; the "E-Paper" name prefix keeps them
@@ -158,6 +159,8 @@ void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
 									 "{{ value_json.timing.total_active_ms }}", "ms", "duration", "measurement");
 		publish_sensor("epaper_boot_to_wifi_ms", "E-Paper Boot to WiFi",
 									 "{{ value_json.timing.boot_to_wifi_ms }}", "ms", "duration", "measurement");
+		publish_sensor("epaper_ntp_sync_ms", "E-Paper NTP Sync Time",
+									 "{{ value_json.timing.ntp_sync_ms }}", "ms", "duration", "measurement");
 		delay(1);
 		publish_sensor("epaper_crc_to_draw_ms", "E-Paper CRC to Draw",
 									 "{{ value_json.timing.crc_to_draw_ms }}", "ms", "duration", "measurement");

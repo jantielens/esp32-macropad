@@ -609,27 +609,29 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		}
 		power_manager_note_wifi_success();
 
-		// Cold boot: kick SNTP so the very first image gets a real timestamp
-		// instead of 1970. Subsequent wakes keep RTC across deep sleep.
-		if (!power_manager_is_deep_sleep_wake()) {
-				configTime(0, 0, "pool.ntp.org");
-				struct tm tm_now;
-				getLocalTime(&tm_now, 2000);
-		}
-
-		// Conditional NTP sync for schedule: only needed if schedule is active and clock is stale.
-		// Fail-open: if NTP times out after 5s, proceed anyway rather than bricking the device.
-		if (g_epaper_config.schedule_hours != 0x00FFFFFF && time(nullptr) < EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
-				LOGI("Epaper", "Schedule active and clock stale; syncing NTP");
+		// Re-sync NTP on every wake (cold boot AND deep-sleep wake). The RTC
+		// clock is driven by the internal RC oscillator, which drifts seconds
+		// per day; since WiFi is already up each cycle, an unconditional resync
+		// is cheap insurance against accumulated drift. Fail-open: if NTP does
+		// not complete within the bounded wait, proceed with the current clock
+		// rather than bricking the refresh. The wait cost is captured in
+		// ntp_sync_ms and published via MQTT so the active-time impact can be
+		// tracked in the field.
+		{
+				static const uint32_t kEpaperNtpMaxWaitMs = 5000;  // ceiling; SNTP startup delay can consume most of this
+				const uint32_t ntp_start = millis();
 				configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-				for (int i = 0; i < 50; ++i) {  // 5s timeout (50 × 100ms)
-						if (time(nullptr) >= EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
+				for (uint32_t waited = 0; waited < kEpaperNtpMaxWaitMs; waited += 100) {
+						if (time(nullptr) >= (time_t)EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
 								break;
 						}
 						delay(100);
 				}
-				if (time(nullptr) < EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
-						LOGW("Epaper", "NTP timeout; proceeding with stale clock (schedule will fail-open)");
+				epaper_timing_last.ntp_sync_ms = millis() - ntp_start;
+				if (time(nullptr) < (time_t)EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
+						LOGW("Epaper", "NTP sync incomplete after %ums; proceeding with stale clock", epaper_timing_last.ntp_sync_ms);
+				} else {
+						LOGI("Epaper", "NTP resync done in %ums", epaper_timing_last.ntp_sync_ms);
 				}
 		}
 
