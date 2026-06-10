@@ -116,6 +116,7 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     JsonObject t = resp.createNestedObject("timing");
     t["boot_to_wifi_ms"] = epaper_timing_last.boot_to_wifi_ms;
     t["wifi_rssi"]       = epaper_timing_last.wifi_rssi;
+    t["ntp_sync_ms"]     = epaper_timing_last.ntp_sync_ms;
     t["crc_to_draw_ms"]  = epaper_timing_last.crc_to_draw_ms;
     t["draw_to_mqtt_ms"] = epaper_timing_last.draw_to_mqtt_ms;
     t["total_active_ms"] = epaper_timing_last.total_active_ms;

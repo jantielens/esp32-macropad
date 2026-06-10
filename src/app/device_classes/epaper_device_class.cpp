@@ -39,6 +39,9 @@ extern MqttManager mqtt_manager;
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <time.h>
+#if HAS_EPAPER_WAKE_BUTTON
+#include <driver/rtc_io.h>  // rtc_gpio_pullup_en for deep-sleep button wake
+#endif
 #if HAS_EPAPER_FRONTLIGHT
 #include <esp_task_wdt.h>
 #endif
@@ -54,6 +57,8 @@ EpaperConfig g_epaper_config = {};
 static const char *kNvsNamespace      = "device_cfg";
 static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
+static const char *kKeyCrcEnabled     = "ep_crc_en";
+static const char *kKeySdCacheEn      = "ep_sd_en";
 static const char *kKeyOverlayEn      = "ep_ovl_en";
 static const char *kKeyOverlayPos     = "ep_ovl_pos";
 static const char *kKeyOverlayCol     = "ep_ovl_col";
@@ -167,6 +172,8 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.epaper_url[0] = '\0';
 		g_epaper_config.epaper_rotation = 0;
 		g_epaper_config.epaper_last_crc32 = 0;
+		g_epaper_config.epaper_crc32_enabled = false;
+		g_epaper_config.epaper_sd_cache_enabled = false;
 		g_epaper_config.epaper_overlay_enabled = false;
 		g_epaper_config.epaper_overlay_position = 3;
 		g_epaper_config.epaper_overlay_color = 0;
@@ -194,6 +201,8 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		g_epaper_config.epaper_rotation = prefs.getUChar(kKeyRotation, 0);
 		if (g_epaper_config.epaper_rotation > 3) g_epaper_config.epaper_rotation = 0;
 		g_epaper_config.epaper_last_crc32 = prefs.getUInt(kKeyCrc32, 0);
+		g_epaper_config.epaper_crc32_enabled = prefs.getBool(kKeyCrcEnabled, false);
+		g_epaper_config.epaper_sd_cache_enabled = prefs.getBool(kKeySdCacheEn, false);
 
 		g_epaper_config.epaper_overlay_enabled = prefs.getBool(kKeyOverlayEn, false);
 		g_epaper_config.epaper_overlay_position = prefs.getUChar(kKeyOverlayPos, 3);
@@ -230,6 +239,8 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putUChar(kKeyRotation, g_epaper_config.epaper_rotation);
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_last_crc32);
+		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_crc32_enabled);
+		prefs.putBool(kKeySdCacheEn, g_epaper_config.epaper_sd_cache_enabled);
 		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_overlay_enabled);
 		prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_overlay_position);
 		prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_overlay_color);
@@ -260,6 +271,15 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) {
 		root["caps"]["epaper"] = true;
 		root["epaper_rotation"] = g_epaper_config.epaper_rotation;
+		root["epaper_crc32_enabled"] = g_epaper_config.epaper_crc32_enabled;
+		root["epaper_sd_cache_enabled"] = g_epaper_config.epaper_sd_cache_enabled;
+		root["epaper_sd_cache_supported"] = (bool)
+#ifdef EPAPER_SD_CS_PIN
+			true
+#else
+			false
+#endif
+			;
 		root["epaper_overlay_enabled"] = g_epaper_config.epaper_overlay_enabled;
 		root["epaper_overlay_position"] = g_epaper_config.epaper_overlay_position;
 		root["epaper_overlay_color"] = g_epaper_config.epaper_overlay_color;
@@ -290,8 +310,11 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 						: (uint8_t)(body["epaper_rotation"] | 0);
 				if (v > 3) v = 0;
 				g_epaper_config.epaper_rotation = v;
-		}
-		if (body.containsKey("epaper_overlay_enabled")) {
+		}		if (body.containsKey("epaper_crc32_enabled")) {
+			g_epaper_config.epaper_crc32_enabled = body["epaper_crc32_enabled"] | false;
+		}		if (body.containsKey("epaper_sd_cache_enabled")) {
+			g_epaper_config.epaper_sd_cache_enabled = body["epaper_sd_cache_enabled"] | false;
+		}		if (body.containsKey("epaper_overlay_enabled")) {
 				g_epaper_config.epaper_overlay_enabled = body["epaper_overlay_enabled"] | false;
 		}
 		if (body.containsKey("epaper_overlay_position")) {
@@ -398,11 +421,28 @@ static void wake_classify_hook(bool *handled, bool *force_config) {
 static void sleep_prepare_hook(uint32_t *seconds_inout) {
 		// E-paper button-only mode: when wake_seconds is 0, keep it at 0 so
 		// power_manager_sleep_for() can skip timer wake and rely on class-owned
-		// wake sources (ext0 here). The core clamps 0->1 only when no class owns
+		// wake sources (ext1 here). The core clamps 0->1 only when no class owns
 		// the active power mode.
 		(void)seconds_inout;
 #if HAS_EPAPER_WAKE_BUTTON
-		esp_sleep_enable_ext0_wakeup((gpio_num_t)EPAPER_BUTTON_PIN, 0);
+		// Match the Seeed reTerminal LowPower_DeepSleep reference: use ext1 (more
+		// robust than ext0 on the ESP32-S3) and enable the RTC-domain pull-up so
+		// the active-low button line stays HIGH while asleep. The board's HW
+		// pull-up is disabled in the RTC domain during deep sleep, so without
+		// rtc_gpio_pullup_en() the line can drift and the falling edge is never
+		// latched -- the press appears to do nothing.
+		const gpio_num_t wake_pin = (gpio_num_t)EPAPER_BUTTON_PIN;
+		rtc_gpio_pullup_en(wake_pin);
+		rtc_gpio_pulldown_dis(wake_pin);
+		// The original ESP32 (Inkplate) only defines ESP_EXT1_WAKEUP_ALL_LOW; the
+		// ANY_LOW logic mode is S3/C-series only. For a single-GPIO wake mask the
+		// two are semantically identical (one selected pin going low satisfies both
+		// "all" and "any"), so pick whichever the target SoC's enum exposes.
+#if CONFIG_IDF_TARGET_ESP32
+		esp_sleep_enable_ext1_wakeup(1ULL << EPAPER_BUTTON_PIN, ESP_EXT1_WAKEUP_ALL_LOW);
+#else
+		esp_sleep_enable_ext1_wakeup(1ULL << EPAPER_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
 #endif
 }
 
@@ -502,28 +542,62 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				});
 		}
 
-		// Low-battery gate: power-cycle the panel briefly to read the cell
-		// voltage before burning ~80 mA on WiFi for 5+ seconds. Below 3.2 V
-		// the panel waveform + radio together risk a brownout reset, so paint
-		// a "low battery" status frame and go back to sleep.
-		if (epaper_driver_begin()) {
+		// Low-battery gate: read the cell voltage before burning ~80 mA on WiFi
+		// for 5+ seconds. Below 3.2 V the panel waveform + radio together risk a
+		// brownout reset, so paint a "low battery" status frame and go back to
+		// sleep. Boards whose battery sense is independent of the panel (E1003)
+		// read the cell up front and then overlap the slow panel init with the
+		// WiFi connect; boards whose sense is gated behind begin() (Inkplate)
+		// must power the panel up first.
+
+		auto low_battery_sleep = [&](uint16_t mv) {
+				const uint8_t pct = epaper_battery_percent(mv);
+				epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
+				epaper_screen_low_battery(mv, pct);
+				epaper_driver_display();
+				epaper_driver_sleep();
+				power_manager_sleep_for(600);
+		};
+
+		bool begin_started = false;  // true once begin_async() has been kicked off
+		if (epaper_driver_battery_ready_before_begin()) {
 				const uint16_t mv = epaper_driver_battery_mv();
+				LOGI("Epaper", "Battery %u mV (early read)", mv);
 				if (mv > 0 && mv < 3200) {
-						const uint8_t pct = epaper_battery_percent(mv);
-						epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
-						epaper_screen_low_battery(mv, pct);
-						epaper_driver_display();
-						epaper_driver_sleep();
-						power_manager_sleep_for(600);
+						epaper_driver_begin();  // bring panel up to paint the status frame
+						low_battery_sleep(mv);
 						return true;
 				}
-				epaper_driver_sleep();
+				// Healthy: start panel init on a background task so it overlaps the
+				// WiFi connect below. Joined before the first draw.
+				epaper_driver_begin_async();
+				begin_started = true;
+		} else if (epaper_driver_begin()) {
+				const uint16_t mv = epaper_driver_battery_mv();
+				LOGI("Epaper", "Battery %u mV", mv);
+				if (mv > 0 && mv < 3200) {
+						low_battery_sleep(mv);
+						return true;
+				}
+				// Healthy: panel already up; leave it powered through the WiFi connect
+				// so the draw-path power_on() collapses to a guarded no-op (the slow
+				// ~1.6 s IT8951 power-on is paid once, here, not again in the draw).
+		} else {
+				LOGW("Epaper", "driver begin returned false");
 		}
 
 		// WiFi -> CRC check -> conditional draw -> sleep. Each checkpoint feeds
 		// the RTC-retained timing budget so the portal can show a per-cycle
-		// breakdown.
+		// breakdown. On early-battery boards the background panel init started
+		// above runs concurrently with this association.
 		const bool connected = wifi_manager_connect(config, true);
+
+		// Ensure panel init has finished (and reap its task) before any later
+		// draw. No-op on boards where begin() ran synchronously above.
+		if (begin_started && !epaper_driver_begin_join()) {
+				LOGW("Epaper", "driver begin returned false");
+		}
+
 		if (!connected) {
 				const uint32_t backoff = power_manager_note_wifi_failure(
 						epaper_current_slot_duration_seconds(),
@@ -535,27 +609,29 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		}
 		power_manager_note_wifi_success();
 
-		// Cold boot: kick SNTP so the very first image gets a real timestamp
-		// instead of 1970. Subsequent wakes keep RTC across deep sleep.
-		if (!power_manager_is_deep_sleep_wake()) {
-				configTime(0, 0, "pool.ntp.org");
-				struct tm tm_now;
-				getLocalTime(&tm_now, 2000);
-		}
-
-		// Conditional NTP sync for schedule: only needed if schedule is active and clock is stale.
-		// Fail-open: if NTP times out after 5s, proceed anyway rather than bricking the device.
-		if (g_epaper_config.schedule_hours != 0x00FFFFFF && time(nullptr) < EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
-				LOGI("Epaper", "Schedule active and clock stale; syncing NTP");
+		// Re-sync NTP on every wake (cold boot AND deep-sleep wake). The RTC
+		// clock is driven by the internal RC oscillator, which drifts seconds
+		// per day; since WiFi is already up each cycle, an unconditional resync
+		// is cheap insurance against accumulated drift. Fail-open: if NTP does
+		// not complete within the bounded wait, proceed with the current clock
+		// rather than bricking the refresh. The wait cost is captured in
+		// ntp_sync_ms and published via MQTT so the active-time impact can be
+		// tracked in the field.
+		{
+				static const uint32_t kEpaperNtpMaxWaitMs = 5000;  // ceiling; SNTP startup delay can consume most of this
+				const uint32_t ntp_start = millis();
 				configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-				for (int i = 0; i < 50; ++i) {  // 5s timeout (50 × 100ms)
-						if (time(nullptr) >= EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
+				for (uint32_t waited = 0; waited < kEpaperNtpMaxWaitMs; waited += 100) {
+						if (time(nullptr) >= (time_t)EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
 								break;
 						}
 						delay(100);
 				}
-				if (time(nullptr) < EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
-						LOGW("Epaper", "NTP timeout; proceeding with stale clock (schedule will fail-open)");
+				epaper_timing_last.ntp_sync_ms = millis() - ntp_start;
+				if (time(nullptr) < (time_t)EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
+						LOGW("Epaper", "NTP sync incomplete after %ums; proceeding with stale clock", epaper_timing_last.ntp_sync_ms);
+				} else {
+						LOGI("Epaper", "NTP resync done in %ums", epaper_timing_last.ntp_sync_ms);
 				}
 		}
 
@@ -563,8 +639,20 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		epaper_timing_last.boot_to_wifi_ms = t_wifi_done;
 		epaper_timing_last.wifi_rssi = (int16_t)WiFi.RSSI();
 
-		// Schedule check BEFORE image fetch: if disabled at this hour, sleep and skip refresh
-		if (g_epaper_config.schedule_hours != 0x00FFFFFF) {
+		// A WAKE-button press always wins over the schedule: the user is
+		// actively looking at the panel and expects fresh content, so a button
+		// wake bypasses the schedule gate below and forces a refresh even
+		// outside the enabled hours.
+		const bool cold_boot = !power_manager_is_deep_sleep_wake();
+#if HAS_EPAPER_WAKE_BUTTON
+		const bool button_wake = epaper_button_is_button_wake();
+#else
+		const bool button_wake = false;
+#endif
+
+		// Schedule check BEFORE image fetch: if disabled at this hour, sleep and
+		// skip refresh. Skipped on a button wake so the button always refreshes.
+		if (g_epaper_config.schedule_hours != 0x00FFFFFF && !button_wake) {
 				if (!epaper_schedule_should_refresh(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr))) {
 						uint32_t sleep_s = epaper_schedule_seconds_to_next(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr));
 						LOGI("Epaper", "Schedule: disabled at this hour; sleeping %u seconds", sleep_s);
@@ -577,12 +665,12 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// splash, so a CRC-match skip would leave the user staring at the
 		// splash. Button wakes also force a refresh -- the user is actively
 		// looking at the panel and expects fresh content.
-		const bool cold_boot = !power_manager_is_deep_sleep_wake();
 #if HAS_EPAPER_WAKE_BUTTON
-		const bool force_refresh = cold_boot || epaper_button_is_button_wake();
+		const bool force_refresh = cold_boot || button_wake;
 #else
 		const bool force_refresh = cold_boot;
 #endif
+
 
 		if (!epaper_resolve_current_url()) {
 				LOGW("Epaper", "Refresh skipped: no carousel URL configured");
@@ -735,12 +823,14 @@ void epaper_device_class_register() {
 // whole device class lives in one folder.
 #include "epaper/epaper_crc32.cpp"
 #include "epaper/epaper_carousel.cpp"
+#include "epaper/epaper_http.cpp"
 #include "epaper/epaper_drivers.cpp"
 #include "epaper/epaper_mqtt.cpp"
 #include "epaper/epaper_overlay.cpp"
 #include "epaper/epaper_refresh.cpp"
 #include "epaper/epaper_schedule.cpp"
 #include "epaper/epaper_screens.cpp"
+#include "epaper/epaper_sd_cache.cpp"
 #include "epaper/epaper_timing.cpp"
 
 #endif // HAS_EPAPER

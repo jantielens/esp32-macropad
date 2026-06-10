@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 213
+Total flags: 221
 
 ### Features (HAS_*)
 
@@ -35,6 +35,7 @@ Total flags: 213
 - **HAS_DISPLAY** default: `false` — Enable display + LVGL UI support.
 - **HAS_EPAPER** default: `false` — Enable the e-paper refresh path and E-Paper portal page.
 - **HAS_EPAPER_FRONTLIGHT** default: `false` — Enable e-paper frontlight control on boards with frontlight hardware.
+- **HAS_EPAPER_VCOM** default: `false` — Enable the portal VCOM calibration page (TPS65186/Inkplate panels only).
 - **HAS_EPAPER_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext0 wake plus short/long press).
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
@@ -64,7 +65,12 @@ Total flags: 213
 
 - **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin.
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
+- **EPAPER_BATTERY_ADC_PIN** default: `(no default)` — ADC pin for the battery sense divider (GPIO1 on the E1003).
+- **EPAPER_BATTERY_ENABLE_PIN** default: `(no default)` — Drive HIGH ~5ms before sampling to gate the battery divider on (GPIO40 on E1003).
 - **EPAPER_BUTTON_PIN** default: `36` — (typical Inkplate wiring uses GPIO36 with an external pullup).
+- **EPAPER_SD_CS_PIN** default: `(no default)` — default; enable via the portal (Image & Schedule -> "Cache images on SD").
+- **EPAPER_SD_DET_PIN** default: `(no default)` — microSD card-detect input (reads LOW when a card is inserted).
+- **EPAPER_SD_EN_PIN** default: `(no default)` — microSD power-enable gate (drive HIGH ~5 ms before mounting the card).
 - **HX711_DOUT_PIN** default: `-1` — HX711 data-out pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **HX711_SCK_PIN** default: `-1` — HX711 clock pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.
@@ -162,6 +168,7 @@ Total flags: 213
 - **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
+- **EPAPER_BATTERY_DIVIDER** default: `(no default)` — Voltage divider ratio applied to the raw ADC millivolt reading.
 - **EPAPER_FAST_REFRESH** default: `false` — button wakes skip straight to the image fetch to avoid the second waveform.
 - **HEALTH_HISTORY_ENABLED** default: `1` — Enable device-side health history ring buffer for charting in the web portal
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
@@ -249,6 +256,7 @@ Total flags: 213
 - **TSL2591_I2C_BUS** default: `0` — reads off the touch controller's bus so metering never blocks touch polling.
 - **UI_SCALE_TIER** default: `UI_SCALE_MEDIUM` — Default UI scale tier (boards override in board_overrides.h)
 - **USE_SD_STORAGE** default: `false` — flash cache-disable starving the framebuffer DMA.
+- **WIFI_CACHED_RSSI_FLOOR_DBM** default: `-78` — installation that always sits at the edge of one AP.
 - **WIFI_REBOOT_AFTER_MS** default: `600000` — Total outage before controlled device reboot.
 - **WIFI_TIER1_DURATION_MS** default: `60000` — Tier 1: SDK auto-reconnect window — device takes no active reconnect action.
 - **WIFI_TIER2_BACKOFF_BASE_MS** default: `10000` — Tier 2 exponential backoff: initial retry interval.
@@ -260,20 +268,22 @@ Total flags: 213
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
-| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
-| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  |  | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
+| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -293,6 +303,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | — | — |
 | inkplate5v2 | — | — |
+| inkplate6flick | — | — |
+| reterminal-e1003 | — | — |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)
@@ -477,7 +489,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/components/epaper_overlay_component.cpp
   - src/app/device_classes/epaper/components/epaper_status_component.cpp
   - src/app/device_classes/epaper/components/epaper_vcom_component.cpp
-  - src/app/device_classes/epaper/drivers/inkplate5v2_driver.cpp
+  - src/app/device_classes/epaper/drivers/inkplate_driver.cpp
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
   - src/app/device_classes/epaper/epaper_carousel.cpp
   - src/app/device_classes/epaper/epaper_carousel.h
   - src/app/device_classes/epaper/epaper_config.h
@@ -485,6 +498,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_crc32.h
   - src/app/device_classes/epaper/epaper_driver.h
   - src/app/device_classes/epaper/epaper_drivers.cpp
+  - src/app/device_classes/epaper/epaper_http.cpp
+  - src/app/device_classes/epaper/epaper_http.h
   - src/app/device_classes/epaper/epaper_mqtt.cpp
   - src/app/device_classes/epaper/epaper_mqtt.h
   - src/app/device_classes/epaper/epaper_overlay.cpp
@@ -495,15 +510,20 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_schedule.h
   - src/app/device_classes/epaper/epaper_screens.cpp
   - src/app/device_classes/epaper/epaper_screens.h
+  - src/app/device_classes/epaper/epaper_sd_cache.cpp
+  - src/app/device_classes/epaper/epaper_sd_cache.h
   - src/app/device_classes/epaper/epaper_timing.cpp
   - src/app/device_classes/epaper/epaper_timing.h
   - src/app/device_classes/epaper_device_class.cpp
   - src/app/portal_components.cpp
 - **HAS_EPAPER_FRONTLIGHT**
   - src/app/board_config.h
-  - src/app/device_classes/epaper/drivers/inkplate5v2_driver.cpp
+  - src/app/device_classes/epaper/drivers/inkplate_driver.cpp
   - src/app/device_classes/epaper/epaper_driver.h
   - src/app/device_classes/epaper_device_class.cpp
+- **HAS_EPAPER_VCOM**
+  - src/app/board_config.h
+  - src/app/device_classes/epaper/components/epaper_vcom_component.cpp
 - **HAS_EPAPER_WAKE_BUTTON**
   - src/app/board_config.h
   - src/app/device_classes/epaper/epaper_config.h
@@ -712,10 +732,25 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
 - **DISPLAY_SHAPE**
   - src/app/board_config.h
+- **EPAPER_BATTERY_ADC_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+- **EPAPER_BATTERY_DIVIDER**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+- **EPAPER_BATTERY_ENABLE_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_BUTTON_PIN**
   - src/app/board_config.h
 - **EPAPER_FAST_REFRESH**
   - src/app/board_config.h
+- **EPAPER_SD_CS_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+  - src/app/device_classes/epaper/epaper_sd_cache.cpp
+  - src/app/device_classes/epaper/epaper_sd_cache.h
+  - src/app/device_classes/epaper_device_class.cpp
+- **EPAPER_SD_DET_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+- **EPAPER_SD_EN_PIN**
+  - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
 - **HEALTH_HISTORY_ENABLED**
   - src/app/app.ino
   - src/app/board_config.h
@@ -1063,6 +1098,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS**
   - src/app/board_config.h
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES**
+  - src/app/board_config.h
+- **WIFI_CACHED_RSSI_FLOOR_DBM**
   - src/app/board_config.h
 - **WIFI_MAX_ATTEMPTS**
   - src/app/board_config.h

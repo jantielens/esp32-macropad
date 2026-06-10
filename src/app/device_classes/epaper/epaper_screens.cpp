@@ -140,7 +140,7 @@ void epaper_screen_boot_splash(const char* device_name, const char* version) {
 		snprintf(ver, sizeof(ver), "Firmware %s", version && *version ? version : "(unknown)");
 
 		StatusScreenBuilder()
-				.heading1(device_name && *device_name ? device_name : "Inkplate")
+				.heading1(device_name && *device_name ? device_name : "E-Paper")
 				.spacer()
 				.text(ver)
 				.muted("Connecting to Wi-Fi and fetching latest image…")

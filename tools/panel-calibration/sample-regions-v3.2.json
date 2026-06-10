@@ -1,0 +1,1145 @@
+{
+  "pattern": "e1003-bench-measurement-3-v3.2",
+  "dimensions": {
+    "width": 1872,
+    "height": 1404
+  },
+  "gray16_levels": {
+    "0": "panel black",
+    "15": "panel white"
+  },
+  "fiducial_type": "aruco",
+  "aruco": {
+    "dictionary": "DICT_4X4_50",
+    "marker_size_px": 160,
+    "ids": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "corner_order": "TL,TR,BR,BL (matches cv2.aruco.detectMarkers)"
+  },
+  "sampling_note": "Sample sample_rect regions only; avoid labels, gutters, patch edges and marker quiet zones.",
+  "markers": [
+    {
+      "id": 0,
+      "dictionary": "DICT_4X4_50",
+      "rect": {
+        "x": 64,
+        "y": 64,
+        "w": 160,
+        "h": 160
+      },
+      "corners": [
+        [
+          64,
+          64
+        ],
+        [
+          223,
+          64
+        ],
+        [
+          223,
+          223
+        ],
+        [
+          64,
+          223
+        ]
+      ]
+    },
+    {
+      "id": 1,
+      "dictionary": "DICT_4X4_50",
+      "rect": {
+        "x": 1648,
+        "y": 64,
+        "w": 160,
+        "h": 160
+      },
+      "corners": [
+        [
+          1648,
+          64
+        ],
+        [
+          1807,
+          64
+        ],
+        [
+          1807,
+          223
+        ],
+        [
+          1648,
+          223
+        ]
+      ]
+    },
+    {
+      "id": 2,
+      "dictionary": "DICT_4X4_50",
+      "rect": {
+        "x": 64,
+        "y": 1180,
+        "w": 160,
+        "h": 160
+      },
+      "corners": [
+        [
+          64,
+          1180
+        ],
+        [
+          223,
+          1180
+        ],
+        [
+          223,
+          1339
+        ],
+        [
+          64,
+          1339
+        ]
+      ]
+    },
+    {
+      "id": 3,
+      "dictionary": "DICT_4X4_50",
+      "rect": {
+        "x": 1648,
+        "y": 1180,
+        "w": 160,
+        "h": 160
+      },
+      "corners": [
+        [
+          1648,
+          1180
+        ],
+        [
+          1807,
+          1180
+        ],
+        [
+          1807,
+          1339
+        ],
+        [
+          1648,
+          1339
+        ]
+      ]
+    }
+  ],
+  "reference_patches": [
+    {
+      "id": "top_left_black",
+      "location": "top_left",
+      "role": "black",
+      "level": 0,
+      "rect": {
+        "x": 260,
+        "y": 84,
+        "w": 104,
+        "h": 104
+      },
+      "sample_rect": {
+        "x": 281,
+        "y": 105,
+        "w": 62,
+        "h": 62
+      }
+    },
+    {
+      "id": "top_left_white",
+      "location": "top_left",
+      "role": "white",
+      "level": 15,
+      "rect": {
+        "x": 378,
+        "y": 84,
+        "w": 104,
+        "h": 104
+      },
+      "sample_rect": {
+        "x": 399,
+        "y": 105,
+        "w": 62,
+        "h": 62
+      }
+    },
+    {
+      "id": "top_right_black",
+      "location": "top_right",
+      "role": "black",
+      "level": 0,
+      "rect": {
+        "x": 1390,
+        "y": 84,
+        "w": 104,
+        "h": 104
+      },
+      "sample_rect": {
+        "x": 1411,
+        "y": 105,
+        "w": 62,
+        "h": 62
+      }
+    },
+    {
+      "id": "top_right_white",
+      "location": "top_right",
+      "role": "white",
+      "level": 15,
+      "rect": {
+        "x": 1508,
+        "y": 84,
+        "w": 104,
+        "h": 104
+      },
+      "sample_rect": {
+        "x": 1529,
+        "y": 105,
+        "w": 62,
+        "h": 62
+      }
+    },
+    {
+      "id": "bottom_left_black",
+      "location": "bottom_left",
+      "role": "black",
+      "level": 0,
+      "rect": {
+        "x": 260,
+        "y": 1196,
+        "w": 104,
+        "h": 104
+      },
+      "sample_rect": {
+        "x": 281,
+        "y": 1217,
+        "w": 62,
+        "h": 62
+      }
+    },
+    {
+      "id": "bottom_left_white",
+      "location": "bottom_left",
+      "role": "white",
+      "level": 15,
+      "rect": {
+        "x": 378,
+        "y": 1196,
+        "w": 104,
+        "h": 104
+      },
+      "sample_rect": {
+        "x": 399,
+        "y": 1217,
+        "w": 62,
+        "h": 62
+      }
+    },
+    {
+      "id": "bottom_right_black",
+      "location": "bottom_right",
+      "role": "black",
+      "level": 0,
+      "rect": {
+        "x": 1390,
+        "y": 1196,
+        "w": 104,
+        "h": 104
+      },
+      "sample_rect": {
+        "x": 1411,
+        "y": 1217,
+        "w": 62,
+        "h": 62
+      }
+    },
+    {
+      "id": "bottom_right_white",
+      "location": "bottom_right",
+      "role": "white",
+      "level": 15,
+      "rect": {
+        "x": 1508,
+        "y": 1196,
+        "w": 104,
+        "h": 104
+      },
+      "sample_rect": {
+        "x": 1529,
+        "y": 1217,
+        "w": 62,
+        "h": 62
+      }
+    }
+  ],
+  "checkerboard": {
+    "id": "registration_checkerboard",
+    "rect": {
+      "x": 880,
+      "y": 1200,
+      "w": 112,
+      "h": 112
+    },
+    "cells": 4,
+    "cell_size": 28,
+    "top_left_level": 0,
+    "vertical_edges_x": [
+      880,
+      908,
+      936,
+      964,
+      992
+    ],
+    "horizontal_edges_y": [
+      1200,
+      1228,
+      1256,
+      1284,
+      1312
+    ]
+  },
+  "wedge": {
+    "orientation": "vertical_bars_left_to_right_0_to_F",
+    "rect": {
+      "x": 72,
+      "y": 336,
+      "w": 1728,
+      "h": 744
+    },
+    "bars": [
+      {
+        "id": "bar_00",
+        "label": "0",
+        "level": 0,
+        "rect": {
+          "x": 72,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 81,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_01",
+        "label": "1",
+        "level": 1,
+        "rect": {
+          "x": 180,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 189,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_02",
+        "label": "2",
+        "level": 2,
+        "rect": {
+          "x": 288,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 297,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_03",
+        "label": "3",
+        "level": 3,
+        "rect": {
+          "x": 396,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 405,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_04",
+        "label": "4",
+        "level": 4,
+        "rect": {
+          "x": 504,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 513,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_05",
+        "label": "5",
+        "level": 5,
+        "rect": {
+          "x": 612,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 621,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_06",
+        "label": "6",
+        "level": 6,
+        "rect": {
+          "x": 720,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 729,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_07",
+        "label": "7",
+        "level": 7,
+        "rect": {
+          "x": 828,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 837,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_08",
+        "label": "8",
+        "level": 8,
+        "rect": {
+          "x": 936,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 945,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_09",
+        "label": "9",
+        "level": 9,
+        "rect": {
+          "x": 1044,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1053,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_10",
+        "label": "A",
+        "level": 10,
+        "rect": {
+          "x": 1152,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1161,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_11",
+        "label": "B",
+        "level": 11,
+        "rect": {
+          "x": 1260,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1269,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_12",
+        "label": "C",
+        "level": 12,
+        "rect": {
+          "x": 1368,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1377,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_13",
+        "label": "D",
+        "level": 13,
+        "rect": {
+          "x": 1476,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1485,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_14",
+        "label": "E",
+        "level": 14,
+        "rect": {
+          "x": 1584,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1593,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      },
+      {
+        "id": "bar_15",
+        "label": "F",
+        "level": 15,
+        "rect": {
+          "x": 1692,
+          "y": 336,
+          "w": 76,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1701,
+          "y": 425,
+          "w": 58,
+          "h": 566
+        }
+      }
+    ],
+    "white_rails": [
+      {
+        "id": "white_rail_00",
+        "level": 15,
+        "rect": {
+          "x": 154,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 159,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_01",
+        "level": 15,
+        "rect": {
+          "x": 262,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 267,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_02",
+        "level": 15,
+        "rect": {
+          "x": 370,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 375,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_03",
+        "level": 15,
+        "rect": {
+          "x": 478,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 483,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_04",
+        "level": 15,
+        "rect": {
+          "x": 586,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 591,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_05",
+        "level": 15,
+        "rect": {
+          "x": 694,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 699,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_06",
+        "level": 15,
+        "rect": {
+          "x": 802,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 807,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_07",
+        "level": 15,
+        "rect": {
+          "x": 910,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 915,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_08",
+        "level": 15,
+        "rect": {
+          "x": 1018,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1023,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_09",
+        "level": 15,
+        "rect": {
+          "x": 1126,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1131,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_10",
+        "level": 15,
+        "rect": {
+          "x": 1234,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1239,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_11",
+        "level": 15,
+        "rect": {
+          "x": 1342,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1347,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_12",
+        "level": 15,
+        "rect": {
+          "x": 1450,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1455,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_13",
+        "level": 15,
+        "rect": {
+          "x": 1558,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1563,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_14",
+        "level": 15,
+        "rect": {
+          "x": 1666,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1671,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      },
+      {
+        "id": "white_rail_15",
+        "level": 15,
+        "rect": {
+          "x": 1774,
+          "y": 336,
+          "w": 26,
+          "h": 744
+        },
+        "sample_rect": {
+          "x": 1779,
+          "y": 485,
+          "w": 16,
+          "h": 446
+        }
+      }
+    ],
+    "label_rects": [
+      {
+        "x": 83,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 191,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 299,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 407,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 515,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 623,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 731,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 839,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 947,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 1055,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 1163,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 1271,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 1379,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 1487,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 1595,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      },
+      {
+        "x": 1703,
+        "y": 346,
+        "w": 54,
+        "h": 38
+      }
+    ]
+  },
+  "uniformity_patch": {
+    "id": "mid_gray_8_uniformity",
+    "level": 8,
+    "rect": {
+      "x": 1140,
+      "y": 96,
+      "w": 200,
+      "h": 80
+    },
+    "sample_rect": {
+      "x": 1170,
+      "y": 108,
+      "w": 140,
+      "h": 56
+    }
+  },
+  "dither_ramp": {
+    "id": "fs_dithered_0_to_15_ramp",
+    "rect": {
+      "x": 540,
+      "y": 96,
+      "w": 560,
+      "h": 80
+    },
+    "method": "Floyd-Steinberg using the existing linear nearest_gray16 quantizer",
+    "comparison_regions": [
+      {
+        "id": "dither_bin_00",
+        "nominal_level": 0,
+        "sample_rect": {
+          "x": 548,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_01",
+        "nominal_level": 1,
+        "sample_rect": {
+          "x": 583,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_02",
+        "nominal_level": 2,
+        "sample_rect": {
+          "x": 618,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_03",
+        "nominal_level": 3,
+        "sample_rect": {
+          "x": 653,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_04",
+        "nominal_level": 4,
+        "sample_rect": {
+          "x": 688,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_05",
+        "nominal_level": 5,
+        "sample_rect": {
+          "x": 723,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_06",
+        "nominal_level": 6,
+        "sample_rect": {
+          "x": 758,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_07",
+        "nominal_level": 7,
+        "sample_rect": {
+          "x": 793,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_08",
+        "nominal_level": 8,
+        "sample_rect": {
+          "x": 828,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_09",
+        "nominal_level": 9,
+        "sample_rect": {
+          "x": 863,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_10",
+        "nominal_level": 10,
+        "sample_rect": {
+          "x": 898,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_11",
+        "nominal_level": 11,
+        "sample_rect": {
+          "x": 933,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_12",
+        "nominal_level": 12,
+        "sample_rect": {
+          "x": 968,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_13",
+        "nominal_level": 13,
+        "sample_rect": {
+          "x": 1003,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_14",
+        "nominal_level": 14,
+        "sample_rect": {
+          "x": 1038,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      },
+      {
+        "id": "dither_bin_15",
+        "nominal_level": 15,
+        "sample_rect": {
+          "x": 1073,
+          "y": 120,
+          "w": 19,
+          "h": 32
+        }
+      }
+    ]
+  },
+  "layout_rationale": [
+    "Four ArUco markers (DICT_4X4_50) pushed to a 64px corner margin define the coordinate frame with a wide, well-conditioned baseline.",
+    "The 16-bar wedge claims the entire interior between the markers (full width, ~744px tall) so each bar has a large pixel population for glare-robust estimation.",
+    "v3.2: each gray bar is narrowed and paired with a full-height white rail (level 15) separated by a guard gap, giving a co-located white reference at every bar's own y so the sampler can fit a quadratic-in-y white field that models the centre illumination hump (fixes highlight clamp).",
+    "Black/white reference pairs sit near the four interior corners (top and bottom bands) and feed the residual black bilinear lighting field.",
+    "Diagnostics (mid-gray uniformity patch, FS dither ramp) live in the top band; the registration checkerboard sits in the bottom band centre.",
+    "Bar labels are drawn inside the top inset of each bar, never within the sampled region."
+  ]
+}

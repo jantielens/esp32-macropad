@@ -105,6 +105,13 @@
 #define HAS_EPAPER_FRONTLIGHT false
 #endif
 
+// Only TPS65186-backed panels (Inkplate) expose a user-programmable VCOM;
+// panels that manage VCOM internally (e.g. IT8951) leave this false.
+// Enable the portal VCOM calibration page (TPS65186/Inkplate panels only).
+#ifndef HAS_EPAPER_VCOM
+#define HAS_EPAPER_VCOM false
+#endif
+
 // E-paper full-refresh speed classification. When true, the boot path shows
 // a short "Refreshing" splash on button wakes (OG inkplate-dashboard pattern).
 // When false (default — most e-paper panels need 6-10 s per full refresh),
@@ -181,6 +188,16 @@
 // Tier 2 exponential backoff: maximum retry interval cap.
 #ifndef WIFI_TIER2_BACKOFF_MAX_MS
 #define WIFI_TIER2_BACKOFF_MAX_MS 60000
+#endif
+
+// Minimum acceptable RSSI (dBm) for a cached-AP fast connect on a warm wake.
+// Above this floor the cached BSSID connect is accepted and the scan skipped;
+// at or below it the cached AP is treated as too weak and a full scan runs to
+// find a stronger AP. Conservative default so a stationary device with a decent
+// link never pays the scan cost. A board may lower it (e.g. -82) for a fixed
+// installation that always sits at the edge of one AP.
+#ifndef WIFI_CACHED_RSSI_FLOOR_DBM
+#define WIFI_CACHED_RSSI_FLOOR_DBM -78
 #endif
 
 // ============================================================================

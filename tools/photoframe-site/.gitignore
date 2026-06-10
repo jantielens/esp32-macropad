@@ -1,0 +1,6 @@
+# Local secrets / config — never commit
+config.local.json
+.secret_key
+.venv/
+__pycache__/
+*.pyc

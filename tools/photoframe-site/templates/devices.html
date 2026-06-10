@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Devices · Photoframe{% endblock %}
+{% block content %}
+<h1 class="h3 page-title mb-4">Your devices</h1>
+{% if devices %}
+<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
+  {% for device in devices %}
+  <div class="col">
+    <div class="card app-card h-100">
+      <div class="card-body">
+        <h2 class="h5 card-title mb-2">{{ device.id }}</h2>
+        {% if device.missing %}
+        <span class="badge rounded-pill text-bg-danger">Not configured</span>
+        {% else %}
+        <div class="d-flex flex-wrap gap-1">
+          <span class="badge rounded-pill {{ 'text-bg-info' if device.format == 'jpeg' else 'text-bg-secondary' }}"
+                title="Output format">{{ device.format_label }}</span>
+          <span class="badge rounded-pill text-bg-light border" title="Panel resolution">{{ device.resolution }}</span>
+          {% if device.jpeg_quality %}
+          <span class="badge rounded-pill text-bg-light border" title="JPEG quality">Q{{ device.jpeg_quality }}</span>
+          {% endif %}
+        </div>
+        <dl class="row small text-body-secondary mb-0 mt-3 g-0">
+          <dt class="col-7 fw-normal">Featured spacing</dt>
+          <dd class="col-5 text-end mb-1">
+            {{ device.temp_min_spacing }}{% if device.temp_min_spacing_overridden %}<span class="badge text-bg-secondary ms-1" title="Overrides the config default">override</span>{% endif %}
+          </dd>
+          <dt class="col-7 fw-normal">Fresh window</dt>
+          <dd class="col-5 text-end mb-1">
+            {{ device.fresh_window_days }}d{% if device.fresh_window_days_overridden %}<span class="badge text-bg-secondary ms-1" title="Overrides the config default">override</span>{% endif %}
+          </dd>
+          <dt class="col-7 fw-normal">Max featured share</dt>
+          <dd class="col-5 text-end mb-0">
+            {{ device.max_temp_share_pct }}%{% if device.max_temp_share_pct_overridden %}<span class="badge text-bg-secondary ms-1" title="Overrides the config default">override</span>{% endif %}
+          </dd>
+        </dl>
+        {% endif %}
+      </div>
+      <div class="card-footer bg-transparent d-flex gap-2">
+        <a class="btn btn-sm btn-accent" href="/photos?device_id={{ device.id }}">Gallery</a>
+        <a class="btn btn-sm btn-accent-soft" href="/upload?device_id={{ device.id }}">Upload</a>
+        {% if not device.missing %}
+        <a class="btn btn-sm btn-outline-secondary ms-auto" href="/settings?device_id={{ device.id }}">Config</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">No devices are assigned to your account.</div>
+{% endif %}
+{% endblock %}

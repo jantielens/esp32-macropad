@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+"""Unit tests for the pure two-bucket selection core in store.py.
+
+Standalone (no pytest needed): run `python3 tests/test_selection.py`. Exercises
+temp_slot_spacing, _lru_id, and bucket_schedule_pick -- the pure functions that
+decide what /api/next serves -- without any Azure/blob I/O.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from datetime import datetime, timedelta, timezone
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import store  # noqa: E402
+
+NOW = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _t(minutes: int) -> datetime:
+    """A timestamp `minutes` after NOW (larger = more recently shown)."""
+    return NOW + timedelta(minutes=minutes)
+
+
+# --- temp_slot_spacing --------------------------------------------------------
+
+def test_spacing_single_temp_matches_knob():
+    # 1 temp photo, n=3 -> temp slot every 3 displays (T,P,P).
+    assert store.temp_slot_spacing(3, 1) == 3
+    assert store.temp_slot_spacing(4, 1) == 4
+    assert store.temp_slot_spacing(8, 1) == 8
+
+
+def test_spacing_multiple_temps_share_the_slot():
+    # 2 temps at n=3 -> ceil(3/2)=2 -> T1,P,T2,P (every other display is a temp).
+    assert store.temp_slot_spacing(3, 2) == 2
+    # 4 temps at n=8 -> ceil(8/4)=2.
+    assert store.temp_slot_spacing(8, 4) == 2
+
+
+def test_spacing_floored_at_two():
+    # Alternation caps the bucket at 50%: never less than 2 even for n<2 or big k.
+    assert store.temp_slot_spacing(1, 1) == 2
+    assert store.temp_slot_spacing(2, 1) == 2
+    assert store.temp_slot_spacing(3, 10) == 2
+
+
+# --- _lru_id ------------------------------------------------------------------
+
+def test_lru_prefers_never_shown():
+    items = [("a", _t(5)), ("b", None), ("c", _t(1))]
+    assert store._lru_id(items) == "b"
+
+
+def test_lru_picks_oldest_when_all_shown():
+    items = [("a", _t(5)), ("b", _t(2)), ("c", _t(9))]
+    assert store._lru_id(items) == "b"
+
+
+def test_lru_empty_is_none():
+    assert store._lru_id([]) is None
+
+
+# --- bucket_schedule_pick: fallbacks ------------------------------------------
+
+def test_pick_empty_both_returns_none():
+    chosen, source, cd = store.bucket_schedule_pick([], [], temp_countdown=0, n=4)
+    assert chosen is None and source is None and cd == 0
+
+
+def test_pick_only_permanent_rotates_and_resets_countdown():
+    perm = [("P0", _t(5)), ("P1", _t(1))]
+    chosen, source, cd = store.bucket_schedule_pick(perm, [], temp_countdown=3, n=4)
+    assert chosen == "P1" and source == "permanent"
+    assert cd == 0  # reset so a freshly added temp is immediately due
+
+
+def test_pick_only_temporary_rotates_without_separator():
+    temp = [("T0", _t(5)), ("T1", None)]
+    chosen, source, cd = store.bucket_schedule_pick([], temp, temp_countdown=2, n=4)
+    assert chosen == "T1" and source == "temporary"
+    assert cd == 2  # countdown untouched when there are no permanents
+
+
+# --- bucket_schedule_pick: cadence --------------------------------------------
+
+def test_pick_temp_when_due_sets_spacing_countdown():
+    perm = [("P0", None)]
+    temp = [("T0", None)]
+    chosen, source, cd = store.bucket_schedule_pick(perm, temp, temp_countdown=0, n=3)
+    assert chosen == "T0" and source == "temporary"
+    assert cd == store.temp_slot_spacing(3, 1) - 1 == 2
+
+
+def test_pick_permanent_while_counting_down():
+    perm = [("P0", None)]
+    temp = [("T0", _t(1))]
+    chosen, source, cd = store.bucket_schedule_pick(perm, temp, temp_countdown=2, n=3)
+    assert chosen == "P0" and source == "permanent"
+    assert cd == 1
+
+
+def _run_sequence(perm_ids, temp_ids, *, n, draws):
+    """Drive the scheduler like the simulator does; return the P/T source string."""
+    last_shown = {i: None for i in perm_ids + temp_ids}
+    temp_set = set(temp_ids)
+    countdown = 0
+    clock = NOW
+    out = []
+    for _ in range(draws):
+        perm = [(i, last_shown[i]) for i in perm_ids]
+        temp = [(i, last_shown[i]) for i in temp_ids]
+        chosen, _source, countdown = store.bucket_schedule_pick(
+            perm, temp, temp_countdown=countdown, n=n
+        )
+        out.append((chosen, "T" if chosen in temp_set else "P"))
+        last_shown[chosen] = clock
+        clock = clock + timedelta(minutes=3)
+    return out
+
+
+def test_sequence_single_temp_is_t_then_n_minus_one_p():
+    # n=3, 1 temp -> T,P,P,T,P,P...
+    seq = _run_sequence(["P0", "P1", "P2", "P3"], ["T0"], n=3, draws=9)
+    pattern = "".join(s for _id, s in seq)
+    assert pattern == "TPPTPPTPP"
+
+
+def test_sequence_two_temps_round_robin_the_slot():
+    # n=3, 2 temps -> ceil(3/2)=2 -> T1,P,T2,P,T1,P,... alternating temp identity.
+    seq = _run_sequence(["P0", "P1", "P2", "P3"], ["T0", "T1"], n=3, draws=8)
+    pattern = "".join(s for _id, s in seq)
+    assert pattern == "TPTPTPTP"
+    temp_hits = [cid for cid, s in seq if s == "T"]
+    # The two temporaries alternate fairly (LRU within the bucket).
+    assert temp_hits == ["T0", "T1", "T0", "T1"]
+
+
+def test_sequence_n_two_is_pure_alternation():
+    # n=2, 1 temp -> spacing 2 -> T,P,T,P (50% cap, never two temps in a row).
+    seq = _run_sequence(["P0", "P1"], ["T0"], n=2, draws=6)
+    pattern = "".join(s for _id, s in seq)
+    assert pattern == "TPTPTP"
+
+
+def test_temp_share_is_pool_independent():
+    # The defining property: a temp photo's share depends on n, not pool size.
+    def temp_share(pool: int) -> float:
+        perm_ids = [f"P{i}" for i in range(pool)]
+        seq = _run_sequence(perm_ids, ["T0"], n=4, draws=pool * 8)
+        hits = sum(1 for _id, s in seq if s == "T")
+        return hits / len(seq)
+
+    small = temp_share(20)
+    large = temp_share(500)
+    # Both ~1/4 = 25%, independent of the 25x pool difference.
+    assert abs(small - 0.25) < 0.02
+    assert abs(large - 0.25) < 0.02
+    assert abs(small - large) < 0.02
+
+
+# --- temp_slot_spacing: explicit floor ----------------------------------------
+
+def test_spacing_custom_floor_caps_share():
+    # A higher floor caps the featured bucket below 50%: floor 4 -> >=25% spacing.
+    assert store.temp_slot_spacing(3, 10, 4) == 4   # ceil(3/10)=1 -> floored to 4
+    assert store.temp_slot_spacing(8, 1, 4) == 8     # per-photo spacing still dominates
+    assert store.temp_slot_spacing(2, 10, 1) == 1    # floor 1 allows back-to-back featured
+
+
+# --- share_pct_to_floor -------------------------------------------------------
+
+def test_share_pct_to_floor_maps_percent():
+    # share = 1/floor; floor = ceil(100/pct) keeps actual share <= requested pct.
+    assert store.share_pct_to_floor(50) == 2
+    assert store.share_pct_to_floor(25) == 4
+    assert store.share_pct_to_floor(33) == 4   # 3.03 -> 4 (never exceeds 33%)
+    assert store.share_pct_to_floor(100) == 1
+    assert store.share_pct_to_floor(1) == 100
+
+
+# --- is_fresh -----------------------------------------------------------------
+
+def _perm(uploaded_minutes_ago, *, expires_at=None) -> dict:
+    sel = {"permanent": True, "expires_at": expires_at}
+    if uploaded_minutes_ago is not None:
+        sel["uploaded_at"] = (NOW - timedelta(minutes=uploaded_minutes_ago)).isoformat()
+    return sel
+
+
+def test_is_fresh_within_window():
+    assert store.is_fresh(_perm(60), now=NOW, window_days=7) is True
+
+
+def test_is_fresh_outside_window():
+    assert store.is_fresh(_perm(8 * 24 * 60), now=NOW, window_days=7) is False
+
+
+def test_is_fresh_disabled_window():
+    assert store.is_fresh(_perm(10), now=NOW, window_days=0) is False
+
+
+def test_is_fresh_needs_uploaded_at():
+    assert store.is_fresh(_perm(None), now=NOW, window_days=7) is False
+
+
+def test_is_fresh_temporary_is_not_fresh():
+    # A photo with an expiry is already featured as temporary; never doubled in.
+    sel = _perm(10, expires_at=(NOW + timedelta(hours=1)).isoformat())
+    assert store.is_fresh(sel, now=NOW, window_days=7) is False
+
+
+# --- bucket_schedule_pick: floor ----------------------------------------------
+
+def test_pick_featured_honors_floor():
+    # floor=4 caps the featured bucket at 25%: a due slot resets countdown to 3.
+    perm = [("P0", None)]
+    temp = [("T0", None)]
+    chosen, source, cd = store.bucket_schedule_pick(
+        perm, temp, temp_countdown=0, n=2, floor=4
+    )
+    assert chosen == "T0" and source == "temporary"
+    assert cd == store.temp_slot_spacing(2, 1, 4) - 1 == 3
+
+
+# --- estimate_displays_per_day ------------------------------------------------
+
+def test_displays_per_day_default_without_history():
+    assert store.estimate_displays_per_day([], now=NOW) == 24.0
+    assert store.estimate_displays_per_day([NOW.isoformat()], now=NOW) == 24.0
+
+
+def test_displays_per_day_hourly_history():
+    # Five serves one hour apart -> 24 displays/day.
+    times = [(NOW - timedelta(hours=h)).isoformat() for h in range(5)]
+    assert store.estimate_displays_per_day(times, now=NOW) == 24.0
+
+
+def test_displays_per_day_median_ignores_outlier_gap():
+    # 30-min cadence with one long downtime gap; median stays ~30 min -> 48/day.
+    times = [
+        NOW - timedelta(hours=10),       # outlier gap before this
+        NOW - timedelta(minutes=90),
+        NOW - timedelta(minutes=60),
+        NOW - timedelta(minutes=30),
+        NOW,
+    ]
+    assert store.estimate_displays_per_day(times, now=NOW) == 48.0
+
+
+def test_displays_per_day_ignores_old_history():
+    # Two serves but both older than the lookback window -> fall back to default.
+    times = [(NOW - timedelta(days=30)).isoformat(),
+             (NOW - timedelta(days=29)).isoformat()]
+    assert store.estimate_displays_per_day(times, now=NOW) == 24.0
+
+
+# --- expected_share -----------------------------------------------------------
+
+def test_expected_share_one_featured_among_many_permanents():
+    # n=4, k=1, p=1000 -> featured 1/(s*k)=1/4=25%; each permanent (s-1)/(s*p).
+    feat = store.expected_share(is_featured=True, perm_count=1000, featured_count=1, n=4, floor=2)
+    perm = store.expected_share(is_featured=False, perm_count=1000, featured_count=1, n=4, floor=2)
+    assert abs(feat - 0.25) < 1e-9
+    assert abs(perm - (3 / (4 * 1000))) < 1e-9
+
+
+def test_expected_share_shares_sum_to_one():
+    # Total featured + total permanent share must cover all displays.
+    p, k, n, floor = 50, 3, 4, 2
+    feat = store.expected_share(is_featured=True, perm_count=p, featured_count=k, n=n, floor=floor)
+    perm = store.expected_share(is_featured=False, perm_count=p, featured_count=k, n=n, floor=floor)
+    assert abs(feat * k + perm * p - 1.0) < 1e-9
+
+
+def test_expected_share_no_featured_is_even_permanent():
+    perm = store.expected_share(is_featured=False, perm_count=20, featured_count=0, n=4, floor=2)
+    assert abs(perm - 1 / 20) < 1e-9
+
+
+def test_expected_share_no_permanents_featured_rotate():
+    feat = store.expected_share(is_featured=True, perm_count=0, featured_count=4, n=4, floor=2)
+    assert abs(feat - 1 / 4) < 1e-9
+
+
+def test_expected_share_cap_floor_lowers_featured():
+    # max-share 25% -> floor 4 -> featured slot only every 4 even with 1 featured.
+    feat = store.expected_share(is_featured=True, perm_count=100, featured_count=1, n=2, floor=4)
+    assert abs(feat - 0.25) < 1e-9
+
+
+# --- frequency_label ----------------------------------------------------------
+
+def test_frequency_label_hourly_and_daily():
+    assert store.frequency_label(0.25, 24.0) == "~6\u00d7/day"
+    assert store.frequency_label(1.0, 48.0) == "~2\u00d7/hour"
+
+
+def test_frequency_label_weekly_and_rare():
+    # 0.075% at 24/day -> ~0.0126/day -> interval ~55 days -> "~once every 8 weeks".
+    assert store.frequency_label(0.00075, 24.0) == "~once every 8 weeks"
+    # A bit more often: ~1.5/week.
+    assert store.frequency_label(0.009, 24.0) == "~2\u00d7/week"
+
+
+def test_frequency_label_not_in_rotation():
+    assert store.frequency_label(0.0, 24.0) == "not in rotation"
+
+
+def _collect_tests():
+    return [(name, obj) for name, obj in sorted(globals().items())
+            if name.startswith("test_") and callable(obj)]
+
+
+def main() -> int:
+    failures = 0
+    for name, fn in _collect_tests():
+        try:
+            fn()
+            print(f"ok   {name}")
+        except AssertionError as exc:
+            failures += 1
+            print(f"FAIL {name}: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            failures += 1
+            print(f"ERROR {name}: {exc!r}")
+    total = len(_collect_tests())
+    print(f"\n{total - failures}/{total} passed")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

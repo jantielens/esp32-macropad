@@ -1,17 +1,24 @@
-// Inkplate 5 V2 e-paper driver (Soldered InkplateLibrary).
+// Inkplate e-paper driver (Soldered InkplateLibrary, 3-bit grayscale boards).
 //
-// Only compiled when the board is Inkplate 5V2 and HAS_EPAPER is enabled.
-// Wired into the build through device_classes/epaper/epaper_drivers.cpp.
+// Shared across the Inkplate 3-bit-grayscale targets (Inkplate 5 V2 and
+// Inkplate 6FLICK): both are driven through the same InkplateLibrary
+// `Inkplate(INKPLATE_3BIT)` code path, expose the same TPS65186 PMIC for VCOM,
+// and use the same Adafruit_GFX primitives — only the panel resolution differs
+// (the library auto-detects it from the selected board). Only compiled when the
+// board is one of these Inkplate targets and HAS_EPAPER is enabled. Wired into
+// the build through device_classes/epaper/epaper_drivers.cpp.
 
 #include "board_config.h"
 
-#if HAS_EPAPER && defined(BOARD_INKPLATE5V2)
+#if HAS_EPAPER && (defined(BOARD_INKPLATE5V2) || defined(BOARD_INKPLATE6FLICK))
 
 #include "device_classes/epaper/epaper_driver.h"
+#include "device_classes/epaper/epaper_http.h"
 #include "log_manager.h"
 
 #include <Inkplate.h>
 #include <Wire.h>
+#include <esp_heap_caps.h>
 #include <math.h>
 
 // Bundled Inter fonts. Only included in this implementation .cpp so the
@@ -60,9 +67,22 @@ bool epaper_driver_begin() {
 		s_display->begin();
 		s_display->clearDisplay();
 		s_began = true;
+#if defined(BOARD_INKPLATE6FLICK)
+		LOGI("Epaper", "Inkplate 6FLICK panel initialized (3-bit grayscale)");
+#else
 		LOGI("Epaper", "Inkplate 5 V2 panel initialized (3-bit grayscale)");
+#endif
 		return true;
 }
+
+// No background-init path on this board: begin_async() runs begin() inline and
+// join() returns the cached result. Battery sense is gated behind begin() (the
+// Inkplate library reads it through the panel), so the duty-cycle hook must
+// power the panel up before reading the cell.
+static bool s_begin_result = false;
+void epaper_driver_begin_async() { s_begin_result = epaper_driver_begin(); }
+bool epaper_driver_begin_join() { return s_begin_result; }
+bool epaper_driver_battery_ready_before_begin() { return false; }
 
 void epaper_driver_set_rotation(uint8_t rotation) {
 		if (!s_began || !s_display) return;
@@ -71,13 +91,34 @@ void epaper_driver_set_rotation(uint8_t rotation) {
 
 bool epaper_driver_draw_url(const char* url) {
 		if (!s_began || !s_display || !url || !*url) return false;
-		// InkplateLibrary v11 exposes the auto-format web image loader via the
-		// `display.image` member (Inkplate inherits Image as an aggregated sub-
-		// object on this board, not via base class). Signature:
-		//   bool Image::draw(const char *url, int x, int y, bool dither, bool invert)
-		const bool ok = s_display->image.draw(url, 0, 0, true /*dither*/, false /*invert*/);
+		// Download the image ourselves (the shared epaper_http_download avoids the
+		// InkplateLibrary HTTPS downloader, which crashes on https:// hosts — see
+		// device_classes/epaper/epaper_http.h), then sniff the format from the magic
+		// bytes. We cannot use InkplateLibrary's `image.draw(url, ...)` because it
+		// picks the decoder from the URL's file extension, which a photoframe
+		// "/api/next?device_id=...&key=..." endpoint lacks.
+		uint8_t* buf = nullptr;
+		size_t len = 0;
+		if (!epaper_http_download(url, &buf, &len)) {
+				LOGW("Epaper", "download failed for %s", url);
+				return false;
+		}
+
+		bool ok = false;
+		if (buf[0] == 0xFF && buf[1] == 0xD8 && buf[2] == 0xFF) {
+				ok = s_display->image.drawJpegFromBuffer(buf, (int32_t)len, 0, 0, true /*dither*/, false /*invert*/);
+		} else if (buf[0] == 0x89 && buf[1] == 'P' && buf[2] == 'N' && buf[3] == 'G') {
+				ok = s_display->image.drawPngFromBuffer(buf, (int32_t)len, 0, 0, true /*dither*/, false /*invert*/);
+		} else if (buf[0] == 'B' && buf[1] == 'M') {
+				ok = s_display->image.drawBitmapFromBuffer(buf, 0, 0, true /*dither*/, false /*invert*/);
+		} else {
+				LOGW("Epaper", "unknown image format for %s (magic %02X %02X %02X %02X)",
+				     url, buf[0], buf[1], buf[2], buf[3]);
+		}
+
+		heap_caps_free(buf);
 		if (!ok) {
-				LOGW("Epaper", "image.draw failed for %s", url);
+				LOGW("Epaper", "decode/draw failed for %s", url);
 		}
 		return ok;
 }
@@ -98,6 +139,9 @@ uint16_t epaper_driver_battery_mv() {
 		if (v <= 0.0) return 0;
 		return (uint16_t)(v * 1000.0);
 }
+
+// SD image cache is unsupported on this board (no shared-bus SD slot); the
+// SD-cache HAL vtable resolves to the inline no-ops in epaper_sd_cache.h.
 
 // ---------------------------------------------------------------------------
 // GFX primitives — pass-through to Adafruit_GFX methods inherited by Inkplate.
@@ -421,4 +465,4 @@ void epaper_driver_frontlight_off() {
 }
 #endif // HAS_EPAPER_FRONTLIGHT
 
-#endif // HAS_EPAPER && BOARD_INKPLATE5V2
+#endif // HAS_EPAPER && (BOARD_INKPLATE5V2 || BOARD_INKPLATE6FLICK)

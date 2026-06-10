@@ -89,8 +89,10 @@ ESP32 Macropad runs on these ESP32 development boards:
 | **Guition JC4880P433** | ESP32-P4 | 4.3" IPS LCD | 800 × 480 | Rectangle |
 | **Guition JC1060P470C** | ESP32-P4 | 7.0" IPS LCD | 1024 × 600 | Rectangle |
 | **Soldered Inkplate 5V2** | ESP32 | 5.17" 3-bit grayscale e-paper | 720 × 1280 | Portrait |
+| **Soldered Inkplate 6FLICK** | ESP32 | 6.0" 3-bit grayscale e-paper | 1024 × 758 | Landscape |
+| **Seeed reTerminal E1003** | ESP32-S3 | 10.3" 16-level grayscale e-paper | 1404 × 1872 | Portrait |
 
-Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2 is the current non-touch e-paper target.
+Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are the current non-touch e-paper targets.
 
 ### Device Classes
 
@@ -99,7 +101,7 @@ The firmware auto-detects a device class at build time based on board capability
 | Device Class | Detection | Brand Prefix | SSID Format | Boards |
 |---|---|---|---|---|
 | **Macropad** | `HAS_DISPLAY` (default) | `ESP32 Macropad` | `ESP32-MACROPAD-XXXXXX` | All touch-screen boards listed above |
-| **E-Paper** | `HAS_EPAPER` | `ESP32-MP E-Paper` | `ESP32-MP-EPAPER-XXXXXX` | Inkplate 5V2 |
+| **E-Paper** | `HAS_EPAPER` | `ESP32-MP E-Paper` | `ESP32-MP-EPAPER-XXXXXX` | Inkplate 5V2, Inkplate 6FLICK, Seeed reTerminal E1003 |
 | **Headless** | `!HAS_DISPLAY` | `ESP32-MP Headless` | `ESP32-MP-HEADLESS-XXXXXX` | Sensor-only boards (e.g. `esp32c3-withsensors`) |
 | **Shutter Tester** | `IS_SHUTTER_TESTER` | `ESP32-MP Shutter Tester` | `ESP32-MP-SHUTTER-XXXXXX` | `jc4880p433-shutter` — see [docs/device-classes/shutter-tester/](docs/device-classes/shutter-tester/README.md) |
 | **Coffee Scale** | `IS_COFFEE_SCALE` | `ESP32-MP Coffee Scale` | `ESP32-MP-SCALE-XXXXXX` | `jc4880p433-nau7802`, `jc4880p433-hx711` — see [docs/device-classes/coffee-scale/](docs/device-classes/coffee-scale/README.md) |

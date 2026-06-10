@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-06-01
+ms.date: 2026-06-05
 ms.topic: reference
 ---
 
@@ -11,6 +11,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.20.0] - 2026-06-05
+
+This release grows the **e-paper device class** — introduced in 1.17.0 with the single Inkplate 5V2 board — into a proper multi-board class. Two new panels join it: the **Seeed reTerminal E1003** (10.3" 1404×1872 IT8951 on an ESP32-S3) and the **Soldered Inkplate 6FLICK** (6.0" 1024×758 Inkplate 3-bit on an ESP32 classic). Alongside the boards, this release lands the shared image-transport plumbing that keeps the battery-powered wake path fast on all three: a compressed **G16Z** transport that cuts WiFi bytes by ~2–3×, an optional **SD blob cache** that skips the re-download entirely on a cache hit, a self-hosted HTTPS image downloader (replacing InkplateLibrary's crashing one), and a wake-to-visible path that overlaps panel power-up with the WiFi association.
+
+### Added
+
+#### New e-paper boards
+
+* **Soldered Inkplate 6FLICK e-paper board (`inkplate6flick`)** — a third `epaper` device-class target: a 6.0" 1024×758 3-bit grayscale e-paper touchscreen (frontlight present but left disabled) on an ESP32 classic SoC, sharing the same Soldered InkplateLibrary `INKPLATE_3BIT` code path as the Inkplate 5V2. The two Inkplate boards are now served by a single shared driver (`src/app/device_classes/epaper/drivers/inkplate_driver.cpp`, renamed from `inkplate5v2_driver.cpp`) guarded for both `BOARD_INKPLATE5V2` and `BOARD_INKPLATE6FLICK` — identical image fetch/decode, GFX primitives, and TPS65186 VCOM management, with the panel resolution auto-detected by the library. Wired into the build via `config.sh` (`Inkplate_Boards:esp32:Inkplate6Flick`), GPIO36 wake button, and the shared e-paper duty-cycle runtime. Both Inkplate boards now download images themselves through a shared `epaper_http_download` helper (`HTTPClient` + `WiFiClientSecure::setInsecure()`, cross-host redirect following) and pick the decoder by sniffing the JPEG/PNG/BMP magic bytes, replacing InkplateLibrary's HTTPS downloader, which crashed on `https://` hosts. The bundled [`tools/photoframe-site`](tools/photoframe-site/README.md) reference server now emits baseline 3-component (RGB) JPEG so the Inkplate's bundled TJpgDec decoder accepts it (single-component grayscale JPEGs were rejected); a per-device config entry just selects JPEG output at 1024×758. See [docs/epaper-guide.md](docs/epaper-guide.md).
+* **Seeed reTerminal E1003 e-paper board (`reterminal-e1003`)** — a second `epaper` device-class target: a 10.3" 1404×1872 16-level grayscale panel driven by an IT8951 controller on an ESP32-S3 (XIAO form factor, 32 MB flash + 8 MB OPI PSRAM). The driver is self-contained (raw IT8951 HSPI sequences plus a 4 bpp PSRAM framebuffer wrapped in Adafruit_GFX) and draws dashboard images at the panel's native resolution with no on-device scaling, prioritizing the battery-powered refresh path. It accepts a server-supplied **G16P** payload (pre-dithered 4 bpp packed nibbles, copied straight into the framebuffer) as the fast path, and falls back to decoding a baseline JPEG with JPEGDEC and Floyd–Steinberg dithering on-device. Shares the existing e-paper duty-cycle runtime (scheduled wake, CRC-skip refresh, status overlay, deep sleep) and Refresh-button wake. The portal VCOM page is hidden on this board (`HAS_EPAPER_VCOM=false`, since the IT8951 sets VCOM internally). Seeed_GxEPD2 is git-installed by `setup.sh`; `Adafruit GFX Library` and `JPEGDEC` are added as registry dependencies. See [docs/epaper-guide.md](docs/epaper-guide.md).
+
+#### Shared e-paper image transport
+
+* **SD image cache for e-paper boards** — an optional downloaded-blob cache for e-paper device-class boards that expose a microSD slot on the panel's shared SPI bus, gated by the `EPAPER_SD_CS_PIN` compile-time flag (enabled on `reterminal-e1003`, compiled out on `inkplate5v2`). On a cache hit the firmware reads the cached transport blob (G16Z, or G16P when the server sent an uncompressed frame) from SD and skips the HTTP body download; on a miss the blob is written back to the card on the awake tail so the write stays out of the wake-to-visible path. A **Cache images on SD** portal toggle (NVS key `ep_sd_en`, default off) and a **Clear SD cache** action control it; the toggle is shown only on boards that report the capability. See [docs/epaper-guide.md](docs/epaper-guide.md#sd-image-cache).
+* **Compressed G16Z image transport for e-paper boards** — the e-paper firmware and the bundled [`tools/photoframe-site`](tools/photoframe-site/README.md) reference server support an optional raw-DEFLATE `G16Z` wrapper around the G16P framebuffer (`G16Z` magic + raw DEFLATE of the full G16P bytes). The server compresses each upload when it shrinks the payload, so the device pulls ~0.3–0.5× the bytes off WiFi and inflates into a PSRAM buffer with the ROM's malloc-free tinfl before rendering the reconstructed G16P. Raw (uncompressed) G16P blobs are still accepted. On boards with the SD image cache, the **compressed** transport blob is written back, so a later cache hit skips the re-download and reads only ~0.4 MB off the shared HSPI bus (vs ~1.3 MB for a full G16P) before re-inflating in PSRAM. Added a [`tools/photoframe-site/README.md`](tools/photoframe-site/README.md) documenting the server as a sample reference implementation, and clarified [`tools/panel-calibration/README.md`](tools/panel-calibration/README.md) as one-shot bring-up tooling.
+
+### Changed
+
+* **Faster e-paper wake-to-visible path** — the duty-cycle hook now overlaps the slow panel power-up with the WiFi association instead of running them back to back. On boards whose battery sense is independent of the panel rails (E1003), the cell voltage is read and the low-battery gate runs up front, then panel init runs on a background PSRAM-stack task concurrently with the WiFi connect (two independent buses), shaving roughly the shorter of the two off the critical path. Boards whose battery sense is gated behind panel init (Inkplate) keep the original ordering with no behavior change. The hook also no longer sleeps and re-powers the panel between the healthy-battery gate and the draw, so the ~1.6 s IT8951 power-on is paid once per wake rather than twice. New `epaper_driver_begin_async()` / `epaper_driver_begin_join()` / `epaper_driver_battery_ready_before_begin()` HAL entry points back the overlap.
+* **Cached-AP RSSI floor is now configurable** — the WiFi reconnect path's signal-strength floor for trusting a cached access point is exposed as the `WIFI_CACHED_RSSI_FLOOR_DBM` compile-time flag (default `-78`) instead of a hard-coded constant, so boards with marginal antennas can tune it via `board_overrides.h`. See [docs/compile-time-flags.md](docs/compile-time-flags.md).
+* **WAKE button overrides the e-paper schedule** — a short press of the WAKE button now refreshes the image even when the current local hour is disabled in the hourly schedule. Previously a button wake during a disabled hour went straight back to sleep without drawing; now the button wins and forces the refresh, then normal scheduled sleeping resumes on the next timer wake. Timer wakes still honor the disabled hours.
 
 ## [1.19.0] - 2026-06-01
 

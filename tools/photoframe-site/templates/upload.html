@@ -1,0 +1,1020 @@
+{% extends "base.html" %}
+{% block title %}Upload · {{ device_id }}{% endblock %}
+{% block content %}
+<style>
+  .upload-flow {
+    --accent: #6d28d9;
+    --accent-2: #db2777;
+  }
+  .upload-flow .step {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    background: var(--bs-body-bg);
+    padding: 1.25rem 1.25rem 1.4rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: box-shadow .15s ease, border-color .15s ease;
+  }
+  .upload-flow .step:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 .2rem rgba(109, 40, 217, .15);
+  }
+  .upload-flow .step-head {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin-bottom: .9rem;
+  }
+  .upload-flow .step-num {
+    flex: 0 0 auto;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 2px 6px rgba(109, 40, 217, .35);
+  }
+  .upload-flow .step-title {
+    font-weight: 800;
+    letter-spacing: .02em;
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  .upload-flow .form-control,
+  .upload-flow .form-select {
+    border-radius: .75rem;
+    padding: .7rem .9rem;
+  }
+  .upload-flow .form-range { accent-color: var(--accent); }
+  /* Treat a vertical swipe that starts on a slider as a page scroll, not a drag,
+     so scrolling past the adjustment knobs no longer changes their value by
+     accident. Horizontal drags still adjust the slider. Extra vertical padding
+     widens the dead-zone between rows to make a clean scroll-grab easier. */
+  .upload-flow .form-range {
+    touch-action: pan-y;
+    padding-block: .35rem;
+  }
+  /* Reserved scroll lane: sliders sit in an inset track so a thumb-width strip on
+     each side is always control-free and safe to swipe-scroll past. The faint
+     side tint marks the lane as a scroll target without drawing too much
+     attention. Only the slider is inset; its label and help text stay full width. */
+  .upload-flow .slider-lane {
+    padding-inline: 2.5rem;
+    background:
+      linear-gradient(to right, rgba(109, 40, 217, .05), rgba(109, 40, 217, 0)) left / 2.5rem 100% no-repeat,
+      linear-gradient(to left, rgba(109, 40, 217, .05), rgba(109, 40, 217, 0)) right / 2.5rem 100% no-repeat;
+    border-radius: .5rem;
+  }
+  .upload-flow .slider-lane .form-range { margin-bottom: 0; }
+  .upload-flow input[type="checkbox"].form-check-input:checked {
+    background-color: var(--accent);
+    border-color: var(--accent);
+  }
+  .upload-flow .btn-upload {
+    border: 0;
+    border-radius: .85rem;
+    padding: .85rem 1rem;
+    font-weight: 800;
+    font-size: 1.1rem;
+    letter-spacing: .02em;
+    color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 6px 18px rgba(109, 40, 217, .35);
+    transition: transform .08s ease, box-shadow .15s ease;
+  }
+  .upload-flow .btn-upload:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(109, 40, 217, .45);
+    color: #fff;
+  }
+  .upload-flow .btn-upload:active { transform: translateY(0); }
+  .upload-flow .ghost-link {
+    --bs-btn-color: var(--accent);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  /* Sticky commit bar: always-in-view keep-in-rotation + auto-remove + send.
+     Bold, label-light, big tap targets; opaque so content scrolls beneath it. */
+  .upload-flow .action-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1030;
+    margin: .25rem -.15rem 0;
+    padding: .7rem;
+    padding-bottom: calc(.7rem + env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1.1rem;
+    box-shadow: 0 -8px 28px rgba(17, 12, 34, .16);
+  }
+  .upload-flow .bar-toggle {
+    flex: 0 0 auto;
+    width: 3.1rem;
+    height: 3.1rem;
+    border-radius: .85rem;
+    display: grid;
+    place-items: center;
+    font-size: 1.4rem;
+    cursor: pointer;
+    user-select: none;
+    border: 2px solid var(--accent);
+    background: rgba(109, 40, 217, .12);
+    color: var(--accent);
+    transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, color .12s ease;
+  }
+  .upload-flow .bar-toggle:hover { box-shadow: 0 0 0 .15rem rgba(109, 40, 217, .18); }
+  .upload-flow .bar-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* "Always" state: neutral/grey, since nothing is timed. */
+  .upload-flow .bar-toggle.is-always {
+    border-color: var(--bs-border-color);
+    background: var(--bs-secondary-bg);
+    color: var(--bs-secondary-color);
+  }
+  .upload-flow .bar-life {
+    /* flex-basis 0 (not auto) so width is set by the flex ratio, not the label
+       text; this stops the bar from resizing/jumping as the duration cycles. */
+    flex: 2 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .15rem;
+    height: 3.1rem;
+    padding: 0 .35rem;
+    border-radius: .85rem;
+    border: 2px solid var(--bs-border-color);
+    background: var(--bs-secondary-bg);
+  }
+  .upload-flow .bar-step {
+    flex: 0 0 auto;
+    width: 2.1rem;
+    height: 2.4rem;
+    border: 0;
+    border-radius: .6rem;
+    background: transparent;
+    color: var(--accent);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .upload-flow .bar-step:hover:not(:disabled) { background: rgba(109, 40, 217, .12); }
+  .upload-flow .bar-step:disabled { color: var(--bs-secondary-color); opacity: .35; cursor: default; }
+  .upload-flow .bar-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .upload-flow .bar-life-label {
+    flex: 1 1 auto;
+    text-align: center;
+    font-weight: 800;
+    font-size: 1.05rem;
+    letter-spacing: .01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .upload-flow .action-bar .btn-upload {
+    /* Content-independent basis so the send button keeps a steady width as the
+       duration label cycles; smaller grow than .bar-life so it stays compact. */
+    flex: 1 1 0;
+    height: 3.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.02rem;
+    padding: .25rem .9rem;
+    box-shadow: 0 4px 14px rgba(109, 40, 217, .35);
+  }
+  /* Sticky preview: pinned to the top edge so the image stays in view while the
+     user scrolls down to the adjustment knobs (Excel-style frozen row). The
+     wrapper is full-width and opaque so scrolled content is covered behind the
+     centered image; a soft bottom shadow separates it from the content beneath. */
+  .upload-flow .preview-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    /* No bottom padding: when pinned, any bottom padding renders as a strip of
+       wrapper background below the dark preview box -- the "chin" that only
+       shows once the preview clamps to the top. The box's own rounded corners
+       and the pinned box-shadow provide the separation from content beneath. */
+    padding: .4rem 0 0;
+    background: var(--bs-body-bg);
+    /* Round the bottom corners so the opaque cover (and its shadow) that content
+       slides under matches the rounded preview instead of showing hard edges. */
+    border-bottom-left-radius: var(--bs-border-radius-lg, .5rem);
+    border-bottom-right-radius: var(--bs-border-radius-lg, .5rem);
+  }
+  .upload-flow .preview-sticky.is-pinned {
+    box-shadow: 0 10px 22px -12px rgba(17, 12, 34, .45);
+  }
+  /* Width-first sizing so aspect-ratio is always honored: the box fills the
+     column width and derives its height from the device aspect, capped via
+     max-width so the height never exceeds ~46vh. This keeps the box exactly at
+     the panel aspect on every viewport (no gray letterbox from object-fit), and
+     the drag-to-frame pointer math stays exact. */
+  .upload-flow .preview-box {
+    position: relative;
+    aspect-ratio: var(--dev-aspect, 4 / 3);
+    width: 100%;
+    max-width: calc(46vh * var(--dev-aspect, 4 / 3));
+    margin-inline: auto;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: grab;
+    /* Edge definition via outline, not border: the canvas is absolutely
+       positioned at inset:0 (the padding box), so a real border would inset the
+       canvas and leave the dark box showing as a 1px "chin" below the image.
+       outline sits outside the box model and traces the rounded edge with no
+       layout effect, so the canvas covers the full box. */
+    outline: var(--bs-border-width, 1px) solid var(--bs-border-color, rgba(0, 0, 0, .15));
+    outline-offset: calc(-1 * var(--bs-border-width, 1px));
+  }
+  #send-overlay {
+    /* --accent lives on .upload-flow; this overlay is outside that scope, so
+       redeclare the accents here or the progress-bar gradient resolves to nothing. */
+    --accent: #6d28d9;
+    --accent-2: #db2777;
+    position: fixed;
+    inset: 0;
+    z-index: 1080;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(17, 12, 34, .72);
+    backdrop-filter: blur(4px);
+  }
+  #send-overlay.show { display: flex; }
+  #send-overlay .send-card {
+    width: min(90vw, 22rem);
+    border-radius: 1.25rem;
+    background: var(--bs-body-bg);
+    padding: 1.75rem 1.5rem;
+    text-align: center;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .4);
+  }
+  #send-overlay .send-emoji { font-size: 2.5rem; line-height: 1; }
+  #send-overlay .send-title { font-weight: 800; margin: .6rem 0 .15rem; }
+  #send-overlay .progress {
+    height: .6rem;
+    border-radius: 1rem;
+    overflow: hidden;
+    position: relative;
+    background: rgba(109, 40, 217, .15);
+  }
+  #send-overlay .progress-bar {
+    height: 100%;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    transition: width .2s ease;
+  }
+  /* Indeterminate "processing" state: a slice that slides across, since the
+     determinate width no longer applies once the bytes are all on the server. */
+  #send-overlay .progress.indeterminate .progress-bar {
+    position: absolute;
+    width: 40%;
+    transition: none;
+    animation: send-indet 1.1s ease-in-out infinite;
+  }
+  @keyframes send-indet {
+    0%   { left: -45%; }
+    100% { left: 100%; }
+  }
+</style>
+<div class="row justify-content-center upload-flow">
+  <div class="col-12 col-md-8 col-lg-6">
+    <a href="/photos?device_id={{ device_id }}" class="ghost-link small d-inline-block mb-2">&larr; Gallery</a>
+    <h1 class="h3 fw-bold mb-1">Upload to {{ device_id }}</h1>
+    <p class="text-body-secondary mb-4">Four quick steps and you're on the wall. 🖼️</p>
+    {% if error %}
+    <div class="alert alert-danger rounded-3">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/upload" enctype="multipart/form-data" id="upload-form">
+      <input type="hidden" name="device_id" value="{{ device_id }}">
+      <input type="hidden" name="knob_values" id="knob_values" value="">
+      <input type="hidden" name="crop_values" id="crop_values" value="">
+
+      <div class="d-flex flex-column gap-3">
+
+        <!-- 1 · Choose file -->
+        <section class="step">
+          <div class="step-head">
+            <span class="step-num">1</span>
+            <h2 class="step-title">Choose a photo</h2>
+          </div>
+          <input type="file" id="file" name="file" accept="image/*" required class="visually-hidden">
+          <label for="file" class="btn btn-upload w-100 mb-0">📷 Pick an image</label>
+        </section>
+
+        <!-- Preview (sticky: clamps to the top edge while scrolling to the knobs) -->
+        <div class="preview-sticky" id="preview-sticky">
+          <div id="preview-wrap" class="preview-box rounded-3 bg-dark d-flex align-items-center justify-content-center"
+               style="--dev-aspect: {{ device_aspect|default(4 / 3) }};">
+            <canvas id="preview" style="position:absolute; inset:0; width:100%; height:100%; object-fit:fill; display:none;"></canvas>
+            <span id="preview-status" class="text-secondary small p-3 text-center">
+              Choose an image to preview how it will look on the panel.
+            </span>
+          </div>
+        </div>
+
+        <!-- 2 · Preview & framing -->
+        <section class="step">
+          <div class="step-head">
+            <span class="step-num">2</span>
+            <h2 class="step-title">Preview &amp; framing</h2>
+          </div>
+          <div id="zoom-row" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center">
+              <label for="crop-zoom" class="form-label fw-semibold mb-0">Zoom &amp; drag to frame</label>
+              <button type="button" class="btn btn-link btn-sm p-0 ghost-link" id="reset-crop">Reset framing</button>
+            </div>
+            <div class="slider-lane">
+              <input type="range" class="form-range" id="crop-zoom" min="0.3" max="3" step="0.01" value="1">
+            </div>
+            <div class="form-text">
+              Drag to reposition; zoom out to fit the whole image (white bars fill the rest).
+            </div>
+          </div>
+          <div class="form-text">
+            {% if image_format == 'jpeg' %}
+            Grayscale and tone-adjusted preview. Your device handles the final dithering on its own screen.
+            {% else %}
+            Grayscale and tone-adjusted like the panel. Final dithering is applied on upload.
+            {% endif %}
+          </div>
+          <div id="histo-wrap" class="mt-3" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label fw-semibold mb-0">Tonal coverage</label>
+              <span class="small text-body-secondary font-monospace" id="histo-readout"></span>
+            </div>
+            <canvas id="histogram" height="64" class="border rounded-3 bg-dark"
+                    style="width:100%; height:64px; display:block;"></canvas>
+            <div class="form-text">
+              {% if image_format == 'jpeg' %}
+              Each bar is a slice of the grey range, shown in its own shade. Tall bars at the
+              far left and right mean the photo reaches pure black &amp; white; a gap there is
+              what makes a photo look muted.
+              {% else %}
+              Each bar is one of the panel's 16 grey levels, shown in that level's
+              actual shade. Tall bars at the far left and right mean the photo
+              reaches pure black &amp; white; a gap there is what makes a photo look muted.
+              {% endif %}
+            </div>
+          </div>
+        </section>
+
+        <!-- 3 · Adjustments -->
+        <section class="step">
+          <div class="step-head">
+            <span class="step-num">3</span>
+            <h2 class="step-title">Adjustments</h2>
+            {% if knobs %}<button type="button" class="btn btn-link btn-sm p-0 ms-auto ghost-link" id="reset-knobs">Reset</button>{% endif %}
+          </div>
+          {% for knob in knobs %}
+          {% if knob.type == 'toggle' %}
+          <div class="mb-3 form-check form-switch">
+            <input class="form-check-input knob-input" type="checkbox" role="switch"
+                   id="knob_{{ knob.id }}" data-knob-id="{{ knob.id }}" data-default="{{ knob.default }}"
+                   {% if knob.default >= 0.5 %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="knob_{{ knob.id }}">{{ knob.label }}</label>
+            {% if knob.help %}<div class="form-text">{{ knob.help }}</div>{% endif %}
+          </div>
+          {% else %}
+          <div class="mb-3">
+            <div class="d-flex justify-content-between">
+              <label for="knob_{{ knob.id }}" class="form-label fw-semibold mb-0">{{ knob.label }}</label>
+              <span class="badge text-bg-light font-monospace" id="knobval_{{ knob.id }}"></span>
+            </div>
+            <div class="slider-lane">
+              <input type="range" class="form-range knob-input" id="knob_{{ knob.id }}"
+                     data-knob-id="{{ knob.id }}" data-default="{{ knob.default }}"
+                     min="{{ knob.min }}" max="{{ knob.max }}" step="{{ knob.step }}"
+                     value="{{ knob.default }}">
+            </div>
+            {% if knob.help %}<div class="form-text">{{ knob.help }}</div>{% endif %}
+          </div>
+          {% endif %}
+          {% endfor %}
+          {% if resamplers %}
+          <div class="mb-1">
+            <label for="resampler" class="form-label fw-semibold mb-1">Downscale filter</label>
+            <select class="form-select" id="resampler" name="resampler">
+              {% for r in resamplers %}
+              <option value="{{ r }}" {% if r == resampler_default %}selected{% endif %}>{{ r|capitalize }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">
+              How the image is resized to the panel before dithering. <strong>Nearest</strong> keeps
+              hard edges (default); <strong>Lanczos</strong>/<strong>Bicubic</strong> retain more
+              detail but soften edges. Experiment to see what looks best on the panel.
+            </div>
+          </div>
+          {% endif %}
+        </section>
+
+        <!-- 4 · Caption -->
+        <section class="step">
+          <div class="step-head">
+            <span class="step-num">4</span>
+            <h2 class="step-title">Caption <span class="fw-normal text-body-secondary fs-6">(optional)</span></h2>
+          </div>
+          <input type="text" class="form-control form-control-lg" id="caption" name="caption" maxlength="200"
+                 placeholder="Give it a name…">
+        </section>
+
+        <!-- Sticky commit bar: lifetime (always <-> timed ladder) + send -->
+        <div class="action-bar">
+          <input type="hidden" name="permanent" id="permanent" value="1">
+          <input type="hidden" name="ttl_hours" id="ttl_hours" value="">
+
+          <button type="button" class="bar-toggle" id="life-toggle" role="switch" aria-checked="false"
+                  title="Switch between keeping always and auto-removing after a while"
+                  aria-label="Auto-remove after a while">&#8734;</button>
+
+          <div class="bar-life">
+            <button type="button" class="bar-step" id="life-down" aria-label="Shorter lifetime">&#9660;</button>
+            <span class="bar-life-label" id="life-label" aria-live="polite">Keep always</span>
+            <button type="button" class="bar-step" id="life-up" aria-label="Longer lifetime">&#9650;</button>
+          </div>
+
+          <button type="submit" class="btn btn-upload">Send it</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="send-overlay" role="alertdialog" aria-live="assertive" aria-busy="true">
+  <div class="send-card">
+    <div class="send-emoji" id="send-emoji">🚀</div>
+    <div class="send-title" id="send-title">Sending to the wall…</div>
+    <p class="text-body-secondary small mb-3" id="send-sub">Uploading your photo</p>
+    <div class="progress" id="send-progress" role="progressbar" aria-label="Upload progress">
+      <div class="progress-bar" id="send-bar" style="width:0%"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // Knob descriptors from the server-side registry (knobs.py). The browser renders
+  // sliders from this and rebuilds the tone LUT live, with no per-knob JS.
+  var KNOBS = {{ knobs|tojson }};
+  var DEVICE_ID = {{ device_id|tojson }};
+  var DEVICE_ASPECT = {{ device_aspect|default(4 / 3)|tojson }};
+  // Output format: 'g16z' (calibrated + dithered E1003) or 'jpeg' (resize-only;
+  // the device library does grayscale + dither). Drives the preview path.
+  var IMAGE_FORMAT = {{ image_format|default('g16z')|tojson }};
+
+  // --- Tone twin: mirrors gray16._build_tone_lut (post-auto-stretch portion). ---
+  // The /preview-base PNG is already oriented, cover-cropped, luma'd and
+  // auto-stretched, so here black=0/white=255 and we only apply the tone knobs.
+  // MUST stay in sync with gray16.py; guarded by tests/test_knobs.py.
+  var HIGHLIGHT_BUMP_EXP = 6.0;
+  var HIGHLIGHT_BUMP_PEAK =
+    (Math.pow(HIGHLIGHT_BUMP_EXP / (HIGHLIGHT_BUMP_EXP + 1.0), HIGHLIGHT_BUMP_EXP)) /
+    (HIGHLIGHT_BUMP_EXP + 1.0);
+
+  function buildLut(values) {
+    var gamma = values.gamma;
+    var highlights = values.highlights;
+    var brightness = values.brightness;
+    var contrast = values.contrast;
+    var midtone = values.midtone;
+    var invGamma = gamma > 0 ? 1.0 / gamma : 1.0;
+    var sigLo = 0.0, sigSpan = 1.0;
+    if (midtone > 0.0) {
+      sigLo = 1.0 / (1.0 + Math.exp(midtone * 0.5));
+      sigSpan = (1.0 / (1.0 + Math.exp(-midtone * 0.5))) - sigLo;
+    }
+    var lut = new Uint8ClampedArray(256);
+    for (var v = 0; v < 256; v++) {
+      var norm = v / 255.0;
+      var toned = Math.pow(norm, invGamma);
+      if (highlights !== 0.0) {
+        var bump = (Math.pow(toned, HIGHLIGHT_BUMP_EXP) * (1.0 - toned)) / HIGHLIGHT_BUMP_PEAK;
+        toned += highlights * bump;
+      }
+      if (contrast !== 1.0) toned = (toned - 0.5) * contrast + 0.5;
+      if (midtone > 0.0) toned = (1.0 / (1.0 + Math.exp(-midtone * (toned - 0.5))) - sigLo) / sigSpan;
+      if (brightness !== 0.0) toned += brightness;
+      if (toned < 0.0) toned = 0.0;
+      else if (toned > 1.0) toned = 1.0;
+      lut[v] = Math.round(toned * 255.0);
+    }
+    return lut;
+  }
+
+  // --- Panel response (measured) -----------------------------------------------
+  // Mirrors gray16's _build_panel_inverse_lut / _build_panel_forward_lut, both
+  // derived from PANEL_RESPONSE_E1003_GC16_V32. The INVERSE maps desired gray to
+  // the source level the panel must be fed (the encode-time calibration); the
+  // FORWARD maps a source level to how it actually renders (the display sim).
+  // Together they make the preview show what the panel will produce. Guarded by
+  // tests/test_knobs.py; keep in sync with gray16.py.
+  var PANEL_RESPONSE = {{ panel_response|default([])|tojson }};
+
+  function buildPanelInverseLut(resp) {
+    var last = resp.length - 1;
+    var lut = new Uint8ClampedArray(256);
+    for (var d = 0; d < 256; d++) {
+      var target = d / 255.0;
+      if (target <= resp[0]) { lut[d] = 0; continue; }
+      if (target >= resp[last]) { lut[d] = 255; continue; }
+      for (var k = 0; k < last; k++) {
+        if (resp[k] <= target && target <= resp[k + 1]) {
+          var denom = resp[k + 1] - resp[k];
+          var frac = denom <= 0.0 ? 0.0 : (target - resp[k]) / denom;
+          lut[d] = Math.round((k + frac) * 17.0);
+          break;
+        }
+      }
+    }
+    return lut;
+  }
+
+  function buildPanelForwardLut(resp) {
+    var last = resp.length - 1;
+    var lut = new Uint8ClampedArray(256);
+    for (var s = 0; s < 256; s++) {
+      var pos = s / 17.0;
+      var k = Math.floor(pos);
+      var refl;
+      if (k >= last) refl = resp[last];
+      else { var frac = pos - k; refl = resp[k] + frac * (resp[k + 1] - resp[k]); }
+      lut[s] = Math.round(refl * 255.0);
+    }
+    return lut;
+  }
+
+  var PANEL_INVERSE_LUT = buildPanelInverseLut(PANEL_RESPONSE);
+  var PANEL_FORWARD_LUT = buildPanelForwardLut(PANEL_RESPONSE);
+
+  var fileInput = document.getElementById("file");
+  var canvas = document.getElementById("preview");
+  var statusEl = document.getElementById("preview-status");
+  var knobValuesField = document.getElementById("knob_values");
+  var previewWrap = document.getElementById("preview-wrap");
+  var zoomRow = document.getElementById("zoom-row");
+  var cropZoom = document.getElementById("crop-zoom");
+  var cropField = document.getElementById("crop_values");
+  var ctx = canvas.getContext("2d");
+  var offscreen = document.createElement("canvas");
+  var octx = offscreen.getContext("2d", { willReadFrequently: true });
+  var histoWrap = document.getElementById("histo-wrap");
+  var histoCanvas = document.getElementById("histogram");
+  var hctx = histoCanvas.getContext("2d");
+  var histoReadout = document.getElementById("histo-readout");
+  var rafPending = false;
+
+  // --- Framing (option B: pan/zoom a device-aspect window over the base) -------
+  // The server sends ONE base PNG: the WHOLE oriented image (its own aspect),
+  // auto-stretched at identity tone. The browser pans/zooms a device-aspect
+  // window over it entirely client-side -- no refetch -- so brightness stays
+  // stable while framing. The window rect is reported to the server as a
+  // normalized crop {x,y,w,h} in source coords; it may extend OUTSIDE [0,1] when
+  // zoomed out, and the server white-pads those margins into letterbox bars.
+  var baseBitmap = null;
+  var baseW = 0, baseH = 0;
+  var aspectRatio = 1;     // r = DEVICE_ASPECT / imageAspect
+  var coverH = 1, fitH = 1; // window height (frac of source H) at cover / fit
+  var zoom = 1;             // 1 = cover (default); < 1 zooms out toward fit (letterbox)
+  var centerX = 0.5, centerY = 0.5;
+
+  function configureForBase() {
+    var imageAspect = baseW / baseH;
+    aspectRatio = DEVICE_ASPECT / imageAspect;
+    coverH = aspectRatio <= 1 ? 1 : 1 / aspectRatio;
+    fitH = aspectRatio <= 1 ? 1 / aspectRatio : 1;
+    var zMin = coverH / fitH; // <= 1: full image fits with letterbox bars
+    zoom = 1;
+    centerX = 0.5;
+    centerY = 0.5;
+    cropZoom.min = zMin.toFixed(4);
+    cropZoom.max = "3";
+    cropZoom.value = "1";
+    zoomRow.style.display = "";
+    histoWrap.style.display = "";
+  }
+
+  function windowSize() {
+    var h = coverH / zoom;
+    return { w: aspectRatio * h, h: h };
+  }
+
+  function clampCenter(w, h) {
+    centerX = w <= 1 ? Math.min(Math.max(centerX, w / 2), 1 - w / 2) : 0.5;
+    centerY = h <= 1 ? Math.min(Math.max(centerY, h / 2), 1 - h / 2) : 0.5;
+  }
+
+  function setStatus(msg) {
+    statusEl.textContent = msg;
+    statusEl.style.display = msg ? "" : "none";
+    canvas.style.display = msg ? "none" : "block";
+  }
+
+  function currentValues() {
+    var values = {};
+    KNOBS.forEach(function (k) {
+      var el = document.getElementById("knob_" + k.id);
+      if (k.type === "toggle") {
+        values[k.id] = el.checked ? 1 : 0;
+      } else {
+        values[k.id] = parseFloat(el.value);
+      }
+    });
+    return values;
+  }
+
+  function syncBadges(values) {
+    KNOBS.forEach(function (k) {
+      var badge = document.getElementById("knobval_" + k.id);
+      if (badge) badge.textContent = Number(values[k.id]).toFixed(2);
+    });
+  }
+
+  // Live tonal histogram. For g16z it is a 16-level PANEL coverage meter (bars in
+  // each panel level's measured reflectance shade); for jpeg it is a generic
+  // 16-bucket luma distribution (bars in their own bin's grey). Either way the
+  // two end bars are outlined when non-empty to flag that the photo reaches the
+  // black/white rails (the cure for a "muted" look).
+  function drawHistogram(hist, total, isJpeg) {
+    var cssW = histoCanvas.clientWidth || 320;
+    var dpr = window.devicePixelRatio || 1;
+    histoCanvas.width = Math.round(cssW * dpr);
+    histoCanvas.height = Math.round(64 * dpr);
+    hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    hctx.clearRect(0, 0, cssW, 64);
+
+    var maxCount = 1;
+    var used = 0;
+    for (var k = 0; k < 16; k++) {
+      if (hist[k] > maxCount) maxCount = hist[k];
+      if (hist[k] > 0) used++;
+    }
+    var gap = 2;
+    var barW = (cssW - gap * 15) / 16;
+    var maxH = 60;
+    for (var b = 0; b < 16; b++) {
+      // g16z: panel reflectance of level b. jpeg: the bin's own nominal grey.
+      var refl = isJpeg ? Math.min(255, b * 17) : PANEL_FORWARD_LUT[b * 17];
+      var bx = b * (barW + gap);
+      // sqrt scaling so a small-but-present level stays visible; >=2px when used.
+      var h = hist[b] > 0 ? Math.max(2, Math.sqrt(hist[b] / maxCount) * maxH) : 0;
+      hctx.fillStyle = "rgb(" + refl + "," + refl + "," + refl + ")";
+      hctx.fillRect(bx, 62 - h, barW, h);
+      if ((b === 0 || b === 15) && hist[b] > 0) {
+        hctx.strokeStyle = "#5eb1ff";
+        hctx.lineWidth = 1.5;
+        hctx.strokeRect(bx + 0.75, 62 - h + 0.75, barW - 1.5, h - 1.5);
+      }
+    }
+
+    if (total > 0) {
+      var blackPct = (hist[0] / total) * 100;
+      var whitePct = (hist[15] / total) * 100;
+      histoReadout.textContent =
+        blackPct.toFixed(1) + "% black \u00b7 " +
+        whitePct.toFixed(1) + "% white" +
+        (isJpeg ? "" : " \u00b7 " + used + "/16 levels");
+    } else {
+      histoReadout.textContent = "";
+    }
+  }
+
+  function render() {
+    var values = currentValues();
+    knobValuesField.value = JSON.stringify(values);
+    syncBadges(values);
+    if (!baseBitmap) return;
+
+    // Combined LUT: tone curve -> panel calibration (desired -> source) -> panel
+    // forward display sim (source -> on-screen). When calibration is off, the
+    // source IS the desired gray, so the preview shows the panel's uncorrected
+    // (lighter midtone) response. White (255) maps to white, so letterbox bars
+    // stay clean. Resize-only (jpeg) devices apply the same tone curve but no
+    // panel calibration and no forward display sim -- the device dithers
+    // on-screen -- so the histogram bins the toned output into even luma slices
+    // instead of the panel's 16 measured levels.
+    var isJpeg = IMAGE_FORMAT === "jpeg";
+    var combined = new Uint8ClampedArray(256);
+    var levelLut = new Uint8Array(256); // base grey -> histogram bucket (0..15)
+    if (isJpeg) {
+      var jpegTone = buildLut(values);
+      for (var v = 0; v < 256; v++) {
+        combined[v] = jpegTone[v];
+        // No panel quantization on this path; bucket the toned output into 16
+        // even luma bins purely for the tonal-distribution histogram.
+        levelLut[v] = jpegTone[v] >> 4;
+      }
+    } else {
+      var tone = buildLut(values);
+      var calOn = values.panel_calibration >= 0.5;
+      for (var v = 0; v < 256; v++) {
+        var src = calOn ? PANEL_INVERSE_LUT[tone[v]] : tone[v];
+        combined[v] = PANEL_FORWARD_LUT[src];
+        var lvl = Math.round(src / 17);
+        levelLut[v] = lvl < 0 ? 0 : lvl > 15 ? 15 : lvl;
+      }
+    }
+
+    var win = windowSize();
+    clampCenter(win.w, win.h);
+    var x = centerX - win.w / 2;
+    var y = centerY - win.h / 2;
+    cropField.value = JSON.stringify({ x: x, y: y, w: win.w, h: win.h });
+
+    var bw = Math.max(1, Math.round(win.w * baseW));
+    var bh = Math.max(1, Math.round(win.h * baseH));
+    offscreen.width = bw;
+    offscreen.height = bh;
+    octx.fillStyle = "#ffffff"; // uncovered margins become letterbox bars
+    octx.fillRect(0, 0, bw, bh);
+    octx.drawImage(baseBitmap, -x * baseW, -y * baseH);
+
+    var img = octx.getImageData(0, 0, bw, bh);
+    var data = img.data;
+    var hist = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (var i = 0; i < data.length; i += 4) {
+      var base = data[i];
+      hist[levelLut[base]]++;
+      var g = combined[base];
+      data[i] = g;
+      data[i + 1] = g;
+      data[i + 2] = g;
+      data[i + 3] = 255;
+    }
+    canvas.width = bw;
+    canvas.height = bh;
+    ctx.putImageData(img, 0, 0);
+    drawHistogram(hist, (data.length / 4) | 0, isJpeg);
+  }
+
+  function scheduleRender() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function () {
+      rafPending = false;
+      render();
+    });
+  }
+
+  function loadBase(file) {
+    setStatus("Rendering preview\u2026");
+    var fd = new FormData();
+    fd.append("device_id", DEVICE_ID);
+    fd.append("file", file);
+    fetch("/preview-base", { method: "POST", body: fd })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error("status " + resp.status);
+        return resp.blob();
+      })
+      .then(function (blob) { return createImageBitmap(blob); })
+      .then(function (bmp) {
+        baseBitmap = bmp;
+        baseW = bmp.width;
+        baseH = bmp.height;
+        configureForBase();
+        setStatus("");
+        render();
+      })
+      .catch(function () {
+        baseBitmap = null;
+        zoomRow.style.display = "none";
+        histoWrap.style.display = "none";
+        setStatus("Preview unavailable. You can still upload.");
+      });
+  }
+
+  fileInput.addEventListener("change", function () {
+    if (!(fileInput.files && fileInput.files[0])) {
+      baseBitmap = null;
+      zoomRow.style.display = "none";
+      histoWrap.style.display = "none";
+      cropField.value = "";
+      setStatus("Choose an image to preview how it will look on the panel.");
+      return;
+    }
+    loadBase(fileInput.files[0]);
+    // Pull the sticky preview up to the top edge so the framing + adjustment
+    // steps below it are immediately in view -- the user picks a photo and the
+    // knobs are exposed without a manual scroll. rAF lets the preview unhide and
+    // lay out first so the scroll target has its final position.
+    requestAnimationFrame(function () {
+      previewSticky.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+
+  // --- Lifetime control: one ladder from "once" -> finite TTLs -> "always" -----
+  // A single stepped choice mapped onto the existing permanent / ttl_hours hidden
+  // fields, so the backend contract is unchanged. The toggle jumps to/from the
+  // "always" end; the steppers walk the ladder. NOTE: bool("0") is True server-
+  // side, so the non-permanent ("once") stop MUST emit an empty permanent value.
+  var LIFE_LADDER = [
+    { label: "Once",     perm: "",  ttl: "" },
+    { label: "1 hour",   perm: "1", ttl: "1" },
+    { label: "6 hours",  perm: "1", ttl: "6" },
+    { label: "12 hours", perm: "1", ttl: "12" },
+    { label: "24 hours", perm: "1", ttl: "24" },
+    { label: "48 hours", perm: "1", ttl: "48" },
+    { label: "1 week",   perm: "1", ttl: "168" },
+    { label: "1 month",  perm: "1", ttl: "720" },
+    { label: "Always",   perm: "1", ttl: "" }
+  ];
+  var LIFE_ALWAYS = LIFE_LADDER.length - 1;
+  var LIFE_DEFAULT = 4;          // 24 hours
+  var lifeIndex = LIFE_DEFAULT;
+  var lifeLastFinite = LIFE_DEFAULT; // remembered across an "always" detour
+
+  var permField = document.getElementById("permanent");
+  var ttlField = document.getElementById("ttl_hours");
+  var lifeToggle = document.getElementById("life-toggle");
+  var lifeDown = document.getElementById("life-down");
+  var lifeUp = document.getElementById("life-up");
+  var lifeLabel = document.getElementById("life-label");
+
+  function syncLifetime() {
+    var stop = LIFE_LADDER[lifeIndex];
+    permField.value = stop.perm;
+    ttlField.value = stop.ttl;
+    lifeLabel.textContent = stop.label;
+    var isAlways = lifeIndex === LIFE_ALWAYS;
+    lifeToggle.innerHTML = isAlways ? "\u221e" : "\u23f1"; // infinity vs stopwatch
+    lifeToggle.classList.toggle("is-always", isAlways);
+    lifeToggle.setAttribute("aria-checked", isAlways ? "false" : "true");
+    lifeDown.disabled = lifeIndex <= 0;
+    lifeUp.disabled = lifeIndex >= LIFE_ALWAYS;
+    if (lifeIndex !== LIFE_ALWAYS) lifeLastFinite = lifeIndex;
+  }
+
+  lifeToggle.addEventListener("click", function () {
+    lifeIndex = (lifeIndex === LIFE_ALWAYS) ? lifeLastFinite : LIFE_ALWAYS;
+    syncLifetime();
+  });
+  lifeDown.addEventListener("click", function () {
+    if (lifeIndex > 0) { lifeIndex--; syncLifetime(); }
+  });
+  lifeUp.addEventListener("click", function () {
+    if (lifeIndex < LIFE_ALWAYS) { lifeIndex++; syncLifetime(); }
+  });
+  syncLifetime();
+
+  // Toggle a shadow on the sticky preview only while it is actually pinned to the
+  // top edge (top hits 0), so it reads as a flat panel when in normal flow.
+  var previewSticky = document.getElementById("preview-sticky");
+  var pinTick = false;
+  function updatePinned() {
+    pinTick = false;
+    previewSticky.classList.toggle("is-pinned", previewSticky.getBoundingClientRect().top <= 0);
+  }
+  window.addEventListener("scroll", function () {
+    if (pinTick) return;
+    pinTick = true;
+    requestAnimationFrame(updatePinned);
+  }, { passive: true });
+  updatePinned();
+
+  // Drag to pan the window across the base (clamped where there is freedom).
+  var dragging = false, startX = 0, startY = 0, startCx = 0, startCy = 0;
+  previewWrap.addEventListener("pointerdown", function (e) {
+    if (!baseBitmap) return;
+    dragging = true;
+    previewWrap.setPointerCapture(e.pointerId);
+    previewWrap.style.cursor = "grabbing";
+    startX = e.clientX; startY = e.clientY;
+    startCx = centerX; startCy = centerY;
+    e.preventDefault();
+  });
+  previewWrap.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    var rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    var win = windowSize();
+    centerX = startCx - ((e.clientX - startX) / rect.width) * win.w;
+    centerY = startCy - ((e.clientY - startY) / rect.height) * win.h;
+    scheduleRender();
+  });
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    previewWrap.style.cursor = "grab";
+  }
+  previewWrap.addEventListener("pointerup", endDrag);
+  previewWrap.addEventListener("pointercancel", endDrag);
+
+  cropZoom.addEventListener("input", function () {
+    zoom = parseFloat(cropZoom.value);
+    scheduleRender();
+  });
+
+  document.getElementById("reset-crop").addEventListener("click", function () {
+    zoom = 1;
+    centerX = 0.5;
+    centerY = 0.5;
+    cropZoom.value = "1";
+    render();
+  });
+
+  document.querySelectorAll(".knob-input").forEach(function (el) {
+    el.addEventListener("input", scheduleRender);
+    el.addEventListener("change", scheduleRender);
+  });
+
+  var resetKnobsBtn = document.getElementById("reset-knobs");
+  if (resetKnobsBtn) resetKnobsBtn.addEventListener("click", function () {
+    document.querySelectorAll(".knob-input").forEach(function (el) {
+      if (el.type === "checkbox") {
+        el.checked = parseFloat(el.getAttribute("data-default")) >= 0.5;
+      } else {
+        el.value = el.getAttribute("data-default");
+      }
+    });
+    render();
+  });
+
+  // --- Submit with progress overlay -------------------------------------------
+  // A plain form POST navigates immediately and gives no feedback while the
+  // server decodes, encodes G16P, and uploads to blob storage. Submit via XHR so
+  // we can show real upload progress, then an indeterminate "processing" phase
+  // once the bytes are sent. Success is a 303 to the gallery (XHR follows it, so
+  // responseURL lands on /photos); an error re-renders this page, which we swap
+  // in via document.write so its inline script re-runs.
+  var form = document.getElementById("upload-form");
+  var overlay = document.getElementById("send-overlay");
+  var sendProgress = document.getElementById("send-progress");
+  var sendBar = document.getElementById("send-bar");
+  var sendTitle = document.getElementById("send-title");
+  var sendSub = document.getElementById("send-sub");
+  var sendEmoji = document.getElementById("send-emoji");
+
+  function setBarDeterminate(pct) {
+    sendProgress.classList.remove("indeterminate");
+    sendBar.style.width = pct + "%";
+  }
+  function setBarIndeterminate() {
+    sendBar.style.width = "40%"; // matches the sliding slice in CSS
+    sendProgress.classList.add("indeterminate");
+  }
+
+  form.addEventListener("submit", function (e) {
+    if (!form.reportValidity()) return; // let native validation block it
+    e.preventDefault();
+
+    overlay.classList.add("show");
+    sendEmoji.textContent = "🚀";
+    sendTitle.textContent = "Sending to the wall…";
+    sendSub.textContent = "Uploading your photo";
+    setBarDeterminate(0);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", form.getAttribute("action"), true);
+
+    xhr.upload.addEventListener("progress", function (ev) {
+      if (ev.lengthComputable) {
+        setBarDeterminate(Math.round((ev.loaded / ev.total) * 100));
+      }
+    });
+    xhr.upload.addEventListener("load", function () {
+      // Bytes are on the server; the slow part now is decode + encode + blob put.
+      sendTitle.textContent = "Processing…";
+      sendSub.textContent = "Converting and saving to the panel";
+      setBarIndeterminate();
+    });
+
+    xhr.addEventListener("load", function () {
+      var url = xhr.responseURL || "";
+      if (xhr.status >= 200 && xhr.status < 300 && url.indexOf("/photos") !== -1) {
+        window.location.assign(url); // success: follow the redirect to the gallery
+        return;
+      }
+      // Error: the server re-rendered this upload page. Swap it in so the inline
+      // script re-runs and the error alert shows.
+      document.open();
+      document.write(xhr.responseText);
+      document.close();
+    });
+
+    xhr.addEventListener("error", function () { showSendError(); });
+    xhr.addEventListener("abort", function () { showSendError(); });
+
+    function showSendError() {
+      sendEmoji.textContent = "⚠️";
+      sendTitle.textContent = "Upload failed";
+      sendSub.textContent = "Check your connection and try again.";
+      setBarDeterminate(0);
+      setTimeout(function () { overlay.classList.remove("show"); }, 2500);
+    }
+
+    xhr.send(new FormData(form));
+  });
+
+  // Initialize hidden field + badges so a submit without touching sliders is valid.
+  render();
+})();
+</script>
+{% endblock %}

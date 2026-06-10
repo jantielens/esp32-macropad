@@ -42,6 +42,11 @@ struct EpaperRefreshOutcome {
 // The watchdog is disabled around the long drawImage() call.
 EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force);
 
+// Immediately draw the provided image URL without changing the saved carousel
+// config and without CRC sidecar checks. Used by the Image & Schedule portal
+// row-level "Show now" action for rapid testing.
+EpaperRefreshOutcome epaper_refresh_show_url(DeviceConfig* config, const char* image_url);
+
 // Unix epoch seconds of the last successful refresh. Persisted in RTC_DATA
 // memory so the value survives deep sleep across duty-cycle wakes (but is
 // lost on power loss / hard reset). Returns 0 if no refresh has been

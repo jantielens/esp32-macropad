@@ -9,6 +9,8 @@
 if (typeof window.registerConfigFields === 'function') {
     window.registerConfigFields([
         'epaper_rotation',
+        'epaper_crc32_enabled',
+        'epaper_sd_cache_enabled',
         'epaper_overlay_enabled', 'epaper_overlay_position',
         'epaper_overlay_color', 'epaper_overlay_items',
         'epaper_frontlight_brightness', 'epaper_frontlight_duration_s',
@@ -151,6 +153,13 @@ window.init_epaper_image_fragment = function () {
     var tzSelect = document.getElementById('ep_sch_tz');
     var grid = document.getElementById('epaper-schedule-grid');
     var saveBtn = document.getElementById('epaper-image-save-btn');
+    var showNowStatus = document.getElementById('epaper-show-now-status');
+
+    function setShowNowStatus(text, isErr) {
+        if (!showNowStatus) return;
+        showNowStatus.textContent = text;
+        showNowStatus.style.color = isErr ? '#c00' : '';
+    }
 
     function hourEnabled(mask, h) {
         return ((mask >>> h) & 1) === 1;
@@ -228,6 +237,13 @@ window.init_epaper_image_fragment = function () {
                     tzSelect.value = String(cfg.epaper_schedule_tz_offset);
                 }
 
+                setNamedValue('epaper_crc32_enabled', !!cfg.epaper_crc32_enabled);
+
+                // SD cache is only meaningful on boards that compiled it in.
+                var sdRow = document.getElementById('epaper_sd_cache_row');
+                if (sdRow) sdRow.hidden = !cfg.epaper_sd_cache_supported;
+                setNamedValue('epaper_sd_cache_enabled', !!cfg.epaper_sd_cache_enabled);
+
                 var arr = Array.isArray(cfg.epaper_carousel) ? cfg.epaper_carousel : [];
                 for (var i = 0; i < 5; i++) {
                     var row = arr[i] || {};
@@ -265,6 +281,20 @@ window.init_epaper_image_fragment = function () {
         setQuickHours(8, 17);
     });
 
+    var clearSdBtn = document.getElementById('epaper_clear_sd_cache');
+    if (clearSdBtn) clearSdBtn.addEventListener('click', function () {
+        if (!window.confirm('Delete all cached images from the SD card?')) return;
+        clearSdBtn.disabled = true;
+        fetch('/api/component/epaper-image/clear-sd-cache', { method: 'POST' })
+            .then(function (r) { return r.json().catch(function () { return null; }); })
+            .then(function (res) {
+                showMessage(res && res.success ? 'SD cache cleared' : 'Failed to clear SD cache',
+                            res && res.success ? 'success' : 'error');
+            })
+            .catch(function () { showMessage('Failed to clear SD cache', 'error'); })
+            .finally(function () { clearSdBtn.disabled = false; });
+    });
+
     function buildCarouselPayload() {
         var out = [];
         for (var i = 0; i < 5; i++) {
@@ -288,6 +318,8 @@ window.init_epaper_image_fragment = function () {
         var fields = [
             'operating_mode',
             'epaper_rotation',
+            'epaper_crc32_enabled',
+            'epaper_sd_cache_enabled',
             'wifi_backoff_max_seconds',
             'epaper_frontlight_brightness', 'epaper_frontlight_duration_s'
         ];
@@ -337,6 +369,45 @@ window.init_epaper_image_fragment = function () {
             saveImageConfig();
         });
     }
+
+    document.querySelectorAll('.epaper-show-now').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var slot = parseInt(btn.getAttribute('data-slot') || '0', 10);
+            var urlEl = document.querySelector('[name="ep_c' + slot + '_url"]');
+            var url = urlEl ? String(urlEl.value || '').trim() : '';
+            if (!url) {
+                setShowNowStatus('Slot ' + (slot + 1) + ': Image URL is empty.', true);
+                return;
+            }
+            btn.disabled = true;
+            setShowNowStatus('Showing slot ' + (slot + 1) + '… (this can take 10–30 seconds)', false);
+            fetch('/api/component/epaper-image/show-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'url=' + encodeURIComponent(url)
+            })
+                .then(function (r) {
+                    return r.json().catch(function () {
+                        return { success: false, message: 'Bad response' };
+                    }).then(function (j) {
+                        if (!r.ok && !j.message) j.message = 'HTTP ' + r.status;
+                        return j;
+                    });
+                })
+                .then(function (j) {
+                    if (j && j.success) {
+                        var elapsed = j.elapsed_ms ? (' (' + j.elapsed_ms + ' ms)') : '';
+                        setShowNowStatus('Slot ' + (slot + 1) + ' shown' + elapsed, false);
+                    } else {
+                        setShowNowStatus('Failed: ' + (j.message || j.result || 'unknown error'), true);
+                    }
+                })
+                .catch(function (e) {
+                    setShowNowStatus('Failed: ' + e, true);
+                })
+                .finally(function () { btn.disabled = false; });
+        });
+    });
 
     buildHourGrid();
     renderHourButtons();
