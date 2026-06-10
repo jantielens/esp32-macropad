@@ -15,7 +15,7 @@ This guide holds the detailed e-paper-specific material. Generic project docs, s
 
 ## Current Scope
 
-The current implementation targets two boards and one usage model:
+The current implementation targets three boards and one usage model:
 
 | Board | SoC | Display | Decode |
 |---|---|---|---|
