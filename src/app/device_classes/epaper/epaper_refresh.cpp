@@ -143,11 +143,16 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 				out.result = sidecar_transport_failed
 					? EpaperRefreshResult::FailedFetch
 					: EpaperRefreshResult::FailedDraw;
-				// Show a user-visible error screen so the panel doesn't just keep
-				// the stale image with no indication anything went wrong. Re-power
-				// the panel briefly to push the status frame; the previous sleep
-				// call above already powered it down.
-				if (epaper_driver_begin()) {
+				// On a silent timer wake, keep whatever image is already on the
+				// bistable panel rather than replacing the (presumably good) last
+				// dashboard with an error screen — a transient fetch hiccup should
+				// not blank a working display. On cold boot or button wake the user
+				// is actively looking at the device and expects feedback, so push a
+				// visible error screen instead. The portal status card reflects the
+				// failure in all cases regardless of what the panel shows.
+				const bool is_timer_wake =
+						power_manager_is_deep_sleep_wake() && !epaper_button_is_button_wake();
+				if (!is_timer_wake && epaper_driver_begin()) {
 						epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
 						const char* detail = sidecar_transport_failed
 								? "Network or server unreachable"
@@ -155,6 +160,8 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 						epaper_screen_error(detail, config->duty_cycle_wake_seconds);
 						epaper_driver_display();
 						epaper_driver_sleep();
+				} else if (is_timer_wake) {
+						LOGW("Epaper", "Refresh failed on timer wake; keeping existing image on panel");
 				}
 				out.elapsed_ms = millis() - t0;
 				s_last_outcome = out;
