@@ -31,55 +31,117 @@
         <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="epaper_clear_sd_cache">Clear SD cache</button>
       </div>
     </div>
-    <div class="table-responsive mt-3">
-      <table class="table table-sm align-middle">
-        <thead>
-          <tr>
-            <th scope="col" style="width: 72px;">Slot</th>
-            <th scope="col">Image URL</th>
-            <th scope="col" style="width: 170px;">Duration (s)</th>
-            <th scope="col" style="width: 90px;">Stay</th>
-            <th scope="col" style="width: 110px;">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>1</td>
-            <td><input type="url" class="form-control" name="ep_c0_url" maxlength="255" placeholder="https://example.com/image-1.png"></td>
-            <td><input type="number" class="form-control" name="ep_c0_int" min="1" max="86400" placeholder="900"></td>
-            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c0_stay"></td>
-            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="0">Show now</button></td>
-          </tr>
-          <tr>
-            <td>2</td>
-            <td><input type="url" class="form-control" name="ep_c1_url" maxlength="255" placeholder="https://example.com/image-2.png"></td>
-            <td><input type="number" class="form-control" name="ep_c1_int" min="1" max="86400" placeholder="900"></td>
-            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c1_stay"></td>
-            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="1">Show now</button></td>
-          </tr>
-          <tr>
-            <td>3</td>
-            <td><input type="url" class="form-control" name="ep_c2_url" maxlength="255" placeholder="https://example.com/image-3.png"></td>
-            <td><input type="number" class="form-control" name="ep_c2_int" min="1" max="86400" placeholder="900"></td>
-            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c2_stay"></td>
-            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="2">Show now</button></td>
-          </tr>
-          <tr>
-            <td>4</td>
-            <td><input type="url" class="form-control" name="ep_c3_url" maxlength="255" placeholder="https://example.com/image-4.png"></td>
-            <td><input type="number" class="form-control" name="ep_c3_int" min="1" max="86400" placeholder="900"></td>
-            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c3_stay"></td>
-            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="3">Show now</button></td>
-          </tr>
-          <tr>
-            <td>5</td>
-            <td><input type="url" class="form-control" name="ep_c4_url" maxlength="255" placeholder="https://example.com/image-5.png"></td>
-            <td><input type="number" class="form-control" name="ep_c4_int" min="1" max="86400" placeholder="900"></td>
-            <td class="text-center"><input type="checkbox" class="form-check-input" name="ep_c4_stay"></td>
-            <td><button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="4">Show now</button></td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="mt-3">
+      <div class="epaper-slot border rounded p-2 mb-2">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="small">Slot 1</strong>
+          <button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="0">Show now</button>
+        </div>
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md">
+            <label class="form-label small mb-1" for="ep_c0_url">Image URL</label>
+            <input type="url" class="form-control" id="ep_c0_url" name="ep_c0_url" maxlength="255" placeholder="https://example.com/image-1.png">
+          </div>
+          <div class="col-7 col-md-auto">
+            <label class="form-label small mb-1" for="ep_c0_int">Duration (s)</label>
+            <input type="number" class="form-control" id="ep_c0_int" name="ep_c0_int" min="1" max="86400" placeholder="900" style="max-width: 150px;">
+          </div>
+          <div class="col-5 col-md-auto">
+            <div class="form-check mb-1">
+              <input type="checkbox" class="form-check-input" id="ep_c0_stay" name="ep_c0_stay">
+              <label class="form-check-label small" for="ep_c0_stay">Stay</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="epaper-slot border rounded p-2 mb-2">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="small">Slot 2</strong>
+          <button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="1">Show now</button>
+        </div>
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md">
+            <label class="form-label small mb-1" for="ep_c1_url">Image URL</label>
+            <input type="url" class="form-control" id="ep_c1_url" name="ep_c1_url" maxlength="255" placeholder="https://example.com/image-2.png">
+          </div>
+          <div class="col-7 col-md-auto">
+            <label class="form-label small mb-1" for="ep_c1_int">Duration (s)</label>
+            <input type="number" class="form-control" id="ep_c1_int" name="ep_c1_int" min="1" max="86400" placeholder="900" style="max-width: 150px;">
+          </div>
+          <div class="col-5 col-md-auto">
+            <div class="form-check mb-1">
+              <input type="checkbox" class="form-check-input" id="ep_c1_stay" name="ep_c1_stay">
+              <label class="form-check-label small" for="ep_c1_stay">Stay</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="epaper-slot border rounded p-2 mb-2">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="small">Slot 3</strong>
+          <button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="2">Show now</button>
+        </div>
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md">
+            <label class="form-label small mb-1" for="ep_c2_url">Image URL</label>
+            <input type="url" class="form-control" id="ep_c2_url" name="ep_c2_url" maxlength="255" placeholder="https://example.com/image-3.png">
+          </div>
+          <div class="col-7 col-md-auto">
+            <label class="form-label small mb-1" for="ep_c2_int">Duration (s)</label>
+            <input type="number" class="form-control" id="ep_c2_int" name="ep_c2_int" min="1" max="86400" placeholder="900" style="max-width: 150px;">
+          </div>
+          <div class="col-5 col-md-auto">
+            <div class="form-check mb-1">
+              <input type="checkbox" class="form-check-input" id="ep_c2_stay" name="ep_c2_stay">
+              <label class="form-check-label small" for="ep_c2_stay">Stay</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="epaper-slot border rounded p-2 mb-2">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="small">Slot 4</strong>
+          <button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="3">Show now</button>
+        </div>
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md">
+            <label class="form-label small mb-1" for="ep_c3_url">Image URL</label>
+            <input type="url" class="form-control" id="ep_c3_url" name="ep_c3_url" maxlength="255" placeholder="https://example.com/image-4.png">
+          </div>
+          <div class="col-7 col-md-auto">
+            <label class="form-label small mb-1" for="ep_c3_int">Duration (s)</label>
+            <input type="number" class="form-control" id="ep_c3_int" name="ep_c3_int" min="1" max="86400" placeholder="900" style="max-width: 150px;">
+          </div>
+          <div class="col-5 col-md-auto">
+            <div class="form-check mb-1">
+              <input type="checkbox" class="form-check-input" id="ep_c3_stay" name="ep_c3_stay">
+              <label class="form-check-label small" for="ep_c3_stay">Stay</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="epaper-slot border rounded p-2 mb-2">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="small">Slot 5</strong>
+          <button type="button" class="btn btn-outline-primary btn-sm epaper-show-now" data-slot="4">Show now</button>
+        </div>
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md">
+            <label class="form-label small mb-1" for="ep_c4_url">Image URL</label>
+            <input type="url" class="form-control" id="ep_c4_url" name="ep_c4_url" maxlength="255" placeholder="https://example.com/image-5.png">
+          </div>
+          <div class="col-7 col-md-auto">
+            <label class="form-label small mb-1" for="ep_c4_int">Duration (s)</label>
+            <input type="number" class="form-control" id="ep_c4_int" name="ep_c4_int" min="1" max="86400" placeholder="900" style="max-width: 150px;">
+          </div>
+          <div class="col-5 col-md-auto">
+            <div class="form-check mb-1">
+              <input type="checkbox" class="form-check-input" id="ep_c4_stay" name="ep_c4_stay">
+              <label class="form-check-label small" for="ep_c4_stay">Stay</label>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="epaper-show-now-status" class="form-text" style="min-height:1.2em;"></div>
     <div class="form-text">Fill top-to-bottom. Empty URLs are skipped. <code>Stay</code> keeps showing that image when content is unchanged.</div>
