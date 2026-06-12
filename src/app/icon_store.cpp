@@ -7,6 +7,8 @@
 
 #include "storage.h"
 #include <esp_heap_caps.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <string.h>
 
 // LVGL's built-in lodepng for PNG decoding
@@ -28,6 +30,21 @@ struct IconEntry {
 static IconEntry* g_entries = nullptr;
 static uint16_t g_count = 0;
 static uint16_t g_capacity = 0;
+
+// Guards g_entries / g_count / g_capacity against concurrent access by the
+// LVGL render task (icon_store_lookup) and the async web server task
+// (icon_store_install -> cache_entry_buf, icon_store_delete_page_icons,
+// icon_store_enumerate_cache). Created in icon_store_init(). Critical sections
+// cover only the in-memory table touches — never PNG decode or file I/O.
+static SemaphoreHandle_t g_cache_mutex = nullptr;
+
+static inline void cache_lock() {
+    if (g_cache_mutex) xSemaphoreTake(g_cache_mutex, portMAX_DELAY);
+}
+
+static inline void cache_unlock() {
+    if (g_cache_mutex) xSemaphoreGive(g_cache_mutex);
+}
 
 // ============================================================================
 // Internal helpers
@@ -73,6 +90,7 @@ static uint16_t invalidate_entries_with_prefix(const char* prefix) {
     const size_t prefix_len = strlen(prefix);
     uint16_t removed = 0;
 
+    cache_lock();
     for (uint16_t i = 0; i < g_count; ) {
         if (strncmp(g_entries[i].id, prefix, prefix_len) == 0) {
             if (i != g_count - 1) {
@@ -84,6 +102,7 @@ static uint16_t invalidate_entries_with_prefix(const char* prefix) {
         }
         i++;
     }
+    cache_unlock();
 
     return removed;
 }
@@ -145,6 +164,8 @@ static IconKind kind_from_icon_id(const char* icon_id) {
 
 // Add or update a cache entry. Takes ownership of the lv_draw_buf_t.
 static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
+    cache_lock();
+
     // Check if entry already exists (update in place)
     int idx = find_entry(id);
     if (idx >= 0) {
@@ -153,6 +174,7 @@ static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
         IconEntry& e = g_entries[idx];
         e.draw_buf = buf;
         e.kind = kind;
+        cache_unlock();
         LOGD(TAG, "Updated cache: '%s' %ux%u stride=%u", id,
              buf->header.w, buf->header.h, (unsigned)buf->header.stride);
         return true;
@@ -160,6 +182,7 @@ static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
 
     // New entry
     if (!ensure_capacity()) {
+        cache_unlock();
         lv_draw_buf_destroy(buf);
         return false;
     }
@@ -170,9 +193,11 @@ static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
     e.kind = kind;
 
     g_count++;
+    uint16_t total = g_count;
+    cache_unlock();
     LOGD(TAG, "Cached: '%s' %ux%u stride=%u kind=%u (%u total)",
          id, buf->header.w, buf->header.h,
-         (unsigned)buf->header.stride, kind, g_count);
+         (unsigned)buf->header.stride, kind, total);
     return true;
 }
 
@@ -247,6 +272,13 @@ void icon_store_build_key(uint8_t page, uint8_t col, uint8_t row,
 }
 
 void icon_store_init() {
+    if (!g_cache_mutex) {
+        g_cache_mutex = xSemaphoreCreateMutex();
+        if (!g_cache_mutex) {
+            LOGE(TAG, "Failed to create cache mutex");
+        }
+    }
+
     if (!Storage.exists("/icons")) {
         Storage.mkdir("/icons");
         LOGI(TAG, "Created /icons directory");
@@ -301,12 +333,17 @@ bool icon_store_install(const char* id, IconKind kind,
 bool icon_store_lookup(const char* id, IconRef* out) {
     if (!id || !id[0] || !out) return false;
 
+    cache_lock();
     int idx = find_entry(id);
-    if (idx < 0) return false;
+    if (idx < 0) {
+        cache_unlock();
+        return false;
+    }
 
     const lv_draw_buf_t* buf = g_entries[idx].draw_buf;
     out->dsc = (const lv_image_dsc_t*)buf;
     out->kind = g_entries[idx].kind;
+    cache_unlock();
     return true;
 }
 
@@ -423,10 +460,14 @@ void icon_store_delete_page_icons(uint8_t page) {
 }
 
 uint16_t icon_store_cache_count() {
-    return g_count;
+    cache_lock();
+    uint16_t count = g_count;
+    cache_unlock();
+    return count;
 }
 
 void icon_store_enumerate_cache(bool (*cb)(const IconCacheInfo* info, void* ctx), void* ctx) {
+    cache_lock();
     for (uint16_t i = 0; i < g_count; i++) {
         const lv_draw_buf_t* buf = g_entries[i].draw_buf;
         IconCacheInfo info;
@@ -437,6 +478,7 @@ void icon_store_enumerate_cache(bool (*cb)(const IconCacheInfo* info, void* ctx)
         info.data_size = buf->data_size;
         if (!cb(&info, ctx)) break;
     }
+    cache_unlock();
 }
 
 #endif // HAS_DISPLAY
