@@ -181,10 +181,11 @@ void numericrocker_substitute_step(ButtonAction* act, float step) {
                                      sizeof(act->payload.timer.timer_value), step);
     } else {
         // Device-class action types store their value in the opaque
-        // payload arm; delegate to the registered handler so {step} reaches
-        // fields shared code cannot see (e.g. darkroom strip/expose/meter).
+        // payload arm; substitute {step} generically against the registered
+        // value_field accessor so it reaches fields shared code cannot see
+        // (e.g. darkroom strip/expose/meter).
         const ActionTypeDef* def = action_type_find(act->type);
-        if (def && def->substitute_step) def->substitute_step(*act, step);
+        action_type_substitute_step(def, *act, step);
     }
 }
 

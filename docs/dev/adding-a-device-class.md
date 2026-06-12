@@ -386,6 +386,14 @@ Then register the `ActionTypeDef` via `REGISTER_ACTION_TYPE(...)` in the
 class's `foo_actions.cpp` (see
 [src/app/device_classes/shutter_tester/shutter_actions.cpp](src/app/device_classes/shutter_tester/shutter_actions.cpp)).
 
+If your payload follows the `{ command, value }` convention and `value` is
+bindable (`[scheme:...]` tokens) and/or the numeric rocker's `{step}` target,
+expose it via the `value_field` accessor on `ActionTypeDef`. Shared code then
+drives binding resolution, the `[` binding scan, and `{step}` substitution
+generically against that one pointer — you do not write a per-type
+`resolve_bindings` / `has_binding` / `substitute_step`. Types with no single
+value field (e.g. shelly's `host`/`relay`/`on`) leave `value_field` `nullptr`.
+
 **Size budget**: the default `ACTION_PAYLOAD_DEVICE_CLASS_BYTES` is 96 B.
 Today the dominant arm is `NotifyPayload` at 394 B, so the device-class slot
 does not move `sizeof(ActionPayload)`. If your payload exceeds 96 B, prefer

@@ -43,22 +43,20 @@ static void strip_dispatch(const ButtonAction& act, const char* label) {
     test_strip_dispatch(p.command, p.value);
 }
 
-// Numeric rocker drives adjust_* commands; substitute {step} into the value.
-static void strip_substitute_step(ButtonAction& act, float step) {
+// `value` is the single bindable/numeric field (numeric rocker {step} target
+// for adjust_* commands); expose it so shared code drives binding + {step}.
+static char* strip_value_field(ButtonAction& act, size_t* out_size) {
     StripPayload& p = strip_payload(act);
-    action_substitute_step_field(p.value, sizeof(p.value), step);
+    *out_size = sizeof(p.value);
+    return p.value;
 }
 
 static const ActionTypeDef strip_action_type = {
-    /* type_name        */ ACTION_TYPE_STRIP,
-    /* parse            */ strip_parse,
-    /* serialize        */ strip_serialize,
-#if HAS_MQTT
-    /* resolve_bindings */ nullptr,
-    /* has_binding      */ nullptr,
-#endif
-    /* dispatch         */ strip_dispatch,
-    /* substitute_step  */ strip_substitute_step,
+    /* type_name   */ ACTION_TYPE_STRIP,
+    /* parse       */ strip_parse,
+    /* serialize   */ strip_serialize,
+    /* dispatch    */ strip_dispatch,
+    /* value_field */ strip_value_field,
 };
 
 REGISTER_ACTION_TYPE(strip_action_type);

@@ -71,9 +71,10 @@ static void resolve_action_bindings(ButtonAction& act) {
         try_resolve(act.payload.notify.notify_border_color, sizeof(act.payload.notify.notify_border_color));
     } else {
         // Device-class action types (e.g. shutter) self-register via the
-        // action type registry; delegate to their resolve_bindings hook if any.
+        // action type registry; resolve bindings generically against their
+        // value_field accessor (if any).
         const ActionTypeDef* t = action_type_find(act.type);
-        if (t && t->resolve_bindings) t->resolve_bindings(act);
+        action_type_resolve_bindings(t, act);
     }
     // sound, system, back, ble_pair: no bindable fields today.
 }
@@ -105,7 +106,7 @@ static bool action_has_any_binding(const ButtonAction& act) {
             || has(act.payload.notify.notify_border_color);
     }
     const ActionTypeDef* t = action_type_find(act.type);
-    return (t && t->has_binding) ? t->has_binding(act) : false;
+    return action_type_has_binding(t, act);
 }
 #endif // HAS_MQTT
 
