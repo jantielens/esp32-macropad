@@ -34,3 +34,10 @@
 // on large volumes, so this helper throttles repeat calls to once per minute.
 // Pass `force=true` once after mount to populate the cache immediately.
 void storage_publish_usage(bool force);
+
+// Mount the persistent filesystem backend and ensure base directories exist.
+// Idempotent — safe to call from multiple subsystems (pad config, hw button
+// config, …); only the first call performs the actual mount. Returns true if
+// the filesystem is mounted and ready. For SD storage the card must already
+// have been mounted via sd_storage_mount() earlier in boot.
+bool storage_mount();

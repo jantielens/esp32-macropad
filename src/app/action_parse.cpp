@@ -1,6 +1,6 @@
 #include "action_parse.h"
 
-#if HAS_DISPLAY
+#if HAS_DISPLAY || HAS_BUTTON
 
 #include "action_registry.h"
 #include <string.h>

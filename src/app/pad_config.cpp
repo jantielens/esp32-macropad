@@ -352,49 +352,11 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
 bool pad_config_init() {
     if (g_fs_mounted) return true;
 
-#if USE_SD_STORAGE
-    // SD card was already mounted in setup() via sd_storage_mount(). Skip the
-    // LittleFS partition lookup + begin() entirely — `Storage` resolves to
-    // SD_MMC and is ready to use.
-    LOGI(TAG, "Using SD card storage (mounted earlier in boot)");
-    g_fs_mounted = true;
-    storage_publish_usage(true);
-    if (!Storage.exists("/config")) {
-        Storage.mkdir("/config");
-    }
-    if (!Storage.exists("/storage")) {
-        Storage.mkdir("/storage");
-    }
-#else
-    // Find storage partition by subtype (label may vary across boards)
-    const esp_partition_t* part = esp_partition_find_first(
-        ESP_PARTITION_TYPE_DATA,
-        ESP_PARTITION_SUBTYPE_DATA_SPIFFS,
-        nullptr);
-    if (!part) {
-        LOGW(TAG, "No storage partition found — pad configs will not persist");
+    if (!storage_mount()) {
+        LOGW(TAG, "Storage mount failed — pad configs will not persist");
         return false;
     }
-
-    LOGI(TAG, "Found storage partition '%s' (%u KB)", part->label, part->size / 1024);
-
-    if (!Storage.begin(true /* formatOnFail */, "/littlefs", 10, part->label)) {
-        LOGE(TAG, "LittleFS mount failed on partition '%s'", part->label);
-        return false;
-    }
-
     g_fs_mounted = true;
-
-    // Update fs_health stats
-    storage_publish_usage(true);
-
-    // Ensure /config directory exists
-    if (!Storage.exists("/config")) {
-        Storage.mkdir("/config");
-    }
-
-    LOGI(TAG, "LittleFS mounted (total=%u used=%u)", Storage.totalBytes(), Storage.usedBytes());
-#endif
 
     // Pre-load all existing page configs into RAM cache.
     // This runs on the main task (internal stack) so flash access is safe.

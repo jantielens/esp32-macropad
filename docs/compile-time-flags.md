@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 221
+Total flags: 224
 
 ### Features (HAS_*)
 
@@ -131,6 +131,7 @@ Total flags: 221
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
 - **MAX_GRID_COLS** default: `(no default)` — Maximum grid columns.
 - **MAX_GRID_ROWS** default: `(no default)` — Maximum grid rows.
+- **MAX_HW_BUTTONS** default: `5` — Compile-time cap on the number of declarable hardware buttons.
 - **MAX_NON_PAD_SCREENS** default: `10` — Number of non-pad screens (info, test, fps, touch_test, + headroom).
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
@@ -174,6 +175,7 @@ Total flags: 221
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
+- **HW_BUTTON_HOLD_MS** default: `500` — the "hold" action; a shorter press fires the "tap" action on release).
 - **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
@@ -199,6 +201,7 @@ Total flags: 221
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
 - **LVGL_TASK_PRIORITY** default: `4` — Default 4 matches ESP-IDF BSP convention; keeps rendering above WiFi (pri 2-3).
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
+- **NUM_HW_BUTTONS** default: `0` — Number of buttons actually declared by the board (0 = none).
 - **PORTAL_PRIMARY_CATEGORY** default: `""` — Custom nav category ID promoted to first position (empty = standard behavior).
 - **PORTAL_PRIMARY_FRAGMENT** default: `""` — Default startup fragment for board variants with a primary portal category.
 - **PORTAL_PRIMARY_ICON** default: `""` — Icon (UTF-8) for the primary portal category in the nav sidebar.
@@ -279,7 +282,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
 | jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
 | jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
 | inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
@@ -368,8 +371,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/power_manager.cpp
 - **HAS_BUTTON**
+  - src/app/action_dispatch.cpp
+  - src/app/action_dispatch.h
+  - src/app/action_list.cpp
+  - src/app/action_list.h
+  - src/app/action_parse.cpp
+  - src/app/action_parse.h
+  - src/app/action_registry.cpp
+  - src/app/action_registry.h
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/portal_components.cpp
 - **HAS_CUSTOM_FONTS**
   - src/app/board_config.h
   - src/app/custom_fonts.cpp
@@ -762,6 +774,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
+- **HW_BUTTON_HOLD_MS**
+  - src/app/board_config.h
 - **HX711_DOUT_PIN**
   - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
 - **HX711_SCK_PIN**
@@ -907,6 +921,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_config.h
 - **MAX_GRID_ROWS**
   - src/app/pad_config.h
+- **MAX_HW_BUTTONS**
+  - src/app/board_config.h
 - **MAX_NON_PAD_SCREENS**
   - src/app/board_config.h
 - **MAX_PADS**
@@ -914,6 +930,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **MAX_PAD_BUTTONS**
   - src/app/pad_config.h
 - **MIN_USER_BRIGHTNESS**
+  - src/app/board_config.h
+- **NUM_HW_BUTTONS**
   - src/app/board_config.h
 - **PORTAL_PRIMARY_CATEGORY**
   - src/app/board_config.h
@@ -1083,10 +1101,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
-  - src/app/pad_config.cpp
   - src/app/sd_probe.cpp
   - src/app/sd_storage.cpp
   - src/app/sd_storage.h
+  - src/app/storage.cpp
   - src/app/storage.h
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS**
   - src/app/board_config.h

@@ -105,6 +105,20 @@
 #define AUDIO_CODEC_ADDR 0x18  // ES8311 I2C address (shared Wire bus 0)
 
 // ============================================================================
+// Hardware Button (onboard SW1 / BOOT)
+// ============================================================================
+// SW1 is the BOOT strapping button on GPIO35 (active-low, internal pull-up).
+// Usable as a runtime action button — only matters at reset (holding it low
+// at power-up enters serial download mode).
+#define HAS_BUTTON true
+#define NUM_HW_BUTTONS 1
+#ifdef __cplusplus
+static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
+    { .pin = 35, .active_low = true, .label = "BOOT" },
+};
+#endif
+
+// ============================================================================
 // Advanced Tuning (MIPI-DSI specific)
 // ============================================================================
 // Hide PSRAM flicker when screensaver fades (DPI FB lives in PSRAM).

@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_DISPLAY
+#if HAS_DISPLAY || HAS_BUTTON
 
 #include "pad_config.h"  // ButtonAction, ACTION_TYPE_* constants
 
@@ -14,4 +14,4 @@ void action_dispatch(const ButtonAction& act, const char* label);
 // Process deferred operations (NVS writes) — call from main loop().
 void action_dispatch_loop();
 
-#endif // HAS_DISPLAY
+#endif // HAS_DISPLAY || HAS_BUTTON

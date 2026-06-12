@@ -1,6 +1,6 @@
 #include "action_list.h"
 
-#if HAS_DISPLAY
+#if HAS_DISPLAY || HAS_BUTTON
 
 #include "action_dispatch.h"
 #include "action_parse.h"
@@ -32,4 +32,4 @@ void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char
     }
 }
 
-#endif // HAS_DISPLAY
+#endif // HAS_DISPLAY || HAS_BUTTON

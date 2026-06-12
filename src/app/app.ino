@@ -17,6 +17,8 @@
 #include "wifi_manager.h"
 #include "device_class.h"
 #include "duty_cycle.h"
+#include "hw_buttons.h"
+#include "hw_button_config.h"
 #if HAS_BLE
 #include "ble_telemetry.h"
 #endif
@@ -470,6 +472,13 @@ void setup()
 	timer_config_init();
 	#endif
 
+	// Hardware button actions (GPIO buttons). No-op stubs when !HAS_BUTTON.
+	// Initialized after WiFi/MQTT setup so dispatched actions can fire
+	// immediately, and well after check_config_mode_button() has released the
+	// shared GPIO from its boot-hold probe.
+	hw_button_config_init();
+	hw_buttons_init();
+
 	last_heartbeat_ms = millis();
 	LOGI("Main", "Setup complete");
 
@@ -563,6 +572,9 @@ void loop()
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).
 	sensor_manager_loop();
+
+	// Process hardware button debounce/hold + action dispatch (no-op when !HAS_BUTTON).
+	hw_buttons_loop();
 
 
 

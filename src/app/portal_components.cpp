@@ -45,6 +45,11 @@
 #include "components/ha_discovery_component.cpp"
 #endif // HAS_MQTT
 
+// --- Hardware Button Actions (boards with GPIO buttons) ---
+#if HAS_BUTTON
+#include "components/hw_buttons_component.cpp"
+#endif // HAS_BUTTON
+
 // --- BLE-gated components ---
 #if HAS_BLE_HID
 #include "components/ble_component.cpp"

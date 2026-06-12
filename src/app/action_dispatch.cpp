@@ -1,11 +1,15 @@
 #include "action_dispatch.h"
 
-#if HAS_DISPLAY
+#if HAS_DISPLAY || HAS_BUTTON
 
 #include "action_registry.h"
-#include "display_manager.h"
 #include "log_manager.h"
+
+#if HAS_DISPLAY
+#include "display_manager.h"
 #include "message_bubble.h"
+#include "screen_saver_manager.h"
+#endif
 
 #if HAS_MQTT
 #include "binding_template.h"
@@ -20,19 +24,20 @@
 
 #include "timer_engine.h"
 #include "wifi_manager.h"
-#include "screen_saver_manager.h"
 
 #include <math.h>
 
 #define TAG "Action"
 
 // Compute a clamped percentage value from a string, optionally as a delta from current.
+#if HAS_AUDIO || HAS_DISPLAY
 static uint8_t compute_clamped_percent(const char* value_str, uint8_t current, bool is_adjust, int min_val) {
     int v = is_adjust ? (int)current + lroundf(atof(value_str)) : lroundf(atof(value_str));
     if (v > 100) v = 100;
     if (v < min_val) v = min_val;
     return (uint8_t)v;
 }
+#endif
 
 #if HAS_MQTT
 // Resolve binding templates in the active payload arm's resolvable fields.
@@ -134,6 +139,7 @@ void action_dispatch(const ButtonAction& act_in, const char* label) {
 static void action_dispatch_resolved(const ButtonAction& act, const char* label) {
 
     if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
+#if HAS_DISPLAY
         const char* screen_id = act.payload.screen.screen_id;
         if (screen_id[0]) {
             bool ok = false;
@@ -142,10 +148,17 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
                 LOGW(TAG, "%s nav failed: '%s'", label, screen_id);
             }
         }
+#else
+        LOGW(TAG, "%s screen: no display", label);
+#endif
     } else if (strcmp(act.type, ACTION_TYPE_BACK) == 0) {
+#if HAS_DISPLAY
         if (!display_manager_go_back()) {
             LOGW(TAG, "%s back: no previous screen", label);
         }
+#else
+        LOGW(TAG, "%s back: no display", label);
+#endif
     } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
 #if HAS_MQTT
         const auto& m = act.payload.mqtt;
@@ -216,12 +229,17 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
         LOGW(TAG, "%s volume: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
+#if HAS_DISPLAY
         const auto& br = act.payload.brightness;
         bool adj = strcmp(br.brightness_mode, "adjust") == 0;
         uint8_t nv = compute_clamped_percent(br.brightness_value, display_manager_get_backlight_brightness(), adj, MIN_USER_BRIGHTNESS);
         screen_saver_manager_set_brightness(nv);
         LOGI(TAG, "%s brightness %s %s -> %u%%", label, adj ? "adjust" : "set", br.brightness_value, nv);
+#else
+        LOGW(TAG, "%s brightness: no display", label);
+#endif
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
+#if HAS_DISPLAY
         const auto& t = act.payload.timer;
         uint8_t tid = t.timer_id;
         const char* cmd = t.timer_command;
@@ -253,7 +271,11 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
         } else {
             LOGW(TAG, "%s timer: bad id=%u cmd='%s'", label, tid, cmd);
         }
+#else
+        LOGW(TAG, "%s timer: no display", label);
+#endif
     } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
+#if HAS_DISPLAY
         const auto& n = act.payload.notify;
         MessageBubbleParams params = {};
 
@@ -286,6 +308,9 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
             LOGI(TAG, "%s notify: '%s' dur=%u loc=%s", label, params.text,
                  params.duration_ms, n.notify_location[0] ? n.notify_location : "bottom");
         }
+#else
+        LOGW(TAG, "%s notify: no display", label);
+#endif
     } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
         const char* syscmd = act.payload.system.system_command;
         if (strcmp(syscmd, "reboot") == 0) {
@@ -296,8 +321,12 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
             LOGI(TAG, "%s system: wifi_reconnect", label);
             wifi_manager_request_reconnect();
         } else if (strcmp(syscmd, "screensaver") == 0) {
+#if HAS_DISPLAY
             LOGI(TAG, "%s system: screensaver", label);
             screen_saver_manager_sleep_now();
+#else
+            LOGW(TAG, "%s system: screensaver unavailable (no display)", label);
+#endif
         } else {
             LOGW(TAG, "%s system: unknown command '%s'", label, syscmd);
         }
@@ -319,4 +348,4 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
 void action_dispatch_loop() {
 }
 
-#endif // HAS_DISPLAY
+#endif // HAS_DISPLAY || HAS_BUTTON

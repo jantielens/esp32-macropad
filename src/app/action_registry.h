@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_DISPLAY
+#if HAS_DISPLAY || HAS_BUTTON
 
 #include "pad_config.h"  // ButtonAction
 #include <ArduinoJson.h>
@@ -63,4 +63,4 @@ void action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act);
         var##AutoReg() { action_type_register(&var); }                         \
     } _##var##_auto_reg
 
-#endif // HAS_DISPLAY
+#endif // HAS_DISPLAY || HAS_BUTTON

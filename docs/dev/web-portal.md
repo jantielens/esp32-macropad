@@ -1002,6 +1002,27 @@ Save boot action configuration to LittleFS.
 
 ---
 
+### Hardware Buttons API
+
+Available when the board declares physical buttons. The board's `board_overrides.h` must set `HAS_BUTTON true` explicitly (it defaults to `false` and is not auto-derived) and define `NUM_HW_BUTTONS` plus the `HW_BUTTON_DEFS[]` table. Independent of `HAS_DISPLAY` — works on headless boards. Gated by Basic Auth when enabled. Per-button tap/hold action lists are stored on the `Storage` facade at `/config/hw_buttons.json` and applied immediately without reboot.
+
+#### `GET /api/component/hw-buttons/config`
+
+Returns the declared buttons and their configured action lists.
+
+- **Response:** JSON object with a `buttons` array, one entry per declared button (in `HW_BUTTON_DEFS[]` order), each containing `label` (string), `pin` (GPIO number), `tap_actions` (array of up to 3 `ButtonAction` objects), and `hold_actions` (array of up to 3 `ButtonAction` objects). `ButtonAction` uses the same schema as button/swipe/boot actions.
+- Default (no file saved): each button reports empty `tap_actions` and `hold_actions`.
+
+#### `POST /api/component/hw-buttons/config`
+
+Save hardware button action configuration.
+
+- **Body:** JSON object with a `buttons` array of `{ tap_actions, hold_actions }` objects, positional by button index. Entries beyond `NUM_HW_BUTTONS` are ignored.
+- **Response:** standard component save response on success; JSON error on failure.
+- On screenless boards, display-only action types (screen, brightness, notify, timer) parse and store normally but log a no-op when dispatched.
+
+---
+
 ### Button Defaults API
 
 All button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Button defaults are stored on LittleFS at `/config/button_defaults.json`.

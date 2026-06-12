@@ -1,6 +1,21 @@
 #ifndef BOARD_CONFIG_H
 #define BOARD_CONFIG_H
 
+#include <stdint.h>
+
+// Per-button definition supplied by boards via HW_BUTTON_DEFS (see the
+// "Hardware Button Actions" section below). Defined before the Phase 1
+// override include so board_overrides.h can declare a typed HW_BUTTON_DEFS
+// array using this struct. C++ only — board_config.h is also included from
+// vendored C driver units, which neither use nor understand this type.
+#ifdef __cplusplus
+struct HwButtonDef {
+    uint8_t pin;          // GPIO pin
+    bool active_low;      // true when pressed reads LOW
+    char label[12];       // human-readable label shown in the portal
+};
+#endif
+
 // ============================================================================
 // Board Configuration - Two-Phase Include Pattern
 // ============================================================================
@@ -332,6 +347,51 @@
 // Button polarity: true when pressed = LOW.
 #ifndef BUTTON_ACTIVE_LOW
 #define BUTTON_ACTIVE_LOW true
+#endif
+
+// ----------------------------------------------------------------------------
+// Hardware Button Actions (optional, GPIO-direct buttons)
+// ----------------------------------------------------------------------------
+// Boards with physical buttons expose them in the web portal where users can
+// assign tap/hold action lists — identical to on-screen button actions. The
+// driver is interrupt-driven with software debounce and works independently of
+// HAS_DISPLAY (headless boards can use buttons too).
+//
+// To declare buttons, a board override sets HAS_BUTTON, NUM_HW_BUTTONS, and an
+// HW_BUTTON_DEFS array, e.g.:
+//
+//   #define HAS_BUTTON true
+//   #define NUM_HW_BUTTONS 1
+//   static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
+//       { .pin = 9, .active_low = true, .label = "BTN" }
+//   };
+//
+// NOTE: The board author is responsible for choosing button pins that do not
+// conflict with I2C/SPI/display/touch peripherals on that board.
+
+// Compile-time cap on the number of declarable hardware buttons.
+#ifndef MAX_HW_BUTTONS
+#define MAX_HW_BUTTONS 5
+#endif
+
+// Number of buttons actually declared by the board (0 = none).
+#ifndef NUM_HW_BUTTONS
+#define NUM_HW_BUTTONS 0
+#endif
+
+// Hold detection threshold in milliseconds (press held longer than this fires
+// the "hold" action; a shorter press fires the "tap" action on release).
+#ifndef HW_BUTTON_HOLD_MS
+#define HW_BUTTON_HOLD_MS 500
+#endif
+
+// Default: no buttons declared. Boards override HW_BUTTON_DEFS in
+// board_overrides.h. The hw_buttons module is fully #if HAS_BUTTON gated so
+// this empty default is only referenced when no buttons exist.
+#if !defined(HW_BUTTON_DEFS) && NUM_HW_BUTTONS == 0
+#ifdef __cplusplus
+static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
+#endif
 #endif
 
 // Enable power-on burst detection to force Config Mode (NVS-backed, disabled by default).

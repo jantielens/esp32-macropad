@@ -1,6 +1,6 @@
 #include "action_registry.h"
 
-#if HAS_DISPLAY
+#if HAS_DISPLAY || HAS_BUTTON
 
 #include <stdio.h>
 #include <string.h>
@@ -76,4 +76,4 @@ void action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act) {
 }
 #endif
 
-#endif // HAS_DISPLAY
+#endif // HAS_DISPLAY || HAS_BUTTON
