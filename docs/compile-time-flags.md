@@ -326,6 +326,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/test_strip.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
+  - src/app/hw_buttons.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
   - src/app/portal_components.cpp
@@ -381,6 +382,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_registry.h
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/components/hw_buttons_component.cpp
+  - src/app/hw_button_config.cpp
+  - src/app/hw_button_config.h
+  - src/app/hw_buttons.cpp
+  - src/app/hw_buttons.h
   - src/app/portal_components.cpp
 - **HAS_CUSTOM_FONTS**
   - src/app/board_config.h

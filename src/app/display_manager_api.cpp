@@ -97,4 +97,18 @@ bool display_manager_try_lock(uint32_t timeout_ms) {
 		return displayManager->tryLock(timeout_ms);
 }
 
+void display_manager_lock_if_needed(bool* did_lock) {
+		bool d = false;
+		if (displayManager) {
+				displayManager->lockIfNeeded(d);
+		}
+		if (did_lock) *did_lock = d;
+}
+
+void display_manager_unlock_if_needed(bool did_lock) {
+		if (displayManager) {
+				displayManager->unlockIfNeeded(did_lock);
+		}
+}
+
 #endif // HAS_DISPLAY

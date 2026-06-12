@@ -85,11 +85,6 @@ private:
 		// Defer small LVGL UI updates (like splash status) to the LVGL task.
 		char pendingSplashStatus[96];
 		volatile bool pendingSplashStatusSet;
-
-		// Helpers: avoid taking the LVGL mutex when already inside the LVGL task
-		bool isInLvglTask() const;
-		void lockIfNeeded(bool& didLock);
-		void unlockIfNeeded(bool didLock);
 		
 		// Screen instances (created at init, kept in memory)
 		SplashScreen splashScreen;
@@ -175,6 +170,11 @@ public:
 		void lock();
 		void unlock();
 
+		// Helpers: avoid taking the LVGL mutex when already inside the LVGL task
+		bool isInLvglTask() const;
+		void lockIfNeeded(bool& didLock);
+		void unlockIfNeeded(bool didLock);
+
 		// Attempt to lock the LVGL mutex with a timeout (in milliseconds).
 		// Returns true if the lock was acquired.
 		bool tryLock(uint32_t timeoutMs);
@@ -221,6 +221,11 @@ uint8_t display_manager_get_backlight_brightness();  // 0-100%
 void display_manager_lock();
 void display_manager_unlock();
 bool display_manager_try_lock(uint32_t timeout_ms);
+// Lock only when called from outside the LVGL task; no-op (and reports
+// did_lock=false) when already running on the LVGL task. Pair the returned
+// flag with display_manager_unlock_if_needed().
+void display_manager_lock_if_needed(bool* did_lock);
+void display_manager_unlock_if_needed(bool did_lock);
 
 // Best-effort perf stats for diagnostics (/api/health).
 // Returns false until a first stats window has been captured.

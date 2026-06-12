@@ -121,12 +121,21 @@ void action_dispatch(const ButtonAction& act_in, const char* label) {
     if (!act_in.type[0]) return;
 
     // Resolve binding templates in value fields before dispatch.
-    // Must only be called from the LVGL task — binding_template_resolve
-    // accesses MQTT subscription state and may call LVGL APIs.
+    // binding_template_resolve accesses MQTT subscription state shared with the
+    // LVGL task and may call LVGL APIs. When invoked from another task (e.g. a
+    // hardware button on the loop() task), serialize against the LVGL task with
+    // the display lock; lock_if_needed is a no-op when already on the LVGL task.
 #if HAS_MQTT
     if (action_has_any_binding(act_in)) {
         ButtonAction act = act_in;
+#if HAS_DISPLAY
+        bool did_lock = false;
+        display_manager_lock_if_needed(&did_lock);
         resolve_action_bindings(act);
+        display_manager_unlock_if_needed(did_lock);
+#else
+        resolve_action_bindings(act);
+#endif
         action_dispatch_resolved(act, label);
     } else {
         action_dispatch_resolved(act_in, label);
