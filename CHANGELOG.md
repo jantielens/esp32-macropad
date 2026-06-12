@@ -12,6 +12,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+* **E-paper NTP resync no longer taxes every wake** — re-syncing NTP on every duty-cycle wake (added in 1.20.0) paid lwIP's randomized SNTP startup delay (~3–5 s) on the critical path each cycle, racing the HTTPS image download and inflating the wake-to-visible time. The firmware now skips the network sync when the RTC clock is already valid and the last successful sync is under one hour old (matching ESP-IDF's default SNTP update cadence), fetching only on cold boot or when a resync is due — and when it does fetch, it blocks on the SNTP sync-notification callback before starting the download so the two never contend on the WiFi stack. This keeps warm-wake refreshes fast while still bounding RTC drift, and the `ntp_sync_ms` telemetry now reports 0 on skipped wakes and the true cost on resync wakes.
+
 ## [1.20.0] - 2026-06-05
 
 This release grows the **e-paper device class** — introduced in 1.17.0 with the single Inkplate 5V2 board — into a proper multi-board class. Two new panels join it: the **Seeed reTerminal E1003** (10.3" 1404×1872 IT8951 on an ESP32-S3) and the **Soldered Inkplate 6FLICK** (6.0" 1024×758 Inkplate 3-bit on an ESP32 classic). Alongside the boards, this release lands the shared image-transport plumbing that keeps the battery-powered wake path fast on all three: a compressed **G16Z** transport that cuts WiFi bytes by ~2–3×, an optional **SD blob cache** that skips the re-download entirely on a cache hit, a self-hosted HTTPS image downloader (replacing InkplateLibrary's crashing one), and a wake-to-visible path that overlaps panel power-up with the WiFi association.
