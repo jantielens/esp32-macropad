@@ -75,7 +75,7 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     const time_t now = time(nullptr);
     const bool clock_synced = (now >= (time_t)kEpaperMinValidEpoch);
 
-    StaticJsonDocument<512> resp;
+    StaticJsonDocument<768> resp;
     if (last_unix == 0) {
         // No refresh recorded since cold boot (RTC memory was cleared by
         // power loss or this is the first ever boot).
@@ -120,6 +120,10 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     t["crc_to_draw_ms"]  = epaper_timing_last.crc_to_draw_ms;
     t["draw_to_mqtt_ms"] = epaper_timing_last.draw_to_mqtt_ms;
     t["total_active_ms"] = epaper_timing_last.total_active_ms;
+    t["resolve_ms"]      = epaper_timing_last.resolve_ms;
+    t["fetch_ms"]        = epaper_timing_last.fetch_ms;
+    t["draw_ms"]         = epaper_timing_last.draw_ms;
+    t["image_source"]    = epaper_timing_last.image_from_cache ? "cache" : "download";
 
     String body;
     serializeJson(resp, body);

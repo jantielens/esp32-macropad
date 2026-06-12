@@ -716,6 +716,9 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		const uint8_t active_slot_index = g_epaper_carousel_index;
 		LOGI("Epaper", "Carousel: using slot %u URL: %s", g_epaper_carousel_index, g_epaper_config.epaper_url);
 
+		// Clear the per-draw sub-step timings so a CRC-skip wake (no fetch/draw)
+		// reports zeros rather than the previous cycle's resolve/fetch/draw.
+		epaper_timing_reset_draw_steps();
 		const EpaperRefreshOutcome outcome = epaper_refresh_run(config, force_refresh);
 		const uint32_t t_draw_done = millis();
 		epaper_timing_last.crc_retry_count = outcome.crc_retry_count;

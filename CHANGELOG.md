@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **E-paper wake-cycle telemetry breakdown** — the per-wake timing budget now decomposes the previously opaque `crc_to_draw_ms` into three observable sub-steps so long-term trends are visible without a serial console: `resolve_ms` (the carousel URL/API redirect round-trip), `fetch_ms` together with `image_source` (`cache` or `download`, distinguishing an SD-cache hit from a full body download and timing whichever ran), and `draw_ms` (framebuffer upload + GC16 panel refresh). The fields are staged by the active board driver as each phase completes, retained across deep sleep in RTC memory, published in the `<base>/epaper/state` MQTT payload (with four new Home Assistant discovery sensors — URL Resolve, Image Fetch, Panel Draw, and Image Source), and surfaced in the portal status JSON. A CRC-skip wake reports zeros for all three since no fetch or draw occurs. Diagnostic `LOGI` lines also report the URL-resolve time and the panel power-on overlap wait on the reterminal-e1003 driver, making the warm-wake critical path measurable at the device.
+
 ### Fixed
 
 * **E-paper NTP resync no longer taxes every wake** — re-syncing NTP on every duty-cycle wake (added in 1.20.0) paid lwIP's randomized SNTP startup delay (~3–5 s) on the critical path each cycle, racing the HTTPS image download and inflating the wake-to-visible time. The firmware now skips the network sync when the RTC clock is already valid and the last successful sync is under one hour old (matching ESP-IDF's default SNTP update cadence), fetching only on cold boot or when a resync is due — and when it does fetch, it blocks on the SNTP sync-notification callback before starting the download so the two never contend on the WiFi stack. This keeps warm-wake refreshes fast while still bounding RTC drift, and the `ntp_sync_ms` telemetry now reports 0 on skipped wakes and the true cost on resync wakes.
