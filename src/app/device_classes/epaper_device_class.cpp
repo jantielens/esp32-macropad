@@ -38,6 +38,7 @@ extern MqttManager mqtt_manager;
 #include <Preferences.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
+#include <esp_sntp.h>
 #include <time.h>
 #if HAS_EPAPER_WAKE_BUTTON
 #include <driver/rtc_io.h>  // rtc_gpio_pullup_en for deep-sleep button wake
@@ -515,6 +516,18 @@ static void on_loop_hook() {
 }
 #endif
 
+// Set by the SNTP service (from the lwIP task) when a fresh time response is
+// applied. Polled by the resync below so we can block until an actual sync
+// lands instead of racing the image download on the WiFi stack.
+static volatile bool s_epaper_ntp_synced = false;
+static void epaper_ntp_sync_cb(struct timeval * /*tv*/) {
+		s_epaper_ntp_synced = true;
+}
+
+// UTC epoch of the last successful NTP fetch, retained across deep sleep so we
+// can throttle real resyncs to once per interval instead of every wake.
+RTC_DATA_ATTR static time_t s_epaper_last_ntp_epoch = 0;
+
 // ---------------------------------------------------------------------------
 // Duty cycle: full pipeline (was duty_cycle.cpp's `if (mode == DutyCycleEpaper)`
 // block plus the splash decisions that lived in app.ino).
@@ -609,29 +622,52 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		}
 		power_manager_note_wifi_success();
 
-		// Re-sync NTP on every wake (cold boot AND deep-sleep wake). The RTC
-		// clock is driven by the internal RC oscillator, which drifts seconds
-		// per day; since WiFi is already up each cycle, an unconditional resync
-		// is cheap insurance against accumulated drift. Fail-open: if NTP does
-		// not complete within the bounded wait, proceed with the current clock
-		// rather than bricking the refresh. The wait cost is captured in
-		// ntp_sync_ms and published via MQTT so the active-time impact can be
-		// tracked in the field.
+		// NTP policy: the RTC clock survives deep sleep, so on a normal wake the
+		// time is already valid and we skip the network sync entirely -- the
+		// common path costs ~0 ms and starts no SNTP traffic that could collide
+		// with the time-critical HTTPS image download. We only pay for a real
+		// fetch when the clock is stale (cold boot) or the last successful sync
+		// is older than the resync interval, matching ESP-IDF's default 1 h SNTP
+		// update cadence. This bounds RTC drift (the internal RC oscillator
+		// drifts seconds per day) without taxing every wake.
+		//
+		// When a fetch is due we block until an actual SNTP response lands (or
+		// the ceiling elapses) BEFORE starting the download. A fire-and-forget
+		// configTime() leaves the SNTP service doing DNS lookups + UDP traffic
+		// concurrently with the download, which inflated crc_to_draw_ms by ~10s
+		// on some wakes. Waiting synchronously keeps the download contention-free
+		// and makes ntp_sync_ms reflect the true cost. Fail-open: if no response
+		// arrives within the ceiling, proceed with the current clock.
 		{
-				static const uint32_t kEpaperNtpMaxWaitMs = 5000;  // ceiling; SNTP startup delay can consume most of this
-				const uint32_t ntp_start = millis();
-				configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-				for (uint32_t waited = 0; waited < kEpaperNtpMaxWaitMs; waited += 100) {
-						if (time(nullptr) >= (time_t)EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
-								break;
-						}
-						delay(100);
-				}
-				epaper_timing_last.ntp_sync_ms = millis() - ntp_start;
-				if (time(nullptr) < (time_t)EPAPER_SCHEDULE_MIN_VALID_EPOCH) {
-						LOGW("Epaper", "NTP sync incomplete after %ums; proceeding with stale clock", epaper_timing_last.ntp_sync_ms);
+				static const uint32_t kEpaperNtpMaxWaitMs    = 5000;  // ceiling for an unreachable server
+				static const time_t   kEpaperNtpResyncIntervalS = 3600;  // 1 h, matches ESP-IDF SNTP default
+
+				const time_t now = time(nullptr);
+				const bool clock_valid = (now >= (time_t)EPAPER_SCHEDULE_MIN_VALID_EPOCH);
+				const bool due_for_resync =
+						!clock_valid ||
+						s_epaper_last_ntp_epoch == 0 ||
+						(now - s_epaper_last_ntp_epoch) >= kEpaperNtpResyncIntervalS;
+
+				if (!due_for_resync) {
+						epaper_timing_last.ntp_sync_ms = 0;
+						LOGI("Epaper", "NTP resync skipped (last sync %lds ago)",
+								 (long)(now - s_epaper_last_ntp_epoch));
 				} else {
-						LOGI("Epaper", "NTP resync done in %ums", epaper_timing_last.ntp_sync_ms);
+						const uint32_t ntp_start = millis();
+						s_epaper_ntp_synced = false;
+						sntp_set_time_sync_notification_cb(epaper_ntp_sync_cb);
+						configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+						for (uint32_t waited = 0; waited < kEpaperNtpMaxWaitMs && !s_epaper_ntp_synced; waited += 50) {
+								delay(50);
+						}
+						epaper_timing_last.ntp_sync_ms = millis() - ntp_start;
+						if (s_epaper_ntp_synced) {
+								s_epaper_last_ntp_epoch = time(nullptr);
+								LOGI("Epaper", "NTP resync done in %ums", epaper_timing_last.ntp_sync_ms);
+						} else {
+								LOGW("Epaper", "NTP sync incomplete after %ums; proceeding with current clock", epaper_timing_last.ntp_sync_ms);
+						}
 				}
 		}
 
