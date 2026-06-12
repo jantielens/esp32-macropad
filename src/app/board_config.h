@@ -900,6 +900,21 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define SCREENSAVER_SLEEP_REFRESH_MS 900000
 #endif
 
+// Active LC de-bias parameters used by displayRefreshSleep() when
+// DISPLAY_HARD_RESET_ON_SLEEP is enabled. Each periodic refresh briefly powers
+// the panel up and drives full-frame white↔black inversion cycles (backlight
+// off) to cancel the DC bias that accumulates in cheap IPS cells during long
+// idle, then powers the panel back down. More cycles / longer dwell = stronger
+// de-bias, slightly more per-interval panel activity (still invisible).
+// Number of white↔black inversion cycles per de-bias refresh.
+#ifndef DISPLAY_DEBIAS_CYCLES
+#define DISPLAY_DEBIAS_CYCLES 3
+#endif
+// Dwell time (ms) per half-cycle (white, then black) during de-bias.
+#ifndef DISPLAY_DEBIAS_HOLD_MS
+#define DISPLAY_DEBIAS_HOLD_MS 80
+#endif
+
 // Hold the panel hardware reset pin LOW during screensaver sleep so the
 // panel IC fully powers down its internal regulators. Required on cheap
 // IPS MIPI-DSI panels (e.g. JD9165 on jc1060p470c) where DCS Sleep In

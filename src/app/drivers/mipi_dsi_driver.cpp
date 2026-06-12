@@ -433,22 +433,31 @@ bool MipiDsiDriver::asyncFlush() const {
 // (Note: esp_lcd_panel_disp_on_off() on the DPI panel handle is not
 // implemented in our ESP-IDF version — it returns ESP_ERR_NOT_SUPPORTED
 // and logs an error — so framebuffer blanking is the actual mitigation.)
-void MipiDsiDriver::blankFramebuffers() {
+// Fill both DPI framebuffers with a byte-uniform RGB565 color (0x0000 black,
+// 0xFFFF white) and flush the PSRAM cache so the DPI peripheral's continuous
+// scanout reads the new content. The high and low bytes of `color` must match
+// for memset to produce the intended pixel value.
+void MipiDsiDriver::fillFramebuffers(uint16_t color) {
     if (!panel_handle) return;
     void* fb0 = nullptr;
     void* fb1 = nullptr;
     if (esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 2, &fb0, &fb1) != ESP_OK) {
         return;
     }
+    const int fill = (int)(color & 0xFF);
     const size_t fb_bytes = (size_t)displayWidth * (size_t)displayHeight * sizeof(uint16_t);
     if (fb0) {
-        memset(fb0, 0, fb_bytes);
+        memset(fb0, fill, fb_bytes);
         esp_cache_msync(fb0, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     }
     if (fb1 && fb1 != fb0) {
-        memset(fb1, 0, fb_bytes);
+        memset(fb1, fill, fb_bytes);
         esp_cache_msync(fb1, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     }
+}
+
+void MipiDsiDriver::blankFramebuffers() {
+    fillFramebuffers(0x0000);
 }
 
 void MipiDsiDriver::sendInitCommands() {
@@ -551,14 +560,40 @@ bool MipiDsiDriver::needsTwoPhaseWake() const {
 #endif
 }
 
-// Periodic scrub during long idle. With hard-reset enabled the panel IC is
-// already unpowered, so this is a no-op. Otherwise re-blank both framebuffers
-// as insurance against any transient LVGL write that slipped past the opaque
-// top-layer overlay (e.g. overlay teardown race during fade-in) leaving stale
-// pixels in the FB to ghost into the IPS cells over hours.
+// Periodic scrub during long idle, called by the screensaver every
+// SCREENSAVER_SLEEP_REFRESH_MS while fully asleep.
+//   - Hard-reset mode: actively de-bias the LC by briefly powering the panel
+//     up and driving full-frame white↔black inversion cycles (backlight off),
+//     then powering it down again. Power-down alone does not de-bias these
+//     cheap IPS cells — the trapped DC just relaxes slowly (the washed-out
+//     colors that fade a few minutes after wake), so the periodic inversion is
+//     what actually prevents the buildup. Leaves RST LOW + framebuffers black
+//     so the normal hard-reset wake path is unchanged.
+//   - Otherwise: re-blank both framebuffers as insurance against any transient
+//     LVGL write that slipped past the opaque top-layer overlay (e.g. overlay
+//     teardown race during fade-in) leaving stale pixels to ghost over hours.
 void MipiDsiDriver::displayRefreshSleep() {
 #if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
-    return;
+    if (!ioHandle) return;
+    // Power the panel back up (replays vendor init; backlight stays at 0).
+    wakeFromHardReset();
+    // Drive opposite-polarity full-frame cycles to cancel accumulated DC bias.
+    for (int i = 0; i < DISPLAY_DEBIAS_CYCLES; i++) {
+        fillFramebuffers(0xFFFF);  // white
+        delay(DISPLAY_DEBIAS_HOLD_MS);
+        fillFramebuffers(0x0000);  // black
+        delay(DISPLAY_DEBIAS_HOLD_MS);
+    }
+    // Brief settle so the final black frame is fully scanned out, then power
+    // the panel back down the same way displaySleep() does: graceful DCS
+    // Display Off → Sleep In, then hold RST LOW. RST low alone would reset the
+    // controller regardless, but mirroring the standard power-down keeps the
+    // resting state identical to a normal sleep entry.
+    delay(5);
+    esp_lcd_panel_io_tx_param(ioHandle, 0x28, NULL, 0);  // Display Off
+    delay(20);
+    esp_lcd_panel_io_tx_param(ioHandle, 0x10, NULL, 0);  // Sleep In
+    digitalWrite(LCD_RST_PIN, LOW);
 #else
     blankFramebuffers();
 #endif

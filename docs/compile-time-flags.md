@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 224
+Total flags: 226
 
 ### Features (HAS_*)
 
@@ -166,6 +166,8 @@ Total flags: 224
 - **DEVICE_TELEMETRY_CPU_MONITOR** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable CPU monitoring (idle-hook based, 1 Hz esp_timer).
 - **DEVICE_TELEMETRY_HEALTH_WINDOW** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable health-window min/max sampling timer.
 - **DISPLAY_BLANK_ON_SAVE** default: `false` — (LittleFS + lodepng). The browser blanks/restores via /api/display/brightness.
+- **DISPLAY_DEBIAS_CYCLES** default: `3` — Number of white↔black inversion cycles per de-bias refresh.
+- **DISPLAY_DEBIAS_HOLD_MS** default: `80` — Dwell time (ms) per half-cycle (white, then black) during de-bias.
 - **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
@@ -383,6 +385,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/components/hw_buttons_component.cpp
+  - src/app/ha_service.cpp
+  - src/app/ha_service.h
   - src/app/hw_button_config.cpp
   - src/app/hw_button_config.h
   - src/app/hw_buttons.cpp
@@ -440,6 +444,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/expr_binding.cpp
   - src/app/fs_indexed_store.cpp
   - src/app/ha_discovery.cpp
+  - src/app/ha_service.cpp
+  - src/app/ha_service.h
   - src/app/health_binding.cpp
   - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
@@ -735,6 +741,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
 - **DISPLAY_BLANK_ON_SAVE**
+  - src/app/board_config.h
+- **DISPLAY_DEBIAS_CYCLES**
+  - src/app/board_config.h
+- **DISPLAY_DEBIAS_HOLD_MS**
   - src/app/board_config.h
 - **DISPLAY_HARD_RESET_ON_SLEEP**
   - src/app/board_config.h
