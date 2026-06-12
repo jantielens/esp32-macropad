@@ -350,4 +350,8 @@ echo "=== Running guard: branding mirror (C++ <-> bash) ==="
 ./tests/test_branding_mirror.sh
 echo
 
+echo "=== Running guard: asset bundler variant matrix ==="
+./tests/test_asset_variant_matrix.sh
+echo
+
 echo "=== All tests passed ==="
