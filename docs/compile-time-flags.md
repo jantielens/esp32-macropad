@@ -273,15 +273,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 | board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  |  | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
-| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
-| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
+| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
 | jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |

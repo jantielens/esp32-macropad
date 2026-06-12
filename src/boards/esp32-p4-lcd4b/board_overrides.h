@@ -140,4 +140,18 @@
 #define DEVICE_TELEMETRY_CPU_MONITOR      1
 #define DEVICE_TELEMETRY_HEALTH_WINDOW    1
 
+// ============================================================================
+// Hardware Button (onboard BOOT)
+// ============================================================================
+// BOOT is the ESP32-P4 strapping button on GPIO35 (active-low, internal
+// pull-up). Usable as a runtime action button — only matters at reset
+// (holding it low at power-up enters serial download mode).
+#define HAS_BUTTON true
+#define NUM_HW_BUTTONS 1
+#ifdef __cplusplus
+static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
+    { .pin = 35, .active_low = true, .label = "BOOT" },
+};
+#endif
+
 #endif // BOARD_OVERRIDES_ESP32_P4_LCD4B_H
