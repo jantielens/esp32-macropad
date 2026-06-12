@@ -487,7 +487,10 @@ window.init_ble_fragment = function () {
 // ============================================================================
 
 window.init_ha_discovery_fragment = function () {
-    // Static informational fragment — no data to load
+    if (typeof registerConfigFields === 'function') {
+        registerConfigFields(['ha_url', 'ha_token']);
+    }
+    initConfigFragment('ha-save-btn', false);
 };
 
 // ============================================================================

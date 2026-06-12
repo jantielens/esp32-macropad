@@ -54,6 +54,10 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         strlcpy(act.payload.notify.notify_location,     a["notify_location"]     | "", sizeof(act.payload.notify.notify_location));
     } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
         strlcpy(act.payload.system.system_command, a["system_command"] | "", sizeof(act.payload.system.system_command));
+    } else if (strcmp(act.type, ACTION_TYPE_HA_SERVICE) == 0) {
+        strlcpy(act.payload.ha_service.entity_id, a["entity_id"] | "", sizeof(act.payload.ha_service.entity_id));
+        strlcpy(act.payload.ha_service.service,   a["service"]   | "", sizeof(act.payload.ha_service.service));
+        strlcpy(act.payload.ha_service.data_json, a["data_json"] | "", sizeof(act.payload.ha_service.data_json));
     } else {
         // Device-class action types (e.g. shutter) self-register via
         // action_type_register(); fall through to the registry.
@@ -101,6 +105,10 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
         if (act.payload.notify.notify_location[0])     obj["notify_location"]     = act.payload.notify.notify_location;
     } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
         if (act.payload.system.system_command[0]) obj["system_command"] = act.payload.system.system_command;
+    } else if (strcmp(act.type, ACTION_TYPE_HA_SERVICE) == 0) {
+        if (act.payload.ha_service.entity_id[0]) obj["entity_id"] = act.payload.ha_service.entity_id;
+        if (act.payload.ha_service.service[0])   obj["service"]   = act.payload.ha_service.service;
+        if (act.payload.ha_service.data_json[0]) obj["data_json"] = act.payload.ha_service.data_json;
     } else {
         const ActionTypeDef* t = action_type_find(act.type);
         if (t && t->serialize) t->serialize(act, obj);

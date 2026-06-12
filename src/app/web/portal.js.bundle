@@ -36,6 +36,12 @@ portal_binding_validator.js
 portal_action_editor.js
 portal_config_actions.js
 
+# Home Assistant Service action-editor extension. Registers the "ha_service"
+# type with the shared editor via the _actionEditorExtensions hook array, so
+# it must come after portal_action_editor.js (which defines the hook). Core
+# feature (not device-class), so it lives under src/app/web/.
+portal_action_editor_ha.js
+
 # [chunk:shutter_actions IS_SHUTTER_TESTER]
 # Shutter Tester action-editor extension. Registers the "shutter" action type
 # with the shared editor via the _actionEditorExtensions hook array, so only

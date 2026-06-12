@@ -344,6 +344,7 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. Set and adjust countdown values support binding templates. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
+| **Home Assistant Service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
 | **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, **Enable Screensaver**, **Set/Adjust Volume**, or **Set/Adjust Brightness**. |
 
 **Example setup for a smart light:**
@@ -454,6 +455,33 @@ The bubble fades in over 200 ms, displays for the configured duration, then fade
 - **Tap action**: Show Notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, duration: `0`, bg_color: `#1a3a1a`, location: `center`
 
 > **Home Assistant integration**: Notifications can also be triggered remotely via the **Notify** text entity. See the [Home Assistant Integration Guide](ha-integration-guide.md#notifications) for details and automation examples.
+
+### Home Assistant Service Action
+
+The **Home Assistant Service** action calls a Home Assistant service directly over the REST API — for example, toggling a light, running a scene, or opening a cover — without routing through MQTT.
+
+**Prerequisites**: On the portal's **Home Assistant** page, set the **Home Assistant URL** (base URL including scheme and port, e.g. `http://192.168.1.50:8123`) and a **Long-Lived Access Token** (created under your HA profile). HTTPS URLs are supported (the certificate is not verified). Leave the URL empty to disable service actions.
+
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| **Entity ID** | The target entity, e.g. `light.living_room`. The service **domain** is derived automatically from the text before the first `.` (here, `light`). |
+| **Service** | The service to call within that domain, e.g. `toggle`, `turn_on`, `turn_off`. |
+| **Service Data (JSON)** | Optional. A JSON object merged into the request body alongside `entity_id`, e.g. `{"brightness_pct": 60}`. Leave empty for services that need no extra data. |
+
+The action sends `POST <ha_url>/api/services/<domain>/<service>` with the access token as a bearer credential. The HTTP request runs on the main loop (not the render task), so the UI stays responsive. These fields are stored literally and do **not** support binding templates.
+
+**Example: toggle a light**
+- **Tap action**: Home Assistant Service → entity ID: `light.living_room`, service: `toggle`
+
+**Example: set brightness on turn-on**
+- **Tap action**: Home Assistant Service → entity ID: `light.kitchen`, service: `turn_on`, service data: `{"brightness_pct": 75}`
+
+**Example: run a scene**
+- **Tap action**: Home Assistant Service → entity ID: `scene.movie_night`, service: `turn_on`
+
+> See the [Home Assistant Integration Guide](ha-integration-guide.md#service-actions-rest-api) for setup details and more examples.
 
 ### Audio Behavior
 

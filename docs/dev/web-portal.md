@@ -642,7 +642,10 @@ Returns current device configuration (passwords excluded).
 
   "audio_volume": 50,
   "tap_beep": "",
-  "lp_beep": ""
+  "lp_beep": "",
+
+  "ha_url": "",
+  "ha_token": ""
 }
 ```
 
@@ -651,6 +654,7 @@ Returns current device configuration (passwords excluded).
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
+- `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config` — it is always reported as an empty string.
 
 #### `POST /api/config`
 
@@ -690,7 +694,10 @@ Save new configuration. Device reboots after successful save.
 
   "audio_volume": 50,
   "tap_beep": "800:80",
-  "lp_beep": "600:40 40 600:40"
+  "lp_beep": "600:40 40 600:40",
+
+  "ha_url": "http://192.168.1.50:8123",
+  "ha_token": "eyJhbGciOi..."
 }
 ```
 
@@ -705,6 +712,7 @@ Save new configuration. Device reboots after successful save.
 **Notes:**
 - Only fields present in request are updated
 - Password field: empty string = no change, non-empty = update
+- `ha_token` follows the same rule: empty string = keep current, non-empty = update. `ha_url` is always updated when present.
 - Basic Auth password is never returned by `GET /api/config`.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
 - Device automatically reboots after successful save

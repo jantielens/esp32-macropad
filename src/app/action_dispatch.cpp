@@ -24,6 +24,7 @@
 
 #include "timer_engine.h"
 #include "wifi_manager.h"
+#include "ha_service.h"
 
 #include <math.h>
 
@@ -339,6 +340,14 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
         } else {
             LOGW(TAG, "%s system: unknown command '%s'", label, syscmd);
         }
+    } else if (strcmp(act.type, ACTION_TYPE_HA_SERVICE) == 0) {
+        const auto& h = act.payload.ha_service;
+        if (h.entity_id[0] && h.service[0]) {
+            LOGI(TAG, "%s ha_service: %s.%s", label, h.entity_id, h.service);
+            ha_service_enqueue(h);
+        } else {
+            LOGW(TAG, "%s ha_service: missing entity_id/service", label);
+        }
     } else {
         // Device-class action types (e.g. shutter) self-register via the
         // action type registry; delegate dispatch when found.
@@ -352,9 +361,10 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
 }
 
 // ---------------------------------------------------------------------------
-// Called from main loop() — placeholder for future deferred operations.
+// Called from main loop() — runs deferred action I/O off the LVGL task.
 // ---------------------------------------------------------------------------
 void action_dispatch_loop() {
+    ha_service_execute();
 }
 
 #endif // HAS_DISPLAY || HAS_BUTTON

@@ -32,6 +32,8 @@
 #define KEY_MQTT_PORT      "mqtt_port"
 #define KEY_MQTT_USER      "mqtt_user"
 #define KEY_MQTT_PASS      "mqtt_pass"
+#define KEY_HA_URL         "ha_url"
+#define KEY_HA_TOKEN       "ha_token"
 #define KEY_OPERATING_MODE "op_mode"
 #define KEY_DC_WAKE        "dc_wake_s"
 #define KEY_MQTT_PUB       "mqtt_pub_s"
@@ -222,6 +224,10 @@ bool config_manager_load(DeviceConfig *config) {
 		preferences.getString(KEY_MQTT_USER, config->mqtt_username, CONFIG_MQTT_USERNAME_MAX_LEN);
 		preferences.getString(KEY_MQTT_PASS, config->mqtt_password, CONFIG_MQTT_PASSWORD_MAX_LEN);
 
+		// Load Home Assistant REST API settings (optional)
+		preferences.getString(KEY_HA_URL, config->ha_url, CONFIG_HA_URL_MAX_LEN);
+		preferences.getString(KEY_HA_TOKEN, config->ha_token, CONFIG_HA_TOKEN_MAX_LEN);
+
 		// Load power settings
 		preferences.getString(KEY_OPERATING_MODE, config->operating_mode, CONFIG_OPERATING_MODE_MAX_LEN);
 		if (strlen(config->operating_mode) == 0) {
@@ -336,6 +342,10 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUShort(KEY_MQTT_PORT, config->mqtt_port);
 		preferences.putString(KEY_MQTT_USER, config->mqtt_username);
 		preferences.putString(KEY_MQTT_PASS, config->mqtt_password);
+
+		// Save Home Assistant REST API settings
+		preferences.putString(KEY_HA_URL, config->ha_url);
+		preferences.putString(KEY_HA_TOKEN, config->ha_token);
 
 		// Save power settings
 		preferences.putString(KEY_OPERATING_MODE, config->operating_mode);
@@ -594,6 +604,14 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 		// MQTT config can still exist in NVS, but the firmware has MQTT support compiled out.
 		LOGI("Config", "MQTT: disabled (feature not compiled into firmware)");
 #endif
+
+		// Home Assistant REST API (independent of MQTT)
+		if (strlen(config->ha_url) > 0) {
+				LOGI("Config", "HA URL: %s", config->ha_url);
+				LOGI("Config", "HA Token: %s", strlen(config->ha_token) > 0 ? "***" : "(none)");
+		} else {
+				LOGI("Config", "HA REST: disabled");
+		}
 
 #if HAS_BLE_HID
 		LOGI("Config", "BLE Keyboard: %s", config->ble_enabled ? "enabled" : "disabled");

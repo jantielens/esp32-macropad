@@ -32,6 +32,10 @@
 #define CONFIG_MQTT_USERNAME_MAX_LEN 32
 #define CONFIG_MQTT_PASSWORD_MAX_LEN 64
 
+// Home Assistant REST API (for ha_service button actions)
+#define CONFIG_HA_URL_MAX_LEN 48
+#define CONFIG_HA_TOKEN_MAX_LEN 184
+
 // Operating mode (always_on | duty_cycle_mqtt | duty_cycle_ble | duty_cycle_epaper). Sized to fit longest value + NUL.
 #define CONFIG_OPERATING_MODE_MAX_LEN 20
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
@@ -69,6 +73,10 @@ struct DeviceConfig {
 		uint16_t mqtt_port; // default to 1883 when mqtt_host set and mqtt_port is 0
 		char mqtt_username[CONFIG_MQTT_USERNAME_MAX_LEN];
 		char mqtt_password[CONFIG_MQTT_PASSWORD_MAX_LEN];
+
+		// Home Assistant REST API (for ha_service button actions; independent of MQTT)
+		char ha_url[CONFIG_HA_URL_MAX_LEN];      // e.g. http://192.168.1.50:8123 (empty = disabled)
+		char ha_token[CONFIG_HA_TOKEN_MAX_LEN];  // HA long-lived access token
 
 		// Operating mode (user-selectable transport / wake behaviour)
 		char operating_mode[CONFIG_OPERATING_MODE_MAX_LEN];    // always_on | duty_cycle_mqtt | duty_cycle_ble

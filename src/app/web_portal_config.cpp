@@ -118,6 +118,10 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["mqtt_username"] = current_config->mqtt_username;
 				(*doc)["mqtt_password"] = "";
 
+				// Home Assistant REST API (token not returned)
+				(*doc)["ha_url"] = current_config->ha_url;
+				(*doc)["ha_token"] = "";
+
 				// Power settings
 				(*doc)["operating_mode"] = current_config->operating_mode;
 				(*doc)["duty_cycle_wake_seconds"] = current_config->duty_cycle_wake_seconds;
@@ -387,6 +391,19 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				const char* mqtt_pass = doc["mqtt_password"];
 				if (mqtt_pass && strlen(mqtt_pass) > 0) {
 						strlcpy(current_config->mqtt_password, mqtt_pass, CONFIG_MQTT_PASSWORD_MAX_LEN);
+				}
+		}
+
+		// Home Assistant REST API URL
+		if (doc.containsKey("ha_url")) {
+				strlcpy(current_config->ha_url, doc["ha_url"] | "", CONFIG_HA_URL_MAX_LEN);
+		}
+
+		// Home Assistant token (only update if provided and not empty)
+		if (doc.containsKey("ha_token")) {
+				const char* ha_token = doc["ha_token"];
+				if (ha_token && strlen(ha_token) > 0) {
+						strlcpy(current_config->ha_token, ha_token, CONFIG_HA_TOKEN_MAX_LEN);
 				}
 		}
 
