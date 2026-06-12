@@ -111,7 +111,9 @@ static uint32_t epaper_current_slot_duration_seconds() {
 static EpaperButtonWakeAction g_button_wake_action_boot = EpaperButtonWakeAction::None;
 
 static EpaperButtonWakeAction classify_button_wake(uint32_t threshold_ms) {
-		if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_EXT0) {
+		// The wake button is armed via esp_sleep_enable_ext1_wakeup() in
+		// sleep_prepare_hook(), so a button wake reports ESP_SLEEP_WAKEUP_EXT1.
+		if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_EXT1) {
 				return EpaperButtonWakeAction::None;
 		}
 		pinMode(EPAPER_BUTTON_PIN, INPUT);
@@ -126,7 +128,9 @@ static EpaperButtonWakeAction classify_button_wake(uint32_t threshold_ms) {
 }
 
 static bool classify_cold_boot_config_hold(uint32_t threshold_ms) {
-		if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
+		// Button wakes (ext1) are handled by classify_button_wake(); this path is
+		// only for a genuine cold boot (power-on) hold.
+		if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
 				return false;
 		}
 
@@ -143,7 +147,7 @@ static bool classify_cold_boot_config_hold(uint32_t threshold_ms) {
 }
 
 bool epaper_button_is_button_wake() {
-		return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
+		return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1;
 }
 
 EpaperButtonWakeAction epaper_button_wake_action() {
@@ -403,7 +407,7 @@ static void wake_classify_hook(bool *handled, bool *force_config) {
 #if HAS_EPAPER_WAKE_BUTTON
 		g_button_wake_action_boot = classify_button_wake(2500);
 		const bool cold_boot_hold_config = classify_cold_boot_config_hold(2500);
-		if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
+		if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
 				if (handled) *handled = true;
 		}
 		if (g_button_wake_action_boot == EpaperButtonWakeAction::Config || cold_boot_hold_config) {

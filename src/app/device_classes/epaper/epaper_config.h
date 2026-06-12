@@ -74,7 +74,7 @@ enum class EpaperButtonWakeAction : uint8_t {
 		Config = 2,
 };
 
-// True if the most recent wake was triggered by the e-paper wake button (ext0).
+// True if the most recent wake was triggered by the e-paper wake button (ext1).
 bool epaper_button_is_button_wake();
 // Boot-time classification of the wake-button press (short = Refresh, long = Config).
 EpaperButtonWakeAction epaper_button_wake_action();

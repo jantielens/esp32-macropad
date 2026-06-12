@@ -36,7 +36,7 @@
 #define HAS_EPAPER true
 
 // Inkplate carrier exposes a "wake" button on GPIO36 (input-only, no internal
-// pullup; external pullup is on the board). Wired for ext0 deep-sleep wake on
+// pullup; external pullup is on the board). Wired for ext1 deep-sleep wake on
 // low level.
 #define HAS_EPAPER_WAKE_BUTTON true
 #define EPAPER_BUTTON_PIN 36

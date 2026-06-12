@@ -36,7 +36,7 @@ Total flags: 224
 - **HAS_EPAPER** default: `false` — Enable the e-paper refresh path and E-Paper portal page.
 - **HAS_EPAPER_FRONTLIGHT** default: `false` — Enable e-paper frontlight control on boards with frontlight hardware.
 - **HAS_EPAPER_VCOM** default: `false` — Enable the portal VCOM calibration page (TPS65186/Inkplate panels only).
-- **HAS_EPAPER_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext0 wake plus short/long press).
+- **HAS_EPAPER_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext1 wake plus short/long press).
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
 - **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.

@@ -104,7 +104,7 @@ struct HwButtonDef {
 #define IS_DARKROOM_TIMER false
 #endif
 
-// Enable e-paper wake-button handling (ext0 wake plus short/long press).
+// Enable e-paper wake-button handling (ext1 wake plus short/long press).
 #ifndef HAS_EPAPER_WAKE_BUTTON
 #define HAS_EPAPER_WAKE_BUTTON false
 #endif
