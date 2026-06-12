@@ -17,11 +17,12 @@ extern DeviceConfig device_config;
 
 #define TAG "HwBtn"
 
-// Press debounce window (ms). Release is implicitly debounced by the ~10ms
-// loop() cadence; bounce during the initial press is rejected here.
+// Debounce window (ms), applied to both press and release. Bounce during the
+// initial press is rejected in Debounce; a release is only committed after the
+// line stays inactive for this window (TapRelease / HoldRelease).
 #define HW_BUTTON_DEBOUNCE_MS 20
 
-enum class BtnState : uint8_t { Idle, Debounce, Pressed, Held };
+enum class BtnState : uint8_t { Idle, Debounce, Pressed, TapRelease, Held, HoldRelease };
 
 struct BtnRuntime {
     BtnState state;
@@ -69,7 +70,8 @@ static void dispatch_event(uint8_t index, bool is_hold) {
     LOGI(TAG, "HW btn %u %s: dispatching %u action(s)", index, is_hold ? "hold" : "tap", count);
     if (count == 0) return;
 #if HAS_AUDIO
-    maybe_beep(actions, count);
+    // tap_beep is the tap feedback cue only; hold events do not beep.
+    if (!is_hold) maybe_beep(actions, count);
 #endif
     char label[16];
     snprintf(label, sizeof(label), "HWBtn%u%s", index, is_hold ? "H" : "T");
@@ -123,16 +125,33 @@ void hw_buttons_loop() {
                 break;
             case BtnState::Pressed:
                 if (!active) {
-                    dispatch_event(i, false);  // released before hold → tap
-                    rt.state = BtnState::Idle;
+                    rt.state = BtnState::TapRelease;  // candidate tap; debounce release
+                    rt.t_change = now;
                 } else if (now - rt.t_change >= HW_BUTTON_HOLD_MS) {
                     dispatch_event(i, true);   // held past threshold → hold
                     rt.state = BtnState::Held;
                 }
                 break;
+            case BtnState::TapRelease:
+                if (active) {
+                    rt.state = BtnState::Pressed;  // bounce; resume press
+                    rt.t_change = now;
+                } else if (now - rt.t_change >= HW_BUTTON_DEBOUNCE_MS) {
+                    dispatch_event(i, false);  // release confirmed → tap
+                    rt.state = BtnState::Idle;
+                }
+                break;
             case BtnState::Held:
                 if (!active) {
-                    rt.state = BtnState::Idle;  // hold already fired; suppress tap
+                    rt.state = BtnState::HoldRelease;  // debounce release before Idle
+                    rt.t_change = now;
+                }
+                break;
+            case BtnState::HoldRelease:
+                if (active) {
+                    rt.state = BtnState::Held;  // bounce; still held (hold already fired)
+                } else if (now - rt.t_change >= HW_BUTTON_DEBOUNCE_MS) {
+                    rt.state = BtnState::Idle;  // release confirmed
                 }
                 break;
         }
