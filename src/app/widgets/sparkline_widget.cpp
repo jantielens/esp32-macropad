@@ -864,8 +864,13 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         for (uint8_t fi = 0; fi < st->line_count; fi++) {
             if (st->lbl_current[fi]) { font_src = st->lbl_current[fi]; break; }
         }
-        int16_t lbl_h = lv_font_get_line_height(
-            lv_obj_get_style_text_font(font_src, LV_PART_MAIN)) + 2;
+        // Nominal font line height — used only as a fallback if a label has not
+        // been laid out yet. The collision spacing below uses the *measured*
+        // label height instead, so it accounts for theme padding and the real
+        // glyph extent (the font line height alone can be shorter, which makes
+        // stacked labels slightly overlap).
+        int16_t font_line_h = lv_font_get_line_height(
+            lv_obj_get_style_text_font(font_src, LV_PART_MAIN));
 
         for (uint8_t ci = 0; ci < st->line_count; ci++) {
             if (!st->lbl_current[ci]) continue;
@@ -917,6 +922,19 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         }
 
         if (active_count > 0) {
+            // Measure the tallest actual label box (text was set above) so the
+            // collision spacing matches what is drawn.
+            int16_t box_h = 0;
+            for (uint8_t i = 0; i < active_count; i++) {
+                lv_obj_t* lbl = st->lbl_current[active[i].line_idx];
+                lv_obj_update_layout(lbl);
+                int16_t h = (int16_t)lv_obj_get_height(lbl);
+                if (h > box_h) box_h = h;
+            }
+            if (box_h <= 0) box_h = font_line_h;
+            const int16_t LABEL_GAP = 3;        // breathing room between labels
+            int16_t lbl_h = box_h + LABEL_GAP;  // per-row pitch for collision pass
+
             // Sort by ideal_y (simple insertion sort, max 3 elements)
             for (uint8_t i = 1; i < active_count; i++) {
                 LabelSlot tmp = active[i];
@@ -942,18 +960,33 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 }
             }
 
-            // If bottom label exceeds chart area, shift entire stack up
-            int16_t overflow = (adjusted_y[active_count - 1] + lbl_h) - chart_h;
-            if (overflow > 0) {
-                for (uint8_t i = 0; i < active_count; i++) {
-                    adjusted_y[i] -= overflow;
+            // Fit the stack into the chart. After the push-down pass each
+            // successive label top is lbl_h apart, so the stack spans
+            // (n-1)*lbl_h + box_h.
+            int16_t stack_h = (int16_t)((active_count - 1) * lbl_h + box_h);
+            if (stack_h <= chart_h) {
+                // Fits: shift the whole stack as a block so it stays inside
+                // [0, chart_h]. Block-shifting preserves spacing — unlike a
+                // per-label clamp, which would collapse labels onto one row.
+                int16_t shift = 0;
+                if (adjusted_y[active_count - 1] + box_h > chart_h)
+                    shift = chart_h - (adjusted_y[active_count - 1] + box_h);
+                if (adjusted_y[0] + shift < 0)
+                    shift = -adjusted_y[0];
+                if (shift != 0) {
+                    for (uint8_t i = 0; i < active_count; i++) adjusted_y[i] += shift;
                 }
-            }
-
-            // Clamp all to chart bounds
-            for (uint8_t i = 0; i < active_count; i++) {
-                if (adjusted_y[i] < 0) adjusted_y[i] = 0;
-                if (adjusted_y[i] + lbl_h > chart_h) adjusted_y[i] = chart_h - lbl_h;
+            } else {
+                // Too tall to fit without overlap: distribute tops evenly across
+                // the available height so labels stay as separated as possible
+                // instead of stacking onto a single clamped row.
+                int16_t span = chart_h - box_h;
+                if (span < 0) span = 0;
+                for (uint8_t i = 0; i < active_count; i++) {
+                    adjusted_y[i] = (active_count > 1)
+                        ? (int16_t)((int32_t)span * i / (active_count - 1))
+                        : (int16_t)(span / 2);
+                }
             }
 
             // Position labels in the right margin
