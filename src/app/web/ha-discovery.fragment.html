@@ -1,11 +1,39 @@
 <div class="section-header">
   <h2>🏠 Home Assistant</h2>
-  <p>REST API connection for service actions and MQTT auto-discovery.</p>
+  <p>Two independent integration paths — use either, both, or neither.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <h3 class="h6">How it connects</h3>
+    <p class="text-muted small">The device talks to Home Assistant over two separate paths. They do not depend on each other, and each can be enabled on its own.</p>
+    <div class="table-responsive">
+      <table class="table table-sm small mb-2">
+        <thead>
+          <tr><th>Path</th><th>Direction</th><th>What it needs</th><th>What it gives you</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Service Actions</b><br>(REST API)</td>
+            <td>device&nbsp;&rarr;&nbsp;HA</td>
+            <td>HA URL + token<br>(set below)</td>
+            <td>The <b>Home Assistant Service</b> button action — call any HA service (lights, scenes, covers&hellip;).</td>
+          </tr>
+          <tr>
+            <td><b>MQTT</b></td>
+            <td>device&nbsp;&harr;&nbsp;HA</td>
+            <td>MQTT broker<br>(<a href="#mqtt">set on the MQTT page</a>)</td>
+            <td>Auto-discovery, live HA state, <code>[mqtt:&hellip;]</code> bindings, and remote control — see below.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-muted small mb-0">Service Actions use Home Assistant's HTTP API and need no MQTT broker. Everything in the MQTT section below needs only a connected broker — no token.</p>
+  </div>
 </div>
 <div class="card mb-3" id="ha-rest-section">
   <div class="card-body">
-    <h3 class="h6">Service Actions (REST API)</h3>
-    <p class="text-muted small">Configure a Home Assistant URL and long-lived access token to enable the <b>Home Assistant Service</b> button action, which calls any HA service (lights, switches, covers, scenes, etc.).</p>
+    <h3 class="h6">Service Actions (REST API) &mdash; device &rarr; HA</h3>
+    <p class="text-muted small">Configure a Home Assistant URL and long-lived access token to enable the <b>Home Assistant Service</b> button action, which calls any HA service (lights, switches, covers, scenes, etc.). This path is independent of MQTT.</p>
     <div class="mb-3">
       <label class="form-label" for="ha_url">Home Assistant URL</label>
       <input type="text" class="form-control" id="ha_url" name="ha_url" maxlength="47" placeholder="http://192.168.1.50:8123">
@@ -23,19 +51,23 @@
 </div>
 <div class="card mb-3">
   <div class="card-body">
-    <h3 class="h6">MQTT Auto-Discovery</h3>
-    <p class="text-muted">When MQTT is configured, the device automatically advertises its data and capabilities to Home Assistant — sensors, buttons, siren, volume, and other entities appear under the <code>homeassistant/</code> topic prefix with no manual YAML. This makes the device ready to use in HA dashboards and automations out of the box.</p>
-    <p class="text-muted small">Just make sure your MQTT broker is reachable and HA's MQTT integration is enabled.</p>
-  </div>
-</div>
-<div class="card mb-3">
-  <div class="card-body">
-    <h3 class="h6">Live HA State via MQTT Statestream (optional)</h3>
-    <p class="text-muted">Auto-discovery sends the device's data <em>to</em> Home Assistant. To go the other way — show live HA entity state <em>on</em> the device — enable HA's <code>mqtt_statestream</code> integration. It publishes every entity's state to MQTT, so you can, for example, bind a light's on/off state to the color of a button icon.</p>
-    <p class="text-muted">Add this to your HA <code>configuration.yaml</code>:</p>
+    <h3 class="h6">What MQTT unlocks</h3>
+    <p class="text-muted small">Connect an MQTT broker on the <a href="#mqtt">MQTT page</a> first. Once connected, the capabilities below become available. Each is independent — you can use any subset.</p>
+
+    <h4 class="h6 mt-3 mb-1">Auto-Discovery &amp; State <span class="text-muted small">— device &rarr; HA</span></h4>
+    <p class="text-muted small">The device automatically advertises its data and capabilities to Home Assistant — sensors, diagnostics, buttons, siren, volume, and other entities appear under the <code>homeassistant/</code> topic prefix with no manual YAML, and the device keeps publishing their live values. Just make sure HA's MQTT integration is enabled.</p>
+
+    <h4 class="h6 mt-3 mb-1">Live HA State via Statestream <span class="text-muted small">— HA &rarr; device</span></h4>
+    <p class="text-muted small">Auto-discovery sends data <em>to</em> Home Assistant. To go the other way — bring live HA entity state <em>onto</em> the device — enable HA's <code>mqtt_statestream</code> integration, which publishes every entity's state to MQTT. Add this to your HA <code>configuration.yaml</code>:</p>
     <pre class="small"><code>mqtt_statestream:&#10;&#32;&#32;base_topic: homeassistant&#10;&#32;&#32;publish_attributes: false&#10;&#32;&#32;publish_timestamps: false</code></pre>
-    <p class="text-muted">Then a button label or color can reference live state with a binding like:</p>
+    <p class="text-muted small mb-0">See the <a href="https://www.home-assistant.io/integrations/mqtt_statestream/" target="_blank" rel="noopener">MQTT Statestream documentation</a> for details.</p>
+
+    <h4 class="h6 mt-3 mb-1"><code>[mqtt:&hellip;]</code> Bindings <span class="text-muted small">— any topic &rarr; device</span></h4>
+    <p class="text-muted small">Button labels, colors, and widgets can subscribe to <b>any</b> MQTT topic — HA Statestream above, or any other publisher on your broker — to show live data. For example, bind a button to a light's on/off state:</p>
     <pre class="small"><code>[mqtt:homeassistant/light/living_room/state;;]</code></pre>
-    <p class="text-muted small">See the <a href="https://www.home-assistant.io/integrations/mqtt_statestream/" target="_blank" rel="noopener">MQTT Statestream documentation</a> for details.</p>
+    <p class="text-muted small mb-0">Configure these in the Pad Editor. Bindings work without auto-discovery or Statestream — they only need the topic to exist on the broker.</p>
+
+    <h4 class="h6 mt-3 mb-1">Remote Control <span class="text-muted small">— HA &rarr; device</span></h4>
+    <p class="text-muted small mb-0">Auto-discovery also exposes control entities so Home Assistant can drive the device: a screen-select entity for remote navigation, screensaver wake, notification messages, and (on audio boards) siren, volume, and beep buttons.</p>
   </div>
 </div>

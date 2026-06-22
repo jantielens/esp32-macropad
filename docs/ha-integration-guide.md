@@ -1,10 +1,26 @@
 # Home Assistant Integration Guide
 
-The ESP32 Macropad integrates with Home Assistant via MQTT auto-discovery. Once connected to your MQTT broker (configured in the web portal's Network page), the device automatically registers its entities in Home Assistant — no manual YAML configuration needed.
+The ESP32 Macropad integrates with Home Assistant over **two independent paths**. Use either, both, or neither — they do not depend on each other.
 
-The device can also call Home Assistant **services** in the outbound direction over the REST API — see [Service Actions](#service-actions-rest-api) below. This path is independent of MQTT.
+| Path | Direction | Needs | Enables |
+|------|-----------|-------|---------|
+| **Service Actions** (REST API) | device → HA | HA URL + long-lived token | The *Home Assistant Service* button action — call any HA service. See [Service Actions](#service-actions-rest-api). |
+| **MQTT** | device ↔ HA | MQTT broker (configured on the web portal's MQTT page) | Auto-discovery, live HA state, `[mqtt:…]` bindings, and remote control. |
 
-> **Prerequisites**: MQTT broker configured and connected, Home Assistant MQTT integration enabled.
+Service Actions talk to Home Assistant's HTTP API and require no MQTT broker. Everything in the MQTT path below requires only a connected broker — no token.
+
+## What MQTT Unlocks
+
+Once an MQTT broker is connected, these capabilities become available. Each is independent — you can use any subset.
+
+| Capability | Direction | Description |
+|------------|-----------|-------------|
+| **Auto-Discovery & State** | device → HA | The device advertises its entities (sensors, diagnostics, buttons, siren, volume…) under the `homeassistant/` prefix with no manual YAML, and keeps publishing their live values. |
+| **Statestream** | HA → device | HA's `mqtt_statestream` integration publishes every entity's state to MQTT so the device can read it. |
+| **`[mqtt:…]` Bindings** | any topic → device | Button labels, colors, and widgets subscribe to any MQTT topic (Statestream or any other publisher) to show live data. Works without auto-discovery or Statestream. |
+| **Remote Control** | HA → device | Control entities let HA drive the device: screen-select navigation, screensaver wake, notification messages, and (on audio boards) siren, volume, and beep buttons. |
+
+> **Prerequisites (MQTT path)**: MQTT broker configured and connected, Home Assistant MQTT integration enabled.
 
 ---
 
