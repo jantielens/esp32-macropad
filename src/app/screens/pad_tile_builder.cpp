@@ -342,6 +342,19 @@ void PadScreen::buildTiles() {
             if (wt) {
                 tile.widget_type = wt;
                 memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
+#if HAS_MQTT
+                // Expand [pad:] tokens in widget data bindings so stream-based
+                // widgets (e.g. sparkline) look up their data stream by the same
+                // expanded key that data_stream_rebuild() registered it under.
+                // Without this, [pad:name] data bindings never match a stream.
+                for (int wb = 0; wb < MAX_WIDGET_BINDINGS; wb++) {
+                    char expanded[CONFIG_LABEL_MAX_LEN];
+                    if (pad_binding_expand(cfg, tile.widget_cfg.data_binding[wb],
+                                           expanded, sizeof(expanded))) {
+                        strlcpy(tile.widget_cfg.data_binding[wb], expanded, CONFIG_LABEL_MAX_LEN);
+                    }
+                }
+#endif
                 // Widget data binding templates
                 for (int wb = 0; wb < MAX_WIDGET_BINDINGS; wb++) {
                     strlcpy(tile.widget_binding[wb], bcfg.widget.data_binding[wb], CONFIG_LABEL_MAX_LEN);
