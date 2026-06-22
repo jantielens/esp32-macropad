@@ -789,6 +789,7 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
 | **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
 | **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
+| **Line separation** | Per-line vertical offset in pixels (0 = off, 1–6). When non-zero and the widget has more than one line, each line is nudged by a small symmetric offset (e.g. two lines fan out by ±offset, three lines by −offset / 0 / +offset) so lines with near-identical values stay visually distinct instead of drawing on top of each other. The current-value dot and min/max markers move with their line. Note: this shifts lines a couple of pixels off their exact value, so leave it at 0 when precise pixel-accurate readout matters |
 | **Max marker size** | Dot radius for the maximum-value marker (0 = off, 1–20 px). When non-zero, a dot and optional label are drawn at the highest point in the visible data |
 | **Max format** | Printf format string for the max label (e.g., `hi %.1f`). Only one `%f`/`%e`/`%g` specifier allowed. Leave empty for dot only (no label) |
 | **Max label color** | Override color for the max label text. White (#FFFFFF) means "auto" — the label inherits the line's current color |
