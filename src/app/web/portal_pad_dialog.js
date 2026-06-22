@@ -250,6 +250,9 @@ function padDialogOpen(col, row) {
     // Scroll dialog body to top
     const body = document.querySelector('.pad-edit-modal .pad-edit-body');
     if (body) body.scrollTop = 0;
+
+    // Refresh binding length warnings for the loaded values
+    if (typeof padScanMaxlenHints === 'function') padScanMaxlenHints();
 }
 
 function padDialogClose() {

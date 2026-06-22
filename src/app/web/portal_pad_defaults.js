@@ -304,3 +304,56 @@ function padCollectUsedColors(editCol, editRow) {
     }
     return colors.slice(0, 9);
 }
+
+// --- Binding length warning (pad editor) ---
+// When a bindable field is filled to its maxlength while it contains a binding
+// token, the value may be a truncated [scheme:...] expression. Show an inline
+// hint pointing the user at named pad bindings, which keep long topics short.
+
+function padBindingMaxlenHint(input) {
+    if (!input || input.tagName !== 'INPUT') return;
+    const max = input.maxLength;
+    if (!max || max < 0) return;
+    const val = input.value || '';
+    const show = val.length >= max && val.indexOf('[') !== -1;
+    let hint = input._maxlenHint;
+    if (show) {
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.className = 'binding-maxlen-hint';
+            hint.innerHTML = 'Reached the maximum length. For a long binding, define a ' +
+                '<a href="#" onclick="showBindingHelp(\'pad\');return false;">named pad binding</a> ' +
+                'and use the short <code>[pad:name]</code> alias here.';
+            // Anchor to the enclosing field block so the hint always lands on its
+            // own full-width line below the input, never as a flex sibling that
+            // would squeeze the textbox narrow.
+            const anchor = input.closest('.form-group') || input.closest('.bindable-color') || input;
+            anchor.insertAdjacentElement('afterend', hint);
+            input._maxlenHint = hint;
+        }
+        hint.style.display = '';
+    } else if (hint) {
+        hint.style.display = 'none';
+    }
+}
+
+// Re-evaluate every bindable field in the pad-edit dialog (clears stale hints
+// from a previous button and shows fresh ones for the current values).
+function padScanMaxlenHints() {
+    const overlay = document.getElementById('pad-edit-overlay');
+    if (!overlay) return;
+    overlay.querySelectorAll('input[maxlength]').forEach(padBindingMaxlenHint);
+}
+
+// Delegated listener — fires for any bindable input typed in the pad editor.
+if (!window.__padMaxlenHintWired) {
+    window.__padMaxlenHintWired = true;
+    document.addEventListener('input', function(e) {
+        const t = e.target;
+        if (t && t.tagName === 'INPUT' && t.maxLength > 0 &&
+            t.closest && t.closest('#pad-edit-overlay')) {
+            padBindingMaxlenHint(t);
+        }
+    });
+}
+

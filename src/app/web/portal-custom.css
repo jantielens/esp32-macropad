@@ -1687,6 +1687,16 @@ input[type="text"].label-style-input {
 
 .binding-docs-note-strong { color: var(--portal-docs-heading); font-weight: 600; }
 
+.binding-maxlen-hint {
+  display: block; width: 100%; box-sizing: border-box;
+  margin: 4px 0 2px; padding: 6px 10px;
+  border: 1px solid #f0c36d; border-left-width: 3px;
+  border-radius: 6px; background: rgba(240, 195, 109, 0.12);
+  color: var(--portal-docs-body, #5a4a1a); font-size: 12px; line-height: 1.5;
+}
+.binding-maxlen-hint a { color: var(--portal-link-blue); text-decoration: underline; cursor: pointer; }
+.binding-maxlen-hint code { font-size: 11px; }
+
 .binding-docs-badge {
   display: inline-block; margin-left: 8px; padding: 2px 8px;
   border-radius: 999px; background: var(--portal-docs-badge-bg);
