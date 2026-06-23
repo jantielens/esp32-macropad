@@ -736,8 +736,8 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Tick Color** | Color of the tick marks. Supports binding expressions for dynamic color |
 | **Target Value** | Bindable value on the scale that positions a target marker and optional zone across all active rings. Empty = no target. For example `[mqtt:hvac/setpoint;temperature]` |
 | **Target Zone Angle** | Total zone width in degrees centered on the target value (0 = no zone, max 90). The zone is rendered as a semi-transparent overlay on all rings |
-| **Target Tick Width** | Tick line width at the target value position (0 = no tick, 1–5 px). Boundary ticks at the zone edges use the same width |
-| **Target Marker Color** | Color of the target value tick and zone boundary ticks. Supports binding expressions |
+| **Target Tick Width** | Tick line width at the target value position (0 = no tick, 1–5 px) |
+| **Target Marker Color** | Color of the target value tick. Supports binding expressions |
 | **Target Zone Color** | Color of the zone overlay arc. Supports binding expressions |
 | **Animation (ms)** | Duration of the ease-out transition when arc and needle values change (0–5000 ms). Default: 300. Set to 0 for instant updates (no animation). Applies to all rings and the needle. The first value after screen load always snaps immediately |
 
