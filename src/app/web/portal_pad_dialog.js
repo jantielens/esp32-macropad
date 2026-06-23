@@ -134,6 +134,11 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-bar-data-binding-2').value = btn.widget_data_binding_2 || '';
     document.getElementById('pad-edit-widget-bar-data-binding-3').value = btn.widget_data_binding_3 || '';
     document.getElementById('pad-edit-widget-bar-data-binding-4').value = btn.widget_data_binding_4 || '';
+    document.getElementById('pad-edit-widget-bar-label').value = btn.widget_bar_label || '';
+    document.getElementById('pad-edit-widget-bar-label-2').value = btn.widget_bar_label_2 || '';
+    document.getElementById('pad-edit-widget-bar-label-3').value = btn.widget_bar_label_3 || '';
+    document.getElementById('pad-edit-widget-bar-label-4').value = btn.widget_bar_label_4 || '';
+    document.getElementById('pad-edit-widget-bar-label-size').value = (btn.widget_bar_label_size !== undefined) ? btn.widget_bar_label_size : 0;
     padSetBindableColor('pad-edit-widget-bar-color', btn.widget_bar_color, '#4CAF50');
     padSetBindableColor('pad-edit-widget-bar-color-2', btn.widget_bar_color_2, '#2196F3');
     padSetBindableColor('pad-edit-widget-bar-color-3', btn.widget_bar_color_3, '#9C27B0');
@@ -377,6 +382,12 @@ function padDialogOk(keepOpen) {
             btn.widget_data_binding_2 = document.getElementById('pad-edit-widget-bar-data-binding-2').value.trim();
             btn.widget_data_binding_3 = document.getElementById('pad-edit-widget-bar-data-binding-3').value.trim();
             btn.widget_data_binding_4 = document.getElementById('pad-edit-widget-bar-data-binding-4').value.trim();
+            btn.widget_bar_label = document.getElementById('pad-edit-widget-bar-label').value.trim();
+            btn.widget_bar_label_2 = document.getElementById('pad-edit-widget-bar-label-2').value.trim();
+            btn.widget_bar_label_3 = document.getElementById('pad-edit-widget-bar-label-3').value.trim();
+            btn.widget_bar_label_4 = document.getElementById('pad-edit-widget-bar-label-4').value.trim();
+            const barLblSz = parseInt(document.getElementById('pad-edit-widget-bar-label-size').value);
+            if (!isNaN(barLblSz) && barLblSz > 0) btn.widget_bar_label_size = (barLblSz > 200) ? 200 : barLblSz;
             btn.widget_bar_min = padGetBindableNumber('pad-edit-widget-bar-min', 0);
             btn.widget_bar_max = padGetBindableNumber('pad-edit-widget-bar-max', 3);
             btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');

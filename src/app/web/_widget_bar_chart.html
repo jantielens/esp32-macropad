@@ -28,6 +28,29 @@
                             </div>
                         </div>
 
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-label">Bar 1 caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <input type="text" class="binding-mono" id="pad-edit-widget-bar-label" maxlength="63" placeholder="Optional — text or [binding], e.g. Solar [mqtt:home/solar]W">
+                            <small>Shown beneath the bar (vertical) or left of it (horizontal), colored to match</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-label-2">Bar 2 caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <input type="text" class="binding-mono" id="pad-edit-widget-bar-label-2" maxlength="63" placeholder="Optional — text or [binding]">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-label-3">Bar 3 caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <input type="text" class="binding-mono" id="pad-edit-widget-bar-label-3" maxlength="63" placeholder="Optional — text or [binding]">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-label-4">Bar 4 caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <input type="text" class="binding-mono" id="pad-edit-widget-bar-label-4" maxlength="63" placeholder="Optional — text or [binding]">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-label-size">Caption Size (px)</label>
+                            <input type="number" id="pad-edit-widget-bar-label-size" min="0" max="200" value="0" placeholder="0 = auto">
+                            <small>Caption strip width (horizontal) or height (vertical). 0 = auto. Captions support <code>\n</code> for line breaks</small>
+                        </div>
+
                         <div style="display:flex; gap:8px;">
                             <div class="form-group" style="flex:1;">
                                 <label for="pad-edit-widget-bar-min">Min Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
