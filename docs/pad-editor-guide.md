@@ -683,7 +683,11 @@ The bar chart widget draws a vertical or horizontal bar that fills based on a nu
 | **Bar color** | The fill color of the bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
 | **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
+| **Zero-Centered** | The fill grows from the zero point instead of the minimum — negative values grow down (or left in horizontal mode), positive values grow up (or right). Use with a negative minimum (e.g. min `-5000`, max `5000`) for signed values like net power flow |
 | **Animation (ms)** | Duration of the ease-out transition when the bar value changes (0–5000 ms). Default: 300. Set to 0 for instant updates (no animation). The first value after screen load always snaps immediately |
+| **Gridlines** | Number of evenly spaced scale lines drawn across the bar (0–20, 0 = none), with configurable width and bindable color |
+| **Target Value** | A bindable value on the scale drawn as a marker line across the bar (e.g. a setpoint). Empty = no target |
+| **Target Zone %** | A shaded band centered on the target, sized as a percentage of the min–max range (0 = no band). The marker line width and the marker/zone colors are configurable and bindable |
 
 **Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: pick your zone colors, set breakpoints, and the expression auto-generates as you type. For a solar panel with a 5 kW max:
 

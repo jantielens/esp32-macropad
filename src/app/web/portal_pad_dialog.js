@@ -135,7 +135,16 @@ function padDialogOpen(col, row) {
     padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, '#1A1A1A');
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
     document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
+    document.getElementById('pad-edit-widget-bar-zero-centered').checked = (btn.widget_bar_zero_centered !== undefined) ? btn.widget_bar_zero_centered : false;
     document.getElementById('pad-edit-widget-bar-anim-ms').value = (btn.widget_anim_ms !== undefined) ? btn.widget_anim_ms : 300;
+    document.getElementById('pad-edit-widget-bar-ticks').value = (btn.widget_bar_ticks !== undefined) ? btn.widget_bar_ticks : 0;
+    document.getElementById('pad-edit-widget-bar-tick-width').value = (btn.widget_bar_tick_width !== undefined) ? btn.widget_bar_tick_width : 1;
+    padSetBindableColor('pad-edit-widget-bar-tick-color', btn.widget_bar_tick_color, '#808080');
+    document.getElementById('pad-edit-widget-bar-marker-value').value = btn.widget_bar_marker_value || '';
+    document.getElementById('pad-edit-widget-bar-marker-zone-pct').value = (btn.widget_bar_marker_zone_pct !== undefined) ? btn.widget_bar_marker_zone_pct : 0;
+    document.getElementById('pad-edit-widget-bar-marker-width').value = (btn.widget_bar_marker_width !== undefined) ? btn.widget_bar_marker_width : 2;
+    padSetBindableColor('pad-edit-widget-bar-marker-color', btn.widget_bar_marker_color, '#FFFFFF');
+    padSetBindableColor('pad-edit-widget-bar-marker-zone-color', btn.widget_bar_marker_zone_color, '#FF5722');
 
     // Gauge widget fields
     document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
@@ -367,8 +376,21 @@ function padDialogOk(keepOpen) {
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
             const orient = document.getElementById('pad-edit-widget-orientation').value;
             if (orient === 'horizontal') btn.widget_orientation = 'horizontal';
+            btn.widget_bar_zero_centered = document.getElementById('pad-edit-widget-bar-zero-centered').checked;
             const barAnimMs = parseInt(document.getElementById('pad-edit-widget-bar-anim-ms').value);
             btn.widget_anim_ms = (isNaN(barAnimMs) || barAnimMs < 0) ? 300 : (barAnimMs > 5000) ? 5000 : barAnimMs;
+            const barTicks = parseInt(document.getElementById('pad-edit-widget-bar-ticks').value);
+            btn.widget_bar_ticks = (isNaN(barTicks) || barTicks < 0) ? 0 : (barTicks > 20) ? 20 : barTicks;
+            const barTickW = parseInt(document.getElementById('pad-edit-widget-bar-tick-width').value);
+            btn.widget_bar_tick_width = (isNaN(barTickW) || barTickW < 1) ? 1 : (barTickW > 5) ? 5 : barTickW;
+            btn.widget_bar_tick_color = padGetBindableColor('pad-edit-widget-bar-tick-color');
+            btn.widget_bar_marker_value = document.getElementById('pad-edit-widget-bar-marker-value').value.trim();
+            const barZonePct = parseInt(document.getElementById('pad-edit-widget-bar-marker-zone-pct').value);
+            btn.widget_bar_marker_zone_pct = (isNaN(barZonePct) || barZonePct < 0) ? 0 : (barZonePct > 100) ? 100 : barZonePct;
+            const barMarkerW = parseInt(document.getElementById('pad-edit-widget-bar-marker-width').value);
+            btn.widget_bar_marker_width = (isNaN(barMarkerW) || barMarkerW < 0) ? 2 : (barMarkerW > 10) ? 10 : barMarkerW;
+            btn.widget_bar_marker_color = padGetBindableColor('pad-edit-widget-bar-marker-color');
+            btn.widget_bar_marker_zone_color = padGetBindableColor('pad-edit-widget-bar-marker-zone-color');
         }
         if (wtype === 'gauge') {
             const gDataBinding = document.getElementById('pad-edit-gauge-data-binding').value.trim();
