@@ -671,16 +671,18 @@ Tapping "Pad 2: Home Assistant" (id: `pad_2`) navigates to that pad screen.
 
 ### Bar Chart
 
-The bar chart widget draws a vertical or horizontal bar that fills based on a numeric value — perfect for power meters, CPU gauges, progress bars, or tank levels.
+The bar chart widget draws one or more vertical or horizontal bars that fill based on numeric values — perfect for power meters, CPU gauges, progress bars, tank levels, or side-by-side comparisons of related values.
 
 **Configuration:**
 
 | Setting | Description |
 |---------|-------------|
-| **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
+| **Bar 1 data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
+| **Bar 2 / 3 / 4 data binding** | Optional. Each non-empty binding adds another bar to the widget (up to 4 total). Each bar gets its **own track** (background, gridlines, and target marker stay scoped to that bar — they no longer span the whole widget). The bars are spread evenly across the full width as columns (vertical) or stacked as rows (horizontal) with a fixed 6 px gap. All bars share the same min/max scale and zero-centered behavior |
 | **Min / Max** | The value range. The bar is empty at min and full at max. Accepts a number or a binding expression (e.g. `[health:psram_total]`) for dynamic scaling |
-| **Bar width %** | How wide the bar is relative to the button (1–100%). In horizontal mode, controls the bar height instead |
-| **Bar color** | The fill color of the bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
+| **Bar width %** | Each bar's thickness within its own column (1–100%), centered in the column. With a single bar this is the bar's width relative to the button, exactly as before; with multiple bars, lowering it thins each bar while keeping them spread across the full width. In horizontal mode it controls bar height instead |
+| **Bar 1 color** | The fill color of the first bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
+| **Bar 2 / 3 / 4 color** | Fill colors for the additional bars. Defaults: blue (`#2196F3`), purple (`#9C27B0`), orange (`#FF9800`). Each is bindable |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
 | **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
 | **Zero-Centered** | The fill grows from the zero point instead of the minimum — negative values grow down (or left in horizontal mode), positive values grow up (or right). Use with a negative minimum (e.g. min `-5000`, max `5000`) for signed values like net power flow |

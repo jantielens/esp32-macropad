@@ -131,7 +131,13 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : '0';
     document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : '3';
     document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-widget-bar-data-binding-2').value = btn.widget_data_binding_2 || '';
+    document.getElementById('pad-edit-widget-bar-data-binding-3').value = btn.widget_data_binding_3 || '';
+    document.getElementById('pad-edit-widget-bar-data-binding-4').value = btn.widget_data_binding_4 || '';
     padSetBindableColor('pad-edit-widget-bar-color', btn.widget_bar_color, '#4CAF50');
+    padSetBindableColor('pad-edit-widget-bar-color-2', btn.widget_bar_color_2, '#2196F3');
+    padSetBindableColor('pad-edit-widget-bar-color-3', btn.widget_bar_color_3, '#9C27B0');
+    padSetBindableColor('pad-edit-widget-bar-color-4', btn.widget_bar_color_4, '#FF9800');
     padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, '#1A1A1A');
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
     document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
@@ -368,9 +374,15 @@ function padDialogOk(keepOpen) {
         if (wtype === 'bar_chart') {
             const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
             if (wDataBinding) btn.widget_data_binding = wDataBinding;
+            btn.widget_data_binding_2 = document.getElementById('pad-edit-widget-bar-data-binding-2').value.trim();
+            btn.widget_data_binding_3 = document.getElementById('pad-edit-widget-bar-data-binding-3').value.trim();
+            btn.widget_data_binding_4 = document.getElementById('pad-edit-widget-bar-data-binding-4').value.trim();
             btn.widget_bar_min = padGetBindableNumber('pad-edit-widget-bar-min', 0);
             btn.widget_bar_max = padGetBindableNumber('pad-edit-widget-bar-max', 3);
             btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');
+            btn.widget_bar_color_2 = padGetBindableColor('pad-edit-widget-bar-color-2');
+            btn.widget_bar_color_3 = padGetBindableColor('pad-edit-widget-bar-color-3');
+            btn.widget_bar_color_4 = padGetBindableColor('pad-edit-widget-bar-color-4');
             btn.widget_bar_bg_color = padGetBindableColor('pad-edit-widget-bar-bg-color');
             const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
