@@ -82,6 +82,7 @@ struct BarSlot {
     lv_obj_t* marker_line;      // Per-bar target marker line (or nullptr)
     lv_obj_t* marker_zone;      // Per-bar target zone band overlay (or nullptr)
     lv_obj_t* label;            // Per-bar caption (beneath column / left of row, or nullptr)
+    lv_obj_t* cap;              // Dual bars only: square overlay on the inner (center) edge (or nullptr)
     float     last_value;       // Last numeric value (for skipping redundant updates)
     uint32_t  cached_color;     // Last resolved fill color
     int16_t   last_anim_px;     // Last animated quantity (fill px or value-edge px)
@@ -213,6 +214,42 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
     cfg->marker_width = (mw > 10) ? 10 : mw;
     uint8_t mzp = btn["widget_bar_marker_zone_pct"] | (uint8_t)0;
     cfg->marker_zone_pct = (mzp > 100) ? 100 : mzp;
+}
+
+// Center cap for a dual bar: a small square child of the fill that overlays the
+// rounded inner corners (the edge meeting the partner at the zero baseline), so
+// the two halves touch with a flat seam while their outer ends stay rounded. As
+// a child of the fill it stays anchored to the fixed center edge automatically.
+// Anchor the cap to the fill's baseline (zero) edge. `dir < 0` means the bar
+// grows toward min/near (baseline edge is right/top); otherwise toward max/far
+// (baseline edge is left/bottom). Zero-centered single bars flip `dir` with the
+// sign of their value, so this is called again from the anim callback.
+static void bar_chart_align_center_cap(lv_obj_t* cap, bool horizontal, int8_t dir) {
+    if (horizontal) {
+        lv_obj_align(cap, dir < 0 ? LV_ALIGN_RIGHT_MID : LV_ALIGN_LEFT_MID, 0, 0);
+    } else {
+        lv_obj_align(cap, dir < 0 ? LV_ALIGN_TOP_MID : LV_ALIGN_BOTTOM_MID, 0, 0);
+    }
+}
+
+static lv_obj_t* bar_chart_make_center_cap(lv_obj_t* fill, bool horizontal,
+                                           int8_t dual_dir, int16_t track_cross,
+                                           lv_color_t color) {
+    const int16_t R = 4;  // matches the fill corner radius
+    lv_obj_t* cap = lv_obj_create(fill);
+    if (horizontal) {
+        lv_obj_set_size(cap, R, track_cross);
+    } else {
+        lv_obj_set_size(cap, track_cross, R);
+    }
+    bar_chart_align_center_cap(cap, horizontal, dual_dir);
+    lv_obj_set_style_bg_color(cap, color, 0);
+    lv_obj_set_style_bg_opa(cap, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(cap, 0, 0);
+    lv_obj_set_style_border_width(cap, 0, 0);
+    lv_obj_set_style_pad_all(cap, 0, 0);
+    lv_obj_clear_flag(cap, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+    return cap;
 }
 
 static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
@@ -455,6 +492,16 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         slot->track_total = fill_len;
         slot->track_cross = track_cross;
 
+        // Square off the inner (center/baseline) corners with a cap overlay:
+        // dual bars (fixed center seam) and single zero-centered bars (baseline
+        // edge re-anchored per value sign in bar_chart_anim_cb).
+        if (slot->dual_dir != 0 || cfg->zero_centered) {
+            slot->cap = bar_chart_make_center_cap(
+                fill, cfg->horizontal,
+                slot->dual_dir != 0 ? slot->dual_dir : (int8_t)+1, track_cross,
+                resolve_lv_color(bar_slot_color_cfg(cfg, oi), BAR_SLOT_DEFAULT_COLOR[oi]));
+        }
+
         // Dual far partner: a second fill hosted inside the same track. Both
         // halves anchor at the shared zero baseline (see bar_chart_anim_cb); the
         // owner grows toward min, the partner toward max.
@@ -479,6 +526,9 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             partner->bg = nullptr;  // shares the owner's track (no own bg/marker)
             partner->track_total = fill_len;
             partner->track_cross = track_cross;
+            partner->cap = bar_chart_make_center_cap(
+                pfill, cfg->horizontal, partner->dual_dir, track_cross,
+                resolve_lv_color(bar_slot_color_cfg(cfg, oi + 1), BAR_SLOT_DEFAULT_COLOR[oi + 1]));
         }
 
         // Per-bar scale gridlines (evenly spaced across the fill direction).
@@ -606,6 +656,11 @@ static void bar_chart_anim_cb(void* var, int32_t value) {
         int32_t lo = (value < z) ? value : z;
         int32_t hi = (value > z) ? value : z;
         int32_t size = hi - lo;
+        // Single zero-centered bars flip which edge meets the baseline with the
+        // sign of the value; dual halves keep their fixed center seam.
+        if (slot->cap && slot->dual_dir == 0) {
+            bar_chart_align_center_cap(slot->cap, st->horizontal, value >= z ? (int8_t)+1 : (int8_t)-1);
+        }
         if (st->horizontal) {
             lv_obj_set_size(slot->fill, size, slot->track_cross);
             lv_obj_align(slot->fill, LV_ALIGN_TOP_LEFT, lo, 0);
@@ -805,6 +860,7 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
             resolve_color_changed(bar_slot_color_cfg(cfg, s), BAR_SLOT_DEFAULT_COLOR[s],
                                   &slot->cached_color, &clr)) {
             lv_obj_set_style_bg_color(slot->fill, clr, 0);
+            if (slot->cap) lv_obj_set_style_bg_color(slot->cap, clr, 0);
             if (slot->label) lv_obj_set_style_text_color(slot->label, clr, 0);
         }
     }
@@ -849,6 +905,7 @@ static void bar_chart_destroy(WidgetState* state) {
         st->slots[s].fill = nullptr;
         st->slots[s].bg = nullptr;
         st->slots[s].label = nullptr;
+        st->slots[s].cap = nullptr;
     }
     // Free the heap-allocated gridline pointer array (the LVGL objects
     // themselves are deleted automatically with the parent tile).
