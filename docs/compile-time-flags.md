@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 226
+Total flags: 227
 
 ### Features (HAS_*)
 
@@ -168,6 +168,7 @@ Total flags: 226
 - **DISPLAY_BLANK_ON_SAVE** default: `false` — (LittleFS + lodepng). The browser blanks/restores via /api/display/brightness.
 - **DISPLAY_DEBIAS_CYCLES** default: `3` — Number of white↔black inversion cycles per de-bias refresh.
 - **DISPLAY_DEBIAS_HOLD_MS** default: `80` — Dwell time (ms) per half-cycle (white, then black) during de-bias.
+- **DISPLAY_DEBIAS_SETTLE_MS** default: `300` — Soft-landing VCOM settle (ms) at the end of each de-bias refresh; 0 disables.
 - **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
@@ -747,6 +748,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **DISPLAY_DEBIAS_HOLD_MS**
   - src/app/board_config.h
+- **DISPLAY_DEBIAS_SETTLE_MS**
+  - src/app/board_config.h
+  - src/app/drivers/mipi_dsi_driver.cpp
 - **DISPLAY_HARD_RESET_ON_SLEEP**
   - src/app/board_config.h
   - src/app/drivers/mipi_dsi_driver.cpp

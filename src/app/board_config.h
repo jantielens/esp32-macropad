@@ -914,6 +914,18 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #ifndef DISPLAY_DEBIAS_HOLD_MS
 #define DISPLAY_DEBIAS_HOLD_MS 80
 #endif
+// Soft-landing settle (ms) used at the END of each de-bias refresh. After the
+// inversion cycles the panel is held on a uniform black frame (Display On,
+// backlight off) for this long so frame inversion averages out the residual
+// LC/VCOM bias, then the same dwell is spent on Display Off so the panel's
+// internal VCOM discharge can equalize before RST is re-asserted LOW. Without
+// it the panel is frozen mid-equilibration and wakes into an unstable VCOM
+// state that flickers for minutes (JD9165 + cheap IPS). 0 restores the abrupt
+// power-down.
+// Soft-landing VCOM settle (ms) at the end of each de-bias refresh; 0 disables.
+#ifndef DISPLAY_DEBIAS_SETTLE_MS
+#define DISPLAY_DEBIAS_SETTLE_MS 300
+#endif
 
 // Hold the panel hardware reset pin LOW during screensaver sleep so the
 // panel IC fully powers down its internal regulators. Required on cheap

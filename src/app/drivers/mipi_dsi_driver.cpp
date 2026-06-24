@@ -567,8 +567,11 @@ bool MipiDsiDriver::needsTwoPhaseWake() const {
 //     then powering it down again. Power-down alone does not de-bias these
 //     cheap IPS cells — the trapped DC just relaxes slowly (the washed-out
 //     colors that fade a few minutes after wake), so the periodic inversion is
-//     what actually prevents the buildup. Leaves RST LOW + framebuffers black
-//     so the normal hard-reset wake path is unchanged.
+//     what actually prevents the buildup. A soft-landing settle then lets the
+//     panel reach VCOM equilibrium before RST is re-asserted LOW; freezing the
+//     panel mid-equilibration leaves it in a marginal VCOM state that flickers
+//     for minutes on the next wake. Leaves RST LOW + framebuffers black so the
+//     normal hard-reset wake path is unchanged.
 //   - Otherwise: re-blank both framebuffers as insurance against any transient
 //     LVGL write that slipped past the opaque top-layer overlay (e.g. overlay
 //     teardown race during fade-in) leaving stale pixels to ghost over hours.
@@ -584,14 +587,29 @@ void MipiDsiDriver::displayRefreshSleep() {
         fillFramebuffers(0x0000);  // black
         delay(DISPLAY_DEBIAS_HOLD_MS);
     }
-    // Brief settle so the final black frame is fully scanned out, then power
-    // the panel back down the same way displaySleep() does: graceful DCS
-    // Display Off → Sleep In, then hold RST LOW. RST low alone would reset the
-    // controller regardless, but mirroring the standard power-down keeps the
-    // resting state identical to a normal sleep entry.
+    // Soft landing: hold a uniform black frame with the panel still scanning so
+    // its per-frame inversion averages the residual LC/VCOM bias toward zero,
+    // instead of freezing the panel on the last-driven polarity. fillFramebuffers
+    // already left black above; the settle is the dwell that matters.
+    fillFramebuffers(0x0000);  // black (explicit; cheap and self-documenting)
+#if DISPLAY_DEBIAS_SETTLE_MS > 0
+    delay(DISPLAY_DEBIAS_SETTLE_MS);
+#else
     delay(5);
+#endif
+    // Graceful DCS power-down: Display Off → (VCOM discharge window) → Sleep In,
+    // then hold RST LOW. The dwell on Display Off gives the panel's internal
+    // VCOM/source discharge time to equalize so it powers down from a balanced
+    // state, mirroring displaySleep() but with the extra settle the abrupt
+    // periodic path lacked. RST low alone would reset the controller regardless,
+    // but mirroring the standard power-down keeps the resting state identical to
+    // a normal sleep entry.
     esp_lcd_panel_io_tx_param(ioHandle, 0x28, NULL, 0);  // Display Off
+#if DISPLAY_DEBIAS_SETTLE_MS > 0
+    delay(DISPLAY_DEBIAS_SETTLE_MS);
+#else
     delay(20);
+#endif
     esp_lcd_panel_io_tx_param(ioHandle, 0x10, NULL, 0);  // Sleep In
     digitalWrite(LCD_RST_PIN, LOW);
 #else
