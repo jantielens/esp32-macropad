@@ -593,11 +593,11 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (!vals[i]) vals[i] = const_cast<char*>("");
     }
 
-    // Resolve bindable min/max (widget-wide)
+    // Resolve bindable min/max (widget-wide). Do NOT write cached_min/cached_max
+    // here — bar_chart_tick() owns range-change detection (marker reposition +
+    // fill-rescale invalidation) and relies on the cache lagging the live value.
     float bar_max = resolve_number(cfg->bar_max, 3.0f);
     float bar_min = resolve_number(cfg->bar_min, 0.0f);
-    st->cached_min = bar_min;
-    st->cached_max = bar_max;
 
     float range = bar_max - bar_min;
     if (range <= 0.0f) range = 1.0f;
