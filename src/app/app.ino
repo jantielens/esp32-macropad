@@ -9,6 +9,7 @@
 #include "mqtt_wake.h"
 #include "mqtt_audio.h"
 #include "mqtt_notify.h"
+#include "mqtt_triggers.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
 #include "power_config.h"
@@ -456,6 +457,9 @@ void setup()
 			mqtt_wake_init(&device_config);
 			mqtt_audio_init();
 			mqtt_notify_init();
+#if MQTT_TRIGGERS_ENABLED
+			mqtt_triggers_init();
+#endif
 		} else {
 			LOGI("Main", "MQTT not configured: skipping handler init");
 		}
@@ -568,6 +572,9 @@ void loop()
 	mqtt_wake_loop();
 	mqtt_audio_loop();
 	mqtt_notify_loop();
+#if MQTT_TRIGGERS_ENABLED
+	mqtt_triggers_loop();
+#endif
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).

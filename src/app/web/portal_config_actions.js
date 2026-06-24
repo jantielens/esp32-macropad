@@ -312,6 +312,114 @@ async function saveHwButtons() {
 }
 
 // ============================================================================
+// MQTT Triggers (uses shared portal_action_editor.js)
+// ============================================================================
+
+// Flat list of every action editor prefix currently rendered, used to wire
+// screen + sound dropdowns in one pass after the editors are built.
+var MQTT_TRIGGER_PREFIXES = [];
+
+function mqttTriggerPrefixes(n) {
+    return ['mqtttrig-' + n + '-1', 'mqtttrig-' + n + '-2', 'mqtttrig-' + n + '-3'];
+}
+
+async function initMqttTriggers() {
+    var container = document.getElementById('mqtt-trigger-editors');
+    if (!container) return;
+    MQTT_TRIGGER_PREFIXES = [];
+    var data;
+    try {
+        const response = await fetch('/api/component/mqtt-triggers/config');
+        if (!response.ok) {
+            container.innerHTML = '<small style="color:#86868b;">Could not load MQTT triggers.</small>';
+            return;
+        }
+        data = await response.json();
+    } catch (err) {
+        console.error('Failed to load MQTT triggers:', err);
+        container.innerHTML = '<small style="color:#ff3b30;">Error loading MQTT triggers.</small>';
+        return;
+    }
+
+    var max = (data && data.max) || 8;
+    var triggers = (data && data.triggers) || [];
+
+    var html = '';
+    for (var n = 1; n <= max; n++) {
+        html += '<details class="editor-group" id="mqtttrig-' + n + '-group">';
+        html += '<summary>Trigger ' + n + '</summary>';
+        html += '<div class="editor-group-body">';
+        html += '<label class="form-label">Topic</label>';
+        html += '<input type="text" id="mqtttrig-' + n + '-topic" class="form-control form-control-sm mb-1" maxlength="127" spellcheck="false" placeholder="home/sensor/state">';
+        html += '<label class="form-label">Value filter (empty = match any)</label>';
+        html += '<input type="text" id="mqtttrig-' + n + '-value" class="form-control form-control-sm mb-2" maxlength="63" spellcheck="false" placeholder="e.g. ON">';
+        html += '<h4 class="mt-2 mb-1">Actions</h4>';
+        html += '<div id="mqtttrig-' + n + '-editors"></div>';
+        html += '</div></details>';
+    }
+    container.innerHTML = html;
+
+    var listLabels = ['Action 1', 'Action 2', 'Action 3'];
+    for (var n = 1; n <= max; n++) {
+        var prefixes = mqttTriggerPrefixes(n);
+        actionEditorListRender('mqtttrig-' + n + '-editors', prefixes, listLabels);
+        var trig = triggers[n - 1];
+        if (trig) {
+            var topicEl = document.getElementById('mqtttrig-' + n + '-topic');
+            var valueEl = document.getElementById('mqtttrig-' + n + '-value');
+            if (topicEl) topicEl.value = trig.topic || '';
+            if (valueEl) valueEl.value = trig.value || '';
+            actionEditorListLoad(prefixes, trig.actions || []);
+            // Expand configured slots so they are visible on load.
+            var grp = document.getElementById('mqtttrig-' + n + '-group');
+            if (grp && trig.topic) grp.open = true;
+        }
+        MQTT_TRIGGER_PREFIXES = MQTT_TRIGGER_PREFIXES.concat(prefixes);
+    }
+
+    actionEditorWireFragment(MQTT_TRIGGER_PREFIXES);
+}
+
+async function saveMqttTriggers() {
+    var container = document.getElementById('mqtt-trigger-editors');
+    if (!container) return;
+    var groupCount = container.querySelectorAll('details.editor-group').length;
+    var triggers = [];
+    for (var n = 1; n <= groupCount; n++) {
+        var topicEl = document.getElementById('mqtttrig-' + n + '-topic');
+        var valueEl = document.getElementById('mqtttrig-' + n + '-value');
+        var topic = topicEl ? topicEl.value.trim() : '';
+        if (!topic) continue;  // skip empty slots
+        if (topic.indexOf('#') !== -1 || topic.indexOf('+') !== -1) {
+            showMessage('Wildcard topics are not supported. Use exact topic names.', 'error');
+            return;
+        }
+        triggers.push({
+            topic: topic,
+            value: valueEl ? valueEl.value : '',
+            actions: actionEditorListBuild(mqttTriggerPrefixes(n))
+        });
+    }
+    try {
+        const response = await fetch('/api/component/mqtt-triggers/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ triggers: triggers })
+        });
+        if (response.ok) {
+            showMessage('MQTT triggers saved', 'success');
+        } else {
+            var msg = 'Failed to save MQTT triggers';
+            try { var j = await response.json(); if (j && j.message) msg = j.message; } catch (e) {}
+            showMessage(msg, 'error');
+        }
+    } catch (err) {
+        console.error('Error saving MQTT triggers:', err);
+        showMessage('Error saving MQTT triggers: ' + err.message, 'error');
+    }
+}
+
+// ============================================================================
 // Timer Config (device-level, uses shared portal_action_editor.js)
 // ============================================================================
 

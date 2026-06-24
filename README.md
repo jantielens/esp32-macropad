@@ -41,6 +41,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Multi-action buttons** — chain up to 3 actions per tap and per long-press (publish MQTT, play sound, navigate, send keystrokes, etc.)
 - **Swipe gestures** — configure left/right/up/down on any screen with the same actions as buttons
 - **Boot actions** — run a sequence of actions automatically when the device starts
+- **MQTT triggers** — dispatch action chains when a matching MQTT message arrives, no button or screen required (works on headless boards with a physical button too)
 - **On-device timers** — 3 independent count-up / countdown timers with expire actions and live `[timer:N]` bindings
 - **Notification bubble** — display a floating message via a button action or remotely from Home Assistant
 
@@ -145,7 +146,7 @@ Everything is configured from your browser — no flashing or coding needed afte
 - **Device** — operating mode, boot actions, timers, and swipe gestures
 - **Display** — brightness, screensaver, and button defaults
 - **Pads** — visual pad editor for designing button layouts
-- **Actions** — boot actions and swipe gesture configuration
+- **Actions** — boot actions, swipe gestures, hardware buttons, and MQTT triggers
 - **Connectivity** — Wi-Fi, MQTT, BLE, device name, static IP, and security
 - **Audio** — volume, beep patterns, and sound files
 - **Sensors** — sensor configuration for boards with sensor hardware

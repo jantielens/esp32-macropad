@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 227
+Total flags: 228
 
 ### Features (HAS_*)
 
@@ -132,6 +132,7 @@ Total flags: 227
 - **MAX_GRID_COLS** default: `(no default)` — Maximum grid columns.
 - **MAX_GRID_ROWS** default: `(no default)` — Maximum grid rows.
 - **MAX_HW_BUTTONS** default: `5` — Compile-time cap on the number of declarable hardware buttons.
+- **MAX_MQTT_TRIGGERS** default: `8` — Example override: #define MAX_MQTT_TRIGGERS 3
 - **MAX_NON_PAD_SCREENS** default: `10` — Number of non-pad screens (info, test, fps, touch_test, + headroom).
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
@@ -943,6 +944,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **MAX_GRID_ROWS**
   - src/app/pad_config.h
 - **MAX_HW_BUTTONS**
+  - src/app/board_config.h
+- **MAX_MQTT_TRIGGERS**
   - src/app/board_config.h
 - **MAX_NON_PAD_SCREENS**
   - src/app/board_config.h

@@ -1031,6 +1031,29 @@ Save hardware button action configuration.
 
 ---
 
+### MQTT Triggers API
+
+Available when `HAS_MQTT && (HAS_DISPLAY || HAS_BUTTON)` (so headless boards with a physical button are included, while display-less and button-less boards are excluded). Gated by Basic Auth when enabled. Triggers are stored on the `Storage` facade at `/config/mqtt_triggers.json` and applied immediately without reboot; subscriptions are (re)established on every MQTT (re)connect.
+
+A trigger pairs a topic with an optional exact-value filter and up to 3 sequential `ButtonAction` objects. When a subscribed topic receives a message whose payload equals the filter (or the filter is empty, matching any payload), the trigger's actions are dispatched. Capacity is `MAX_MQTT_TRIGGERS` (default 8, lowered to 3 on non-PSRAM boards).
+
+#### `GET /api/component/mqtt-triggers/config`
+
+Returns the configured triggers and the device's capacity.
+
+- **Response:** JSON object with `max` (number, `MAX_MQTT_TRIGGERS`) and a `triggers` array. Each entry contains `topic` (string), `value` (string, exact-match filter; empty = match any), and `actions` (array of up to 3 `ButtonAction` objects using the same schema as button/swipe/boot actions). Empty (unconfigured) slots are omitted.
+- Default (no file saved): `max` with an empty `triggers` array.
+
+#### `POST /api/component/mqtt-triggers/config`
+
+Save the MQTT trigger configuration.
+
+- **Body:** JSON object with a `triggers` array of `{ topic, value, actions }` objects. At most `MAX_MQTT_TRIGGERS` entries are accepted. Wildcard topics (containing `#` or `+`) are rejected with an error — use exact topic names.
+- **Response:** standard component save response on success; JSON error on failure (e.g. wildcard topic, too many triggers, payload too large).
+- On screenless boards (with a button), display-only action types parse and store normally but log a no-op when dispatched.
+
+---
+
 ### Button Defaults API
 
 All button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Button defaults are stored on LittleFS at `/config/button_defaults.json`.

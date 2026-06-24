@@ -400,6 +400,19 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define POWERON_CONFIG_BURST_ENABLED false
 #endif
 
+// ----------------------------------------------------------------------------
+// MQTT-Triggered Actions (optional)
+// ----------------------------------------------------------------------------
+// Compile-time cap on the number of configurable MQTT triggers. Each trigger
+// consumes ~1.4 KB. Default 8 = 11.2 KB (allocated to PSRAM on supported boards
+// via config_psram_alloc(), with automatic SRAM fallback on boards without
+// PSRAM). Non-PSRAM boards (ESP32-C3 headless, CYD-v2) MUST override this lower
+// (recommended: 2-4) in their board_overrides.h to limit SRAM fallback cost.
+// Example override: #define MAX_MQTT_TRIGGERS 3
+#ifndef MAX_MQTT_TRIGGERS
+#define MAX_MQTT_TRIGGERS 8
+#endif
+
 // ============================================================================
 // Sensors (Optional)
 // ============================================================================

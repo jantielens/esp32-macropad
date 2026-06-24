@@ -166,5 +166,9 @@
 // #define HAS_LDR true
 // #define LDR_PIN 34
 
+// MQTT triggers: this board has no PSRAM, so the trigger config cache falls
+// back to internal SRAM. Cap at 3 triggers (~4.3 KB) to limit SRAM cost.
+#define MAX_MQTT_TRIGGERS 3
+
 
 #endif // BOARD_OVERRIDES_CYD2USB_V2_H

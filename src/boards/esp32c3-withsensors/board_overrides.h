@@ -70,3 +70,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
 
 // Optional: BME280 address (0x76 or 0x77)
 // #define BME280_I2C_ADDR 0x76
+
+// MQTT triggers: this board has no PSRAM, so the trigger config cache falls
+// back to internal SRAM. Cap at 3 triggers (~4.3 KB) to limit SRAM cost.
+#define MAX_MQTT_TRIGGERS 3
