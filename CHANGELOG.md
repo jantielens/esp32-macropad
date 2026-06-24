@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **jc1060p470c UI scale lowered to the LARGE tier** — the 1024×600 Guition board now selects `UI_SCALE_LARGE` instead of `UI_SCALE_XLARGE` (in `src/boards/jc1060p470c/board_overrides.h`), a better fit for its panel size. Pad fonts shift from 18/24/36 to 14/24/32 (small/medium/large), the inter-button gap from 4 px to 3 px, and the icon height from 50% to 45% of button height. The other XLARGE board (`esp32-p4-lcd4b`, 720×720) is unchanged.
 * **Gauge target zone drops the redundant edge ticks** — the gauge widget's target zone previously drew two boundary tick lines at the zone start and end *in addition to* the semi-transparent zone band and the center target tick, duplicating information the band's own edges already convey. The boundary ticks are removed so the gauge now matches the bar chart widget's cleaner model: a shaded zone band plus a single center marker tick at the target value. This is an internal rendering change only — no configuration, REST API, or web UI fields change (`widget_gauge_marker_tick_width`/`widget_gauge_marker_tick_color` still drive the center tick, and `widget_gauge_marker_zone_deg`/`widget_gauge_marker_zone_color` still define the band), so existing pads render unchanged apart from the missing edge ticks. Removing the per-ring `zone_ticks_lo`/`zone_ticks_hi` arrays also frees state and skips creating up to eight extra LVGL line objects per gauge. Affects `gauge_widget.cpp`.
 
 ### Fixed

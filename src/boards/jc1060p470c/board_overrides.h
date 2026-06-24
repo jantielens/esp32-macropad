@@ -30,7 +30,7 @@
 // Pad Layout
 // ============================================================================
 #define DISPLAY_SHAPE DISPLAY_SHAPE_RECT
-#define UI_SCALE_TIER UI_SCALE_XLARGE
+#define UI_SCALE_TIER UI_SCALE_LARGE
 
 // ============================================================================
 // Display geometry
