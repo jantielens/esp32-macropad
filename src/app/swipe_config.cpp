@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 
 #include "action_parse.h"
+#include "config_psram.h"
 #include "log_manager.h"
 #include "fs_health.h"
 #include "psram_json_allocator.h"
@@ -15,8 +16,9 @@
 
 static const char* SWIPE_CONFIG_PATH = "/config/swipe_actions.json";
 
-// RAM cache (always valid — defaults if file missing)
-static SwipeConfig g_config;
+// RAM cache (always valid — defaults if file missing). Heap-allocated
+// (PSRAM preferred, SRAM fallback) via config_psram_alloc().
+static SwipeConfig* g_config = nullptr;
 static bool g_loaded = false;
 
 static void parse_swipe_action(JsonVariant v, ButtonAction* act) {
@@ -26,12 +28,14 @@ static void parse_swipe_action(JsonVariant v, ButtonAction* act) {
 }
 
 static void apply_defaults(SwipeConfig* cfg) {
+    if (!cfg) return;
     memset(cfg, 0, sizeof(SwipeConfig));
     // Default: swipe right = navigate back (natural iOS-like gesture)
     strlcpy(cfg->swipe_right.type, ACTION_TYPE_BACK, CONFIG_ACTION_TYPE_MAX_LEN);
 }
 
 static bool load_from_flash(SwipeConfig* cfg) {
+    if (!cfg) return false;
     apply_defaults(cfg);
 
     if (!Storage.exists(SWIPE_CONFIG_PATH)) {
@@ -75,16 +79,22 @@ static bool load_from_flash(SwipeConfig* cfg) {
 }
 
 void swipe_config_init() {
-    load_from_flash(&g_config);
+    g_config = (SwipeConfig*)config_psram_alloc(sizeof(SwipeConfig), "swipe_config");
+    if (!g_config) {
+        LOGE(TAG, "Failed to allocate swipe config");
+        return;  // feature disabled
+    }
+    load_from_flash(g_config);
     g_loaded = true;
 }
 
 const SwipeConfig* swipe_config_get() {
+    if (!g_config) return nullptr;
     if (!g_loaded) {
-        apply_defaults(&g_config);
+        apply_defaults(g_config);
         g_loaded = true;
     }
-    return &g_config;
+    return g_config;
 }
 
 bool swipe_config_save_raw(const uint8_t* json, size_t len) {
@@ -105,7 +115,7 @@ bool swipe_config_save_raw(const uint8_t* json, size_t len) {
     }
 
     // Update RAM cache
-    load_from_flash(&g_config);
+    load_from_flash(g_config);
     storage_publish_usage(false);
 
     LOGI(TAG, "Saved (%u bytes)", (unsigned)len);
@@ -113,7 +123,7 @@ bool swipe_config_save_raw(const uint8_t* json, size_t len) {
 }
 
 void swipe_config_reload() {
-    load_from_flash(&g_config);
+    load_from_flash(g_config);
 }
 
 #endif // HAS_DISPLAY

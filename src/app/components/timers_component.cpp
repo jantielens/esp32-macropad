@@ -15,7 +15,7 @@ static void timers_get_config(AsyncWebServerRequest *request) {
 
     auto doc = make_psram_json_doc(3072);
 
-    for (uint8_t i = 0; i < TIMER_COUNT; i++) {
+    for (uint8_t i = 0; cfg && i < TIMER_COUNT; i++) {
         char key[4];
         snprintf(key, sizeof(key), "%u", i + 1);
         JsonObject tobj = doc->createNestedObject(key);

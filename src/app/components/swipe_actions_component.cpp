@@ -19,10 +19,12 @@ static void swipe_actions_get_config(AsyncWebServerRequest *request) {
     JsonObject up    = doc->createNestedObject("swipe_up");
     JsonObject down  = doc->createNestedObject("swipe_down");
 
-    action_to_json(cfg->swipe_left,  left);
-    action_to_json(cfg->swipe_right, right);
-    action_to_json(cfg->swipe_up,    up);
-    action_to_json(cfg->swipe_down,  down);
+    if (cfg) {
+        action_to_json(cfg->swipe_left,  left);
+        action_to_json(cfg->swipe_right, right);
+        action_to_json(cfg->swipe_up,    up);
+        action_to_json(cfg->swipe_down,  down);
+    }
 
     web_portal_send_json_chunked(request, doc);
 }

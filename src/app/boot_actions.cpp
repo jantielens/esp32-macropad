@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 
 #include "action_list.h"
+#include "config_psram.h"
 #include "fs_health.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -15,15 +16,18 @@
 
 static const char* BOOT_ACTIONS_PATH = "/config/boot_actions.json";
 
-// RAM cache (always valid — empty if file missing)
-static BootActionsConfig g_config;
+// RAM cache (always valid — empty if file missing). Heap-allocated
+// (PSRAM preferred, SRAM fallback) via config_psram_alloc().
+static BootActionsConfig* g_config = nullptr;
 static bool g_loaded = false;
 
 static void apply_defaults(BootActionsConfig* cfg) {
+    if (!cfg) return;
     memset(cfg, 0, sizeof(BootActionsConfig));
 }
 
 static bool load_from_flash(BootActionsConfig* cfg) {
+    if (!cfg) return false;
     apply_defaults(cfg);
 
     if (!Storage.exists(BOOT_ACTIONS_PATH)) {
@@ -60,16 +64,22 @@ static bool load_from_flash(BootActionsConfig* cfg) {
 }
 
 void boot_actions_init() {
-    load_from_flash(&g_config);
+    g_config = (BootActionsConfig*)config_psram_alloc(sizeof(BootActionsConfig), "boot_actions");
+    if (!g_config) {
+        LOGE(TAG, "Failed to allocate boot actions config");
+        return;  // feature disabled
+    }
+    load_from_flash(g_config);
     g_loaded = true;
 }
 
 const BootActionsConfig* boot_actions_get() {
+    if (!g_config) return nullptr;
     if (!g_loaded) {
-        apply_defaults(&g_config);
+        apply_defaults(g_config);
         g_loaded = true;
     }
-    return &g_config;
+    return g_config;
 }
 
 bool boot_actions_save_raw(const uint8_t* json, size_t len) {
@@ -90,7 +100,7 @@ bool boot_actions_save_raw(const uint8_t* json, size_t len) {
     }
 
     // Update RAM cache
-    load_from_flash(&g_config);
+    load_from_flash(g_config);
     storage_publish_usage(false);
 
     LOGI(TAG, "Saved (%u bytes)", (unsigned)len);
@@ -99,6 +109,7 @@ bool boot_actions_save_raw(const uint8_t* json, size_t len) {
 
 void boot_actions_dispatch() {
     const BootActionsConfig* cfg = boot_actions_get();
+    if (!cfg) return;
     if (cfg->action_count == 0) return;
 
     // Note: runs from setup() on the Arduino main task, not the LVGL task.

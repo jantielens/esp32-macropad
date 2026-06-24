@@ -3,6 +3,7 @@
 #if HAS_BUTTON
 
 #include "action_list.h"
+#include "config_psram.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 
@@ -15,15 +16,18 @@
 static const char* HW_BUTTONS_PATH = "/config/hw_buttons.json";
 
 // RAM cache (always valid — empty if file missing). Sized to NUM_HW_BUTTONS
-// (not MAX_HW_BUTTONS) to minimize RAM on constrained boards.
-static HwButtonConfig g_config[NUM_HW_BUTTONS];
+// (not MAX_HW_BUTTONS) to minimize RAM on constrained boards. Heap-allocated
+// (PSRAM preferred, SRAM fallback) via config_psram_alloc().
+static HwButtonConfig* g_config = nullptr;
 static bool g_loaded = false;
 
 static void apply_defaults() {
-    memset(g_config, 0, sizeof(g_config));
+    if (!g_config) return;
+    memset(g_config, 0, NUM_HW_BUTTONS * sizeof(HwButtonConfig));
 }
 
 static bool load_from_flash() {
+    if (!g_config) return false;
     apply_defaults();
 
     if (!Storage.exists(HW_BUTTONS_PATH)) {
@@ -77,6 +81,11 @@ static bool load_from_flash() {
 }
 
 void hw_button_config_init() {
+    g_config = (HwButtonConfig*)config_psram_alloc(NUM_HW_BUTTONS * sizeof(HwButtonConfig), "hw_buttons");
+    if (!g_config) {
+        LOGE(TAG, "Failed to allocate hw button config");
+        return;  // feature disabled
+    }
     storage_mount();  // idempotent — ensures FS is mounted on headless boards too
     load_from_flash();
     g_loaded = true;
@@ -84,6 +93,7 @@ void hw_button_config_init() {
 
 const HwButtonConfig* hw_button_config_get(uint8_t index) {
     if (index >= NUM_HW_BUTTONS) return nullptr;
+    if (!g_config) return nullptr;
     if (!g_loaded) {
         apply_defaults();
         g_loaded = true;

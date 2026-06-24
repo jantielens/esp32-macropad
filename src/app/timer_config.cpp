@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 
 #include "action_list.h"
+#include "config_psram.h"
 #include "fs_health.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -16,17 +17,20 @@
 
 static const char* TIMER_CONFIG_PATH = "/config/timers.json";
 
-// RAM cache (always valid — defaults if file missing)
-static TimerConfig g_config;
+// RAM cache (always valid — defaults if file missing). Heap-allocated
+// (PSRAM preferred, SRAM fallback) via config_psram_alloc().
+static TimerConfig* g_config = nullptr;
 static bool g_loaded = false;
 
 static void apply_defaults(TimerConfig* cfg) {
+    if (!cfg) return;
     memset(cfg, 0, sizeof(TimerConfig));
     // All timers default to count-up mode, no expire actions
 }
 
 // Apply loaded config to the timer engine
 static void apply_to_engine(const TimerConfig* cfg) {
+    if (!cfg) return;
     for (uint8_t i = 0; i < TIMER_COUNT; i++) {
         uint8_t id = i + 1;
         const TimerSettings& ts = cfg->timers[i];
@@ -43,6 +47,7 @@ static void apply_to_engine(const TimerConfig* cfg) {
 }
 
 static bool load_from_flash(TimerConfig* cfg) {
+    if (!cfg) return false;
     apply_defaults(cfg);
 
     if (!Storage.exists(TIMER_CONFIG_PATH)) {
@@ -101,17 +106,23 @@ static bool load_from_flash(TimerConfig* cfg) {
 }
 
 void timer_config_init() {
-    load_from_flash(&g_config);
-    apply_to_engine(&g_config);
+    g_config = (TimerConfig*)config_psram_alloc(sizeof(TimerConfig), "timer_config");
+    if (!g_config) {
+        LOGE(TAG, "Failed to allocate timer config");
+        return;  // feature disabled
+    }
+    load_from_flash(g_config);
+    apply_to_engine(g_config);
     g_loaded = true;
 }
 
 const TimerConfig* timer_config_get() {
+    if (!g_config) return nullptr;
     if (!g_loaded) {
-        apply_defaults(&g_config);
+        apply_defaults(g_config);
         g_loaded = true;
     }
-    return &g_config;
+    return g_config;
 }
 
 bool timer_config_save_raw(const uint8_t* json, size_t len) {
@@ -132,8 +143,8 @@ bool timer_config_save_raw(const uint8_t* json, size_t len) {
     }
 
     // Update RAM cache and re-apply to engine
-    load_from_flash(&g_config);
-    apply_to_engine(&g_config);
+    load_from_flash(g_config);
+    apply_to_engine(g_config);
     storage_publish_usage(false);
 
     LOGI(TAG, "Saved (%u bytes)", (unsigned)len);
