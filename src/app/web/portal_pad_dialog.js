@@ -147,6 +147,8 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
     document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
     document.getElementById('pad-edit-widget-bar-zero-centered').checked = (btn.widget_bar_zero_centered !== undefined) ? btn.widget_bar_zero_centered : false;
+    document.getElementById('pad-edit-widget-bar-dual-binding-pair-1').checked = (btn.widget_bar_dual_binding_pair_1 !== undefined) ? btn.widget_bar_dual_binding_pair_1 : false;
+    document.getElementById('pad-edit-widget-bar-dual-binding-pair-2').checked = (btn.widget_bar_dual_binding_pair_2 !== undefined) ? btn.widget_bar_dual_binding_pair_2 : false;
     document.getElementById('pad-edit-widget-bar-anim-ms').value = (btn.widget_anim_ms !== undefined) ? btn.widget_anim_ms : 300;
     document.getElementById('pad-edit-widget-bar-ticks').value = (btn.widget_bar_ticks !== undefined) ? btn.widget_bar_ticks : 0;
     document.getElementById('pad-edit-widget-bar-tick-width').value = (btn.widget_bar_tick_width !== undefined) ? btn.widget_bar_tick_width : 1;
@@ -400,6 +402,8 @@ function padDialogOk(keepOpen) {
             const orient = document.getElementById('pad-edit-widget-orientation').value;
             if (orient === 'horizontal') btn.widget_orientation = 'horizontal';
             btn.widget_bar_zero_centered = document.getElementById('pad-edit-widget-bar-zero-centered').checked;
+            btn.widget_bar_dual_binding_pair_1 = document.getElementById('pad-edit-widget-bar-dual-binding-pair-1').checked;
+            btn.widget_bar_dual_binding_pair_2 = document.getElementById('pad-edit-widget-bar-dual-binding-pair-2').checked;
             const barAnimMs = parseInt(document.getElementById('pad-edit-widget-bar-anim-ms').value);
             btn.widget_anim_ms = (isNaN(barAnimMs) || barAnimMs < 0) ? 300 : (barAnimMs > 5000) ? 5000 : barAnimMs;
             const barTicks = parseInt(document.getElementById('pad-edit-widget-bar-ticks').value);

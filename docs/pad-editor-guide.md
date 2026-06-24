@@ -688,6 +688,8 @@ The bar chart widget draws one or more vertical or horizontal bars that fill bas
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
 | **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
 | **Zero-Centered** | The fill grows from the zero point instead of the minimum — negative values grow down (or left in horizontal mode), positive values grow up (or right). Use with a negative minimum (e.g. min `-5000`, max `5000`) for signed values like net power flow |
+| **Dual Binding Bar 1 and 2** | Combines bars 1 and 2 into one center-anchored bar (active when bar 2 is bound). Bar 1 grows from zero toward the **minimum**, bar 2 grows toward the **maximum**. Bar 1 keeps its normal caption side (left in horizontal, bottom in vertical); bar 2's caption moves to the opposite end (right/top). Both halves share the same `min..max` scale with 0 at the baseline, so set a negative minimum (e.g. min `-100`, max `100`) for a symmetric look |
+| **Dual Binding Bar 3 and 4** | Same as above for bars 3 and 4 (active when bar 4 is bound). The two dual pairs are independent, so you can mix a dual pair with normal bars |
 | **Animation (ms)** | Duration of the ease-out transition when the bar value changes (0–5000 ms). Default: 300. Set to 0 for instant updates (no animation). The first value after screen load always snaps immediately |
 | **Gridlines** | Number of evenly spaced scale lines drawn across the bar (0–20, 0 = none), with configurable width and bindable color |
 | **Target Value** | A bindable value on the scale drawn as a marker line across the bar (e.g. a setpoint). Empty = no target |
@@ -702,6 +704,8 @@ The bar chart widget draws one or more vertical or horizontal bars that fill bas
 Green below 1 kW, light green 1–3 kW, orange 3–4.5 kW, red above 4.5 kW.
 
 Labels, icons, and colors still work alongside the widget. A typical bar chart button uses the top label for a title ("Solar") and the bottom label for the current value (`[mqtt:solar/power;watts;%.0f W]`).
+
+**Dual binding bars** — enable **Dual Binding Bar 1 and 2** (and/or **Bar 3 and 4**) to merge a pair of bars into a single bar that fills outward from the scale's zero point. The lower-numbered bar grows toward the minimum and the higher-numbered bar grows toward the maximum, with their captions on opposite ends — horizontally this reads `CAPTION1 ──‖████──‖ CAPTION2`, and vertically the captions sit top and bottom. Both halves keep their own color and caption, and both scale on the full `min..max` range, so use a symmetric range like min `-100` / max `100` for an even split. This is handy for opposing quantities such as charge vs discharge, in vs out, or left vs right channel.
 
 ### Gauge
 

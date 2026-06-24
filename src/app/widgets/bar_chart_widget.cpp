@@ -45,6 +45,8 @@ struct BarChartConfig {
     uint8_t  bar_label_size;      // Caption strip size in px: width (horizontal) / height (vertical), 0 = auto
     bool     horizontal;          // true = horizontal bar (grows left→right)
     bool     zero_centered;       // Fill from the zero baseline instead of min (default false)
+    bool     dual_binding_pair_1; // Slots 1/2 share one center-anchored bar (pos/neg)
+    bool     dual_binding_pair_2; // Slots 3/4 share one center-anchored bar (pos/neg)
     uint16_t anim_ms;             // Transition duration in ms (0 = instant, default 300)
     // Scale tick gridlines
     uint8_t  tick_count;          // Gridline count (0 = none, default 0)
@@ -85,6 +87,7 @@ struct BarSlot {
     int16_t   last_anim_px;     // Last animated quantity (fill px or value-edge px)
     int16_t   track_total;      // Track length along the fill direction
     int16_t   track_cross;      // Track length on the cross axis (= fill thickness)
+    int8_t    dual_dir;         // 0 = normal; -1 grows toward min (near); +1 toward max (far)
 };
 
 struct BarChartState {
@@ -104,6 +107,8 @@ struct BarChartState {
     bool      has_received_data;    // True after first value received (snap on first)
     bool      horizontal;           // Cached orientation for anim callback
     bool      zero_centered;        // Cached zero-centered mode for anim callback
+    bool      dual_pair_1_active;   // Slots 0/1 rendered as one center-anchored bar
+    bool      dual_pair_2_active;   // Slots 2/3 rendered as one center-anchored bar
 };
 
 static_assert(sizeof(BarChartState) <= WIDGET_STATE_MAX_BYTES,
@@ -187,6 +192,8 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
     cfg->horizontal = (orient[0] == 'h' || orient[0] == 'H');
 
     cfg->zero_centered = btn["widget_bar_zero_centered"] | false;
+    cfg->dual_binding_pair_1 = btn["widget_bar_dual_binding_pair_1"] | false;
+    cfg->dual_binding_pair_2 = btn["widget_bar_dual_binding_pair_2"] | false;
 
     int ams = btn["widget_anim_ms"] | 300;
     cfg->anim_ms = (uint16_t)clamp_val(ams, 0, 5000);
@@ -238,6 +245,28 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
     st->num_bars = num_bars;
 
+    // ---- Dual binding: collapse a slot pair into one center-anchored bar ----
+    // Pair 1 = slots 0(near)/1(far), pair 2 = slots 2(near)/3(far). A pair is
+    // active only when its partner slot is bound. The near slot owns the shared
+    // track and keeps the normal caption side (left/bottom), growing toward min;
+    // the far slot's fill is hosted inside the same track and grows toward max,
+    // with its caption on the opposite end (right/top) — mirrors the gauge's
+    // dual ring. Each half is scaled on the full min..max scale with 0 fixed at
+    // the zero baseline, so a symmetric look needs min = -max.
+    st->dual_pair_1_active = cfg->dual_binding_pair_1 && wcfg->data_binding[1][0] && num_bars >= 2;
+    st->dual_pair_2_active = cfg->dual_binding_pair_2 && wcfg->data_binding[3][0] && num_bars >= 4;
+    if (st->dual_pair_1_active) { st->slots[0].dual_dir = -1; st->slots[1].dual_dir = +1; }
+    if (st->dual_pair_2_active) { st->slots[2].dual_dir = -1; st->slots[3].dual_dir = +1; }
+
+    // Visual track list: every slot except the far(+1) partner of an active pair
+    // owns its own track. The partner shares its owner's track.
+    uint8_t vbar_owner[MAX_WIDGET_BINDINGS];
+    uint8_t vbars = 0;
+    for (uint8_t i = 0; i < num_bars; i++) {
+        if (st->slots[i].dual_dir == +1) continue;  // far partner: no own track
+        vbar_owner[vbars++] = i;
+    }
+    if (vbars == 0) vbar_owner[vbars++] = 0;  // safety
 
     // Only reserve space for labels that are actually used (static text or MQTT binding)
     bool has_top = btn->label_top[0];
@@ -248,11 +277,16 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // Per-bar captions reserve a strip beneath each column (vertical) or to the
     // left of each row (horizontal). Only reserved when at least one active bar
-    // has a caption, so caption-less charts keep their full bar extent.
-    bool has_labels = false;
+    // has a caption, so caption-less charts keep their full bar extent. A dual
+    // pair's far slot reserves a second strip on the opposite end (right/top).
+    bool has_near_labels = false;  // owner/normal slot captions (left/bottom strip)
+    bool has_far_labels = false;   // dual far-partner captions (right/top strip)
     for (uint8_t i = 0; i < num_bars; i++) {
-        if (bar_slot_label_cfg(cfg, i)[0]) { has_labels = true; break; }
+        if (!bar_slot_label_cfg(cfg, i)[0]) continue;
+        if (st->slots[i].dual_dir == +1) has_far_labels = true;
+        else                             has_near_labels = true;
     }
+    bool has_labels = has_near_labels || has_far_labels;
     const int16_t ui_ofs_x = btn->ui_offset_x;
     const int16_t ui_ofs_y = btn->ui_offset_y;
     // Use actual icon image height if available (PNG is pre-sized by JS)
@@ -301,20 +335,27 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // bar_width_pct then sets each bar's thickness within its own column/row.
     // A single bar fills the full extent exactly as before (backward
     // compatible: column == full width, gap collapses to 0).
-    const uint8_t n = st->num_bars;
+    const uint8_t n = vbars;  // number of visual tracks (a dual pair counts as 1)
     const int16_t COL_GAP = (n > 1) ? 6 : 0;
 
-    // Caption strip dimensions (0 when no captions are configured).
-    int16_t hlabel_w = 0;  // horizontal: left caption strip width
-    int16_t vlabel_h = 0;  // vertical: caption strip height beneath each column
+    // Caption strip dimensions (0 when no captions are configured). A dual pair
+    // adds a second strip on the far end: right when horizontal, top when vertical.
+    int16_t hlabel_w = 0;      // horizontal: left (near) caption strip width
+    int16_t hlabel_w_far = 0;  // horizontal: right (far) caption strip width
+    int16_t vlabel_h = 0;      // vertical: bottom (near) caption strip height
+    int16_t vlabel_h_far = 0;  // vertical: top (far) caption strip height
     if (has_labels) {
         if (cfg->horizontal) {
-            hlabel_w = cfg->bar_label_size > 0
-                           ? cfg->bar_label_size
-                           : clamp_val<int16_t>((int16_t)(content_w * 28 / 100), 30, 120);
+            int16_t w = cfg->bar_label_size > 0
+                            ? cfg->bar_label_size
+                            : clamp_val<int16_t>((int16_t)(content_w * 28 / 100), 30, 120);
+            if (has_near_labels) hlabel_w = w;
+            if (has_far_labels)  hlabel_w_far = w;
         } else {
-            vlabel_h = cfg->bar_label_size > 0 ? (int16_t)cfg->bar_label_size
-                                               : (int16_t)(label_h + 4);
+            int16_t h = cfg->bar_label_size > 0 ? (int16_t)cfg->bar_label_size
+                                                : (int16_t)(label_h + 4);
+            if (has_near_labels) vlabel_h = h;
+            if (has_far_labels)  vlabel_h_far = h;
         }
     }
 
@@ -324,19 +365,20 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     int16_t group_start;  // cross-axis start of the group (horizontal rows only)
 
     if (cfg->horizontal) {
-        // Horizontal: bars span the width (minus caption strip); rows divide height.
+        // Horizontal: bars span the width (minus caption strips); rows divide height.
         int16_t bar_top_start = top_h + header_h + (header_h > 0 ? gap : 0);
         bar_bottom_margin = bot_h + 4;
         int16_t avail_h = content_h - bar_top_start - bar_bottom_margin;
         if (avail_h < 8) avail_h = 8;
-        fill_len = content_w - hlabel_w;
+        fill_len = content_w - hlabel_w - hlabel_w_far;
         if (fill_len < 8) fill_len = 8;
         band_full = avail_h;
         group_start = bar_top_start;
         bar_top = bar_top_start;  // (placement is per-row for horizontal)
     } else {
-        // Vertical: bars span the height (minus caption strip); columns divide width.
-        bar_top = top_h + header_h + gap;
+        // Vertical: bars span the height (minus caption strips); columns divide width.
+        // bar_top is pushed down by the far (top) strip so its caption has room.
+        bar_top = top_h + header_h + gap + vlabel_h_far;
         bar_bottom_margin = bot_h + 4;
         fill_len = content_h - bar_top - bar_bottom_margin - vlabel_h;
         if (fill_len < 8) fill_len = 8;
@@ -364,8 +406,9 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (!st->tick_lines) LOGW(TAG, "Failed to alloc tick_lines (%u)", (unsigned)(cfg->tick_count * n));
     }
 
-    for (uint8_t i = 0; i < n; i++) {
-        BarSlot* slot = &st->slots[i];
+    for (uint8_t v = 0; v < n; v++) {
+        uint8_t oi = vbar_owner[v];     // owner slot index for this visual track
+        BarSlot* slot = &st->slots[oi];
 
         // Per-bar track (background). Vertical: the column group is centered
         // via TOP_MID with a per-column x offset. Horizontal: stacked rows,
@@ -377,11 +420,11 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         int16_t col_center_x = 0;  // vertical: this column's center x offset
         if (cfg->horizontal) {
             int16_t group_top = group_start + (band_full - group_cross) / 2;
-            row_top = group_top + i * (col_cross + COL_GAP) + (col_cross - track_cross) / 2;
-            // Shift bars right to leave the left caption strip free.
-            lv_obj_align(bg, LV_ALIGN_TOP_MID, ui_ofs_x + hlabel_w / 2, row_top + ui_ofs_y);
+            row_top = group_top + v * (col_cross + COL_GAP) + (col_cross - track_cross) / 2;
+            // Center the track between the left/right caption strips.
+            lv_obj_align(bg, LV_ALIGN_TOP_MID, ui_ofs_x + (hlabel_w - hlabel_w_far) / 2, row_top + ui_ofs_y);
         } else {
-            col_center_x = (int16_t)(-group_cross / 2 + col_cross / 2 + i * (col_cross + COL_GAP));
+            col_center_x = (int16_t)(-group_cross / 2 + col_cross / 2 + v * (col_cross + COL_GAP));
             lv_obj_align(bg, LV_ALIGN_TOP_MID, ui_ofs_x + col_center_x, bar_top);
         }
         lv_obj_set_style_bg_color(bg, bg_clr, 0);
@@ -400,7 +443,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             lv_obj_set_size(fill, track_cross, 0);
             lv_obj_align(fill, LV_ALIGN_BOTTOM_LEFT, 0, 0);
         }
-        lv_obj_set_style_bg_color(fill, resolve_lv_color(bar_slot_color_cfg(cfg, i), BAR_SLOT_DEFAULT_COLOR[i]), 0);
+        lv_obj_set_style_bg_color(fill, resolve_lv_color(bar_slot_color_cfg(cfg, oi), BAR_SLOT_DEFAULT_COLOR[oi]), 0);
         lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(fill, 4, 0);
         lv_obj_set_style_border_width(fill, 0, 0);
@@ -411,6 +454,32 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         slot->fill = fill;
         slot->track_total = fill_len;
         slot->track_cross = track_cross;
+
+        // Dual far partner: a second fill hosted inside the same track. Both
+        // halves anchor at the shared zero baseline (see bar_chart_anim_cb); the
+        // owner grows toward min, the partner toward max.
+        BarSlot* partner = nullptr;
+        if (slot->dual_dir == -1 && oi + 1 < MAX_WIDGET_BINDINGS) {
+            partner = &st->slots[oi + 1];
+            lv_obj_t* pfill = lv_obj_create(bg);
+            if (cfg->horizontal) {
+                lv_obj_set_size(pfill, 0, track_cross);
+                lv_obj_align(pfill, LV_ALIGN_TOP_LEFT, 0, 0);
+            } else {
+                lv_obj_set_size(pfill, track_cross, 0);
+                lv_obj_align(pfill, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+            }
+            lv_obj_set_style_bg_color(pfill, resolve_lv_color(bar_slot_color_cfg(cfg, oi + 1), BAR_SLOT_DEFAULT_COLOR[oi + 1]), 0);
+            lv_obj_set_style_bg_opa(pfill, LV_OPA_COVER, 0);
+            lv_obj_set_style_radius(pfill, 4, 0);
+            lv_obj_set_style_border_width(pfill, 0, 0);
+            lv_obj_set_style_pad_all(pfill, 0, 0);
+            lv_obj_clear_flag(pfill, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+            partner->fill = pfill;
+            partner->bg = nullptr;  // shares the owner's track (no own bg/marker)
+            partner->track_total = fill_len;
+            partner->track_cross = track_cross;
+        }
 
         // Per-bar scale gridlines (evenly spaced across the fill direction).
         if (cfg->tick_count > 0 && st->tick_lines) {
@@ -461,14 +530,14 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             }
         }
 
-        // Per-bar caption (gauge-style: bindable text, color-matched to the bar,
-        // hidden when empty). Vertical: centered beneath the column. Horizontal:
-        // left-aligned in the reserved strip, vertically centered on the row.
-        const char* lbl_templ = bar_slot_label_cfg(cfg, i);
-        if (has_labels && lbl_templ[0]) {
+        // Per-bar near caption (gauge-style: bindable text, color-matched to the
+        // bar, hidden when empty). Vertical: centered beneath the column.
+        // Horizontal: right-aligned in the left strip, vertically centered on the row.
+        const char* lbl_templ = bar_slot_label_cfg(cfg, oi);
+        if (has_near_labels && lbl_templ[0]) {
             lv_obj_t* lbl = lv_label_create(tile);
             lv_obj_set_style_text_font(lbl, scale->font_small, 0);
-            lv_obj_set_style_text_color(lbl, resolve_lv_color(bar_slot_color_cfg(cfg, i), BAR_SLOT_DEFAULT_COLOR[i]), 0);
+            lv_obj_set_style_text_color(lbl, resolve_lv_color(bar_slot_color_cfg(cfg, oi), BAR_SLOT_DEFAULT_COLOR[oi]), 0);
             lv_obj_set_style_pad_all(lbl, 0, 0);
             lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
             lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
@@ -488,6 +557,34 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             }
             slot->label = lbl;
         }
+
+        // Dual far-partner caption: right strip (horizontal, left-aligned) or
+        // above the column (vertical, centered), color-matched to the far bar.
+        if (partner) {
+            const char* far_templ = bar_slot_label_cfg(cfg, oi + 1);
+            if (far_templ[0]) {
+                lv_obj_t* lbl = lv_label_create(tile);
+                lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+                lv_obj_set_style_text_color(lbl, resolve_lv_color(bar_slot_color_cfg(cfg, oi + 1), BAR_SLOT_DEFAULT_COLOR[oi + 1]), 0);
+                lv_obj_set_style_pad_all(lbl, 0, 0);
+                lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
+                lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+                bar_chart_set_label_text(lbl, far_templ);
+                if (cfg->horizontal) {
+                    lv_obj_set_width(lbl, hlabel_w_far - 4);
+                    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
+                    lv_obj_update_layout(lbl);
+                    int16_t lbl_h = (int16_t)lv_obj_get_height(lbl);
+                    int16_t row_center = row_top + track_cross / 2;
+                    lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, ui_ofs_x + content_w - hlabel_w_far + 4, row_center - lbl_h / 2 + ui_ofs_y);
+                } else {
+                    lv_obj_set_width(lbl, col_cross);
+                    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
+                    lv_obj_align(lbl, LV_ALIGN_TOP_MID, ui_ofs_x + col_center_x, bar_top - vlabel_h_far);
+                }
+                partner->label = lbl;
+            }
+        }
     }
 
     st->has_received_data = false;
@@ -501,7 +598,8 @@ static void bar_chart_anim_cb(void* var, int32_t value) {
     BarChartState* st = slot->owner;
     if (!slot->fill) return;
     slot->last_anim_px = (int16_t)value;
-    if (st->zero_centered) {
+    // Dual-binding halves are always zero-anchored, regardless of zero_centered.
+    if (st->zero_centered || slot->dual_dir != 0) {
         // `value` is the value-edge position (px from the min/bottom end).
         // The opposite edge is pinned to the zero baseline.
         int32_t z = st->zero_px;
@@ -605,8 +703,9 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     // All bars share the same track length along the fill direction.
     int16_t bar_total = st->slots[0].track_total;
 
-    // Zero baseline (widget-wide; same min/max for all bars)
-    if (cfg->zero_centered) {
+    // Zero baseline (widget-wide; same min/max for all bars). Also computed when a
+    // dual pair is active, since both dual halves anchor here.
+    if (cfg->zero_centered || st->dual_pair_1_active || st->dual_pair_2_active) {
         float zero_ratio = (0.0f - bar_min) / range;
         if (zero_ratio < 0.0f) zero_ratio = 0.0f;
         if (zero_ratio > 1.0f) zero_ratio = 1.0f;
@@ -633,11 +732,16 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (!isnan(slot->last_value) && fabsf(value - slot->last_value) < 0.001f) continue;
         slot->last_value = value;
 
+        // Dual halves are zero-anchored: the far half (dual_dir +1) grows toward
+        // max, the near half (dual_dir -1) flips its magnitude toward min.
+        bool zc = cfg->zero_centered || slot->dual_dir != 0;
+        float eff = (slot->dual_dir != 0) ? slot->dual_dir * value : value;
+
         // `target_px` is the animated quantity: in normal mode the fill
-        // dimension; in zero-centered mode the value-edge position.
+        // dimension; in zero-anchored mode the value-edge position.
         int16_t target_px;
-        if (cfg->zero_centered) {
-            float val_ratio = (value - bar_min) / range;
+        if (zc) {
+            float val_ratio = (eff - bar_min) / range;
             if (val_ratio < 0.0f) val_ratio = 0.0f;
             if (val_ratio > 1.0f) val_ratio = 1.0f;
             target_px = (int16_t)roundf(val_ratio * bar_total);
