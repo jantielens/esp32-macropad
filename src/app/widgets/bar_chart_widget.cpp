@@ -801,11 +801,11 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
             if (val_ratio > 1.0f) val_ratio = 1.0f;
             target_px = (int16_t)roundf(val_ratio * bar_total);
         } else {
-            float ratio = (fabsf(value) - bar_min) / range;
+            float ratio = (value - bar_min) / range;
             if (ratio < 0.0f) ratio = 0.0f;
             if (ratio > 1.0f) ratio = 1.0f;
             target_px = (int16_t)(ratio * bar_total);
-            if (target_px == 0 && fabsf(value) > 0.001f) target_px = 1;
+            if (target_px == 0 && value > bar_min) target_px = 1;
         }
 
         int16_t cur_px = slot->last_anim_px;
