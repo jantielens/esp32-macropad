@@ -951,6 +951,22 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_HARD_RESET_ON_SLEEP false
 #endif
 
+// Keep the MIPI-DSI panel fully powered (normal Display On, scanning an
+// all-black framebuffer with frame inversion active) for the entire
+// screensaver sleep instead of issuing DCS Sleep In or holding RST low. The
+// backlight is still faded to 0 so sleep looks identical to the user. This
+// avoids both failure modes seen on the cheap JD9165 + IPS combo on
+// jc1060p470c: the DC bias that DCS Sleep In leaves in the cells (washed-out
+// colors after multi-hour idle) and the marginal VCOM/MIPI-lock state the
+// repeated hard-reset power-cycling produced (morning flicker after a full
+// night). Trades higher idle power (panel + DSI stay active) for a clean,
+// power-cycle-free wake. Takes precedence over DISPLAY_HARD_RESET_ON_SLEEP in
+// the MipiDsiDriver sleep/wake paths; the two are mutually exclusive.
+// Keep the MIPI-DSI panel powered (Display On, black) during screensaver sleep; no DCS power-down.
+#ifndef DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+#define DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP false
+#endif
+
 // ============================================================================
 // Pad & Screen Limits
 // ============================================================================

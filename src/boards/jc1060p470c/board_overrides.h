@@ -127,13 +127,18 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
 // ============================================================================
 // Hide PSRAM flicker when screensaver fades (DPI FB lives in PSRAM).
 #define DISPLAY_BLANK_ON_SAVE true
-// Hold panel RST low during screensaver sleep. The JD9165 + HKC IPS combo
-// shows washed-out colors after multi-hour idle even with DCS Sleep In and
-// framebuffer blanking — only a full hardware reset reliably de-biases
-// the TFT cells. Wake re-runs the vendor init sequence (~180-230 ms total:
-// 50 ms reset-release + vendor command stream + 120 ms Sleep Out + 50 ms
-// Display On).
-#define DISPLAY_HARD_RESET_ON_SLEEP true
+// Screensaver sleep strategy for the JD9165 + HKC IPS panel. Holding the panel
+// in hardware reset all night (DISPLAY_HARD_RESET_ON_SLEEP) fixed the washed-out
+// colors but introduced morning flicker: the panel woke from hours of full
+// power-down into a marginal VCOM/MIPI-lock state that took minutes to settle,
+// and an active LC de-bias + soft-landing power-down did not resolve it.
+// Instead, keep the panel fully powered (Display On, scanning all-black with
+// frame inversion, backlight at 0) for the whole sleep. That avoids the DC bias
+// of DCS Sleep In *and* the hard-reset power-cycling, so wake is a clean
+// backlight fade with no panel re-init. Costs extra idle power (mains-powered
+// device, acceptable). Mutually exclusive with DISPLAY_HARD_RESET_ON_SLEEP.
+#define DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP true
+#define DISPLAY_HARD_RESET_ON_SLEEP false
 // Avoid PSRAM bus contention — disable background task telemetry.
 #define DEVICE_TELEMETRY_BACKGROUND_TASKS 0
 #define DEVICE_TELEMETRY_CPU_MONITOR 1

@@ -502,6 +502,15 @@ void MipiDsiDriver::displaySleep() {
     // it and would just log "disp_on_off is not supported by this panel".
     blankFramebuffers();
 
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Keep the panel fully powered in normal Display On, scanning the now-black
+    // framebuffer with frame inversion active (backlight already faded to 0).
+    // The opaque top-layer sleep overlay keeps LVGL rendering black, so the
+    // panel scans a DC-balanced all-black frame throughout sleep. No DCS
+    // power-down and no RST toggle: this avoids both the DC bias of Sleep In
+    // (washed-out colors) and the hard-reset power-cycling (morning flicker).
+    return;
+#else
     // Standard DCS power-down: Display Off → Sleep In.
     esp_lcd_panel_io_tx_param(ioHandle, 0x28, NULL, 0);  // Display Off
     delay(20);
@@ -515,11 +524,15 @@ void MipiDsiDriver::displaySleep() {
 #if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     digitalWrite(LCD_RST_PIN, LOW);
 #endif
+#endif
 }
 
 void MipiDsiDriver::displayWake() {
     if (!ioHandle) return;
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Panel never slept; the backlight fade restores visibility. Nothing to do.
+    return;
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     wakeFromHardReset();
 #else
     esp_lcd_panel_io_tx_param(ioHandle, 0x11, NULL, 0);  // Sleep Out
@@ -530,7 +543,10 @@ void MipiDsiDriver::displayWake() {
 
 void MipiDsiDriver::displayWakeSleepOut() {
     if (!ioHandle) return;
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Panel never slept (single-phase wake); nothing to do.
+    return;
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     // Hard-reset wake is single-phase (see needsTwoPhaseWake()): replay the
     // full init sequence here. The screensaver skips the 120 ms gap and the
     // second displayWakeDisplayOn() call so the display lock is only held
@@ -543,7 +559,11 @@ void MipiDsiDriver::displayWakeSleepOut() {
 
 void MipiDsiDriver::displayWakeDisplayOn() {
     if (!ioHandle) return;
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Unreachable: needsTwoPhaseWake() returns false so the screensaver never
+    // calls this. The panel never slept anyway. Guarded out for safety.
+    return;
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     // Unreachable: needsTwoPhaseWake() returns false in hard-reset mode so
     // screen_saver_manager never calls this. Guarded out for safety.
     return;
@@ -553,7 +573,9 @@ void MipiDsiDriver::displayWakeDisplayOn() {
 }
 
 bool MipiDsiDriver::needsTwoPhaseWake() const {
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    return false;
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     return false;
 #else
     return true;
@@ -562,6 +584,9 @@ bool MipiDsiDriver::needsTwoPhaseWake() const {
 
 // Periodic scrub during long idle, called by the screensaver every
 // SCREENSAVER_SLEEP_REFRESH_MS while fully asleep.
+//   - Keep-awake mode: the panel stays powered and scanning, so this just
+//     re-blanks both framebuffers as insurance against any transient LVGL
+//     write that slipped past the opaque overlay.
 //   - Hard-reset mode: actively de-bias the LC by briefly powering the panel
 //     up and driving full-frame white↔black inversion cycles (backlight off),
 //     then powering it down again. Power-down alone does not de-bias these
@@ -576,7 +601,10 @@ bool MipiDsiDriver::needsTwoPhaseWake() const {
 //     LVGL write that slipped past the opaque top-layer overlay (e.g. overlay
 //     teardown race during fade-in) leaving stale pixels to ghost over hours.
 void MipiDsiDriver::displayRefreshSleep() {
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Panel stays in Display On scanning black; just re-blank as insurance.
+    blankFramebuffers();
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     if (!ioHandle) return;
     // Power the panel back up (replays vendor init; backlight stays at 0).
     wakeFromHardReset();
