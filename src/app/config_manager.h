@@ -52,6 +52,12 @@
 #define CONFIG_BASIC_AUTH_USERNAME_MAX_LEN 32
 #define CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN 64
 
+// MCP (Model Context Protocol) server bearer token.
+// 32 lowercase hex chars (128-bit) + NUL; buffer sized to 40 per spec.
+#if HAS_MCP
+#define CONFIG_MCP_TOKEN_MAX_LEN 40
+#endif
+
 // Configuration structure
 struct DeviceConfig {
 		// WiFi credentials
@@ -99,6 +105,13 @@ struct DeviceConfig {
 		bool basic_auth_enabled;
 		char basic_auth_username[CONFIG_BASIC_AUTH_USERNAME_MAX_LEN];
 		char basic_auth_password[CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN];
+
+		// MCP server (Model Context Protocol; STA/full mode only)
+#if HAS_MCP
+		bool mcp_enabled;                              // default false (feature off)
+		bool mcp_control_enabled;                      // default false (gates control tools)
+		char mcp_token[CONFIG_MCP_TOKEN_MAX_LEN];      // bearer token; empty = none (fail closed)
+#endif
 
 #if HAS_BLE_HID
 		// BLE Keyboard (runtime toggle; saves ~70 KB internal RAM when disabled)

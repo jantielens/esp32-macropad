@@ -209,6 +209,25 @@ async function loadConfig() {
             const saved = config.basic_auth_password_set === true;
             authPwdField.placeholder = saved ? '(saved - leave blank to keep)' : '';
         }
+
+        // MCP server settings
+        var mcpCard = document.getElementById('mcp-card');
+        if (mcpCard) {
+            // Hide the whole card when the firmware was built without HAS_MCP.
+            mcpCard.style.display = (config.caps && config.caps.mcp === false) ? 'none' : '';
+        }
+        if (config.mcp_enabled !== undefined) {
+            setCheckedIfExists('mcp_enabled', config.mcp_enabled);
+            setCheckedIfExists('mcp_control_enabled', config.mcp_control_enabled);
+            const mcpEndpoint = document.getElementById('mcp_endpoint_url');
+            if (mcpEndpoint) mcpEndpoint.value = 'http://' + window.location.host + '/mcp';
+            const mcpStatus = document.getElementById('mcp_token_status');
+            if (mcpStatus) {
+                mcpStatus.textContent = config.mcp_token_set === true
+                    ? 'A token is set (hidden). Generate a new one to replace it.'
+                    : 'No token generated yet. Generate one to use the MCP server.';
+            }
+        }
         
         // Display settings - backlight brightness
         const brightness = config.backlight_brightness !== undefined ? config.backlight_brightness : 100;

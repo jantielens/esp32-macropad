@@ -631,6 +631,10 @@ Returns current device configuration (passwords excluded).
   "basic_auth_username": "",
   "basic_auth_password_set": false,
 
+  "mcp_enabled": false,
+  "mcp_control_enabled": false,
+  "mcp_token_set": false,
+
   "backlight_brightness": 100,
 
   "screen_saver_enabled": false,
@@ -655,6 +659,7 @@ Returns current device configuration (passwords excluded).
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
 - `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config` — it is always reported as an empty string.
+- MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
 
 #### `POST /api/config`
 
@@ -682,6 +687,10 @@ Save new configuration. Device reboots after successful save.
   "basic_auth_enabled": true,
   "basic_auth_username": "admin",
   "basic_auth_password": "change-me",
+
+  "mcp_enabled": true,
+  "mcp_control_enabled": false,
+  "mcp_generate_token": true,
 
   "backlight_brightness": 70,
 
@@ -714,6 +723,7 @@ Save new configuration. Device reboots after successful save.
 - Password field: empty string = no change, non-empty = update
 - `ha_token` follows the same rule: empty string = keep current, non-empty = update. `ha_url` is always updated when present.
 - Basic Auth password is never returned by `GET /api/config`.
+- `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
@@ -937,6 +947,32 @@ Switch the active runtime screen (no persistence).
 **Notes:**
 - Screen-affecting actions count as user activity and will reset the screen saver timer.
 - When the screen saver is dimming/asleep/fading in, touch input is intentionally suppressed to avoid “wake gestures” clicking through into the UI. A second tap may be required after wake.
+
+
+
+---
+
+### MCP Server API
+
+Requires `HAS_MCP` (default on). Off by default; enabled and tokened from the portal's **MCP** card. STA-mode only. See the user-facing [MCP Server Guide](../mcp-guide.md) for client setup.
+
+#### `POST /mcp`
+
+Single Model Context Protocol endpoint — JSON-RPC 2.0 over the MCP **Streamable HTTP** transport (protocol `2025-06-18`, JSON-only responses, stateless). Methods: `initialize`, `tools/list`, `tools/call`, `ping`; JSON-RPC notifications return `202`.
+
+- **Auth:** every request must carry `Authorization: Bearer <token>`. Fails closed: when `mcp_enabled` is true but no token has been generated, all requests are refused (`401`). Independent of portal Basic Auth.
+- **Availability:** returns `404` when `mcp_enabled` is false or the device is in AP/setup mode. Performs Origin validation (any browser `Origin` → `403`; native clients send none) and does not alter the global CORS allow-list.
+- **Tools:** read tools are always available once enabled; control tools (`press_button`, `set_screen`, `set_backlight`, `wake`, `system_command`) are hidden from `tools/list` and refused by `tools/call` unless `mcp_control_enabled` is true. Display tools are absent on `!HAS_DISPLAY` boards. Control tools run on the main loop, never on the async web task.
+- **Body cap:** request bodies above 8 KB are rejected with JSON-RPC `-32600`.
+- **Implementation note:** served by a custom `AsyncWebHandler` (not `server->on`) because MCP clients send `Accept: application/json, text/event-stream`, which the stock callback handler rejects via `isHTTP()`. `GET`/`DELETE /mcp` return `405` (no SSE stream offered) so client transport negotiation succeeds.
+
+**Example (`initialize`):**
+```bash
+curl -X POST http://<device-ip>/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+```
 
 
 

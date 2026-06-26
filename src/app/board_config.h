@@ -65,6 +65,15 @@ struct HwButtonDef {
 #define HAS_MQTT true
 #endif
 
+// Enable the built-in MCP (Model Context Protocol) server (POST /mcp).
+// Lets local AI assistants inspect and control the device. Independent of
+// HAS_DISPLAY: headless boards still expose read tools and system_command,
+// while display-specific tools self-gate on HAS_DISPLAY. Set false to compile
+// the feature out entirely (saves flash on constrained or locked-down builds).
+#ifndef HAS_MCP
+#define HAS_MCP true
+#endif
+
 // Enable BLE HID keyboard support.
 #ifndef HAS_BLE_HID
 #define HAS_BLE_HID true

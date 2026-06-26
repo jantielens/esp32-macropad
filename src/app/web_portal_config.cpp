@@ -11,6 +11,7 @@
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
+#include "web_mcp.h"
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -141,6 +142,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["mqtt"] = (bool)HAS_MQTT;
 				caps["display"] = (bool)HAS_DISPLAY;
 				caps["ble_hid"] = (bool)HAS_BLE_HID;
+				caps["mcp"] = (bool)HAS_MCP;
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;
@@ -150,6 +152,13 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["basic_auth_username"] = current_config->basic_auth_username;
 				(*doc)["basic_auth_password"] = "";
 				(*doc)["basic_auth_password_set"] = (strlen(current_config->basic_auth_password) > 0);
+
+				// MCP server (token never returned; only whether one is set)
+#if HAS_MCP
+				(*doc)["mcp_enabled"] = current_config->mcp_enabled;
+				(*doc)["mcp_control_enabled"] = current_config->mcp_control_enabled;
+				(*doc)["mcp_token_set"] = (strlen(current_config->mcp_token) > 0);
+#endif
 
 				// Display settings
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
@@ -523,6 +532,25 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		}
 
+		// MCP server settings. Token is minted server-side on explicit request and
+		// returned exactly once in this POST response (never echoed via GET).
+#if HAS_MCP
+		bool mcp_token_minted = false;
+		if (doc.containsKey("mcp_enabled")) {
+				current_config->mcp_enabled = parseBoolField(doc, "mcp_enabled");
+		}
+		if (doc.containsKey("mcp_control_enabled")) {
+				current_config->mcp_control_enabled = parseBoolField(doc, "mcp_control_enabled");
+		}
+		if (doc.containsKey("mcp_generate_token") && parseBoolField(doc, "mcp_generate_token")) {
+				char tok[CONFIG_MCP_TOKEN_MAX_LEN];
+				if (mcp_token_generate(tok, sizeof(tok)) > 0) {
+						strlcpy(current_config->mcp_token, tok, CONFIG_MCP_TOKEN_MAX_LEN);
+						mcp_token_minted = true;
+				}
+		}
+#endif
+
 		// Display settings - backlight brightness (0-100%)
 		if (doc.containsKey("backlight_brightness")) {
 				uint8_t brightness;
@@ -613,7 +641,18 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		// Save to NVS
 		if (config_manager_save(current_config)) {
 				LOGI("Portal", "Config saved");
-				request->send(200, "application/json", "{\"success\":true,\"message\":\"Configuration saved\"}");
+#if HAS_MCP
+				if (mcp_token_minted) {
+						// Return the freshly minted MCP token exactly once.
+						String resp = "{\"success\":true,\"message\":\"Configuration saved\",\"mcp_token\":\"";
+						resp += current_config->mcp_token;
+						resp += "\"}";
+						request->send(200, "application/json", resp);
+				} else
+#endif
+				{
+						request->send(200, "application/json", "{\"success\":true,\"message\":\"Configuration saved\"}");
+				}
 
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();

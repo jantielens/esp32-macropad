@@ -1,0 +1,695 @@
+#include "web_mcp.h"
+
+#include "board_config.h"
+
+#if HAS_MCP
+
+#include "mcp_tool_registry.h"
+
+#include "config_manager.h"
+#include "class_branding.h"
+#include "log_manager.h"
+#include "psram_json_allocator.h"
+#include "web_portal_json.h"
+#include "web_portal_routes.h"
+#include "web_portal_state.h"
+
+#include "version.h"
+
+#include <ArduinoJson.h>
+#include <string.h>
+
+#include <esp_random.h>
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/portmacro.h>
+#include <freertos/task.h>
+
+static const char* TAG = "MCP";
+
+// ----------------------------------------------------------------------------
+// Protocol + limits
+// ----------------------------------------------------------------------------
+static constexpr const char* MCP_PROTOCOL_VERSION = "2025-06-18";
+static constexpr size_t   MCP_MAX_BODY_BYTES     = 8192;   // hard cap on the request body
+static constexpr uint32_t MCP_BODY_TIMEOUT_MS    = 5000;   // stale-body cleanup
+static constexpr uint32_t MCP_CONTROL_TIMEOUT_MS = 2000;   // bounded wait for deferred control
+static constexpr uint32_t MCP_REBOOT_GRACE_MS    = 400;    // flush the response before restart
+
+// JSON-RPC + MCP error codes
+static constexpr int MCP_ERR_PARSE        = -32700;
+static constexpr int MCP_ERR_INVALID_REQ  = -32600;
+static constexpr int MCP_ERR_METHOD       = -32601;
+static constexpr int MCP_ERR_PARAMS       = -32602;
+static constexpr int MCP_ERR_INTERNAL     = -32603;
+static constexpr int MCP_ERR_CONTROL_BUSY = -32001;  // server-defined (-32000..-32099)
+
+// ----------------------------------------------------------------------------
+// Token: hardware-RNG generation + constant-time compare
+// ----------------------------------------------------------------------------
+
+size_t mcp_token_generate(char* out, size_t out_len) {
+    // 16 random bytes (128-bit) -> 32 lowercase hex chars + NUL.
+    if (!out || out_len < 33) return 0;
+    uint8_t raw[16];
+    esp_fill_random(raw, sizeof(raw));
+    static const char hexd[] = "0123456789abcdef";
+    for (size_t i = 0; i < sizeof(raw); ++i) {
+        out[i * 2]     = hexd[(raw[i] >> 4) & 0x0F];
+        out[i * 2 + 1] = hexd[raw[i] & 0x0F];
+    }
+    out[32] = '\0';
+    return 32;
+}
+
+// Fixed-length, branch-free, length-difference-safe comparison of two buffers
+// of exactly CONFIG_MCP_TOKEN_MAX_LEN bytes. Never branches on length or content
+// before completing the full compare (no timing oracle, no short-buffer over-read
+// because both operands are sized to the fixed window and zero-padded).
+static bool mcp_token_equal_fixed(const uint8_t* a, const uint8_t* b) {
+    volatile uint8_t diff = 0;
+    for (size_t i = 0; i < CONFIG_MCP_TOKEN_MAX_LEN; ++i) {
+        diff |= (uint8_t)(a[i] ^ b[i]);
+    }
+    return diff == 0;
+}
+
+// ----------------------------------------------------------------------------
+// Request gate
+// ----------------------------------------------------------------------------
+// Returns 0 when the request may proceed, otherwise the HTTP status to send.
+static int mcp_gate(AsyncWebServerRequest* request) {
+    // STA-only: behave as disabled in AP/setup mode.
+    if (web_portal_is_ap_mode_active()) return 404;
+
+    DeviceConfig* cfg = web_portal_get_current_config();
+    if (!cfg) return 404;
+
+    // Feature off by default.
+    if (!cfg->mcp_enabled) return 404;
+
+    // Origin validation: reject any present Origin (empty allow-list).
+    // Native desktop MCP clients send no Origin and pass.
+    if (request->hasHeader("Origin")) {
+        const AsyncWebHeader* o = request->getHeader("Origin");
+        if (o && o->value().length() > 0) {
+            return 403;
+        }
+    }
+
+    // Fail closed: enabled but no token -> refuse all.
+    if (cfg->mcp_token[0] == '\0') return 401;
+
+    // Bearer token, independent of portal Basic Auth.
+    if (!request->hasHeader("Authorization")) return 401;
+    const AsyncWebHeader* auth = request->getHeader("Authorization");
+    if (!auth) return 401;
+    const String& av = auth->value();
+    static const char kBearer[] = "Bearer ";
+    if (!av.startsWith(kBearer)) return 401;
+    const char* presented_str = av.c_str() + (sizeof(kBearer) - 1);
+
+    // Zero-pad both operands to the fixed compare window.
+    uint8_t configured[CONFIG_MCP_TOKEN_MAX_LEN];
+    uint8_t presented[CONFIG_MCP_TOKEN_MAX_LEN];
+    memset(configured, 0, sizeof(configured));
+    memset(presented, 0, sizeof(presented));
+    strlcpy((char*)configured, cfg->mcp_token, sizeof(configured));
+    strlcpy((char*)presented, presented_str, sizeof(presented));
+
+    if (!mcp_token_equal_fixed(configured, presented)) return 401;
+
+    return 0;  // authorized
+}
+
+static bool mcp_control_enabled() {
+    DeviceConfig* cfg = web_portal_get_current_config();
+    return cfg && cfg->mcp_control_enabled;
+}
+
+// ----------------------------------------------------------------------------
+// Deferred control bridge (web task -> main loop)
+// ----------------------------------------------------------------------------
+static portMUX_TYPE       s_ctrl_mux       = portMUX_INITIALIZER_UNLOCKED;
+static SemaphoreHandle_t  s_ctrl_done_sem  = nullptr;
+static volatile bool      s_ctrl_busy      = false;   // slot occupied
+static volatile bool      s_ctrl_pending   = false;   // queued, not yet run
+static volatile bool      s_ctrl_done      = false;   // job finished
+static volatile bool      s_ctrl_waiter    = false;   // a waiter is still blocked
+static McpControlExec     s_ctrl_exec      = nullptr;
+static uint8_t            s_ctrl_ctx[MCP_CONTROL_CTX_BYTES];
+static size_t             s_ctrl_ctx_len   = 0;
+static bool               s_ctrl_ok        = false;
+static char               s_ctrl_msg[160]  = {0};
+
+// Pending reboot timestamp (0 = none). Set on the main loop; honored by loop.
+static volatile uint32_t  s_reboot_at_ms   = 0;
+
+McpControlResult mcp_control_dispatch(McpControlExec exec,
+                                      const void* ctx, size_t ctx_len,
+                                      uint32_t timeout_ms,
+                                      bool* out_ok,
+                                      char* out_msg, size_t out_msg_len) {
+    if (!exec || !s_ctrl_done_sem) return MCP_CONTROL_TIMEOUT;
+    if (ctx_len > sizeof(s_ctrl_ctx)) ctx_len = sizeof(s_ctrl_ctx);
+
+    portENTER_CRITICAL(&s_ctrl_mux);
+    if (s_ctrl_busy) {
+        portEXIT_CRITICAL(&s_ctrl_mux);
+        return MCP_CONTROL_BUSY;
+    }
+    s_ctrl_busy    = true;
+    s_ctrl_pending = true;
+    s_ctrl_done    = false;
+    s_ctrl_waiter  = true;
+    s_ctrl_exec    = exec;
+    s_ctrl_ctx_len = ctx_len;
+    if (ctx && ctx_len) memcpy(s_ctrl_ctx, ctx, ctx_len);
+    s_ctrl_ok      = false;
+    s_ctrl_msg[0]  = '\0';
+    portEXIT_CRITICAL(&s_ctrl_mux);
+
+    // Defensive: drain any stale completion signal before waiting.
+    xSemaphoreTake(s_ctrl_done_sem, 0);
+
+    if (xSemaphoreTake(s_ctrl_done_sem, pdMS_TO_TICKS(timeout_ms)) == pdTRUE) {
+        // Job completed and notified us.
+        portENTER_CRITICAL(&s_ctrl_mux);
+        if (out_ok) *out_ok = s_ctrl_ok;
+        if (out_msg && out_msg_len) strlcpy(out_msg, s_ctrl_msg, out_msg_len);
+        s_ctrl_busy   = false;
+        s_ctrl_waiter = false;
+        portEXIT_CRITICAL(&s_ctrl_mux);
+        return MCP_CONTROL_OK;
+    }
+
+    // Timed out waiting. Re-check whether the job actually completed at the
+    // boundary; if so consume its signal and report OK. Otherwise abandon the
+    // slot — the main loop will reclaim it when the job finishes.
+    portENTER_CRITICAL(&s_ctrl_mux);
+    if (s_ctrl_done) {
+        portEXIT_CRITICAL(&s_ctrl_mux);
+        xSemaphoreTake(s_ctrl_done_sem, 0);
+        portENTER_CRITICAL(&s_ctrl_mux);
+        if (out_ok) *out_ok = s_ctrl_ok;
+        if (out_msg && out_msg_len) strlcpy(out_msg, s_ctrl_msg, out_msg_len);
+        s_ctrl_busy   = false;
+        s_ctrl_waiter = false;
+        portEXIT_CRITICAL(&s_ctrl_mux);
+        return MCP_CONTROL_OK;
+    }
+    s_ctrl_waiter = false;  // job still pending/running; leave busy for reclaim
+    portEXIT_CRITICAL(&s_ctrl_mux);
+    return MCP_CONTROL_TIMEOUT;
+}
+
+void mcp_request_reboot() {
+    uint32_t at = millis() + MCP_REBOOT_GRACE_MS;
+    if (at == 0) at = 1;  // 0 is the "none" sentinel
+    s_reboot_at_ms = at;
+}
+
+// ----------------------------------------------------------------------------
+// POST body accumulator (chunk-safe; mirrors handlePostConfig). Single in-flight.
+// ----------------------------------------------------------------------------
+static portMUX_TYPE g_body_mux = portMUX_INITIALIZER_UNLOCKED;
+static struct {
+    bool      in_progress;
+    uint32_t  started_ms;
+    size_t    total;
+    size_t    received;
+    uint8_t*  buf;
+} g_body = {false, 0, 0, 0, nullptr};
+
+static void body_reset_locked() {
+    if (g_body.buf) {
+        heap_caps_free(g_body.buf);
+        g_body.buf = nullptr;
+    }
+    g_body.in_progress = false;
+    g_body.total = 0;
+    g_body.received = 0;
+    g_body.started_ms = 0;
+}
+
+// Forward decl: dispatch a fully-accumulated JSON-RPC envelope.
+static void mcp_dispatch(AsyncWebServerRequest* request, uint8_t* body, size_t len);
+
+static void mcp_send_http(AsyncWebServerRequest* request, int code) {
+    // Minimal HTTP-level rejection (gate failures). Body kept short + JSON.
+    request->send(code, "application/json",
+                  code == 404 ? "{\"error\":\"not found\"}"
+                  : code == 403 ? "{\"error\":\"forbidden\"}"
+                  : "{\"error\":\"unauthorized\"}");
+}
+
+// Send a bare JSON-RPC error envelope (id: null) as HTTP 200 for failures that
+// occur before or around dispatch (oversize body, busy, OOM, empty request),
+// where no request id is available. `message` must be JSON-safe (no quotes or
+// newlines).
+static void mcp_send_rpc_http_error(AsyncWebServerRequest* request, int code, const char* message) {
+    String body = "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":";
+    body += code;
+    body += ",\"message\":\"";
+    body += (message ? message : "error");
+    body += "\"}}";
+    request->send(200, "application/json", body);
+}
+
+static void handleMcpBody(AsyncWebServerRequest* request, uint8_t* data,
+                          size_t len, size_t index, size_t total) {
+    if (index == 0) {
+        // Gate before accepting any body.
+        int gate = mcp_gate(request);
+        if (gate != 0) {
+            mcp_send_http(request, gate);
+            // Mark so trailing chunks are ignored.
+            portENTER_CRITICAL(&g_body_mux);
+            body_reset_locked();
+            portEXIT_CRITICAL(&g_body_mux);
+            return;
+        }
+
+        // Reset a stuck prior body.
+        const uint32_t now = millis();
+        portENTER_CRITICAL(&g_body_mux);
+        const bool stale = g_body.in_progress && g_body.started_ms &&
+                           (now - g_body.started_ms > MCP_BODY_TIMEOUT_MS);
+        if (stale) body_reset_locked();
+
+        if (g_body.in_progress) {
+            portEXIT_CRITICAL(&g_body_mux);
+            // Another request is mid-flight; reject as a JSON-RPC error.
+            mcp_send_rpc_http_error(request, MCP_ERR_INTERNAL, "server busy");
+            return;
+        }
+
+        // Hard cap: reject oversize envelopes before allocation.
+        if (total == 0 || total > MCP_MAX_BODY_BYTES) {
+            portEXIT_CRITICAL(&g_body_mux);
+            mcp_send_rpc_http_error(request, MCP_ERR_INVALID_REQ, "request too large");
+            return;
+        }
+
+        uint8_t* buf = nullptr;
+        if (psramFound()) {
+            buf = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        }
+        if (!buf) {
+            buf = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        }
+        if (!buf) {
+            portEXIT_CRITICAL(&g_body_mux);
+            mcp_send_rpc_http_error(request, MCP_ERR_INTERNAL, "out of memory");
+            return;
+        }
+
+        g_body.in_progress = true;
+        g_body.started_ms  = now;
+        g_body.total       = total;
+        g_body.received    = 0;
+        g_body.buf         = buf;
+        portEXIT_CRITICAL(&g_body_mux);
+    }
+
+    // Copy this chunk.
+    portENTER_CRITICAL(&g_body_mux);
+    const bool ok = g_body.in_progress && g_body.buf &&
+                    g_body.total == total && (index + len) <= total;
+    uint8_t* dst = g_body.buf;
+    portEXIT_CRITICAL(&g_body_mux);
+
+    if (!ok) {
+        // Either we rejected at index 0 (gate/oversize) or state is invalid.
+        return;
+    }
+
+    memcpy(dst + index, data, len);
+
+    portENTER_CRITICAL(&g_body_mux);
+    const size_t new_received = index + len;
+    if (new_received > g_body.received) g_body.received = new_received;
+    const bool done = (g_body.received >= g_body.total);
+    portEXIT_CRITICAL(&g_body_mux);
+
+    if (!done) return;
+
+    // Finalize.
+    uint8_t* body = nullptr;
+    size_t   body_len = 0;
+    portENTER_CRITICAL(&g_body_mux);
+    body = g_body.buf;
+    body_len = g_body.total;
+    if (body) body[body_len] = 0;
+    // Detach buffer from the accumulator; we own it now and free below.
+    g_body.buf = nullptr;
+    body_reset_locked();
+    portEXIT_CRITICAL(&g_body_mux);
+
+    if (body) {
+        mcp_dispatch(request, body, body_len);
+        heap_caps_free(body);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// JSON-RPC response helpers
+// ----------------------------------------------------------------------------
+static void mcp_send_error(AsyncWebServerRequest* request,
+                           JsonVariantConst id, int code, const char* message) {
+    auto doc = make_psram_json_doc(256);
+    if (!doc || doc->capacity() == 0) {
+        request->send(500, "application/json", "{\"error\":\"oom\"}");
+        return;
+    }
+    (*doc)["jsonrpc"] = "2.0";
+    if (id.isNull()) (*doc)["id"] = (char*)nullptr;
+    else (*doc)["id"] = id;
+    JsonObject err = doc->createNestedObject("error");
+    err["code"] = code;
+    err["message"] = message ? message : "error";
+    web_portal_send_json_chunked(request, doc);
+}
+
+// ----------------------------------------------------------------------------
+// Method handlers
+// ----------------------------------------------------------------------------
+static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantConst id) {
+    auto doc = make_psram_json_doc(512);
+    if (!doc || doc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
+    (*doc)["jsonrpc"] = "2.0";
+    (*doc)["id"] = id;
+    JsonObject result = doc->createNestedObject("result");
+    result["protocolVersion"] = MCP_PROTOCOL_VERSION;
+    JsonObject caps = result.createNestedObject("capabilities");
+    caps.createNestedObject("tools");  // tools capability advertised
+
+    JsonObject info = result.createNestedObject("serverInfo");
+    DeviceConfig* cfg = web_portal_get_current_config();
+    const char* name = (cfg && cfg->device_name[0]) ? cfg->device_name
+                                                     : device_class_get_full_name();
+    info["name"] = name;
+    info["version"] = FIRMWARE_VERSION;
+    web_portal_send_json_chunked(request, doc);
+}
+
+static void mcp_append_tool_def(JsonArray tools, const McpTool* t) {
+    JsonObject td = tools.createNestedObject();
+    td["name"] = t->name;
+    td["description"] = t->description;
+    // inputSchema is a JSON Schema string literal; parse it into the response.
+    bool schema_set = false;
+    if (t->input_schema_json && t->input_schema_json[0]) {
+        StaticJsonDocument<512> sd;
+        if (deserializeJson(sd, t->input_schema_json) == DeserializationError::Ok) {
+            td["inputSchema"] = sd;  // deep copy
+            schema_set = true;
+        } else {
+            // Schema too large for the parse buffer or malformed — fall back to
+            // a permissive object schema and flag it so the tool author notices.
+            LOGW(TAG, "tool '%s' inputSchema unparseable; using {type:object}", t->name);
+        }
+    }
+    if (!schema_set) {
+        JsonObject schema = td.createNestedObject("inputSchema");
+        schema["type"] = "object";
+    }
+    // Tool annotations.
+    JsonObject ann = td.createNestedObject("annotations");
+    ann["readOnlyHint"] = t->read_only;
+    ann["destructiveHint"] = t->destructive;
+    ann["idempotentHint"] = t->read_only;  // read tools are idempotent
+}
+
+static void mcp_method_tools_list(AsyncWebServerRequest* request, JsonVariantConst id) {
+    auto doc = make_psram_json_doc(8192);
+    if (!doc || doc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
+    (*doc)["jsonrpc"] = "2.0";
+    (*doc)["id"] = id;
+    JsonObject result = doc->createNestedObject("result");
+    JsonArray tools = result.createNestedArray("tools");
+
+    const bool control_on = mcp_control_enabled();
+    const uint8_t n = mcp_tool_count();
+    for (uint8_t i = 0; i < n; ++i) {
+        const McpTool* t = mcp_tool_at(i);
+        if (!t) continue;
+        // Filter control tools when control is disabled.
+        if (t->requires_control && !control_on) continue;
+        mcp_append_tool_def(tools, t);
+    }
+    web_portal_send_json_chunked(request, doc);
+}
+
+static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantConst id,
+                                  JsonObjectConst params) {
+    if (params.isNull()) { mcp_send_error(request, id, MCP_ERR_PARAMS, "missing params"); return; }
+    const char* name = params["name"];
+    if (!name || !name[0]) { mcp_send_error(request, id, MCP_ERR_PARAMS, "missing tool name"); return; }
+
+    const McpTool* tool = mcp_tool_find(name);
+    if (!tool) { mcp_send_error(request, id, MCP_ERR_PARAMS, "unknown tool"); return; }
+
+    // Control gate.
+    if (tool->requires_control && !mcp_control_enabled()) {
+        mcp_send_error(request, id, MCP_ERR_METHOD, "tool not available (control disabled)");
+        return;
+    }
+
+    // Build args object (default empty).
+    auto argsDoc = make_psram_json_doc(2048);
+    if (!argsDoc || argsDoc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
+    JsonObject args = argsDoc->to<JsonObject>();
+    JsonObjectConst inArgs = params["arguments"];
+    if (!inArgs.isNull()) {
+        for (JsonPairConst kv : inArgs) args[kv.key()] = kv.value();
+    }
+
+    // Result document the handler writes into.
+    auto resultDoc = make_psram_json_doc(8192);
+    if (!resultDoc || resultDoc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
+    JsonObject toolResult = resultDoc->to<JsonObject>();
+    String err;
+
+    bool ok = tool->handler(args, toolResult, err);
+
+    if (!ok) {
+        // Optional handler-provided error code; default to internal error.
+        int code = MCP_ERR_INTERNAL;
+        if (toolResult.containsKey(MCP_RESULT_ERRCODE_KEY)) {
+            code = toolResult[MCP_RESULT_ERRCODE_KEY] | MCP_ERR_INTERNAL;
+        }
+        mcp_send_error(request, id, code, err.length() ? err.c_str() : "tool error");
+        return;
+    }
+
+    // Wrap the tool result as a single text content item.
+    String resultStr;
+    serializeJson(toolResult, resultStr);
+
+    auto doc = make_psram_json_doc(resultStr.length() + 512);
+    if (!doc || doc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
+    (*doc)["jsonrpc"] = "2.0";
+    (*doc)["id"] = id;
+    JsonObject result = doc->createNestedObject("result");
+    JsonArray content = result.createNestedArray("content");
+    JsonObject item = content.createNestedObject();
+    item["type"] = "text";
+    item["text"] = resultStr;
+    result["isError"] = false;
+    web_portal_send_json_chunked(request, doc);
+}
+
+// ----------------------------------------------------------------------------
+// JSON-RPC envelope dispatch
+// ----------------------------------------------------------------------------
+static void mcp_dispatch(AsyncWebServerRequest* request, uint8_t* body, size_t len) {
+    auto reqDoc = make_psram_json_doc(MCP_MAX_BODY_BYTES + 1024);
+    if (!reqDoc || reqDoc->capacity() == 0) {
+        mcp_send_rpc_http_error(request, MCP_ERR_INTERNAL, "out of memory");
+        return;
+    }
+    DeserializationError perr = deserializeJson(*reqDoc, body, len);
+    if (perr) {
+        mcp_send_error(request, JsonVariantConst(), MCP_ERR_PARSE, "parse error");
+        return;
+    }
+
+    JsonObjectConst root = reqDoc->as<JsonObjectConst>();
+    if (root.isNull()) {
+        mcp_send_error(request, JsonVariantConst(), MCP_ERR_INVALID_REQ, "invalid request");
+        return;
+    }
+
+    const char* method = root["method"];
+    JsonVariantConst id = root["id"];
+    const bool is_notification = !root.containsKey("id");
+
+    if (!method) {
+        if (is_notification) { request->send(202); return; }
+        mcp_send_error(request, id, MCP_ERR_INVALID_REQ, "missing method");
+        return;
+    }
+
+    // Notifications (no id) -> 202 Accepted, no body.
+    if (is_notification) {
+        request->send(202);
+        return;
+    }
+
+    if (strcmp(method, "initialize") == 0) {
+        mcp_method_initialize(request, id);
+    } else if (strcmp(method, "ping") == 0) {
+        // Empty success result.
+        auto doc = make_psram_json_doc(128);
+        if (!doc || doc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
+        (*doc)["jsonrpc"] = "2.0";
+        (*doc)["id"] = id;
+        doc->createNestedObject("result");
+        web_portal_send_json_chunked(request, doc);
+    } else if (strcmp(method, "tools/list") == 0) {
+        mcp_method_tools_list(request, id);
+    } else if (strcmp(method, "tools/call") == 0) {
+        mcp_method_tools_call(request, id, root["params"].as<JsonObjectConst>());
+    } else {
+        mcp_send_error(request, id, MCP_ERR_METHOD, "method not found");
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Registration + loop
+// ----------------------------------------------------------------------------
+
+// GET/DELETE on /mcp. This server is JSON-only and does not open a
+// server->client SSE stream, so per the MCP Streamable HTTP spec it returns
+// 405 Method Not Allowed (not 404) — otherwise clients like VS Code treat the
+// endpoint as missing and fall back to the legacy SSE transport. When MCP is
+// disabled or in AP mode the endpoint stays invisible (404), matching POST.
+static void handle_mcp_other_method(AsyncWebServerRequest* request) {
+    if (web_portal_is_ap_mode_active()) { mcp_send_http(request, 404); return; }
+    DeviceConfig* cfg = web_portal_get_current_config();
+    if (!cfg || !cfg->mcp_enabled) { mcp_send_http(request, 404); return; }
+    AsyncWebServerResponse* resp = request->beginResponse(405, "application/json",
+        "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32000,"
+        "\"message\":\"Method Not Allowed: POST JSON-RPC only (no SSE stream)\"}}");
+    resp->addHeader("Allow", "POST");
+    // Build stamp so the live firmware can be identified from a simple GET.
+    resp->addHeader("X-MCP-Build", __DATE__ " " __TIME__);
+    request->send(resp);
+}
+
+// Custom handler for /mcp.
+//
+// MCP Streamable HTTP clients (VS Code, Cursor, the MCP SDK) always send
+// `Accept: application/json, text/event-stream`. ESPAsyncWebServer flags any
+// request whose Accept contains `text/event-stream` as an event-source request
+// (RCT_EVENT), which makes request->isHTTP() return false. The stock
+// AsyncCallbackWebHandler::canHandle() rejects such requests (`!isHTTP()`), so
+// a normal server->on() route never matches them and they fall through to
+// onNotFound (404). This handler bypasses that check so /mcp works for real MCP
+// clients while still answering curl/browsers.
+class McpWebHandler : public AsyncWebHandler {
+public:
+    bool canHandle(AsyncWebServerRequest* request) const override {
+        const String& u = request->url();
+        if (u != "/mcp" && u != "/mcp/") return false;
+        const uint8_t m = (uint8_t)request->method();
+        return (m == HTTP_POST || m == HTTP_GET || m == HTTP_DELETE);
+    }
+    void handleRequest(AsyncWebServerRequest* request) override {
+        const uint8_t m = (uint8_t)request->method();
+        if (m == HTTP_GET || m == HTTP_DELETE) {
+            handle_mcp_other_method(request);
+            return;
+        }
+        // POST with no body: the body handler never fires.
+        if (request->contentLength() == 0) {
+            mcp_send_rpc_http_error(request, MCP_ERR_INVALID_REQ, "empty request");
+        }
+    }
+    void handleBody(AsyncWebServerRequest* request, uint8_t* data, size_t len,
+                    size_t index, size_t total) override {
+        handleMcpBody(request, data, len, index, total);
+    }
+    // Non-trivial: we must receive the request body before responding.
+    bool isRequestHandlerTrivial() const override { return false; }
+};
+
+void web_mcp_register(AsyncWebServer* server) {
+    if (!server) return;
+    if (!s_ctrl_done_sem) {
+        s_ctrl_done_sem = xSemaphoreCreateBinary();
+    }
+    // Use a custom AsyncWebHandler (not server->on) so /mcp matches requests
+    // that carry `Accept: text/event-stream` — which the stock callback handler
+    // rejects via isHTTP(). The handler dispatches POST (JSON-RPC) vs GET/DELETE
+    // (405) internally.
+    server->addHandler(new McpWebHandler());
+    LOGI(TAG, "MCP endpoint registered at /mcp");
+}
+REGISTER_ROUTES(web_mcp_register);
+
+void web_mcp_loop() {
+    // 1) Stale request-body cleanup.
+    const uint32_t now = millis();
+    portENTER_CRITICAL(&g_body_mux);
+    const bool stale = g_body.in_progress && g_body.started_ms &&
+                       (now - g_body.started_ms > MCP_BODY_TIMEOUT_MS);
+    if (stale) body_reset_locked();
+    portEXIT_CRITICAL(&g_body_mux);
+    if (stale) LOGW(TAG, "MCP body timed out (loop cleanup)");
+
+    // 2) Drain a deferred control job (runs in main/LVGL task context).
+    bool run = false;
+    McpControlExec exec = nullptr;
+    portENTER_CRITICAL(&s_ctrl_mux);
+    if (s_ctrl_pending) {
+        s_ctrl_pending = false;
+        exec = s_ctrl_exec;
+        run = true;
+    }
+    portEXIT_CRITICAL(&s_ctrl_mux);
+
+    if (run && exec) {
+        bool ok = false;
+        char msg[160];
+        msg[0] = '\0';
+        exec(s_ctrl_ctx, &ok, msg, sizeof(msg));
+
+        portENTER_CRITICAL(&s_ctrl_mux);
+        s_ctrl_ok = ok;
+        strlcpy(s_ctrl_msg, msg, sizeof(s_ctrl_msg));
+        s_ctrl_done = true;
+        const bool notify = s_ctrl_waiter;
+        if (!notify) {
+            // Waiter abandoned (timed out). Reclaim the slot now.
+            s_ctrl_busy = false;
+        }
+        portEXIT_CRITICAL(&s_ctrl_mux);
+        if (notify) xSemaphoreGive(s_ctrl_done_sem);
+    }
+
+    // 3) Deferred reboot: fire after the grace period so the
+    //    JSON-RPC response has flushed.
+    const uint32_t at = s_reboot_at_ms;
+    if (at != 0 && (int32_t)(now - at) >= 0) {
+        LOGW(TAG, "MCP system_command: rebooting");
+        s_reboot_at_ms = 0;
+        ESP.restart();
+    }
+}
+
+#else // !HAS_MCP
+
+// Feature compiled out. Provide link stubs for the symbols other translation
+// units (web_portal, web_portal_config) reference. web_mcp_register is not
+// defined, so no /mcp route is registered.
+void web_mcp_loop() {}
+size_t mcp_token_generate(char* out, size_t out_len) {
+    (void)out;
+    (void)out_len;
+    return 0;
+}
+
+#endif // HAS_MCP

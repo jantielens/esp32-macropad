@@ -1,0 +1,178 @@
+# MCP Server Guide
+
+The firmware includes a built-in **Model Context Protocol (MCP)** server. It lets a
+local AI assistant — Claude Desktop, Cursor, VS Code Copilot Chat, Continue, and
+other MCP clients — both **inspect** and **control** the device through chat:
+
+- "What's my device status?"
+- "Press the kitchen-lights button."
+- "Switch to the dashboard screen."
+- "Reboot the device."
+
+The server is **off by default** and opt-in from the web portal. It is served only
+when the device is connected to your WiFi (station mode), never in the setup access
+point.
+
+> **Build flag:** the feature is gated by the `HAS_MCP` compile-time flag (default
+> `true`). Boards built with `#define HAS_MCP false` compile the MCP server out
+> entirely (no `/mcp` endpoint, no portal card) to save flash. `HAS_MCP` is
+> independent of the display — headless boards still expose the read tools and
+> `system_command`, while display tools (`set_screen`, `set_backlight`, `wake`,
+> `list_screens`, pads) only appear on boards with a screen.
+
+## Security model at a glance
+
+| Layer | Behavior |
+|-------|----------|
+| Enabled | Off by default. Turn it on in the portal. |
+| Token | A dedicated bearer token. Required on every request. Shown once at generation. |
+| Read tools | Available when enabled and a token is set. |
+| Control tools | Hidden and refused unless you also enable the **control** toggle. |
+| Network | Station mode only. Inert in setup/AP mode. |
+| Transport | Plain HTTP on your LAN — **no TLS**. |
+
+> ⚠️ **Plain-text on the LAN.** The token and all tool traffic travel cleartext over
+> your local network — the same posture as the device's existing WiFi, MQTT, and
+> Home Assistant secrets. Enable MCP (and especially control) **only on trusted
+> networks**. Treat the token as a network-local secret, not an internet credential.
+> The token is stored in NVS in plain text like other device secrets, so physical or
+> flash access can reveal it.
+
+## Enable the server
+
+1. Open the web portal (see the [Web Portal Guide](web-portal-guide.md)).
+2. Go to **Network → MCP Server**.
+3. Tick **Enable MCP server**.
+4. Click **Generate new token** and **copy the token immediately** — it is shown
+   only once and cannot be retrieved later. Generating a new token replaces any
+   previous one.
+5. (Optional) Tick **Allow control tools** if you want the assistant to press
+   buttons, change screens, set backlight, or reboot. Leave it off for read-only
+   access.
+6. Click **Save**.
+
+Settings apply immediately — no reboot is required.
+
+## Find the endpoint
+
+The MCP endpoint is a single HTTP `POST` route:
+
+```
+http://<hostname>.local/mcp
+```
+
+The portal's MCP card shows the exact URL for your device. `<hostname>` is the
+device's mDNS name (for example `http://esp32-1a2b.local/mcp`). If mDNS (`.local`)
+discovery does not work on your network, use the device's IP address instead:
+
+```
+http://192.168.1.50/mcp
+```
+
+You can find the IP on the portal home page or in your router's client list.
+
+## Connect a client
+
+Every request must include the bearer token:
+
+```
+Authorization: Bearer <your-token>
+```
+
+### VS Code (Copilot Chat / MCP)
+
+Add an HTTP MCP server to your MCP configuration:
+
+```jsonc
+{
+  "servers": {
+    "esp32-macropad": {
+      "type": "http",
+      "url": "http://esp32-1a2b.local/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN_HERE"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+In Cursor's MCP settings, add an HTTP server with the URL and an `Authorization`
+header set to `Bearer YOUR_TOKEN_HERE`.
+
+### Claude Desktop (and other stdio-only clients)
+
+Claude Desktop speaks MCP over stdio, so bridge it to the device's HTTP endpoint
+with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote). Pass the token with
+`--header`:
+
+```jsonc
+{
+  "mcpServers": {
+    "esp32-macropad": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://esp32-1a2b.local/mcp",
+        "--header",
+        "Authorization: Bearer YOUR_TOKEN_HERE"
+      ]
+    }
+  }
+}
+```
+
+The same `mcp-remote` bridge works for any stdio-only MCP client (Continue and
+others) — point it at the device URL and pass the `Authorization` header.
+
+## What the assistant can do
+
+```mermaid
+graph LR
+    CLIENT["AI assistant"] -->|"POST /mcp (Bearer token)"| GATE["Enabled · station mode<br/>Origin · token"]
+    GATE --> READ["Read tools<br/>(always available)"]
+    GATE --> CONTROL["Control tools<br/>(control toggle on)"]
+    READ --> INFO["status · health · screens<br/>pads · sensors"]
+    CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system"]
+```
+
+**Read tools** (always available once enabled):
+
+- `get_device_status` — firmware version, board, uptime, current screen, WiFi state.
+- `get_health` — heap (internal/PSRAM), CPU, WiFi signal.
+- `list_screens` / `get_current_screen` — available screens and the active one.
+- `list_pads` / `get_pad` — configured pads and their buttons (so the assistant
+  knows what it can press).
+- `get_sensors` — current sensor readings (empty on boards without sensors).
+
+**Control tools** (require the control toggle):
+
+- `press_button` — press a pad button by position or label, exactly like a tap.
+- `set_screen` — navigate to a screen.
+- `set_backlight` / `wake` — adjust display brightness or cancel the screen saver.
+- `system_command` — `reboot`, `wifi_reconnect`, or `screensaver`.
+
+Display-related tools are present only on boards that have a display.
+
+## Example prompts
+
+- "What's my device status?"
+- "How much free memory does the device have?"
+- "List the buttons on pad 0."
+- "Press the **Lights** button."
+- "Switch to the **info** screen."
+- "Set the backlight to 40%."
+- "Reboot the device."
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---------|-------------|
+| `404` from `/mcp` | MCP is disabled, or the device is in setup/AP mode. Enable it in the portal while connected to WiFi. |
+| `401` | Missing or wrong token, or no token has been generated yet. Generate a token and set the `Authorization: Bearer` header. |
+| `403` | The request carried an `Origin` header (a browser tab). Native MCP clients send none and are accepted. Browser-based clients are not supported. |
+| Control tools missing | The control toggle is off. Enable **Allow control tools** and save. |
+| "control busy, retry" | Another control command is still running. Issue one control action at a time. |
+| Can't resolve `.local` | Use the device's IP address in the URL instead. |

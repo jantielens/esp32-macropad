@@ -36,6 +36,7 @@ async function saveFragmentConfig(requiresReboot) {
         'ble_burst_count', 'ble_adv_interval_ms',
         'mqtt_publish_scope',
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
+        'mcp_enabled', 'mcp_control_enabled',
         'ble_enabled',
         'audio_volume', 'tap_beep', 'lp_beep',
         'backlight_brightness',
@@ -300,6 +301,48 @@ window.init_network_fragment = function () {
     initConfigFragment('network-save-btn', true);
     var secBtn = document.getElementById('security-save-btn');
     if (secBtn) secBtn.addEventListener('click', function () { saveFragmentConfig(true); });
+
+    // MCP server card. Settings apply live (no reboot). Token is minted
+    // server-side on demand and shown exactly once.
+    var mcpSaveBtn = document.getElementById('mcp-save-btn');
+    if (mcpSaveBtn) mcpSaveBtn.addEventListener('click', function () { saveFragmentConfig(false); });
+
+    var mcpGenBtn = document.getElementById('mcp-generate-token-btn');
+    if (mcpGenBtn) mcpGenBtn.addEventListener('click', async function () {
+        if (!confirm('Generate a new MCP token? Any existing token will stop working.')) return;
+        try {
+            var resp = await fetch('/api/config?no_reboot=1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mcp_generate_token: true })
+            });
+            var r = await resp.json();
+            if (r.success && r.mcp_token) {
+                var grp = document.getElementById('mcp_token_display_group');
+                var val = document.getElementById('mcp_token_value');
+                var warn = document.getElementById('mcp_token_warning');
+                var status = document.getElementById('mcp_token_status');
+                if (val) val.value = r.mcp_token;
+                if (grp) grp.style.display = '';
+                if (warn) warn.style.display = '';
+                if (status) status.textContent = 'A token is set (hidden). Generate a new one to replace it.';
+                showMessage('New MCP token generated', 'success');
+            } else {
+                showMessage('Failed to generate token', 'error');
+            }
+        } catch (e) {
+            showMessage('Error generating token: ' + e.message, 'error');
+        }
+    });
+
+    var mcpCopyBtn = document.getElementById('mcp-copy-token-btn');
+    if (mcpCopyBtn) mcpCopyBtn.addEventListener('click', function () {
+        var val = document.getElementById('mcp_token_value');
+        if (val && val.value && navigator.clipboard) {
+            navigator.clipboard.writeText(val.value);
+            showMessage('Token copied', 'success');
+        }
+    });
 };
 
 // ============================================================================

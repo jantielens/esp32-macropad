@@ -51,6 +51,12 @@
 #define KEY_BASIC_AUTH_ENABLED "ba_en"
 #define KEY_BASIC_AUTH_USER    "ba_user"
 #define KEY_BASIC_AUTH_PASS    "ba_pass"
+// MCP server (Model Context Protocol)
+#if HAS_MCP
+#define KEY_MCP_ENABLED        "mcp_en"
+#define KEY_MCP_CTRL_EN        "mcp_ctrl_en"
+#define KEY_MCP_TOKEN          "mcp_token"
+#endif
 #if HAS_BLE_HID
 #define KEY_BLE_ENABLED    "ble_en"
 #define KEY_BLE_OWNER      "ble_owner"
@@ -176,6 +182,13 @@ bool config_manager_load(DeviceConfig *config) {
 				config->basic_auth_username[0] = '\0';
 				config->basic_auth_password[0] = '\0';
 
+				// MCP server defaults (off, no token)
+#if HAS_MCP
+				config->mcp_enabled = false;
+				config->mcp_control_enabled = false;
+				config->mcp_token[0] = '\0';
+#endif
+
 				#if HAS_BLE_HID
 				config->ble_enabled = false;
 				#endif
@@ -257,6 +270,14 @@ bool config_manager_load(DeviceConfig *config) {
 		config->basic_auth_enabled = preferences.getBool(KEY_BASIC_AUTH_ENABLED, false);
 		preferences.getString(KEY_BASIC_AUTH_USER, config->basic_auth_username, CONFIG_BASIC_AUTH_USERNAME_MAX_LEN);
 		preferences.getString(KEY_BASIC_AUTH_PASS, config->basic_auth_password, CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN);
+
+		// Load MCP server settings
+#if HAS_MCP
+		config->mcp_enabled = preferences.getBool(KEY_MCP_ENABLED, false);
+		config->mcp_control_enabled = preferences.getBool(KEY_MCP_CTRL_EN, false);
+		config->mcp_token[0] = '\0';
+		preferences.getString(KEY_MCP_TOKEN, config->mcp_token, CONFIG_MCP_TOKEN_MAX_LEN);
+#endif
 
 		#if HAS_BLE_HID
 		config->ble_enabled = preferences.getBool(KEY_BLE_ENABLED, false);
@@ -369,6 +390,13 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putBool(KEY_BASIC_AUTH_ENABLED, config->basic_auth_enabled);
 		preferences.putString(KEY_BASIC_AUTH_USER, config->basic_auth_username);
 		preferences.putString(KEY_BASIC_AUTH_PASS, config->basic_auth_password);
+
+		// Save MCP server settings
+#if HAS_MCP
+		preferences.putBool(KEY_MCP_ENABLED, config->mcp_enabled);
+		preferences.putBool(KEY_MCP_CTRL_EN, config->mcp_control_enabled);
+		preferences.putString(KEY_MCP_TOKEN, config->mcp_token);
+#endif
 
 		#if HAS_BLE_HID
 		preferences.putBool(KEY_BLE_ENABLED, config->ble_enabled);
