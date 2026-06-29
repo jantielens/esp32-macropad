@@ -217,8 +217,11 @@ static void list_destroy(WidgetState* state) {
 
 #if HAS_MCP
 static void list_describe(JsonObject& out) {
-    JsonArray f = out.createNestedArray("config_fields");
-    JsonObject o = f.createNestedObject(); o["name"] = "provider"; o["type"] = "string"; o["desc"] = "list provider id, e.g. 'pads'";
+    // No button-level config knobs: the list's data source is selected via the
+    // [list:name] binding (see get_capabilities binding_schemes.list), not a
+    // button JSON field. A note (not an "add"/name entry) keeps the schema-parity
+    // lint honest — nothing here must map to a btn["…"] parse key.
+    out["note"] = "data via [list:name] binding; no button-level config";
 }
 #endif
 REGISTER_WIDGET_SCHEMA(list, nullptr, true);

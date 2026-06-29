@@ -354,4 +354,8 @@ echo "=== Running guard: asset bundler variant matrix ==="
 ./tests/test_asset_variant_matrix.sh
 echo
 
+echo "=== Running guard: widget schema parity (describe <-> parse) ==="
+python3 tools/lint_widget_schema.py
+echo
+
 echo "=== All tests passed ==="
