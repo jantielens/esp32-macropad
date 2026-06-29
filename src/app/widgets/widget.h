@@ -96,6 +96,14 @@ const WidgetType* widget_find(const char* type_name);
 // Register a widget type at startup (called from each widget .cpp via auto-registration).
 void widget_register(const WidgetType* type);
 
+// Number of registered widget types (for registry-driven enumeration, e.g. the
+// MCP capability manifest). The widget list stays generated — adding a widget
+// auto-appears with no extra edit.
+uint8_t widget_count();
+
+// Get a registered widget type by index (0 .. widget_count()-1), or NULL.
+const WidgetType* widget_at(uint8_t index);
+
 // ---- JSON→string field parser for widget config ----
 // Converts a JSON value (integer, hex string, or binding template) into a
 // string stored in the widget config struct. For colors, integers are

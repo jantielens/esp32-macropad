@@ -36,6 +36,7 @@
 #if HAS_DISPLAY || HAS_BUTTON
 #include "action_dispatch.h"
 #include "action_list.h"
+#include "action_parse.h"
 #include "pad_config.h"
 #endif
 
@@ -165,6 +166,75 @@ static void append_pad_buttons(JsonObject po, const PadConfig* cfg) {
     }
 }
 
+// Append a tap/long-press action sequence to `bo` under `key`, including each
+// action's resolved target so callers see *what* a button does (screen→target,
+// mqtt→topic, system→command), not just the type. Reuses the portal serializer.
+static void append_actions(JsonObject bo, const char* key,
+                           const ButtonAction* actions, uint8_t count) {
+    if (count == 0) return;
+    JsonArray arr = bo.createNestedArray(key);
+    for (uint8_t i = 0; i < count; ++i) {
+        if (!actions[i].type[0]) continue;
+        action_to_json(actions[i], arr.createNestedObject());
+    }
+}
+
+// Emit a LabelStyle as a compact object, skipping default (zero) fields so the
+// JSON stays small. Empty/omitted means "all defaults".
+static void append_style(JsonObject parent, const char* key, const LabelStyle& s) {
+    if (!s.font_size && !s.font_family && !s.font_upscale && !s.x_offset &&
+        !s.y_offset && !s.align && !s.long_mode && !s.color) return;
+    JsonObject so = parent.createNestedObject(key);
+    if (s.font_size)    so["font_size"]    = s.font_size;
+    if (s.font_family)  so["font_family"]  = s.font_family;
+    if (s.font_upscale) so["font_upscale"] = s.font_upscale;
+    if (s.x_offset)     so["x"]            = s.x_offset;
+    if (s.y_offset)     so["y"]            = s.y_offset;
+    if (s.align)        so["align"]        = s.align;
+    if (s.long_mode)    so["long_mode"]    = s.long_mode;
+    if (s.color & 0xFF000000) so["color"]  = s.color & 0xFFFFFF;
+}
+
+// Full per-button detail for get_pad: position/grid, labels + styles, colors,
+// border/radius, state, widget + bindings, and resolved tap/long-press actions
+// with targets. Enough to round-trip and to describe behavior accurately.
+static void append_button_detail(JsonArray btns, const ScreenButtonConfig& btn, uint8_t pos) {
+    JsonObject bo = btns.createNestedObject();
+    bo["position"] = pos;
+    bo["col"] = btn.col;
+    bo["row"] = btn.row;
+    if (btn.col_span > 1) bo["col_span"] = btn.col_span;
+    if (btn.row_span > 1) bo["row_span"] = btn.row_span;
+
+    if (btn.label_top[0])    bo["label_top"]    = btn.label_top;
+    if (btn.label_center[0]) bo["label_center"] = btn.label_center;
+    if (btn.label_bottom[0]) bo["label_bottom"] = btn.label_bottom;
+    append_style(bo, "style_top", btn.style_top);
+    append_style(bo, "style_center", btn.style_center);
+    append_style(bo, "style_bottom", btn.style_bottom);
+
+    if (btn.bg_color[0])      bo["bg_color"]      = btn.bg_color;
+    if (btn.fg_color[0])      bo["fg_color"]      = btn.fg_color;
+    if (btn.border_color[0])  bo["border_color"]  = btn.border_color;
+    if (btn.border_width[0])  bo["border_width"]  = btn.border_width;
+    if (btn.corner_radius[0]) bo["corner_radius"] = btn.corner_radius;
+    if (btn.icon_id[0])       bo["icon"]          = btn.icon_id;
+    if (btn.btn_state[0])     bo["btn_state"]     = btn.btn_state;
+
+    if (btn.widget.type[0]) {
+        JsonObject w = bo.createNestedObject("widget");
+        w["type"] = btn.widget.type;
+        JsonArray wb = w.createNestedArray("bindings");
+        for (uint8_t i = 0; i < MAX_WIDGET_BINDINGS; ++i) {
+            if (btn.widget.data_binding[i][0]) wb.add(btn.widget.data_binding[i]);
+        }
+        if (wb.size() == 0) w.remove("bindings");
+    }
+
+    append_actions(bo, "tap", btn.actions, btn.action_count);
+    append_actions(bo, "long_press", btn.lp_actions, btn.lp_action_count);
+}
+
 static bool tool_list_pads(const JsonObject& args, JsonObject& result, String& err) {
     // Enumerates configured pads on the web task: each existing pad is loaded
     // from flash into a single reused PadConfig buffer (PSRAM-preferred). Work is
@@ -221,10 +291,30 @@ static bool tool_get_pad(const JsonObject& args, JsonObject& result, String& err
     }
 
     result["screen"] = screen;
+    result["layout"] = cfg->layout;
     result["cols"] = cfg->cols;
     result["rows"] = cfg->rows;
+    if (cfg->wake_screen[0]) result["wake_screen"] = cfg->wake_screen;
+    if (cfg->bg_color[0]) result["bg_color"] = cfg->bg_color;
+    if (cfg->template_pad >= 0) {
+        char tid[16];
+        snprintf(tid, sizeof(tid), "pad_%d", (int)cfg->template_pad);
+        result["template_pad"] = tid;
+        // Inherited buttons render into empty cells but are NOT stored in this
+        // pad's JSON; only this pad's own buttons appear below.
+        result["template_pad_note"] = "inherited buttons rendered, not stored";
+    }
+    if (cfg->binding_count > 0) {
+        JsonObject pb = result.createNestedObject("bindings");
+        for (uint8_t i = 0; i < cfg->binding_count; ++i) {
+            pb[cfg->bindings[i].name] = cfg->bindings[i].value;
+        }
+    }
     result["button_count"] = cfg->button_count;
-    append_pad_buttons(result, cfg);
+    JsonArray btns = result.createNestedArray("buttons");
+    for (uint8_t b = 0; b < cfg->button_count; ++b) {
+        append_button_detail(btns, cfg->buttons[b], b);
+    }
     free(cfg);
     return true;
 }
@@ -536,7 +626,7 @@ REGISTER_MCP_TOOL(s_tool_list_pads);
 
 static const McpTool s_tool_get_pad = {
     "get_pad",
-    "Get one pad's grid and buttons. Args: screen (pad id like 'pad_0').",
+    "Get one pad's full configuration: layout/cols/rows, wake_screen, bg_color, template_pad, named bindings, and every button's labels, styles, colors, widget, and resolved tap/long-press actions with targets. Args: screen (pad id like 'pad_0').",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"],\"additionalProperties\":false}",
     tool_get_pad, true, false, false
 };
