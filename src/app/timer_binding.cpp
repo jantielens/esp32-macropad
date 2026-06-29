@@ -117,6 +117,14 @@ static void timer_scheme_describe(void* out) {
     o["example"] = "[timer:1]";
     o["note"]    = "timers 1-3; N_expired resolves ON/OFF when the timer has fired";
 }
+
+// Validate a [timer:N] / [timer:N_expired] token: N must be 1-3.
+static const char* timer_scheme_validate(const char* params) {
+    if (!params || !params[0]) return nullptr;
+    int n = atoi(params);
+    if (n >= 1 && n <= 3) return nullptr;
+    return "timer id must be 1-3 (e.g. [timer:1] or [timer:1_expired])";
+}
 #endif
 
 void timer_binding_init() {
@@ -128,6 +136,7 @@ void timer_binding_init() {
     }
 #if HAS_MCP
     binding_template_set_scheme_describe("timer", timer_scheme_describe);
+    binding_template_set_scheme_validate("timer", timer_scheme_validate);
 #endif
 }
 

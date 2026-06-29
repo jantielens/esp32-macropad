@@ -921,14 +921,15 @@ static void bar_chart_destroy(WidgetState* state) {
 static void bar_chart_describe(JsonObject& out) {
     JsonArray f = out.createNestedArray("config_fields");
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
+    auto addmax = [&](const char* n, const char* t, const char* d, int m){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; o["max"]=m; };
     add("widget_bar_min","number","scale minimum (bindable)"); add("widget_bar_max","number","full-scale value (bindable)");
     add("widget_orientation","string","'horizontal' or 'vertical' (default vertical)");
     add("widget_bar_width_pct","number","bar thickness 1-100% of its column"); add("widget_bar_zero_centered","bool","fill from 0 baseline instead of min");
     add("widget_bar_bg_color","color","track/background color");
     add("widget_bar_color","color","bar 1 fill"); add("widget_bar_color_2","color","bar 2 fill (2nd binding)");
     add("widget_bar_color_3","color","bar 3 fill"); add("widget_bar_color_4","color","bar 4 fill");
-    add("widget_bar_label","string","bar 1 caption"); add("widget_bar_label_2","string","bar 2 caption");
-    add("widget_bar_label_3","string","bar 3 caption"); add("widget_bar_label_4","string","bar 4 caption");
+    addmax("widget_bar_label","string","bar 1 caption",63); addmax("widget_bar_label_2","string","bar 2 caption",63);
+    addmax("widget_bar_label_3","string","bar 3 caption",63); addmax("widget_bar_label_4","string","bar 4 caption",63);
     add("widget_bar_label_size","number","caption strip px, 0=auto");
     add("widget_bar_dual_binding_pair_1","bool","bind 1&2 share one center bar: 1 grows down/left, 2 up/right (need min<0)");
     add("widget_bar_dual_binding_pair_2","bool","same for bindings 3&4");

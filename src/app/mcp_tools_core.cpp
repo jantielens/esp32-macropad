@@ -266,7 +266,10 @@ static bool finish_control(McpControlResult r, bool ok, const char* msg,
         return tool_fail(result, err, TOOL_ERR_INTERNAL, (msg && msg[0]) ? msg : "control failed");
     }
     result["ok"] = true;
-    if (msg && msg[0]) result["message"] = msg;
+    // Copy the message: `msg` is the caller's local char[] which is out of scope
+    // by the time the result doc is serialized. Assigning a String forces
+    // ArduinoJson to duplicate the bytes (const char* would be stored by ref).
+    if (msg && msg[0]) result["message"] = String(msg);
     return true;
 }
 

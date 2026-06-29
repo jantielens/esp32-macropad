@@ -446,6 +446,21 @@ static void health_scheme_describe(void* out) {
     o["example"] = "[health:heap_free;%d]";
     o["keys"]    = "see health_keys[] for the full {name, desc} list";
 }
+
+// Validate a [health:KEY] token's params (the key, already stripped of any
+// ;format / |fallback by the caller). Lives with the scheme so the key set is
+// the single source for both the manifest and authoring validation.
+static char s_health_verr[80];
+static const char* health_scheme_validate(const char* params) {
+    if (!params || !params[0]) return nullptr;
+    for (uint8_t i = 0; i < health_binding_key_count(); ++i) {
+        const char* hk = health_binding_key_at(i);
+        if (hk && strcmp(hk, params) == 0) return nullptr;
+    }
+    snprintf(s_health_verr, sizeof(s_health_verr),
+             "unknown health key '%s' — use a key from capabilities.health_keys", params);
+    return s_health_verr;
+}
 #else
 uint8_t health_binding_key_count() { return 0; }
 const char* health_binding_key_at(uint8_t index) { (void)index; return nullptr; }
@@ -458,6 +473,7 @@ void health_binding_init() {
     }
 #if HAS_MCP
     binding_template_set_scheme_describe("health", health_scheme_describe);
+    binding_template_set_scheme_validate("health", health_scheme_validate);
 #endif
 }
 

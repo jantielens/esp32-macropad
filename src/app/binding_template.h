@@ -70,6 +70,23 @@ bool binding_template_set_scheme_describe(const char* scheme, binding_describe_f
 // true if the scheme has a describe hook, false otherwise.
 bool binding_template_describe_scheme(uint8_t index, void* out_json);
 
+// Optional per-scheme validate hook for authoring (MCP write tools). Each scheme
+// validates its own token params in its own .cpp (mirrors describe). `params` is
+// the text after "scheme:" up to the first ';' '|' or ']' (e.g. the health key,
+// timer id, list provider). Returns a human-readable error string (static
+// lifetime) when invalid, or nullptr when ok.
+typedef const char* (*binding_validate_fn)(const char* params);
+
+// Attach a validate hook to a registered scheme (call after register).
+bool binding_template_set_scheme_validate(const char* scheme, binding_validate_fn fn);
+
+// True if `scheme` (length name_len) is a registered scheme name.
+bool binding_template_scheme_known(const char* scheme, size_t name_len);
+
+// Run the scheme's validate hook on `params`. Returns nullptr when the scheme is
+// unknown, has no validate hook, or the params are valid; otherwise an error.
+const char* binding_template_validate_params(const char* scheme, size_t name_len, const char* params);
+
 // Check if a label string contains any binding tokens [xxx:...]
 bool binding_template_has_bindings(const char* label);
 

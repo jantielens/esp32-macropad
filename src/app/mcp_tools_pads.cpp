@@ -122,7 +122,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     for (const char* f : fields) bf.add(f);
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
     btn["labels_note"] = "labels render with LVGL bitmap fonts (Latin text, digits, basic punctuation only). Do NOT use emoji or Unicode symbols — they render as blank/tofu. Use plain text, or an icon_id for graphics.";
-    btn["limits_note"] = "max field lengths: labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
+    btn["limits_note"] = "max field lengths: button labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
     btn["btn_state_note"] = "accepts a binding for conditional visibility, e.g. [expr:[mqtt:printer;state]==\"online\"?\"enabled\":\"hidden\"] (unresolved -> enabled)";
@@ -151,6 +151,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         }
     }
     result["actions_note"] = "button.actions (tap) / button.lp_actions (long-press): arrays of {type, ...fields above}";
+    result["position_note"] = "set_button/set_buttons 'position' is the 0-based index in the pad's button array, NOT a grid cell (grid placement is col/row). Use 0,1,2,...; a position at or past the end appends. To rebuild a pad: clear_pad then add buttons from position 0.";
 
     // Bindings: ONE generated block. Each scheme is enumerated from the live
     // registry (so device-class schemes auto-appear) and described in place via
@@ -219,6 +220,44 @@ static const char* check_max(JsonObjectConst b, const char* key, size_t cap, con
 }
 static const char* LEN_MSG_LABEL = "field too long (max 191 chars); factor long binding expressions into a pad-level [pad:name] binding and reference it";
 static const char* LEN_MSG_SHORT = "field too long (max 63 chars)";
+// Single in-flight MCP request, so a static buffer for a formatted validation
+// message is safe (and the validator returns const char*).
+static char s_len_err[96];
+
+// Validate every [scheme:params] token in a string: the scheme must be a
+// registered binding scheme, and (if that scheme provides a validate hook) its
+// params must pass. This is generic across all schemes — health keys, list
+// providers, timer ids, etc. are each checked by the scheme's own hook (open
+// schemes like mqtt/expr/time have no hook and accept anything). nullptr = ok.
+static const char* validate_binding_tokens(const char* s) {
+    if (!s) return nullptr;
+    const char* p = s;
+    while ((p = strchr(p, '[')) != nullptr) {
+        const char* scheme = p + 1;
+        const char* c = scheme;
+        while ((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z')) c++;
+        if (*c != ':' || c == scheme) { p++; continue; }  // not a [scheme:...] token
+        size_t schemelen = (size_t)(c - scheme);
+        if (!binding_template_scheme_known(scheme, schemelen)) {
+            char sbuf[16];
+            size_t nn = schemelen < sizeof(sbuf) - 1 ? schemelen : sizeof(sbuf) - 1;
+            memcpy(sbuf, scheme, nn); sbuf[nn] = '\0';
+            snprintf(s_len_err, sizeof(s_len_err), "unknown binding scheme '%s'", sbuf);
+            return s_len_err;
+        }
+        // Simple params (up to ; ] |) for the scheme's validate hook. Schemes with
+        // nested params (expr) have no hook, so this approximation is unused there.
+        const char* pp = c + 1;
+        char pbuf[48];
+        size_t pn = 0;
+        while (*pp && *pp != ';' && *pp != ']' && *pp != '|' && pn < sizeof(pbuf) - 1) pbuf[pn++] = *pp++;
+        pbuf[pn] = '\0';
+        const char* e = binding_template_validate_params(scheme, schemelen, pbuf);
+        if (e) return e;
+        p++;  // keep scanning (nested tokens too)
+    }
+    return nullptr;
+}
 
 static const char* validate_action_array(JsonArrayConst arr) {
     if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
@@ -242,7 +281,32 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows) {
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
     const char* wt = b["widget_type"] | "";
-    if (wt[0] && !widget_find(wt)) return "unknown widget type";
+    const WidgetType* wtype = wt[0] ? widget_find(wt) : nullptr;
+    if (wt[0] && !wtype) return "unknown widget type";
+    // Widget config field length limits, enforced from the widget's own
+    // describeSchema (single source): each field may declare its own "max"
+    // (e.g. caption fields are 63, others differ or declare none). Only fields
+    // that declare a "max" are length-checked, so an over-long value is rejected
+    // here instead of silently truncating on the device.
+    if (wtype && wtype->describeSchema) {
+        BasicJsonDocument<PsramJsonAllocator> sd(4096);
+        JsonObject so = sd.to<JsonObject>();
+        wtype->describeSchema(so);
+        JsonArrayConst cf = so["config_fields"];
+        for (JsonObjectConst f : cf) {
+            int mx = f["max"] | 0;
+            if (mx <= 0) continue;
+            const char* fname = f["name"] | "";
+            if (!fname[0]) continue;
+            const char* val = b[fname] | "";
+            if ((int)strlen(val) > mx) {
+                snprintf(s_len_err, sizeof(s_len_err),
+                         "widget field '%s' too long (max %d); factor a long binding into a [pad:name] binding",
+                         fname, mx);
+                return s_len_err;
+            }
+        }
+    }
     // Length limits (truncation guard). Labels/bindings/state: 192-byte buffers;
     // border/radius: 64-byte; colors: 192-byte.
     const char* e;
@@ -261,6 +325,14 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows) {
     if ((e = check_max(b, "widget_data_binding_4", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
     if (b["actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["actions"]); if (ae) return ae; }
     if (b["lp_actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["lp_actions"]); if (ae) return ae; }
+    // Reject invalid binding tokens (unknown scheme, bad health key / list
+    // provider / timer id) in any string field (labels, widget bindings...).
+    for (JsonPairConst kv : b) {
+        if (kv.value().is<const char*>()) {
+            const char* he = validate_binding_tokens(kv.value().as<const char*>());
+            if (he) return he;
+        }
+    }
     return nullptr;
 }
 
@@ -288,24 +360,20 @@ static const char* validate_pad_doc(JsonObjectConst pad) {
             if (strlen(kv.key().c_str()) >= PAD_BINDING_NAME_MAX_LEN) return "binding name too long (max 31 chars)";
             const char* val = kv.value().as<const char*>();
             if (val && strlen(val) >= CONFIG_LABEL_MAX_LEN) return "binding value too long (max 191 chars)";
+            const char* be = validate_binding_tokens(val);
+            if (be) return be;
         }
     }
     JsonArrayConst btns = pad["buttons"];
     if (btns.isNull()) return nullptr;
     if (btns.size() > MAX_PAD_BUTTONS) return "too many buttons";
-    // Collision map (occupied cells) + per-button checks.
-    bool occ[MAX_GRID_COLS][MAX_GRID_ROWS] = {{false}};
+    // Per-button checks. NOTE: grid-cell overlaps are intentionally NOT rejected
+    // — the firmware (and the portal save path) tolerate them (a later button
+    // renders over / hides an earlier one). Rejecting overlaps here was stricter
+    // than the device and broke incremental set_buttons edits.
     for (JsonObjectConst b : btns) {
         const char* e = validate_button(b, cols, rows);
         if (e) return e;
-        if (!is_grid) continue;
-        int col = b["col"] | 0, row = b["row"] | 0;
-        int cspan = b["col_span"] | 1, rspan = b["row_span"] | 1;
-        for (int c = col; c < col + cspan && c < MAX_GRID_COLS; ++c)
-            for (int r = row; r < row + rspan && r < MAX_GRID_ROWS; ++r) {
-                if (occ[c][r]) return "button position collision";
-                occ[c][r] = true;
-            }
     }
     return nullptr;
 }
@@ -373,11 +441,14 @@ static bool load_or_seed(uint8_t page, JsonDocument& doc) {
     return true;
 }
 
-// Insert/replace at position; grows array if pos == size.
+// Insert/replace at position; appends when pos is at or past the end. Position
+// is the 0-based ARRAY index (not a grid cell — grid placement is col/row), so a
+// sparse/grid-style position past the current size simply appends rather than
+// failing. Only fails when pos<0 or the array is already full.
 static bool splice_button(JsonArray btns, int pos, JsonVariantConst button) {
-    if (pos < 0 || pos > (int)btns.size() || pos >= MAX_PAD_BUTTONS) return false;
-    if (pos == (int)btns.size()) btns.add(button);
-    else btns[pos] = button;
+    if (pos < 0 || (int)btns.size() >= MAX_PAD_BUTTONS) return false;
+    if (pos < (int)btns.size()) btns[pos] = button;  // replace existing slot
+    else btns.add(button);                           // append (lenient)
     return true;
 }
 
@@ -528,7 +599,7 @@ REGISTER_MCP_TOOL(s_tool_get_pad_blocks);
 
 static const McpTool s_tool_set_button = {
     "set_button",
-    "Create/replace one button at a position. Args: screen ('pad_N'), position (int), button (JSON, portal pad schema). Requires authoring.",
+    "Create/replace one button. position = 0-based index in the button array (NOT a grid cell; placement is col/row). A position at/past the end appends. Args: screen ('pad_N'), position (int), button (JSON, portal pad schema). Requires authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"screen\",\"position\",\"button\"],\"additionalProperties\":false}",
     tool_set_button, false, true, false, true
 };
@@ -536,7 +607,7 @@ REGISTER_MCP_TOOL(s_tool_set_button);
 
 static const McpTool s_tool_set_buttons = {
     "set_buttons",
-    "Create/replace many buttons in one save. Args: screen ('pad_N'), buttons (array of {position, button}). Requires authoring.",
+    "Create/replace many buttons in one save (processed in array order). Each item.position is a 0-based array index (NOT a grid cell); positions past the end append. To rebuild a pad, clear_pad first then use positions 0,1,2,... Args: screen ('pad_N'), buttons (array of {position, button}). Requires authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"buttons\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"position\",\"button\"]}}},\"required\":[\"screen\",\"buttons\"],\"additionalProperties\":false}",
     tool_set_buttons, false, true, false, true
 };

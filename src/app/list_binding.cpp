@@ -102,6 +102,20 @@ static void list_scheme_describe(void* out) {
     o["example"]   = "[list:pads.selected]";
     o["providers"] = "see list_providers[]";
 }
+
+// Validate a [list:PROVIDER.field] token: the provider must be registered.
+static char s_list_verr[80];
+static const char* list_scheme_validate(const char* params) {
+    if (!params || !params[0]) return nullptr;
+    char provider[LIST_ITEM_ID_MAX];
+    size_t n = 0;
+    while (params[n] && params[n] != '.' && n < sizeof(provider) - 1) { provider[n] = params[n]; n++; }
+    provider[n] = '\0';
+    if (!provider[0] || list_provider_find(provider)) return nullptr;
+    snprintf(s_list_verr, sizeof(s_list_verr),
+             "unknown list provider '%s' — use one from capabilities.list_providers", provider);
+    return s_list_verr;
+}
 #endif
 
 void list_binding_init() {
@@ -112,6 +126,7 @@ void list_binding_init() {
     }
 #if HAS_MCP
     binding_template_set_scheme_describe("list", list_scheme_describe);
+    binding_template_set_scheme_validate("list", list_scheme_validate);
 #endif
 }
 
