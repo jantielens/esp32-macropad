@@ -157,6 +157,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 #if HAS_MCP
 				(*doc)["mcp_enabled"] = current_config->mcp_enabled;
 				(*doc)["mcp_control_enabled"] = current_config->mcp_control_enabled;
+				(*doc)["mcp_authoring_enabled"] = current_config->mcp_authoring_enabled;
 				(*doc)["mcp_token_set"] = (strlen(current_config->mcp_token) > 0);
 #endif
 
@@ -541,6 +542,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 		if (doc.containsKey("mcp_control_enabled")) {
 				current_config->mcp_control_enabled = parseBoolField(doc, "mcp_control_enabled");
+		}
+		if (doc.containsKey("mcp_authoring_enabled")) {
+				current_config->mcp_authoring_enabled = parseBoolField(doc, "mcp_authoring_enabled");
 		}
 		if (doc.containsKey("mcp_generate_token") && parseBoolField(doc, "mcp_generate_token")) {
 				char tok[CONFIG_MCP_TOKEN_MAX_LEN];

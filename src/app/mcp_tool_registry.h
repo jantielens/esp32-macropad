@@ -50,6 +50,7 @@ struct McpTool {
     bool read_only;                  // surfaced as readOnlyHint
     bool destructive;                // surfaced as destructiveHint
     bool requires_control;           // hidden/refused when mcp_control_enabled == false
+    bool requires_authoring;         // hidden/refused when mcp_authoring_enabled == false
 };
 
 // Register a tool. The McpTool must have static storage duration (the registry

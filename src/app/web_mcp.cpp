@@ -33,6 +33,7 @@ static const char* TAG = "MCP";
 // ----------------------------------------------------------------------------
 static constexpr const char* MCP_PROTOCOL_VERSION = "2025-06-18";
 static constexpr size_t   MCP_MAX_BODY_BYTES     = 8192;   // hard cap on the request body
+static constexpr size_t   MCP_MAX_BODY_BYTES_AUTHORING = 48 * 1024; // pad writes (PSRAM only)
 static constexpr uint32_t MCP_BODY_TIMEOUT_MS    = 5000;   // stale-body cleanup
 static constexpr uint32_t MCP_CONTROL_TIMEOUT_MS = 2000;   // bounded wait for deferred control
 static constexpr uint32_t MCP_REBOOT_GRACE_MS    = 400;    // flush the response before restart
@@ -126,6 +127,18 @@ static int mcp_gate(AsyncWebServerRequest* request) {
 static bool mcp_control_enabled() {
     DeviceConfig* cfg = web_portal_get_current_config();
     return cfg && cfg->mcp_control_enabled;
+}
+
+static bool mcp_authoring_enabled() {
+    DeviceConfig* cfg = web_portal_get_current_config();
+    return cfg && cfg->mcp_authoring_enabled;
+}
+
+// Effective request-body cap. Authoring (pad writes) can exceed 8 KB; raise the
+// cap when authoring is enabled and PSRAM is available, else hold the default.
+static size_t mcp_body_cap() {
+    if (mcp_authoring_enabled() && psramFound()) return MCP_MAX_BODY_BYTES_AUTHORING;
+    return MCP_MAX_BODY_BYTES;
 }
 
 // ----------------------------------------------------------------------------
@@ -288,7 +301,7 @@ static void handleMcpBody(AsyncWebServerRequest* request, uint8_t* data,
         }
 
         // Hard cap: reject oversize envelopes before allocation.
-        if (total == 0 || total > MCP_MAX_BODY_BYTES) {
+        if (total == 0 || total > mcp_body_cap()) {
             portEXIT_CRITICAL(&g_body_mux);
             mcp_send_rpc_http_error(request, MCP_ERR_INVALID_REQ, "request too large");
             return;
@@ -435,12 +448,15 @@ static void mcp_method_tools_list(AsyncWebServerRequest* request, JsonVariantCon
     JsonArray tools = result.createNestedArray("tools");
 
     const bool control_on = mcp_control_enabled();
+    const bool authoring_on = mcp_authoring_enabled();
     const uint8_t n = mcp_tool_count();
     for (uint8_t i = 0; i < n; ++i) {
         const McpTool* t = mcp_tool_at(i);
         if (!t) continue;
         // Filter control tools when control is disabled.
         if (t->requires_control && !control_on) continue;
+        // Filter authoring tools when authoring is disabled.
+        if (t->requires_authoring && !authoring_on) continue;
         mcp_append_tool_def(tools, t);
     }
     web_portal_send_json_chunked(request, doc);
@@ -460,9 +476,16 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
         mcp_send_error(request, id, MCP_ERR_METHOD, "tool not available (control disabled)");
         return;
     }
+    // Authoring gate.
+    if (tool->requires_authoring && !mcp_authoring_enabled()) {
+        mcp_send_error(request, id, MCP_ERR_METHOD, "tool not available (authoring disabled)");
+        return;
+    }
 
-    // Build args object (default empty).
-    auto argsDoc = make_psram_json_doc(2048);
+    // Build args object (default empty). Authoring tools may carry whole-pad
+    // JSON, so size their args doc to the authoring body cap.
+    size_t args_cap = (tool->requires_authoring ? mcp_body_cap() : (size_t)2048);
+    auto argsDoc = make_psram_json_doc(args_cap);
     if (!argsDoc || argsDoc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
     JsonObject args = argsDoc->to<JsonObject>();
     JsonObjectConst inArgs = params["arguments"];
@@ -471,7 +494,7 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
     }
 
     // Result document the handler writes into.
-    auto resultDoc = make_psram_json_doc(8192);
+    auto resultDoc = make_psram_json_doc(24576);
     if (!resultDoc || resultDoc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
     JsonObject toolResult = resultDoc->to<JsonObject>();
     String err;
@@ -509,7 +532,7 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
 // JSON-RPC envelope dispatch
 // ----------------------------------------------------------------------------
 static void mcp_dispatch(AsyncWebServerRequest* request, uint8_t* body, size_t len) {
-    auto reqDoc = make_psram_json_doc(MCP_MAX_BODY_BYTES + 1024);
+    auto reqDoc = make_psram_json_doc(len + 1024);
     if (!reqDoc || reqDoc->capacity() == 0) {
         mcp_send_rpc_http_error(request, MCP_ERR_INTERNAL, "out of memory");
         return;

@@ -36,7 +36,7 @@ async function saveFragmentConfig(requiresReboot) {
         'ble_burst_count', 'ble_adv_interval_ms',
         'mqtt_publish_scope',
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
-        'mcp_enabled', 'mcp_control_enabled',
+        'mcp_enabled', 'mcp_control_enabled', 'mcp_authoring_enabled',
         'ble_enabled',
         'audio_volume', 'tap_beep', 'lp_beep',
         'backlight_brightness',

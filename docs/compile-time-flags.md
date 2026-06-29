@@ -462,6 +462,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
   - src/app/mcp_tools_core.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/message_bubble.cpp
   - src/app/message_bubble.h
   - src/app/mqtt_notify.cpp
@@ -579,8 +580,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_components.cpp
   - src/app/mcp_tool_registry.cpp
   - src/app/mcp_tools_core.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/web_mcp.cpp
   - src/app/web_portal_config.cpp
+  - src/app/widgets/bar_chart_widget.cpp
+  - src/app/widgets/gauge_widget.cpp
+  - src/app/widgets/list_widget.cpp
+  - src/app/widgets/numericrocker_widget.cpp
+  - src/app/widgets/rocker_widget.cpp
+  - src/app/widgets/sparkline_widget.cpp
+  - src/app/widgets/table_widget.cpp
+  - src/app/widgets/widget.h
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
   - src/app/action_registry.cpp

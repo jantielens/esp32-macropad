@@ -535,6 +535,13 @@ static void table_tick(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* sta
     table_update(tile, cfg, state, payload);
 }
 
-REGISTER_WIDGET(table, nullptr, true);
+#if HAS_MCP
+static void table_describe(JsonObject& out) {
+    JsonArray f = out.createNestedArray("config_fields");
+    { JsonObject o = f.createNestedObject(); o["name"] = "widget_table_scrollable"; o["type"] = "bool"; o["desc"] = "allow vertical scroll"; }
+    { JsonObject o = f.createNestedObject(); o["name"] = "widget_table_style"; o["type"] = "string"; o["desc"] = "table style preset"; }
+}
+#endif
+REGISTER_WIDGET_SCHEMA(table, nullptr, true);
 
 #endif // HAS_DISPLAY

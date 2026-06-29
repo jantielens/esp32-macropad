@@ -1252,6 +1252,27 @@ static void gauge_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
-REGISTER_WIDGET(gauge, nullptr, false);
+#if HAS_MCP
+static void gauge_describe(JsonObject& out) {
+    JsonArray f = out.createNestedArray("config_fields");
+    auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
+    add("widget_gauge_min","number","scale min"); add("widget_gauge_max","number","scale max");
+    add("widget_gauge_degrees","number","arc sweep degrees"); add("widget_gauge_start_angle","number","start angle (0=top)");
+    add("widget_gauge_zero_centered","bool","fill from 0 baseline"); add("widget_gauge_arc_width_pct","number","arc thickness %");
+    add("widget_arc_color","color","ring 1"); add("widget_arc_color_2","color","ring 2");
+    add("widget_arc_color_3","color","ring 3"); add("widget_arc_color_4","color","ring 4");
+    add("widget_gauge_track_color","color","unfilled track");
+    add("widget_gauge_start_label","string","ring 1 caption"); add("widget_gauge_start_label_2","string","ring 2");
+    add("widget_gauge_start_label_3","string","ring 3"); add("widget_gauge_start_label_4","string","ring 4");
+    add("widget_gauge_dual_binding_pair_1","bool","rings 1&2 share center"); add("widget_gauge_dual_binding_pair_2","bool","rings 3&4 share center");
+    add("widget_gauge_show_needle","bool","draw needle"); add("widget_gauge_needle_color","color","needle color");
+    add("widget_gauge_needle_width","number","needle px"); add("widget_gauge_needle_cutoff_pct","number","needle inner cutoff %");
+    add("widget_gauge_ticks","number","tick count"); add("widget_gauge_tick_color","color",""); add("widget_gauge_tick_width","number","");
+    add("widget_gauge_marker_value","number","target on scale"); add("widget_gauge_marker_tick_color","color",""); add("widget_gauge_marker_tick_width","number","");
+    add("widget_gauge_marker_zone_color","color","zone band"); add("widget_gauge_marker_zone_deg","number","zone width deg");
+    add("widget_anim_ms","number","transition ms");
+}
+#endif
+REGISTER_WIDGET_SCHEMA(gauge, nullptr, false);
 
 #endif // HAS_DISPLAY

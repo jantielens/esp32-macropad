@@ -110,6 +110,7 @@ struct DeviceConfig {
 #if HAS_MCP
 		bool mcp_enabled;                              // default false (feature off)
 		bool mcp_control_enabled;                      // default false (gates control tools)
+		bool mcp_authoring_enabled;                    // default false (gates pad authoring/write tools)
 		char mcp_token[CONFIG_MCP_TOKEN_MAX_LEN];      // bearer token; empty = none (fail closed)
 #endif
 

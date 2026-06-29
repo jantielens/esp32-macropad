@@ -1,13 +1,23 @@
 // ============================================================================
-// mcp_tools_pads.cpp — MCP capability manifest (read-only).
+// mcp_tools_pads.cpp — MCP pad capability manifest + authoring (write) tools.
 //
 // Aggregated into the build via mcp_components.cpp (arduino-cli only compiles
-// .cpp in the sketch root). Gated HAS_MCP && HAS_DISPLAY. get_capabilities is a
-// read tool — needs only the bearer token, no control/authoring permission.
+// .cpp in the sketch root). Gated HAS_MCP && HAS_DISPLAY.
 //
-// The widget LIST is generated from the live registry (widget_count/widget_at)
-// so a new widget auto-appears with no edit here. Per-widget config FIELDS are
-// a static schema below until widgets export their own field metadata.
+//   get_capabilities  — read tool (bearer token only). Manifest is generated:
+//                       widget list + per-widget fields come from the registry
+//                       (widget_at + describeSchema); no hand-maintained table.
+//   validate_pad      — read tool: dry-run validate a pad JSON, no save.
+//   set_button / set_buttons / remove_button / clear_pad — authoring tools.
+//
+// Authoring tools require mcp_authoring_enabled (gated by web_mcp via the
+// requires_authoring flag). They run on the web task: load the pad raw, splice
+// the button(s) into the JSON, VALIDATE, then hand a PSRAM buffer (pointer+len)
+// to the main loop via mcp_control_dispatch (D6) which calls pad_config_save_raw
+// + pad_config_rebuild_all_caches and frees it. The 256-byte ctx is never
+// widened and the pad JSON is never inlined into it. save_raw truncates in
+// place, so validation runs before every write. Concurrent portal/LLM edits are
+// last-write-wins per pad.
 // ============================================================================
 
 #include "board_config.h"
@@ -15,81 +25,79 @@
 #if HAS_MCP && HAS_DISPLAY
 
 #include "mcp_tool_registry.h"
+#include "web_mcp.h"
 #include "pad_config.h"
+#include "psram_json_allocator.h"
 #include "widgets/widget.h"
 
 #include <ArduinoJson.h>
+#include <esp_heap_caps.h>
 #include <string.h>
 
-// ============================================================================
-// Static widget config-field schema.
-//
-// TODO(widget authors): when adding a new widget type, add a "<type>" entry
-// here with its config fields. The widget LIST is registry-generated, but
-// per-field config metadata is not yet exported by the WidgetType vtable — this
-// table is the single drift point. Phase 2+ replaces it with a registry export.
-// ============================================================================
-static void emit_widget_fields(const char* type, JsonObject w) {
-    JsonArray f = w.createNestedArray("config_fields");
-    auto add = [&](const char* n, const char* t, const char* note) {
-        JsonObject o = f.createNestedObject();
-        o["name"] = n; o["type"] = t; if (note && note[0]) o["note"] = note;
-    };
-    if (strcmp(type, "bar_chart") == 0 || strcmp(type, "bar") == 0) {
-        add("min", "number", "scale min (binding ok)");
-        add("max", "number", "scale max (binding ok)");
-        add("color", "color", "fill color");
-    } else if (strcmp(type, "gauge") == 0) {
-        add("min", "number", "scale min"); add("max", "number", "scale max");
-        add("units", "string", "displayed unit");
-    } else if (strcmp(type, "sparkline") == 0) {
-        add("window_secs", "number", "time window"); add("color", "color", "");
-    } else if (strcmp(type, "table") == 0) {
-        add("rows", "number", "max rows");
-    } else if (strcmp(type, "list") == 0) {
-        add("provider", "string", "list provider id, e.g. 'pads'");
-    } else if (strcmp(type, "rocker") == 0 || strcmp(type, "numericrocker") == 0) {
-        add("step", "number", ""); add("min", "number", ""); add("max", "number", "");
-    }
-    // data_binding[0..3] is common to all widgets (see ScreenButtonConfig.widget).
-    add("data_binding", "binding[]", "primary + up to 3 extra binding templates");
+static constexpr int PAD_ERR_PARAMS   = -32602;
+static constexpr int PAD_ERR_INTERNAL = -32603;
+static constexpr int PAD_ERR_BUSY     = -32001;
+static constexpr uint32_t PAD_WRITE_TIMEOUT_MS = 4000;
+
+static bool pad_fail(JsonObject& result, String& err, int code, const char* msg) {
+    err = msg ? msg : "error";
+    result[MCP_RESULT_ERRCODE_KEY] = code;
+    return false;
 }
 
+// ============================================================================
+// get_capabilities — registry-generated manifest
+// ============================================================================
 static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, String& err) {
     (void)args; (void)err;
 
-    // --- Widget types (generated from the live registry) ---
+    // Widget types — generated from the live registry; per-widget config fields
+    // come from each type's describeSchema hook. Adding a widget auto-appears.
     JsonArray widgets = result.createNestedArray("widgets");
     for (uint8_t i = 0; i < widget_count(); ++i) {
         const WidgetType* wt = widget_at(i);
         if (!wt) continue;
         JsonObject w = widgets.createNestedObject();
         w["type"] = wt->name;
-        emit_widget_fields(wt->name, w);
+        if (wt->describeSchema) wt->describeSchema(w);
     }
+    result["widget_common"] = "all widgets: widget_type + widget_data_binding (and _2.._4 for extra binding templates); widget config fields are flat on the button";
 
-    // --- Grid limits ---
     JsonObject grid = result.createNestedObject("grid");
     grid["max_buttons"] = MAX_PAD_BUTTONS;
     grid["max_cols"] = MAX_GRID_COLS;
     grid["max_rows"] = MAX_GRID_ROWS;
     grid["max_pads"] = MAX_PADS;
+    grid["max_actions"] = MAX_BUTTON_ACTIONS;
+    grid["max_bindings"] = PAD_MAX_BINDINGS;
 
-    // --- Button schema ---
+    // Pad-level schema (set via set_pad; read via get_pad). Distinct from the
+    // per-button schema below.
+    JsonObject pad = result.createNestedObject("pad");
+    JsonObject pf = pad.createNestedObject("fields");
+    pf["layout"] = "'grid' (default) or a curated layout name";
+    pf["cols"] = "grid columns 1-8";
+    pf["rows"] = "grid rows 1-8";
+    pf["wake_screen"] = "screen id to navigate to on screensaver wake ('' = stay)";
+    pf["bg_color"] = "pad background color #RRGGBB (default #000000)";
+    pf["template_pad"] = "int pad index 0..MAX_PADS-1 to inherit buttons into EMPTY cells (-1 = none). Inherited buttons render but are not stored in this pad.";
+    pf["bindings"] = "object of name->binding-template, referenced elsewhere as [pad:name]. Names: [a-zA-Z][a-zA-Z0-9_]*";
+    pad["bindings_example"] = "{\"power\":\"[mqtt:home/solar/power;watts;%.0f]\",\"hot\":\"[expr:[pad:power]>3000?1:0]\"}";
+
     JsonObject btn = result.createNestedObject("button");
     JsonArray bf = btn.createNestedArray("fields");
     const char* fields[] = {
         "col", "row", "col_span", "row_span",
         "label_top", "label_center", "label_bottom",
-        "style_top", "style_center", "style_bottom",
+        "label_top_style", "label_center_style", "label_bottom_style",
         "bg_color", "fg_color", "border_color", "border_width", "corner_radius",
-        "icon", "btn_state", "widget", "tap", "long_press"
+        "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
+    btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
 
-    // --- LabelStyle DSL tokens ---
     JsonObject style = result.createNestedObject("label_style");
     style["format"] = "font:24;font_family:dseg7;font_upscale:1.4;align:right;y:-3;mode:scroll;color:#FF0000";
     JsonArray fam = style.createNestedArray("font_family");
@@ -99,40 +107,359 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonArray md = style.createNestedArray("mode");
     md.add("clip"); md.add("scroll"); md.add("dot"); md.add("wrap");
 
-    // --- Action types + targets ---
     JsonArray actions = result.createNestedArray("action_types");
     const char* acts[] = {
         "screen->target", "mqtt->topic,payload", "back", "key->sequence",
-        "ble_pair", "beep", "volume", "brightness", "timer", "sound",
-        "notify", "system->system_command", "ha_service->entity_id,service"
+        "ble_pair", "beep->beep_pattern", "volume->volume_value", "brightness->brightness_value",
+        "timer->timer_id,timer_command", "sound->sound_file",
+        "notify->notify_text", "system->system_command", "ha_service->entity_id,service"
     };
     for (const char* a : acts) actions.add(a);
+    result["actions_note"] = "button.actions (tap) / button.lp_actions (long-press): arrays of {type, ...fields above}";
 
-    // --- Binding schemes (one example each) ---
     JsonObject b = result.createNestedObject("binding_schemes");
-    b["mqtt"]   = "[mqtt:home/temp;$.value;%.1f]";
+    b["mqtt"]   = "[mqtt:home/temp;temperature;%.1f]";
     b["time"]   = "[time:%H:%M]";
     b["expr"]   = "[expr:[mqtt:t]>20?\"hot\":\"ok\"]";
-    b["pad"]    = "[pad:power]";   // pad-level named binding
+    b["pad"]    = "[pad:power]";
     b["health"] = "[health:heap_free]";
     b["timer"]  = "[timer:1]";
     b["list"]   = "[list:pads.selected]";
     b["fallback"] = "[scheme:params|fallback]";
     result["named_bindings_note"] = "pad-level [pad:name] bindings declared in pad.bindings; template_pad inherits buttons into empty cells (rendered, not stored)";
 
-    // --- Formats ---
+    // Binding help — what a binding is and how to write each scheme. Any label,
+    // color, or widget binding field accepts these tokens; the device resolves
+    // them live. Multiple tokens and surrounding literal text are allowed.
+    JsonObject bh = result.createNestedObject("binding_help");
+    bh["what"] = "A binding is a [scheme:params] token that resolves to live data at runtime. Put it in any label/color/state/widget field; mix with literal text and multiple tokens.";
+    bh["grammar"] = "[scheme:params] with ';'-separated params; optional '|fallback' at the OUTER bracket level used when unresolved/error; tokens may nest inside [expr:..].";
+    JsonObject bm = bh.createNestedObject("mqtt");
+    bm["syntax"] = "[mqtt:topic;path;format]";
+    bm["path"] = "JSON key, dot-notation for nested (data.temp); empty (';;') = raw payload";
+    bm["format"] = "printf: %d, %.0f, %.1f, %.2f, %s (e.g. [mqtt:home/t;temp;%.1f\u00b0C])";
+    JsonObject be = bh.createNestedObject("expr");
+    be["syntax"] = "[expr:expression;format]";
+    be["ops"] = "+ - * / %, == != > >= < <=, && ||, ternary cond?a:b; string literals in double quotes";
+    be["threshold"] = "threshold(value, c0, t1, c1, t2, c2, ...) -> picks c by ascending thresholds (great for colors)";
+    be["examples"] = "[expr:[mqtt:solar;power]-[mqtt:grid;power];%.0f W] | [expr:[health:cpu]>80?\"#F00\":\"#0F0\"]";
+    JsonObject bt = bh.createNestedObject("time");
+    bt["syntax"] = "[time:strftime;timezone]";
+    bt["codes"] = "%H:%M, %H:%M:%S, %I:%M %p, %Y-%m-%d, %d/%m/%Y, %a %b; timezone = Olson name (omit = UTC)";
+    bh["health"] = "[health:key;format] — keys e.g. cpu, rssi, uptime, ip, heap_free, psram_free, volume, brightness, wifi_ssid";
+    bh["pad"] = "[pad:name] resolves a pad-level named binding from pad.bindings; usable inside [expr:..]";
+    bh["timer"] = "[timer:N] or [timer:N_expired] for timers 1-3";
+
     JsonObject fmt = result.createNestedObject("formats");
     fmt["color"] = "#RRGGBB";
     fmt["size"] = "integer pixels or binding template";
+    result["icon_note"] = "icon_id must reference an icon already uploaded via the portal (material symbols are stored as 'mi_<name>'). MCP cannot upload icons; setting an unknown icon_id renders blank. For symbols without an upload, put a font glyph or a [time:..] binding in a label instead.";
     return true;
 }
 
+// ============================================================================
+// Validation — shared by validate_pad and every write tool. Runs before any
+// save: pad_config_save_raw truncates in place, so a bad pass would corrupt the
+// pad. Returns nullptr on success or a short error string.
+// ============================================================================
+
+// A color is valid if it parses as hex or carries a binding template ([..]).
+static bool color_ok(const char* s) {
+    if (!s || !s[0]) return true;  // empty => default
+    uint32_t tmp;
+    if (parse_hex_color(s, &tmp)) return true;
+    return strchr(s, '[') != nullptr;  // binding template
+}
+
+static const char* validate_action_array(JsonArrayConst arr) {
+    if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
+    for (JsonObjectConst a : arr) {
+        const char* t = a["type"] | "";
+        if (!t[0]) return "action missing type";
+    }
+    return nullptr;
+}
+
+static const char* validate_button(JsonObjectConst b, int cols, int rows) {
+    int col = b["col"] | 0;
+    int row = b["row"] | 0;
+    int cspan = b["col_span"] | 1;
+    int rspan = b["row_span"] | 1;
+    if (col < 0 || row < 0) return "button col/row negative";
+    if (cspan < 1 || rspan < 1) return "span must be >= 1";
+    if (col + cspan > cols) return "button overflows grid columns";
+    if (row + rspan > rows) return "button overflows grid rows";
+    if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
+    if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
+    if (!color_ok(b["border_color"] | "")) return "bad border_color";
+    const char* wt = b["widget_type"] | "";
+    if (wt[0] && !widget_find(wt)) return "unknown widget type";
+    if (b["actions"].is<JsonArrayConst>()) { const char* e = validate_action_array(b["actions"]); if (e) return e; }
+    if (b["lp_actions"].is<JsonArrayConst>()) { const char* e = validate_action_array(b["lp_actions"]); if (e) return e; }
+    return nullptr;
+}
+
+// Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
+static const char* validate_pad_doc(JsonObjectConst pad) {
+    const char* layout = pad["layout"] | "grid";
+    int cols = pad["cols"] | 0;
+    int rows = pad["rows"] | 0;
+    bool is_grid = strcmp(layout, "grid") == 0;
+    if (is_grid) {
+        if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be 1-8";
+        if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be 1-8";
+    } else {
+        cols = MAX_GRID_COLS; rows = MAX_GRID_ROWS;  // skip overflow checks for curated
+    }
+    if (pad.containsKey("template_pad")) {
+        int tp = pad["template_pad"] | -1;
+        if (tp < -1 || tp >= MAX_PADS) return "template_pad out of range";
+    }
+    if (pad["bindings"].size() > PAD_MAX_BINDINGS) return "too many bindings";
+    JsonArrayConst btns = pad["buttons"];
+    if (btns.isNull()) return nullptr;
+    if (btns.size() > MAX_PAD_BUTTONS) return "too many buttons";
+    // Collision map (occupied cells) + per-button checks.
+    bool occ[MAX_GRID_COLS][MAX_GRID_ROWS] = {{false}};
+    for (JsonObjectConst b : btns) {
+        const char* e = validate_button(b, cols, rows);
+        if (e) return e;
+        if (!is_grid) continue;
+        int col = b["col"] | 0, row = b["row"] | 0;
+        int cspan = b["col_span"] | 1, rspan = b["row_span"] | 1;
+        for (int c = col; c < col + cspan && c < MAX_GRID_COLS; ++c)
+            for (int r = row; r < row + rspan && r < MAX_GRID_ROWS; ++r) {
+                if (occ[c][r]) return "button position collision";
+                occ[c][r] = true;
+            }
+    }
+    return nullptr;
+}
+
+// ============================================================================
+// Deferred save (ptr+len in ctx; main loop saves+rebuilds+frees) — D6
+// ============================================================================
+struct PadWriteCtx { uint8_t page; uint8_t* buf; size_t len; };
+
+static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) {
+    const PadWriteCtx* c = (const PadWriteCtx*)ctx;
+    *ok = false;
+    if (!c->buf) { strlcpy(msg, "no buffer", msg_len); return; }
+    bool saved = pad_config_save_raw(c->page, c->buf, c->len);
+    heap_caps_free(c->buf);
+    if (!saved) { strlcpy(msg, "save failed", msg_len); return; }
+    pad_config_rebuild_all_caches();
+    *ok = true;
+    strlcpy(msg, "saved", msg_len);
+}
+
+// Serialize `doc` into a PSRAM buffer and defer the save. Validates first.
+static bool commit_pad(uint8_t page, JsonDocument& doc, JsonObject& result, String& err) {
+    const char* verr = validate_pad_doc(doc.as<JsonObjectConst>());
+    if (verr) return pad_fail(result, err, PAD_ERR_PARAMS, verr);
+
+    size_t need = measureJson(doc) + 1;
+    uint8_t* buf = (uint8_t*)heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!buf) buf = (uint8_t*)heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!buf) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    size_t len = serializeJson(doc, buf, need);
+
+    PadWriteCtx ctx; ctx.page = page; ctx.buf = buf; ctx.len = len;
+    bool ok = false; char msg[160] = {0};
+    McpControlResult r = mcp_control_dispatch(exec_pad_save, &ctx, sizeof(ctx),
+                                              PAD_WRITE_TIMEOUT_MS, &ok, msg, sizeof(msg));
+    if (r == MCP_CONTROL_BUSY) { heap_caps_free(buf); return pad_fail(result, err, PAD_ERR_BUSY, "busy, retry"); }
+    if (r == MCP_CONTROL_TIMEOUT) return pad_fail(result, err, PAD_ERR_INTERNAL, "save timed out");
+    if (!ok) return pad_fail(result, err, PAD_ERR_INTERNAL, msg[0] ? msg : "save failed");
+    result["ok"] = true;
+    return true;
+}
+
+// Parse "pad_N" -> page index, or -1.
+static int pad_index(const char* screen) {
+    if (!screen || strncmp(screen, "pad_", 4) != 0) return -1;
+    int pg = atoi(screen + 4);
+    return (pg >= 0 && pg < MAX_PADS) ? pg : -1;
+}
+
+// Load pad raw into doc; if missing, seed a minimal grid pad. Returns false on OOM.
+static bool load_or_seed(uint8_t page, JsonDocument& doc) {
+    size_t len = 0;
+    char* raw = pad_config_read_raw(page, &len);
+    if (raw) {
+        DeserializationError e = deserializeJson(doc, raw, len);
+        free(raw);
+        if (!e) return true;
+    }
+    doc.clear();
+    doc["layout"] = "grid";
+    doc["cols"] = 4;
+    doc["rows"] = 4;
+    doc.createNestedArray("buttons");
+    return true;
+}
+
+// Insert/replace at position; grows array if pos == size.
+static bool splice_button(JsonArray btns, int pos, JsonVariantConst button) {
+    if (pos < 0 || pos > (int)btns.size() || pos >= MAX_PAD_BUTTONS) return false;
+    if (pos == (int)btns.size()) btns.add(button);
+    else btns[pos] = button;
+    return true;
+}
+
+// ============================================================================
+// validate_pad (read tool) — dry-run, no save
+// ============================================================================
+static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String& err) {
+    JsonObjectConst pad = args["pad"];
+    if (pad.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing pad object");
+    const char* verr = validate_pad_doc(pad);
+    if (verr) { result["valid"] = false; result["error"] = verr; return true; }
+    result["valid"] = true;
+    return true;
+}
+
+// ============================================================================
+// set_button — replace/insert one button by position
+// ============================================================================
+static bool tool_set_button(const JsonObject& args, JsonObject& result, String& err) {
+    int pg = pad_index(args["screen"] | "");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+    if (!args.containsKey("position")) return pad_fail(result, err, PAD_ERR_PARAMS, "missing position");
+    int pos = args["position"] | -1;
+    JsonObjectConst button = args["button"];
+    if (button.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing button object");
+
+    BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
+    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    JsonArray btns = doc["buttons"];
+    if (btns.isNull()) btns = doc.createNestedArray("buttons");
+    if (!splice_button(btns, pos, button)) return pad_fail(result, err, PAD_ERR_PARAMS, "position out of range");
+    return commit_pad((uint8_t)pg, doc, result, err);
+}
+
+static bool tool_set_buttons(const JsonObject& args, JsonObject& result, String& err) {
+    int pg = pad_index(args["screen"] | "");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+    JsonArrayConst items = args["buttons"];
+    if (items.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing buttons array");
+
+    BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
+    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    JsonArray btns = doc["buttons"];
+    if (btns.isNull()) btns = doc.createNestedArray("buttons");
+    for (JsonObjectConst it : items) {
+        int pos = it["position"] | -1;
+        JsonObjectConst button = it["button"];
+        if (button.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "item missing button");
+        if (!splice_button(btns, pos, button)) return pad_fail(result, err, PAD_ERR_PARAMS, "position out of range");
+    }
+    return commit_pad((uint8_t)pg, doc, result, err);
+}
+
+static bool tool_remove_button(const JsonObject& args, JsonObject& result, String& err) {
+    int pg = pad_index(args["screen"] | "");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+    int pos = args["position"] | -1;
+
+    BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
+    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    JsonArray btns = doc["buttons"];
+    if (btns.isNull() || pos < 0 || pos >= (int)btns.size())
+        return pad_fail(result, err, PAD_ERR_PARAMS, "position out of range");
+    btns.remove(pos);
+    return commit_pad((uint8_t)pg, doc, result, err);
+}
+
+static bool tool_clear_pad(const JsonObject& args, JsonObject& result, String& err) {
+    int pg = pad_index(args["screen"] | "");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+    BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
+    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    JsonArray btns = doc["buttons"];
+    if (btns.isNull()) doc.createNestedArray("buttons");
+    else btns.clear();
+    return commit_pad((uint8_t)pg, doc, result, err);
+}
+
+// set_pad — merge pad-level fields (layout/cols/rows/wake_screen/bg_color/
+// template_pad/bindings) into the pad, preserving existing buttons. Only keys
+// present in args are changed.
+static bool tool_set_pad(const JsonObject& args, JsonObject& result, String& err) {
+    int pg = pad_index(args["screen"] | "");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+
+    BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
+    if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+
+    if (args.containsKey("layout"))       doc["layout"] = args["layout"];
+    if (args.containsKey("cols"))         doc["cols"] = (int)(args["cols"] | 0);
+    if (args.containsKey("rows"))         doc["rows"] = (int)(args["rows"] | 0);
+    if (args.containsKey("wake_screen"))  doc["wake_screen"] = args["wake_screen"];
+    if (args.containsKey("bg_color"))     doc["bg_color"] = args["bg_color"];
+    if (args.containsKey("template_pad")) doc["template_pad"] = (int)(args["template_pad"] | -1);
+    if (args.containsKey("bindings"))     doc["bindings"] = args["bindings"];  // object copy
+
+    return commit_pad((uint8_t)pg, doc, result, err);
+}
+
+// ============================================================================
+// Registration
+// ============================================================================
 static const McpTool s_tool_get_capabilities = {
     "get_capabilities",
-    "Get the pad authoring manifest: widget types + config fields, button schema, label-style DSL, binding schemes (incl. [pad:name] + template_pad), grid limits, action targets, and color/size formats. Read-only.",
+    "Get the pad authoring manifest: widget types + config fields, button schema, label-style DSL, binding schemes (incl. [pad:name] + template_pad), grid limits, action targets, color/size formats. Read-only.",
     "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
-    tool_get_capabilities, true, false, false
+    tool_get_capabilities, true, false, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_capabilities);
+
+static const McpTool s_tool_validate_pad = {
+    "validate_pad",
+    "Dry-run validate a pad JSON (grid bounds, span overflow, collisions, widget types, colors) without saving. Args: pad (object). Read-only.",
+    "{\"type\":\"object\",\"properties\":{\"pad\":{\"type\":\"object\"}},\"required\":[\"pad\"],\"additionalProperties\":false}",
+    tool_validate_pad, true, false, false, false
+};
+REGISTER_MCP_TOOL(s_tool_validate_pad);
+
+static const McpTool s_tool_set_button = {
+    "set_button",
+    "Create/replace one button at a position. Args: screen ('pad_N'), position (int), button (JSON, portal pad schema). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"screen\",\"position\",\"button\"],\"additionalProperties\":false}",
+    tool_set_button, false, true, false, true
+};
+REGISTER_MCP_TOOL(s_tool_set_button);
+
+static const McpTool s_tool_set_buttons = {
+    "set_buttons",
+    "Create/replace many buttons in one save. Args: screen ('pad_N'), buttons (array of {position, button}). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"buttons\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"position\",\"button\"]}}},\"required\":[\"screen\",\"buttons\"],\"additionalProperties\":false}",
+    tool_set_buttons, false, true, false, true
+};
+REGISTER_MCP_TOOL(s_tool_set_buttons);
+
+static const McpTool s_tool_remove_button = {
+    "remove_button",
+    "Remove the button at a position. Args: screen ('pad_N'), position (int). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"}},\"required\":[\"screen\",\"position\"],\"additionalProperties\":false}",
+    tool_remove_button, false, true, false, true
+};
+REGISTER_MCP_TOOL(s_tool_remove_button);
+
+static const McpTool s_tool_clear_pad = {
+    "clear_pad",
+    "Remove all buttons from a pad. Args: screen ('pad_N'). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"],\"additionalProperties\":false}",
+    tool_clear_pad, false, true, false, true
+};
+REGISTER_MCP_TOOL(s_tool_clear_pad);
+
+static const McpTool s_tool_set_pad = {
+    "set_pad",
+    "Set pad-level fields (preserves buttons): layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), and bindings (object of [pad:name] templates). Only provided keys change. Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"layout\":{\"type\":\"string\"},\"cols\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"wake_screen\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"template_pad\":{\"type\":\"integer\"},\"bindings\":{\"type\":\"object\"}},\"required\":[\"screen\"],\"additionalProperties\":false}",
+    tool_set_pad, false, true, false, true
+};
+REGISTER_MCP_TOOL(s_tool_set_pad);
 
 #endif // HAS_MCP && HAS_DISPLAY

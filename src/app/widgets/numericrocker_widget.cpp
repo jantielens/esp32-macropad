@@ -191,6 +191,15 @@ void numericrocker_substitute_step(ButtonAction* act, float step) {
 
 // ---- Registration ----
 
-REGISTER_WIDGET(numericrocker, nullptr, false);
+#if HAS_MCP
+static void numericrocker_describe(JsonObject& out) {
+    JsonArray f = out.createNestedArray("config_fields");
+    auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
+    add("widget_numericrocker_axis","string","'h' or 'v'");
+    add("widget_numericrocker_small_step","number","tap step"); add("widget_numericrocker_large_step","number","hold step");
+    add("widget_numericrocker_action","string","value action template"); add("widget_numericrocker_color","color",""); add("widget_numericrocker_opacity","number","0-100");
+}
+#endif
+REGISTER_WIDGET_SCHEMA(numericrocker, nullptr, false);
 
 #endif // HAS_DISPLAY

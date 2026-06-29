@@ -55,6 +55,7 @@
 #if HAS_MCP
 #define KEY_MCP_ENABLED        "mcp_en"
 #define KEY_MCP_CTRL_EN        "mcp_ctrl_en"
+#define KEY_MCP_AUTH_EN        "mcp_auth_en"
 #define KEY_MCP_TOKEN          "mcp_token"
 #endif
 #if HAS_BLE_HID
@@ -186,6 +187,7 @@ bool config_manager_load(DeviceConfig *config) {
 #if HAS_MCP
 				config->mcp_enabled = false;
 				config->mcp_control_enabled = false;
+				config->mcp_authoring_enabled = false;
 				config->mcp_token[0] = '\0';
 #endif
 
@@ -275,6 +277,7 @@ bool config_manager_load(DeviceConfig *config) {
 #if HAS_MCP
 		config->mcp_enabled = preferences.getBool(KEY_MCP_ENABLED, false);
 		config->mcp_control_enabled = preferences.getBool(KEY_MCP_CTRL_EN, false);
+		config->mcp_authoring_enabled = preferences.getBool(KEY_MCP_AUTH_EN, false);
 		config->mcp_token[0] = '\0';
 		preferences.getString(KEY_MCP_TOKEN, config->mcp_token, CONFIG_MCP_TOKEN_MAX_LEN);
 #endif
@@ -394,8 +397,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		// Save MCP server settings
 #if HAS_MCP
 		preferences.putBool(KEY_MCP_ENABLED, config->mcp_enabled);
-		preferences.putBool(KEY_MCP_CTRL_EN, config->mcp_control_enabled);
-		preferences.putString(KEY_MCP_TOKEN, config->mcp_token);
+		preferences.putBool(KEY_MCP_CTRL_EN, config->mcp_control_enabled);			preferences.putBool(KEY_MCP_AUTH_EN, config->mcp_authoring_enabled);		preferences.putString(KEY_MCP_TOKEN, config->mcp_token);
 #endif
 
 		#if HAS_BLE_HID

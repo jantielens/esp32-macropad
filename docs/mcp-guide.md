@@ -28,6 +28,7 @@ point.
 | Token | A dedicated bearer token. Required on every request. Shown once at generation. |
 | Read tools | Available when enabled and a token is set. |
 | Control tools | Hidden and refused unless you also enable the **control** toggle. |
+| Authoring tools | Hidden and refused unless you also enable the **pad authoring** toggle (create/modify/remove buttons). |
 | Network | Station mode only. Inert in setup/AP mode. |
 | Transport | Plain HTTP on your LAN — **no TLS**. |
 
@@ -49,7 +50,10 @@ point.
 5. (Optional) Tick **Allow control tools** if you want the assistant to press
    buttons, change screens, set backlight, or reboot. Leave it off for read-only
    access.
-6. Click **Save**.
+6. (Optional) Tick **Allow pad authoring** to let the assistant create, modify,
+   and remove buttons/widgets. This is a separate, more sensitive permission than
+   control — leave it off unless you want the assistant to edit pads.
+7. Click **Save**.
 
 Settings apply immediately — no reboot is required.
 
@@ -156,6 +160,23 @@ graph LR
 
 Display-related tools are present only on boards that have a display.
 
+**Authoring tools** (require the pad authoring toggle; display boards only):
+
+- `get_capabilities` — manifest of widget types + fields, button schema, label-style
+  DSL, binding schemes (incl. `[pad:name]` and `template_pad`), and grid limits.
+  Read-only, so it works with token alone.
+- `validate_pad` — dry-run validate a pad JSON (grid bounds, span overflow,
+  collisions, widget types, colors) without saving. Read-only.
+- `set_button` / `set_buttons` — create or replace a button (or many in one save)
+  by position, using the same schema as the portal pad editor.
+- `set_pad` — set pad-level fields (layout, cols/rows, wake_screen, bg_color,
+  `template_pad`, and named `[pad:name]` bindings) without touching buttons.
+- `remove_button` / `clear_pad` — delete one button or empty a pad.
+
+Writes are validated before saving and persisted on the main loop. Concurrent
+edits from the LLM and the portal editor are **last-write-wins per pad** — the
+last save replaces the pad, so avoid editing the same pad in both at once.
+
 ## Example prompts
 
 - "What's my device status?"
@@ -165,6 +186,8 @@ Display-related tools are present only on boards that have a display.
 - "Switch to the **info** screen."
 - "Set the backlight to 40%."
 - "Reboot the device."
+- "Add a button to pad 0 that shows the time."
+- "Show MQTT topic `home/temp` as a bar chart on pad 2."
 
 ## Troubleshooting
 

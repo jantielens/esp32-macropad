@@ -219,6 +219,7 @@ async function loadConfig() {
         if (config.mcp_enabled !== undefined) {
             setCheckedIfExists('mcp_enabled', config.mcp_enabled);
             setCheckedIfExists('mcp_control_enabled', config.mcp_control_enabled);
+            setCheckedIfExists('mcp_authoring_enabled', config.mcp_authoring_enabled);
             const mcpEndpoint = document.getElementById('mcp_endpoint_url');
             if (mcpEndpoint) mcpEndpoint.value = 'http://' + window.location.host + '/mcp';
             const mcpStatus = document.getElementById('mcp_token_status');

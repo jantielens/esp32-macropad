@@ -1068,6 +1068,22 @@ static bool sparkline_get_stream_params(const WidgetConfig* wcfg,
     return true;
 }
 
-REGISTER_WIDGET(sparkline, sparkline_get_stream_params, false);
+#if HAS_MCP
+static void sparkline_describe(JsonObject& out) {
+    JsonArray f = out.createNestedArray("config_fields");
+    auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
+    add("widget_sparkline_window","number","time window seconds"); add("widget_sparkline_slots","number","sample count");
+    add("widget_sparkline_min","number","y min ('' auto)"); add("widget_sparkline_max","number","y max ('' auto)");
+    add("widget_sparkline_min_fmt","string","min label fmt"); add("widget_sparkline_max_fmt","string","max label fmt");
+    add("widget_sparkline_min_label_color","color",""); add("widget_sparkline_max_label_color","color","");
+    add("widget_sparkline_label_width","number","axis label strip px"); add("widget_sparkline_unified_scale","bool","share scale across lines"); add("widget_sparkline_ref_in_view","bool","keep min/max in view");
+    add("widget_sparkline_line_color","color","line 1"); add("widget_sparkline_line_color_2","color","line 2"); add("widget_sparkline_line_color_3","color","line 3");
+    add("widget_sparkline_line_width","number","px"); add("widget_sparkline_line_offset","number","px"); add("widget_sparkline_smooth","bool","smooth curve");
+    add("widget_sparkline_current_dot","bool","dot at latest"); add("widget_sparkline_current_label","string","latest-value caption");
+    add("widget_sparkline_current_label_2","string","line 2 caption"); add("widget_sparkline_current_label_3","string","line 3 caption");
+    add("widget_sparkline_marker_size_min","number",""); add("widget_sparkline_marker_size_max","number","");
+}
+#endif
+REGISTER_WIDGET_SCHEMA(sparkline, sparkline_get_stream_params, false);
 
 #endif // HAS_DISPLAY

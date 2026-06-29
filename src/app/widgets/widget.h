@@ -88,6 +88,12 @@ struct WidgetType {
     // When true, this widget resolves its own data bindings from tick()
     // instead of receiving pre-resolved update() payloads from PadScreen.
     bool resolveInTick;
+
+    // Optional: describe this widget's type-specific config fields into `out`
+    // (creates a "config_fields" array). Used by the MCP capability manifest so
+    // it stays registry-generated. NULL = no extra fields. Adding a widget with
+    // its own fields just sets this; the manifest auto-updates.
+    void (*describeSchema)(JsonObject& out);
 };
 
 // Look up a widget type by name. Returns NULL for "" or unknown types.
@@ -184,11 +190,32 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
 #define REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)               \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
-        prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag       \
+        prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
+        nullptr                                                                \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
     } _##prefix##_auto_reg
+
+// Variant that also wires a describeSchema hook (prefix##_describe).
+// When MCP is compiled out there is no manifest consumer, so this collapses to
+// plain REGISTER_WIDGET — the prefix##_describe function (and its string
+// literals) must be guarded with #if HAS_MCP in the widget .cpp so nothing
+// bleeds into non-MCP firmware.
+#if HAS_MCP
+#define REGISTER_WIDGET_SCHEMA(prefix, stream_fn, resolve_in_tick_flag)        \
+    static const WidgetType prefix##_widget_type = {                           \
+        #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
+        prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
+        prefix##_describe                                                      \
+    };                                                                         \
+    static struct prefix##AutoReg {                                            \
+        prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
+    } _##prefix##_auto_reg
+#else
+#define REGISTER_WIDGET_SCHEMA(prefix, stream_fn, resolve_in_tick_flag)        \
+    REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)
+#endif
 
 #endif // HAS_DISPLAY
 

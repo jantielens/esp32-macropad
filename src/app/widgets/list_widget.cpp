@@ -215,6 +215,12 @@ static void list_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
-REGISTER_WIDGET(list, nullptr, true);
+#if HAS_MCP
+static void list_describe(JsonObject& out) {
+    JsonArray f = out.createNestedArray("config_fields");
+    JsonObject o = f.createNestedObject(); o["name"] = "provider"; o["type"] = "string"; o["desc"] = "list provider id, e.g. 'pads'";
+}
+#endif
+REGISTER_WIDGET_SCHEMA(list, nullptr, true);
 
 #endif // HAS_DISPLAY

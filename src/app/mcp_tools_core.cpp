@@ -218,21 +218,19 @@ static void append_button_detail(JsonArray btns, const ScreenButtonConfig& btn, 
     if (btn.border_color[0])  bo["border_color"]  = btn.border_color;
     if (btn.border_width[0])  bo["border_width"]  = btn.border_width;
     if (btn.corner_radius[0]) bo["corner_radius"] = btn.corner_radius;
-    if (btn.icon_id[0])       bo["icon"]          = btn.icon_id;
+    if (btn.icon_id[0])       bo["icon_id"]       = btn.icon_id;
     if (btn.btn_state[0])     bo["btn_state"]     = btn.btn_state;
 
     if (btn.widget.type[0]) {
-        JsonObject w = bo.createNestedObject("widget");
-        w["type"] = btn.widget.type;
-        JsonArray wb = w.createNestedArray("bindings");
-        for (uint8_t i = 0; i < MAX_WIDGET_BINDINGS; ++i) {
-            if (btn.widget.data_binding[i][0]) wb.add(btn.widget.data_binding[i]);
-        }
-        if (wb.size() == 0) w.remove("bindings");
+        bo["widget_type"] = btn.widget.type;
+        if (btn.widget.data_binding[0][0]) bo["widget_data_binding"]   = btn.widget.data_binding[0];
+        if (btn.widget.data_binding[1][0]) bo["widget_data_binding_2"] = btn.widget.data_binding[1];
+        if (btn.widget.data_binding[2][0]) bo["widget_data_binding_3"] = btn.widget.data_binding[2];
+        if (btn.widget.data_binding[3][0]) bo["widget_data_binding_4"] = btn.widget.data_binding[3];
     }
 
-    append_actions(bo, "tap", btn.actions, btn.action_count);
-    append_actions(bo, "long_press", btn.lp_actions, btn.lp_action_count);
+    append_actions(bo, "actions", btn.actions, btn.action_count);
+    append_actions(bo, "lp_actions", btn.lp_actions, btn.lp_action_count);
 }
 
 static bool tool_list_pads(const JsonObject& args, JsonObject& result, String& err) {

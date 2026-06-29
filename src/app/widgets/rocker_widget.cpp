@@ -133,6 +133,14 @@ static void rocker_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
-REGISTER_WIDGET(rocker, nullptr, false);
+#if HAS_MCP
+static void rocker_describe(JsonObject& out) {
+    JsonArray f = out.createNestedArray("config_fields");
+    auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
+    add("widget_rocker_axis","string","'h' or 'v' rocker direction");
+    add("widget_rocker_color","color","rocker color"); add("widget_rocker_opacity","number","0-100");
+}
+#endif
+REGISTER_WIDGET_SCHEMA(rocker, nullptr, false);
 
 #endif // HAS_DISPLAY
