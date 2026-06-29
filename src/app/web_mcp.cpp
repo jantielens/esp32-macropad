@@ -220,7 +220,8 @@ static struct {
     size_t    total;
     size_t    received;
     uint8_t*  buf;
-} g_body = {false, 0, 0, 0, nullptr};
+    void*     owner;        // originating AsyncWebServerRequest* (single in-flight)
+} g_body = {false, 0, 0, 0, nullptr, nullptr};
 
 static void body_reset_locked() {
     if (g_body.buf) {
@@ -231,6 +232,7 @@ static void body_reset_locked() {
     g_body.total = 0;
     g_body.received = 0;
     g_body.started_ms = 0;
+    g_body.owner = nullptr;
 }
 
 // Forward decl: dispatch a fully-accumulated JSON-RPC envelope.
@@ -310,12 +312,14 @@ static void handleMcpBody(AsyncWebServerRequest* request, uint8_t* data,
         g_body.total       = total;
         g_body.received    = 0;
         g_body.buf         = buf;
+        g_body.owner       = request;
         portEXIT_CRITICAL(&g_body_mux);
     }
 
-    // Copy this chunk.
+    // Copy this chunk. Bind to the originating request so a concurrent POST that
+    // was rejected at index 0 cannot splice its chunks into this buffer.
     portENTER_CRITICAL(&g_body_mux);
-    const bool ok = g_body.in_progress && g_body.buf &&
+    const bool ok = g_body.in_progress && g_body.buf && g_body.owner == request &&
                     g_body.total == total && (index + len) <= total;
     uint8_t* dst = g_body.buf;
     portEXIT_CRITICAL(&g_body_mux);
@@ -574,8 +578,6 @@ static void handle_mcp_other_method(AsyncWebServerRequest* request) {
         "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32000,"
         "\"message\":\"Method Not Allowed: POST JSON-RPC only (no SSE stream)\"}}");
     resp->addHeader("Allow", "POST");
-    // Build stamp so the live firmware can be identified from a simple GET.
-    resp->addHeader("X-MCP-Build", __DATE__ " " __TIME__);
     request->send(resp);
 }
 

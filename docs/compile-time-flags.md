@@ -395,6 +395,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/hw_button_config.h
   - src/app/hw_buttons.cpp
   - src/app/hw_buttons.h
+  - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
 - **HAS_CUSTOM_FONTS**
   - src/app/board_config.h
@@ -460,6 +461,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_provider_pads.cpp
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
+  - src/app/mcp_tools_core.cpp
   - src/app/message_bubble.cpp
   - src/app/message_bubble.h
   - src/app/mqtt_notify.cpp
@@ -574,6 +576,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/mcp_components.cpp
+  - src/app/mcp_tool_registry.cpp
+  - src/app/mcp_tools_core.cpp
+  - src/app/web_mcp.cpp
   - src/app/web_portal_config.cpp
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
