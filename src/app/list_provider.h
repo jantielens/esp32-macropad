@@ -26,6 +26,12 @@ struct ListProvider {
 bool list_provider_register(const ListProvider* provider);
 const ListProvider* list_provider_find(const char* id);
 
+// Registry enumeration (for the MCP capability manifest): feature branches
+// register providers, so the manifest can list available [list:id] sources
+// generated, not hand-coded.
+uint8_t list_provider_count();
+const ListProvider* list_provider_at(uint8_t index);
+
 // Apply a comma-separated filter expression to an item list, compacting in place.
 // Returns the new count. Empty filter or NULL = pass-through (returns count).
 // Rules: glob (case-insensitive */?, matched against id then label), index (#N or

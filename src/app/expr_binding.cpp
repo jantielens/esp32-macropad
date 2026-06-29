@@ -217,10 +217,25 @@ static void expr_binding_collect(const char* params, void* user_data) {
 // Init — register the "expr" scheme
 // ============================================================================
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+// Self-description for the MCP capability manifest (lives with the scheme).
+static void expr_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]    = "[expr:expression;format]";
+    o["example"]   = "[expr:[mqtt:solar;power]-[mqtt:grid;power];%.0f W]";
+    o["ops"]       = "+ - * / %, == != > >= < <=, && ||, ternary cond?a:b; double-quoted strings";
+    o["threshold"] = "threshold(value, c0, t1, c1, t2, c2, ...) picks c by ascending thresholds (great for colors)";
+}
+#endif
+
 void expr_binding_init(void) {
     if (!binding_template_register("expr", expr_binding_resolve, expr_binding_collect)) {
         LOGE(TAG, "Failed to register expr binding scheme");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("expr", expr_scheme_describe);
+#endif
 }
 
 #else // !HAS_DISPLAY

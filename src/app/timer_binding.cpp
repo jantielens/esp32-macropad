@@ -109,6 +109,16 @@ static void timer_binding_collect(const char* params, void* user_data) {
 // Init
 // ============================================================================
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void timer_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[timer:N] or [timer:N_expired]";
+    o["example"] = "[timer:1]";
+    o["note"]    = "timers 1-3; N_expired resolves ON/OFF when the timer has fired";
+}
+#endif
+
 void timer_binding_init() {
     timer_engine_init();
     if (!binding_template_register("timer", timer_binding_resolve, timer_binding_collect)) {
@@ -116,6 +126,9 @@ void timer_binding_init() {
     } else {
         LOGI(TAG, "Timer binding scheme registered");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("timer", timer_scheme_describe);
+#endif
 }
 
 #else // !HAS_DISPLAY

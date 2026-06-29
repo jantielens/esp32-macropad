@@ -94,12 +94,25 @@ static void list_binding_collect(const char* params, void* user_data) {
 // Init
 // ============================================================================
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void list_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]    = "[list:provider.selected]";
+    o["example"]   = "[list:pads.selected]";
+    o["providers"] = "see list_providers[]";
+}
+#endif
+
 void list_binding_init() {
     if (!binding_template_register("list", list_binding_resolve, list_binding_collect)) {
         LOGE(TAG, "Failed to register list binding scheme");
     } else {
         LOGI(TAG, "List binding scheme registered");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("list", list_scheme_describe);
+#endif
 }
 
 #else // !HAS_DISPLAY

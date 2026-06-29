@@ -29,9 +29,15 @@
 #include "pad_config.h"
 #include "psram_json_allocator.h"
 #include "widgets/widget.h"
+#include "binding_template.h"
+#include "action_registry.h"
+#include "health_binding.h"
+#include "list_provider.h"
+#include "pad_block.h"
 
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
+#include <stdio.h>
 #include <string.h>
 
 static constexpr int PAD_ERR_PARAMS   = -32602;
@@ -43,6 +49,26 @@ static bool pad_fail(JsonObject& result, String& err, int code, const char* msg)
     err = msg ? msg : "error";
     result[MCP_RESULT_ERRCODE_KEY] = code;
     return false;
+}
+
+// Built-in action types + their flat JSON fields, mirroring the action_parse.cpp
+// strcmp ladder (built-ins are not in the action registry). Device-class action
+// types are enumerated separately from the registry.
+static void emit_builtin_action_fields(JsonObject acts) {
+    auto add = [&](const char* type, const char* fields) { acts[type] = fields; };
+    add("screen",     "target (screen id)");
+    add("mqtt",       "topic, payload");
+    add("key",        "sequence (key DSL)");
+    add("beep",       "beep_pattern, beep_volume");
+    add("volume",     "volume_mode (set|adjust), volume_value");
+    add("brightness", "brightness_mode (set|adjust), brightness_value");
+    add("timer",      "timer_id (1-3), timer_command, timer_value");
+    add("sound",      "sound_file, sound_volume");
+    add("notify",     "notify_text, notify_duration_ms, notify_text_color, notify_bg_color, notify_border_color, notify_opacity, notify_font_size, notify_location");
+    add("system",     "system_command (reboot|wifi_reconnect|screensaver)");
+    add("ha_service", "entity_id, service, data_json");
+    add("back",       "(no fields)");
+    add("ble_pair",   "(no fields)");
 }
 
 // ============================================================================
@@ -95,8 +121,11 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     };
     for (const char* f : fields) bf.add(f);
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
+    btn["labels_note"] = "labels render with LVGL bitmap fonts (Latin text, digits, basic punctuation only). Do NOT use emoji or Unicode symbols — they render as blank/tofu. Use plain text, or an icon_id for graphics.";
+    btn["limits_note"] = "max field lengths: labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
+    btn["btn_state_note"] = "accepts a binding for conditional visibility, e.g. [expr:[mqtt:printer;state]==\"online\"?\"enabled\":\"hidden\"] (unresolved -> enabled)";
 
     JsonObject style = result.createNestedObject("label_style");
     style["format"] = "font:24;font_family:dseg7;font_upscale:1.4;align:right;y:-3;mode:scroll;color:#FF0000";
@@ -107,48 +136,57 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonArray md = style.createNestedArray("mode");
     md.add("clip"); md.add("scroll"); md.add("dot"); md.add("wrap");
 
-    JsonArray actions = result.createNestedArray("action_types");
-    const char* acts[] = {
-        "screen->target", "mqtt->topic,payload", "back", "key->sequence",
-        "ble_pair", "beep->beep_pattern", "volume->volume_value", "brightness->brightness_value",
-        "timer->timer_id,timer_command", "sound->sound_file",
-        "notify->notify_text", "system->system_command", "ha_service->entity_id,service"
-    };
-    for (const char* a : acts) actions.add(a);
+    // Action types: built-in fields (static, mirrors action_parse) + device-class
+    // action types enumerated from the registry (generated, board-specific).
+    JsonObject acts = result.createNestedObject("action_types");
+    emit_builtin_action_fields(acts);
+    for (uint8_t i = 0; i < action_type_count(); ++i) {
+        const ActionTypeDef* d = action_type_at(i);
+        if (!d || !d->type_name) continue;
+        if (d->describe) {
+            JsonObject ao = acts.createNestedObject(d->type_name);
+            d->describe(ao);
+        } else {
+            acts[d->type_name] = "device-class action; flat fields {command, value} (value bindable)";
+        }
+    }
     result["actions_note"] = "button.actions (tap) / button.lp_actions (long-press): arrays of {type, ...fields above}";
 
-    JsonObject b = result.createNestedObject("binding_schemes");
-    b["mqtt"]   = "[mqtt:home/temp;temperature;%.1f]";
-    b["time"]   = "[time:%H:%M]";
-    b["expr"]   = "[expr:[mqtt:t]>20?\"hot\":\"ok\"]";
-    b["pad"]    = "[pad:power]";
-    b["health"] = "[health:heap_free]";
-    b["timer"]  = "[timer:1]";
-    b["list"]   = "[list:pads.selected]";
-    b["fallback"] = "[scheme:params|fallback]";
-    result["named_bindings_note"] = "pad-level [pad:name] bindings declared in pad.bindings; template_pad inherits buttons into empty cells (rendered, not stored)";
+    // Bindings: ONE generated block. Each scheme is enumerated from the live
+    // registry (so device-class schemes auto-appear) and described in place via
+    // emit_binding_detail — the single source of binding docs (no separate
+    // examples + help blocks).
+    JsonObject bindings = result.createNestedObject("bindings");
+    bindings["_about"] = "A [scheme:params] token resolves to live data at runtime; usable in any label/color/state/widget field, mixable with literal text and multiple tokens. Optional '|fallback' at the OUTER bracket level when unresolved/error. Tokens nest inside [expr:..]. Pad-level [pad:name] bindings are declared in pad.bindings.";
+    for (uint8_t i = 0; i < binding_template_scheme_count(); ++i) {
+        const char* name = binding_template_scheme_name(i);
+        if (!name || !name[0]) continue;
+        JsonObject so = bindings.createNestedObject(name);
+        // Each scheme describes itself (hook lives in its own .cpp). Schemes with
+        // no hook (e.g. device-class) fall back to a generic shape here.
+        if (!binding_template_describe_scheme(i, &so)) {
+            char ex[40];
+            snprintf(ex, sizeof(ex), "[%s:params]", name);
+            so["example"] = ex;
+            so["note"] = "device-class scheme";
+        }
+    }
 
-    // Binding help — what a binding is and how to write each scheme. Any label,
-    // color, or widget binding field accepts these tokens; the device resolves
-    // them live. Multiple tokens and surrounding literal text are allowed.
-    JsonObject bh = result.createNestedObject("binding_help");
-    bh["what"] = "A binding is a [scheme:params] token that resolves to live data at runtime. Put it in any label/color/state/widget field; mix with literal text and multiple tokens.";
-    bh["grammar"] = "[scheme:params] with ';'-separated params; optional '|fallback' at the OUTER bracket level used when unresolved/error; tokens may nest inside [expr:..].";
-    JsonObject bm = bh.createNestedObject("mqtt");
-    bm["syntax"] = "[mqtt:topic;path;format]";
-    bm["path"] = "JSON key, dot-notation for nested (data.temp); empty (';;') = raw payload";
-    bm["format"] = "printf: %d, %.0f, %.1f, %.2f, %s (e.g. [mqtt:home/t;temp;%.1f\u00b0C])";
-    JsonObject be = bh.createNestedObject("expr");
-    be["syntax"] = "[expr:expression;format]";
-    be["ops"] = "+ - * / %, == != > >= < <=, && ||, ternary cond?a:b; string literals in double quotes";
-    be["threshold"] = "threshold(value, c0, t1, c1, t2, c2, ...) -> picks c by ascending thresholds (great for colors)";
-    be["examples"] = "[expr:[mqtt:solar;power]-[mqtt:grid;power];%.0f W] | [expr:[health:cpu]>80?\"#F00\":\"#0F0\"]";
-    JsonObject bt = bh.createNestedObject("time");
-    bt["syntax"] = "[time:strftime;timezone]";
-    bt["codes"] = "%H:%M, %H:%M:%S, %I:%M %p, %Y-%m-%d, %d/%m/%Y, %a %b; timezone = Olson name (omit = UTC)";
-    bh["health"] = "[health:key;format] — keys e.g. cpu, rssi, uptime, ip, heap_free, psram_free, volume, brightness, wifi_ssid";
-    bh["pad"] = "[pad:name] resolves a pad-level named binding from pad.bindings; usable inside [expr:..]";
-    bh["timer"] = "[timer:N] or [timer:N_expired] for timers 1-3";
+    // Complementary enumerations referenced by the binding detail above.
+    JsonArray hk = result.createNestedArray("health_keys");
+    for (uint8_t i = 0; i < health_binding_key_count(); ++i) {
+        const char* k = health_binding_key_at(i);
+        if (!k) continue;
+        JsonObject ko = hk.createNestedObject();
+        ko["name"] = k;
+        const char* d = health_binding_key_desc_at(i);
+        if (d) ko["desc"] = d;
+    }
+    JsonArray lp = result.createNestedArray("list_providers");
+    for (uint8_t i = 0; i < list_provider_count(); ++i) {
+        const ListProvider* p = list_provider_at(i);
+        if (p && p->id) lp.add(p->id);
+    }
 
     JsonObject fmt = result.createNestedObject("formats");
     fmt["color"] = "#RRGGBB";
@@ -170,6 +208,17 @@ static bool color_ok(const char* s) {
     if (parse_hex_color(s, &tmp)) return true;
     return strchr(s, '[') != nullptr;  // binding template
 }
+
+// Return `msg` if b[key] would be truncated on store (>= cap, since strlcpy
+// needs room for the NUL). Fields that hold binding templates can overflow when
+// an LLM inlines a long [expr:..]/[mqtt:..]; the message steers it to factor the
+// expression into a reusable pad-level [pad:name] binding.
+static const char* check_max(JsonObjectConst b, const char* key, size_t cap, const char* msg) {
+    const char* v = b[key] | "";
+    return (strlen(v) >= cap) ? msg : nullptr;
+}
+static const char* LEN_MSG_LABEL = "field too long (max 191 chars); factor long binding expressions into a pad-level [pad:name] binding and reference it";
+static const char* LEN_MSG_SHORT = "field too long (max 63 chars)";
 
 static const char* validate_action_array(JsonArrayConst arr) {
     if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
@@ -194,8 +243,24 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows) {
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
     const char* wt = b["widget_type"] | "";
     if (wt[0] && !widget_find(wt)) return "unknown widget type";
-    if (b["actions"].is<JsonArrayConst>()) { const char* e = validate_action_array(b["actions"]); if (e) return e; }
-    if (b["lp_actions"].is<JsonArrayConst>()) { const char* e = validate_action_array(b["lp_actions"]); if (e) return e; }
+    // Length limits (truncation guard). Labels/bindings/state: 192-byte buffers;
+    // border/radius: 64-byte; colors: 192-byte.
+    const char* e;
+    if ((e = check_max(b, "label_top",    CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "label_center", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "label_bottom", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "btn_state",    CONFIG_BTN_STATE_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "bg_color",     CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "fg_color",     CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "border_color", CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "border_width", CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
+    if ((e = check_max(b, "corner_radius",CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
+    if ((e = check_max(b, "widget_data_binding",   CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "widget_data_binding_2", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "widget_data_binding_3", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if ((e = check_max(b, "widget_data_binding_4", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if (b["actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["actions"]); if (ae) return ae; }
+    if (b["lp_actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["lp_actions"]); if (ae) return ae; }
     return nullptr;
 }
 
@@ -216,6 +281,15 @@ static const char* validate_pad_doc(JsonObjectConst pad) {
         if (tp < -1 || tp >= MAX_PADS) return "template_pad out of range";
     }
     if (pad["bindings"].size() > PAD_MAX_BINDINGS) return "too many bindings";
+    // Pad-level binding name/value length limits.
+    JsonObjectConst pbind = pad["bindings"];
+    if (!pbind.isNull()) {
+        for (JsonPairConst kv : pbind) {
+            if (strlen(kv.key().c_str()) >= PAD_BINDING_NAME_MAX_LEN) return "binding name too long (max 31 chars)";
+            const char* val = kv.value().as<const char*>();
+            if (val && strlen(val) >= CONFIG_LABEL_MAX_LEN) return "binding value too long (max 191 chars)";
+        }
+    }
     JsonArrayConst btns = pad["buttons"];
     if (btns.isNull()) return nullptr;
     if (btns.size() > MAX_PAD_BUTTONS) return "too many buttons";
@@ -316,6 +390,28 @@ static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String
     const char* verr = validate_pad_doc(pad);
     if (verr) { result["valid"] = false; result["error"] = verr; return true; }
     result["valid"] = true;
+    return true;
+}
+
+// get_pad_blocks — list pre-built button groups (building blocks) the client can
+// drop onto a pad instead of hand-building. Generated from the live catalog.
+static bool tool_get_pad_blocks(const JsonObject& args, JsonObject& result, String& err) {
+    (void)args; (void)err;
+    JsonArray arr = result.createNestedArray("blocks");
+    const PadBlock* const* cat = pad_block_catalog();
+    uint8_t n = pad_block_catalog_count();
+    for (uint8_t i = 0; i < n; ++i) {
+        const PadBlock* blk = cat ? cat[i] : nullptr;
+        if (!blk || !blk->id) continue;
+        JsonObject o = arr.createNestedObject();
+        o["id"] = blk->id;
+        if (blk->name) o["name"] = blk->name;
+        if (blk->desc) o["desc"] = blk->desc;
+        o["min_cols"] = blk->min_cols;
+        o["min_rows"] = blk->min_rows;
+        o["min_free_cells"] = blk->min_free_cells;
+        o["button_count"] = blk->button_count;
+    }
     return true;
 }
 
@@ -421,6 +517,14 @@ static const McpTool s_tool_validate_pad = {
     tool_validate_pad, true, false, false, false
 };
 REGISTER_MCP_TOOL(s_tool_validate_pad);
+
+static const McpTool s_tool_get_pad_blocks = {
+    "get_pad_blocks",
+    "List pre-built button groups (building blocks) that can be dropped onto a pad: id, name, description, size requirements, button count. Read-only.",
+    "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    tool_get_pad_blocks, true, false, false, false
+};
+REGISTER_MCP_TOOL(s_tool_get_pad_blocks);
 
 static const McpTool s_tool_set_button = {
     "set_button",

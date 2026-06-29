@@ -165,6 +165,8 @@ Display-related tools are present only on boards that have a display.
 - `get_capabilities` — manifest of widget types + fields, button schema, label-style
   DSL, binding schemes (incl. `[pad:name]` and `template_pad`), and grid limits.
   Read-only, so it works with token alone.
+- `get_pad_blocks` — list pre-built button groups (building blocks) that can be
+  dropped onto a pad. Read-only.
 - `validate_pad` — dry-run validate a pad JSON (grid bounds, span overflow,
   collisions, widget types, colors) without saving. Read-only.
 - `set_button` / `set_buttons` — create or replace a button (or many in one save)

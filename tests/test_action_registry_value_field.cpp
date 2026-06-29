@@ -53,6 +53,7 @@ static const ActionTypeDef fake_action_type = {
     /* serialize   */ nullptr,
     /* dispatch    */ nullptr,
     /* value_field */ fake_value_field,
+    /* describe    */ nullptr,
 };
 
 // ---------------------------------------------------------------------------

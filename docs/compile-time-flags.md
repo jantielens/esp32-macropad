@@ -577,10 +577,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/expr_binding.cpp
+  - src/app/health_binding.cpp
+  - src/app/list_binding.cpp
   - src/app/mcp_components.cpp
   - src/app/mcp_tool_registry.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
+  - src/app/mqtt_sub_store.cpp
+  - src/app/pad_binding.cpp
+  - src/app/time_binding.cpp
+  - src/app/timer_binding.cpp
   - src/app/web_mcp.cpp
   - src/app/web_portal_config.cpp
   - src/app/widgets/bar_chart_widget.cpp

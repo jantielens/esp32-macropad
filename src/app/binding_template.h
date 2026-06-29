@@ -48,6 +48,28 @@ typedef void (*binding_topic_collector_fn)(const char* params, void* user_data);
 bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
                                binding_topic_collector_fn collector);
 
+// Number of registered binding schemes (for registry-driven enumeration, e.g.
+// the MCP capability manifest). The scheme list stays generated — a device
+// class registering a scheme auto-appears.
+uint8_t binding_template_scheme_count();
+
+// Name of a registered scheme by index (0 .. count-1), or nullptr.
+const char* binding_template_scheme_name(uint8_t index);
+
+// Optional per-scheme describe hook for the MCP capability manifest. Each scheme
+// describes itself in its own .cpp (mirrors widget describeSchema). The out
+// pointer is an ArduinoJson JsonObject* (void* here to keep this widely-included
+// header free of the ArduinoJson dependency); the scheme's describe casts it.
+typedef void (*binding_describe_fn)(void* out_json);
+
+// Attach a describe hook to a registered scheme (call after register). Returns
+// false if the scheme name is unknown.
+bool binding_template_set_scheme_describe(const char* scheme, binding_describe_fn fn);
+
+// Invoke scheme[index]'s describe hook into out_json (a JsonObject*). Returns
+// true if the scheme has a describe hook, false otherwise.
+bool binding_template_describe_scheme(uint8_t index, void* out_json);
+
 // Check if a label string contains any binding tokens [xxx:...]
 bool binding_template_has_bindings(const char* label);
 

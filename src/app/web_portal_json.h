@@ -61,3 +61,47 @@ static inline void web_portal_send_json_chunked(
 
 		request->send(response);
 }
+
+// Content-Length variant of web_portal_send_json_chunked. Streams the same way
+// but sends a fixed Content-Length header instead of chunked Transfer-Encoding.
+// Required for the MCP endpoint: the MCP Streamable-HTTP client mishandles
+// chunked responses (stray framing bytes -> JSON parse failure on the client).
+template <typename TDoc>
+static inline void web_portal_send_json_sized(
+		AsyncWebServerRequest *request,
+		const std::shared_ptr<TDoc> &doc,
+		int status_code = 200
+) {
+		if (!request) return;
+
+		if (!doc || doc->capacity() == 0) {
+				web_portal_send_json_error(request, 503, "Out of memory");
+				return;
+		}
+
+		if (doc->overflowed()) {
+				web_portal_send_json_error(request, 500, "Response too large");
+				return;
+		}
+
+		const size_t total_len = measureJson(*doc);
+		AsyncWebServerResponse *response = request->beginResponse(
+				"application/json",
+				total_len,
+				[doc, total_len](uint8_t *buffer, size_t max_len, size_t index) -> size_t {
+						if (index >= total_len) return 0;
+						const size_t remaining = total_len - index;
+						const size_t to_write = remaining < max_len ? remaining : max_len;
+						ChunkPrint cp(buffer, index, to_write);
+						(void)serializeJson(*doc, cp);
+						return to_write;
+				}
+		);
+
+		if (status_code != 200) {
+				response->setCode(status_code);
+		}
+
+		request->send(response);
+}
+

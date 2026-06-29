@@ -29,6 +29,12 @@ const ActionTypeDef* action_type_find(const char* type_name) {
     return nullptr;
 }
 
+uint8_t action_type_count() { return (uint8_t)s_count; }
+
+const ActionTypeDef* action_type_at(uint8_t index) {
+    return (index < s_count) ? s_types[index] : nullptr;
+}
+
 void action_substitute_step_field(char* field, size_t field_size, float step) {
     if (!field) return;
     const char* token = "{step}";

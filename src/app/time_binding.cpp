@@ -218,10 +218,23 @@ static void time_binding_collect(const char* params, void* user_data) {
 // Public API
 // ============================================================================
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void time_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[time:strftime;timezone]";
+    o["example"] = "[time:%H:%M;Europe/Brussels]";
+    o["codes"]   = "%H:%M, %H:%M:%S, %I:%M %p, %Y-%m-%d, %d/%m/%Y, %a, %b; timezone = Olson name (omit = UTC)";
+}
+#endif
+
 void time_binding_init() {
     if (!binding_template_register("time", time_binding_resolve, time_binding_collect)) {
         LOGE(TAG, "Failed to register time binding scheme");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("time", time_scheme_describe);
+#endif
 }
 
 void time_binding_start_ntp() {

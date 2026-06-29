@@ -37,10 +37,16 @@ struct ActionTypeDef {
     void (*serialize)(const ButtonAction& act, JsonObject obj);             // payload arm -> flat JSON
     void (*dispatch)(const ButtonAction& act, const char* label);           // execute side effects
     char* (*value_field)(ButtonAction& act, size_t* out_size);              // &payload.value (+ buffer size), or nullptr
+    void (*describe)(JsonObject& out);                                       // optional: list flat JSON fields for the MCP manifest (nullptr = none)
 };
 
 void action_type_register(const ActionTypeDef* type);
 const ActionTypeDef* action_type_find(const char* type_name);
+
+// Registry enumeration (for the MCP capability manifest): device-class action
+// types self-register, so the manifest can list them generated, not hand-coded.
+uint8_t action_type_count();
+const ActionTypeDef* action_type_at(uint8_t index);
 
 // Replace every "{step}" token in a char buffer with the signed step value.
 // Canonical helper shared by the numeric rocker and device-class action types

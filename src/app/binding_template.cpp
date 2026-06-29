@@ -16,6 +16,7 @@ struct SchemeEntry {
     char name[16];
     binding_resolver_fn resolver;
     binding_topic_collector_fn collector;
+    binding_describe_fn describe;
 };
 
 static SchemeEntry g_schemes[MAX_SCHEMES];
@@ -28,7 +29,28 @@ bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
     strlcpy(e.name, scheme, sizeof(e.name));
     e.resolver = resolver;
     e.collector = collector;
+    e.describe = nullptr;
     g_scheme_count++;
+    return true;
+}
+
+uint8_t binding_template_scheme_count() { return (uint8_t)g_scheme_count; }
+
+const char* binding_template_scheme_name(uint8_t index) {
+    return (index < g_scheme_count) ? g_schemes[index].name : nullptr;
+}
+
+bool binding_template_set_scheme_describe(const char* scheme, binding_describe_fn fn) {
+    if (!scheme) return false;
+    for (int i = 0; i < g_scheme_count; i++) {
+        if (strcmp(g_schemes[i].name, scheme) == 0) { g_schemes[i].describe = fn; return true; }
+    }
+    return false;
+}
+
+bool binding_template_describe_scheme(uint8_t index, void* out_json) {
+    if (index >= g_scheme_count || !g_schemes[index].describe) return false;
+    g_schemes[index].describe(out_json);
     return true;
 }
 

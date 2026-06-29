@@ -260,10 +260,23 @@ bool pad_binding_expand(const PadConfig* page, const char* templ,
 // Init
 // ============================================================================
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void pad_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[pad:name]";
+    o["example"] = "[pad:power]";
+    o["note"]    = "resolves a pad-level named binding declared in pad.bindings; usable inside [expr:..]";
+}
+#endif
+
 void pad_binding_init() {
     if (!binding_template_register("pad", pad_binding_resolve, pad_binding_collect)) {
         LOGE(TAG, "Failed to register pad binding scheme");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("pad", pad_scheme_describe);
+#endif
 }
 
 #endif // HAS_DISPLAY && HAS_MQTT

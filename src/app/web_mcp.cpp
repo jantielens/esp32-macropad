@@ -375,7 +375,8 @@ static void handleMcpBody(AsyncWebServerRequest* request, uint8_t* data,
 // ----------------------------------------------------------------------------
 static void mcp_send_error(AsyncWebServerRequest* request,
                            JsonVariantConst id, int code, const char* message) {
-    auto doc = make_psram_json_doc(256);
+    const size_t msglen = message ? strlen(message) : 0;
+    auto doc = make_psram_json_doc(256 + msglen);
     if (!doc || doc->capacity() == 0) {
         request->send(500, "application/json", "{\"error\":\"oom\"}");
         return;
@@ -385,8 +386,13 @@ static void mcp_send_error(AsyncWebServerRequest* request,
     else (*doc)["id"] = id;
     JsonObject err = doc->createNestedObject("error");
     err["code"] = code;
-    err["message"] = message ? message : "error";
-    web_portal_send_json_chunked(request, doc);
+    // Copy the message into the document. The response is serialized lazily by
+    // the async filler AFTER this handler returns, so a const char* pointing at
+    // a caller's temporary String (e.g. err.c_str()) would dangle. Assigning a
+    // String forces ArduinoJson to duplicate the bytes (const char* is stored by
+    // reference and must NOT be used for non-static messages).
+    err["message"] = String(message ? message : "error");
+    web_portal_send_json_sized(request, doc);
 }
 
 // ----------------------------------------------------------------------------
@@ -408,7 +414,7 @@ static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantCon
                                                      : device_class_get_full_name();
     info["name"] = name;
     info["version"] = FIRMWARE_VERSION;
-    web_portal_send_json_chunked(request, doc);
+    web_portal_send_json_sized(request, doc);
 }
 
 static void mcp_append_tool_def(JsonArray tools, const McpTool* t) {
@@ -459,7 +465,7 @@ static void mcp_method_tools_list(AsyncWebServerRequest* request, JsonVariantCon
         if (t->requires_authoring && !authoring_on) continue;
         mcp_append_tool_def(tools, t);
     }
-    web_portal_send_json_chunked(request, doc);
+    web_portal_send_json_sized(request, doc);
 }
 
 static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantConst id,
@@ -525,7 +531,7 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
     item["type"] = "text";
     item["text"] = resultStr;
     result["isError"] = false;
-    web_portal_send_json_chunked(request, doc);
+    web_portal_send_json_sized(request, doc);
 }
 
 // ----------------------------------------------------------------------------
@@ -574,7 +580,7 @@ static void mcp_dispatch(AsyncWebServerRequest* request, uint8_t* body, size_t l
         (*doc)["jsonrpc"] = "2.0";
         (*doc)["id"] = id;
         doc->createNestedObject("result");
-        web_portal_send_json_chunked(request, doc);
+        web_portal_send_json_sized(request, doc);
     } else if (strcmp(method, "tools/list") == 0) {
         mcp_method_tools_list(request, id);
     } else if (strcmp(method, "tools/call") == 0) {
