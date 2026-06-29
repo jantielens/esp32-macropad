@@ -1078,8 +1078,8 @@ static void sparkline_describe(JsonObject& out) {
     add("widget_sparkline_min_label_color","color",""); add("widget_sparkline_max_label_color","color","");
     add("widget_sparkline_label_width","number","axis label strip px"); add("widget_sparkline_unified_scale","bool","share scale across lines"); add("widget_sparkline_ref_in_view","bool","keep min/max in view");
     add("widget_sparkline_line_color","color","line 1"); add("widget_sparkline_line_color_2","color","line 2"); add("widget_sparkline_line_color_3","color","line 3");
-    add("widget_sparkline_line_width","number","px"); add("widget_sparkline_line_offset","number","px"); add("widget_sparkline_smooth","bool","smooth curve");
-    add("widget_sparkline_current_dot","bool","dot at latest"); add("widget_sparkline_current_label","string","latest-value caption");
+    add("widget_sparkline_line_width","number","px"); add("widget_sparkline_line_offset","number","px"); add("widget_sparkline_smooth","number","smoothing amount, 0=off");
+    add("widget_sparkline_current_dot","number","dot size px at latest sample, 0=off"); add("widget_sparkline_current_label","string","latest-value caption");
     add("widget_sparkline_current_label_2","string","line 2 caption"); add("widget_sparkline_current_label_3","string","line 3 caption");
     add("widget_sparkline_marker_size_min","number",""); add("widget_sparkline_marker_size_max","number","");
 }
