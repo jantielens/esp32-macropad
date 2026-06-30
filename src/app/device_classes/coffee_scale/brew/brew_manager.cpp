@@ -88,11 +88,17 @@ static float s_save_weight  = 0.0f;
 
 static void emit_marker(const char* label, uint16_t sample_idx) {
     if (s_marker_count >= BREW_MARKER_MAX) return;
-    BrewMarker& m = s_markers[s_marker_count++];
+    // Write the marker fields BEFORE advancing the count, all under the series
+    // spinlock, so an off-loop reader (brew_markers_copy) never sees an
+    // incremented count pointing at a half-written entry.
+    portENTER_CRITICAL(&s_series_mux);
+    BrewMarker& m = s_markers[s_marker_count];
     m.sample_index = sample_idx;
     strlcpy(m.label, label, sizeof(m.label));
+    s_marker_count++;
+    portEXIT_CRITICAL(&s_series_mux);
     LOGD(TAG, "Marker[%u]: t=%u '%s'", (unsigned)(s_marker_count - 1),
-         (unsigned)m.sample_index, label);
+         (unsigned)sample_idx, label);
 }
 
 static void emit_capture(const BrewStage* stage) {
@@ -191,9 +197,17 @@ static void enter_stage(uint8_t index) {
 
 static void record_sample() {
     if (!s_series || s_series_count >= BREW_SERIES_MAX_SAMPLES) return;
-    s_series[s_series_count].weight = scale_get_weight_ema();  // smooth weight for brew data (no dead-band staircase)
-    s_series[s_series_count].flow   = scale_get_flow_rate();
+    // Read the sensor values OUTSIDE the lock (cached getters), then write the
+    // sample fields BEFORE advancing the count, all under the series spinlock,
+    // so an off-loop reader (brew_series_copy) never sees an incremented count
+    // pointing at a half-written sample.
+    const float w = scale_get_weight_ema();  // smooth weight for brew data (no dead-band staircase)
+    const float f = scale_get_flow_rate();
+    portENTER_CRITICAL(&s_series_mux);
+    s_series[s_series_count].weight = w;
+    s_series[s_series_count].flow   = f;
     s_series_count++;
+    portEXIT_CRITICAL(&s_series_mux);
 }
 
 // ============================================================================
@@ -617,9 +631,15 @@ void brew_free_series() {
     if (s_series) s_free_series_pending = true;
 }
 
+#if HAS_MCP
 uint16_t brew_series_copy(BrewSample* dst, uint16_t dst_max) {
     if (!dst || dst_max == 0) return 0;
     uint16_t n = 0;
+    // The memcpy below is O(samples): up to BREW_SERIES_MAX_SAMPLES *
+    // sizeof(BrewSample) (~4.8 KB) is copied with interrupts disabled
+    // (portENTER_CRITICAL). Acceptable for the rare on-demand MCP read, but keep
+    // this in mind before widening the buffer — a chunked/pinned copy would be
+    // needed to bound the interrupts-off duration if samples grow much larger.
     portENTER_CRITICAL(&s_series_mux);
     if (s_series && s_series_count) {
         n = (s_series_count < dst_max) ? s_series_count : dst_max;
@@ -638,6 +658,7 @@ uint8_t brew_markers_copy(BrewMarker* dst, uint8_t dst_max) {
     portEXIT_CRITICAL(&s_series_mux);
     return n;
 }
+#endif // HAS_MCP
 
 // ============================================================================
 // Timer formatting (same logic as timer_engine, self-contained)

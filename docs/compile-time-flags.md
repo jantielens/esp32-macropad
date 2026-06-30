@@ -578,6 +578,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_manager.h
+  - src/app/device_classes/coffee_scale/mcp/mcp_tools_coffee_scale.cpp
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/expr_binding.cpp
   - src/app/health_binding.cpp
@@ -851,6 +854,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/components/brew_templates_component.cpp
   - src/app/device_classes/coffee_scale/components/brews_component.cpp
   - src/app/device_classes/coffee_scale/components/coffee_scale_component.cpp
+  - src/app/device_classes/coffee_scale/mcp/mcp_tools_coffee_scale.cpp
   - src/app/device_classes/coffee_scale/scale_actions.cpp
   - src/app/device_classes/coffee_scale/web/web_portal_brew_templates.cpp
   - src/app/device_classes/coffee_scale/web/web_portal_brew_templates.h

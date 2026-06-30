@@ -131,12 +131,41 @@ static void test_ternary_with_literal_links() {
           "ternary 'cond ? buf : literal' links (the reported failure shape)");
 }
 
+// --- Case F: nested array of objects copied from a reused struct buffer -------
+// Mirrors the get_brew_status captures / get_brew_series markers emitters: the
+// tools build a JSON array of objects from a struct{char[]} that the brew engine
+// can overwrite (a new brew reusing the static slot) before serialization. The
+// emitters wrap each field in String() to copy; this asserts that overwriting
+// the source struct after assignment does not corrupt the emitted JSON.
+static void test_nested_objects_copy_from_reused_struct() {
+    struct Capture { char key[16]; char unit[8]; float value; };
+    JsonDocument doc;
+    {
+        Capture caps[2] = { { "bloom_water", "g", 40.0f }, { "dose", "g", 18.0f } };
+        JsonArray arr = doc["captures"].to<JsonArray>();
+        for (const auto& c : caps) {
+            JsonObject o = arr.add<JsonObject>();
+            o["key"]   = CopyString(c.key);   // SAFE: copy (matches the tool emitter)
+            o["unit"]  = CopyString(c.unit);
+            o["value"] = c.value;
+        }
+        // Reuse/overwrite the source slots the way a new brew would.
+        std::memset(caps, 0xCD, sizeof(caps));
+    }
+    char out[160];
+    CHECK(std::strcmp(dump(doc, out, sizeof(out)),
+                      "{\"captures\":[{\"key\":\"bloom_water\",\"unit\":\"g\",\"value\":40},"
+                      "{\"key\":\"dose\",\"unit\":\"g\",\"value\":18}]}") == 0,
+          "nested objects copied from reused struct buffer");
+}
+
 int main() {
     test_control_status_copies_stack_buffer();
     test_read_field_copies_freed_heap();
     test_mutable_char_array_copies();
     test_const_char_ptr_links();
     test_ternary_with_literal_links();
+    test_nested_objects_copy_from_reused_struct();
 
     if (g_failures) {
         std::printf("\n%d check(s) failed\n", g_failures);

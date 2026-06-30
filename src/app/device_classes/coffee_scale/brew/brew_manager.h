@@ -205,6 +205,7 @@ int brew_format_timer(const char* fmt, char* out, size_t out_len);
 // Free the series buffer (called after brew_log_save completes).
 void brew_free_series();
 
+#if HAS_MCP
 // Thread-safe snapshot of the in-progress brew series for off-main-loop readers
 // (the MCP web task). Copies up to dst_max samples into dst under the series
 // spinlock so a concurrent deferred free in brew_tick() cannot use-after-free.
@@ -215,6 +216,7 @@ uint16_t brew_series_copy(BrewSample* dst, uint16_t dst_max);
 // Copy the current stage-transition markers into dst (up to dst_max). Guarded
 // by the same spinlock for count consistency. Returns the number copied.
 uint8_t brew_markers_copy(BrewMarker* dst, uint8_t dst_max);
+#endif // HAS_MCP
 
 // Drop cached template pointers (s_template and s_last_template) so the
 // manager no longer references template storage. Call before a template

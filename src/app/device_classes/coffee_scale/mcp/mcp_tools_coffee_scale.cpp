@@ -23,9 +23,14 @@
 //     mcp_control_dispatch() (exactly like shutter_control) — scale/brew command
 //     dispatch runs through action_dispatch(), which may touch LVGL/audio and
 //     must not run on the web task.
-//   - delete_brew, delete_brew_template and set_brew_template are plain
-//     LittleFS/template-registry I/O (no LVGL, no action dispatch) and run
-//     inline on the web task, the same way the existing portal handlers do.
+//   - delete_brew, delete_brew_template and set_brew_template run inline on the
+//     web task (no LVGL, no action dispatch), the same way the existing portal
+//     handlers do. NOTE: delete_brew_template and set_brew_template call
+//     brew_template_loader_reload(), which is NOT pure I/O — it resets the
+//     active brew (brew_reset) and drops cached template pointers
+//     (brew_forget_templates) before reloading from storage. This mutates brew
+//     state on the AsyncTCP task; it is intentional and matches the portal
+//     POST/DELETE template handlers (which call the same reload).
 //
 // Saved-brew series exposure mirrors the shutter saved-session pattern: the full
 // per-second weight/flow series is large, so get_brew returns metadata plus a
@@ -542,6 +547,8 @@ static bool tool_delete_brew(const JsonObject& args, JsonObject& result, String&
 
 // ============================================================================
 // Control tool: delete_brew_template — remove a dynamic template
+// (reloads the template registry: brew_template_loader_reload() resets the
+//  active brew and drops cached template pointers — matches the portal handler)
 // ============================================================================
 
 static bool tool_delete_brew_template(const JsonObject& args, JsonObject& result, String& err) {
@@ -573,7 +580,8 @@ static bool tool_delete_brew_template(const JsonObject& args, JsonObject& result
 
 // ============================================================================
 // Authoring tool: set_brew_template — write/replace one brew template
-// (plain LittleFS write — runs inline like the portal POST handler)
+// (runs inline like the portal POST handler; brew_template_loader_reload() after
+//  the write resets the active brew and drops cached template pointers)
 // ============================================================================
 
 static bool tool_set_brew_template(const JsonObject& args, JsonObject& result, String& err) {
