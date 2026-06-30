@@ -121,7 +121,9 @@ static void sh_emit_measurement_summary(JsonObject o, const ShutterMeasurement& 
     if (m.capping_gradient_stops_per_mm >= 0.0f) {
         o["capping_gradient_stops_per_mm"] = m.capping_gradient_stops_per_mm;
     }
-    if (m.detected_travel[0]) o["detected_travel"] = m.detected_travel;
+    // `m` is a heap struct the caller frees before serialization; wrap in
+    // String() so ArduinoJson copies the bytes instead of linking into it.
+    if (m.detected_travel[0]) o["detected_travel"] = String(m.detected_travel);
     o["speed_locked"] = m.speed_locked;
 }
 
@@ -178,7 +180,9 @@ static bool tool_get_shutter_status(const JsonObject& args, JsonObject& result, 
         bool locked = false;
         shutter_measure_get_target(label, sizeof(label), &locked);
         JsonObject tgt = result.createNestedObject("target");
-        tgt["speed"]  = label[0] ? label : "";
+        // `label` is a stack buffer; assign the array (not a const char*) so
+        // ArduinoJson COPIES it rather than linking a soon-dangling pointer.
+        tgt["speed"]  = label;
         tgt["locked"] = locked;
     }
 
@@ -478,7 +482,12 @@ static bool finish_control(McpControlResult r, bool ok, const char* msg,
     if (r == MCP_CONTROL_BUSY)    return sh_fail(result, err, SH_ERR_BUSY, "another control action is in progress");
     if (r == MCP_CONTROL_TIMEOUT) return sh_fail(result, err, SH_ERR_INTERNAL, "control action timed out");
     if (!ok)                      return sh_fail(result, err, SH_ERR_INTERNAL, msg && msg[0] ? msg : "control action failed");
-    result["status"] = (msg && msg[0]) ? msg : "ok";
+    // Wrap in String() so ArduinoJson COPIES the text into the result document.
+    // `msg` points at the caller's stack buffer; assigning it as a const char*
+    // would only link the pointer, which dangles once the handler returns and
+    // before the dispatcher serializes the result (garbage output).
+    if (msg && msg[0]) result["status"] = String(msg);
+    else               result["status"] = "ok";
     return true;
 }
 

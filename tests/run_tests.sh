@@ -346,6 +346,16 @@ echo "=== Running unit tests: print_log ==="
 ./tests/bin/test_print_log
 echo
 
+echo "=== Building unit tests: mcp_result_strings ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_mcp_result_strings.cpp \
+    -o tests/bin/test_mcp_result_strings
+
+echo "=== Running unit tests: mcp_result_strings ==="
+./tests/bin/test_mcp_result_strings
+echo
+
 echo "=== Running guard: branding mirror (C++ <-> bash) ==="
 ./tests/test_branding_mirror.sh
 echo

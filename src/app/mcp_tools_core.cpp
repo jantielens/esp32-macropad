@@ -160,6 +160,10 @@ static const char* button_label(const ScreenButtonConfig& b) {
 }
 
 // Append a pad's buttons into `po` (a JSON object) under "buttons".
+// Strings are wrapped in String() so ArduinoJson COPIES them into the result
+// document: they point into `cfg`, which the caller reuses for the next pad and
+// then frees before the dispatcher serializes the result. Assigning the raw
+// const char* would only link the pointer and dangle (garbage / wrong labels).
 static void append_pad_buttons(JsonObject po, const PadConfig* cfg) {
     JsonArray btns = po.createNestedArray("buttons");
     for (uint8_t b = 0; b < cfg->button_count; ++b) {
@@ -168,10 +172,10 @@ static void append_pad_buttons(JsonObject po, const PadConfig* cfg) {
         bo["position"] = b;
         bo["col"] = btn.col;
         bo["row"] = btn.row;
-        bo["label"] = button_label(btn);
+        bo["label"] = String(button_label(btn));
         const char* at = (btn.action_count > 0 && btn.actions[0].type[0]) ? btn.actions[0].type : "";
-        bo["action_type"] = at;
-        if (btn.widget.type[0]) bo["widget"] = btn.widget.type;
+        bo["action_type"] = String(at);
+        if (btn.widget.type[0]) bo["widget"] = String(btn.widget.type);
     }
 }
 
