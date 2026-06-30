@@ -18,6 +18,7 @@ static void button_defaults_get_config(AsyncWebServerRequest *request) {
     if (d->border_color[0])      (*doc)["border_color"]      = d->border_color;
     if (d->border_width[0])      (*doc)["border_width"]      = d->border_width;
     if (d->corner_radius[0])     (*doc)["corner_radius"]     = d->corner_radius;
+    if (d->content_pad[0])       (*doc)["content_pad"]       = d->content_pad;
     if (d->label_top_style[0])   (*doc)["label_top_style"]   = d->label_top_style;
     if (d->label_center_style[0]) (*doc)["label_center_style"] = d->label_center_style;
     if (d->label_bottom_style[0]) (*doc)["label_bottom_style"] = d->label_bottom_style;

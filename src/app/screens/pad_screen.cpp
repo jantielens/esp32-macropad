@@ -27,7 +27,6 @@
 #define TAP_OVERLAY_DARK_OPA   80   // ~31% black overlay on light backgrounds
 #define TAP_OVERLAY_LIGHT_OPA  50   // ~20% white overlay on dark backgrounds
 #define TAP_LUMINANCE_THRESH   180  // Perceived-brightness cutoff (0-255)
-#define TILE_PAD_PX            4    // Content padding inside each tile
 
 // ============================================================================
 // Helpers

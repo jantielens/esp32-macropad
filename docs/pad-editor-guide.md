@@ -35,9 +35,10 @@ The **Button Defaults** section (collapsible, at the bottom of the Pads page) le
 | **Border color** | Default button outline color |
 | **Border width** | Default border thickness (px) |
 | **Corner radius** | Default button corner rounding (px) |
+| **Padding** | Default content inset between the border and labels/icon/widget (px, 0–50) |
 | **Label top/center/bottom style** | Default label style DSL (e.g., `font_size:24;align:left`) |
 
-The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius).
+The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius, 4px padding).
 
 > **Tip**: Set your button defaults first, then add buttons. Changing a default immediately updates all buttons that don't have a custom override — both in the editor preview and on the device.
 
@@ -252,6 +253,8 @@ Each color field accepts either a static `#hex` value or a binding expression fo
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
 **Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the device-level [Button Defaults](#button-defaults). If you set a custom value, a **↩** reset link appears next to the label — click it to revert to the inherited default.
+
+**Padding** (0–50 px, default 4) sets the content inset between the button border and its content — the top/center/bottom labels, the icon, and any widget. Increase it to keep left/right-aligned labels from crowding the border or rounded corners, or to give a widget more breathing room. Like border width and radius, it inherits from [Button Defaults](#button-defaults) and shows a **↩** reset link when overridden.
 
 **UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
 

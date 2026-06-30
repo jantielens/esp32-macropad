@@ -254,7 +254,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
   - **Grid preview**: Click any cell to open the button editor dialog
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
-  - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
+  - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, content padding, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
   - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode — green/red ghost overlay shows valid/invalid positions. Blocks check grid dimensions, free cells, and 64-button limit. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
@@ -1098,7 +1098,7 @@ All button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth 
 
 Returns the current device-level button defaults.
 
-- **Response:** JSON object with only the fields that have been explicitly set. Possible fields: `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `label_top_style`, `label_center_style`, `label_bottom_style`.
+- **Response:** JSON object with only the fields that have been explicitly set. Possible fields: `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`.
 - Default (no file saved): empty JSON object `{}`.
 
 #### `POST /api/button-defaults`

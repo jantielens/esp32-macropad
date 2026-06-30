@@ -82,6 +82,7 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                          const PadRect* rect, const UIScaleInfo* scale,
                          lv_obj_t* icon_img, lv_obj_t* center_label,
                          WidgetState* state) {
+    (void)rect;
     auto* st = reinterpret_cast<ListWidgetState*>(state->data);
     memset(st, 0, sizeof(ListWidgetState));
 
@@ -144,17 +145,18 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // Create scrollable container (no flex/list — LV_USE_FLEX and LV_USE_LIST disabled).
     // Inset vertically so top/bottom button labels remain visible above/below the list.
-    // Account for the tile's pad_all (TILE_PAD_PX=4 in pad_screen.cpp) since labels
-    // and the container are positioned within the tile's content area.
-    const lv_coord_t TILE_PAD = 4;
+    // Size from the tile's content area so the list honors the button's content
+    // padding (pad_all) consistently with labels and other widgets.
+    lv_obj_update_layout(tile);
+    const lv_coord_t cont_w_full = lv_obj_get_content_width(tile);
     const lv_font_t* top_font = pad_resolve_font(btn->style_top, scale->font_small);
     const lv_font_t* bot_font = pad_resolve_font(btn->style_bottom, scale->font_small);
     const lv_coord_t top_h = btn->label_top[0] ? lv_font_get_line_height(top_font) : 0;
     const lv_coord_t bot_h = btn->label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
-    const lv_coord_t cont_h = rect->h - 2 * TILE_PAD - top_h - bot_h;
+    const lv_coord_t cont_h = lv_obj_get_content_height(tile) - top_h - bot_h;
 
     lv_obj_t* cont = lv_obj_create(tile);
-    lv_obj_set_size(cont, rect->w, cont_h);
+    lv_obj_set_size(cont, cont_w_full, cont_h);
     lv_obj_align(cont, LV_ALIGN_CENTER, 0, (top_h - bot_h) / 2);
     lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(cont, 0, 0);
@@ -168,7 +170,7 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     const lv_coord_t item_pad_v = 4;
     const lv_coord_t item_h = lv_font_get_line_height(st->item_font) + item_pad_v * 2;
     const lv_coord_t gap = 2;
-    const lv_coord_t content_w = rect->w - 4; // account for pad_all=2
+    const lv_coord_t content_w = cont_w_full - 4; // account for cont pad_all=2
 
     for (uint8_t i = 0; i < count; i++) {
         lv_obj_t* item = lv_obj_create(cont);

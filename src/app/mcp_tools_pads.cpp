@@ -119,7 +119,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "col", "row", "col_span", "row_span",
         "label_top", "label_center", "label_bottom",
         "label_top_style", "label_center_style", "label_bottom_style",
-        "bg_color", "fg_color", "border_color", "border_width", "corner_radius",
+        "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad",
         "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
@@ -340,6 +340,7 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows) {
     if ((e = check_max(b, "border_color", CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "border_width", CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
     if ((e = check_max(b, "corner_radius",CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
+    if ((e = check_max(b, "content_pad",  CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
     if ((e = check_max(b, "widget_data_binding",   CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "widget_data_binding_2", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "widget_data_binding_3", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;

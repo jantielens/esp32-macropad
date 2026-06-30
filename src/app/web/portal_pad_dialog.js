@@ -10,8 +10,15 @@ function padDialogOpen(col, row) {
     padPopulateScreenDropdown();
     padPopulateSoundDropdown();
 
-    // Sync device-level button defaults from the DOM into padState so placeholders are current
-    padState.buttonDefaults = padCollectButtonDefaults();
+    // Sync device-level button defaults from the DOM into padState so placeholders
+    // are current. The Button Defaults form may live on a separate page; only
+    // re-collect when it is actually mounted, otherwise keep the defaults already
+    // loaded from the device API (padLoadButtonDefaultsFromDevice) so inherited
+    // values/placeholders stay correct instead of falling back to firmware.
+    if (document.getElementById('pad-def-border-width')) {
+        padState.buttonDefaults = padCollectButtonDefaults();
+    }
+    if (!padState.buttonDefaults) padState.buttonDefaults = {};
 
     const btn = padFindButton(col, row) || {};
 
@@ -48,16 +55,20 @@ function padDialogOpen(col, row) {
 
     // Auto-open colors section if any color has a binding or custom override
     var hasColorOverride = btn.bg_color || btn.fg_color || btn.border_color ||
-        (btn.border_width !== undefined) || (btn.corner_radius !== undefined);
+        (btn.border_width !== undefined) || (btn.corner_radius !== undefined) ||
+        (btn.content_pad !== undefined);
     document.getElementById('pad-edit-colors-section').open = !!hasColorOverride;
 
     var effBw = padGetEffectiveDefault('border_width');
     var effCr = padGetEffectiveDefault('corner_radius');
+    var effCp = padGetEffectiveDefault('content_pad');
     document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : effBw;
     document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : effCr;
+    document.getElementById('pad-edit-content-pad').value = (btn.content_pad !== undefined) ? btn.content_pad : effCp;
     // Set placeholders to show what the pad default is
     document.getElementById('pad-edit-border-width').placeholder = effBw;
     document.getElementById('pad-edit-corner-radius').placeholder = effCr;
+    document.getElementById('pad-edit-content-pad').placeholder = effCp;
     document.getElementById('pad-edit-ui-offset').value = btn.ui_offset || '';
 
     // Update reset-hint visibility for appearance fields
@@ -328,6 +339,9 @@ function padDialogOk(keepOpen) {
     const cr = document.getElementById('pad-edit-corner-radius').value.trim();
     var effCr = padGetEffectiveDefault('corner_radius');
     if (cr && cr !== effCr) btn.corner_radius = cr;
+    const cp = document.getElementById('pad-edit-content-pad').value.trim();
+    var effCp = padGetEffectiveDefault('content_pad');
+    if (cp && cp !== effCp) btn.content_pad = cp; else delete btn.content_pad;
     const uiOffset = document.getElementById('pad-edit-ui-offset').value.trim();
     if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
 

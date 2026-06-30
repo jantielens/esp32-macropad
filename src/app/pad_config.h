@@ -303,6 +303,7 @@ struct ScreenButtonConfig {
     char border_color[CONFIG_COLOR_MAX_LEN];      // default "#000000"
     char border_width[CONFIG_BINDABLE_SHORT_LEN]; // default "0" — static or binding
     char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // default "8" — static or binding
+    char content_pad[CONFIG_BINDABLE_SHORT_LEN];  // default "4" — plain px inset for labels/icon/widget (0-50)
 
     // Typed actions (up to MAX_BUTTON_ACTIONS sequential actions per gesture)
     ButtonAction actions[MAX_BUTTON_ACTIONS];      // tap actions (executed sequentially)
@@ -342,6 +343,7 @@ struct ButtonDefaults {
     char border_color[CONFIG_COLOR_MAX_LEN];      // e.g. "#333366"
     char border_width[CONFIG_BINDABLE_SHORT_LEN]; // e.g. "1"
     char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // e.g. "16"
+    char content_pad[CONFIG_BINDABLE_SHORT_LEN];  // e.g. "8" — plain px inset (0-50)
     char label_top_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];

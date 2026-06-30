@@ -62,7 +62,7 @@ function syncLabelStyleVisibility(slot) {
 // Firmware hardcoded defaults (must match init_button_defaults in pad_config.cpp)
 const PAD_FIRMWARE_DEFAULTS = {
     bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000',
-    border_width: '0', corner_radius: '8',
+    border_width: '0', corner_radius: '8', content_pad: '4',
 };
 
 // Load device-level button defaults from the REST API
@@ -102,6 +102,7 @@ function padLoadButtonDefaults(defs) {
     var el;
     el = document.getElementById('pad-def-border-width'); if (el) el.value = defs.border_width || '';
     el = document.getElementById('pad-def-corner-radius'); if (el) el.value = defs.corner_radius || '';
+    el = document.getElementById('pad-def-content-pad'); if (el) el.value = defs.content_pad || '';
     el = document.getElementById('pad-def-label-top-style'); if (el) el.value = defs.label_top_style || '';
     el = document.getElementById('pad-def-label-center-style'); if (el) el.value = defs.label_center_style || '';
     el = document.getElementById('pad-def-label-bottom-style'); if (el) el.value = defs.label_bottom_style || '';
@@ -121,6 +122,7 @@ function padCollectButtonDefaults() {
     var el;
     el = document.getElementById('pad-def-border-width'); if (el && el.value.trim()) d.border_width = el.value.trim();
     el = document.getElementById('pad-def-corner-radius'); if (el && el.value.trim()) d.corner_radius = el.value.trim();
+    el = document.getElementById('pad-def-content-pad'); if (el && el.value.trim()) d.content_pad = el.value.trim();
     el = document.getElementById('pad-def-label-top-style'); if (el && el.value.trim()) d.label_top_style = el.value.trim();
     el = document.getElementById('pad-def-label-center-style'); if (el && el.value.trim()) d.label_center_style = el.value.trim();
     el = document.getElementById('pad-def-label-bottom-style'); if (el && el.value.trim()) d.label_bottom_style = el.value.trim();
@@ -180,7 +182,8 @@ var PAD_APPEARANCE_FIELDS = [
     { input: 'pad-edit-fg-color', key: 'fg_color', isColor: true },
     { input: 'pad-edit-border-color', key: 'border_color', isColor: true },
     { input: 'pad-edit-border-width', key: 'border_width', isColor: false },
-    { input: 'pad-edit-corner-radius', key: 'corner_radius', isColor: false }
+    { input: 'pad-edit-corner-radius', key: 'corner_radius', isColor: false },
+    { input: 'pad-edit-content-pad', key: 'content_pad', isColor: false }
 ];
 
 // Show/hide reset hints based on whether each field differs from its effective default

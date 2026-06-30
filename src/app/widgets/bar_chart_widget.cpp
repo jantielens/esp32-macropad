@@ -419,7 +419,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         bar_bottom_margin = bot_h + 4;
         fill_len = content_h - bar_top - bar_bottom_margin - vlabel_h;
         if (fill_len < 8) fill_len = 8;
-        band_full = rect->w - 16;  // 8px margin each side
+        band_full = content_w;  // honor content padding (matches horizontal branch + other widgets)
         group_start = 0;
     }
     bar_top += ui_ofs_y;

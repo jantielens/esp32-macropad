@@ -160,7 +160,14 @@ void PadScreen::buildTiles() {
         lv_obj_set_style_border_width(obj, bw_def, 0);
         lv_obj_set_style_radius(obj, cr_def, 0);
         lv_obj_set_style_clip_corner(obj, true, 0);
-        lv_obj_set_style_pad_all(obj, TILE_PAD_PX, 0);
+
+        // Content padding — plain px inset for labels/icon/widget. Cascades
+        // button → device defaults → firmware default "4" (the legacy fixed inset).
+        long cp_raw = strtol(bcfg.content_pad, nullptr, 10);
+        if (cp_raw < 0) cp_raw = 0; else if (cp_raw > 50) cp_raw = 50;
+        const int16_t pad = (int16_t)cp_raw;
+        const int16_t lbl_w = (r.w > 2 * pad) ? (int16_t)(r.w - 2 * pad) : 0;
+        lv_obj_set_style_pad_all(obj, pad, 0);
 
         lv_color_t fg = rgb_to_lv(fg_def);
 
@@ -170,7 +177,7 @@ void PadScreen::buildTiles() {
             lbl_top = lv_label_create(obj);
             lv_obj_set_style_text_color(lbl_top, pad_resolve_label_color(bcfg.style_top, fg), 0);
             lv_obj_set_style_text_font(lbl_top, pad_resolve_font(bcfg.style_top, scale.font_small), 0);
-            lv_obj_set_width(lbl_top, r.w - 8);
+            lv_obj_set_width(lbl_top, lbl_w);
             pad_apply_long_mode(lbl_top, bcfg.style_top);
             lv_label_set_text(lbl_top, bcfg.label_top);
             pad_apply_font_upscale(lbl_top, bcfg.style_top, PAD_LABEL_ANCHOR_TOP);
@@ -187,7 +194,7 @@ void PadScreen::buildTiles() {
             lbl_center = lv_label_create(obj);
             lv_obj_set_style_text_color(lbl_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
             lv_obj_set_style_text_font(lbl_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
-            lv_obj_set_width(lbl_center, r.w - 8);
+            lv_obj_set_width(lbl_center, lbl_w);
             pad_apply_long_mode(lbl_center, bcfg.style_center);
             lv_label_set_text(lbl_center, bcfg.label_center);
             pad_apply_font_upscale(lbl_center, bcfg.style_center, PAD_LABEL_ANCHOR_CENTER);
@@ -236,7 +243,7 @@ void PadScreen::buildTiles() {
 
             if (effective_icon_pos == ICON_POS_LEFT) {
                 // Horizontal row: icon left, label right, vertically centered
-                const int16_t inset_x = TILE_PAD_PX;
+                const int16_t inset_x = pad;
                 const int16_t gap = 4;
                 // Shrink label so icon + gap + label fits inside the button
                 const int16_t lbl_max_w = r.w - 2 * inset_x - icon_w - gap;
@@ -288,7 +295,7 @@ void PadScreen::buildTiles() {
             lbl_bottom = lv_label_create(obj);
             lv_obj_set_style_text_color(lbl_bottom, pad_resolve_label_color(bcfg.style_bottom, fg), 0);
             lv_obj_set_style_text_font(lbl_bottom, pad_resolve_font(bcfg.style_bottom, scale.font_small), 0);
-            lv_obj_set_width(lbl_bottom, r.w - 8);
+            lv_obj_set_width(lbl_bottom, lbl_w);
             pad_apply_long_mode(lbl_bottom, bcfg.style_bottom);
             lv_label_set_text(lbl_bottom, bcfg.label_bottom);
             pad_apply_font_upscale(lbl_bottom, bcfg.style_bottom, PAD_LABEL_ANCHOR_BOTTOM);
@@ -320,7 +327,7 @@ void PadScreen::buildTiles() {
             tile.label_center = lv_label_create(obj);
             lv_obj_set_style_text_color(tile.label_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
             lv_obj_set_style_text_font(tile.label_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
-            lv_obj_set_width(tile.label_center, r.w - 8);
+            lv_obj_set_width(tile.label_center, lbl_w);
             pad_apply_long_mode(tile.label_center, bcfg.style_center);
             lv_label_set_text(tile.label_center, "");
             pad_apply_font_upscale(tile.label_center, bcfg.style_center, PAD_LABEL_ANCHOR_CENTER);
@@ -477,7 +484,7 @@ void PadScreen::buildTiles() {
         // Color adapts to background luminance: dark overlay on light bg, light on dark.
         {
             bool is_light = perceived_luminance(bg_def) > TAP_LUMINANCE_THRESH;
-            int16_t inset = TILE_PAD_PX + bw_def; // pad + border
+            int16_t inset = pad + bw_def; // pad + border
             lv_obj_t* ov = lv_obj_create(obj);
             lv_obj_set_pos(ov, -inset, -inset);
             lv_obj_set_size(ov, r.w, r.h);

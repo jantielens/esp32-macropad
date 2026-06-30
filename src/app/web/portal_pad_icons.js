@@ -59,6 +59,13 @@ function padRenderCellContent(cell, btn) {
     const cornerRadius = (btn.corner_radius !== undefined) ? btn.corner_radius : padGetEffectiveDefault('corner_radius');
     cell.style.border = borderWidth + 'px solid ' + borderColor;
     cell.style.borderRadius = cornerRadius + 'px';
+    // Content padding — mirror the device inset so the preview stays WYSIWYG
+    var contentPad = (btn.content_pad !== undefined) ? btn.content_pad : padGetEffectiveDefault('content_pad');
+    var cpNum = parseInt(contentPad, 10);
+    if (!isNaN(cpNum)) {
+        if (cpNum < 0) cpNum = 0; else if (cpNum > 50) cpNum = 50;
+        cell.style.padding = cpNum + 'px';
+    }
     const hasTop = !!btn.label_top;
     const hasBottom = !!btn.label_bottom;
     if (hasTop || hasBottom) cell.style.justifyContent = 'space-between';

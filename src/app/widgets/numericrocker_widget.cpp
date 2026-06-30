@@ -76,6 +76,7 @@ static void numericrocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                                   lv_obj_t* icon_img, lv_obj_t* center_label,
                                   WidgetState* state) {
     (void)center_label;
+    (void)rect;
     auto* cfg = reinterpret_cast<const NumericRockerConfig*>(wcfg->data);
     auto* st = reinterpret_cast<NumericRockerState*>(state->data);
     memset(st, 0, sizeof(NumericRockerState));
@@ -114,8 +115,12 @@ static void numericrocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         return lbl;
     };
 
-    // Compute pixel-clamped zone boundaries
-    int span = cfg->horizontal ? rect->w : rect->h;
+    // Compute pixel-clamped zone boundaries.
+    // Use the tile's content area (honors the button's content padding) so the
+    // chevrons inset consistently with labels and other widgets.
+    lv_obj_update_layout(tile);
+    int span = cfg->horizontal ? (int)lv_obj_get_content_width(tile)
+                               : (int)lv_obj_get_content_height(tile);
     NRZoneLayout z = nr_compute_zones(span, cfg->small_step, cfg->large_step);
 
     // Create chevrons only for active zones.

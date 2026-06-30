@@ -138,6 +138,7 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     strlcpy(btn->border_color, "#000000", CONFIG_COLOR_MAX_LEN);
     strlcpy(btn->border_width, "0", CONFIG_BINDABLE_SHORT_LEN);
     strlcpy(btn->corner_radius, "8", CONFIG_BINDABLE_SHORT_LEN);
+    strlcpy(btn->content_pad, "4", CONFIG_BINDABLE_SHORT_LEN);
 }
 
 static void parse_ui_offset_field(JsonVariant v, int16_t* out_x, int16_t* out_y) {
@@ -276,6 +277,8 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
                          btn_default(defs ? defs->border_width : nullptr, "0"), false);
     parse_bindable_field(obj["corner_radius"], btn->corner_radius, CONFIG_BINDABLE_SHORT_LEN,
                          btn_default(defs ? defs->corner_radius : nullptr, "8"), false);
+    parse_bindable_field(obj["content_pad"], btn->content_pad, CONFIG_BINDABLE_SHORT_LEN,
+                         btn_default(defs ? defs->content_pad : nullptr, "4"), false);
 
     // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
     // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "beep", ... } ]
