@@ -578,6 +578,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/expr_binding.cpp
   - src/app/health_binding.cpp
   - src/app/list_binding.cpp
@@ -889,6 +890,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
   - src/app/device_classes/shutter_tester/components/shutter_session_actions_component.cpp
+  - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_adc.cpp
   - src/app/device_classes/shutter_tester/shutter_adc.h

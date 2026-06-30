@@ -687,6 +687,10 @@ void web_mcp_register(AsyncWebServer* server) {
     // (405) internally.
     server->addHandler(new McpWebHandler());
     LOGI(TAG, "MCP endpoint registered at /mcp");
+    if (mcp_tool_dropped() > 0) {
+        LOGW(TAG, "MCP tool registry full at %u; %u tool(s) dropped — raise MCP_TOOL_REGISTRY_MAX",
+             mcp_tool_count(), mcp_tool_dropped());
+    }
 }
 REGISTER_ROUTES(web_mcp_register);
 

@@ -17,16 +17,21 @@
 static constexpr uint8_t MCP_TOOL_REGISTRY_MAX = 48;
 static const McpTool* s_tools[MCP_TOOL_REGISTRY_MAX] = {};
 static uint8_t s_tool_count = 0;
+static uint16_t s_tools_dropped = 0;
 
 bool mcp_tool_register(const McpTool* tool) {
     if (!tool || !tool->name) return false;
-    if (s_tool_count >= MCP_TOOL_REGISTRY_MAX) return false;
+    if (s_tool_count >= MCP_TOOL_REGISTRY_MAX) { ++s_tools_dropped; return false; }
     s_tools[s_tool_count++] = tool;
     return true;
 }
 
 uint8_t mcp_tool_count() {
     return s_tool_count;
+}
+
+uint16_t mcp_tool_dropped() {
+    return s_tools_dropped;
 }
 
 const McpTool* mcp_tool_at(uint8_t index) {

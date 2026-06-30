@@ -228,6 +228,9 @@ compile none of it.
   fractions like `1/2`/`1/1000`); `#` starts a comment; repeat the `name:` block
   for more tests.
 
+> **Note:** The Shutter Tester read tools assume a PSRAM board — their scratch
+> buffers allocate with `MALLOC_CAP_SPIRAM` and have no internal-RAM fallback.
+
 ## Visually verifying the display
 
 The assistant cannot see the panel directly, but it can capture exactly what is

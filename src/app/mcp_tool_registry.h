@@ -73,6 +73,9 @@ bool mcp_tool_register(const McpTool* tool);
 // Number of registered tools.
 uint8_t mcp_tool_count();
 
+// Number of tools that could not be registered because the registry was full.
+uint16_t mcp_tool_dropped();
+
 // Get a registered tool by index (0 .. mcp_tool_count()-1), or nullptr.
 const McpTool* mcp_tool_at(uint8_t index);
 
