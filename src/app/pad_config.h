@@ -394,6 +394,16 @@ bool pad_config_exists(uint8_t page);
 // Returns NULL on failure. *out_len is set to the file size.
 char* pad_config_read_raw(uint8_t page, size_t* out_len);
 
+// Read just the pad's optional friendly "name" label into `out` (empty when
+// unset). Returns true when a non-empty name was found. Cheap filtered read.
+bool pad_config_read_name(uint8_t page, char* out, size_t out_len);
+
+// Resolve a pad reference that is either the canonical id ('pad_N') or a
+// friendly name (case-insensitive match against existing pads' "name"). Returns
+// the pad index, or -1 with a human-readable reason in `err` (unknown name, or
+// ambiguous name listing the matching ids so the caller can disambiguate).
+int pad_config_resolve_ref(const char* ref, char* err, size_t err_len);
+
 // Rebuild all in-RAM pad config caches from flash. Call when a shared
 // dependency (e.g. device-level button defaults) changes.
 void pad_config_rebuild_all_caches();

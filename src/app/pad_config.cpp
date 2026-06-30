@@ -793,4 +793,60 @@ uint32_t pad_config_get_generation() {
     return g_generation;
 }
 
+bool pad_config_read_name(uint8_t page, char* out, size_t out_len) {
+    if (out && out_len) out[0] = '\0';
+    if (!out || out_len == 0 || page >= MAX_PADS) return false;
+    size_t len = 0;
+    char* raw = pad_config_read_raw(page, &len);
+    if (!raw) return false;
+    // Read only the top-level "name" (friendly label) without parsing the whole
+    // pad. Mirrors the filtered read in web_portal_device_api.
+    JsonDocument filter;
+    filter["name"] = true;
+    JsonDocument doc;
+    bool ok = false;
+    if (deserializeJson(doc, raw, len, DeserializationOption::Filter(filter)) == DeserializationError::Ok
+        && doc["name"].is<const char*>()) {
+        const char* n = doc["name"];
+        if (n && n[0]) { strlcpy(out, n, out_len); ok = true; }
+    }
+    free(raw);
+    return ok;
+}
+
+int pad_config_resolve_ref(const char* ref, char* err, size_t err_len) {
+    if (err && err_len) err[0] = '\0';
+    if (!ref || !ref[0]) { if (err) strlcpy(err, "missing pad reference (id 'pad_N' or friendly name)", err_len); return -1; }
+
+    // Canonical id form: pad_<digits>.
+    if (strncmp(ref, "pad_", 4) == 0) {
+        const char* d = ref + 4;
+        bool all_digits = d[0] != '\0';
+        for (const char* p = d; *p; ++p) if (!isdigit((unsigned char)*p)) { all_digits = false; break; }
+        if (all_digits) {
+            int pg = atoi(d);
+            if (pg >= 0 && pg < MAX_PADS) return pg;
+            if (err) snprintf(err, err_len, "pad id out of range (0..%d)", MAX_PADS - 1);
+            return -1;
+        }
+    }
+
+    // Friendly-name lookup (case-insensitive) among existing pads.
+    int found = -1, count = 0;
+    char name[64], cand[120];
+    size_t cl = 0; cand[0] = '\0';
+    for (uint8_t pg = 0; pg < MAX_PADS; ++pg) {
+        if (!pad_config_exists(pg)) continue;
+        if (!pad_config_read_name(pg, name, sizeof(name))) continue;
+        if (strcasecmp(name, ref) != 0) continue;
+        found = pg; count++;
+        int n = snprintf(cand + cl, sizeof(cand) - cl, "%spad_%u", cl ? ", " : "", (unsigned)pg);
+        if (n > 0 && (size_t)n < sizeof(cand) - cl) cl += (size_t)n;
+    }
+    if (count == 1) return found;
+    if (count == 0) { if (err) snprintf(err, err_len, "no pad with id or name '%s'", ref); return -1; }
+    if (err) snprintf(err, err_len, "ambiguous pad name '%s' matches %s — use the pad id", ref, cand);
+    return -1;
+}
+
 #endif // HAS_DISPLAY

@@ -129,6 +129,14 @@ static bool tool_list_screens(const JsonObject& args, JsonObject& result, String
         JsonObject o = arr.createNestedObject();
         o["id"] = screens[i].id;
         o["name"] = screens[i].display_name;
+        // For pad screens, surface the editable friendly name (consistent with
+        // list_pads and the portal); display_manager only holds the default
+        // "Pad N" label.
+        const char* sid = screens[i].id;
+        if (sid && strncmp(sid, "pad_", 4) == 0) {
+            char nm[64];
+            if (pad_config_read_name((uint8_t)atoi(sid + 4), nm, sizeof(nm))) o["name"] = nm;
+        }
     }
     const char* cs = display_manager_get_current_screen_id();
     result["current_screen"] = cs ? cs : "";
@@ -192,6 +200,8 @@ static bool tool_list_pads(const JsonObject& args, JsonObject& result, String& e
         snprintf(sid, sizeof(sid), "pad_%u", (unsigned)pg);
         JsonObject po = pads.createNestedObject();
         po["screen"] = sid;
+        char nm[64];
+        if (pad_config_read_name(pg, nm, sizeof(nm))) po["name"] = nm;  // friendly label
         po["button_count"] = cfg->button_count;
         append_pad_buttons(po, cfg);
     }
@@ -201,12 +211,11 @@ static bool tool_list_pads(const JsonObject& args, JsonObject& result, String& e
 
 static bool tool_get_pad(const JsonObject& args, JsonObject& result, String& err) {
     const char* screen = args["screen"] | (const char*)nullptr;
-    if (!screen || strncmp(screen, "pad_", 4) != 0) {
-        return tool_fail(result, err, TOOL_ERR_PARAMS, "screen must be a pad id like 'pad_0'");
-    }
-    int pg = atoi(screen + 4);
-    if (pg < 0 || pg >= MAX_PADS) {
-        return tool_fail(result, err, TOOL_ERR_PARAMS, "pad index out of range");
+    // Accept either the canonical id 'pad_N' or a pad's friendly name.
+    char rerr[160];
+    int pg = pad_config_resolve_ref(screen ? screen : "", rerr, sizeof(rerr));
+    if (pg < 0) {
+        return tool_fail(result, err, TOOL_ERR_PARAMS, rerr);
     }
     if (!pad_config_exists((uint8_t)pg)) {
         return tool_fail(result, err, TOOL_ERR_PARAMS, "pad not configured");
@@ -234,7 +243,9 @@ static bool tool_get_pad(const JsonObject& args, JsonObject& result, String& err
     // Copy every stored key through unchanged, then add a few read-only helpers.
     JsonObjectConst src = doc->as<JsonObjectConst>();
     for (JsonPairConst kv : src) result[kv.key()] = kv.value();
-    result["screen"] = screen;
+    char sid[16];
+    snprintf(sid, sizeof(sid), "pad_%d", pg);
+    result["screen"] = sid;  // canonical id (the arg may have been a friendly name)
 
     JsonArray btns = result["buttons"];
     if (!btns.isNull()) {
@@ -508,7 +519,7 @@ static bool tool_system_command(const JsonObject& args, JsonObject& result, Stri
 static const McpTool s_tool_get_device_status = {
     "get_device_status",
     "Get firmware version, board/device-class, uptime, current screen, and WiFi state.",
-    "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{}}",
     tool_get_device_status, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_device_status);
@@ -516,7 +527,7 @@ REGISTER_MCP_TOOL(s_tool_get_device_status);
 static const McpTool s_tool_get_health = {
     "get_health",
     "Get device health: heap (internal/PSRAM), CPU usage/temperature, and WiFi RSSI.",
-    "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{}}",
     tool_get_health, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_health);
@@ -524,7 +535,7 @@ REGISTER_MCP_TOOL(s_tool_get_health);
 static const McpTool s_tool_get_sensors = {
     "get_sensors",
     "Get current sensor readings (e.g. temperature, humidity, presence). Empty on boards without sensors.",
-    "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{}}",
     tool_get_sensors, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_sensors);
@@ -534,7 +545,7 @@ REGISTER_MCP_TOOL(s_tool_get_sensors);
 static const McpTool s_tool_list_screens = {
     "list_screens",
     "List all available screens (id and name) and report the active one.",
-    "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{}}",
     tool_list_screens, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_list_screens);
@@ -542,23 +553,23 @@ REGISTER_MCP_TOOL(s_tool_list_screens);
 static const McpTool s_tool_get_current_screen = {
     "get_current_screen",
     "Report the currently active screen id.",
-    "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{}}",
     tool_get_current_screen, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_current_screen);
 
 static const McpTool s_tool_list_pads = {
     "list_pads",
-    "List configured pads and their buttons (position, label, action type). Optional 'screen' filter (e.g. 'pad_0').",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\",\"description\":\"Pad id like 'pad_0' to limit output\"}},\"additionalProperties\":false}",
+    "List configured pads with their friendly name and buttons (position, label, action type). Optional 'screen' filter (e.g. 'pad_0').",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\",\"description\":\"Pad id like 'pad_0' to limit output\"}}}",
     tool_list_pads, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_list_pads);
 
 static const McpTool s_tool_get_pad = {
     "get_pad",
-    "Get one pad's full configuration: layout/cols/rows, wake_screen, bg_color, template_pad, named bindings, and every button's labels, styles, colors, widget, and resolved tap/long-press actions with targets. Args: screen (pad id like 'pad_0').",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"],\"additionalProperties\":false}",
+    "Get one pad's full configuration: layout/cols/rows, wake_screen, bg_color, template_pad, named bindings, and every button's labels, styles, colors, widget, and resolved tap/long-press actions with targets. Args: screen (pad id 'pad_0' or the pad's friendly name).",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_get_pad, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_pad);
@@ -566,7 +577,7 @@ REGISTER_MCP_TOOL(s_tool_get_pad);
 static const McpTool s_tool_press_button = {
     "press_button",
     "Press a pad button (run its tap action) exactly as a physical tap. Args: screen (pad id) plus either position (index) or label.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"label\":{\"type\":\"string\"}},\"required\":[\"screen\"],\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"label\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_press_button, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_press_button);
@@ -574,7 +585,7 @@ REGISTER_MCP_TOOL(s_tool_press_button);
 static const McpTool s_tool_set_screen = {
     "set_screen",
     "Navigate to a screen by id (e.g. 'pad_1', 'info').",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"],\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_set_screen, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_screen);
@@ -582,7 +593,7 @@ REGISTER_MCP_TOOL(s_tool_set_screen);
 static const McpTool s_tool_set_backlight = {
     "set_backlight",
     "Set display backlight brightness (0-100%).",
-    "{\"type\":\"object\",\"properties\":{\"brightness\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":100}},\"required\":[\"brightness\"],\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{\"brightness\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":100}},\"required\":[\"brightness\"]}",
     tool_set_backlight, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_backlight);
@@ -590,7 +601,7 @@ REGISTER_MCP_TOOL(s_tool_set_backlight);
 static const McpTool s_tool_wake = {
     "wake",
     "Wake the display (cancel the screen saver).",
-    "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{}}",
     tool_wake, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_wake);
@@ -600,7 +611,7 @@ REGISTER_MCP_TOOL(s_tool_wake);
 static const McpTool s_tool_system_command = {
     "system_command",
     "Run a system command: 'reboot' (destructive), 'wifi_reconnect', or 'screensaver'.",
-    "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"enum\":[\"reboot\",\"wifi_reconnect\",\"screensaver\"]}},\"required\":[\"command\"],\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"enum\":[\"reboot\",\"wifi_reconnect\",\"screensaver\"]}},\"required\":[\"command\"]}",
     tool_system_command, false, true, true
 };
 REGISTER_MCP_TOOL(s_tool_system_command);

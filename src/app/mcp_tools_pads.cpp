@@ -101,6 +101,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     // per-button schema below.
     JsonObject pad = result.createNestedObject("pad");
     JsonObject pf = pad.createNestedObject("fields");
+    pf["name"] = "optional friendly label for the pad (shown in the UI; returned by get_pad/list_pads). The canonical id is still 'pad_N'. To SET it, call set_pad with the 'pad_name' argument (the key 'name' is avoided because some MCP clients reserve it).";
     pf["layout"] = "'grid' (default) or a curated layout name";
     pf["cols"] = "grid columns 1-8";
     pf["rows"] = "grid rows 1-8";
@@ -152,6 +153,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     }
     result["actions_note"] = "button.actions (tap) / button.lp_actions (long-press): arrays of {type, ...fields above}";
     result["position_note"] = "set_button/set_buttons 'position' is the 0-based index in the pad's button array, NOT a grid cell (grid placement is col/row). Use 0,1,2,...; a position at or past the end appends. To rebuild a pad: clear_pad then add buttons from position 0.";
+    result["screen_ref_note"] = "pad tools accept the 'screen' arg as either the canonical id 'pad_N' or a pad's friendly name (case-insensitive). Names may be unset or non-unique; an ambiguous name is refused with the matching ids so you can pick one. Creating a new pad requires the 'pad_N' id. list_pads shows each pad's name.";
 
     // Bindings: ONE generated block. Each scheme is enumerated from the live
     // registry (so device-class schemes auto-appear) and described in place via
@@ -417,11 +419,12 @@ static bool commit_pad(uint8_t page, JsonDocument& doc, JsonObject& result, Stri
     return true;
 }
 
-// Parse "pad_N" -> page index, or -1.
+// Resolve a pad reference (id 'pad_N' or friendly name) to a page index. On
+// failure, s_pad_err holds a clarifying reason (unknown name, or ambiguous name
+// listing the candidate ids).
+static char s_pad_err[160];
 static int pad_index(const char* screen) {
-    if (!screen || strncmp(screen, "pad_", 4) != 0) return -1;
-    int pg = atoi(screen + 4);
-    return (pg >= 0 && pg < MAX_PADS) ? pg : -1;
+    return pad_config_resolve_ref(screen, s_pad_err, sizeof(s_pad_err));
 }
 
 // Load pad raw into doc; if missing, seed a minimal grid pad. Returns false on OOM.
@@ -491,7 +494,7 @@ static bool tool_get_pad_blocks(const JsonObject& args, JsonObject& result, Stri
 // ============================================================================
 static bool tool_set_button(const JsonObject& args, JsonObject& result, String& err) {
     int pg = pad_index(args["screen"] | "");
-    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
     if (!args.containsKey("position")) return pad_fail(result, err, PAD_ERR_PARAMS, "missing position");
     int pos = args["position"] | -1;
     JsonObjectConst button = args["button"];
@@ -507,7 +510,7 @@ static bool tool_set_button(const JsonObject& args, JsonObject& result, String& 
 
 static bool tool_set_buttons(const JsonObject& args, JsonObject& result, String& err) {
     int pg = pad_index(args["screen"] | "");
-    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
     JsonArrayConst items = args["buttons"];
     if (items.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing buttons array");
 
@@ -526,7 +529,7 @@ static bool tool_set_buttons(const JsonObject& args, JsonObject& result, String&
 
 static bool tool_remove_button(const JsonObject& args, JsonObject& result, String& err) {
     int pg = pad_index(args["screen"] | "");
-    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
     int pos = args["position"] | -1;
 
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
@@ -540,7 +543,7 @@ static bool tool_remove_button(const JsonObject& args, JsonObject& result, Strin
 
 static bool tool_clear_pad(const JsonObject& args, JsonObject& result, String& err) {
     int pg = pad_index(args["screen"] | "");
-    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
     if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
     JsonArray btns = doc["buttons"];
@@ -554,12 +557,16 @@ static bool tool_clear_pad(const JsonObject& args, JsonObject& result, String& e
 // present in args are changed.
 static bool tool_set_pad(const JsonObject& args, JsonObject& result, String& err) {
     int pg = pad_index(args["screen"] | "");
-    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, "screen must be 'pad_N'");
+    if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
 
     BasicJsonDocument<PsramJsonAllocator> doc(48 * 1024);
     if (!load_or_seed((uint8_t)pg, doc)) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
 
     if (args.containsKey("layout"))       doc["layout"] = args["layout"];
+    // Friendly label. The argument is 'pad_name' (not 'name') because some MCP
+    // clients reserve/strip an argument literally called 'name' — it collides
+    // with the tools/call 'name' field. Stored as the pad's 'name' key.
+    if (args.containsKey("pad_name"))     doc["name"] = args["pad_name"];
     if (args.containsKey("cols"))         doc["cols"] = (int)(args["cols"] | 0);
     if (args.containsKey("rows"))         doc["rows"] = (int)(args["rows"] | 0);
     if (args.containsKey("wake_screen"))  doc["wake_screen"] = args["wake_screen"];
@@ -576,7 +583,7 @@ static bool tool_set_pad(const JsonObject& args, JsonObject& result, String& err
 static const McpTool s_tool_get_capabilities = {
     "get_capabilities",
     "Get the pad authoring manifest: widget types + config fields, button schema, label-style DSL, binding schemes (incl. [pad:name] + template_pad), grid limits, action targets, color/size formats. Read-only.",
-    "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{}}",
     tool_get_capabilities, true, false, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_capabilities);
@@ -584,7 +591,7 @@ REGISTER_MCP_TOOL(s_tool_get_capabilities);
 static const McpTool s_tool_validate_pad = {
     "validate_pad",
     "Dry-run validate a pad JSON (grid bounds, span overflow, collisions, widget types, colors) without saving. Args: pad (object). Read-only.",
-    "{\"type\":\"object\",\"properties\":{\"pad\":{\"type\":\"object\"}},\"required\":[\"pad\"],\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{\"pad\":{\"type\":\"object\"}},\"required\":[\"pad\"]}",
     tool_validate_pad, true, false, false, false
 };
 REGISTER_MCP_TOOL(s_tool_validate_pad);
@@ -592,47 +599,47 @@ REGISTER_MCP_TOOL(s_tool_validate_pad);
 static const McpTool s_tool_get_pad_blocks = {
     "get_pad_blocks",
     "List pre-built button groups (building blocks) that can be dropped onto a pad: id, name, description, size requirements, button count. Read-only.",
-    "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    "{\"type\":\"object\",\"properties\":{}}",
     tool_get_pad_blocks, true, false, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_pad_blocks);
 
 static const McpTool s_tool_set_button = {
     "set_button",
-    "Create/replace one button. position = 0-based index in the button array (NOT a grid cell; placement is col/row). A position at/past the end appends. Args: screen ('pad_N'), position (int), button (JSON, portal pad schema). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"screen\",\"position\",\"button\"],\"additionalProperties\":false}",
+    "Create/replace one button. position = 0-based index in the button array (NOT a grid cell; placement is col/row). A position at/past the end appends. Args: screen (pad id or friendly name), position (int), button (JSON, portal pad schema). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"screen\",\"position\",\"button\"]}",
     tool_set_button, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_button);
 
 static const McpTool s_tool_set_buttons = {
     "set_buttons",
-    "Create/replace many buttons in one save (processed in array order). Each item.position is a 0-based array index (NOT a grid cell); positions past the end append. To rebuild a pad, clear_pad first then use positions 0,1,2,... Args: screen ('pad_N'), buttons (array of {position, button}). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"buttons\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"position\",\"button\"]}}},\"required\":[\"screen\",\"buttons\"],\"additionalProperties\":false}",
+    "Create/replace many buttons in one save (processed in array order). Each item.position is a 0-based array index (NOT a grid cell); positions past the end append. To rebuild a pad, clear_pad first then use positions 0,1,2,... Args: screen (pad id or friendly name), buttons (array of {position, button}). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"buttons\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"position\",\"button\"]}}},\"required\":[\"screen\",\"buttons\"]}",
     tool_set_buttons, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_buttons);
 
 static const McpTool s_tool_remove_button = {
     "remove_button",
-    "Remove the button at a position. Args: screen ('pad_N'), position (int). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"}},\"required\":[\"screen\",\"position\"],\"additionalProperties\":false}",
+    "Remove the button at a position. Args: screen (pad id or friendly name), position (int). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"}},\"required\":[\"screen\",\"position\"]}",
     tool_remove_button, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_remove_button);
 
 static const McpTool s_tool_clear_pad = {
     "clear_pad",
-    "Remove all buttons from a pad. Args: screen ('pad_N'). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"],\"additionalProperties\":false}",
+    "Remove all buttons from a pad. Args: screen (pad id or friendly name). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_clear_pad, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_clear_pad);
 
 static const McpTool s_tool_set_pad = {
     "set_pad",
-    "Set pad-level fields (preserves buttons): layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), and bindings (object of [pad:name] templates). Only provided keys change. Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"layout\":{\"type\":\"string\"},\"cols\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"wake_screen\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"template_pad\":{\"type\":\"integer\"},\"bindings\":{\"type\":\"object\"}},\"required\":[\"screen\"],\"additionalProperties\":false}",
+    "Set pad-level fields (preserves buttons): pad_name (friendly label; arg is 'pad_name' not 'name'), layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), and bindings (object of [pad:name] templates). Only provided keys change. 'screen' may be a 'pad_N' id or friendly name. Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"pad_name\":{\"type\":\"string\"},\"layout\":{\"type\":\"string\"},\"cols\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"wake_screen\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"template_pad\":{\"type\":\"integer\"},\"bindings\":{\"type\":\"object\"}},\"required\":[\"screen\"]}",
     tool_set_pad, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_pad);

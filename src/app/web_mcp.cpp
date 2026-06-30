@@ -424,7 +424,10 @@ static void mcp_append_tool_def(JsonArray tools, const McpTool* t) {
     // inputSchema is a JSON Schema string literal; parse it into the response.
     bool schema_set = false;
     if (t->input_schema_json && t->input_schema_json[0]) {
-        StaticJsonDocument<512> sd;
+        // Sized for the largest tool schemas (set_pad with all pad fields,
+        // set_buttons' nested array). Too small a buffer silently degrades a
+        // tool to a permissive {type:object}, dropping its declared params.
+        StaticJsonDocument<2048> sd;
         if (deserializeJson(sd, t->input_schema_json) == DeserializationError::Ok) {
             td["inputSchema"] = sd;  // deep copy
             schema_set = true;
