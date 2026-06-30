@@ -18,6 +18,11 @@ static const ScaleSmoothingParams PRESETS[SCALE_PRESET_COUNT] = {
 // Active params — mutable copy of the selected preset
 static ScaleSmoothingParams s_active = PRESETS[SCALE_PRESET_BALANCED];
 
+// Preset display names — index-aligned with the ScaleSmoothingPreset enum.
+static const char* const PRESET_NAMES[SCALE_PRESET_COUNT] = {
+    "Stable", "Balanced", "Responsive",
+};
+
 // ============================================================================
 // API
 // ============================================================================
@@ -25,6 +30,11 @@ static ScaleSmoothingParams s_active = PRESETS[SCALE_PRESET_BALANCED];
 const ScaleSmoothingParams& scale_smoothing_get_params(uint8_t preset_index) {
     if (preset_index >= SCALE_PRESET_COUNT) preset_index = SCALE_PRESET_BALANCED;
     return PRESETS[preset_index];
+}
+
+const char* scale_smoothing_preset_name(uint8_t preset_index) {
+    if (preset_index >= SCALE_PRESET_COUNT) preset_index = SCALE_PRESET_BALANCED;
+    return PRESET_NAMES[preset_index];
 }
 
 void scale_smoothing_apply(uint8_t preset_index) {

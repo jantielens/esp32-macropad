@@ -858,6 +858,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/web/web_portal_brews.h
   - src/app/device_classes/coffee_scale/web/web_portal_scale.cpp
   - src/app/device_classes/coffee_scale/web/web_portal_scale.h
+  - src/app/mcp_components.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
 - **IS_DARKROOM_TIMER**

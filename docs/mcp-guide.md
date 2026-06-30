@@ -231,6 +231,61 @@ compile none of it.
 > **Note:** The Shutter Tester read tools assume a PSRAM board — their scratch
 > buffers allocate with `MALLOC_CAP_SPIRAM` and have no internal-RAM fallback.
 
+**Coffee Scale** (`IS_COFFEE_SCALE` boards, e.g. `jc4880p433-nau7802`):
+
+- `get_scale_status` — live scale state: weight (g), flow rate (g/s),
+  availability, calibration factor + raw offset, calibration reference weight,
+  status string, and the active smoothing preset. *(read)*
+- `get_brew_status` — brew state machine snapshot: phase (idle/active/done),
+  active template, current stage (name, index, count, instruction, advance-button
+  label), brew timer, live weight/flow, water + dose weight, current-stage
+  targets (weight/flow/time with remaining), and captured data points. *(read)*
+- `get_brew_series` — the in-progress brew's recorded weight/flow time-series
+  (1 Hz), decimated (last-weight + peak-flow per bucket) so the pour shape stays
+  visible while the payload stays bounded, plus stage-transition markers. Live
+  only while a brew records; for finished brews use `get_brew`'s `detail_url`. *(read)*
+- `list_brews` / `get_brew` — saved brews: a newest-first (capped) manifest, and
+  one brew's summary fields, template snapshot, and markers plus a `detail_url`.
+  The full per-second series is large, so `get_brew` does not inline it — stream
+  `GET /api/brews?id=N` for the raw record. *(read)*
+- `list_brew_templates` / `get_brew_template` — brew template definitions
+  (built-in + user) and one template serialized to its JSON DSL. *(read)*
+- `scale_control` — one scale command (`command` + optional `value`):
+  `tare`, `calibrate`, `cal_weight` (gram delta), `cal_weight_set` (absolute g). *(control)*
+- `brew_control` — one brew command (`command` + optional `value`) covering
+  `set_template`, `advance`, `start`, `next`, `stop`, `reset`, `tare`. *(control)*
+- `delete_brew` — delete a saved brew by id. *(control, destructive)*
+- `delete_brew_template` — delete a user (dynamic) template by name; built-ins
+  cannot be deleted. *(control, destructive)*
+- `set_brew_template` — create or replace one brew template. *(authoring)*
+
+  The `content` is the template's JSON DSL — the same format `get_brew_template`
+  returns and the portal's template editor uses. The tool's own description
+  carries the full schema; in short:
+
+  ```json
+  {
+    "v": 1,
+    "name": "my_v60",
+    "display_name": "My V60",
+    "stages": [
+      { "name": "Dose", "instruction": "Add coffee", "type": "manual",
+        "on_enter": ["tare"], "on_exit": ["capture_dose"] },
+      { "name": "Bloom", "type": "auto_time", "auto_time_s": 45,
+        "target_weight": 40.0 }
+    ]
+  }
+  ```
+
+  Stage `type` is `manual`, `auto_weight` (advances at `target_weight` /
+  `auto_threshold` g) or `auto_time` (advances after `auto_time_s`); effects in
+  `on_enter`/`on_exit` include `tare`, `beep`, `capture_dose`, `marker`,
+  `capture_weight`. Max 16 stages; the template is validated before saving.
+
+> **Note:** The Coffee Scale read tools assume a PSRAM board — their scratch
+> buffers (live series, brew-log parsing) allocate with `MALLOC_CAP_SPIRAM` and
+> have no internal-RAM fallback.
+
 ## Visually verifying the display
 
 The assistant cannot see the panel directly, but it can capture exactly what is

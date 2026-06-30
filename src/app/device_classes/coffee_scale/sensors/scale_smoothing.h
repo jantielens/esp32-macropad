@@ -55,6 +55,11 @@ struct ScaleSmoothingState {
 // Get the resolved parameters for a preset index.
 const ScaleSmoothingParams& scale_smoothing_get_params(uint8_t preset_index);
 
+// Human-readable name for a preset index ("Stable"/"Balanced"/"Responsive").
+// Out-of-range indices fall back to the Balanced name. Single source of truth
+// for the preset display names (used by config logging and the MCP scale tool).
+const char* scale_smoothing_preset_name(uint8_t preset_index);
+
 // Apply a preset — updates the active params. Thread-safe (called from main loop).
 void scale_smoothing_apply(uint8_t preset_index);
 

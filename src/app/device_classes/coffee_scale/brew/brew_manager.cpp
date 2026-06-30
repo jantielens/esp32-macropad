@@ -60,6 +60,12 @@ static uint32_t    s_last_sample_ms = 0;
 // (Mirrors the s_save_pending pattern below.)
 static bool s_free_series_pending = false;
 
+// Guards the series buffer pointer/count against the only cross-task reader
+// (the MCP web task via brew_series_copy/brew_markers_copy). record_sample()
+// and the deferred free both run on the main loop, so they never race each
+// other; the spinlock only serializes those mutations against an off-loop copy.
+static portMUX_TYPE s_series_mux = portMUX_INITIALIZER_UNLOCKED;
+
 // Markers
 static BrewMarker  s_markers[BREW_MARKER_MAX];
 static uint8_t     s_marker_count  = 0;
@@ -311,10 +317,18 @@ void brew_tick() {
     // (see s_free_series_pending) so it never races record_sample() below.
     if (s_free_series_pending) {
         s_free_series_pending = false;
-        if (s_series) {
-            heap_caps_free(s_series);
-            s_series = nullptr;
-        }
+        // Swap the pointer to null under the spinlock so a concurrent
+        // brew_series_copy() on the web task either copies the whole buffer
+        // first or observes null and returns 0 — never a use-after-free. The
+        // actual heap_caps_free() runs OUTSIDE the critical section: freeing
+        // takes the heap lock, which must not be acquired with interrupts
+        // disabled.
+        BrewSample* to_free;
+        portENTER_CRITICAL(&s_series_mux);
+        to_free = s_series;
+        s_series = nullptr;
+        portEXIT_CRITICAL(&s_series_mux);
+        if (to_free) heap_caps_free(to_free);
     }
 
     // Deferred save — runs on main task (internal RAM stack, flash-safe)
@@ -601,6 +615,28 @@ void brew_free_series() {
     // until the next tick consumes the flag.
     s_series_count = 0;
     if (s_series) s_free_series_pending = true;
+}
+
+uint16_t brew_series_copy(BrewSample* dst, uint16_t dst_max) {
+    if (!dst || dst_max == 0) return 0;
+    uint16_t n = 0;
+    portENTER_CRITICAL(&s_series_mux);
+    if (s_series && s_series_count) {
+        n = (s_series_count < dst_max) ? s_series_count : dst_max;
+        memcpy(dst, s_series, (size_t)n * sizeof(BrewSample));
+    }
+    portEXIT_CRITICAL(&s_series_mux);
+    return n;
+}
+
+uint8_t brew_markers_copy(BrewMarker* dst, uint8_t dst_max) {
+    if (!dst || dst_max == 0) return 0;
+    uint8_t n = 0;
+    portENTER_CRITICAL(&s_series_mux);
+    n = (s_marker_count < dst_max) ? s_marker_count : dst_max;
+    if (n) memcpy(dst, s_markers, (size_t)n * sizeof(BrewMarker));
+    portEXIT_CRITICAL(&s_series_mux);
+    return n;
 }
 
 // ============================================================================

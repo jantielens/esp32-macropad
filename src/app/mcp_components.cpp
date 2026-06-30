@@ -25,4 +25,8 @@
 #include "device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp"
 #endif
 
+#if IS_COFFEE_SCALE
+#include "device_classes/coffee_scale/mcp/mcp_tools_coffee_scale.cpp"
+#endif
+
 #endif // HAS_MCP
