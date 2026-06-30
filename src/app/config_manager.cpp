@@ -397,7 +397,9 @@ bool config_manager_save(const DeviceConfig *config) {
 		// Save MCP server settings
 #if HAS_MCP
 		preferences.putBool(KEY_MCP_ENABLED, config->mcp_enabled);
-		preferences.putBool(KEY_MCP_CTRL_EN, config->mcp_control_enabled);			preferences.putBool(KEY_MCP_AUTH_EN, config->mcp_authoring_enabled);		preferences.putString(KEY_MCP_TOKEN, config->mcp_token);
+		preferences.putBool(KEY_MCP_CTRL_EN, config->mcp_control_enabled);
+		preferences.putBool(KEY_MCP_AUTH_EN, config->mcp_authoring_enabled);
+		preferences.putString(KEY_MCP_TOKEN, config->mcp_token);
 #endif
 
 		#if HAS_BLE_HID

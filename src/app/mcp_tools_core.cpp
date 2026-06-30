@@ -44,10 +44,11 @@
 #include "wifi_manager.h"
 #endif
 
-// JSON-RPC error codes used by tool handlers (mirror web_mcp.cpp).
-static constexpr int TOOL_ERR_PARAMS   = -32602;
-static constexpr int TOOL_ERR_INTERNAL = -32603;
-static constexpr int TOOL_ERR_BUSY     = -32001;
+// JSON-RPC error codes used by tool handlers (canonical values in
+// mcp_tool_registry.h).
+static constexpr int TOOL_ERR_PARAMS   = MCP_RPC_ERR_PARAMS;
+static constexpr int TOOL_ERR_INTERNAL = MCP_RPC_ERR_INTERNAL;
+static constexpr int TOOL_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 
 static constexpr uint32_t TOOL_CONTROL_TIMEOUT_MS = 2000;
 

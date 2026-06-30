@@ -38,13 +38,13 @@ static constexpr uint32_t MCP_BODY_TIMEOUT_MS    = 5000;   // stale-body cleanup
 static constexpr uint32_t MCP_CONTROL_TIMEOUT_MS = 2000;   // bounded wait for deferred control
 static constexpr uint32_t MCP_REBOOT_GRACE_MS    = 400;    // flush the response before restart
 
-// JSON-RPC + MCP error codes
-static constexpr int MCP_ERR_PARSE        = -32700;
-static constexpr int MCP_ERR_INVALID_REQ  = -32600;
-static constexpr int MCP_ERR_METHOD       = -32601;
-static constexpr int MCP_ERR_PARAMS       = -32602;
-static constexpr int MCP_ERR_INTERNAL     = -32603;
-static constexpr int MCP_ERR_CONTROL_BUSY = -32001;  // server-defined (-32000..-32099)
+// JSON-RPC + MCP error codes (canonical values in mcp_tool_registry.h).
+static constexpr int MCP_ERR_PARSE        = MCP_RPC_ERR_PARSE;
+static constexpr int MCP_ERR_INVALID_REQ  = MCP_RPC_ERR_INVALID_REQ;
+static constexpr int MCP_ERR_METHOD       = MCP_RPC_ERR_METHOD;
+static constexpr int MCP_ERR_PARAMS       = MCP_RPC_ERR_PARAMS;
+static constexpr int MCP_ERR_INTERNAL     = MCP_RPC_ERR_INTERNAL;
+static constexpr int MCP_ERR_CONTROL_BUSY = MCP_RPC_ERR_CONTROL_BUSY;
 
 // ----------------------------------------------------------------------------
 // Token: hardware-RNG generation + constant-time compare
@@ -399,7 +399,7 @@ static void mcp_send_error(AsyncWebServerRequest* request,
 // Method handlers
 // ----------------------------------------------------------------------------
 static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantConst id) {
-    auto doc = make_psram_json_doc(512);
+    auto doc = make_psram_json_doc(1024);
     if (!doc || doc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
     (*doc)["jsonrpc"] = "2.0";
     (*doc)["id"] = id;
@@ -407,6 +407,19 @@ static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantCon
     result["protocolVersion"] = MCP_PROTOCOL_VERSION;
     JsonObject caps = result.createNestedObject("capabilities");
     caps.createNestedObject("tools");  // tools capability advertised
+
+#if HAS_DISPLAY
+    // Server-level guidance surfaced to the model (MCP `instructions`). Points
+    // at the screenshot-via-browser workflow so an assistant can visually verify
+    // UI work; the full recipe lives in get_capabilities.visual_inspection.
+    result["instructions"] =
+        "This device drives a touch display. After changing a pad, button, or widget you can "
+        "visually verify the result: GET /api/screenshot returns the live framebuffer as a large "
+        "BMP image. Never fetch it as text/data \u2014 it is an image and is large. Instead point a "
+        "Playwright browser at the URL and capture the rendered <img> element. Call get_capabilities "
+        "for the exact recipe (visual_inspection). Verifying a specific pad also needs control tools "
+        "(set_screen) to bring it on-screen first.";
+#endif
 
     JsonObject info = result.createNestedObject("serverInfo");
     DeviceConfig* cfg = web_portal_get_current_config();
@@ -425,11 +438,13 @@ static void mcp_append_tool_def(JsonArray tools, const McpTool* t) {
     bool schema_set = false;
     if (t->input_schema_json && t->input_schema_json[0]) {
         // Sized for the largest tool schemas (set_pad with all pad fields,
-        // set_buttons' nested array). Too small a buffer silently degrades a
-        // tool to a permissive {type:object}, dropping its declared params.
-        StaticJsonDocument<2048> sd;
-        if (deserializeJson(sd, t->input_schema_json) == DeserializationError::Ok) {
-            td["inputSchema"] = sd;  // deep copy
+        // set_buttons' nested array). Allocated in PSRAM (not on the async-web
+        // task stack). Too small a buffer silently degrades a tool to a
+        // permissive {type:object}, dropping its declared params.
+        auto sd = make_psram_json_doc(2048);
+        if (sd && sd->capacity() > 0 &&
+            deserializeJson(*sd, t->input_schema_json) == DeserializationError::Ok) {
+            td["inputSchema"] = *sd;  // deep copy
             schema_set = true;
         } else {
             // Schema too large for the parse buffer or malformed — fall back to
@@ -445,7 +460,9 @@ static void mcp_append_tool_def(JsonArray tools, const McpTool* t) {
     JsonObject ann = td.createNestedObject("annotations");
     ann["readOnlyHint"] = t->read_only;
     ann["destructiveHint"] = t->destructive;
-    ann["idempotentHint"] = t->read_only;  // read tools are idempotent
+    // Read tools are idempotent; among control tools, only destructive ones
+    // (e.g. reboot) are not safely repeatable.
+    ann["idempotentHint"] = t->read_only || !t->destructive;
 }
 
 static void mcp_method_tools_list(AsyncWebServerRequest* request, JsonVariantConst id) {
@@ -517,6 +534,15 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
             code = toolResult[MCP_RESULT_ERRCODE_KEY] | MCP_ERR_INTERNAL;
         }
         mcp_send_error(request, id, code, err.length() ? err.c_str() : "tool error");
+        return;
+    }
+
+    // Guard: a tool whose output exceeded the result document capacity would
+    // otherwise serialize as valid-but-truncated JSON (silent data loss, e.g.
+    // get_pad on a large pad). Fail loudly so the caller can narrow the request.
+    if (resultDoc->overflowed()) {
+        mcp_send_error(request, id, MCP_ERR_INTERNAL,
+                       "tool result too large; narrow the request");
         return;
     }
 

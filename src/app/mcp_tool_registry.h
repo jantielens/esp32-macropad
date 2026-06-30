@@ -42,6 +42,18 @@ typedef bool (*McpToolHandler)(const JsonObject& args, JsonObject& result, Strin
 // when it returns false. The dispatcher removes this key from the result.
 #define MCP_RESULT_ERRCODE_KEY "__mcp_code"
 
+// ----------------------------------------------------------------------------
+// Canonical JSON-RPC 2.0 + MCP error codes. Single source of truth shared by
+// the dispatcher (web_mcp.cpp) and every tool translation unit, so the numeric
+// values are not duplicated as magic literals across files.
+// ----------------------------------------------------------------------------
+static constexpr int MCP_RPC_ERR_PARSE        = -32700;
+static constexpr int MCP_RPC_ERR_INVALID_REQ  = -32600;
+static constexpr int MCP_RPC_ERR_METHOD       = -32601;
+static constexpr int MCP_RPC_ERR_PARAMS       = -32602;
+static constexpr int MCP_RPC_ERR_INTERNAL     = -32603;
+static constexpr int MCP_RPC_ERR_CONTROL_BUSY = -32001;  // server-defined (-32000..-32099)
+
 struct McpTool {
     const char* name;
     const char* description;

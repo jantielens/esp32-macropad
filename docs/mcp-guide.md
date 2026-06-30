@@ -168,7 +168,7 @@ Display-related tools are present only on boards that have a display.
 - `get_pad_blocks` — list pre-built button groups (building blocks) that can be
   dropped onto a pad. Read-only.
 - `validate_pad` — dry-run validate a pad JSON (grid bounds, span overflow,
-  collisions, widget types, colors) without saving. Read-only.
+  widget types, colors, binding tokens) without saving. Read-only.
 - `set_button` / `set_buttons` — create or replace a button (or many in one save)
   by position, using the same schema as the portal pad editor.
 - `set_pad` — set pad-level fields (layout, cols/rows, wake_screen, bg_color,
@@ -178,6 +178,30 @@ Display-related tools are present only on boards that have a display.
 Writes are validated before saving and persisted on the main loop. Concurrent
 edits from the LLM and the portal editor are **last-write-wins per pad** — the
 last save replaces the pad, so avoid editing the same pad in both at once.
+
+## Visually verifying the display
+
+The assistant cannot see the panel directly, but it can capture exactly what is
+on-screen through a browser. The device serves the live framebuffer at
+`GET /api/screenshot` as a 24-bit BMP. The image is large and image-only, so an
+assistant must **not** fetch it as text — it renders the URL in a browser and
+captures the image element instead.
+
+With a Playwright-style browser tool (such as the one in VS Code), the recipe is:
+
+1. If verifying a specific pad, call `set_screen("pad_N")` first so it is on-screen
+   (this needs control tools enabled).
+2. `page.goto("http://<device-ip>/api/screenshot")` — use `get_device_status` →
+   `wifi.ip` for the address.
+3. `page.waitForTimeout(1000)` — let the image load.
+4. Capture the page with selector `img` — this crops out the browser chrome and
+   returns just the device framebuffer, edge to edge.
+
+If portal Basic Auth is enabled, embed credentials in the URL
+(`http://user:pass@host/api/screenshot`); the MCP bearer token does not apply to
+`/api/screenshot`. The MCP server also advertises this workflow to the model in
+its `initialize` instructions and in `get_capabilities` (`visual_inspection`), so
+a capable assistant can offer to verify UI work on its own.
 
 ## Example prompts
 

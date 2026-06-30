@@ -40,9 +40,11 @@
 #include <stdio.h>
 #include <string.h>
 
-static constexpr int PAD_ERR_PARAMS   = -32602;
-static constexpr int PAD_ERR_INTERNAL = -32603;
-static constexpr int PAD_ERR_BUSY     = -32001;
+// JSON-RPC error codes used by the pad tools (canonical values in
+// mcp_tool_registry.h).
+static constexpr int PAD_ERR_PARAMS   = MCP_RPC_ERR_PARAMS;
+static constexpr int PAD_ERR_INTERNAL = MCP_RPC_ERR_INTERNAL;
+static constexpr int PAD_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 static constexpr uint32_t PAD_WRITE_TIMEOUT_MS = 4000;
 
 static bool pad_fail(JsonObject& result, String& err, int code, const char* msg) {
@@ -195,6 +197,23 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     fmt["color"] = "#RRGGBB";
     fmt["size"] = "integer pixels or binding template";
     result["icon_note"] = "icon_id must reference an icon already uploaded via the portal (material symbols are stored as 'mi_<name>'). MCP cannot upload icons; setting an unknown icon_id renders blank. For symbols without an upload, put a font glyph or a [time:..] binding in a label instead.";
+
+    // Visual inspection: the device cannot hand the model an image directly, but
+    // a Playwright-driven browser can. /api/screenshot is the live framebuffer as
+    // a large 24-bit BMP — too big and not directly understandable as text/data,
+    // so it must be rendered in a browser and captured as an <img>, never fetched
+    // inline. This is the one reliable way to verify on-panel rendering.
+    JsonObject vis = result.createNestedObject("visual_inspection");
+    vis["endpoint"] = "GET /api/screenshot";
+    vis["format"] = "24-bit BMP of the current on-device screen; large and image-only — do NOT fetch it as text/data, render it in a browser instead";
+    vis["why"] = "the only reliable way to verify how a pad/button/widget actually renders on the panel (colors, resolved bindings, overflow, layout) without the physical device";
+    JsonArray steps = vis.createNestedArray("playwright_steps");
+    steps.add("To verify a specific pad, first set_screen('pad_N') so it is on-screen (requires control tools enabled).");
+    steps.add("page.goto('http://<device-ip>/api/screenshot')");
+    steps.add("page.waitForTimeout(1000)  // let the image load");
+    steps.add("screenshot_page with selector 'img'  // captures just the framebuffer, no browser chrome");
+    vis["device_ip"] = "use get_device_status.wifi.ip for <device-ip>";
+    vis["auth_note"] = "if portal Basic Auth is enabled, embed credentials in the URL (http://user:pass@host/api/screenshot); the MCP bearer token does not apply to /api/screenshot";
     return true;
 }
 
@@ -590,7 +609,7 @@ REGISTER_MCP_TOOL(s_tool_get_capabilities);
 
 static const McpTool s_tool_validate_pad = {
     "validate_pad",
-    "Dry-run validate a pad JSON (grid bounds, span overflow, collisions, widget types, colors) without saving. Args: pad (object). Read-only.",
+    "Dry-run validate a pad JSON (grid bounds, span overflow, widget types, colors, binding tokens) without saving. Args: pad (object). Read-only.",
     "{\"type\":\"object\",\"properties\":{\"pad\":{\"type\":\"object\"}},\"required\":[\"pad\"]}",
     tool_validate_pad, true, false, false, false
 };

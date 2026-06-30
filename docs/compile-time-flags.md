@@ -491,6 +491,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/timer_config.h
   - src/app/timer_engine.cpp
   - src/app/touch_manager.cpp
+  - src/app/web_mcp.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_device_api.cpp
