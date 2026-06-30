@@ -21,6 +21,8 @@
 
 #if HAS_MCP
 
-// (No device-class MCP tool includes yet.)
+#if IS_SHUTTER_TESTER
+#include "device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp"
+#endif
 
 #endif // HAS_MCP

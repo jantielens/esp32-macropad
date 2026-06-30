@@ -914,6 +914,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/web/portal_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
   - src/app/device_classes/shutter_tester_device_class.cpp
+  - src/app/mcp_components.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
   - src/app/widgets.cpp

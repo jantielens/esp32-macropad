@@ -179,6 +179,55 @@ Writes are validated before saving and persisted on the main loop. Concurrent
 edits from the LLM and the portal editor are **last-write-wins per pad** — the
 last save replaces the pad, so avoid editing the same pad in both at once.
 
+### Device-class tools
+
+Some device classes register their own tools, which appear only on firmware
+built for that class. Each class keeps its MCP tools inside its own folder
+(e.g. `src/app/device_classes/shutter_tester/mcp/`) and is pulled into the build
+by a single `#if IS_*` include in `mcp_components.cpp`, so non-matching boards
+compile none of it.
+
+**Shutter Tester** (`IS_SHUTTER_TESTER` boards, e.g. `jc4880p433-shutter`):
+
+- `get_shutter_status` — live state: active preset/sensors/sample rate,
+  comparison target speed + lock, session state (incl. guided progress),
+  alignment readout, and the latest measurement with per-sensor health. *(read)*
+- `get_shutter_history` — rolling history of recent measurements
+  (speed, deviation, verdict, spread). *(read)*
+- `get_shutter_waveform` — the latest capture's per-sensor ADC waveform,
+  decimated (min-per-bucket) so the exposure pulse stays visible while the
+  payload stays bounded. *(read)*
+- `list_shutter_sessions` / `get_shutter_session` — saved test sessions: the
+  manifest, and one session's metadata plus a `detail_url`. The full per-shot
+  record (with per-sensor waveforms) is large, so `get_shutter_session` does not
+  inline it — stream `GET /api/sessions/{id}` for the raw record. *(read)*
+- `list_shutter_tests` / `get_shutter_test` — guided-test script definitions and
+  their speed lists. *(read)*
+- `shutter_control` — one control command (`command` + optional `value`) covering
+  target speed (`set` / `adjust` / `toggle_lock`), sessions (`sess_start` /
+  `sess_stop` / `sess_toggle` / `sess_discard`), guided runs (`guide_start` /
+  `guide_stop` / `guide_skip` / `guide_redo`), and capture
+  (`align_start` / `align_stop` / `recalibrate`). *(control)*
+- `delete_shutter_session` — delete a saved session by id. *(control, destructive)*
+- `set_shutter_tests` — overwrite the guided-test script file. *(authoring)*
+
+  The `content` is a plain-text DSL (not JSON), one test per block — the same
+  format as the portal's **Guided Test Definitions** editor. The tool's own
+  description carries the full grammar; in short:
+
+  ```text
+  name: leicam6|Leica M6 (x3)
+  shots_per_speed: 3
+  1
+  1/2
+  1/60
+  1/1000
+  ```
+
+  Speeds are bare standard shutter speeds (whole seconds like `1`/`2` or
+  fractions like `1/2`/`1/1000`); `#` starts a comment; repeat the `name:` block
+  for more tests.
+
 ## Visually verifying the display
 
 The assistant cannot see the panel directly, but it can capture exactly what is
