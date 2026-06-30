@@ -1,0 +1,99 @@
+<div class="section-header">
+  <h2>🤖 MCP Server (AI Assistant)</h2>
+  <p>Let a local AI assistant inspect and control this device over your LAN using the Model Context Protocol.</p>
+</div>
+
+<div class="card mb-3" id="mcp-card">
+  <div class="card-header"><h5 class="mb-0">Server</h5></div>
+  <div class="card-body" id="mcp-section">
+    <p class="text-muted small mb-3">
+      Lets a local AI assistant (Claude Desktop, Cursor, VS Code Copilot Chat, …)
+      inspect and control this device over your LAN. Off by default. Read tools are
+      available once enabled with a token; control tools also require the toggle below.
+    </p>
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" id="mcp_enabled" name="mcp_enabled">
+      <label class="form-check-label" for="mcp_enabled">Enable MCP server</label>
+    </div>
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" id="mcp_control_enabled" name="mcp_control_enabled">
+      <label class="form-check-label" for="mcp_control_enabled">Allow control tools (press buttons, change screen, reboot…)</label>
+    </div>
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" id="mcp_authoring_enabled" name="mcp_authoring_enabled">
+      <label class="form-check-label" for="mcp_authoring_enabled">Allow pad authoring (create/modify/remove buttons and widgets)</label>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="mcp_endpoint_url">Endpoint URL</label>
+      <input type="text" class="form-control" id="mcp_endpoint_url" readonly>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Access token</label>
+      <div id="mcp_token_status" class="small text-muted mb-2">No token generated yet.</div>
+      <div class="input-group mb-2" id="mcp_token_display_group" style="display:none;">
+        <input type="text" class="form-control" id="mcp_token_value" readonly>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="mcp-copy-token-btn">Copy</button>
+      </div>
+      <div class="small text-warning mb-2" id="mcp_token_warning" style="display:none;">
+        Copy this token now — it is shown only once and cannot be retrieved later.
+      </div>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="mcp-generate-token-btn">Generate new token</button>
+    </div>
+    <div class="small text-muted mb-3">
+      ⚠️ Traffic is plain HTTP on your LAN (no TLS). Treat the token as a network-local
+      secret and enable this only on trusted networks.
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="mcp-save-btn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">💬 Sample prompts</h5></div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Once the server is connected to your assistant, try asking it things like these.
+    </p>
+    <ul class="small mb-0">
+      <li>"What's my device status?"</li>
+      <li>"How much free memory does the device have?"</li>
+      <li>"List the buttons on pad 0."</li>
+      <li>"List the buttons on the <strong>Lights</strong> pad."
+        <span class="text-muted">— pads can be referenced by their friendly name, not just their number.</span></li>
+      <li>"Switch to the info screen."</li>
+      <li>"Set the backlight to 40%."</li>
+      <li>"Add a button to pad 0 that shows the current time using a large font."</li>
+      <li>"Show MQTT topic <code>home/temp</code> as a bar chart on the <strong>Climate</strong> pad, ranged 0–40."</li>
+      <li>"Build a system-info pad: heap, CPU load, WiFi signal, and uptime as gauges."</li>
+      <li>"Rename pad 5 to <strong>Lights</strong> and add three buttons that publish MQTT toggles."</li>
+      <li>"On the <strong>Office Macropad</strong>, set the backlight to 30%."
+        <span class="text-muted">— name the device when several macropad MCP servers are registered; the assistant routes the request to that server.</span></li>
+      <li>"Compare free memory between the <strong>Office Macropad</strong> and the <strong>Living Room Macropad</strong>."
+        <span class="text-muted">— the device names come from each server registration / the device name set under Network.</span></li>
+    </ul>
+    <p class="small text-muted mt-3 mb-0">
+      Control prompts require the control toggle; authoring prompts require the pad
+      authoring toggle above.
+    </p>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">⚙️ VS Code configuration</h5></div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Add this device as an HTTP MCP server. Paste the snippet into your VS Code
+      <code>mcp.json</code> and replace <code>YOUR_TOKEN_HERE</code> with a token
+      generated above.
+    </p>
+    <div class="input-group mb-2">
+      <textarea class="form-control font-monospace" id="mcp_vscode_config" rows="11" readonly style="white-space:pre; overflow-x:auto;"></textarea>
+    </div>
+    <button type="button" class="btn btn-outline-secondary btn-sm mb-3" id="mcp-copy-config-btn">Copy configuration</button>
+    <p class="small text-muted mb-0">
+      📖 Full setup for VS Code, Cursor, and Claude Desktop is in the
+      <a href="https://github.com/jantielens/esp32-macropad/blob/main/docs/mcp-guide.md" target="_blank" rel="noopener">MCP guide</a>.
+    </p>
+  </div>
+</div>

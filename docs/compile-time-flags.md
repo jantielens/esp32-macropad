@@ -586,6 +586,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_sub_store.cpp
   - src/app/pad_binding.cpp
+  - src/app/portal_components.cpp
   - src/app/time_binding.cpp
   - src/app/timer_binding.cpp
   - src/app/web_mcp.cpp

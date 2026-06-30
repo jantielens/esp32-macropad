@@ -301,11 +301,42 @@ window.init_network_fragment = function () {
     initConfigFragment('network-save-btn', true);
     var secBtn = document.getElementById('security-save-btn');
     if (secBtn) secBtn.addEventListener('click', function () { saveFragmentConfig(true); });
+};
 
-    // MCP server card. Settings apply live (no reboot). Token is minted
-    // server-side on demand and shown exactly once.
-    var mcpSaveBtn = document.getElementById('mcp-save-btn');
-    if (mcpSaveBtn) mcpSaveBtn.addEventListener('click', function () { saveFragmentConfig(false); });
+// ============================================================================
+// MCP Server (AI assistant)
+// ============================================================================
+
+window.init_mcp_fragment = function () {
+    // Loads config (populates the MCP fields + endpoint URL) and wires the
+    // save button. MCP settings apply live (no reboot).
+    initConfigFragment('mcp-save-btn', false);
+
+    // Fill the VS Code mcp.json sample with this device's actual endpoint.
+    var cfgBox = document.getElementById('mcp_vscode_config');
+    if (cfgBox) {
+        var url = 'http://' + window.location.host + '/mcp';
+        cfgBox.value =
+            '{\n' +
+            '  "servers": {\n' +
+            '    "esp32-macropad": {\n' +
+            '      "type": "http",\n' +
+            '      "url": "' + url + '",\n' +
+            '      "headers": {\n' +
+            '        "Authorization": "Bearer YOUR_TOKEN_HERE"\n' +
+            '      }\n' +
+            '    }\n' +
+            '  }\n' +
+            '}';
+    }
+
+    var cfgCopyBtn = document.getElementById('mcp-copy-config-btn');
+    if (cfgCopyBtn) cfgCopyBtn.addEventListener('click', function () {
+        if (cfgBox && cfgBox.value && navigator.clipboard) {
+            navigator.clipboard.writeText(cfgBox.value);
+            showMessage('Configuration copied', 'success');
+        }
+    });
 
     var mcpGenBtn = document.getElementById('mcp-generate-token-btn');
     if (mcpGenBtn) mcpGenBtn.addEventListener('click', async function () {

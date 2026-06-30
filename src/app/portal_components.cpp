@@ -54,6 +54,11 @@
 #include "components/hw_buttons_component.cpp"
 #endif // HAS_BUTTON
 
+// --- MCP server (AI assistant) ---
+#if HAS_MCP
+#include "components/mcp_component.cpp"
+#endif // HAS_MCP
+
 // --- BLE-gated components ---
 #if HAS_BLE_HID
 #include "components/ble_component.cpp"

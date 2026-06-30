@@ -42,7 +42,7 @@ point.
 ## Enable the server
 
 1. Open the web portal (see the [Web Portal Guide](web-portal-guide.md)).
-2. Go to **Network → MCP Server**.
+2. Go to **Connectivity → MCP Server**.
 3. Tick **Enable MCP server**.
 4. Click **Generate new token** and **copy the token immediately** — it is shown
    only once and cannot be retrieved later. Generating a new token replaces any
