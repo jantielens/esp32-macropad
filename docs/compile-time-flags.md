@@ -599,6 +599,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_binding.cpp
   - src/app/mcp_components.cpp
   - src/app/mcp_tool_registry.cpp
+  - src/app/mcp_tool_util.cpp
+  - src/app/mcp_tool_util.h
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
