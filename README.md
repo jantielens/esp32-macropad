@@ -1,9 +1,5 @@
 # ESP32 Macropad
 
-Open-source firmware for ESP32 touchscreen and e-paper control panels, including the Inkplate 5V2 e-paper device class.
-
-## Overview
-
 Turn your ESP32 display board into a powerful, fully customizable smart home control panel with no coding required.
 
 ESP32 Macropad is open-source firmware that transforms affordable ESP32 development boards into configurable control surfaces and dashboards. Interactive boards use a touch-first pad UI. E-paper boards, such as the Inkplate 5V2, use a battery-focused image carousel + hourly schedule model with deep sleep between refreshes. Both are configured from the same web portal and integrate with Home Assistant over MQTT.
