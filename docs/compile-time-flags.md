@@ -477,6 +477,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_sub_store.cpp
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
+  - src/app/net_binding.cpp
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
   - src/app/pad_block.cpp
@@ -609,6 +610,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_sub_store.cpp
+  - src/app/net_binding.cpp
   - src/app/pad_binding.cpp
   - src/app/portal_components.cpp
   - src/app/time_binding.cpp

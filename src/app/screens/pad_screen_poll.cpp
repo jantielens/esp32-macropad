@@ -147,15 +147,29 @@ void PadScreen::pollColorBindings() {
             }
             break;
         case 1: // fg (labels + mono icon recolor)
-            if (tile.label_top) lv_obj_set_style_text_color(tile.label_top, rgb_to_lv(color), 0);
-            if (tile.label_center) lv_obj_set_style_text_color(tile.label_center, rgb_to_lv(color), 0);
-            if (tile.label_bottom) lv_obj_set_style_text_color(tile.label_bottom, rgb_to_lv(color), 0);
+            // Per-label color overrides win: skip a label's text color if it has its
+            // own color (static or binding). Icon recolor is NOT gated by the mask.
+            if (tile.label_top && !(tile.labelColorOverride & 0x01))
+                lv_obj_set_style_text_color(tile.label_top, rgb_to_lv(color), 0);
+            if (tile.label_center && !(tile.labelColorOverride & 0x02))
+                lv_obj_set_style_text_color(tile.label_center, rgb_to_lv(color), 0);
+            if (tile.label_bottom && !(tile.labelColorOverride & 0x04))
+                lv_obj_set_style_text_color(tile.label_bottom, rgb_to_lv(color), 0);
             if (tile.icon_img && tile.icon_is_mono) {
                 lv_obj_set_style_image_recolor(tile.icon_img, rgb_to_lv(color), 0);
             }
             break;
         case 2: // border
             lv_obj_set_style_border_color(tile.obj, rgb_to_lv(color), 0);
+            break;
+        case 3: // label_top text
+            if (tile.label_top) lv_obj_set_style_text_color(tile.label_top, rgb_to_lv(color), 0);
+            break;
+        case 4: // label_center text
+            if (tile.label_center) lv_obj_set_style_text_color(tile.label_center, rgb_to_lv(color), 0);
+            break;
+        case 5: // label_bottom text
+            if (tile.label_bottom) lv_obj_set_style_text_color(tile.label_bottom, rgb_to_lv(color), 0);
             break;
         }
     }

@@ -175,7 +175,7 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
 | `y` | `-999` to `999` | Shift the label up (negative) or down (positive) in pixels |
 | `mode` | `clip`, `scroll`, `dot`, `wrap` | How to handle text that doesn't fit |
-| `color` | `#RGB` or `#RRGGBB` | Override the label's text color |
+| `color` | `#RGB` / `#RRGGBB`, or a `[binding]` | Override the label's text color (static or live-bound) |
 
 Combine them with semicolons:
 
@@ -195,6 +195,9 @@ A few more examples:
 - `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
 - `font_size:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
+- `color:[expr:[net:any]?"#22c55e":"#94a3b8"]` — text color driven by a live binding
+
+> The `color:` property accepts a full binding template just like the button's own colors, so a label's text color can update live (e.g. green when active, gray when idle). A per-label `color:` always wins over the button's foreground color. The style input holds up to 127 characters; if a binding expression is longer, declare it once as a pad-level `[pad:name]` binding and reference `color:[pad:name]`.
 
 > Without style overrides, font size is chosen automatically based on the grid dimensions and display resolution. The default alignment is center, and overflow is clipped.
 

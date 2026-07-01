@@ -76,6 +76,19 @@ echo "=== Running integration tests: pad_binding ==="
 ./tests/bin/test_pad_binding
 echo
 
+echo "=== Building unit tests: label_style ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    tests/test_label_style.cpp \
+    src/app/label_style.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_label_style -lm
+
+echo "=== Running unit tests: label_style ==="
+./tests/bin/test_label_style
+echo
+
 echo "=== Building unit tests: widget_common ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \

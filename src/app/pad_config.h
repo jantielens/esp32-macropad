@@ -46,7 +46,7 @@
 #define CONFIG_BG_IMAGE_URL_MAX_LEN   256
 #define CONFIG_BG_IMAGE_USER_MAX_LEN   32
 #define CONFIG_BG_IMAGE_PASS_MAX_LEN   64
-#define CONFIG_LABEL_STYLE_MAX_LEN     64
+#define CONFIG_LABEL_STYLE_MAX_LEN    128
 #define PAD_MAX_BINDINGS              16
 #define PAD_BINDING_NAME_MAX_LEN      32
 
@@ -109,7 +109,11 @@ struct LabelStyle {
 
 // Parse a label style DSL string into a LabelStyle struct.
 // Unknown keys are silently ignored. Empty/null input → all defaults (zeros).
-void label_style_parse(const char* dsl, LabelStyle* out);
+// When the `color:` value is a binding template (contains '['), the raw token is
+// copied to color_bind_out (if provided) and out->color is left unset (marker bit
+// clear) so the runtime resolves it live; a static #RRGGBB sets out->color instead.
+void label_style_parse(const char* dsl, LabelStyle* out,
+                       char* color_bind_out = nullptr, size_t color_bind_len = 0);
 
 // Action types (string constants for type field)
 #define ACTION_TYPE_NONE     ""
@@ -289,6 +293,14 @@ struct ScreenButtonConfig {
     LabelStyle style_center;
     LabelStyle style_bottom;
 
+    // Raw binding token from each label style's `color:` sub-field (empty when the
+    // color is static or absent). Sized at CONFIG_LABEL_STYLE_MAX_LEN because a
+    // color token can never exceed the style DSL it is a substring of. Registered
+    // as a runtime color binding so per-label text colors update live.
+    char label_top_color_bind[CONFIG_LABEL_STYLE_MAX_LEN];
+    char label_center_color_bind[CONFIG_LABEL_STYLE_MAX_LEN];
+    char label_bottom_color_bind[CONFIG_LABEL_STYLE_MAX_LEN];
+
     // Icon reference
     char icon_id[CONFIG_ICON_ID_MAX_LEN];
     uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
@@ -325,6 +337,13 @@ struct ScreenButtonConfig {
     // Empty = enabled. Supports binding templates for dynamic state.
     char btn_state[CONFIG_BTN_STATE_MAX_LEN];
 };
+
+// Size canary: per-label color-bind capture must stay sized at the label-style cap
+// (a color token is a substring of the style DSL), NOT the larger color cap. This
+// guards against a future edit silently re-oversizing ScreenButtonConfig ×3×buttons.
+static_assert(sizeof(((ScreenButtonConfig*)nullptr)->label_center_color_bind)
+                  == CONFIG_LABEL_STYLE_MAX_LEN,
+              "label color-bind fields must be sized at CONFIG_LABEL_STYLE_MAX_LEN");
 
 // Named binding: [pad:name] resolves to the stored template at runtime.
 // Names must match [a-zA-Z][a-zA-Z0-9_]* (max PAD_BINDING_NAME_MAX_LEN chars).
