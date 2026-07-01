@@ -1,5 +1,7 @@
 #pragma once
 
+#include "board_config.h"
+
 // ============================================================================
 // Print Prep Meter — bright/dark spot metering + magnification compensation
 // ============================================================================
@@ -68,8 +70,10 @@ float meter_get_grade();
 const char* meter_get_grade_label();
 float meter_get_mag_factor();
 
-// Additional read accessors used by the MCP get_meter_status tool.
+#if HAS_MCP
+// Additional read accessors used solely by the MCP get_meter_status tool.
 float meter_get_time();        // recommended exposure time (seconds), -1 = not computable
 float meter_get_mag_lux_a();   // magnification lux reading A, -1 = not set
 float meter_get_mag_lux_b();   // magnification lux reading B, -1 = not set
 bool  meter_get_has_results(); // true once SBR/grade have been computed
+#endif // HAS_MCP

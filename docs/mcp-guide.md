@@ -352,9 +352,11 @@ compile none of it.
   (unlike `print_control`, which only stars the most recent print). *(authoring)*
 - `set_relay_config` — create or replace the relay action configuration. *(authoring)*
 
-> **Note:** The Darkroom Timer read tools assume a PSRAM board — their scratch
-> buffers (print-log id list, record parsing) allocate with `MALLOC_CAP_SPIRAM`
-> and have no internal-RAM fallback.
+> **Note:** Feature-rich device classes (Shutter Tester, Coffee Scale, Darkroom
+> Timer) **require PSRAM** — a deliberate policy, enforced at compile time by a
+> `#error` guard in `board_config.h`. Their scratch buffers (here: the print-log
+> id list and record parsing) allocate with `MALLOC_CAP_SPIRAM` and intentionally
+> have no internal-RAM fallback, since these classes only ship on PSRAM boards.
 
 ## Visually verifying the display
 

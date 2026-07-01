@@ -447,6 +447,7 @@ void expose_timer_set_time(float seconds) {
     cmd_set_time(seconds);  // reuses validation (clamp + snap_tenth)
 }
 
+#if HAS_MCP
 void expose_timer_get_status(ExposeStatus* out) {
     if (!out) return;
     // Lock-free scalar snapshot — matches the binding-resolver read path. The
@@ -469,6 +470,7 @@ const char* expose_state_str(uint8_t state) {
         default:             return "stopped";
     }
 }
+#endif // HAS_MCP
 
 void expose_timer_init() {
     if (!binding_template_register("expose", expose_resolve, expose_collect)) {
@@ -485,7 +487,9 @@ void expose_timer_dispatch(const char*, const char*) {}
 void expose_timer_tick() {}
 float expose_timer_get_time() { return 0.0f; }
 void expose_timer_set_time(float) {}
+#if HAS_MCP
 void expose_timer_get_status(ExposeStatus* out) { if (out) *out = ExposeStatus{}; }
 const char* expose_state_str(uint8_t) { return "stopped"; }
+#endif // HAS_MCP
 
 #endif // IS_DARKROOM_TIMER

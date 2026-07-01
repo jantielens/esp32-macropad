@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "board_config.h"
 
 // ============================================================================
 // Test Strip Sequencer — automated f-stop test strip exposure sequence
@@ -73,13 +74,14 @@ void test_strip_dispatch(const char* command, const char* value);
 // Tick function — call from LVGL render task to drive the state machine.
 void test_strip_tick();
 
+#if HAS_MCP
 // Maximum segments reported by StripStatus (matches STRIP_MAX_SEGMENTS).
 #define STRIP_STATUS_MAX_SEGMENTS 12
 
 // Read-only status snapshot for the MCP get_strip_status tool. The engine's
 // fields are plain scalars updated on the main loop; the segment table is kept
-// current by every config command (each calls recalculate_segments()), so a
-// lock-free copy here matches the binding-resolver read path.
+// current by every config command (each calls recalculate_segments()) and is
+// copied under g_strip_lock, so the read matches the binding-resolver path.
 struct StripStatusSegment {
     float cumulative_s;   // cumulative exposure time at this segment
     float incremental_s;  // incremental time for this segment
@@ -104,5 +106,6 @@ void test_strip_get_status(StripStatus* out);
 
 // Human-readable name for a StripStatus::phase value.
 const char* test_strip_phase_str(uint8_t phase);
+#endif // HAS_MCP
 
 

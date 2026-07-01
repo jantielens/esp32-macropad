@@ -42,6 +42,19 @@ struct HwButtonDef {
 #include "board_overrides.h"
 #endif
 
+// Repo-owned PSRAM capability alias, derived from the Arduino core's
+// BOARD_HAS_PSRAM (defined by PSRAM-enabled board menus / FQBN options). Safe
+// default of 0 so a board that does not advertise PSRAM is treated as
+// PSRAM-less. A board may force it on in board_overrides.h with
+// `#define HAS_PSRAM 1` (evaluated before this block via the #ifndef guard).
+#ifndef HAS_PSRAM
+#  ifdef BOARD_HAS_PSRAM
+#    define HAS_PSRAM 1
+#  else
+#    define HAS_PSRAM 0
+#  endif
+#endif
+
 // ============================================================================
 // Project Branding
 // ============================================================================
@@ -111,6 +124,15 @@ struct HwButtonDef {
 // enabled per-board via src/boards/<name>/board_overrides.h.
 #ifndef IS_DARKROOM_TIMER
 #define IS_DARKROOM_TIMER false
+#endif
+
+// Feature-rich device classes (shutter tester, coffee scale, darkroom timer)
+// allocate large scratch/history buffers directly in PSRAM with no internal-RAM
+// fallback — a deliberate policy, since these classes are always shipped on
+// PSRAM-equipped boards. Enforce it at compile time so a mis-configured board
+// fails fast here instead of OOM'ing at runtime.
+#if (IS_SHUTTER_TESTER || IS_COFFEE_SCALE || IS_DARKROOM_TIMER) && !HAS_PSRAM
+#  error "Feature-rich device classes require PSRAM."
 #endif
 
 // Enable e-paper wake-button handling (ext1 wake plus short/long press).

@@ -514,6 +514,7 @@ float meter_get_mag_factor() {
     return factor;
 }
 
+#if HAS_MCP
 float meter_get_time() {
     return g_meter.time_s;  // atomic float read on ESP32
 }
@@ -535,6 +536,7 @@ float meter_get_mag_lux_b() {
 bool meter_get_has_results() {
     return g_meter.has_results;
 }
+#endif // HAS_MCP
 
 void meter_init() {
     if (!binding_template_register("meter", meter_resolve, meter_collect)) {
@@ -558,9 +560,11 @@ float meter_get_sbr() { return 0.0f; }
 float meter_get_grade() { return 0.0f; }
 const char* meter_get_grade_label() { return "---"; }
 float meter_get_mag_factor() { return -1.0f; }
+#if HAS_MCP
 float meter_get_time() { return -1.0f; }
 float meter_get_mag_lux_a() { return -1.0f; }
 float meter_get_mag_lux_b() { return -1.0f; }
 bool meter_get_has_results() { return false; }
+#endif // HAS_MCP
 
 #endif // IS_DARKROOM_TIMER

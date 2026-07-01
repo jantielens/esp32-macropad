@@ -130,34 +130,43 @@ static const char* current_step_label() {
     return STEP_TABLE[g_strip.step_idx].label;
 }
 
+// Guards the segment table (g_strip.segments) so a web-task reader
+// (test_strip_get_status) never observes a half-rewritten table while the main
+// loop runs recalculate_segments(). Only the table publish/copy is held.
+static portMUX_TYPE g_strip_lock = portMUX_INITIALIZER_UNLOCKED;
+
 static void recalculate_segments() {
     int n = g_strip.segment_count;
     float center = (n - 1) / 2.0f;
     float step = current_step_value();
 
-    // Progressive uncover (left-to-right): index 0 = most light (highest
-    // cumulative), index n-1 = least light.  Reverse the offset so the
-    // descending cumulative order matches the physical uncover sequence.
+    // Compute the full table into a local FIRST (the powf math stays outside the
+    // lock), then publish it under g_strip_lock in one short critical section.
+    SegmentInfo tmp[STRIP_MAX_SEGMENTS];
     for (int i = 0; i < n; i++) {
         float offset = (center - i) * step;          // descending
         float cum = strip_snap_tenth(g_strip.base_time_s * powf(2.0f, offset));
         if (cum < 0.1f) cum = 0.1f;
 
-        g_strip.segments[i].cumulative_s = cum;
-        g_strip.segments[i].offset_stops = offset;
+        tmp[i].cumulative_s = cum;
+        tmp[i].offset_stops = offset;
 
         if (i == n - 1) {
             // Last segment (least light): incremental == cumulative
-            g_strip.segments[i].incremental_s = cum;
+            tmp[i].incremental_s = cum;
         } else {
             // Incremental = difference to next (smaller) cumulative
             float next_cum = strip_snap_tenth(g_strip.base_time_s * powf(2.0f, (center - (i + 1)) * step));
             if (next_cum < 0.1f) next_cum = 0.1f;
             float inc = cum - next_cum;
             if (inc < 0.1f) inc = 0.1f;
-            g_strip.segments[i].incremental_s = strip_snap_tenth(inc);
+            tmp[i].incremental_s = strip_snap_tenth(inc);
         }
     }
+
+    portENTER_CRITICAL(&g_strip_lock);
+    for (int i = 0; i < n; i++) g_strip.segments[i] = tmp[i];
+    portEXIT_CRITICAL(&g_strip_lock);
 }
 
 // ============================================================================
@@ -787,14 +796,13 @@ void test_strip_init() {
     }
 }
 
+#if HAS_MCP
 void test_strip_get_status(StripStatus* out) {
     if (!out) return;
-    // Lock-free scalar snapshot — matches the binding-resolver read path. The
-    // segment table is kept current by every config command, so copying it here
-    // (outside a sequence) reflects the configured strip.
+    // Scalar fields are updated on the main loop; a torn read of one scalar is
+    // benign for an advisory status report (matches the binding-resolver path).
     out->phase              = (uint8_t)g_strip.phase;
     out->segment            = g_strip.current_segment;
-    out->segment_count      = g_strip.segment_count;
     out->base_time_s        = g_strip.base_time_s;
     out->step_stops         = current_step_value();
     out->step_label         = current_step_label();
@@ -803,7 +811,11 @@ void test_strip_get_status(StripStatus* out) {
     out->exposure_tick      = g_strip.exposure_tick;
     out->phase_remaining_ms = phase_remaining_ms();
     out->phase_elapsed_ms   = phase_elapsed_ms();
-    out->total_time_s       = estimate_total_time_s();
+
+    // Snapshot the segment count + table atomically under g_strip_lock so a
+    // concurrent recalculate_segments() cannot be seen half-rewritten. Derive
+    // total_time from the snapshot to keep it consistent with the table.
+    portENTER_CRITICAL(&g_strip_lock);
     int n = g_strip.segment_count;
     if (n > STRIP_STATUS_MAX_SEGMENTS) n = STRIP_STATUS_MAX_SEGMENTS;
     for (int i = 0; i < n; i++) {
@@ -811,6 +823,12 @@ void test_strip_get_status(StripStatus* out) {
         out->segments[i].incremental_s = g_strip.segments[i].incremental_s;
         out->segments[i].offset_stops  = g_strip.segments[i].offset_stops;
     }
+    portEXIT_CRITICAL(&g_strip_lock);
+
+    out->segment_count = n;
+    float total = (float)g_strip.countdown_s + (n > 1 ? (float)(n - 1) * g_strip.pause_s : 0.0f);
+    for (int i = 0; i < n; i++) total += out->segments[i].incremental_s;
+    out->total_time_s = total;
 }
 
 const char* test_strip_phase_str(uint8_t phase) {
@@ -822,13 +840,16 @@ const char* test_strip_phase_str(uint8_t phase) {
         default:                      return "idle";
     }
 }
+#endif // HAS_MCP
 
 #else // !IS_DARKROOM_TIMER
 
 void test_strip_init() {}
 void test_strip_dispatch(const char*, const char*) {}
 void test_strip_tick() {}
+#if HAS_MCP
 void test_strip_get_status(StripStatus* out) { if (out) *out = StripStatus{}; }
 const char* test_strip_phase_str(uint8_t) { return "idle"; }
+#endif // HAS_MCP
 
 #endif // IS_DARKROOM_TIMER
