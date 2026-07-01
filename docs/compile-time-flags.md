@@ -581,6 +581,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
   - src/app/device_classes/coffee_scale/brew/brew_manager.h
   - src/app/device_classes/coffee_scale/mcp/mcp_tools_coffee_scale.cpp
+  - src/app/device_classes/darkroom_timer/mcp/mcp_tools_darkroom.cpp
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/expr_binding.cpp
   - src/app/health_binding.cpp
@@ -876,6 +877,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/darkroom_timer_payload.h
   - src/app/device_classes/darkroom_timer/expose_actions.cpp
   - src/app/device_classes/darkroom_timer/expose_timer.cpp
+  - src/app/device_classes/darkroom_timer/mcp/mcp_tools_darkroom.cpp
   - src/app/device_classes/darkroom_timer/meter.cpp
   - src/app/device_classes/darkroom_timer/meter_actions.cpp
   - src/app/device_classes/darkroom_timer/print_log.cpp

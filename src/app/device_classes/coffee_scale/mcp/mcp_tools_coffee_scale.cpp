@@ -692,7 +692,8 @@ REGISTER_MCP_TOOL(s_tool_get_brew_template);
 
 static const McpTool s_tool_scale_control = {
     "scale_control",
-    "Run a scale control command. command (required): tare | calibrate | cal_weight | cal_weight_set. value rules: REQUIRED for 'cal_weight' (a non-zero gram delta applied to the calibration reference weight) and 'cal_weight_set' (an absolute reference weight in grams, >= 1); ignored for 'tare' and 'calibrate'. 'calibrate' uses the current reference weight. Smoothing preset is a config setting (see get_scale_status), not a control command.",
+    "Run a scale control command. command (required): tare | calibrate | cal_weight | cal_weight_set. value rules: REQUIRED for 'cal_weight' (a non-zero gram delta applied to the calibration reference weight) and 'cal_weight_set' (an absolute reference weight in grams, >= 1); ignored for 'tare' and 'calibrate'. 'calibrate' uses the current reference weight. Smoothing preset is a config setting (see get_scale_status), not a control command. "
+    "IMPORTANT WORKFLOW: calibration is a hands-on, multi-step procedure using a physical reference mass — do NOT call calibrate on its own. Walk the user through it: (1) ask them to clear the scale platform, then tare it; (2) tell them the known mass they will use and set it with cal_weight_set (e.g. 100 for a 100 g check weight); (3) ask them to place that exact mass on the platform and confirm it has settled; (4) only then call calibrate. tare also assumes the platform holds what the user intends to zero (usually empty, or the empty cup before dosing) — confirm before taring mid-brew. Read back weight from get_scale_status to verify the result.",
     "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"enum\":[\"tare\",\"calibrate\",\"cal_weight\",\"cal_weight_set\"]},\"value\":{\"type\":\"string\"}},\"required\":[\"command\"]}",
     tool_scale_control, false, false, true, false
 };
@@ -700,7 +701,8 @@ REGISTER_MCP_TOOL(s_tool_scale_control);
 
 static const McpTool s_tool_brew_control = {
     "brew_control",
-    "Run a brew control command. command (required): set_template | advance | start | next | stop | reset | tare. value rules: REQUIRED for 'set_template' (a template machine name from list_brew_templates — primes the next brew); ignored for all other commands. 'advance' is the smart single-button action (start when idle, advance a manual stage, stop a running timer, restart when done). Unknown template names are rejected.",
+    "Run a brew control command. command (required): set_template | advance | start | next | stop | reset | tare. value rules: REQUIRED for 'set_template' (a template machine name from list_brew_templates — primes the next brew); ignored for all other commands. 'advance' is the smart single-button action (start when idle, advance a manual stage, stop a running timer, restart when done). Unknown template names are rejected. "
+    "IMPORTANT WORKFLOW: a brew is an interactive, stage-by-stage procedure the user performs at the machine (add the coffee dose, pour water to a target, wait). Drive it one stage at a time: after start (or set_template + advance), read get_brew_status to get the current stage's instruction and advance-button label, relay that instruction to the user, and WAIT for them to confirm they have done the physical step before calling advance/next. Manual stages wait for advance; auto stages (auto_weight/auto_time) advance on their own — do NOT manually advance those, just report progress from get_brew_status. Do not run a whole brew in one burst of commands.",
     "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"enum\":[\"set_template\",\"advance\",\"start\",\"next\",\"stop\",\"reset\",\"tare\"]},\"value\":{\"type\":\"string\"}},\"required\":[\"command\"]}",
     tool_brew_control, false, false, true, false
 };

@@ -207,7 +207,11 @@ compile none of it.
   target speed (`set` / `adjust` / `toggle_lock`), sessions (`sess_start` /
   `sess_stop` / `sess_toggle` / `sess_discard`), guided runs (`guide_start` /
   `guide_stop` / `guide_skip` / `guide_redo`), and capture
-  (`align_start` / `align_stop` / `recalibrate`). *(control)*
+  (`align_start` / `align_stop` / `recalibrate`). The tool description explains
+  the hands-on rig workflow: the user aligns the camera over the sensors and
+  **physically fires the shutter** for each measurement (there is no per-shot
+  command), so the assistant coordinates capture by polling `get_shutter_status`
+  / `get_shutter_history` and relaying guided-run steps. *(control)*
 - `delete_shutter_session` — delete a saved session by id. *(control, destructive)*
 - `set_shutter_tests` — overwrite the guided-test script file. *(authoring)*
 
@@ -251,9 +255,15 @@ compile none of it.
 - `list_brew_templates` / `get_brew_template` — brew template definitions
   (built-in + user) and one template serialized to its JSON DSL. *(read)*
 - `scale_control` — one scale command (`command` + optional `value`):
-  `tare`, `calibrate`, `cal_weight` (gram delta), `cal_weight_set` (absolute g). *(control)*
+  `tare`, `calibrate`, `cal_weight` (gram delta), `cal_weight_set` (absolute g).
+  The description walks the assistant through the hands-on **calibration**
+  procedure (clear + tare, set the reference mass, place that exact weight,
+  confirm it settled, then `calibrate`) rather than calling `calibrate` blind. *(control)*
 - `brew_control` — one brew command (`command` + optional `value`) covering
-  `set_template`, `advance`, `start`, `next`, `stop`, `reset`, `tare`. *(control)*
+  `set_template`, `advance`, `start`, `next`, `stop`, `reset`, `tare`. The
+  description drives a brew **one stage at a time**: relay the current stage's
+  instruction from `get_brew_status`, wait for the user to complete the physical
+  step, then `advance` (manual stages only — auto stages self-advance). *(control)*
 - `delete_brew` — delete a saved brew by id. *(control, destructive)*
 - `delete_brew_template` — delete a user (dynamic) template by name; built-ins
   cannot be deleted. *(control, destructive)*
