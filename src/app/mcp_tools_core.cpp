@@ -523,7 +523,7 @@ static bool tool_system_command(const JsonObject& args, JsonObject& result, Stri
 
 static const McpTool s_tool_get_device_status = {
     "get_device_status",
-    "Get firmware version, board/device-class, uptime, current screen, and WiFi state.",
+    "Get firmware version, board/device-class, uptime, current screen, and WiFi state. Good first call to orient yourself (identity + what kind of device this is) before using other tools.",
     "{\"type\":\"object\",\"properties\":{}}",
     tool_get_device_status, true, false, false
 };
@@ -565,7 +565,7 @@ REGISTER_MCP_TOOL(s_tool_get_current_screen);
 
 static const McpTool s_tool_list_pads = {
     "list_pads",
-    "List configured pads with their friendly name and buttons (position, label, action type). Optional 'screen' filter (e.g. 'pad_0').",
+    "List configured pads with their friendly name and buttons (position, label, action type). Use this to discover what can be pressed, then get_pad for one pad's full detail or press_button to activate a button. Optional 'screen' filter (e.g. 'pad_0').",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\",\"description\":\"Pad id like 'pad_0' to limit output\"}}}",
     tool_list_pads, true, false, false
 };
@@ -573,7 +573,7 @@ REGISTER_MCP_TOOL(s_tool_list_pads);
 
 static const McpTool s_tool_get_pad = {
     "get_pad",
-    "Get one pad's full configuration: layout/cols/rows, wake_screen, bg_color, template_pad, named bindings, and every button's labels, styles, colors, widget, and resolved tap/long-press actions with targets. Args: screen (pad id 'pad_0' or the pad's friendly name).",
+    "Get one pad's full configuration: layout/cols/rows, wake_screen, bg_color, template_pad, named bindings, and every button's labels, styles, colors, widget, and resolved tap/long-press actions with targets. Each button's 'position' is the 0-based array index that press_button/set_button use. Inspect a button here to see what it does before pressing it. Args: screen (pad id 'pad_0' or the pad's friendly name).",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_get_pad, true, false, false
 };
@@ -581,7 +581,7 @@ REGISTER_MCP_TOOL(s_tool_get_pad);
 
 static const McpTool s_tool_press_button = {
     "press_button",
-    "Press a pad button (run its tap action) exactly as a physical tap. Args: screen (pad id) plus either position (index) or label.",
+    "Activate a pad button, running its tap action(s) exactly as a physical tap would. The action is REAL and may have side effects (publish MQTT, call Home Assistant, send BLE keystrokes, navigate screens, or run a system command like reboot) — inspect an unfamiliar button with get_pad first. Discover buttons via list_pads/get_pad; 'position' is the 0-based index in the pad's button array, NOT a grid cell. Args: screen (pad id like 'pad_0') plus either position or label (case-insensitive).",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"label\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_press_button, false, false, true
 };
@@ -589,7 +589,7 @@ REGISTER_MCP_TOOL(s_tool_press_button);
 
 static const McpTool s_tool_set_screen = {
     "set_screen",
-    "Navigate to a screen by id (e.g. 'pad_1', 'info').",
+    "Navigate the display to a screen by id (e.g. 'pad_1', 'info'). Call list_screens for valid ids (pads are 'pad_N'); get_current_screen confirms the active one afterward.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_set_screen, false, false, true
 };
@@ -615,7 +615,7 @@ REGISTER_MCP_TOOL(s_tool_wake);
 
 static const McpTool s_tool_system_command = {
     "system_command",
-    "Run a system command: 'reboot' (destructive), 'wifi_reconnect', or 'screensaver'.",
+    "Run a system command: 'reboot' (destructive — restarts the device and DROPS this connection/MCP session), 'wifi_reconnect' (re-establish the WiFi link), or 'screensaver' (trigger the display screen saver).",
     "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"enum\":[\"reboot\",\"wifi_reconnect\",\"screensaver\"]}},\"required\":[\"command\"]}",
     tool_system_command, false, true, true
 };

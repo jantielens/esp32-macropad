@@ -399,7 +399,7 @@ static void mcp_send_error(AsyncWebServerRequest* request,
 // Method handlers
 // ----------------------------------------------------------------------------
 static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantConst id) {
-    auto doc = make_psram_json_doc(1024);
+    auto doc = make_psram_json_doc(4096);
     if (!doc || doc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
     (*doc)["jsonrpc"] = "2.0";
     (*doc)["id"] = id;
@@ -408,18 +408,46 @@ static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantCon
     JsonObject caps = result.createNestedObject("capabilities");
     caps.createNestedObject("tools");  // tools capability advertised
 
+    // Server-level guidance surfaced to the model (MCP `instructions`). Gives a
+    // board-agnostic orientation to the firmware and the core read -> control
+    // tool-chaining so the model understands what the device is and how the
+    // tools compose; on display boards it then appends the screenshot-via-browser
+    // recipe for visual verification (also mirrored in
+    // get_capabilities.visual_inspection).
+    String instructions =
+        "This is an ESP32 device running Macropad firmware (device class: ";
+    instructions += device_class_get_display_name();
+    instructions += "). ";
+    // Specialized classes (darkroom, coffee scale, shutter, ...) advertise their
+    // core use case in one sentence so the model knows what the device is FOR;
+    // the generic macropad adds nothing here.
+    const char* scenario = mcp_class_scenario();
+    if (scenario && scenario[0]) {
+        instructions += scenario;
+        instructions += " ";
+    }
+    instructions +=
+        "Read tools inspect live state; control tools drive the device. Orient yourself first with "
+        "get_device_status (identity, current screen, WiFi) and get_health (heap, CPU, signal); "
+        "get_sensors returns any attached sensor readings. General pattern: DISCOVER with the read "
+        "tools, then act, then re-read to VERIFY. To operate the UI, list_screens shows navigable "
+        "screens and set_screen switches to one; list_pads then get_pad reveal a pad's buttons (their "
+        "array position, label, and action) so you can press_button by position or label. press_button "
+        "runs the button's REAL action \u2014 it may publish MQTT, call Home Assistant, send BLE "
+        "keystrokes, navigate, or reboot \u2014 exactly as a physical tap, so inspect an unfamiliar "
+        "button with get_pad before pressing it. Control tools (press_button, set_screen, set_backlight, "
+        "wake, system_command) appear only when the control toggle is enabled; system_command 'reboot' "
+        "restarts the device and drops this connection.";
 #if HAS_DISPLAY
-    // Server-level guidance surfaced to the model (MCP `instructions`). Points
-    // at the screenshot-via-browser workflow so an assistant can visually verify
-    // UI work; the full recipe lives in get_capabilities.visual_inspection.
-    result["instructions"] =
-        "This device drives a touch display. After changing a pad, button, or widget you can "
-        "visually verify the result: GET /api/screenshot returns the live framebuffer as a large "
-        "BMP image. Never fetch it as text/data \u2014 it is an image and is large. Instead point a "
-        "Playwright browser at the URL and capture the rendered <img> element. Call get_capabilities "
-        "for the exact recipe (visual_inspection). Verifying a specific pad also needs control tools "
-        "(set_screen) to bring it on-screen first.";
+    instructions +=
+        " This device drives a touch display, so you can visually verify UI changes: GET /api/screenshot "
+        "returns the live framebuffer as a large BMP image. Never fetch it as text/data \u2014 it is an "
+        "image and is large. Instead point a Playwright browser at the URL and capture the rendered <img> "
+        "element. Call get_capabilities for the exact recipe (visual_inspection) plus the full "
+        "pad/widget/binding schema. Verifying a specific pad first needs set_screen (a control tool) to "
+        "bring it on-screen.";
 #endif
+    result["instructions"] = instructions;
 
     JsonObject info = result.createNestedObject("serverInfo");
     DeviceConfig* cfg = web_portal_get_current_config();

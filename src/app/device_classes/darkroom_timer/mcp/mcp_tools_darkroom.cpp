@@ -629,6 +629,13 @@ static bool tool_set_relay_config(const JsonObject& args, JsonObject& result, St
 // Tool descriptors + registration
 // ============================================================================
 
+// Core use case surfaced to the model at MCP initialize (see mcp_tool_registry.h).
+REGISTER_MCP_CLASS_SCENARIO(
+    "A darkroom enlarger timer for black-and-white printing: use it to meter prints, run f-stop "
+    "test strips, time enlarger exposures, and log finished prints — the *_control tools drive a "
+    "real enlarger lamp/relay that exposes photographic paper, so confirm with the user before "
+    "starting an exposure or test strip.");
+
 static const McpTool s_tool_get_expose_status = {
     "get_expose_status",
     "Get the darkroom single-exposure timer state: state (stopped/running/paused/focus), exposure time setting (s), dry-down-compensated effective time (s), dry-down percent, countdown remaining/elapsed (s), and the relay on/off state.",

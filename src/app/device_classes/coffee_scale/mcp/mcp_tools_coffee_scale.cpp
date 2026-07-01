@@ -634,6 +634,11 @@ static bool tool_set_brew_template(const JsonObject& args, JsonObject& result, S
 // Tool descriptors + registration
 // ============================================================================
 
+// Core use case surfaced to the model at MCP initialize (see mcp_tool_registry.h).
+REGISTER_MCP_CLASS_SCENARIO(
+    "A precision coffee scale for espresso and pour-over: use it to read live weight and flow rate "
+    "and run timed brew sessions, with saved brew logs and reusable brew templates.");
+
 static const McpTool s_tool_get_scale_status = {
     "get_scale_status",
     "Get the coffee scale's live state: weight (g), flow rate (g/s), availability, calibration factor + raw offset, calibration reference weight, status string, and the active smoothing preset.",

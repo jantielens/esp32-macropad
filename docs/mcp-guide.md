@@ -382,6 +382,16 @@ If portal Basic Auth is enabled, embed credentials in the URL
 its `initialize` instructions and in `get_capabilities` (`visual_inspection`), so
 a capable assistant can offer to verify UI work on its own.
 
+The `initialize` response's `instructions` field additionally gives the model a
+board-agnostic orientation to the firmware and the core **discover → act →
+verify** tool-chaining (e.g. `list_pads`/`get_pad` before `press_button`,
+`list_screens` before `set_screen`), so it understands what the device is and how
+the read and control tools compose — even on headless boards with no display.
+Specialized device classes prepend one sentence describing their **core use
+case** (e.g. "a darkroom enlarger timer for black-and-white printing: meter
+prints, run f-stop test strips, time exposures, log prints"), so the model knows
+what the device is *for* before it reads the individual tool list.
+
 ## Example prompts
 
 - "What's my device status?"

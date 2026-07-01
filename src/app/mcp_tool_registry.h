@@ -82,7 +82,22 @@ const McpTool* mcp_tool_at(uint8_t index);
 // Find a registered tool by name, or nullptr.
 const McpTool* mcp_tool_find(const char* name);
 
+// ----------------------------------------------------------------------------
+// Device-class scenario — one sentence describing what THIS device is FOR,
+// appended to the MCP `initialize` instructions so the model understands the
+// device's core use case (e.g. "a darkroom enlarger timer for B&W printing")
+// instead of inferring the whole domain from individual tool names. Only the
+// compiled device class sets it (IS_* variants are mutually exclusive), so at
+// most one sentence ships and the generic macropad adds nothing. Keep it to a
+// single concise sentence to avoid bloating the instructions.
+void mcp_set_class_scenario(const char* text);
+const char* mcp_class_scenario();  // nullptr when unset
+
 #define REGISTER_MCP_TOOL(var) \
     static struct _McpReg_##var { _McpReg_##var() { mcp_tool_register(&var); } } _mcp_reg_##var;
+
+// Register the compiled device class's core-use-case sentence (see above).
+#define REGISTER_MCP_CLASS_SCENARIO(text) \
+    static struct _McpScenarioReg { _McpScenarioReg() { mcp_set_class_scenario(text); } } _mcp_scenario_reg;
 
 #endif // MCP_TOOL_REGISTRY_H

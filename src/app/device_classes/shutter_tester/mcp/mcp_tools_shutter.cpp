@@ -577,6 +577,12 @@ static bool tool_set_shutter_tests(const JsonObject& args, JsonObject& result, S
 // Tool descriptors + registration
 // ============================================================================
 
+// Core use case surfaced to the model at MCP initialize (see mcp_tool_registry.h).
+REGISTER_MCP_CLASS_SCENARIO(
+    "A camera shutter-speed tester: use it to measure a film camera's shutter speeds from a "
+    "light-pulse sensor array, run guided multi-speed tests, and save/review test sessions — the "
+    "user physically fires the shutter over the sensors for each measurement.");
+
 static const McpTool s_tool_get_shutter_status = {
     "get_shutter_status",
     "Get shutter-tester live state: active preset/sensors/sample rate, comparison target speed + lock, session state (incl. guided progress), alignment readout, and the latest measurement with per-sensor health.",

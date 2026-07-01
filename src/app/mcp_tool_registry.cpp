@@ -49,4 +49,16 @@ const McpTool* mcp_tool_find(const char* name) {
     return nullptr;
 }
 
+// Device-class scenario sentence (see mcp_tool_registry.h). Set once at startup
+// by the compiled device class; the pointer must have static storage duration.
+static const char* s_class_scenario = nullptr;
+
+void mcp_set_class_scenario(const char* text) {
+    s_class_scenario = text;
+}
+
+const char* mcp_class_scenario() {
+    return s_class_scenario;
+}
+
 #endif // HAS_MCP
