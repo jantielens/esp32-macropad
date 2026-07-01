@@ -333,6 +333,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
   - src/app/hw_buttons.cpp
+  - src/app/mcp_tools_config.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
   - src/app/portal_components.cpp
@@ -356,6 +357,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/duty_cycle.cpp
+  - src/app/mcp_tools_config.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/web_portal_config.cpp
 - **HAS_BLE_HID**
@@ -368,6 +370,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
   - src/app/health_binding.cpp
+  - src/app/mcp_tools_config.cpp
   - src/app/portal_components.cpp
   - src/app/web_portal_ble.cpp
   - src/app/web_portal_ble.h
@@ -395,6 +398,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/hw_button_config.h
   - src/app/hw_buttons.cpp
   - src/app/hw_buttons.h
+  - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
 - **HAS_CUSTOM_FONTS**
@@ -461,6 +465,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_provider_pads.cpp
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
+  - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/message_bubble.cpp
@@ -594,6 +599,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_binding.cpp
   - src/app/mcp_components.cpp
   - src/app/mcp_tool_registry.cpp
+  - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_sub_store.cpp
@@ -630,6 +636,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/ha_discovery.h
+  - src/app/mcp_tools_config.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
   - src/app/mqtt_manager.cpp

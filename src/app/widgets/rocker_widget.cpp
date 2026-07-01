@@ -139,6 +139,9 @@ static void rocker_describe(JsonObject& out) {
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
     add("widget_rocker_axis","string","'h' or 'v' rocker direction");
     add("widget_rocker_color","color","rocker color"); add("widget_rocker_opacity","number","0-100");
+    out["note"] = "Rocker has NO widget action field. Its two halves dispatch the BUTTON's action lists: "
+                  "zone A (top for vertical / left for horizontal) runs actions[]; zone B (bottom / right) runs "
+                  "lp_actions[]. Configure both via the button's 'actions' and 'lp_actions' arrays.";
 }
 #endif
 REGISTER_WIDGET_SCHEMA(rocker, nullptr, false);

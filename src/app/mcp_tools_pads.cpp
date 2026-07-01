@@ -89,7 +89,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         w["type"] = wt->name;
         if (wt->describeSchema) wt->describeSchema(w);
     }
-    result["widget_common"] = "all widgets: widget_type + widget_data_binding (and _2.._4 for extra binding templates); widget config fields are flat on the button";
+    result["widget_common"] = "all widgets: widget_type + widget_data_binding (and _2.._4 for extra binding templates); widget config fields are flat on the button. A config field whose \"type\" is \"action\" is a NESTED action object (same {type, <mode>, <value>} shape as a button action, and supports the {step} token), NOT a string — e.g. numericrocker's widget_numericrocker_action.";
 
     JsonObject grid = result.createNestedObject("grid");
     grid["max_buttons"] = MAX_PAD_BUTTONS;
@@ -322,12 +322,33 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows) {
         wtype->describeSchema(so);
         JsonArrayConst cf = so["config_fields"];
         for (JsonObjectConst f : cf) {
-            int mx = f["max"] | 0;
-            if (mx <= 0) continue;
             const char* fname = f["name"] | "";
             if (!fname[0]) continue;
-            const char* val = b[fname] | "";
-            if ((int)strlen(val) > mx) {
+            // Action-typed fields (e.g. numericrocker's adjust action) are nested
+            // action OBJECTS, not strings. Catch the common LLM mistake of passing
+            // a bare string/number here so validate_pad rejects it up front,
+            // instead of the device silently ignoring it at render time.
+            if (strcmp(f["type"] | "", "action") == 0) {
+                JsonVariantConst av = b[fname];
+                if (!av.isNull()) {
+                    if (!av.is<JsonObjectConst>()) {
+                        snprintf(s_len_err, sizeof(s_len_err),
+                                 "widget field '%s' must be a nested action object {type,...}, not a bare value", fname);
+                        return s_len_err;
+                    }
+                    const char* at = av["type"] | "";
+                    if (!at[0]) {
+                        snprintf(s_len_err, sizeof(s_len_err),
+                                 "widget field '%s' action is missing 'type'", fname);
+                        return s_len_err;
+                    }
+                }
+                continue;  // action fields carry no length cap
+            }
+            int mx = f["max"] | 0;
+            if (mx <= 0) continue;
+            const char* fname_val = b[fname] | "";
+            if ((int)strlen(fname_val) > mx) {
                 snprintf(s_len_err, sizeof(s_len_err),
                          "widget field '%s' too long (max %d); factor a long binding into a [pad:name] binding",
                          fname, mx);

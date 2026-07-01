@@ -200,9 +200,27 @@ void numericrocker_substitute_step(ButtonAction* act, float step) {
 static void numericrocker_describe(JsonObject& out) {
     JsonArray f = out.createNestedArray("config_fields");
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
-    add("widget_numericrocker_axis","string","'h' or 'v'");
-    add("widget_numericrocker_small_step","number","tap step"); add("widget_numericrocker_large_step","number","hold step");
-    add("widget_numericrocker_action","string","value action template"); add("widget_numericrocker_color","color",""); add("widget_numericrocker_opacity","number","0-100");
+    add("widget_numericrocker_axis","string","'h'/'horizontal' or 'v'/'vertical'");
+    add("widget_numericrocker_small_step","number","inner-arrow step (± per tap)");
+    add("widget_numericrocker_large_step","number","outer-arrow step (± per tap)");
+    // The adjust action is a NESTED action OBJECT (same shape as a button
+    // action) — NOT a bare string. Spell that out with an example so an LLM does
+    // not emit "volume"/"brightness" as a string (which the device ignores).
+    {
+        JsonObject o = f.createNestedObject();
+        o["name"] = "widget_numericrocker_action";
+        o["type"] = "action";
+        o["desc"] = "REQUIRED nested action OBJECT (same shape as a button action; NOT a bare string). "
+                    "Dispatched on every arrow tap with the literal token {step} substituted by the small/large "
+                    "step (negative for the down/left arrows). Typically adjusts volume, brightness, a timer, or "
+                    "a device-class value.";
+        o["example"] = "{\"type\":\"volume\",\"volume_mode\":\"adjust\",\"volume_value\":\"{step}\"}";
+    }
+    add("widget_numericrocker_color","color","indicator color");
+    add("widget_numericrocker_opacity","number","0-100");
+    out["note"] = "Numeric rocker: the outer/inner arrows run widget_numericrocker_action with {step} substituted "
+                  "by large/small step; a tap in the CENTER falls through to the button's normal actions[]. "
+                  "Set small_step/large_step to the ± amounts (e.g. 5 and 20).";
 }
 #endif
 REGISTER_WIDGET_SCHEMA(numericrocker, nullptr, false);
