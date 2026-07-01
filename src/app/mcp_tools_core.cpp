@@ -420,7 +420,11 @@ static bool tool_wake(const JsonObject& args, JsonObject& result, String& err) {
 #endif // HAS_DISPLAY
 
 // --- system_command --------------------------------------------------------
-struct SysCtx { char command[CONFIG_ACTION_TYPE_MAX_LEN]; };
+// Board-agnostic buffer for the small set of system commands (reboot,
+// wifi_reconnect, screensaver). Sized independently of pad_config.h, which is
+// not compiled on action-less boards (e.g. e-paper), and kept in sync with
+// ButtonAction::payload.system.system_command (CONFIG_ACTION_TYPE_MAX_LEN = 16).
+struct SysCtx { char command[16]; };
 
 static void exec_system_command(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const SysCtx* c = (const SysCtx*)ctx;
