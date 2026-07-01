@@ -1,9 +1,6 @@
----
-title: ESP32 Macropad
-description: Open-source firmware for ESP32 touchscreen and e-paper control panels, including the Inkplate 5V2 e-paper device class.
-ms.date: 2026-05-25
-ms.topic: overview
----
+# ESP32 Macropad
+
+Open-source firmware for ESP32 touchscreen and e-paper control panels, including the Inkplate 5V2 e-paper device class.
 
 ## Overview
 
@@ -16,7 +13,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 ### Pads, buttons & widgets
 - **Up to 16 pads** with configurable grids (up to 8×8, board-dependent), per-pad backgrounds, and multi-cell button spans
 - **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols) with configurable icon position, background images, icon + center label co-display, and a per-label style DSL (font family, size, alignment, overflow)
-- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal), sparkline (multi-line with reference markers), table, list (scrollable item picker), **rocker** (split-button up/down or left/right), and **numeric rocker** (4-zone fine/coarse adjustment)
+- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal, up to 4 bars with per-bar captions and gauge-style scale options), sparkline (multi-line with reference markers), table, list (scrollable item picker), **rocker** (split-button up/down or left/right), and **numeric rocker** (4-zone fine/coarse adjustment)
 - **Smooth animations** — gauges, bars, and needles ease into new values instead of jumping
 - **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
 - **Building blocks** — drop pre-built button groups (countdown timer, system info) into any pad with a single click
@@ -40,6 +37,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 ### Inputs & automation
 - **Multi-action buttons** — chain up to 3 actions per tap and per long-press (publish MQTT, play sound, navigate, send keystrokes, etc.)
 - **Swipe gestures** — configure left/right/up/down on any screen with the same actions as buttons
+- **Hardware buttons** — map a board's physical GPIO buttons to tap and long-press action chains (works on headless boards too)
 - **Boot actions** — run a sequence of actions automatically when the device starts
 - **MQTT triggers** — dispatch action chains when a matching MQTT message arrives, no button or screen required (works on headless boards with a physical button too)
 - **On-device timers** — 3 independent count-up / countdown timers with expire actions and live `[timer:N]` bindings
