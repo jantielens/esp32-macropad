@@ -518,10 +518,24 @@ static void shutter_binding_collect(const char* params, void* user_data) {
 // Init
 // ============================================================================
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void shutter_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[shutter:key] or [shutter:key;format]";
+    o["example"] = "[shutter:speed] ([shutter:deviation;%+.1f]%)";
+    o["keys"]    = "speed, speed_seconds, target_speed, target_ms, duration_ms, deviation, deviation_abs, deviation_stops, verdict, spread, spread_ms, sensor_count, valid_sensor_count, preset_id, preset_name, count, capture_id, available, history_json; per-sensor sensor_N_ms/_valid/_depth/_snr; namespaced align.*, calib.*, session.*, guide.*";
+    o["note"]    = "Live shutter-tester measurement + alignment/session state.";
+}
+#endif
+
 void shutter_binding_init() {
     if (!binding_template_register("shutter", shutter_binding_resolve, shutter_binding_collect)) {
         LOGE(TAG, "Failed to register shutter binding scheme");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("shutter", shutter_scheme_describe);
+#endif
 }
 
 #else // !HAS_DISPLAY || !IS_SHUTTER_TESTER

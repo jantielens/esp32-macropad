@@ -4,6 +4,7 @@
 
 #include "image_decoder.h"
 #include "log_manager.h"
+#include "net_activity.h"
 #include "rtos_task_utils.h"
 
 #include <HTTPClient.h>
@@ -176,6 +177,7 @@ static bool conn_download(int slot, uint8_t** out_data, size_t* out_len) {
 
     SlotConn& c = g_conn[slot];
     int code = c.http.GET();
+    net_activity_mark(NET_CH_HTTP);
     if (code != 200) {
         LOGW(TAG, "HTTP %d for slot %d", code, slot);
         c.http.end();        // clears response; keep-alive preserves socket
@@ -334,6 +336,7 @@ static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
     // ---- Step 1: First call — open connection and parse headers ----
     if (!c.is_streaming) {
         int code = c.http.GET();
+        net_activity_mark(NET_CH_HTTP);
         if (code != 200) {
             LOGW(TAG, "MJPEG slot %d: HTTP %d", slot, code);
             c.http.end();

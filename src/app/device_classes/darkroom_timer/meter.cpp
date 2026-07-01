@@ -538,12 +538,26 @@ bool meter_get_has_results() {
 }
 #endif // HAS_MCP
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void meter_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[meter:key] or [meter:key;format]";
+    o["example"] = "Grade [meter:grade_label] @ [meter:time;%.1f]s";
+    o["keys"]    = "lref, l_bright, l_dark, sbr, grade, grade_label, time, mag_lux_a, mag_lux_b, mag_time, mag_factor";
+    o["note"]    = "Darkroom enlarging-meter readings and recommended grade/time.";
+}
+#endif
+
 void meter_init() {
     if (!binding_template_register("meter", meter_resolve, meter_collect)) {
         LOGE(TAG, "Failed to register meter binding scheme");
     } else {
         LOGI(TAG, "Meter binding scheme registered");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("meter", meter_scheme_describe);
+#endif
 }
 
 #else // !IS_DARKROOM_TIMER

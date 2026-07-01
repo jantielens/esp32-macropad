@@ -270,6 +270,17 @@ echo "=== Running unit tests: list_provider ==="
 ./tests/bin/test_list_provider
 echo
 
+echo "=== Building unit tests: net_activity ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I tests -I src/app \
+    tests/test_net_activity.cpp \
+    src/app/net_activity.cpp \
+    -o tests/bin/test_net_activity
+
+echo "=== Running unit tests: net_activity ==="
+./tests/bin/test_net_activity
+echo
+
 echo "=== Building unit tests: shutter_session ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -Wno-deprecated-declarations \
@@ -366,6 +377,10 @@ echo
 
 echo "=== Running guard: widget schema parity (describe <-> parse) ==="
 python3 tools/lint_widget_schema.py
+echo
+
+echo "=== Running guard: MCP binding-scheme parity (register <-> describe) ==="
+./tests/test_mcp_scheme_parity.sh
 echo
 
 echo "=== All tests passed ==="

@@ -15,6 +15,7 @@
 #include "power_manager.h"
 #include "power_config.h"
 #include "log_manager.h"
+#include "net_activity.h"
 
 MqttManager::MqttManager() : _client(_net) {}
 
@@ -113,6 +114,7 @@ bool MqttManager::publish(const char *topic, const char *payload, bool retained)
 		if (!enabled() || !_client.connected()) return false;
 		if (!topic || !payload) return false;
 
+		net_activity_mark(NET_CH_MQTT_TX);
 		return _client.publish(topic, payload, retained);
 }
 
@@ -128,6 +130,7 @@ bool MqttManager::publishJson(const char *topic, JsonDocument &doc, bool retaine
 		}
 
 		if (!enabled() || !_client.connected()) return false;
+		net_activity_mark(NET_CH_MQTT_TX);
 		return _client.publish(topic, (const uint8_t*)payload, (unsigned)n, retained);
 }
 
@@ -149,6 +152,7 @@ bool MqttManager::subscribe(const char *topic) {
 
 void MqttManager::installCallback() {
 		_client.setCallback([](char* topic, uint8_t* payload, unsigned int length) {
+				net_activity_mark(NET_CH_MQTT_RX);
 				mqtt_screen_on_message(topic, payload, length);
 				mqtt_audio_on_message(topic, payload, length);
 				mqtt_notify_on_message(topic, payload, length);

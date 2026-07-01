@@ -39,6 +39,7 @@
 #include "pad_block.h"
 #include "list_provider.h"
 #include "list_binding.h"
+#include "net_binding.h"
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "timer_config.h"
@@ -473,6 +474,7 @@ void setup()
 	pad_binding_init();
 	timer_binding_init();
 	list_binding_init();
+	net_binding_init();
 	timer_config_init();
 	#endif
 

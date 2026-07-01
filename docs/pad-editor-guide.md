@@ -1063,6 +1063,39 @@ WiFi: [health:rssi] dBm                               → WiFi: -54 dBm
 [health:ip]                                            → 192.168.1.42
 ```
 
+### Network Binding
+
+**Syntax:** `[net:channel]` or `[net:channel;age]`
+
+Exposes live network / transport activity so labels, icon colors, and widget inputs can react with a subtle visual cue whenever the device sends or receives data. Each channel tracks the time of its most recent activity; the binding is resolved on-screen every frame, so an icon flashes on activity and settles back when idle.
+
+| Channel | Activity tracked |
+|---------|------------------|
+| `portal` | Inbound web portal HTTP requests |
+| `mcp` | Inbound MCP (Model Context Protocol) calls |
+| `mqtt_rx` | Inbound MQTT messages |
+| `mqtt_tx` | Outbound MQTT publishes |
+| `mqtt` | Either MQTT direction — active on `mqtt_rx` or `mqtt_tx` |
+| `http` | Outbound HTTP client (image fetch, Home Assistant REST) |
+| `ble` | BLE HID reports (ESP32-P4 only) |
+| `ota` | Firmware OTA flash writes |
+| `any` | Aggregate — active when *any* channel is active |
+
+| Sub-key | Returns |
+|---------|---------|
+| *(none)* | `1` when the channel saw activity in the last ~400 ms, else `0` |
+| `age` | Milliseconds since the last activity (capped at `999999`, which also means "never") |
+
+**Examples:**
+
+```
+[net:mqtt_rx]                                          → 1 briefly on each message, else 0
+[expr:[net:any]?"#22c55e":"#334155"]                   → green on activity, gray idle (icon color)
+[expr:[net:portal;age]<1000?"ACTIVE":"idle"]           → label stays ACTIVE for 1 s after a request
+```
+
+> **Tip**: Bind a small status button's icon color to `[expr:[net:any]?"#22c55e":"#334155"]` for a device-wide "network heartbeat" LED.
+
 ### Time Binding
 
 **Syntax:** `[time:format;timezone]`

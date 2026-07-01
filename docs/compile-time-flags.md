@@ -583,17 +583,21 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
   - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
   - src/app/device_classes/coffee_scale/brew/brew_manager.h
   - src/app/device_classes/coffee_scale/mcp/mcp_tools_coffee_scale.cpp
+  - src/app/device_classes/coffee_scale/scale_binding.cpp
   - src/app/device_classes/darkroom_timer/expose_timer.cpp
   - src/app/device_classes/darkroom_timer/expose_timer.h
   - src/app/device_classes/darkroom_timer/mcp/mcp_tools_darkroom.cpp
   - src/app/device_classes/darkroom_timer/meter.cpp
   - src/app/device_classes/darkroom_timer/meter.h
+  - src/app/device_classes/darkroom_timer/print_log.cpp
   - src/app/device_classes/darkroom_timer/test_strip.cpp
   - src/app/device_classes/darkroom_timer/test_strip.h
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
+  - src/app/device_classes/shutter_tester/shutter_binding.cpp
   - src/app/expr_binding.cpp
   - src/app/health_binding.cpp
   - src/app/list_binding.cpp

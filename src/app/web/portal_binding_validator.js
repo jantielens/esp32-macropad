@@ -796,6 +796,34 @@ bindingRegisterScheme('health', {
     ]
 });
 
+// ─── Scheme: net ─────────────────────────────────────────────────
+// [net:channel]  or  [net:channel;age]
+bindingRegisterScheme('net', {
+    firstParamRequired: true,
+    firstParamLabel: 'Network channel',
+    keysLabel: 'network channel',
+    keys: [
+        'portal', 'mcp', 'mqtt_rx', 'mqtt_tx', 'mqtt', 'http', 'ble', 'ota', 'any'
+    ],
+    validate: function(params, opts) {
+        var parts = bindingSplitParams(params);
+        var chan = (parts[0] || '').trim();
+        if (chan === '') return 'Network channel is empty';
+        var valid = ['portal', 'mcp', 'mqtt_rx', 'mqtt_tx', 'mqtt', 'http', 'ble', 'ota', 'any'];
+        if (valid.indexOf(chan) === -1) {
+            return 'Unknown network channel "' + chan + '" — expected one of ' + valid.join(', ');
+        }
+        if (parts.length > 1) {
+            var sub = (parts[1] || '').trim();
+            if (sub !== '' && sub !== 'age') {
+                return 'Second parameter must be "age" or omitted';
+            }
+        }
+        if (parts.length > 2) return 'Too many parameters for net binding';
+        return null;
+    }
+});
+
 // ─── Scheme: time ────────────────────────────────────────────────
 // [time:format;timezone]
 bindingRegisterScheme('time', {

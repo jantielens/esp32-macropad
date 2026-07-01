@@ -4,6 +4,7 @@
 #include "portal_idle.h"
 #include "config_manager.h"
 #include "class_branding.h"
+#include "net_activity.h"
 
 static bool portal_auth_required() {
 		if (web_portal_is_ap_mode_active()) return false;
@@ -15,6 +16,7 @@ static bool portal_auth_required() {
 }
 
 bool portal_auth_gate(AsyncWebServerRequest *request) {
+		net_activity_mark(NET_CH_PORTAL);
 		portal_idle_notify_activity();
 
 		if (!portal_auth_required()) return true;

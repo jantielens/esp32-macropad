@@ -13,6 +13,7 @@
 #include "web_portal_json.h"
 #include "web_portal_routes.h"
 #include "web_portal_state.h"
+#include "net_activity.h"
 
 #include "version.h"
 
@@ -595,6 +596,7 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
 // JSON-RPC envelope dispatch
 // ----------------------------------------------------------------------------
 static void mcp_dispatch(AsyncWebServerRequest* request, uint8_t* body, size_t len) {
+    net_activity_mark(NET_CH_MCP);
     auto reqDoc = make_psram_json_doc(len + 1024);
     if (!reqDoc || reqDoc->capacity() == 0) {
         mcp_send_rpc_http_error(request, MCP_ERR_INTERNAL, "out of memory");
