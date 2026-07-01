@@ -214,6 +214,13 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     steps.add("screenshot_page with selector 'img'  // captures just the framebuffer, no browser chrome");
     vis["device_ip"] = "use get_device_status.wifi.ip for <device-ip>";
     vis["auth_note"] = "if portal Basic Auth is enabled, embed credentials in the URL (http://user:pass@host/api/screenshot); the MCP bearer token does not apply to /api/screenshot";
+
+    // Device-settings surface (get_config/set_config + get/set_component_config),
+    // defined in mcp_tools_config.cpp so the component list stays a single source
+    // of truth. Lets an assistant discover the non-pad config it can read/write.
+    extern void mcp_config_capabilities(JsonObject& out);
+    JsonObject device_config = result.createNestedObject("device_config");
+    mcp_config_capabilities(device_config);
     return true;
 }
 

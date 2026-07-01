@@ -138,8 +138,8 @@ graph LR
     CLIENT["AI assistant"] -->|"POST /mcp (Bearer token)"| GATE["Enabled · station mode<br/>Origin · token"]
     GATE --> READ["Read tools<br/>(always available)"]
     GATE --> CONTROL["Control tools<br/>(control toggle on)"]
-    READ --> INFO["status · health · screens<br/>pads · sensors"]
-    CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system"]
+    READ --> INFO["status · health · screens<br/>pads · sensors · config"]
+    CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system<br/>notify · volume · timers · config"]
 ```
 
 **Read tools** (always available once enabled):
@@ -150,21 +150,41 @@ graph LR
 - `list_pads` / `get_pad` — configured pads and their buttons (so the assistant
   knows what it can press).
 - `get_sensors` — current sensor readings (empty on boards without sensors).
+- `get_config` — current device settings (device name, network, MQTT/HA,
+  power, display/screen saver, audio). Secrets are redacted to `<field>_set`
+  booleans — passwords and tokens are never returned.
+- `get_component_config` — the saved JSON for one auxiliary feature: `timers`,
+  `swipe`, `boot`, `button-defaults`, `hw-buttons`, or `mqtt-triggers`.
 
 **Control tools** (require the control toggle):
 
 - `press_button` — press a pad button by position or label, exactly like a tap.
 - `set_screen` — navigate to a screen.
 - `set_backlight` / `wake` — adjust display brightness or cancel the screen saver.
+- `notify` — show a message bubble on the screen (empty text dismisses it).
+- `set_volume` — set (0-100) or adjust (signed delta) the speaker volume.
+- `timer_control` — start/stop/toggle/pause/resume/reset/lap/set/adjust one of
+  the three on-screen timers.
+- `set_config` — write a safe subset of device settings that apply live without a
+  reboot: device name, backlight brightness, the screen-saver group, MQTT publish
+  interval/scope, and audio volume. WiFi/MQTT/HA credentials, operating mode, and
+  security toggles stay read-only (change those in the portal).
+- `set_component_config` — overwrite one auxiliary feature's config (`timers`,
+  `swipe`, `boot`, `button-defaults`, `hw-buttons`, `mqtt-triggers`) with a
+  validated full-replacement object (read it first with `get_component_config`,
+  edit, send back).
 - `system_command` — `reboot`, `wifi_reconnect`, or `screensaver`.
 
-Display-related tools are present only on boards that have a display.
+Display-related tools are present only on boards that have a display; `set_volume`
+requires audio hardware; `get_component_config` lists only the components compiled
+into the board.
 
 **Authoring tools** (require the pad authoring toggle; display boards only):
 
 - `get_capabilities` — manifest of widget types + fields, button schema, label-style
   DSL, binding schemes (incl. `[pad:name]` and `template_pad`), and grid limits.
-  Read-only, so it works with token alone.
+  It also carries a `device_config` section advertising `set_config`'s writable
+  fields and the read/write component list. Read-only, so it works with token alone.
 - `get_pad_blocks` — list pre-built button groups (building blocks) that can be
   dropped onto a pad. Read-only.
 - `validate_pad` — dry-run validate a pad JSON (grid bounds, span overflow,
