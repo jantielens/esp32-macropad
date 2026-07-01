@@ -99,4 +99,24 @@
 #define AUDIO_PA_PIN     11    // Power amplifier enable (active high)
 #define AUDIO_CODEC_ADDR 0x18  // ES8311 I2C address (shared Wire bus 0)
 
+// ============================================================================
+// Hardware Button (onboard SW1 / BOOT)
+// ============================================================================
+// SW1 is the ESP32-P4 BOOT strapping button on GPIO35 (active-low, internal
+// pull-up), matching the GUITION sibling board jc1060p470c. Usable as a
+// runtime action button — only matters at reset (holding it low at power-up
+// enters serial download mode).
+#define HAS_BUTTON true
+// BUTTON_PIN / BUTTON_ACTIVE_LOW drive boot-hold config-mode detection in
+// check_config_mode_button(); keep them aligned with HW_BUTTON_DEFS[0] below
+// (which drives the runtime tap/hold action dispatcher).
+#define BUTTON_PIN 35
+#define BUTTON_ACTIVE_LOW true
+#define NUM_HW_BUTTONS 1
+#ifdef __cplusplus
+static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
+    { .pin = 35, .active_low = true, .label = "BOOT" },
+};
+#endif
+
 #endif // BOARD_OVERRIDES_JC4880P433_H

@@ -125,6 +125,7 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_SOUND    "sound"
 #define ACTION_TYPE_NOTIFY   "notify"
 #define ACTION_TYPE_SYSTEM   "system"
+#define ACTION_TYPE_HA_SERVICE "ha_service"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -189,6 +190,11 @@ struct NotifyPayload {
 struct SystemPayload {
     char system_command[CONFIG_ACTION_TYPE_MAX_LEN];      // "reboot", "wifi_reconnect", "screensaver"
 };
+struct HaServicePayload {
+    char entity_id[48];   // e.g. "light.living_room" (domain = text before first '.')
+    char service[20];     // e.g. "toggle", "turn_on", "set_cover_position"
+    char data_json[64];   // optional extra JSON object, e.g. {"brightness_pct":80}
+};
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -217,6 +223,7 @@ union ActionPayload {
     SoundPayload      sound;        // type == ACTION_TYPE_SOUND
     NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
     SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
+    HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, "" (none) carry no payload data — only the type tag.
@@ -251,6 +258,7 @@ static_assert(sizeof(ButtonAction) <= 420,
     printf_fn("  SoundPayload      = %zu\n", sizeof(SoundPayload));      \
     printf_fn("  NotifyPayload     = %zu\n", sizeof(NotifyPayload));     \
     printf_fn("  SystemPayload     = %zu\n", sizeof(SystemPayload));     \
+    printf_fn("  HaServicePayload  = %zu\n", sizeof(HaServicePayload));  \
 } while (0)
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
@@ -295,6 +303,7 @@ struct ScreenButtonConfig {
     char border_color[CONFIG_COLOR_MAX_LEN];      // default "#000000"
     char border_width[CONFIG_BINDABLE_SHORT_LEN]; // default "0" — static or binding
     char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // default "8" — static or binding
+    char content_pad[CONFIG_BINDABLE_SHORT_LEN];  // default "4" — plain px inset for labels/icon/widget (0-50)
 
     // Typed actions (up to MAX_BUTTON_ACTIONS sequential actions per gesture)
     ButtonAction actions[MAX_BUTTON_ACTIONS];      // tap actions (executed sequentially)
@@ -334,6 +343,7 @@ struct ButtonDefaults {
     char border_color[CONFIG_COLOR_MAX_LEN];      // e.g. "#333366"
     char border_width[CONFIG_BINDABLE_SHORT_LEN]; // e.g. "1"
     char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // e.g. "16"
+    char content_pad[CONFIG_BINDABLE_SHORT_LEN];  // e.g. "8" — plain px inset (0-50)
     char label_top_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];
@@ -385,6 +395,16 @@ bool pad_config_exists(uint8_t page);
 // Read raw JSON from LittleFS. Caller must free() the returned buffer.
 // Returns NULL on failure. *out_len is set to the file size.
 char* pad_config_read_raw(uint8_t page, size_t* out_len);
+
+// Read just the pad's optional friendly "name" label into `out` (empty when
+// unset). Returns true when a non-empty name was found. Cheap filtered read.
+bool pad_config_read_name(uint8_t page, char* out, size_t out_len);
+
+// Resolve a pad reference that is either the canonical id ('pad_N') or a
+// friendly name (case-insensitive match against existing pads' "name"). Returns
+// the pad index, or -1 with a human-readable reason in `err` (unknown name, or
+// ambiguous name listing the matching ids so the caller can disambiguate).
+int pad_config_resolve_ref(const char* ref, char* err, size_t err_len);
 
 // Rebuild all in-RAM pad config caches from flash. Call when a shared
 // dependency (e.g. device-level button defaults) changes.

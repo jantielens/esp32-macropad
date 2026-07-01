@@ -1,0 +1,17 @@
+<div class="section-header">
+  <h2>📡 MQTT Triggers</h2>
+  <p>Dispatch actions when a matching MQTT message arrives — no button or screen required.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <p class="text-muted" style="font-size:13px;">
+      MQTT triggers dispatch actions when matching messages arrive. Leave value empty to match any message on the topic.
+      Wildcard topics (<code>#</code>, <code>+</code>) are not supported — use exact topic names.
+      Avoid empty-value triggers on topics that your actions publish to (risk of message loops).
+    </p>
+    <div id="mqtt-trigger-editors"></div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" onclick="saveMqttTriggers()">Save MQTT Triggers</button>
+    </div>
+  </div>
+</div>

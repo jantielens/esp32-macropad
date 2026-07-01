@@ -104,6 +104,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     tests/test_action_parse.cpp \
     src/app/action_parse.cpp \
     src/app/action_registry.cpp \
+    src/app/binding_template.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_action_parse
 
@@ -132,6 +133,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     tests/test_shutter_session_actions.cpp \
     src/app/action_parse.cpp \
     src/app/action_registry.cpp \
+    src/app/binding_template.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_shutter_session_actions
 
@@ -176,19 +178,19 @@ echo "=== Running unit tests: action_bindings ==="
 ./tests/bin/test_action_bindings
 echo
 
-echo "=== Building unit tests: action_registry_step ==="
+echo "=== Building unit tests: action_registry_value_field ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \
     -I src/app \
     -I ~/Arduino/libraries/ArduinoJson/src \
-    tests/test_action_registry_step.cpp \
+    tests/test_action_registry_value_field.cpp \
     src/app/action_registry.cpp \
     src/app/binding_template.cpp \
     tests/stubs.cpp \
-    -o tests/bin/test_action_registry_step -lm
+    -o tests/bin/test_action_registry_value_field -lm
 
-echo "=== Running unit tests: action_registry_step ==="
-./tests/bin/test_action_registry_step
+echo "=== Running unit tests: action_registry_value_field ==="
+./tests/bin/test_action_registry_value_field
 echo
 
 echo "=== Building unit tests: component_registry ==="
@@ -344,8 +346,26 @@ echo "=== Running unit tests: print_log ==="
 ./tests/bin/test_print_log
 echo
 
+echo "=== Building unit tests: mcp_result_strings ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_mcp_result_strings.cpp \
+    -o tests/bin/test_mcp_result_strings
+
+echo "=== Running unit tests: mcp_result_strings ==="
+./tests/bin/test_mcp_result_strings
+echo
+
 echo "=== Running guard: branding mirror (C++ <-> bash) ==="
 ./tests/test_branding_mirror.sh
+echo
+
+echo "=== Running guard: asset bundler variant matrix ==="
+./tests/test_asset_variant_matrix.sh
+echo
+
+echo "=== Running guard: widget schema parity (describe <-> parse) ==="
+python3 tools/lint_widget_schema.py
 echo
 
 echo "=== All tests passed ==="

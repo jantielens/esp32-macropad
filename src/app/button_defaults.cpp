@@ -75,6 +75,7 @@ static bool load_from_flash(ButtonDefaults* d) {
     parse_bindable(doc["border_color"], d->border_color, CONFIG_COLOR_MAX_LEN, "");
     parse_bindable(doc["border_width"], d->border_width, CONFIG_BINDABLE_SHORT_LEN, "", false);
     parse_bindable(doc["corner_radius"], d->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "", false);
+    parse_bindable(doc["content_pad"], d->content_pad, CONFIG_BINDABLE_SHORT_LEN, "", false);
     strlcpy(d->label_top_style, doc["label_top_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
     strlcpy(d->label_center_style, doc["label_center_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
     strlcpy(d->label_bottom_style, doc["label_bottom_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);

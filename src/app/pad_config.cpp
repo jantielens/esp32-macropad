@@ -138,6 +138,7 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     strlcpy(btn->border_color, "#000000", CONFIG_COLOR_MAX_LEN);
     strlcpy(btn->border_width, "0", CONFIG_BINDABLE_SHORT_LEN);
     strlcpy(btn->corner_radius, "8", CONFIG_BINDABLE_SHORT_LEN);
+    strlcpy(btn->content_pad, "4", CONFIG_BINDABLE_SHORT_LEN);
 }
 
 static void parse_ui_offset_field(JsonVariant v, int16_t* out_x, int16_t* out_y) {
@@ -276,6 +277,8 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
                          btn_default(defs ? defs->border_width : nullptr, "0"), false);
     parse_bindable_field(obj["corner_radius"], btn->corner_radius, CONFIG_BINDABLE_SHORT_LEN,
                          btn_default(defs ? defs->corner_radius : nullptr, "8"), false);
+    parse_bindable_field(obj["content_pad"], btn->content_pad, CONFIG_BINDABLE_SHORT_LEN,
+                         btn_default(defs ? defs->content_pad : nullptr, "4"), false);
 
     // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
     // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "beep", ... } ]
@@ -352,49 +355,11 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
 bool pad_config_init() {
     if (g_fs_mounted) return true;
 
-#if USE_SD_STORAGE
-    // SD card was already mounted in setup() via sd_storage_mount(). Skip the
-    // LittleFS partition lookup + begin() entirely — `Storage` resolves to
-    // SD_MMC and is ready to use.
-    LOGI(TAG, "Using SD card storage (mounted earlier in boot)");
-    g_fs_mounted = true;
-    storage_publish_usage(true);
-    if (!Storage.exists("/config")) {
-        Storage.mkdir("/config");
-    }
-    if (!Storage.exists("/storage")) {
-        Storage.mkdir("/storage");
-    }
-#else
-    // Find storage partition by subtype (label may vary across boards)
-    const esp_partition_t* part = esp_partition_find_first(
-        ESP_PARTITION_TYPE_DATA,
-        ESP_PARTITION_SUBTYPE_DATA_SPIFFS,
-        nullptr);
-    if (!part) {
-        LOGW(TAG, "No storage partition found — pad configs will not persist");
+    if (!storage_mount()) {
+        LOGW(TAG, "Storage mount failed — pad configs will not persist");
         return false;
     }
-
-    LOGI(TAG, "Found storage partition '%s' (%u KB)", part->label, part->size / 1024);
-
-    if (!Storage.begin(true /* formatOnFail */, "/littlefs", 10, part->label)) {
-        LOGE(TAG, "LittleFS mount failed on partition '%s'", part->label);
-        return false;
-    }
-
     g_fs_mounted = true;
-
-    // Update fs_health stats
-    storage_publish_usage(true);
-
-    // Ensure /config directory exists
-    if (!Storage.exists("/config")) {
-        Storage.mkdir("/config");
-    }
-
-    LOGI(TAG, "LittleFS mounted (total=%u used=%u)", Storage.totalBytes(), Storage.usedBytes());
-#endif
 
     // Pre-load all existing page configs into RAM cache.
     // This runs on the main task (internal stack) so flash access is safe.
@@ -829,6 +794,62 @@ char* pad_config_read_raw(uint8_t page, size_t* out_len) {
 
 uint32_t pad_config_get_generation() {
     return g_generation;
+}
+
+bool pad_config_read_name(uint8_t page, char* out, size_t out_len) {
+    if (out && out_len) out[0] = '\0';
+    if (!out || out_len == 0 || page >= MAX_PADS) return false;
+    size_t len = 0;
+    char* raw = pad_config_read_raw(page, &len);
+    if (!raw) return false;
+    // Read only the top-level "name" (friendly label) without parsing the whole
+    // pad. Mirrors the filtered read in web_portal_device_api.
+    JsonDocument filter;
+    filter["name"] = true;
+    JsonDocument doc;
+    bool ok = false;
+    if (deserializeJson(doc, raw, len, DeserializationOption::Filter(filter)) == DeserializationError::Ok
+        && doc["name"].is<const char*>()) {
+        const char* n = doc["name"];
+        if (n && n[0]) { strlcpy(out, n, out_len); ok = true; }
+    }
+    free(raw);
+    return ok;
+}
+
+int pad_config_resolve_ref(const char* ref, char* err, size_t err_len) {
+    if (err && err_len) err[0] = '\0';
+    if (!ref || !ref[0]) { if (err) strlcpy(err, "missing pad reference (id 'pad_N' or friendly name)", err_len); return -1; }
+
+    // Canonical id form: pad_<digits>.
+    if (strncmp(ref, "pad_", 4) == 0) {
+        const char* d = ref + 4;
+        bool all_digits = d[0] != '\0';
+        for (const char* p = d; *p; ++p) if (!isdigit((unsigned char)*p)) { all_digits = false; break; }
+        if (all_digits) {
+            int pg = atoi(d);
+            if (pg >= 0 && pg < MAX_PADS) return pg;
+            if (err) snprintf(err, err_len, "pad id out of range (0..%d)", MAX_PADS - 1);
+            return -1;
+        }
+    }
+
+    // Friendly-name lookup (case-insensitive) among existing pads.
+    int found = -1, count = 0;
+    char name[64], cand[120];
+    size_t cl = 0; cand[0] = '\0';
+    for (uint8_t pg = 0; pg < MAX_PADS; ++pg) {
+        if (!pad_config_exists(pg)) continue;
+        if (!pad_config_read_name(pg, name, sizeof(name))) continue;
+        if (strcasecmp(name, ref) != 0) continue;
+        found = pg; count++;
+        int n = snprintf(cand + cl, sizeof(cand) - cl, "%spad_%u", cl ? ", " : "", (unsigned)pg);
+        if (n > 0 && (size_t)n < sizeof(cand) - cl) cl += (size_t)n;
+    }
+    if (count == 1) return found;
+    if (count == 0) { if (err) snprintf(err, err_len, "no pad with id or name '%s'", ref); return -1; }
+    if (err) snprintf(err, err_len, "ambiguous pad name '%s' matches %s — use the pad id", ref, cand);
+    return -1;
 }
 
 #endif // HAS_DISPLAY

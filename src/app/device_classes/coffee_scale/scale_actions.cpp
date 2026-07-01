@@ -1,5 +1,5 @@
-// Coffee-scale ActionTypeDef — parse, serialize, resolve_bindings,
-// has_binding, dispatch for the "scale" action type. Registered via
+// Coffee-scale ActionTypeDef — parse, serialize, dispatch and a value_field
+// accessor for the "scale" action type. Registered via
 // REGISTER_ACTION_TYPE so action_dispatch.cpp / action_parse.cpp do not need
 // to know about the scale arm at compile time.
 //
@@ -13,10 +13,6 @@
 #include "../../log_manager.h"
 #include "coffee_scale_payload.h"
 #include "scale_hal.h"
-
-#if HAS_MQTT
-#include "../../binding_template.h"
-#endif
 
 #include <string.h>
 #include <stdlib.h>
@@ -37,29 +33,14 @@ static void scale_serialize(const ButtonAction& act, JsonObject obj) {
     if (p.value[0])   obj["scale_value"]   = p.value;
 }
 
-#if HAS_MQTT
-// Only `value` is bindable (numeric, e.g. from a [list:...] preset).
-// `command` is structural and never bindable.
-static void scale_resolve_bindings(ButtonAction& act) {
-    char* field = scale_payload(act).value;
-    if (field[0] && binding_template_has_bindings(field)) {
-        char tmp[BINDING_TEMPLATE_MAX_LEN];
-        binding_template_resolve(field, tmp, sizeof(tmp));
-        strlcpy(field, tmp, sizeof(scale_payload(act).value));
-    }
-}
-
-static bool scale_has_binding(const ButtonAction& act) {
-    const char* f = scale_payload(act).value;
-    return f[0] && memchr(f, '[', strlen(f)) != nullptr;
-}
-#endif
-
-// Numeric rocker drives cal_weight with a signed delta; substitute {step}
-// into the value field so the rocker step reaches scale_adjust_cal_weight().
-static void scale_substitute_step(ButtonAction& act, float step) {
+// `value` is the single bindable/numeric field: bindable (e.g. a [list:...]
+// preset) and the numeric rocker {step} target for cal_weight. Expose it so
+// shared code drives binding resolution + {step} substitution. `command` is
+// structural and never bindable.
+static char* scale_value_field(ButtonAction& act, size_t* out_size) {
     ScalePayload& p = scale_payload(act);
-    action_substitute_step_field(p.value, sizeof(p.value), step);
+    *out_size = sizeof(p.value);
+    return p.value;
 }
 
 #if HAS_SCALE
@@ -99,15 +80,11 @@ static void scale_dispatch(const ButtonAction& /*act*/, const char* label) {
 #endif
 
 static const ActionTypeDef scale_action_type = {
-    /* type_name        */ ACTION_TYPE_SCALE,
-    /* parse            */ scale_parse,
-    /* serialize        */ scale_serialize,
-#if HAS_MQTT
-    /* resolve_bindings */ scale_resolve_bindings,
-    /* has_binding      */ scale_has_binding,
-#endif
-    /* dispatch         */ scale_dispatch,
-    /* substitute_step  */ scale_substitute_step,
+    /* type_name   */ ACTION_TYPE_SCALE,
+    /* parse       */ scale_parse,
+    /* serialize   */ scale_serialize,
+    /* dispatch    */ scale_dispatch,
+    /* value_field */ scale_value_field,
 };
 
 REGISTER_ACTION_TYPE(scale_action_type);

@@ -48,6 +48,45 @@ typedef void (*binding_topic_collector_fn)(const char* params, void* user_data);
 bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
                                binding_topic_collector_fn collector);
 
+// Number of registered binding schemes (for registry-driven enumeration, e.g.
+// the MCP capability manifest). The scheme list stays generated — a device
+// class registering a scheme auto-appears.
+uint8_t binding_template_scheme_count();
+
+// Name of a registered scheme by index (0 .. count-1), or nullptr.
+const char* binding_template_scheme_name(uint8_t index);
+
+// Optional per-scheme describe hook for the MCP capability manifest. Each scheme
+// describes itself in its own .cpp (mirrors widget describeSchema). The out
+// pointer is an ArduinoJson JsonObject* (void* here to keep this widely-included
+// header free of the ArduinoJson dependency); the scheme's describe casts it.
+typedef void (*binding_describe_fn)(void* out_json);
+
+// Attach a describe hook to a registered scheme (call after register). Returns
+// false if the scheme name is unknown.
+bool binding_template_set_scheme_describe(const char* scheme, binding_describe_fn fn);
+
+// Invoke scheme[index]'s describe hook into out_json (a JsonObject*). Returns
+// true if the scheme has a describe hook, false otherwise.
+bool binding_template_describe_scheme(uint8_t index, void* out_json);
+
+// Optional per-scheme validate hook for authoring (MCP write tools). Each scheme
+// validates its own token params in its own .cpp (mirrors describe). `params` is
+// the text after "scheme:" up to the first ';' '|' or ']' (e.g. the health key,
+// timer id, list provider). Returns a human-readable error string (static
+// lifetime) when invalid, or nullptr when ok.
+typedef const char* (*binding_validate_fn)(const char* params);
+
+// Attach a validate hook to a registered scheme (call after register).
+bool binding_template_set_scheme_validate(const char* scheme, binding_validate_fn fn);
+
+// True if `scheme` (length name_len) is a registered scheme name.
+bool binding_template_scheme_known(const char* scheme, size_t name_len);
+
+// Run the scheme's validate hook on `params`. Returns nullptr when the scheme is
+// unknown, has no validate hook, or the params are valid; otherwise an error.
+const char* binding_template_validate_params(const char* scheme, size_t name_len, const char* params);
+
 // Check if a label string contains any binding tokens [xxx:...]
 bool binding_template_has_bindings(const char* label);
 

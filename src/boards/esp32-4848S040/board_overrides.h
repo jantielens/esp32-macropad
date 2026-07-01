@@ -158,4 +158,18 @@
 // Touch interrupt pin (-1 = not connected).
 #define TOUCH_INT -1
 
+// ============================================================================
+// Hardware Button (onboard BOOT)
+// ============================================================================
+// BOOT is the strapping button on GPIO0 (active-low, internal pull-up).
+// Usable as a runtime action button — only matters at reset (holding it low
+// at power-up enters serial download mode).
+#define HAS_BUTTON true
+#define NUM_HW_BUTTONS 1
+#ifdef __cplusplus
+static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
+    { .pin = 0, .active_low = true, .label = "BOOT" },
+};
+#endif
+
 #endif // BOARD_OVERRIDES_ESP32_4848S040_H

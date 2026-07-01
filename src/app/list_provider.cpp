@@ -27,6 +27,12 @@ const ListProvider* list_provider_find(const char* id) {
     return nullptr;
 }
 
+uint8_t list_provider_count() { return g_provider_count; }
+
+const ListProvider* list_provider_at(uint8_t index) {
+    return (index < g_provider_count) ? g_providers[index] : nullptr;
+}
+
 // ============================================================================
 // Item filter
 // ============================================================================

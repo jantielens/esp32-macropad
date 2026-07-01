@@ -10,8 +10,15 @@ function padDialogOpen(col, row) {
     padPopulateScreenDropdown();
     padPopulateSoundDropdown();
 
-    // Sync device-level button defaults from the DOM into padState so placeholders are current
-    padState.buttonDefaults = padCollectButtonDefaults();
+    // Sync device-level button defaults from the DOM into padState so placeholders
+    // are current. The Button Defaults form may live on a separate page; only
+    // re-collect when it is actually mounted, otherwise keep the defaults already
+    // loaded from the device API (padLoadButtonDefaultsFromDevice) so inherited
+    // values/placeholders stay correct instead of falling back to firmware.
+    if (document.getElementById('pad-def-border-width')) {
+        padState.buttonDefaults = padCollectButtonDefaults();
+    }
+    if (!padState.buttonDefaults) padState.buttonDefaults = {};
 
     const btn = padFindButton(col, row) || {};
 
@@ -48,16 +55,20 @@ function padDialogOpen(col, row) {
 
     // Auto-open colors section if any color has a binding or custom override
     var hasColorOverride = btn.bg_color || btn.fg_color || btn.border_color ||
-        (btn.border_width !== undefined) || (btn.corner_radius !== undefined);
+        (btn.border_width !== undefined) || (btn.corner_radius !== undefined) ||
+        (btn.content_pad !== undefined);
     document.getElementById('pad-edit-colors-section').open = !!hasColorOverride;
 
     var effBw = padGetEffectiveDefault('border_width');
     var effCr = padGetEffectiveDefault('corner_radius');
+    var effCp = padGetEffectiveDefault('content_pad');
     document.getElementById('pad-edit-border-width').value = (btn.border_width !== undefined) ? btn.border_width : effBw;
     document.getElementById('pad-edit-corner-radius').value = (btn.corner_radius !== undefined) ? btn.corner_radius : effCr;
+    document.getElementById('pad-edit-content-pad').value = (btn.content_pad !== undefined) ? btn.content_pad : effCp;
     // Set placeholders to show what the pad default is
     document.getElementById('pad-edit-border-width').placeholder = effBw;
     document.getElementById('pad-edit-corner-radius').placeholder = effCr;
+    document.getElementById('pad-edit-content-pad').placeholder = effCp;
     document.getElementById('pad-edit-ui-offset').value = btn.ui_offset || '';
 
     // Update reset-hint visibility for appearance fields
@@ -131,11 +142,33 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : '0';
     document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : '3';
     document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
+    document.getElementById('pad-edit-widget-bar-data-binding-2').value = btn.widget_data_binding_2 || '';
+    document.getElementById('pad-edit-widget-bar-data-binding-3').value = btn.widget_data_binding_3 || '';
+    document.getElementById('pad-edit-widget-bar-data-binding-4').value = btn.widget_data_binding_4 || '';
+    document.getElementById('pad-edit-widget-bar-label').value = btn.widget_bar_label || '';
+    document.getElementById('pad-edit-widget-bar-label-2').value = btn.widget_bar_label_2 || '';
+    document.getElementById('pad-edit-widget-bar-label-3').value = btn.widget_bar_label_3 || '';
+    document.getElementById('pad-edit-widget-bar-label-4').value = btn.widget_bar_label_4 || '';
+    document.getElementById('pad-edit-widget-bar-label-size').value = (btn.widget_bar_label_size !== undefined) ? btn.widget_bar_label_size : 0;
     padSetBindableColor('pad-edit-widget-bar-color', btn.widget_bar_color, '#4CAF50');
+    padSetBindableColor('pad-edit-widget-bar-color-2', btn.widget_bar_color_2, '#2196F3');
+    padSetBindableColor('pad-edit-widget-bar-color-3', btn.widget_bar_color_3, '#9C27B0');
+    padSetBindableColor('pad-edit-widget-bar-color-4', btn.widget_bar_color_4, '#FF9800');
     padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, '#1A1A1A');
     document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
     document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
+    document.getElementById('pad-edit-widget-bar-zero-centered').checked = (btn.widget_bar_zero_centered !== undefined) ? btn.widget_bar_zero_centered : false;
+    document.getElementById('pad-edit-widget-bar-dual-binding-pair-1').checked = (btn.widget_bar_dual_binding_pair_1 !== undefined) ? btn.widget_bar_dual_binding_pair_1 : false;
+    document.getElementById('pad-edit-widget-bar-dual-binding-pair-2').checked = (btn.widget_bar_dual_binding_pair_2 !== undefined) ? btn.widget_bar_dual_binding_pair_2 : false;
     document.getElementById('pad-edit-widget-bar-anim-ms').value = (btn.widget_anim_ms !== undefined) ? btn.widget_anim_ms : 300;
+    document.getElementById('pad-edit-widget-bar-ticks').value = (btn.widget_bar_ticks !== undefined) ? btn.widget_bar_ticks : 0;
+    document.getElementById('pad-edit-widget-bar-tick-width').value = (btn.widget_bar_tick_width !== undefined) ? btn.widget_bar_tick_width : 1;
+    padSetBindableColor('pad-edit-widget-bar-tick-color', btn.widget_bar_tick_color, '#808080');
+    document.getElementById('pad-edit-widget-bar-marker-value').value = btn.widget_bar_marker_value || '';
+    document.getElementById('pad-edit-widget-bar-marker-zone-pct').value = (btn.widget_bar_marker_zone_pct !== undefined) ? btn.widget_bar_marker_zone_pct : 0;
+    document.getElementById('pad-edit-widget-bar-marker-width').value = (btn.widget_bar_marker_width !== undefined) ? btn.widget_bar_marker_width : 2;
+    padSetBindableColor('pad-edit-widget-bar-marker-color', btn.widget_bar_marker_color, '#FFFFFF');
+    padSetBindableColor('pad-edit-widget-bar-marker-zone-color', btn.widget_bar_marker_zone_color, '#FF5722');
 
     // Gauge widget fields
     document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
@@ -185,6 +218,7 @@ function padDialogOpen(col, row) {
     padSetBindableColor('pad-edit-sparkline-line-color-2', btn.widget_sparkline_line_color_2, '#2196F3');
     padSetBindableColor('pad-edit-sparkline-line-color-3', btn.widget_sparkline_line_color_3, '#9C27B0');
     document.getElementById('pad-edit-sparkline-line-width').value = (btn.widget_sparkline_line_width !== undefined) ? btn.widget_sparkline_line_width : 2;
+    document.getElementById('pad-edit-sparkline-line-offset').value = (btn.widget_sparkline_line_offset !== undefined) ? btn.widget_sparkline_line_offset : 0;
     document.getElementById('pad-edit-sparkline-smooth').value = (btn.widget_sparkline_smooth !== undefined) ? btn.widget_sparkline_smooth : 0;
     document.getElementById('pad-edit-sparkline-unified-scale').checked = (btn.widget_sparkline_unified_scale !== undefined) ? btn.widget_sparkline_unified_scale : true;
 
@@ -250,6 +284,9 @@ function padDialogOpen(col, row) {
     // Scroll dialog body to top
     const body = document.querySelector('.pad-edit-modal .pad-edit-body');
     if (body) body.scrollTop = 0;
+
+    // Refresh binding length warnings for the loaded values
+    if (typeof padScanMaxlenHints === 'function') padScanMaxlenHints();
 }
 
 function padDialogClose() {
@@ -302,6 +339,9 @@ function padDialogOk(keepOpen) {
     const cr = document.getElementById('pad-edit-corner-radius').value.trim();
     var effCr = padGetEffectiveDefault('corner_radius');
     if (cr && cr !== effCr) btn.corner_radius = cr;
+    const cp = document.getElementById('pad-edit-content-pad').value.trim();
+    var effCp = padGetEffectiveDefault('content_pad');
+    if (cp && cp !== effCp) btn.content_pad = cp; else delete btn.content_pad;
     const uiOffset = document.getElementById('pad-edit-ui-offset').value.trim();
     if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
 
@@ -355,16 +395,43 @@ function padDialogOk(keepOpen) {
         if (wtype === 'bar_chart') {
             const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
             if (wDataBinding) btn.widget_data_binding = wDataBinding;
+            btn.widget_data_binding_2 = document.getElementById('pad-edit-widget-bar-data-binding-2').value.trim();
+            btn.widget_data_binding_3 = document.getElementById('pad-edit-widget-bar-data-binding-3').value.trim();
+            btn.widget_data_binding_4 = document.getElementById('pad-edit-widget-bar-data-binding-4').value.trim();
+            btn.widget_bar_label = document.getElementById('pad-edit-widget-bar-label').value.trim();
+            btn.widget_bar_label_2 = document.getElementById('pad-edit-widget-bar-label-2').value.trim();
+            btn.widget_bar_label_3 = document.getElementById('pad-edit-widget-bar-label-3').value.trim();
+            btn.widget_bar_label_4 = document.getElementById('pad-edit-widget-bar-label-4').value.trim();
+            const barLblSz = parseInt(document.getElementById('pad-edit-widget-bar-label-size').value);
+            if (!isNaN(barLblSz) && barLblSz > 0) btn.widget_bar_label_size = (barLblSz > 200) ? 200 : barLblSz;
             btn.widget_bar_min = padGetBindableNumber('pad-edit-widget-bar-min', 0);
             btn.widget_bar_max = padGetBindableNumber('pad-edit-widget-bar-max', 3);
             btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');
+            btn.widget_bar_color_2 = padGetBindableColor('pad-edit-widget-bar-color-2');
+            btn.widget_bar_color_3 = padGetBindableColor('pad-edit-widget-bar-color-3');
+            btn.widget_bar_color_4 = padGetBindableColor('pad-edit-widget-bar-color-4');
             btn.widget_bar_bg_color = padGetBindableColor('pad-edit-widget-bar-bg-color');
             const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
             btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
             const orient = document.getElementById('pad-edit-widget-orientation').value;
             if (orient === 'horizontal') btn.widget_orientation = 'horizontal';
+            btn.widget_bar_zero_centered = document.getElementById('pad-edit-widget-bar-zero-centered').checked;
+            btn.widget_bar_dual_binding_pair_1 = document.getElementById('pad-edit-widget-bar-dual-binding-pair-1').checked;
+            btn.widget_bar_dual_binding_pair_2 = document.getElementById('pad-edit-widget-bar-dual-binding-pair-2').checked;
             const barAnimMs = parseInt(document.getElementById('pad-edit-widget-bar-anim-ms').value);
             btn.widget_anim_ms = (isNaN(barAnimMs) || barAnimMs < 0) ? 300 : (barAnimMs > 5000) ? 5000 : barAnimMs;
+            const barTicks = parseInt(document.getElementById('pad-edit-widget-bar-ticks').value);
+            btn.widget_bar_ticks = (isNaN(barTicks) || barTicks < 0) ? 0 : (barTicks > 20) ? 20 : barTicks;
+            const barTickW = parseInt(document.getElementById('pad-edit-widget-bar-tick-width').value);
+            btn.widget_bar_tick_width = (isNaN(barTickW) || barTickW < 1) ? 1 : (barTickW > 5) ? 5 : barTickW;
+            btn.widget_bar_tick_color = padGetBindableColor('pad-edit-widget-bar-tick-color');
+            btn.widget_bar_marker_value = document.getElementById('pad-edit-widget-bar-marker-value').value.trim();
+            const barZonePct = parseInt(document.getElementById('pad-edit-widget-bar-marker-zone-pct').value);
+            btn.widget_bar_marker_zone_pct = (isNaN(barZonePct) || barZonePct < 0) ? 0 : (barZonePct > 100) ? 100 : barZonePct;
+            const barMarkerW = parseInt(document.getElementById('pad-edit-widget-bar-marker-width').value);
+            btn.widget_bar_marker_width = (isNaN(barMarkerW) || barMarkerW < 0) ? 2 : (barMarkerW > 10) ? 10 : barMarkerW;
+            btn.widget_bar_marker_color = padGetBindableColor('pad-edit-widget-bar-marker-color');
+            btn.widget_bar_marker_zone_color = padGetBindableColor('pad-edit-widget-bar-marker-zone-color');
         }
         if (wtype === 'gauge') {
             const gDataBinding = document.getElementById('pad-edit-gauge-data-binding').value.trim();
@@ -435,6 +502,8 @@ function padDialogOk(keepOpen) {
             btn.widget_sparkline_line_color_3 = padGetBindableColor('pad-edit-sparkline-line-color-3');
             const sLw = parseInt(document.getElementById('pad-edit-sparkline-line-width').value);
             btn.widget_sparkline_line_width = (isNaN(sLw) || sLw < 1) ? 2 : (sLw > 10) ? 10 : sLw;
+            const sLoff = parseInt(document.getElementById('pad-edit-sparkline-line-offset').value);
+            btn.widget_sparkline_line_offset = (isNaN(sLoff) || sLoff < 0) ? 0 : (sLoff > 6) ? 6 : sLoff;
             const sSmooth = parseInt(document.getElementById('pad-edit-sparkline-smooth').value);
             btn.widget_sparkline_smooth = (isNaN(sSmooth) || sSmooth < 0) ? 0 : (sSmooth > 8) ? 8 : sSmooth;
             btn.widget_sparkline_unified_scale = document.getElementById('pad-edit-sparkline-unified-scale').checked;

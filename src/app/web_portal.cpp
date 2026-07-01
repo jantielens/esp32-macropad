@@ -27,6 +27,7 @@
 #include "portal_idle.h"
 #include "web_portal_firmware.h"
 #include "web_portal_ap.h"
+#include "web_mcp.h"
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -129,6 +130,8 @@ void web_portal_handle() {
 		web_portal_ap_handle();
 
 		web_portal_config_loop();
+
+		web_mcp_loop();
 
 		portal_idle_loop();
 }

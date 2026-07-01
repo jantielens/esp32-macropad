@@ -16,8 +16,6 @@ namespace {
 constexpr const char* KEY_SCALE_CAL    = "scale_cal";
 constexpr const char* KEY_SCALE_OFS    = "scale_ofs";
 constexpr const char* KEY_SCALE_SMOOTH = "scale_smooth";
-
-const char* const SM_NAMES[] = {"Stable", "Balanced", "Responsive"};
 } // namespace
 
 #undef TAG
@@ -64,7 +62,7 @@ void coffee_scale_config_load(Preferences& prefs) {
     LOGI(TAG, "Config loaded: cal=%s ofs=%s smoothing=%s (%u)",
          coffee_scale_config.scale_cal_factor,
          coffee_scale_config.scale_offset,
-         SM_NAMES[coffee_scale_config.scale_smoothing],
+         scale_smoothing_preset_name(coffee_scale_config.scale_smoothing),
          coffee_scale_config.scale_smoothing);
 
     // Auto-tare-on-first-boot rule: if no calibration data was persisted, the

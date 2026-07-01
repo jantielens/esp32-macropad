@@ -43,22 +43,20 @@ static void print_dispatch(const ButtonAction& act, const char* label) {
     print_log_dispatch(p.command, p.value);
 }
 
-// Numeric rocker drives adjust_* commands; substitute {step} into the value.
-static void print_substitute_step(ButtonAction& act, float step) {
+// `value` is the single bindable/numeric field (numeric rocker {step} target
+// for adjust_* commands); expose it so shared code drives binding + {step}.
+static char* print_value_field(ButtonAction& act, size_t* out_size) {
     PrintPayload& p = print_payload(act);
-    action_substitute_step_field(p.value, sizeof(p.value), step);
+    *out_size = sizeof(p.value);
+    return p.value;
 }
 
 static const ActionTypeDef print_action_type = {
-    /* type_name        */ ACTION_TYPE_PRINT,
-    /* parse            */ print_parse,
-    /* serialize        */ print_serialize,
-#if HAS_MQTT
-    /* resolve_bindings */ nullptr,
-    /* has_binding      */ nullptr,
-#endif
-    /* dispatch         */ print_dispatch,
-    /* substitute_step  */ print_substitute_step,
+    /* type_name   */ ACTION_TYPE_PRINT,
+    /* parse       */ print_parse,
+    /* serialize   */ print_serialize,
+    /* dispatch    */ print_dispatch,
+    /* value_field */ print_value_field,
 };
 
 REGISTER_ACTION_TYPE(print_action_type);

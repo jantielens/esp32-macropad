@@ -42,22 +42,20 @@ static void expose_dispatch(const ButtonAction& act, const char* label) {
     expose_timer_dispatch(p.command, p.value);
 }
 
-// Numeric rocker drives adjust_* commands; substitute {step} into the value.
-static void expose_substitute_step(ButtonAction& act, float step) {
+// `value` is the single bindable/numeric field (numeric rocker {step} target
+// for adjust_* commands); expose it so shared code drives binding + {step}.
+static char* expose_value_field(ButtonAction& act, size_t* out_size) {
     ExposePayload& p = expose_payload(act);
-    action_substitute_step_field(p.value, sizeof(p.value), step);
+    *out_size = sizeof(p.value);
+    return p.value;
 }
 
 static const ActionTypeDef expose_action_type = {
-    /* type_name        */ ACTION_TYPE_EXPOSE,
-    /* parse            */ expose_parse,
-    /* serialize        */ expose_serialize,
-#if HAS_MQTT
-    /* resolve_bindings */ nullptr,
-    /* has_binding      */ nullptr,
-#endif
-    /* dispatch         */ expose_dispatch,
-    /* substitute_step  */ expose_substitute_step,
+    /* type_name   */ ACTION_TYPE_EXPOSE,
+    /* parse       */ expose_parse,
+    /* serialize   */ expose_serialize,
+    /* dispatch    */ expose_dispatch,
+    /* value_field */ expose_value_field,
 };
 
 REGISTER_ACTION_TYPE(expose_action_type);

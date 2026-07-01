@@ -214,7 +214,10 @@ bool epaper_sd_cache_resolve(const char* url, String& out_blob_url,
 				http.setTimeout(8000);
 				const char* collect[] = {"Location"};
 				http.collectHeaders(collect, 1);
+				const uint32_t t_get = millis();
 				const int code = http.GET();
+				LOGI("Epaper", "Resolve hop %d: GET %lums (TCP+TLS+req) code=%d", hop,
+						 (unsigned long)(millis() - t_get), code);
 				if (code == HTTP_CODE_MOVED_PERMANENTLY || code == HTTP_CODE_FOUND ||
 						code == HTTP_CODE_SEE_OTHER || code == HTTP_CODE_TEMPORARY_REDIRECT ||
 						code == HTTP_CODE_PERMANENT_REDIRECT) {

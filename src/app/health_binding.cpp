@@ -377,14 +377,111 @@ static void health_binding_collect(const char* params, void* user_data) {
 // Init — register the "health" scheme
 // ============================================================================
 
+// Canonical [health:key] table, kept beside the resolver ladder so the MCP
+// capability manifest can enumerate keys AND their meaning without a
+// hand-duplicated copy. Gated on HAS_MCP — only the manifest consumes it.
+#if HAS_MCP
+#include <ArduinoJson.h>
+
+struct HealthKeyDef { const char* key; const char* desc; };
+static const HealthKeyDef HEALTH_KEYS[] = {
+    {"cpu",                 "CPU usage % (0-100)"},
+    {"rssi",                "WiFi signal strength, dBm"},
+    {"uptime",              "seconds since boot"},
+    {"chip",                "SoC model, e.g. ESP32-S3"},
+    {"chip_rev",            "silicon revision number"},
+    {"chip_cores",          "CPU core count"},
+    {"cpu_freq",            "CPU clock, MHz"},
+    {"flash_size",          "flash chip size, bytes"},
+    {"firmware",            "firmware version string"},
+    {"board",              "board name used at build time"},
+    {"mac",                 "WiFi MAC address"},
+    {"reset_reason",        "last reset cause"},
+    {"heap_total",          "total heap, bytes"},
+    {"heap_free",           "free heap, bytes"},
+    {"heap_min",            "heap low-water mark, bytes"},
+    {"heap_largest",        "largest free heap block, bytes"},
+    {"heap_internal_total", "total internal RAM, bytes"},
+    {"heap_internal",       "free internal RAM, bytes"},
+    {"heap_internal_used",  "used internal RAM, bytes"},
+    {"psram_total",         "total PSRAM, bytes (0 if absent)"},
+    {"psram_free",          "free PSRAM, bytes"},
+    {"psram_used",          "used PSRAM, bytes"},
+    {"psram_min",           "PSRAM low-water mark, bytes"},
+    {"psram_largest",       "largest free PSRAM block, bytes"},
+    {"wifi_connected",      "ON/OFF WiFi connection state"},
+    {"wifi_ssid",           "connected network name"},
+    {"ip",                  "device IP address"},
+    {"hostname",            "device hostname"},
+    {"brightness",          "backlight brightness 0-100"},
+    {"volume",              "audio volume 0-100"},
+    {"table",               "structured table payload (for the table widget)"},
+    {"extended_table",      "structured table payload, extended schema"},
+    {"ble_status",          "compact BLE status (disabled/ready/pairing/connected/error)"},
+    {"ble_name",            "current BLE keyboard name"},
+    {"ble_state",           "detailed BLE state"},
+    {"ble_pairing",         "ON/OFF BLE pairing-mode active"},
+    {"ble_bonded",          "ON/OFF current connection bonded"},
+    {"ble_encrypted",       "ON/OFF current connection encrypted"},
+    {"ble_peer_addr",       "connected peer Bluetooth address"},
+    {"ble_peer_id_addr",    "connected peer identity address"},
+};
+
+uint8_t health_binding_key_count() {
+    return (uint8_t)(sizeof(HEALTH_KEYS) / sizeof(HEALTH_KEYS[0]));
+}
+
+const char* health_binding_key_at(uint8_t index) {
+    return (index < health_binding_key_count()) ? HEALTH_KEYS[index].key : nullptr;
+}
+
+const char* health_binding_key_desc_at(uint8_t index) {
+    return (index < health_binding_key_count()) ? HEALTH_KEYS[index].desc : nullptr;
+}
+
+// Self-description for the MCP capability manifest (lives with the scheme).
+static void health_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[health:key;format]";
+    o["example"] = "[health:heap_free;%d]";
+    o["keys"]    = "see health_keys[] for the full {name, desc} list";
+}
+
+// Validate a [health:KEY] token's params (the key, already stripped of any
+// ;format / |fallback by the caller). Lives with the scheme so the key set is
+// the single source for both the manifest and authoring validation.
+static char s_health_verr[80];
+static const char* health_scheme_validate(const char* params) {
+    if (!params || !params[0]) return nullptr;
+    for (uint8_t i = 0; i < health_binding_key_count(); ++i) {
+        const char* hk = health_binding_key_at(i);
+        if (hk && strcmp(hk, params) == 0) return nullptr;
+    }
+    snprintf(s_health_verr, sizeof(s_health_verr),
+             "unknown health key '%s' — use a key from capabilities.health_keys", params);
+    return s_health_verr;
+}
+#else
+uint8_t health_binding_key_count() { return 0; }
+const char* health_binding_key_at(uint8_t index) { (void)index; return nullptr; }
+const char* health_binding_key_desc_at(uint8_t index) { (void)index; return nullptr; }
+#endif // HAS_MCP
+
 void health_binding_init() {
     if (!binding_template_register("health", health_binding_resolve, health_binding_collect)) {
         LOGE(TAG, "Failed to register health binding scheme");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("health", health_scheme_describe);
+    binding_template_set_scheme_validate("health", health_scheme_validate);
+#endif
 }
 
 #else // !HAS_DISPLAY
 
+uint8_t health_binding_key_count() { return 0; }
+const char* health_binding_key_at(uint8_t index) { (void)index; return nullptr; }
+const char* health_binding_key_desc_at(uint8_t index) { (void)index; return nullptr; }
 void health_binding_init() {}
 
 #endif

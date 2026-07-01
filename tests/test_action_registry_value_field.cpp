@@ -3,17 +3,17 @@
 // ============================================================================
 // Device-class action types store their value in the opaque
 // ActionPayload::device_class arm, invisible to shared firmware at compile
-// time. Three registry hooks reach that field: resolve_bindings, has_binding,
-// and substitute_step. A device class that forgets to wire substitute_step
-// silently regresses the numeric rocker {step} feature (the bug that motivated
-// this test).
+// time. A single registry accessor, value_field, reaches that field; shared
+// code drives binding resolution, the '[' scan, and {step} substitution
+// generically against it. A device class that forgets to wire value_field
+// silently loses all three behaviors (the bug that motivated this test).
 //
 // This test registers a SYNTHETIC device-class value-action — mirroring the
 // canonical `{ char command[]; char value[]; }` payload shape — and asserts
-// that all three hooks behave correctly when invoked through the registry
-// (action_type_find -> def->hook). It is intentionally decoupled from any one
-// device class so it keeps guarding the contract even as device classes come
-// and go.
+// that all three generic behaviors work when invoked through the registry
+// helpers (action_type_substitute_step / _has_binding / _resolve_bindings).
+// It is intentionally decoupled from any one device class so it keeps guarding
+// the contract even as device classes come and go.
 
 #include <cstdio>
 #include <cstring>
@@ -37,40 +37,23 @@ static_assert(sizeof(FakePayload) <= ACTION_PAYLOAD_DEVICE_CLASS_BYTES,
 static FakePayload& fake_payload(ButtonAction& act) {
     return *reinterpret_cast<FakePayload*>(act.payload.device_class);
 }
-static const FakePayload& fake_payload(const ButtonAction& act) {
-    return *reinterpret_cast<const FakePayload*>(act.payload.device_class);
-}
 
 // ---------------------------------------------------------------------------
-// Hook implementations — mirror the device-class pattern exactly.
+// Accessor implementation — mirrors the device-class pattern exactly.
 // ---------------------------------------------------------------------------
-static void fake_resolve_bindings(ButtonAction& act) {
-    char* field = fake_payload(act).value;
-    if (field[0] && binding_template_has_bindings(field)) {
-        char tmp[BINDING_TEMPLATE_MAX_LEN];
-        binding_template_resolve(field, tmp, sizeof(tmp));
-        strlcpy(field, tmp, sizeof(fake_payload(act).value));
-    }
-}
-
-static bool fake_has_binding(const ButtonAction& act) {
-    const char* f = fake_payload(act).value;
-    return f[0] && memchr(f, '[', strlen(f)) != nullptr;
-}
-
-static void fake_substitute_step(ButtonAction& act, float step) {
+static char* fake_value_field(ButtonAction& act, size_t* out_size) {
     FakePayload& p = fake_payload(act);
-    action_substitute_step_field(p.value, sizeof(p.value), step);
+    *out_size = sizeof(p.value);
+    return p.value;
 }
 
 static const ActionTypeDef fake_action_type = {
-    /* type_name        */ ACTION_TYPE_FAKE,
-    /* parse            */ nullptr,
-    /* serialize        */ nullptr,
-    /* resolve_bindings */ fake_resolve_bindings,
-    /* has_binding      */ fake_has_binding,
-    /* dispatch         */ nullptr,
-    /* substitute_step  */ fake_substitute_step,
+    /* type_name   */ ACTION_TYPE_FAKE,
+    /* parse       */ nullptr,
+    /* serialize   */ nullptr,
+    /* dispatch    */ nullptr,
+    /* value_field */ fake_value_field,
+    /* describe    */ nullptr,
 };
 
 // ---------------------------------------------------------------------------
@@ -126,28 +109,26 @@ static void test_lookup_returns_registered_def() {
     printf("--- registry returns the registered def ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
     check_true(def != nullptr, "fake type is registered");
-    check_true(def && def->substitute_step != nullptr, "substitute_step hook present");
-    check_true(def && def->resolve_bindings != nullptr, "resolve_bindings hook present");
-    check_true(def && def->has_binding != nullptr, "has_binding hook present");
+    check_true(def && def->value_field != nullptr, "value_field accessor present");
 }
 
 static void test_substitute_step_via_registry() {
     printf("--- substitute_step substitutes {step} via registry ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->substitute_step) { g_fail++; return; }
+    if (!def || !def->value_field) { g_fail++; return; }
     {
         ButtonAction act = make_fake("adjust_base {step}");
-        def->substitute_step(act, 5.0f);
+        action_type_substitute_step(def, act, 5.0f);
         check_str(fake_payload(act).value, "adjust_base 5", "positive step substituted");
     }
     {
         ButtonAction act = make_fake("adjust_base {step}");
-        def->substitute_step(act, -2.5f);
+        action_type_substitute_step(def, act, -2.5f);
         check_str(fake_payload(act).value, "adjust_base -2.5", "negative fractional step substituted");
     }
     {
         ButtonAction act = make_fake("no token here");
-        def->substitute_step(act, 9.0f);
+        action_type_substitute_step(def, act, 9.0f);
         check_str(fake_payload(act).value, "no token here", "field without token unchanged");
     }
 }
@@ -155,35 +136,35 @@ static void test_substitute_step_via_registry() {
 static void test_has_binding_via_registry() {
     printf("--- has_binding detects bindings via registry ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->has_binding) { g_fail++; return; }
+    if (!def || !def->value_field) { g_fail++; return; }
     {
         ButtonAction act = make_fake("[mock:x]");
-        check_true(def->has_binding(act), "binding token detected");
+        check_true(action_type_has_binding(def, act), "binding token detected");
     }
     {
         ButtonAction act = make_fake("plain");
-        check_true(!def->has_binding(act), "plain value reports no binding");
+        check_true(!action_type_has_binding(def, act), "plain value reports no binding");
     }
     {
         ButtonAction act = make_fake("");
-        check_true(!def->has_binding(act), "empty value reports no binding");
+        check_true(!action_type_has_binding(def, act), "empty value reports no binding");
     }
 }
 
 static void test_resolve_bindings_via_registry() {
     printf("--- resolve_bindings resolves value via registry ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
-    if (!def || !def->resolve_bindings) { g_fail++; return; }
+    if (!def || !def->value_field) { g_fail++; return; }
     {
         ButtonAction act = make_fake("[mock:x]");
-        def->resolve_bindings(act);
+        action_type_resolve_bindings(def, act);
         check_str(fake_payload(act).value, "RESOLVED", "binding resolved");
     }
     {
         // resolve_bindings must leave {step} untouched — only the rocker
         // substitutes it. This is the cross-feature invariant.
         ButtonAction act = make_fake("{step}");
-        def->resolve_bindings(act);
+        action_type_resolve_bindings(def, act);
         check_str(fake_payload(act).value, "{step}", "{step} survives binding resolution");
     }
 }

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 221
+Total flags: 230
 
 ### Features (HAS_*)
 
@@ -36,8 +36,9 @@ Total flags: 221
 - **HAS_EPAPER** default: `false` — Enable the e-paper refresh path and E-Paper portal page.
 - **HAS_EPAPER_FRONTLIGHT** default: `false` — Enable e-paper frontlight control on boards with frontlight hardware.
 - **HAS_EPAPER_VCOM** default: `false` — Enable the portal VCOM calibration page (TPS65186/Inkplate panels only).
-- **HAS_EPAPER_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext0 wake plus short/long press).
+- **HAS_EPAPER_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext1 wake plus short/long press).
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
+- **HAS_MCP** default: `true` — the feature out entirely (saves flash on constrained or locked-down builds).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
 - **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.
 - **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
@@ -131,6 +132,8 @@ Total flags: 221
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
 - **MAX_GRID_COLS** default: `(no default)` — Maximum grid columns.
 - **MAX_GRID_ROWS** default: `(no default)` — Maximum grid rows.
+- **MAX_HW_BUTTONS** default: `5` — Compile-time cap on the number of declarable hardware buttons.
+- **MAX_MQTT_TRIGGERS** default: `8` — Example override: #define MAX_MQTT_TRIGGERS 3
 - **MAX_NON_PAD_SCREENS** default: `10` — Number of non-pad screens (info, test, fps, touch_test, + headroom).
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
@@ -165,7 +168,11 @@ Total flags: 221
 - **DEVICE_TELEMETRY_CPU_MONITOR** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable CPU monitoring (idle-hook based, 1 Hz esp_timer).
 - **DEVICE_TELEMETRY_HEALTH_WINDOW** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable health-window min/max sampling timer.
 - **DISPLAY_BLANK_ON_SAVE** default: `false` — (LittleFS + lodepng). The browser blanks/restores via /api/display/brightness.
+- **DISPLAY_DEBIAS_CYCLES** default: `3` — Number of white↔black inversion cycles per de-bias refresh.
+- **DISPLAY_DEBIAS_HOLD_MS** default: `80` — Dwell time (ms) per half-cycle (white, then black) during de-bias.
+- **DISPLAY_DEBIAS_SETTLE_MS** default: `300` — Soft-landing VCOM settle (ms) at the end of each de-bias refresh; 0 disables.
 - **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
+- **DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP** default: `false` — Keep the MIPI-DSI panel powered (Display On, black) during screensaver sleep; no DCS power-down.
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
 - **EPAPER_BATTERY_DIVIDER** default: `(no default)` — Voltage divider ratio applied to the raw ADC millivolt reading.
@@ -174,6 +181,7 @@ Total flags: 221
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
+- **HW_BUTTON_HOLD_MS** default: `500` — the "hold" action; a shorter press fires the "tap" action on release).
 - **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
@@ -199,6 +207,7 @@ Total flags: 221
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
 - **LVGL_TASK_PRIORITY** default: `4` — Default 4 matches ESP-IDF BSP convention; keeps rendering above WiFi (pri 2-3).
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
+- **NUM_HW_BUTTONS** default: `0` — Number of buttons actually declared by the board (0 = none).
 - **PORTAL_PRIMARY_CATEGORY** default: `""` — Custom nav category ID promoted to first position (empty = standard behavior).
 - **PORTAL_PRIMARY_FRAGMENT** default: `""` — Default startup fragment for board variants with a primary portal category.
 - **PORTAL_PRIMARY_ICON** default: `""` — Icon (UTF-8) for the primary portal category in the nav sidebar.
@@ -268,22 +277,22 @@ Total flags: 221
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  |  | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
-| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
-| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
-| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
-| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
+| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ✅ | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -323,6 +332,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/test_strip.cpp
   - src/app/ha_discovery.cpp
   - src/app/health_binding.cpp
+  - src/app/hw_buttons.cpp
+  - src/app/mcp_tools_config.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
   - src/app/portal_components.cpp
@@ -346,6 +357,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/duty_cycle.cpp
+  - src/app/mcp_tools_config.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/web_portal_config.cpp
 - **HAS_BLE_HID**
@@ -358,6 +370,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
   - src/app/health_binding.cpp
+  - src/app/mcp_tools_config.cpp
   - src/app/portal_components.cpp
   - src/app/web_portal_ble.cpp
   - src/app/web_portal_ble.h
@@ -368,8 +381,26 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/power_manager.cpp
 - **HAS_BUTTON**
+  - src/app/action_dispatch.cpp
+  - src/app/action_dispatch.h
+  - src/app/action_list.cpp
+  - src/app/action_list.h
+  - src/app/action_parse.cpp
+  - src/app/action_parse.h
+  - src/app/action_registry.cpp
+  - src/app/action_registry.h
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/components/hw_buttons_component.cpp
+  - src/app/ha_service.cpp
+  - src/app/ha_service.h
+  - src/app/hw_button_config.cpp
+  - src/app/hw_button_config.h
+  - src/app/hw_buttons.cpp
+  - src/app/hw_buttons.h
+  - src/app/mcp_tools_config.cpp
+  - src/app/mcp_tools_core.cpp
+  - src/app/portal_components.cpp
 - **HAS_CUSTOM_FONTS**
   - src/app/board_config.h
   - src/app/custom_fonts.cpp
@@ -422,6 +453,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/expr_binding.cpp
   - src/app/fs_indexed_store.cpp
   - src/app/ha_discovery.cpp
+  - src/app/ha_service.cpp
+  - src/app/ha_service.h
   - src/app/health_binding.cpp
   - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
@@ -432,6 +465,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_provider_pads.cpp
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
+  - src/app/mcp_tools_config.cpp
+  - src/app/mcp_tools_core.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/message_bubble.cpp
   - src/app/message_bubble.h
   - src/app/mqtt_notify.cpp
@@ -460,6 +496,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/timer_config.h
   - src/app/timer_engine.cpp
   - src/app/touch_manager.cpp
+  - src/app/web_mcp.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_device_api.cpp
@@ -542,25 +579,58 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen_poll.cpp
   - src/app/screens/pad_tile_builder.cpp
   - src/app/web_portal_firmware.cpp
+- **HAS_MCP**
+  - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
+  - src/app/device_classes/coffee_scale/brew/brew_manager.h
+  - src/app/device_classes/coffee_scale/mcp/mcp_tools_coffee_scale.cpp
+  - src/app/device_classes/darkroom_timer/expose_timer.cpp
+  - src/app/device_classes/darkroom_timer/expose_timer.h
+  - src/app/device_classes/darkroom_timer/mcp/mcp_tools_darkroom.cpp
+  - src/app/device_classes/darkroom_timer/meter.cpp
+  - src/app/device_classes/darkroom_timer/meter.h
+  - src/app/device_classes/darkroom_timer/test_strip.cpp
+  - src/app/device_classes/darkroom_timer/test_strip.h
+  - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
+  - src/app/expr_binding.cpp
+  - src/app/health_binding.cpp
+  - src/app/list_binding.cpp
+  - src/app/mcp_components.cpp
+  - src/app/mcp_tool_registry.cpp
+  - src/app/mcp_tool_util.cpp
+  - src/app/mcp_tool_util.h
+  - src/app/mcp_tools_config.cpp
+  - src/app/mcp_tools_core.cpp
+  - src/app/mcp_tools_pads.cpp
+  - src/app/mqtt_sub_store.cpp
+  - src/app/pad_binding.cpp
+  - src/app/portal_components.cpp
+  - src/app/time_binding.cpp
+  - src/app/timer_binding.cpp
+  - src/app/web_mcp.cpp
+  - src/app/web_portal_config.cpp
+  - src/app/widgets/bar_chart_widget.cpp
+  - src/app/widgets/gauge_widget.cpp
+  - src/app/widgets/list_widget.cpp
+  - src/app/widgets/numericrocker_widget.cpp
+  - src/app/widgets/rocker_widget.cpp
+  - src/app/widgets/sparkline_widget.cpp
+  - src/app/widgets/table_widget.cpp
+  - src/app/widgets/widget.h
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
+  - src/app/action_registry.cpp
   - src/app/action_registry.h
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/data_stream.cpp
   - src/app/data_stream.h
-  - src/app/device_classes/coffee_scale/brew_actions.cpp
-  - src/app/device_classes/coffee_scale/scale_actions.cpp
-  - src/app/device_classes/darkroom_timer/expose_actions.cpp
-  - src/app/device_classes/darkroom_timer/meter_actions.cpp
-  - src/app/device_classes/darkroom_timer/print_log_actions.cpp
-  - src/app/device_classes/darkroom_timer/shelly_actions.cpp
-  - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
   - src/app/device_classes/epaper/epaper_mqtt.cpp
   - src/app/device_classes/epaper/epaper_mqtt.h
   - src/app/device_classes/epaper_device_class.cpp
-  - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_telemetry.cpp
   - src/app/display_manager.cpp
   - src/app/display_task.cpp
@@ -568,6 +638,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/ha_discovery.h
+  - src/app/mcp_tools_config.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
   - src/app/mqtt_manager.cpp
@@ -595,6 +666,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/sensor_manager.cpp
   - src/app/sensors/sensor_manager.h
   - src/app/web_portal_pad.cpp
+  - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/widget.h
@@ -725,7 +797,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **DISPLAY_BLANK_ON_SAVE**
   - src/app/board_config.h
+- **DISPLAY_DEBIAS_CYCLES**
+  - src/app/board_config.h
+- **DISPLAY_DEBIAS_HOLD_MS**
+  - src/app/board_config.h
+- **DISPLAY_DEBIAS_SETTLE_MS**
+  - src/app/board_config.h
+  - src/app/drivers/mipi_dsi_driver.cpp
 - **DISPLAY_HARD_RESET_ON_SLEEP**
+  - src/app/board_config.h
+  - src/app/drivers/mipi_dsi_driver.cpp
+- **DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP**
   - src/app/board_config.h
   - src/app/drivers/mipi_dsi_driver.cpp
 - **DISPLAY_ROTATION**
@@ -769,6 +851,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
+- **HW_BUTTON_HOLD_MS**
+  - src/app/board_config.h
 - **HX711_DOUT_PIN**
   - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
 - **HX711_SCK_PIN**
@@ -786,6 +870,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/components/brew_templates_component.cpp
   - src/app/device_classes/coffee_scale/components/brews_component.cpp
   - src/app/device_classes/coffee_scale/components/coffee_scale_component.cpp
+  - src/app/device_classes/coffee_scale/mcp/mcp_tools_coffee_scale.cpp
   - src/app/device_classes/coffee_scale/scale_actions.cpp
   - src/app/device_classes/coffee_scale/web/web_portal_brew_templates.cpp
   - src/app/device_classes/coffee_scale/web/web_portal_brew_templates.h
@@ -793,6 +878,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/web/web_portal_brews.h
   - src/app/device_classes/coffee_scale/web/web_portal_scale.cpp
   - src/app/device_classes/coffee_scale/web/web_portal_scale.h
+  - src/app/mcp_components.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
 - **IS_DARKROOM_TIMER**
@@ -806,6 +892,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/darkroom_timer_payload.h
   - src/app/device_classes/darkroom_timer/expose_actions.cpp
   - src/app/device_classes/darkroom_timer/expose_timer.cpp
+  - src/app/device_classes/darkroom_timer/mcp/mcp_tools_darkroom.cpp
   - src/app/device_classes/darkroom_timer/meter.cpp
   - src/app/device_classes/darkroom_timer/meter_actions.cpp
   - src/app/device_classes/darkroom_timer/print_log.cpp
@@ -818,6 +905,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
   - src/app/device_classes/darkroom_timer/web_portal_prints.cpp
   - src/app/device_classes/darkroom_timer/web_portal_relay.cpp
+  - src/app/mcp_components.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
 - **IS_SHUTTER_TESTER**
@@ -825,6 +913,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
   - src/app/device_classes/shutter_tester/components/shutter_session_actions_component.cpp
+  - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/device_classes/shutter_tester/shutter_actions.cpp
   - src/app/device_classes/shutter_tester/shutter_adc.cpp
   - src/app/device_classes/shutter_tester/shutter_adc.h
@@ -850,6 +939,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/web/portal_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
   - src/app/device_classes/shutter_tester_device_class.cpp
+  - src/app/mcp_components.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
   - src/app/widgets.cpp
@@ -914,6 +1004,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_config.h
 - **MAX_GRID_ROWS**
   - src/app/pad_config.h
+- **MAX_HW_BUTTONS**
+  - src/app/board_config.h
+- **MAX_MQTT_TRIGGERS**
+  - src/app/board_config.h
 - **MAX_NON_PAD_SCREENS**
   - src/app/board_config.h
 - **MAX_PADS**
@@ -921,6 +1015,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **MAX_PAD_BUTTONS**
   - src/app/pad_config.h
 - **MIN_USER_BRIGHTNESS**
+  - src/app/board_config.h
+- **NUM_HW_BUTTONS**
   - src/app/board_config.h
 - **PORTAL_PRIMARY_CATEGORY**
   - src/app/board_config.h
@@ -1090,10 +1186,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
-  - src/app/pad_config.cpp
   - src/app/sd_probe.cpp
   - src/app/sd_storage.cpp
   - src/app/sd_storage.h
+  - src/app/storage.cpp
   - src/app/storage.h
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS**
   - src/app/board_config.h

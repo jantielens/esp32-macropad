@@ -1,6 +1,21 @@
 #ifndef BOARD_CONFIG_H
 #define BOARD_CONFIG_H
 
+#include <stdint.h>
+
+// Per-button definition supplied by boards via HW_BUTTON_DEFS (see the
+// "Hardware Button Actions" section below). Defined before the Phase 1
+// override include so board_overrides.h can declare a typed HW_BUTTON_DEFS
+// array using this struct. C++ only — board_config.h is also included from
+// vendored C driver units, which neither use nor understand this type.
+#ifdef __cplusplus
+struct HwButtonDef {
+    uint8_t pin;          // GPIO pin
+    bool active_low;      // true when pressed reads LOW
+    char label[12];       // human-readable label shown in the portal
+};
+#endif
+
 // ============================================================================
 // Board Configuration - Two-Phase Include Pattern
 // ============================================================================
@@ -27,6 +42,19 @@
 #include "board_overrides.h"
 #endif
 
+// Repo-owned PSRAM capability alias, derived from the Arduino core's
+// BOARD_HAS_PSRAM (defined by PSRAM-enabled board menus / FQBN options). Safe
+// default of 0 so a board that does not advertise PSRAM is treated as
+// PSRAM-less. A board may force it on in board_overrides.h with
+// `#define HAS_PSRAM 1` (evaluated before this block via the #ifndef guard).
+#ifndef HAS_PSRAM
+#  ifdef BOARD_HAS_PSRAM
+#    define HAS_PSRAM 1
+#  else
+#    define HAS_PSRAM 0
+#  endif
+#endif
+
 // ============================================================================
 // Project Branding
 // ============================================================================
@@ -48,6 +76,15 @@
 // Enable MQTT and Home Assistant integration.
 #ifndef HAS_MQTT
 #define HAS_MQTT true
+#endif
+
+// Enable the built-in MCP (Model Context Protocol) server (POST /mcp).
+// Lets local AI assistants inspect and control the device. Independent of
+// HAS_DISPLAY: headless boards still expose read tools and system_command,
+// while display-specific tools self-gate on HAS_DISPLAY. Set false to compile
+// the feature out entirely (saves flash on constrained or locked-down builds).
+#ifndef HAS_MCP
+#define HAS_MCP true
 #endif
 
 // Enable BLE HID keyboard support.
@@ -89,7 +126,16 @@
 #define IS_DARKROOM_TIMER false
 #endif
 
-// Enable e-paper wake-button handling (ext0 wake plus short/long press).
+// Feature-rich device classes (shutter tester, coffee scale, darkroom timer)
+// allocate large scratch/history buffers directly in PSRAM with no internal-RAM
+// fallback — a deliberate policy, since these classes are always shipped on
+// PSRAM-equipped boards. Enforce it at compile time so a mis-configured board
+// fails fast here instead of OOM'ing at runtime.
+#if (IS_SHUTTER_TESTER || IS_COFFEE_SCALE || IS_DARKROOM_TIMER) && !HAS_PSRAM
+#  error "Feature-rich device classes require PSRAM."
+#endif
+
+// Enable e-paper wake-button handling (ext1 wake plus short/long press).
 #ifndef HAS_EPAPER_WAKE_BUTTON
 #define HAS_EPAPER_WAKE_BUTTON false
 #endif
@@ -334,10 +380,68 @@
 #define BUTTON_ACTIVE_LOW true
 #endif
 
+// ----------------------------------------------------------------------------
+// Hardware Button Actions (optional, GPIO-direct buttons)
+// ----------------------------------------------------------------------------
+// Boards with physical buttons expose them in the web portal where users can
+// assign tap/hold action lists — identical to on-screen button actions. The
+// driver is interrupt-driven with software debounce and works independently of
+// HAS_DISPLAY (headless boards can use buttons too).
+//
+// To declare buttons, a board override sets HAS_BUTTON, NUM_HW_BUTTONS, and an
+// HW_BUTTON_DEFS array, e.g.:
+//
+//   #define HAS_BUTTON true
+//   #define NUM_HW_BUTTONS 1
+//   static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
+//       { .pin = 9, .active_low = true, .label = "BTN" }
+//   };
+//
+// NOTE: The board author is responsible for choosing button pins that do not
+// conflict with I2C/SPI/display/touch peripherals on that board.
+
+// Compile-time cap on the number of declarable hardware buttons.
+#ifndef MAX_HW_BUTTONS
+#define MAX_HW_BUTTONS 5
+#endif
+
+// Number of buttons actually declared by the board (0 = none).
+#ifndef NUM_HW_BUTTONS
+#define NUM_HW_BUTTONS 0
+#endif
+
+// Hold detection threshold in milliseconds (press held longer than this fires
+// the "hold" action; a shorter press fires the "tap" action on release).
+#ifndef HW_BUTTON_HOLD_MS
+#define HW_BUTTON_HOLD_MS 500
+#endif
+
+// Default: no buttons declared. Boards override HW_BUTTON_DEFS in
+// board_overrides.h. The hw_buttons module is fully #if HAS_BUTTON gated so
+// this empty default is only referenced when no buttons exist.
+#if !defined(HW_BUTTON_DEFS) && NUM_HW_BUTTONS == 0
+#ifdef __cplusplus
+static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
+#endif
+#endif
+
 // Enable power-on burst detection to force Config Mode (NVS-backed, disabled by default).
 // Intended for boards WITHOUT a reliable user button.
 #ifndef POWERON_CONFIG_BURST_ENABLED
 #define POWERON_CONFIG_BURST_ENABLED false
+#endif
+
+// ----------------------------------------------------------------------------
+// MQTT-Triggered Actions (optional)
+// ----------------------------------------------------------------------------
+// Compile-time cap on the number of configurable MQTT triggers. Each trigger
+// consumes ~1.4 KB. Default 8 = 11.2 KB (allocated to PSRAM on supported boards
+// via config_psram_alloc(), with automatic SRAM fallback on boards without
+// PSRAM). Non-PSRAM boards (ESP32-C3 headless, CYD-v2) MUST override this lower
+// (recommended: 2-4) in their board_overrides.h to limit SRAM fallback cost.
+// Example override: #define MAX_MQTT_TRIGGERS 3
+#ifndef MAX_MQTT_TRIGGERS
+#define MAX_MQTT_TRIGGERS 8
 #endif
 
 // ============================================================================
@@ -840,6 +944,33 @@
 #define SCREENSAVER_SLEEP_REFRESH_MS 900000
 #endif
 
+// Active LC de-bias parameters used by displayRefreshSleep() when
+// DISPLAY_HARD_RESET_ON_SLEEP is enabled. Each periodic refresh briefly powers
+// the panel up and drives full-frame white↔black inversion cycles (backlight
+// off) to cancel the DC bias that accumulates in cheap IPS cells during long
+// idle, then powers the panel back down. More cycles / longer dwell = stronger
+// de-bias, slightly more per-interval panel activity (still invisible).
+// Number of white↔black inversion cycles per de-bias refresh.
+#ifndef DISPLAY_DEBIAS_CYCLES
+#define DISPLAY_DEBIAS_CYCLES 3
+#endif
+// Dwell time (ms) per half-cycle (white, then black) during de-bias.
+#ifndef DISPLAY_DEBIAS_HOLD_MS
+#define DISPLAY_DEBIAS_HOLD_MS 80
+#endif
+// Soft-landing settle (ms) used at the END of each de-bias refresh. After the
+// inversion cycles the panel is held on a uniform black frame (Display On,
+// backlight off) for this long so frame inversion averages out the residual
+// LC/VCOM bias, then the same dwell is spent on Display Off so the panel's
+// internal VCOM discharge can equalize before RST is re-asserted LOW. Without
+// it the panel is frozen mid-equilibration and wakes into an unstable VCOM
+// state that flickers for minutes (JD9165 + cheap IPS). 0 restores the abrupt
+// power-down.
+// Soft-landing VCOM settle (ms) at the end of each de-bias refresh; 0 disables.
+#ifndef DISPLAY_DEBIAS_SETTLE_MS
+#define DISPLAY_DEBIAS_SETTLE_MS 300
+#endif
+
 // Hold the panel hardware reset pin LOW during screensaver sleep so the
 // panel IC fully powers down its internal regulators. Required on cheap
 // IPS MIPI-DSI panels (e.g. JD9165 on jc1060p470c) where DCS Sleep In
@@ -849,6 +980,22 @@
 // Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
 #ifndef DISPLAY_HARD_RESET_ON_SLEEP
 #define DISPLAY_HARD_RESET_ON_SLEEP false
+#endif
+
+// Keep the MIPI-DSI panel fully powered (normal Display On, scanning an
+// all-black framebuffer with frame inversion active) for the entire
+// screensaver sleep instead of issuing DCS Sleep In or holding RST low. The
+// backlight is still faded to 0 so sleep looks identical to the user. This
+// avoids both failure modes seen on the cheap JD9165 + IPS combo on
+// jc1060p470c: the DC bias that DCS Sleep In leaves in the cells (washed-out
+// colors after multi-hour idle) and the marginal VCOM/MIPI-lock state the
+// repeated hard-reset power-cycling produced (morning flicker after a full
+// night). Trades higher idle power (panel + DSI stay active) for a clean,
+// power-cycle-free wake. Takes precedence over DISPLAY_HARD_RESET_ON_SLEEP in
+// the MipiDsiDriver sleep/wake paths; the two are mutually exclusive.
+// Keep the MIPI-DSI panel powered (Display On, black) during screensaver sleep; no DCS power-down.
+#ifndef DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+#define DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP false
 #endif
 
 // ============================================================================

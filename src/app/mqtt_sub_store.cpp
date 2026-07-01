@@ -151,6 +151,18 @@ static void mqtt_binding_collect(const char* params, void* user_data) {
 // Init
 // ============================================================================
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+// Self-description for the MCP capability manifest (lives with the scheme).
+static void mqtt_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[mqtt:topic;path;format]";
+    o["example"] = "[mqtt:home/temp;temperature;%.1f\u00b0C]";
+    o["path"]    = "JSON key, dot-notation for nested (data.temp); empty (';;') = raw payload";
+    o["format"]  = "printf: %d, %.0f, %.1f, %.2f, %s";
+}
+#endif
+
 void mqtt_sub_store_init() {
     if (g_entries) return; // already initialized
 
@@ -171,6 +183,9 @@ void mqtt_sub_store_init() {
 
     // Register "mqtt" scheme with the binding template engine
     binding_template_register("mqtt", mqtt_binding_resolve, mqtt_binding_collect);
+#if HAS_MCP
+    binding_template_set_scheme_describe("mqtt", mqtt_scheme_describe);
+#endif
 }
 
 // ============================================================================

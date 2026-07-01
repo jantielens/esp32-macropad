@@ -126,8 +126,6 @@ struct GaugeState {
     // Marker state
     lv_obj_t* marker_ticks[4];     // Marker tick lines per ring (nullptr if unused)
     lv_obj_t* marker_zones[4];     // Marker zone arcs per ring (nullptr if unused)
-    lv_obj_t* zone_ticks_lo[4];    // Zone boundary tick at zone start per ring
-    lv_obj_t* zone_ticks_hi[4];    // Zone boundary tick at zone end per ring
     float     cached_marker_val;   // Last resolved marker position
     uint32_t  cached_marker_tick_color; // Marker tick color cache
     uint32_t  cached_marker_zone_color; // Marker zone color cache
@@ -492,8 +490,6 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->needle_cdeg = (int32_t)roundf((float)cfg->start_angle * 100.0f);
     memset(st->marker_ticks, 0, sizeof(st->marker_ticks));
     memset(st->marker_zones, 0, sizeof(st->marker_zones));
-    memset(st->zone_ticks_lo, 0, sizeof(st->zone_ticks_lo));
-    memset(st->zone_ticks_hi, 0, sizeof(st->zone_ticks_hi));
 
     // Slot occupancy: slot1..4 map to data_binding[0..3].
     const bool has_slot2 = wcfg->data_binding[1][0];
@@ -710,28 +706,6 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                 lv_obj_set_style_bg_opa(zarc, LV_OPA_TRANSP, LV_PART_MAIN);
                 lv_obj_clear_flag(zarc, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
                 st->marker_zones[i] = zarc;
-            }
-        }
-
-        // Create zone boundary tick lines (per ring, initially at start angle)
-        if (want_zone && cfg->marker_tick_width > 0) {
-            lv_color_t zt_clr = resolve_lv_color(cfg->marker_zone_color, 0xFF5722);
-            float init_angle = (float)cfg->start_angle;
-            float a_rad = init_angle * (float)M_PI / 180.0f;
-            float cos_a = cosf(a_rad);
-            float sin_a = sinf(a_rad);
-            for (uint8_t i = 0; i < active_ring_count; i++) {
-                int16_t rr = gauge_radius_for_slot(st, i);
-                if (rr < 8) rr = 8;
-                int16_t to = rr - 1;
-                int16_t ti = rr - st->arc_width_px + 1;
-                if (ti < 1) ti = 1;
-                int16_t x1 = cx + (int16_t)roundf(cos_a * ti);
-                int16_t y1 = cy + (int16_t)roundf(sin_a * ti);
-                int16_t x2 = cx + (int16_t)roundf(cos_a * to);
-                int16_t y2 = cy + (int16_t)roundf(sin_a * to);
-                st->zone_ticks_lo[i] = gauge_create_line(tile, x1, y1, x2, y2, zt_clr, cfg->marker_tick_width);
-                st->zone_ticks_hi[i] = gauge_create_line(tile, x1, y1, x2, y2, zt_clr, cfg->marker_tick_width);
             }
         }
 
@@ -1235,37 +1209,6 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
                     }
                 }
             }
-
-            // Reposition zone boundary ticks (per ring)
-            if (cfg->marker_zone_deg > 0 && cfg->marker_tick_width > 0) {
-                lv_color_t zt_clr = resolve_lv_color(cfg->marker_zone_color, 0xFF5722);
-
-                for (uint8_t i = 0; i < st->marker_ring_count; i++) {
-                    // Delete old
-                    if (st->zone_ticks_lo[i]) { lv_obj_delete(st->zone_ticks_lo[i]); st->zone_ticks_lo[i] = nullptr; }
-                    if (st->zone_ticks_hi[i]) { lv_obj_delete(st->zone_ticks_hi[i]); st->zone_ticks_hi[i] = nullptr; }
-
-                    if (zone_start < zone_end) {
-                        int16_t rr = gauge_radius_for_slot(st, i);
-                        if (rr < 8) rr = 8;
-                        int16_t to = rr - 1;
-                        int16_t ti = rr - st->arc_width_px + 1;
-                        if (ti < 1) ti = 1;
-
-                        auto make_bt = [&](int32_t angle_deg) -> lv_obj_t* {
-                            float arad = ((float)cfg->start_angle + (float)angle_deg) * (float)M_PI / 180.0f;
-                            float ca = cosf(arad), sa = sinf(arad);
-                            int16_t x1 = st->cx + (int16_t)roundf(ca * ti);
-                            int16_t y1 = st->cy + (int16_t)roundf(sa * ti);
-                            int16_t x2 = st->cx + (int16_t)roundf(ca * to);
-                            int16_t y2 = st->cy + (int16_t)roundf(sa * to);
-                            return gauge_create_line(tile, x1, y1, x2, y2, zt_clr, cfg->marker_tick_width);
-                        };
-                        st->zone_ticks_lo[i] = make_bt(zone_start);
-                        st->zone_ticks_hi[i] = make_bt(zone_end);
-                    }
-                }
-            }
         }
 
         // Update marker tick color
@@ -1275,15 +1218,11 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
                     lv_obj_set_style_line_color(st->marker_ticks[i], clr, 0);
             }
         }
-        // Update marker zone color (arcs + boundary ticks)
+        // Update marker zone color (arcs)
         if (resolve_color_changed(cfg->marker_zone_color, 0xFF5722, &st->cached_marker_zone_color, &clr)) {
             for (uint8_t i = 0; i < st->marker_ring_count; i++) {
                 if (st->marker_zones[i])
                     lv_obj_set_style_arc_color(st->marker_zones[i], clr, LV_PART_INDICATOR);
-            }
-            for (uint8_t i = 0; i < st->marker_ring_count; i++) {
-                if (st->zone_ticks_lo[i]) lv_obj_set_style_line_color(st->zone_ticks_lo[i], clr, 0);
-                if (st->zone_ticks_hi[i]) lv_obj_set_style_line_color(st->zone_ticks_hi[i], clr, 0);
             }
         }
     }
@@ -1307,14 +1246,34 @@ static void gauge_destroy(WidgetState* state) {
     // Just clear the pointers.
     memset(st->marker_ticks, 0, sizeof(st->marker_ticks));
     memset(st->marker_zones, 0, sizeof(st->marker_zones));
-    memset(st->zone_ticks_lo, 0, sizeof(st->zone_ticks_lo));
-    memset(st->zone_ticks_hi, 0, sizeof(st->zone_ticks_hi));
     // LVGL child objects (arc, ticks, needle line) are deleted automatically
     // when the tile is deleted. Tick points are freed via LV_EVENT_DELETE callbacks.
 }
 
 // ---- Registration ----
 
-REGISTER_WIDGET(gauge, nullptr, false);
+#if HAS_MCP
+static void gauge_describe(JsonObject& out) {
+    JsonArray f = out.createNestedArray("config_fields");
+    auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
+    auto addmax = [&](const char* n, const char* t, const char* d, int m){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; o["max"]=m; };
+    add("widget_gauge_min","number","scale min"); add("widget_gauge_max","number","scale max");
+    add("widget_gauge_degrees","number","arc sweep degrees"); add("widget_gauge_start_angle","number","start angle (0=top)");
+    add("widget_gauge_zero_centered","bool","fill from 0 baseline"); add("widget_gauge_arc_width_pct","number","arc thickness %");
+    add("widget_arc_color","color","ring 1"); add("widget_arc_color_2","color","ring 2");
+    add("widget_arc_color_3","color","ring 3"); add("widget_arc_color_4","color","ring 4");
+    add("widget_gauge_track_color","color","unfilled track");
+    addmax("widget_gauge_start_label","string","ring 1 caption",63); addmax("widget_gauge_start_label_2","string","ring 2",63);
+    addmax("widget_gauge_start_label_3","string","ring 3",63); addmax("widget_gauge_start_label_4","string","ring 4",63);
+    add("widget_gauge_dual_binding_pair_1","bool","rings 1&2 share center"); add("widget_gauge_dual_binding_pair_2","bool","rings 3&4 share center");
+    add("widget_gauge_show_needle","bool","draw needle"); add("widget_gauge_needle_color","color","needle color");
+    add("widget_gauge_needle_width","number","needle px"); add("widget_gauge_needle_cutoff_pct","number","needle inner cutoff %");
+    add("widget_gauge_ticks","number","tick count"); add("widget_gauge_tick_color","color",""); add("widget_gauge_tick_width","number","");
+    add("widget_gauge_marker_value","number","target on scale"); add("widget_gauge_marker_tick_color","color",""); add("widget_gauge_marker_tick_width","number","");
+    add("widget_gauge_marker_zone_color","color","zone band"); add("widget_gauge_marker_zone_deg","number","zone width deg");
+    add("widget_anim_ms","number","transition ms");
+}
+#endif
+REGISTER_WIDGET_SCHEMA(gauge, nullptr, false);
 
 #endif // HAS_DISPLAY

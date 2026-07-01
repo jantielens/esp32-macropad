@@ -1,8 +1,26 @@
 # Home Assistant Integration Guide
 
-The ESP32 Macropad integrates with Home Assistant via MQTT auto-discovery. Once connected to your MQTT broker (configured in the web portal's Network page), the device automatically registers its entities in Home Assistant — no manual YAML configuration needed.
+The ESP32 Macropad integrates with Home Assistant over **two independent paths**. Use either, both, or neither — they do not depend on each other.
 
-> **Prerequisites**: MQTT broker configured and connected, Home Assistant MQTT integration enabled.
+| Path | Direction | Needs | Enables |
+|------|-----------|-------|---------|
+| **Service Actions** (REST API) | device → HA | HA URL + long-lived token | The *Home Assistant Service* button action — call any HA service. See [Service Actions](#service-actions-rest-api). |
+| **MQTT** | device ↔ HA | MQTT broker (configured on the web portal's MQTT page) | Auto-discovery, live HA state, `[mqtt:…]` bindings, and remote control. |
+
+Service Actions talk to Home Assistant's HTTP API and require no MQTT broker. Everything in the MQTT path below requires only a connected broker — no token.
+
+## What MQTT Unlocks
+
+Once an MQTT broker is connected, these capabilities become available. Each is independent — you can use any subset.
+
+| Capability | Direction | Description |
+|------------|-----------|-------------|
+| **Auto-Discovery & State** | device → HA | The device advertises its entities (sensors, diagnostics, buttons, siren, volume…) under the `homeassistant/` prefix with no manual YAML, and keeps publishing their live values. |
+| **Statestream** | HA → device | HA's `mqtt_statestream` integration publishes every entity's state to MQTT so the device can read it. |
+| **`[mqtt:…]` Bindings** | any topic → device | Button labels, colors, and widgets subscribe to any MQTT topic (Statestream or any other publisher) to show live data. Works without auto-discovery or Statestream. |
+| **Remote Control** | HA → device | Control entities let HA drive the device: screen-select navigation, screensaver wake, notification messages, and (on audio boards) siren, volume, and beep buttons. |
+
+> **Prerequisites (MQTT path)**: MQTT broker configured and connected, Home Assistant MQTT integration enabled.
 
 ---
 
@@ -378,3 +396,58 @@ actions:
 - **Persistent mode**: Set `duration_ms` to `0` for notifications that stay on screen until tapped or replaced. The bubble still responds to tap-to-dismiss.
 - **Screensaver**: Notifications display on `lv_layer_top()` — they appear above all screens including the screensaver overlay.
 - **State topic**: The device publishes the last notification text (retained) to `~/notify/state`. An empty state means no active notification.
+
+---
+
+## Service Actions (REST API)
+
+In addition to publishing MQTT, the device can call Home Assistant **services** directly over the REST API. This lets a button (or swipe, boot, or timer-expire action) toggle a light, run a scene, open a cover, or invoke any other HA service — without an MQTT round-trip.
+
+Unlike the MQTT integration above, this path talks to Home Assistant's HTTP API in the outbound direction and does not require an MQTT broker.
+
+### Setup
+
+On the web portal's **Home Assistant** page, configure:
+
+| Field | Description |
+|-------|-------------|
+| **Home Assistant URL** | Base URL including scheme and port, e.g. `http://192.168.1.50:8123`. HTTPS is supported (the certificate is not verified). Leave empty to disable service actions. |
+| **Long-Lived Access Token** | Created in Home Assistant under your user profile → **Security** → **Long-lived access tokens**. Stored on the device and never returned by the API. |
+
+Both values persist to NVS (`ha_url` / `ha_token`).
+
+### Action Fields
+
+When you add a **Home Assistant Service** button action, you configure:
+
+| Field | Description |
+|-------|-------------|
+| **Entity ID** | The target entity, e.g. `light.living_room`. The service **domain** is derived from the text before the first `.`. |
+| **Service** | The service within that domain, e.g. `toggle`, `turn_on`, `turn_off`. |
+| **Service Data (JSON)** | Optional JSON object merged into the request body alongside `entity_id`, e.g. `{"brightness_pct": 60}`. |
+
+The device issues:
+
+```http
+POST <ha_url>/api/services/<domain>/<service>
+Authorization: Bearer <ha_token>
+Content-Type: application/json
+
+{"entity_id": "<entity_id>", ...<service data>}
+```
+
+### Examples
+
+| Goal | Entity ID | Service | Service Data |
+|------|-----------|---------|--------------|
+| Toggle a light | `light.living_room` | `toggle` | *(empty)* |
+| Turn a light on at 75% | `light.kitchen` | `turn_on` | `{"brightness_pct": 75}` |
+| Run a scene | `scene.movie_night` | `turn_on` | *(empty)* |
+| Open a cover | `cover.garage` | `open_cover` | *(empty)* |
+
+### Behavior Notes
+
+- **Non-blocking (display)**: The HTTP request is queued from the UI task and executed on the main loop, so calling a service never stalls the display.
+- **No bindings**: The entity ID, service, and service-data fields are stored literally — binding templates (`[mqtt:...]`, `[health:...]`, etc.) are **not** resolved in these fields.
+- **Display required (for now)**: Service calls are dispatched from the display action loop, so this action runs on boards with a display. Headless button-only boards can be configured for the action but do not yet drain the queued call.
+- **Configuration**: See the [Pad Editor Guide](pad-editor-guide.md#home-assistant-service-action) for the in-editor walkthrough.

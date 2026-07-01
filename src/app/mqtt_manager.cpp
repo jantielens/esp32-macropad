@@ -11,6 +11,7 @@
 #include "mqtt_screen.h"
 #include "mqtt_audio.h"
 #include "mqtt_notify.h"
+#include "mqtt_triggers.h"
 #include "power_manager.h"
 #include "power_config.h"
 #include "log_manager.h"
@@ -151,6 +152,9 @@ void MqttManager::installCallback() {
 				mqtt_screen_on_message(topic, payload, length);
 				mqtt_audio_on_message(topic, payload, length);
 				mqtt_notify_on_message(topic, payload, length);
+#if MQTT_TRIGGERS_ENABLED
+				mqtt_triggers_on_message(topic, payload, length);
+#endif
 				mqtt_sub_store_set(topic, payload, length);
 		});
 }
@@ -292,6 +296,12 @@ void MqttManager::onConnected(bool publish_availability) {
 		// Notify control subscribe + initial state publish.
 		mqtt_notify_on_connected();
 		delay(1);
+
+#if MQTT_TRIGGERS_ENABLED
+		// MQTT-triggered actions: (re)subscribe configured trigger topics.
+		mqtt_triggers_on_connected();
+		delay(1);
+#endif
 
 		// Publish a single retained state after connect so HA entities have values,
 		// even when periodic publishing is disabled (interval = 0).

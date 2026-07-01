@@ -50,6 +50,7 @@ struct SparklineConfig {
     uint16_t window_secs;          // Time window in seconds (e.g. 300 = 5 min)
     uint8_t  slot_count;           // Number of sample slots (default 60)
     uint8_t  line_width;           // Line thickness in pixels (default 2)
+    uint8_t  line_offset;          // Per-line vertical separation in px (0 = off; lines fanned symmetrically)
     uint8_t  marker_size_min;      // Min marker dot size (0 = off, default 5)
     uint8_t  marker_size_max;      // Max marker dot size (0 = off, default 5)
     uint8_t  current_dot_size;     // Current-value dot size at right edge (0 = off)
@@ -119,6 +120,12 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
 
     uint8_t lw = btn["widget_sparkline_line_width"] | (uint8_t)2;
     cfg->line_width = (lw < 1) ? 1 : lw;
+
+    // Per-line vertical separation (0 = off; lines drawn exactly on value).
+    // When > 0 and multiple lines are present, each line is nudged by a
+    // symmetric per-line offset so near-equal lines stay visually distinct.
+    uint8_t lo = btn["widget_sparkline_line_offset"] | (uint8_t)0;
+    cfg->line_offset = (lo > 6) ? 6 : lo;
 
     widget_parse_field(btn["widget_sparkline_line_color"], cfg->line_color, sizeof(cfg->line_color), "#4CAF50");
     widget_parse_field(btn["widget_sparkline_line_color_2"], cfg->line_color_2, sizeof(cfg->line_color_2), "#2196F3");
@@ -330,6 +337,12 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_obj_set_style_bg_opa(chart_area, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(chart_area, 0, 0);
     lv_obj_set_style_pad_all(chart_area, 0, 0);
+    // Radius 0: the theme default gives chart_area rounded corners; with
+    // clip_corner enabled that wedge clips data-line ends that run along the
+    // top/bottom edge, disconnecting them from the current-value dot (a tile
+    // child that is not corner-clipped). Square corners keep the line reaching
+    // the edge while rectangular child-clipping still confines lines to the tile.
+    lv_obj_set_style_radius(chart_area, 0, 0);
     lv_obj_set_style_clip_corner(chart_area, true, 0);
     lv_obj_set_scrollbar_mode(chart_area, LV_SCROLLBAR_MODE_OFF);
     lv_obj_clear_flag(chart_area, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
@@ -482,6 +495,7 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
                                      float resolved_min, float resolved_max,
                                      float shared_auto_min, float shared_auto_max,
                                      float ref_expand_min, float ref_expand_max,
+                                     int16_t y_offset,
                                      SmoothLineInfo* out_info) {
     // Initialize output info
     if (out_info) {
@@ -546,6 +560,14 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
 
         int16_t px = (int16_t)((si + x_offset) * x_step);
         int16_t py = (int16_t)((1.0f - ratio) * (chart_h - 1));
+        // Apply per-line vertical separation, then re-clamp into the chart
+        // (the value clamp above happens pre-offset, so the nudge can push an
+        // edge-pinned point 1-2px out of bounds otherwise).
+        if (y_offset != 0) {
+            py += y_offset;
+            if (py < 0) py = 0;
+            if (py > chart_h - 1) py = chart_h - 1;
+        }
         points[vi].x = (lv_value_precise_t)px;
         points[vi].y = (lv_value_precise_t)py;
 
@@ -638,11 +660,21 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         st->cached_heads[i] = snap.head;
         if (snap.count == 0) continue;
 
+        // Symmetric per-line vertical separation: lines fan out around their
+        // true value (e.g. 2 lines -> -off/+off, 3 lines -> -off/0/+off) so
+        // near-identical lines stay distinguishable. 0 = exact (no nudge).
+        int16_t y_off = 0;
+        if (cfg->line_offset > 0 && st->line_count > 1) {
+            float center = (float)(st->line_count - 1) / 2.0f;
+            y_off = (int16_t)lroundf(((float)i - center) * (float)cfg->line_offset);
+        }
+
         sparkline_rebuild_points(cfg, st->points[i], st->lines[i],
                                  &snap, chart_w, chart_h,
                                  resolved_min, resolved_max,
                                  shared_auto_min, shared_auto_max,
                                  ref_expand_min, ref_expand_max,
+                                 y_off,
                                  &smooth_info[i]);
 
         // Re-resolve line color (binding may have changed)
@@ -832,8 +864,13 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         for (uint8_t fi = 0; fi < st->line_count; fi++) {
             if (st->lbl_current[fi]) { font_src = st->lbl_current[fi]; break; }
         }
-        int16_t lbl_h = lv_font_get_line_height(
-            lv_obj_get_style_text_font(font_src, LV_PART_MAIN)) + 2;
+        // Nominal font line height — used only as a fallback if a label has not
+        // been laid out yet. The collision spacing below uses the *measured*
+        // label height instead, so it accounts for theme padding and the real
+        // glyph extent (the font line height alone can be shorter, which makes
+        // stacked labels slightly overlap).
+        int16_t font_line_h = lv_font_get_line_height(
+            lv_obj_get_style_text_font(font_src, LV_PART_MAIN));
 
         for (uint8_t ci = 0; ci < st->line_count; ci++) {
             if (!st->lbl_current[ci]) continue;
@@ -885,6 +922,19 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         }
 
         if (active_count > 0) {
+            // Measure the tallest actual label box (text was set above) so the
+            // collision spacing matches what is drawn.
+            int16_t box_h = 0;
+            for (uint8_t i = 0; i < active_count; i++) {
+                lv_obj_t* lbl = st->lbl_current[active[i].line_idx];
+                lv_obj_update_layout(lbl);
+                int16_t h = (int16_t)lv_obj_get_height(lbl);
+                if (h > box_h) box_h = h;
+            }
+            if (box_h <= 0) box_h = font_line_h;
+            const int16_t LABEL_GAP = 3;        // breathing room between labels
+            int16_t lbl_h = box_h + LABEL_GAP;  // per-row pitch for collision pass
+
             // Sort by ideal_y (simple insertion sort, max 3 elements)
             for (uint8_t i = 1; i < active_count; i++) {
                 LabelSlot tmp = active[i];
@@ -910,18 +960,33 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 }
             }
 
-            // If bottom label exceeds chart area, shift entire stack up
-            int16_t overflow = (adjusted_y[active_count - 1] + lbl_h) - chart_h;
-            if (overflow > 0) {
-                for (uint8_t i = 0; i < active_count; i++) {
-                    adjusted_y[i] -= overflow;
+            // Fit the stack into the chart. After the push-down pass each
+            // successive label top is lbl_h apart, so the stack spans
+            // (n-1)*lbl_h + box_h.
+            int16_t stack_h = (int16_t)((active_count - 1) * lbl_h + box_h);
+            if (stack_h <= chart_h) {
+                // Fits: shift the whole stack as a block so it stays inside
+                // [0, chart_h]. Block-shifting preserves spacing — unlike a
+                // per-label clamp, which would collapse labels onto one row.
+                int16_t shift = 0;
+                if (adjusted_y[active_count - 1] + box_h > chart_h)
+                    shift = chart_h - (adjusted_y[active_count - 1] + box_h);
+                if (adjusted_y[0] + shift < 0)
+                    shift = -adjusted_y[0];
+                if (shift != 0) {
+                    for (uint8_t i = 0; i < active_count; i++) adjusted_y[i] += shift;
                 }
-            }
-
-            // Clamp all to chart bounds
-            for (uint8_t i = 0; i < active_count; i++) {
-                if (adjusted_y[i] < 0) adjusted_y[i] = 0;
-                if (adjusted_y[i] + lbl_h > chart_h) adjusted_y[i] = chart_h - lbl_h;
+            } else {
+                // Too tall to fit without overlap: distribute tops evenly across
+                // the available height so labels stay as separated as possible
+                // instead of stacking onto a single clamped row.
+                int16_t span = chart_h - box_h;
+                if (span < 0) span = 0;
+                for (uint8_t i = 0; i < active_count; i++) {
+                    adjusted_y[i] = (active_count > 1)
+                        ? (int16_t)((int32_t)span * i / (active_count - 1))
+                        : (int16_t)(span / 2);
+                }
             }
 
             // Position labels in the right margin
@@ -1003,6 +1068,23 @@ static bool sparkline_get_stream_params(const WidgetConfig* wcfg,
     return true;
 }
 
-REGISTER_WIDGET(sparkline, sparkline_get_stream_params, false);
+#if HAS_MCP
+static void sparkline_describe(JsonObject& out) {
+    JsonArray f = out.createNestedArray("config_fields");
+    auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
+    auto addmax = [&](const char* n, const char* t, const char* d, int m){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; o["max"]=m; };
+    add("widget_sparkline_window","number","time window seconds"); add("widget_sparkline_slots","number","sample count");
+    add("widget_sparkline_min","number","y min ('' auto)"); add("widget_sparkline_max","number","y max ('' auto)");
+    add("widget_sparkline_min_fmt","string","min label fmt"); add("widget_sparkline_max_fmt","string","max label fmt");
+    add("widget_sparkline_min_label_color","color",""); add("widget_sparkline_max_label_color","color","");
+    add("widget_sparkline_label_width","number","axis label strip px"); add("widget_sparkline_unified_scale","bool","share scale across lines"); add("widget_sparkline_ref_in_view","bool","keep min/max in view");
+    add("widget_sparkline_line_color","color","line 1"); add("widget_sparkline_line_color_2","color","line 2"); add("widget_sparkline_line_color_3","color","line 3");
+    add("widget_sparkline_line_width","number","px"); add("widget_sparkline_line_offset","number","px"); add("widget_sparkline_smooth","number","smoothing amount, 0=off");
+    add("widget_sparkline_current_dot","number","dot size px at latest sample, 0=off"); addmax("widget_sparkline_current_label","string","latest-value caption",63);
+    addmax("widget_sparkline_current_label_2","string","line 2 caption",63); addmax("widget_sparkline_current_label_3","string","line 3 caption",63);
+    add("widget_sparkline_marker_size_min","number",""); add("widget_sparkline_marker_size_max","number","");
+}
+#endif
+REGISTER_WIDGET_SCHEMA(sparkline, sparkline_get_stream_params, false);
 
 #endif // HAS_DISPLAY

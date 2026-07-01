@@ -47,14 +47,11 @@ static void shelly_dispatch(const ButtonAction& act, const char* label) {
 }
 
 static const ActionTypeDef shelly_action_type = {
-    /* type_name        */ ACTION_TYPE_SHELLY,
-    /* parse            */ shelly_parse,
-    /* serialize        */ shelly_serialize,
-#if HAS_MQTT
-    /* resolve_bindings */ nullptr,
-    /* has_binding      */ nullptr,
-#endif
-    /* dispatch         */ shelly_dispatch,
+    /* type_name   */ ACTION_TYPE_SHELLY,
+    /* parse       */ shelly_parse,
+    /* serialize   */ shelly_serialize,
+    /* dispatch    */ shelly_dispatch,
+    /* value_field */ nullptr,  // host/relay/on — no single bindable value field
 };
 
 REGISTER_ACTION_TYPE(shelly_action_type);

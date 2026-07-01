@@ -44,7 +44,7 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		char topic[160];
 		snprintf(topic, sizeof(topic), "%s/epaper/state", mqtt_manager.baseTopic());
 
-		StaticJsonDocument<768> doc;
+		StaticJsonDocument<1024> doc;
 		doc["battery_mv"]      = outcome.battery_mv;
 		doc["battery_pct"]     = epaper_battery_percent(outcome.battery_mv);
 		doc["wifi_rssi"]       = timing ? timing->wifi_rssi : (int16_t)WiFi.RSSI();
@@ -73,14 +73,10 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 				t["crc_to_draw_ms"]   = timing->crc_to_draw_ms;
 				t["draw_to_mqtt_ms"]  = timing->draw_to_mqtt_ms;
 				t["total_active_ms"]  = timing->total_active_ms;
-				t["last_elapsed_ms"]  = outcome.elapsed_ms;
-		} else {
-				t["last_elapsed_ms"]  = outcome.elapsed_ms;
-		}
-
-		if (doc.overflowed()) {
-				LOGE("Epaper", "MQTT state JSON overflow");
-				return false;
+			t["resolve_ms"]       = timing->resolve_ms;
+			t["fetch_ms"]         = timing->fetch_ms;
+			t["draw_ms"]          = timing->draw_ms;
+			t["image_source"]     = timing->image_from_cache ? "cache" : "download";
 		}
 
 		const bool ok = mqtt_manager.publishJson(topic, doc, true /*retained*/);
@@ -93,7 +89,7 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 }
 
 void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
-		// Publishes thirteen retained HA discovery configs for the e-paper
+	// Publishes seventeen retained HA discovery configs for the e-paper
 		// telemetry surfaced under <base>/epaper/state. Entities are NOT marked
 		// entity_category="diagnostic" so they appear together in the main
 		// entity list of the device card; the "E-Paper" name prefix keeps them
@@ -172,6 +168,20 @@ void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
 		publish_sensor("epaper_crc_retries", "E-Paper CRC Fetch Attempts",
 									 "{{ value_json.timing.crc_retry_count }}", "", "", "measurement");
 		delay(1);
+
+	// Image-fetch/render breakdown (subset of crc_to_draw_ms): isolates the API
+	// resolve, the SD-cache-or-download fetch, and the panel upload+refresh so
+	// long-term trends (e.g. a slowing image API) are observable in HA.
+	publish_sensor("epaper_resolve_ms", "E-Paper URL Resolve",
+									 "{{ value_json.timing.resolve_ms }}", "ms", "duration", "measurement");
+	publish_sensor("epaper_fetch_ms", "E-Paper Image Fetch",
+									 "{{ value_json.timing.fetch_ms }}", "ms", "duration", "measurement");
+	delay(1);
+	publish_sensor("epaper_draw_ms", "E-Paper Panel Draw",
+									 "{{ value_json.timing.draw_ms }}", "ms", "duration", "measurement");
+	publish_sensor("epaper_image_source", "E-Paper Image Source",
+									 "{{ value_json.timing.image_source }}", "", "", "");
+	delay(1);
 }
 
 #endif // HAS_EPAPER && HAS_MQTT

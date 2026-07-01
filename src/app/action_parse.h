@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_DISPLAY
+#if HAS_DISPLAY || HAS_BUTTON
 
 #include "pad_config.h"  // ButtonAction, ACTION_TYPE_*, CONFIG_*_MAX_LEN
 
@@ -17,4 +17,4 @@ void action_parse(const JsonObject& obj, ButtonAction& act);
 // Only writes non-default fields to keep the JSON compact.
 void action_to_json(const ButtonAction& act, JsonObject obj);
 
-#endif // HAS_DISPLAY
+#endif // HAS_DISPLAY || HAS_BUTTON

@@ -206,6 +206,220 @@ async function saveBootActions() {
 }
 
 // ============================================================================
+// Hardware Button Actions (uses shared portal_action_editor.js)
+// ============================================================================
+
+// Flat list of every action editor prefix currently rendered, used to wire
+// screen + sound dropdowns in one pass after the editors are built.
+var HW_BUTTON_PREFIXES = [];
+
+function hwButtonTapPrefixes(n) {
+    return ['hwbtn-' + n + '-tap-1', 'hwbtn-' + n + '-tap-2', 'hwbtn-' + n + '-tap-3'];
+}
+function hwButtonHoldPrefixes(n) {
+    return ['hwbtn-' + n + '-hold-1', 'hwbtn-' + n + '-hold-2', 'hwbtn-' + n + '-hold-3'];
+}
+
+async function initHwButtons() {
+    var container = document.getElementById('hw-button-editors');
+    if (!container) return;
+    HW_BUTTON_PREFIXES = [];
+    var data;
+    try {
+        const response = await fetch('/api/component/hw-buttons/config');
+        if (!response.ok) {
+            container.innerHTML = '<small style="color:#86868b;">Could not load hardware buttons.</small>';
+            return;
+        }
+        data = await response.json();
+    } catch (err) {
+        console.error('Failed to load hardware buttons:', err);
+        container.innerHTML = '<small style="color:#ff3b30;">Error loading hardware buttons.</small>';
+        return;
+    }
+
+    var buttons = (data && data.buttons) || [];
+    if (!buttons.length) {
+        container.innerHTML = '<small style="color:#86868b;">This board has no configurable hardware buttons.</small>';
+        return;
+    }
+
+    // Show the headless note when the device reports no display.
+    if (typeof getDeviceInfo === 'function') {
+        getDeviceInfo().then(function (info) {
+            var note = document.getElementById('hw-button-headless-note');
+            if (note && info && !info.has_display) note.style.display = '';
+        });
+    }
+
+    var html = '';
+    buttons.forEach(function (btn, idx) {
+        var n = idx + 1;
+        var label = (btn.label && btn.label.length) ? btn.label : ('Button ' + n);
+        var title = 'Button ' + n + ' — ' + label + ' (GPIO' + btn.pin + ')';
+        html += '<details class="editor-group" id="hwbtn-' + n + '-group">';
+        html += '<summary>' + title + '</summary>';
+        html += '<div class="editor-group-body">';
+        html += '<h4 class="mt-2 mb-1">Tap Actions</h4>';
+        html += '<div id="hwbtn-' + n + '-tap-editors"></div>';
+        html += '<h4 class="mt-2 mb-1">Hold Actions</h4>';
+        html += '<div id="hwbtn-' + n + '-hold-editors"></div>';
+        html += '</div></details>';
+    });
+    container.innerHTML = html;
+
+    var listLabels = ['Action 1', 'Action 2', 'Action 3'];
+    buttons.forEach(function (btn, idx) {
+        var n = idx + 1;
+        var tapPrefixes = hwButtonTapPrefixes(n);
+        var holdPrefixes = hwButtonHoldPrefixes(n);
+        actionEditorListRender('hwbtn-' + n + '-tap-editors', tapPrefixes, listLabels);
+        actionEditorListRender('hwbtn-' + n + '-hold-editors', holdPrefixes, listLabels);
+        actionEditorListLoad(tapPrefixes, btn.tap_actions || []);
+        actionEditorListLoad(holdPrefixes, btn.hold_actions || []);
+        HW_BUTTON_PREFIXES = HW_BUTTON_PREFIXES.concat(tapPrefixes, holdPrefixes);
+    });
+
+    actionEditorWireFragment(HW_BUTTON_PREFIXES);
+}
+
+async function saveHwButtons() {
+    var container = document.getElementById('hw-button-editors');
+    if (!container) return;
+    var groupCount = container.querySelectorAll('details.editor-group').length;
+    var buttons = [];
+    for (var n = 1; n <= groupCount; n++) {
+        buttons.push({
+            tap_actions: actionEditorListBuild(hwButtonTapPrefixes(n)),
+            hold_actions: actionEditorListBuild(hwButtonHoldPrefixes(n))
+        });
+    }
+    try {
+        const response = await fetch('/api/component/hw-buttons/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ buttons: buttons })
+        });
+        if (response.ok) {
+            showMessage('Hardware button actions saved', 'success');
+        } else {
+            showMessage('Failed to save hardware button actions', 'error');
+        }
+    } catch (err) {
+        console.error('Error saving hardware button actions:', err);
+        showMessage('Error saving hardware button actions: ' + err.message, 'error');
+    }
+}
+
+// ============================================================================
+// MQTT Triggers (uses shared portal_action_editor.js)
+// ============================================================================
+
+// Flat list of every action editor prefix currently rendered, used to wire
+// screen + sound dropdowns in one pass after the editors are built.
+var MQTT_TRIGGER_PREFIXES = [];
+
+function mqttTriggerPrefixes(n) {
+    return ['mqtttrig-' + n + '-1', 'mqtttrig-' + n + '-2', 'mqtttrig-' + n + '-3'];
+}
+
+async function initMqttTriggers() {
+    var container = document.getElementById('mqtt-trigger-editors');
+    if (!container) return;
+    MQTT_TRIGGER_PREFIXES = [];
+    var data;
+    try {
+        const response = await fetch('/api/component/mqtt-triggers/config');
+        if (!response.ok) {
+            container.innerHTML = '<small style="color:#86868b;">Could not load MQTT triggers.</small>';
+            return;
+        }
+        data = await response.json();
+    } catch (err) {
+        console.error('Failed to load MQTT triggers:', err);
+        container.innerHTML = '<small style="color:#ff3b30;">Error loading MQTT triggers.</small>';
+        return;
+    }
+
+    var max = (data && data.max) || 8;
+    var triggers = (data && data.triggers) || [];
+
+    var html = '';
+    for (var n = 1; n <= max; n++) {
+        html += '<details class="editor-group" id="mqtttrig-' + n + '-group">';
+        html += '<summary>Trigger ' + n + '</summary>';
+        html += '<div class="editor-group-body">';
+        html += '<label class="form-label">Topic</label>';
+        html += '<input type="text" id="mqtttrig-' + n + '-topic" class="form-control form-control-sm mb-1" maxlength="127" spellcheck="false" placeholder="home/sensor/state">';
+        html += '<label class="form-label">Value filter (empty = match any)</label>';
+        html += '<input type="text" id="mqtttrig-' + n + '-value" class="form-control form-control-sm mb-2" maxlength="63" spellcheck="false" placeholder="e.g. ON">';
+        html += '<h4 class="mt-2 mb-1">Actions</h4>';
+        html += '<div id="mqtttrig-' + n + '-editors"></div>';
+        html += '</div></details>';
+    }
+    container.innerHTML = html;
+
+    var listLabels = ['Action 1', 'Action 2', 'Action 3'];
+    for (var n = 1; n <= max; n++) {
+        var prefixes = mqttTriggerPrefixes(n);
+        actionEditorListRender('mqtttrig-' + n + '-editors', prefixes, listLabels);
+        var trig = triggers[n - 1];
+        if (trig) {
+            var topicEl = document.getElementById('mqtttrig-' + n + '-topic');
+            var valueEl = document.getElementById('mqtttrig-' + n + '-value');
+            if (topicEl) topicEl.value = trig.topic || '';
+            if (valueEl) valueEl.value = trig.value || '';
+            actionEditorListLoad(prefixes, trig.actions || []);
+            // Expand configured slots so they are visible on load.
+            var grp = document.getElementById('mqtttrig-' + n + '-group');
+            if (grp && trig.topic) grp.open = true;
+        }
+        MQTT_TRIGGER_PREFIXES = MQTT_TRIGGER_PREFIXES.concat(prefixes);
+    }
+
+    actionEditorWireFragment(MQTT_TRIGGER_PREFIXES);
+}
+
+async function saveMqttTriggers() {
+    var container = document.getElementById('mqtt-trigger-editors');
+    if (!container) return;
+    var groupCount = container.querySelectorAll('details.editor-group').length;
+    var triggers = [];
+    for (var n = 1; n <= groupCount; n++) {
+        var topicEl = document.getElementById('mqtttrig-' + n + '-topic');
+        var valueEl = document.getElementById('mqtttrig-' + n + '-value');
+        var topic = topicEl ? topicEl.value.trim() : '';
+        if (!topic) continue;  // skip empty slots
+        if (topic.indexOf('#') !== -1 || topic.indexOf('+') !== -1) {
+            showMessage('Wildcard topics are not supported. Use exact topic names.', 'error');
+            return;
+        }
+        triggers.push({
+            topic: topic,
+            value: valueEl ? valueEl.value : '',
+            actions: actionEditorListBuild(mqttTriggerPrefixes(n))
+        });
+    }
+    try {
+        const response = await fetch('/api/component/mqtt-triggers/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ triggers: triggers })
+        });
+        if (response.ok) {
+            showMessage('MQTT triggers saved', 'success');
+        } else {
+            var msg = 'Failed to save MQTT triggers';
+            try { var j = await response.json(); if (j && j.message) msg = j.message; } catch (e) {}
+            showMessage(msg, 'error');
+        }
+    } catch (err) {
+        console.error('Error saving MQTT triggers:', err);
+        showMessage('Error saving MQTT triggers: ' + err.message, 'error');
+    }
+}
+
+// ============================================================================
 // Timer Config (device-level, uses shared portal_action_editor.js)
 // ============================================================================
 

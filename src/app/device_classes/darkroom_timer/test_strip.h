@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stdint.h>
+#include "board_config.h"
+
 // ============================================================================
 // Test Strip Sequencer — automated f-stop test strip exposure sequence
 // ============================================================================
@@ -70,5 +73,39 @@ void test_strip_dispatch(const char* command, const char* value);
 
 // Tick function — call from LVGL render task to drive the state machine.
 void test_strip_tick();
+
+#if HAS_MCP
+// Maximum segments reported by StripStatus (matches STRIP_MAX_SEGMENTS).
+#define STRIP_STATUS_MAX_SEGMENTS 12
+
+// Read-only status snapshot for the MCP get_strip_status tool. The engine's
+// fields are plain scalars updated on the main loop; the segment table is kept
+// current by every config command (each calls recalculate_segments()) and is
+// copied under g_strip_lock, so the read matches the binding-resolver path.
+struct StripStatusSegment {
+    float cumulative_s;   // cumulative exposure time at this segment
+    float incremental_s;  // incremental time for this segment
+    float offset_stops;   // f-stop offset from base
+};
+struct StripStatus {
+    uint8_t  phase;            // 0=idle, 1=countdown, 2=exposing, 3=pausing
+    int      segment;          // current segment (1-based, 0 when idle)
+    int      segment_count;    // total segments
+    float    base_time_s;      // base/center exposure time
+    float    step_stops;       // step interval in stops
+    const char* step_label;    // step label (e.g. "1/3"), static storage
+    int      countdown_s;      // initial countdown setting
+    int      pause_s;          // inter-segment pause setting
+    bool     exposure_tick;    // per-second tick enabled
+    uint32_t phase_remaining_ms;
+    uint32_t phase_elapsed_ms;
+    float    total_time_s;     // estimated total sequence time
+    StripStatusSegment segments[STRIP_STATUS_MAX_SEGMENTS];
+};
+void test_strip_get_status(StripStatus* out);
+
+// Human-readable name for a StripStatus::phase value.
+const char* test_strip_phase_str(uint8_t phase);
+#endif // HAS_MCP
 
 

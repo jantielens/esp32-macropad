@@ -76,6 +76,7 @@ static void numericrocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                                   lv_obj_t* icon_img, lv_obj_t* center_label,
                                   WidgetState* state) {
     (void)center_label;
+    (void)rect;
     auto* cfg = reinterpret_cast<const NumericRockerConfig*>(wcfg->data);
     auto* st = reinterpret_cast<NumericRockerState*>(state->data);
     memset(st, 0, sizeof(NumericRockerState));
@@ -114,8 +115,12 @@ static void numericrocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         return lbl;
     };
 
-    // Compute pixel-clamped zone boundaries
-    int span = cfg->horizontal ? rect->w : rect->h;
+    // Compute pixel-clamped zone boundaries.
+    // Use the tile's content area (honors the button's content padding) so the
+    // chevrons inset consistently with labels and other widgets.
+    lv_obj_update_layout(tile);
+    int span = cfg->horizontal ? (int)lv_obj_get_content_width(tile)
+                               : (int)lv_obj_get_content_height(tile);
     NRZoneLayout z = nr_compute_zones(span, cfg->small_step, cfg->large_step);
 
     // Create chevrons only for active zones.
@@ -181,15 +186,43 @@ void numericrocker_substitute_step(ButtonAction* act, float step) {
                                      sizeof(act->payload.timer.timer_value), step);
     } else {
         // Device-class action types store their value in the opaque
-        // payload arm; delegate to the registered handler so {step} reaches
-        // fields shared code cannot see (e.g. darkroom strip/expose/meter).
+        // payload arm; substitute {step} generically against the registered
+        // value_field accessor so it reaches fields shared code cannot see
+        // (e.g. darkroom strip/expose/meter).
         const ActionTypeDef* def = action_type_find(act->type);
-        if (def && def->substitute_step) def->substitute_step(*act, step);
+        action_type_substitute_step(def, *act, step);
     }
 }
 
 // ---- Registration ----
 
-REGISTER_WIDGET(numericrocker, nullptr, false);
+#if HAS_MCP
+static void numericrocker_describe(JsonObject& out) {
+    JsonArray f = out.createNestedArray("config_fields");
+    auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
+    add("widget_numericrocker_axis","string","'h'/'horizontal' or 'v'/'vertical'");
+    add("widget_numericrocker_small_step","number","inner-arrow step (± per tap)");
+    add("widget_numericrocker_large_step","number","outer-arrow step (± per tap)");
+    // The adjust action is a NESTED action OBJECT (same shape as a button
+    // action) — NOT a bare string. Spell that out with an example so an LLM does
+    // not emit "volume"/"brightness" as a string (which the device ignores).
+    {
+        JsonObject o = f.createNestedObject();
+        o["name"] = "widget_numericrocker_action";
+        o["type"] = "action";
+        o["desc"] = "REQUIRED nested action OBJECT (same shape as a button action; NOT a bare string). "
+                    "Dispatched on every arrow tap with the literal token {step} substituted by the small/large "
+                    "step (negative for the down/left arrows). Typically adjusts volume, brightness, a timer, or "
+                    "a device-class value.";
+        o["example"] = "{\"type\":\"volume\",\"volume_mode\":\"adjust\",\"volume_value\":\"{step}\"}";
+    }
+    add("widget_numericrocker_color","color","indicator color");
+    add("widget_numericrocker_opacity","number","0-100");
+    out["note"] = "Numeric rocker: the outer/inner arrows run widget_numericrocker_action with {step} substituted "
+                  "by large/small step; a tap in the CENTER falls through to the button's normal actions[]. "
+                  "Set small_step/large_step to the ± amounts (e.g. 5 and 20).";
+}
+#endif
+REGISTER_WIDGET_SCHEMA(numericrocker, nullptr, false);
 
 #endif // HAS_DISPLAY

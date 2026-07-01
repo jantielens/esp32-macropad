@@ -62,7 +62,7 @@ function syncLabelStyleVisibility(slot) {
 // Firmware hardcoded defaults (must match init_button_defaults in pad_config.cpp)
 const PAD_FIRMWARE_DEFAULTS = {
     bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000',
-    border_width: '0', corner_radius: '8',
+    border_width: '0', corner_radius: '8', content_pad: '4',
 };
 
 // Load device-level button defaults from the REST API
@@ -102,6 +102,7 @@ function padLoadButtonDefaults(defs) {
     var el;
     el = document.getElementById('pad-def-border-width'); if (el) el.value = defs.border_width || '';
     el = document.getElementById('pad-def-corner-radius'); if (el) el.value = defs.corner_radius || '';
+    el = document.getElementById('pad-def-content-pad'); if (el) el.value = defs.content_pad || '';
     el = document.getElementById('pad-def-label-top-style'); if (el) el.value = defs.label_top_style || '';
     el = document.getElementById('pad-def-label-center-style'); if (el) el.value = defs.label_center_style || '';
     el = document.getElementById('pad-def-label-bottom-style'); if (el) el.value = defs.label_bottom_style || '';
@@ -121,6 +122,7 @@ function padCollectButtonDefaults() {
     var el;
     el = document.getElementById('pad-def-border-width'); if (el && el.value.trim()) d.border_width = el.value.trim();
     el = document.getElementById('pad-def-corner-radius'); if (el && el.value.trim()) d.corner_radius = el.value.trim();
+    el = document.getElementById('pad-def-content-pad'); if (el && el.value.trim()) d.content_pad = el.value.trim();
     el = document.getElementById('pad-def-label-top-style'); if (el && el.value.trim()) d.label_top_style = el.value.trim();
     el = document.getElementById('pad-def-label-center-style'); if (el && el.value.trim()) d.label_center_style = el.value.trim();
     el = document.getElementById('pad-def-label-bottom-style'); if (el && el.value.trim()) d.label_bottom_style = el.value.trim();
@@ -180,7 +182,8 @@ var PAD_APPEARANCE_FIELDS = [
     { input: 'pad-edit-fg-color', key: 'fg_color', isColor: true },
     { input: 'pad-edit-border-color', key: 'border_color', isColor: true },
     { input: 'pad-edit-border-width', key: 'border_width', isColor: false },
-    { input: 'pad-edit-corner-radius', key: 'corner_radius', isColor: false }
+    { input: 'pad-edit-corner-radius', key: 'corner_radius', isColor: false },
+    { input: 'pad-edit-content-pad', key: 'content_pad', isColor: false }
 ];
 
 // Show/hide reset hints based on whether each field differs from its effective default
@@ -304,3 +307,56 @@ function padCollectUsedColors(editCol, editRow) {
     }
     return colors.slice(0, 9);
 }
+
+// --- Binding length warning (pad editor) ---
+// When a bindable field is filled to its maxlength while it contains a binding
+// token, the value may be a truncated [scheme:...] expression. Show an inline
+// hint pointing the user at named pad bindings, which keep long topics short.
+
+function padBindingMaxlenHint(input) {
+    if (!input || input.tagName !== 'INPUT') return;
+    const max = input.maxLength;
+    if (!max || max < 0) return;
+    const val = input.value || '';
+    const show = val.length >= max && val.indexOf('[') !== -1;
+    let hint = input._maxlenHint;
+    if (show) {
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.className = 'binding-maxlen-hint';
+            hint.innerHTML = 'Reached the maximum length. For a long binding, define a ' +
+                '<a href="#" onclick="showBindingHelp(\'pad\');return false;">named pad binding</a> ' +
+                'and use the short <code>[pad:name]</code> alias here.';
+            // Anchor to the enclosing field block so the hint always lands on its
+            // own full-width line below the input, never as a flex sibling that
+            // would squeeze the textbox narrow.
+            const anchor = input.closest('.form-group') || input.closest('.bindable-color') || input;
+            anchor.insertAdjacentElement('afterend', hint);
+            input._maxlenHint = hint;
+        }
+        hint.style.display = '';
+    } else if (hint) {
+        hint.style.display = 'none';
+    }
+}
+
+// Re-evaluate every bindable field in the pad-edit dialog (clears stale hints
+// from a previous button and shows fresh ones for the current values).
+function padScanMaxlenHints() {
+    const overlay = document.getElementById('pad-edit-overlay');
+    if (!overlay) return;
+    overlay.querySelectorAll('input[maxlength]').forEach(padBindingMaxlenHint);
+}
+
+// Delegated listener — fires for any bindable input typed in the pad editor.
+if (!window.__padMaxlenHintWired) {
+    window.__padMaxlenHintWired = true;
+    document.addEventListener('input', function(e) {
+        const t = e.target;
+        if (t && t.tagName === 'INPUT' && t.maxLength > 0 &&
+            t.closest && t.closest('#pad-edit-overlay')) {
+            padBindingMaxlenHint(t);
+        }
+    });
+}
+

@@ -15,7 +15,7 @@ static void boot_actions_get_config(AsyncWebServerRequest *request) {
     auto doc = make_psram_json_doc(1024);
     JsonArray arr = doc->createNestedArray("actions");
 
-    for (uint8_t i = 0; i < cfg->action_count; i++) {
+    for (uint8_t i = 0; cfg && i < cfg->action_count; i++) {
         JsonObject obj = arr.createNestedObject();
         action_to_json(cfg->actions[i], obj);
     }

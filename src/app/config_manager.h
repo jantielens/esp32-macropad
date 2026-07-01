@@ -32,6 +32,10 @@
 #define CONFIG_MQTT_USERNAME_MAX_LEN 32
 #define CONFIG_MQTT_PASSWORD_MAX_LEN 64
 
+// Home Assistant REST API (for ha_service button actions)
+#define CONFIG_HA_URL_MAX_LEN 48
+#define CONFIG_HA_TOKEN_MAX_LEN 184
+
 // Operating mode (always_on | duty_cycle_mqtt | duty_cycle_ble | duty_cycle_epaper). Sized to fit longest value + NUL.
 #define CONFIG_OPERATING_MODE_MAX_LEN 20
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
@@ -47,6 +51,12 @@
 // Web portal Basic Auth (STA/full mode only)
 #define CONFIG_BASIC_AUTH_USERNAME_MAX_LEN 32
 #define CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN 64
+
+// MCP (Model Context Protocol) server bearer token.
+// 32 lowercase hex chars (128-bit) + NUL; buffer sized to 40 per spec.
+#if HAS_MCP
+#define CONFIG_MCP_TOKEN_MAX_LEN 40
+#endif
 
 // Configuration structure
 struct DeviceConfig {
@@ -70,6 +80,10 @@ struct DeviceConfig {
 		char mqtt_username[CONFIG_MQTT_USERNAME_MAX_LEN];
 		char mqtt_password[CONFIG_MQTT_PASSWORD_MAX_LEN];
 
+		// Home Assistant REST API (for ha_service button actions; independent of MQTT)
+		char ha_url[CONFIG_HA_URL_MAX_LEN];      // e.g. http://192.168.1.50:8123 (empty = disabled)
+		char ha_token[CONFIG_HA_TOKEN_MAX_LEN];  // HA long-lived access token
+
 		// Operating mode (user-selectable transport / wake behaviour)
 		char operating_mode[CONFIG_OPERATING_MODE_MAX_LEN];    // always_on | duty_cycle_mqtt | duty_cycle_ble
 		uint16_t duty_cycle_wake_seconds;                      // default 120; deep-sleep duration in any duty-cycle mode (0 = wake immediately)
@@ -91,6 +105,14 @@ struct DeviceConfig {
 		bool basic_auth_enabled;
 		char basic_auth_username[CONFIG_BASIC_AUTH_USERNAME_MAX_LEN];
 		char basic_auth_password[CONFIG_BASIC_AUTH_PASSWORD_MAX_LEN];
+
+		// MCP server (Model Context Protocol; STA/full mode only)
+#if HAS_MCP
+		bool mcp_enabled;                              // default false (feature off)
+		bool mcp_control_enabled;                      // default false (gates control tools)
+		bool mcp_authoring_enabled;                    // default false (gates pad authoring/write tools)
+		char mcp_token[CONFIG_MCP_TOKEN_MAX_LEN];      // bearer token; empty = none (fail closed)
+#endif
 
 #if HAS_BLE_HID
 		// BLE Keyboard (runtime toggle; saves ~70 KB internal RAM when disabled)

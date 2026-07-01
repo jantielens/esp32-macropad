@@ -254,7 +254,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
   - **Grid preview**: Click any cell to open the button editor dialog
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
-  - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
+  - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, content padding, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
   - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode — green/red ghost overlay shows valid/invalid positions. Blocks check grid dimensions, free cells, and 64-button limit. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
@@ -631,6 +631,10 @@ Returns current device configuration (passwords excluded).
   "basic_auth_username": "",
   "basic_auth_password_set": false,
 
+  "mcp_enabled": false,
+  "mcp_control_enabled": false,
+  "mcp_token_set": false,
+
   "backlight_brightness": 100,
 
   "screen_saver_enabled": false,
@@ -642,7 +646,10 @@ Returns current device configuration (passwords excluded).
 
   "audio_volume": 50,
   "tap_beep": "",
-  "lp_beep": ""
+  "lp_beep": "",
+
+  "ha_url": "",
+  "ha_token": ""
 }
 ```
 
@@ -651,6 +658,8 @@ Returns current device configuration (passwords excluded).
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
+- `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config` — it is always reported as an empty string.
+- MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
 
 #### `POST /api/config`
 
@@ -679,6 +688,10 @@ Save new configuration. Device reboots after successful save.
   "basic_auth_username": "admin",
   "basic_auth_password": "change-me",
 
+  "mcp_enabled": true,
+  "mcp_control_enabled": false,
+  "mcp_generate_token": true,
+
   "backlight_brightness": 70,
 
   "screen_saver_enabled": true,
@@ -690,7 +703,10 @@ Save new configuration. Device reboots after successful save.
 
   "audio_volume": 50,
   "tap_beep": "800:80",
-  "lp_beep": "600:40 40 600:40"
+  "lp_beep": "600:40 40 600:40",
+
+  "ha_url": "http://192.168.1.50:8123",
+  "ha_token": "eyJhbGciOi..."
 }
 ```
 
@@ -705,7 +721,9 @@ Save new configuration. Device reboots after successful save.
 **Notes:**
 - Only fields present in request are updated
 - Password field: empty string = no change, non-empty = update
+- `ha_token` follows the same rule: empty string = keep current, non-empty = update. `ha_url` is always updated when present.
 - Basic Auth password is never returned by `GET /api/config`.
+- `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
@@ -934,6 +952,32 @@ Switch the active runtime screen (no persistence).
 
 ---
 
+### MCP Server API
+
+Requires `HAS_MCP` (default on). Off by default; enabled and tokened from the portal's **MCP** card. STA-mode only. See the user-facing [MCP Server Guide](../mcp-guide.md) for client setup.
+
+#### `POST /mcp`
+
+Single Model Context Protocol endpoint — JSON-RPC 2.0 over the MCP **Streamable HTTP** transport (protocol `2025-06-18`, JSON-only responses, stateless). Methods: `initialize`, `tools/list`, `tools/call`, `ping`; JSON-RPC notifications return `202`.
+
+- **Auth:** every request must carry `Authorization: Bearer <token>`. Fails closed: when `mcp_enabled` is true but no token has been generated, all requests are refused (`401`). Independent of portal Basic Auth.
+- **Availability:** returns `404` when `mcp_enabled` is false or the device is in AP/setup mode. Performs Origin validation (any browser `Origin` → `403`; native clients send none) and does not alter the global CORS allow-list.
+- **Tools:** read tools are always available once enabled; control tools (`press_button`, `set_screen`, `set_backlight`, `wake`, `system_command`) are hidden from `tools/list` and refused by `tools/call` unless `mcp_control_enabled` is true. Display tools are absent on `!HAS_DISPLAY` boards. Control tools run on the main loop, never on the async web task.
+- **Body cap:** request bodies above 8 KB are rejected with JSON-RPC `-32600`.
+- **Implementation note:** served by a custom `AsyncWebHandler` (not `server->on`) because MCP clients send `Accept: application/json, text/event-stream`, which the stock callback handler rejects via `isHTTP()`. `GET`/`DELETE /mcp` return `405` (no SSE stream offered) so client transport negotiation succeeds.
+
+**Example (`initialize`):**
+```bash
+curl -X POST http://<device-ip>/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+```
+
+
+
+---
+
 ### Screenshot API
 
 Requires `HAS_DISPLAY`. Gated by Basic Auth when enabled.
@@ -1002,6 +1046,50 @@ Save boot action configuration to LittleFS.
 
 ---
 
+### Hardware Buttons API
+
+Available when the board declares physical buttons. The board's `board_overrides.h` must set `HAS_BUTTON true` explicitly (it defaults to `false` and is not auto-derived) and define `NUM_HW_BUTTONS` plus the `HW_BUTTON_DEFS[]` table. Independent of `HAS_DISPLAY` — works on headless boards. Gated by Basic Auth when enabled. Per-button tap/hold action lists are stored on the `Storage` facade at `/config/hw_buttons.json` and applied immediately without reboot.
+
+#### `GET /api/component/hw-buttons/config`
+
+Returns the declared buttons and their configured action lists.
+
+- **Response:** JSON object with a `buttons` array, one entry per declared button (in `HW_BUTTON_DEFS[]` order), each containing `label` (string), `pin` (GPIO number), `tap_actions` (array of up to 3 `ButtonAction` objects), and `hold_actions` (array of up to 3 `ButtonAction` objects). `ButtonAction` uses the same schema as button/swipe/boot actions.
+- Default (no file saved): each button reports empty `tap_actions` and `hold_actions`.
+
+#### `POST /api/component/hw-buttons/config`
+
+Save hardware button action configuration.
+
+- **Body:** JSON object with a `buttons` array of `{ tap_actions, hold_actions }` objects, positional by button index. Entries beyond `NUM_HW_BUTTONS` are ignored.
+- **Response:** standard component save response on success; JSON error on failure.
+- On screenless boards, display-only action types (screen, brightness, notify, timer) parse and store normally but log a no-op when dispatched.
+
+---
+
+### MQTT Triggers API
+
+Available when `HAS_MQTT && (HAS_DISPLAY || HAS_BUTTON)` (so headless boards with a physical button are included, while display-less and button-less boards are excluded). Gated by Basic Auth when enabled. Triggers are stored on the `Storage` facade at `/config/mqtt_triggers.json` and applied immediately without reboot; subscriptions are (re)established on every MQTT (re)connect.
+
+A trigger pairs a topic with an optional exact-value filter and up to 3 sequential `ButtonAction` objects. When a subscribed topic receives a message whose payload equals the filter (or the filter is empty, matching any payload), the trigger's actions are dispatched. Capacity is `MAX_MQTT_TRIGGERS` (default 8, lowered to 3 on non-PSRAM boards).
+
+#### `GET /api/component/mqtt-triggers/config`
+
+Returns the configured triggers and the device's capacity.
+
+- **Response:** JSON object with `max` (number, `MAX_MQTT_TRIGGERS`) and a `triggers` array. Each entry contains `topic` (string), `value` (string, exact-match filter; empty = match any), and `actions` (array of up to 3 `ButtonAction` objects using the same schema as button/swipe/boot actions). Empty (unconfigured) slots are omitted.
+- Default (no file saved): `max` with an empty `triggers` array.
+
+#### `POST /api/component/mqtt-triggers/config`
+
+Save the MQTT trigger configuration.
+
+- **Body:** JSON object with a `triggers` array of `{ topic, value, actions }` objects. At most `MAX_MQTT_TRIGGERS` entries are accepted. Wildcard topics (containing `#` or `+`) are rejected with an error — use exact topic names.
+- **Response:** standard component save response on success; JSON error on failure (e.g. wildcard topic, too many triggers, payload too large).
+- On screenless boards (with a button), display-only action types parse and store normally but log a no-op when dispatched.
+
+---
+
 ### Button Defaults API
 
 All button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Button defaults are stored on LittleFS at `/config/button_defaults.json`.
@@ -1010,7 +1098,7 @@ All button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth 
 
 Returns the current device-level button defaults.
 
-- **Response:** JSON object with only the fields that have been explicitly set. Possible fields: `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `label_top_style`, `label_center_style`, `label_bottom_style`.
+- **Response:** JSON object with only the fields that have been explicitly set. Possible fields: `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`.
 - Default (no file saved): empty JSON object `{}`.
 
 #### `POST /api/button-defaults`

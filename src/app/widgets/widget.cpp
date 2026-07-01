@@ -23,4 +23,10 @@ const WidgetType* widget_find(const char* type_name) {
     return nullptr;
 }
 
+uint8_t widget_count() { return (uint8_t)s_widget_count; }
+
+const WidgetType* widget_at(uint8_t index) {
+    return (index < s_widget_count) ? s_widget_types[index] : nullptr;
+}
+
 #endif // HAS_DISPLAY

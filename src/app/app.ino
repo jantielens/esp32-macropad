@@ -9,6 +9,7 @@
 #include "mqtt_wake.h"
 #include "mqtt_audio.h"
 #include "mqtt_notify.h"
+#include "mqtt_triggers.h"
 #include "device_telemetry.h"
 #include "sensors/sensor_manager.h"
 #include "power_config.h"
@@ -17,6 +18,8 @@
 #include "wifi_manager.h"
 #include "device_class.h"
 #include "duty_cycle.h"
+#include "hw_buttons.h"
+#include "hw_button_config.h"
 #if HAS_BLE
 #include "ble_telemetry.h"
 #endif
@@ -454,6 +457,9 @@ void setup()
 			mqtt_wake_init(&device_config);
 			mqtt_audio_init();
 			mqtt_notify_init();
+#if MQTT_TRIGGERS_ENABLED
+			mqtt_triggers_init();
+#endif
 		} else {
 			LOGI("Main", "MQTT not configured: skipping handler init");
 		}
@@ -469,6 +475,13 @@ void setup()
 	list_binding_init();
 	timer_config_init();
 	#endif
+
+	// Hardware button actions (GPIO buttons). No-op stubs when !HAS_BUTTON.
+	// Initialized after WiFi/MQTT setup so dispatched actions can fire
+	// immediately, and well after check_config_mode_button() has released the
+	// shared GPIO from its boot-hold probe.
+	hw_button_config_init();
+	hw_buttons_init();
 
 	last_heartbeat_ms = millis();
 	LOGI("Main", "Setup complete");
@@ -559,10 +572,16 @@ void loop()
 	mqtt_wake_loop();
 	mqtt_audio_loop();
 	mqtt_notify_loop();
+#if MQTT_TRIGGERS_ENABLED
+	mqtt_triggers_loop();
+#endif
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).
 	sensor_manager_loop();
+
+	// Process hardware button debounce/hold + action dispatch (no-op when !HAS_BUTTON).
+	hw_buttons_loop();
 
 
 

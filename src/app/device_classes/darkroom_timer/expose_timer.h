@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stdint.h>
+#include "board_config.h"
+
 // ============================================================================
 // Expose Timer — single-exposure countdown with Shelly Plug relay control
 // ============================================================================
@@ -60,5 +63,23 @@ float expose_timer_get_time();
 
 // Set the exposure time (seconds). Applies clamping and snap-to-tenth.
 void expose_timer_set_time(float seconds);
+
+#if HAS_MCP
+// Read-only status snapshot for the MCP get_expose_status tool. Copies the
+// engine's scalar state in one call (the fields are plain scalars updated on the
+// main loop, so a lock-free read matches the binding-resolver access pattern).
+struct ExposeStatus {
+    uint8_t  state;            // 0=stopped, 1=running, 2=paused, 3=focus
+    float    set_time_s;       // exposure time setting (seconds)
+    float    effective_time_s; // set_time × (1 - dry_down/100)
+    float    dry_down_pct;     // 0.0–15.0
+    uint32_t remaining_ms;     // countdown remaining (0 unless running)
+    uint32_t elapsed_ms;       // countdown elapsed (0 unless running/paused)
+};
+void expose_timer_get_status(ExposeStatus* out);
+
+// Human-readable name for an ExposeStatus::state value.
+const char* expose_state_str(uint8_t state);
+#endif // HAS_MCP
 
 

@@ -22,6 +22,7 @@
 #include "device_classes/epaper/epaper_driver.h"
 #include "device_classes/epaper/epaper_http.h"
 #include "device_classes/epaper/epaper_sd_cache.h"
+#include "device_classes/epaper/epaper_timing.h"
 #include "log_manager.h"
 #include "rtos_task_utils.h"
 
@@ -911,18 +912,27 @@ bool epaper_driver_draw_url(const char* url) {
 				// the resolve already runs before the download either way).
 				Prewarm pw = {};
 				prewarm_start(&pw);
+				const uint32_t t_resolve = millis();
 				const bool resolved =
 						epaper_sd_cache_resolve(url, blob_url, img_id, sizeof(img_id)) &&
 						img_id[0];
+				const uint32_t resolve_ms = millis() - t_resolve;
+				epaper_timing_set_resolve_ms(resolve_ms);
+				const uint32_t t_join = millis();
 				prewarm_join(&pw);  // power_on done; HSPI now free for the SD read
+				LOGI("Epaper", "URL resolve %lums (%s), panel power-on wait %lums",
+						 (unsigned long)resolve_ms, resolved ? "ok" : "unresolved",
+						 (unsigned long)(millis() - t_join));
 
 				// Resolve the /api/next redirect to a blob URL + content-stable id
 				// WITHOUT downloading the body, then try the SD cache. A hit skips the
 				// slow HTTP body GET entirely; the SD read uses the panel's HSPI bus,
 				// so the pre-warm worker (which also drives HSPI) must NOT run here.
 				if (resolved) {
+						const uint32_t t_fetch = millis();
 						if (epaper_sd_cache_read(img_id, &data, &len)) {
 								from_cache = true;
+								epaper_timing_set_fetch(millis() - t_fetch, true /*from_cache*/);
 								LOGI("Epaper", "SD cache hit: %s", img_id);
 						} else {
 								LOGI("Epaper", "SD cache miss: %s", img_id);
@@ -947,6 +957,7 @@ bool epaper_driver_draw_url(const char* url) {
 #ifdef EPAPER_SD_CS_PIN
 				if (blob_url.length() > 0) dl_url = blob_url.c_str();
 #endif
+				const uint32_t t_fetch = millis();
 				const bool dl_ok = epaper_http_download(dl_url, &data, &len);
 
 				// Join the pre-warm worker (notifies after power_on completes), then
@@ -955,6 +966,7 @@ bool epaper_driver_draw_url(const char* url) {
 				prewarm_join(&pw);
 
 				if (!dl_ok) return false;
+				epaper_timing_set_fetch(millis() - t_fetch, false /*downloaded*/);
 		}
 
 		// `data`/`len` now holds the transport bytes -- either a compressed G16Z
@@ -1057,9 +1069,11 @@ bool epaper_driver_draw_url(const char* url) {
 
 void epaper_driver_display() {
 		if (!s_began || !s_canvas) return;
+		const uint32_t t_draw = millis();
 		power_on();  // re-wake the IT8951 if a prior epaper_driver_sleep() put it down
 		upload_frame();
 		refresh_gc16();
+		epaper_timing_set_draw_ms(millis() - t_draw);
 }
 
 void epaper_driver_sleep() {

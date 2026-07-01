@@ -41,6 +41,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Multi-action buttons** — chain up to 3 actions per tap and per long-press (publish MQTT, play sound, navigate, send keystrokes, etc.)
 - **Swipe gestures** — configure left/right/up/down on any screen with the same actions as buttons
 - **Boot actions** — run a sequence of actions automatically when the device starts
+- **MQTT triggers** — dispatch action chains when a matching MQTT message arrives, no button or screen required (works on headless boards with a physical button too)
 - **On-device timers** — 3 independent count-up / countdown timers with expire actions and live `[timer:N]` bindings
 - **Notification bubble** — display a floating message via a button action or remotely from Home Assistant
 
@@ -52,6 +53,8 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 
 ### Smart home & connectivity
 - **MQTT with Home Assistant auto-discovery** — registers as a full HA device with sensors, buttons, siren, volume, screen selector, and notification entities (no YAML needed)
+- **Home Assistant service buttons** — call any HA service (toggle lights, run scenes, open covers) directly over the REST API from a button, swipe, or boot action
+- **MCP server for AI assistants** — a built-in [Model Context Protocol](docs/mcp-guide.md) endpoint lets a local LLM client (Claude Desktop, Cursor, VS Code Copilot Chat) inspect and control the device through chat; off by default, token-secured, with separate read and control permissions
 - **Bluetooth HID keyboard** (ESP32-P4) — send keystrokes, modifier combos, media keys, and multi-step sequences to any paired host with single-owner pairing
 - **Remote control from HA** — switch screens, trigger beeps, play tones, set volume, send notifications
 - **Resilient WiFi** — event-driven tiered reconnect keeps the display responsive through outages, with gateway-ping liveness detection
@@ -144,7 +147,7 @@ Everything is configured from your browser — no flashing or coding needed afte
 - **Device** — operating mode, boot actions, timers, and swipe gestures
 - **Display** — brightness, screensaver, and button defaults
 - **Pads** — visual pad editor for designing button layouts
-- **Actions** — boot actions and swipe gesture configuration
+- **Actions** — boot actions, swipe gestures, hardware buttons, and MQTT triggers
 - **Connectivity** — Wi-Fi, MQTT, BLE, device name, static IP, and security
 - **Audio** — volume, beep patterns, and sound files
 - **Sensors** — sensor configuration for boards with sensor hardware
@@ -160,6 +163,7 @@ The pad editor lets you design button layouts visually: drag-to-move and drag-to
 |-------|-------------|
 | [First-Time Setup](docs/first-time-setup.md) | Initial configuration after flashing |
 | [Web Portal Guide](docs/web-portal-guide.md) | Complete guide to all portal features |
+| [MCP Server Guide](docs/mcp-guide.md) | Connect a local AI assistant to inspect and control the device over MCP |
 | [E-Paper Guide](docs/epaper-guide.md) | Detailed guide for the e-paper device class, carousel/schedule model, wake behavior, and status semantics |
 | [Home Assistant Integration](docs/ha-integration-guide.md) | HA entity reference, audio control, and automation examples |
 | [Home Assistant + MQTT (dev)](docs/dev/home-assistant-mqtt.md) | MQTT topic structure and HA auto-discovery internals |

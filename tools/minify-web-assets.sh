@@ -27,6 +27,108 @@ escape_c_string() {
     printf '%s' "$s"
 }
 
+# ---------------------------------------------------------------------------
+# Chunked-bundle variant enumeration (pure, testable)
+# ---------------------------------------------------------------------------
+# The variant generator (emit_chunked_variants) must produce one #if-guarded
+# blob per *reachable* combination of a bundle's chunk flags. Two flag kinds
+# behave very differently:
+#
+#   * Independent flags (e.g. HAS_DISPLAY, HAS_EPAPER) can each be on/off
+#     freely, so k of them yield 2^k combinations.
+#   * Device-class flags (IS_*) are mutually exclusive — a board is exactly
+#     one device class (see device_class_detect()'s #if ladder). c of them
+#     therefore yield only (c + 1) reachable states: one per class, plus a
+#     "none" state. The 2^c independent expansion would emit combinations
+#     like `IS_SHUTTER_TESTER && IS_COFFEE_SCALE` that no board can ever
+#     match, bloating web_assets.h for nothing.
+#
+# Total reachable variants = 2^k * (c + 1).
+#
+# A device-class flag is identified purely by its `IS_` prefix, matching the
+# enforced naming convention for product variants.
+
+# True (exit 0) when $1 is a device-class flag (part of the exclusive group).
+is_device_class_flag() {
+    [[ "$1" == IS_* ]]
+}
+
+# Enumerate the reachable variants for a set of unique chunk flags.
+# Emits one line per variant to stdout, tab-separated:
+#   <if_expr>\t<space-separated flags that are ON in this variant>
+# The if_expr is a C preprocessor expression (e.g. "HAS_DISPLAY && !HAS_EPAPER
+# && IS_COFFEE_SCALE && !IS_SHUTTER_TESTER && !IS_DARKROOM_TIMER"), or the
+# literal "ALWAYS" when there are no flags. Independent flags expand 2^k;
+# device-class flags form one (c + 1)-way exclusive group. Every positive
+# device-class branch negates the other class flags, and the "none" branch
+# negates them all, so the emitted branches are textually mutually exclusive
+# and exhaustive over reachable boards. (A misconfigured board with two IS_*
+# flags true would match zero branches -> loud link error, never a silent
+# duplicate.)
+enumerate_bundle_variants() {
+    local -a flags=("$@")
+    local -a indep=() klass=()
+    local fl
+    for fl in "${flags[@]}"; do
+        if is_device_class_flag "$fl"; then
+            klass+=("$fl")
+        else
+            indep+=("$fl")
+        fi
+    done
+
+    local k=${#indep[@]} c=${#klass[@]}
+    local n_indep=$((1 << k))
+    local iv b cidx j
+    for ((iv = 0; iv < n_indep; iv++)); do
+        local indep_expr="" indep_active=""
+        for ((b = 0; b < k; b++)); do
+            if (( (iv >> b) & 1 )); then
+                indep_expr+="${indep_expr:+ && }${indep[$b]}"
+                indep_active+="${indep_active:+ }${indep[$b]}"
+            else
+                indep_expr+="${indep_expr:+ && }!${indep[$b]}"
+            fi
+        done
+
+        # Device-class group: c positive branches (one class on, rest off)
+        # plus one "none" branch (all off). When c == 0 this loop runs once
+        # with an empty class expression, collapsing to the pure 2^k case.
+        for ((cidx = 0; cidx <= c; cidx++)); do
+            local class_expr="" class_active=""
+            for ((j = 0; j < c; j++)); do
+                if (( j == cidx )); then
+                    class_expr+="${class_expr:+ && }${klass[$j]}"
+                    class_active="${klass[$j]}"
+                else
+                    class_expr+="${class_expr:+ && }!${klass[$j]}"
+                fi
+            done
+
+            local full_expr active
+            if [[ -n "$indep_expr" && -n "$class_expr" ]]; then
+                full_expr="$indep_expr && $class_expr"
+            else
+                full_expr="${indep_expr}${class_expr}"
+            fi
+            active="$indep_active"
+            [[ -n "$class_active" ]] && active+="${active:+ }$class_active"
+
+            printf '%s\t%s\n' "${full_expr:-ALWAYS}" "$active"
+        done
+    done
+}
+
+# Diagnostic / test hook: print the reachable variant matrix for a set of
+# flags and exit, without running the full asset pipeline. Used by
+# tests/test_asset_variant_matrix.sh to validate exclusivity/exhaustiveness
+# of the generated #if branches against the real production logic.
+if [[ "${1:-}" == "--emit-variants" ]]; then
+    shift
+    enumerate_bundle_variants "$@"
+    exit 0
+fi
+
 PROJECT_NAME_C="$(escape_c_string "$PROJECT_NAME")"
 PROJECT_DISPLAY_NAME_C="$(escape_c_string "$PROJECT_DISPLAY_NAME")"
 
@@ -571,9 +673,13 @@ process_asset_kind() {
     done
 }
 
-# Emit 2^N chunked-bundle variants for one kind (css|js) under a single
-# PROGMEM symbol name with #if guards. Mirrors the original JS/CSS variant
-# loops; both kinds use the same combinatorial structure.
+# Emit chunked-bundle variants for one kind (css|js) under a single PROGMEM
+# symbol name with #if guards. Variant enumeration is delegated to
+# enumerate_bundle_variants(), which treats IS_* device-class flags as one
+# mutually-exclusive group (see its header), so the variant count is
+# 2^k * (c + 1) rather than a pessimistic 2^N. Exactly one branch matches
+# per board build, so device-class assets contribute nothing to non-matching
+# boards.
 emit_chunked_variants() {
     local kind="$1"
     local upper="${kind^^}"
@@ -581,8 +687,9 @@ emit_chunked_variants() {
     local -n chunk_flags_ref="${upper}_CHUNK_FLAGS"
     local -n contents_ref="${upper}_CONTENTS"
 
-    local bundle_name chunks ckey f n_flags n_variants v b cond if_expr
-    local flag include cflag variant_tmp variant_orig_size variant_gz_size variant_gz
+    local bundle_name chunks ckey f n_flags n_indep n_classes n_variants
+    local if_expr active_flags cflag include
+    local variant_tmp variant_orig_size variant_gz_size variant_gz vnum
     for bundle_name in "${!bundle_chunks_ref[@]}"; do
         chunks="${bundle_chunks_ref[$bundle_name]}"
 
@@ -596,43 +703,45 @@ emit_chunked_variants() {
             fi
         done
         n_flags=${#unique_flags[@]}
-        if [[ $n_flags -gt 5 ]]; then
-            echo "  ✗ Bundle $bundle_name has $n_flags unique chunk flags (max 5 supported)." >&2
-            echo "     Each flag doubles the number of gzipped variants in web_assets.h" >&2
-            echo "     (variants are #if-guarded so only one links per board, but source" >&2
-            echo "     size and build time grow). The IS_* device-class flags are mutually" >&2
-            echo "     exclusive, so the variant count is pessimistic; a future generator" >&2
-            echo "     change can collapse them into one N-way group. Until then, consolidate" >&2
-            echo "     chunks instead if possible." >&2
+
+        # Reachable variant count: independent flags expand 2^k, the IS_*
+        # device-class group expands (c + 1)-ways (one per class + "none").
+        n_classes=0
+        for f in "${unique_flags[@]}"; do
+            is_device_class_flag "$f" && n_classes=$((n_classes + 1))
+        done
+        n_indep=$((n_flags - n_classes))
+        n_variants=$(( (1 << n_indep) * (n_classes + 1) ))
+
+        # Backstop against runaway header growth. With the exclusive-group
+        # model only independent flags expand exponentially, so this cap is
+        # far harder to hit than the old 2^N one; it exists to catch a bundle
+        # that accidentally accumulates many independent flags.
+        if [[ $n_variants -gt 32 ]]; then
+            echo "  ✗ Bundle $bundle_name expands to $n_variants variants" \
+                 "(${n_indep} independent flag(s), ${n_classes} device-class flag(s); max 32)." >&2
+            echo "     Independent flags (HAS_*) each double the gzipped variants emitted into" >&2
+            echo "     web_assets.h; device-class flags (IS_*) add only one variant each." >&2
+            echo "     Consolidate independent chunk flags, or split the bundle." >&2
             unset unique_flags seen_flags
             exit 1
         fi
-        n_variants=$((1 << n_flags))
-        echo "Building variants for ${bundle_name}_${kind} (${n_flags} unique flags, ${n_variants} variant(s))..."
+
+        echo "Building variants for ${bundle_name}_${kind}" \
+             "(${n_indep} independent + ${n_classes} device-class flag(s), ${n_variants} variant(s))..."
 
         cat >> "$OUTPUT_FILE" << EOF
 
 // ${upper} bundle variants for ${bundle_name}.${kind}
 // Chunks: $(echo $chunks)
 // Unique flags: ${unique_flags[*]:-<none>}
+// IS_* device-class flags form one mutually-exclusive group.
 // Each board build matches exactly one #if branch below.
 EOF
 
-        for ((v=0; v<n_variants; v++)); do
-            if_expr=""
-            for ((b=0; b<n_flags; b++)); do
-                flag="${unique_flags[$b]}"
-                if (( (v >> b) & 1 )); then
-                    cond="$flag"
-                else
-                    cond="!$flag"
-                fi
-                if [[ -z "$if_expr" ]]; then
-                    if_expr="$cond"
-                else
-                    if_expr="$if_expr && $cond"
-                fi
-            done
+        vnum=0
+        while IFS=$'\t' read -r if_expr active_flags; do
+            vnum=$((vnum + 1))
 
             variant_tmp=$(mktemp /tmp/bundle_variant_XXXXXX)
             for ckey in $chunks; do
@@ -641,12 +750,10 @@ EOF
                 if [[ -z "$cflag" ]]; then
                     include=1
                 else
-                    for ((b=0; b<n_flags; b++)); do
-                        if [[ "${unique_flags[$b]}" == "$cflag" ]]; then
-                            if (( (v >> b) & 1 )); then include=1; fi
-                            break
-                        fi
-                    done
+                    # Included iff this variant has the chunk's flag ON.
+                    case " $active_flags " in
+                        *" $cflag "*) include=1 ;;
+                    esac
                 fi
                 if [[ $include -eq 1 ]]; then
                     printf '%s\n' "${contents_ref[$ckey]}" >> "$variant_tmp"
@@ -658,7 +765,7 @@ EOF
             variant_gz=$(gzip_to_c_array "$(cat "$variant_tmp")")
             rm -f "$variant_tmp"
 
-            if [[ $n_flags -eq 0 ]]; then
+            if [[ "$if_expr" == "ALWAYS" ]]; then
                 cat >> "$OUTPUT_FILE" << EOF
 const uint8_t ${bundle_name}_${kind}_gz[] PROGMEM = {
 ${variant_gz}
@@ -677,8 +784,8 @@ const size_t ${bundle_name}_${kind}_gz_len = sizeof(${bundle_name}_${kind}_gz);
 
 EOF
             fi
-            printf "  variant %d/%d [%s]: %d -> %d bytes\n" "$((v+1))" "$n_variants" "${if_expr:-always}" "$variant_orig_size" "$variant_gz_size"
-        done
+            printf "  variant %d/%d [%s]: %d -> %d bytes\n" "$vnum" "$n_variants" "${if_expr/ALWAYS/always}" "$variant_orig_size" "$variant_gz_size"
+        done < <(enumerate_bundle_variants "${unique_flags[@]}")
 
         unset unique_flags seen_flags
     done
@@ -1032,8 +1139,9 @@ for filename in "${!JS_CONTENTS[@]}"; do
     fi
 done
 
-# Emit chunked JS+CSS bundle variants. Each bundle expands to 2^N #if-guarded
-# PROGMEM arrays under one symbol; exactly one branch matches per build, so
+# Emit chunked JS+CSS bundle variants. Each bundle expands to 2^k * (c + 1)
+# #if-guarded PROGMEM arrays under one symbol (k independent flags, c mutually
+# exclusive IS_* device-class flags); exactly one branch matches per build, so
 # device-class assets contribute nothing to non-matching boards.
 emit_chunked_variants js
 emit_chunked_variants css

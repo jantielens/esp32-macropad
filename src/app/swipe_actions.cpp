@@ -29,6 +29,7 @@ static void on_gesture(lv_event_t* e) {
     lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_active());
 
     const SwipeConfig* cfg = swipe_config_get();
+    if (!cfg) return;
     const ButtonAction* act = nullptr;
     const char* dir_label = nullptr;
 

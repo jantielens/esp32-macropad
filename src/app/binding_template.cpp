@@ -16,6 +16,8 @@ struct SchemeEntry {
     char name[16];
     binding_resolver_fn resolver;
     binding_topic_collector_fn collector;
+    binding_describe_fn describe;
+    binding_validate_fn validate;
 };
 
 static SchemeEntry g_schemes[MAX_SCHEMES];
@@ -28,8 +30,56 @@ bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
     strlcpy(e.name, scheme, sizeof(e.name));
     e.resolver = resolver;
     e.collector = collector;
+    e.describe = nullptr;
+    e.validate = nullptr;
     g_scheme_count++;
     return true;
+}
+
+uint8_t binding_template_scheme_count() { return (uint8_t)g_scheme_count; }
+
+const char* binding_template_scheme_name(uint8_t index) {
+    return (index < g_scheme_count) ? g_schemes[index].name : nullptr;
+}
+
+bool binding_template_set_scheme_describe(const char* scheme, binding_describe_fn fn) {
+    if (!scheme) return false;
+    for (int i = 0; i < g_scheme_count; i++) {
+        if (strcmp(g_schemes[i].name, scheme) == 0) { g_schemes[i].describe = fn; return true; }
+    }
+    return false;
+}
+
+bool binding_template_describe_scheme(uint8_t index, void* out_json) {
+    if (index >= g_scheme_count || !g_schemes[index].describe) return false;
+    g_schemes[index].describe(out_json);
+    return true;
+}
+
+bool binding_template_set_scheme_validate(const char* scheme, binding_validate_fn fn) {
+    if (!scheme) return false;
+    for (int i = 0; i < g_scheme_count; i++) {
+        if (strcmp(g_schemes[i].name, scheme) == 0) { g_schemes[i].validate = fn; return true; }
+    }
+    return false;
+}
+
+bool binding_template_scheme_known(const char* scheme, size_t name_len) {
+    for (int i = 0; i < g_scheme_count; i++) {
+        if (strlen(g_schemes[i].name) == name_len &&
+            strncmp(g_schemes[i].name, scheme, name_len) == 0) return true;
+    }
+    return false;
+}
+
+const char* binding_template_validate_params(const char* scheme, size_t name_len, const char* params) {
+    for (int i = 0; i < g_scheme_count; i++) {
+        if (strlen(g_schemes[i].name) == name_len &&
+            strncmp(g_schemes[i].name, scheme, name_len) == 0) {
+            return g_schemes[i].validate ? g_schemes[i].validate(params) : nullptr;
+        }
+    }
+    return nullptr;
 }
 
 // Find a scheme entry by name. Returns nullptr if not found.

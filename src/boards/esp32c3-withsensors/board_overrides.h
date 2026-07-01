@@ -36,6 +36,17 @@
 // Button polarity (active-low)
 #define BUTTON_ACTIVE_LOW true
 
+// Hardware button actions: declare GPIO9 as a configurable action button.
+// (BUTTON_PIN / BUTTON_ACTIVE_LOW above remain for boot-hold config-mode
+// detection in check_config_mode_button(); these defs drive the runtime
+// tap/hold action dispatcher.)
+#define NUM_HW_BUTTONS 1
+#ifdef __cplusplus
+static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
+    { .pin = 9, .active_low = true, .label = "BTN" }
+};
+#endif
+
 // Enable BME280 sensor sample
 #define HAS_SENSOR_BME280 false
 
@@ -59,3 +70,7 @@
 
 // Optional: BME280 address (0x76 or 0x77)
 // #define BME280_I2C_ADDR 0x76
+
+// MQTT triggers: this board has no PSRAM, so the trigger config cache falls
+// back to internal SRAM. Cap at 3 triggers (~4.3 KB) to limit SRAM cost.
+#define MAX_MQTT_TRIGGERS 3

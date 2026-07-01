@@ -30,7 +30,7 @@
 // Pad Layout
 // ============================================================================
 #define DISPLAY_SHAPE DISPLAY_SHAPE_RECT
-#define UI_SCALE_TIER UI_SCALE_XLARGE
+#define UI_SCALE_TIER UI_SCALE_LARGE
 
 // ============================================================================
 // Display geometry
@@ -105,17 +105,40 @@
 #define AUDIO_CODEC_ADDR 0x18  // ES8311 I2C address (shared Wire bus 0)
 
 // ============================================================================
+// Hardware Button (onboard SW1 / BOOT)
+// ============================================================================
+// SW1 is the BOOT strapping button on GPIO35 (active-low, internal pull-up).
+// Usable as a runtime action button — only matters at reset (holding it low
+// at power-up enters serial download mode).
+#define HAS_BUTTON true
+// BUTTON_PIN / BUTTON_ACTIVE_LOW drive boot-hold config-mode detection in
+// check_config_mode_button(); keep them aligned with HW_BUTTON_DEFS[0] below
+// (which drives the runtime tap/hold action dispatcher).
+#define BUTTON_PIN 35
+#define BUTTON_ACTIVE_LOW true
+#define NUM_HW_BUTTONS 1
+#ifdef __cplusplus
+static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
+    { .pin = 35, .active_low = true, .label = "BOOT" },
+};
+#endif
+// ============================================================================
 // Advanced Tuning (MIPI-DSI specific)
 // ============================================================================
 // Hide PSRAM flicker when screensaver fades (DPI FB lives in PSRAM).
 #define DISPLAY_BLANK_ON_SAVE true
-// Hold panel RST low during screensaver sleep. The JD9165 + HKC IPS combo
-// shows washed-out colors after multi-hour idle even with DCS Sleep In and
-// framebuffer blanking — only a full hardware reset reliably de-biases
-// the TFT cells. Wake re-runs the vendor init sequence (~180-230 ms total:
-// 50 ms reset-release + vendor command stream + 120 ms Sleep Out + 50 ms
-// Display On).
-#define DISPLAY_HARD_RESET_ON_SLEEP true
+// Screensaver sleep strategy for the JD9165 + HKC IPS panel. Holding the panel
+// in hardware reset all night (DISPLAY_HARD_RESET_ON_SLEEP) fixed the washed-out
+// colors but introduced morning flicker: the panel woke from hours of full
+// power-down into a marginal VCOM/MIPI-lock state that took minutes to settle,
+// and an active LC de-bias + soft-landing power-down did not resolve it.
+// Instead, keep the panel fully powered (Display On, scanning all-black with
+// frame inversion, backlight at 0) for the whole sleep. That avoids the DC bias
+// of DCS Sleep In *and* the hard-reset power-cycling, so wake is a clean
+// backlight fade with no panel re-init. Costs extra idle power (mains-powered
+// device, acceptable). Mutually exclusive with DISPLAY_HARD_RESET_ON_SLEEP.
+#define DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP true
+#define DISPLAY_HARD_RESET_ON_SLEEP false
 // Avoid PSRAM bus contention — disable background task telemetry.
 #define DEVICE_TELEMETRY_BACKGROUND_TASKS 0
 #define DEVICE_TELEMETRY_CPU_MONITOR 1

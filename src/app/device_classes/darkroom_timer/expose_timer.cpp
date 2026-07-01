@@ -447,6 +447,31 @@ void expose_timer_set_time(float seconds) {
     cmd_set_time(seconds);  // reuses validation (clamp + snap_tenth)
 }
 
+#if HAS_MCP
+void expose_timer_get_status(ExposeStatus* out) {
+    if (!out) return;
+    // Lock-free scalar snapshot — matches the binding-resolver read path. The
+    // engine's fields are updated on the main loop; a torn read of one scalar is
+    // benign for an advisory status report.
+    out->state            = (uint8_t)g_expose.state;
+    out->set_time_s       = g_expose.exposure_time_s;
+    out->effective_time_s = effective_time_s();
+    out->dry_down_pct     = g_expose.dry_down_pct;
+    out->remaining_ms     = (g_expose.state == EXPOSE_RUNNING) ? remaining_ms() : 0;
+    out->elapsed_ms       = raw_elapsed_ms();
+}
+
+const char* expose_state_str(uint8_t state) {
+    switch (state) {
+        case EXPOSE_RUNNING: return "running";
+        case EXPOSE_PAUSED:  return "paused";
+        case EXPOSE_FOCUS:   return "focus";
+        case EXPOSE_STOPPED:
+        default:             return "stopped";
+    }
+}
+#endif // HAS_MCP
+
 void expose_timer_init() {
     if (!binding_template_register("expose", expose_resolve, expose_collect)) {
         LOGE(TAG, "Failed to register expose binding scheme");
@@ -462,5 +487,9 @@ void expose_timer_dispatch(const char*, const char*) {}
 void expose_timer_tick() {}
 float expose_timer_get_time() { return 0.0f; }
 void expose_timer_set_time(float) {}
+#if HAS_MCP
+void expose_timer_get_status(ExposeStatus* out) { if (out) *out = ExposeStatus{}; }
+const char* expose_state_str(uint8_t) { return "stopped"; }
+#endif // HAS_MCP
 
 #endif // IS_DARKROOM_TIMER

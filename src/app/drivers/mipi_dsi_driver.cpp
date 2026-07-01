@@ -433,22 +433,31 @@ bool MipiDsiDriver::asyncFlush() const {
 // (Note: esp_lcd_panel_disp_on_off() on the DPI panel handle is not
 // implemented in our ESP-IDF version — it returns ESP_ERR_NOT_SUPPORTED
 // and logs an error — so framebuffer blanking is the actual mitigation.)
-void MipiDsiDriver::blankFramebuffers() {
+// Fill both DPI framebuffers with a byte-uniform RGB565 color (0x0000 black,
+// 0xFFFF white) and flush the PSRAM cache so the DPI peripheral's continuous
+// scanout reads the new content. The high and low bytes of `color` must match
+// for memset to produce the intended pixel value.
+void MipiDsiDriver::fillFramebuffers(uint16_t color) {
     if (!panel_handle) return;
     void* fb0 = nullptr;
     void* fb1 = nullptr;
     if (esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 2, &fb0, &fb1) != ESP_OK) {
         return;
     }
+    const int fill = (int)(color & 0xFF);
     const size_t fb_bytes = (size_t)displayWidth * (size_t)displayHeight * sizeof(uint16_t);
     if (fb0) {
-        memset(fb0, 0, fb_bytes);
+        memset(fb0, fill, fb_bytes);
         esp_cache_msync(fb0, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     }
     if (fb1 && fb1 != fb0) {
-        memset(fb1, 0, fb_bytes);
+        memset(fb1, fill, fb_bytes);
         esp_cache_msync(fb1, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     }
+}
+
+void MipiDsiDriver::blankFramebuffers() {
+    fillFramebuffers(0x0000);
 }
 
 void MipiDsiDriver::sendInitCommands() {
@@ -493,6 +502,15 @@ void MipiDsiDriver::displaySleep() {
     // it and would just log "disp_on_off is not supported by this panel".
     blankFramebuffers();
 
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Keep the panel fully powered in normal Display On, scanning the now-black
+    // framebuffer with frame inversion active (backlight already faded to 0).
+    // The opaque top-layer sleep overlay keeps LVGL rendering black, so the
+    // panel scans a DC-balanced all-black frame throughout sleep. No DCS
+    // power-down and no RST toggle: this avoids both the DC bias of Sleep In
+    // (washed-out colors) and the hard-reset power-cycling (morning flicker).
+    return;
+#else
     // Standard DCS power-down: Display Off → Sleep In.
     esp_lcd_panel_io_tx_param(ioHandle, 0x28, NULL, 0);  // Display Off
     delay(20);
@@ -506,11 +524,15 @@ void MipiDsiDriver::displaySleep() {
 #if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     digitalWrite(LCD_RST_PIN, LOW);
 #endif
+#endif
 }
 
 void MipiDsiDriver::displayWake() {
     if (!ioHandle) return;
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Panel never slept; the backlight fade restores visibility. Nothing to do.
+    return;
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     wakeFromHardReset();
 #else
     esp_lcd_panel_io_tx_param(ioHandle, 0x11, NULL, 0);  // Sleep Out
@@ -521,7 +543,10 @@ void MipiDsiDriver::displayWake() {
 
 void MipiDsiDriver::displayWakeSleepOut() {
     if (!ioHandle) return;
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Panel never slept (single-phase wake); nothing to do.
+    return;
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     // Hard-reset wake is single-phase (see needsTwoPhaseWake()): replay the
     // full init sequence here. The screensaver skips the 120 ms gap and the
     // second displayWakeDisplayOn() call so the display lock is only held
@@ -534,7 +559,11 @@ void MipiDsiDriver::displayWakeSleepOut() {
 
 void MipiDsiDriver::displayWakeDisplayOn() {
     if (!ioHandle) return;
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Unreachable: needsTwoPhaseWake() returns false so the screensaver never
+    // calls this. The panel never slept anyway. Guarded out for safety.
+    return;
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     // Unreachable: needsTwoPhaseWake() returns false in hard-reset mode so
     // screen_saver_manager never calls this. Guarded out for safety.
     return;
@@ -544,21 +573,73 @@ void MipiDsiDriver::displayWakeDisplayOn() {
 }
 
 bool MipiDsiDriver::needsTwoPhaseWake() const {
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    return false;
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
     return false;
 #else
     return true;
 #endif
 }
 
-// Periodic scrub during long idle. With hard-reset enabled the panel IC is
-// already unpowered, so this is a no-op. Otherwise re-blank both framebuffers
-// as insurance against any transient LVGL write that slipped past the opaque
-// top-layer overlay (e.g. overlay teardown race during fade-in) leaving stale
-// pixels in the FB to ghost into the IPS cells over hours.
+// Periodic scrub during long idle, called by the screensaver every
+// SCREENSAVER_SLEEP_REFRESH_MS while fully asleep.
+//   - Keep-awake mode: the panel stays powered and scanning, so this just
+//     re-blanks both framebuffers as insurance against any transient LVGL
+//     write that slipped past the opaque overlay.
+//   - Hard-reset mode: actively de-bias the LC by briefly powering the panel
+//     up and driving full-frame white↔black inversion cycles (backlight off),
+//     then powering it down again. Power-down alone does not de-bias these
+//     cheap IPS cells — the trapped DC just relaxes slowly (the washed-out
+//     colors that fade a few minutes after wake), so the periodic inversion is
+//     what actually prevents the buildup. A soft-landing settle then lets the
+//     panel reach VCOM equilibrium before RST is re-asserted LOW; freezing the
+//     panel mid-equilibration leaves it in a marginal VCOM state that flickers
+//     for minutes on the next wake. Leaves RST LOW + framebuffers black so the
+//     normal hard-reset wake path is unchanged.
+//   - Otherwise: re-blank both framebuffers as insurance against any transient
+//     LVGL write that slipped past the opaque top-layer overlay (e.g. overlay
+//     teardown race during fade-in) leaving stale pixels to ghost over hours.
 void MipiDsiDriver::displayRefreshSleep() {
-#if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
-    return;
+#if DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP
+    // Panel stays in Display On scanning black; just re-blank as insurance.
+    blankFramebuffers();
+#elif DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)
+    if (!ioHandle) return;
+    // Power the panel back up (replays vendor init; backlight stays at 0).
+    wakeFromHardReset();
+    // Drive opposite-polarity full-frame cycles to cancel accumulated DC bias.
+    for (int i = 0; i < DISPLAY_DEBIAS_CYCLES; i++) {
+        fillFramebuffers(0xFFFF);  // white
+        delay(DISPLAY_DEBIAS_HOLD_MS);
+        fillFramebuffers(0x0000);  // black
+        delay(DISPLAY_DEBIAS_HOLD_MS);
+    }
+    // Soft landing: hold a uniform black frame with the panel still scanning so
+    // its per-frame inversion averages the residual LC/VCOM bias toward zero,
+    // instead of freezing the panel on the last-driven polarity. fillFramebuffers
+    // already left black above; the settle is the dwell that matters.
+    fillFramebuffers(0x0000);  // black (explicit; cheap and self-documenting)
+#if DISPLAY_DEBIAS_SETTLE_MS > 0
+    delay(DISPLAY_DEBIAS_SETTLE_MS);
+#else
+    delay(5);
+#endif
+    // Graceful DCS power-down: Display Off → (VCOM discharge window) → Sleep In,
+    // then hold RST LOW. The dwell on Display Off gives the panel's internal
+    // VCOM/source discharge time to equalize so it powers down from a balanced
+    // state, mirroring displaySleep() but with the extra settle the abrupt
+    // periodic path lacked. RST low alone would reset the controller regardless,
+    // but mirroring the standard power-down keeps the resting state identical to
+    // a normal sleep entry.
+    esp_lcd_panel_io_tx_param(ioHandle, 0x28, NULL, 0);  // Display Off
+#if DISPLAY_DEBIAS_SETTLE_MS > 0
+    delay(DISPLAY_DEBIAS_SETTLE_MS);
+#else
+    delay(20);
+#endif
+    esp_lcd_panel_io_tx_param(ioHandle, 0x10, NULL, 0);  // Sleep In
+    digitalWrite(LCD_RST_PIN, LOW);
 #else
     blankFramebuffers();
 #endif

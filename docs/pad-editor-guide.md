@@ -35,9 +35,10 @@ The **Button Defaults** section (collapsible, at the bottom of the Pads page) le
 | **Border color** | Default button outline color |
 | **Border width** | Default border thickness (px) |
 | **Corner radius** | Default button corner rounding (px) |
+| **Padding** | Default content inset between the border and labels/icon/widget (px, 0–50) |
 | **Label top/center/bottom style** | Default label style DSL (e.g., `font_size:24;align:left`) |
 
-The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius).
+The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius, 4px padding).
 
 > **Tip**: Set your button defaults first, then add buttons. Changing a default immediately updates all buttons that don't have a custom override — both in the editor preview and on the device.
 
@@ -253,6 +254,8 @@ Each color field accepts either a static `#hex` value or a binding expression fo
 
 **Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the device-level [Button Defaults](#button-defaults). If you set a custom value, a **↩** reset link appears next to the label — click it to revert to the inherited default.
 
+**Padding** (0–50 px, default 4) sets the content inset between the button border and its content — the top/center/bottom labels, the icon, and any widget. Increase it to keep left/right-aligned labels from crowding the border or rounded corners, or to give a widget more breathing room. Like border width and radius, it inherits from [Button Defaults](#button-defaults) and shows a **↩** reset link when overridden.
+
 **UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
 
 ### Button State (Conditional Visibility)
@@ -344,6 +347,7 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. Set and adjust countdown values support binding templates. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
+| **Home Assistant Service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
 | **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, **Enable Screensaver**, **Set/Adjust Volume**, or **Set/Adjust Brightness**. |
 
 **Example setup for a smart light:**
@@ -454,6 +458,33 @@ The bubble fades in over 200 ms, displays for the configured duration, then fade
 - **Tap action**: Show Notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, duration: `0`, bg_color: `#1a3a1a`, location: `center`
 
 > **Home Assistant integration**: Notifications can also be triggered remotely via the **Notify** text entity. See the [Home Assistant Integration Guide](ha-integration-guide.md#notifications) for details and automation examples.
+
+### Home Assistant Service Action
+
+The **Home Assistant Service** action calls a Home Assistant service directly over the REST API — for example, toggling a light, running a scene, or opening a cover — without routing through MQTT.
+
+**Prerequisites**: On the portal's **Home Assistant** page, set the **Home Assistant URL** (base URL including scheme and port, e.g. `http://192.168.1.50:8123`) and a **Long-Lived Access Token** (created under your HA profile). HTTPS URLs are supported (the certificate is not verified). Leave the URL empty to disable service actions.
+
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| **Entity ID** | The target entity, e.g. `light.living_room`. The service **domain** is derived automatically from the text before the first `.` (here, `light`). |
+| **Service** | The service to call within that domain, e.g. `toggle`, `turn_on`, `turn_off`. |
+| **Service Data (JSON)** | Optional. A JSON object merged into the request body alongside `entity_id`, e.g. `{"brightness_pct": 60}`. Leave empty for services that need no extra data. |
+
+The action sends `POST <ha_url>/api/services/<domain>/<service>` with the access token as a bearer credential. The HTTP request runs on the main loop (not the render task), so the UI stays responsive. These fields are stored literally and do **not** support binding templates.
+
+**Example: toggle a light**
+- **Tap action**: Home Assistant Service → entity ID: `light.living_room`, service: `toggle`
+
+**Example: set brightness on turn-on**
+- **Tap action**: Home Assistant Service → entity ID: `light.kitchen`, service: `turn_on`, service data: `{"brightness_pct": 75}`
+
+**Example: run a scene**
+- **Tap action**: Home Assistant Service → entity ID: `scene.movie_night`, service: `turn_on`
+
+> See the [Home Assistant Integration Guide](ha-integration-guide.md#service-actions-rest-api) for setup details and more examples.
 
 ### Audio Behavior
 
@@ -643,19 +674,29 @@ Tapping "Pad 2: Home Assistant" (id: `pad_2`) navigates to that pad screen.
 
 ### Bar Chart
 
-The bar chart widget draws a vertical or horizontal bar that fills based on a numeric value — perfect for power meters, CPU gauges, progress bars, or tank levels.
+The bar chart widget draws one or more vertical or horizontal bars that fill based on numeric values — perfect for power meters, CPU gauges, progress bars, tank levels, or side-by-side comparisons of related values.
 
 **Configuration:**
 
 | Setting | Description |
 |---------|-------------|
-| **Data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
+| **Bar 1 data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
+| **Bar 2 / 3 / 4 data binding** | Optional. Each non-empty binding adds another bar to the widget (up to 4 total). Each bar gets its **own track** (background, gridlines, and target marker stay scoped to that bar — they no longer span the whole widget). The bars are spread evenly across the full width as columns (vertical) or stacked as rows (horizontal) with a fixed 6 px gap. All bars share the same min/max scale and zero-centered behavior |
+| **Bar 1 / 2 / 3 / 4 caption** | Optional per-bar label, colored to match its bar and hidden when empty. Fully bindable, so it can mix static text with live data — e.g. `Solar [mqtt:home/solar;power;%.0f]W`. Use `\n` for a line break (multi-line captions). Shown **beneath** each bar (vertical, centered) or in a strip to the **left** of each row (horizontal, right-aligned). The strip is only reserved when at least one caption is set, so caption-less charts keep their full bar size. Captions use the small font and clip if too long — keep them short |
+| **Caption size (px)** | Fixes the caption strip to an exact pixel size (1–200): **width** in horizontal mode, **height** in vertical mode. Leave at `0` for automatic sizing (horizontal ≈28% of the button width clamped 30–120 px; vertical one line tall). Increase the vertical size to fit multi-line (`\n`) captions |
 | **Min / Max** | The value range. The bar is empty at min and full at max. Accepts a number or a binding expression (e.g. `[health:psram_total]`) for dynamic scaling |
-| **Bar width %** | How wide the bar is relative to the button (1–100%). In horizontal mode, controls the bar height instead |
-| **Bar color** | The fill color of the bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
+| **Bar width %** | Each bar's thickness within its own column (1–100%), centered in the column. With a single bar this is the bar's width relative to the button, exactly as before; with multiple bars, lowering it thins each bar while keeping them spread across the full width. In horizontal mode it controls bar height instead |
+| **Bar 1 color** | The fill color of the first bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
+| **Bar 2 / 3 / 4 color** | Fill colors for the additional bars. Defaults: blue (`#2196F3`), purple (`#9C27B0`), orange (`#FF9800`). Each is bindable |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
 | **Orientation** | **Vertical** (default): bar fills bottom-to-top. **Horizontal**: bar fills left-to-right — ideal for progress bars or wide buttons |
+| **Zero-Centered** | The fill grows from the zero point instead of the minimum — negative values grow down (or left in horizontal mode), positive values grow up (or right). Use with a negative minimum (e.g. min `-5000`, max `5000`) for signed values like net power flow |
+| **Dual Binding Bar 1 and 2** | Combines bars 1 and 2 into one center-anchored bar (active when bar 2 is bound). Bar 1 grows from zero toward the **minimum**, bar 2 grows toward the **maximum**. Bar 1 keeps its normal caption side (left in horizontal, bottom in vertical); bar 2's caption moves to the opposite end (right/top). Both halves share the same `min..max` scale with 0 at the baseline, so set a negative minimum (e.g. min `-100`, max `100`) for a symmetric look |
+| **Dual Binding Bar 3 and 4** | Same as above for bars 3 and 4 (active when bar 4 is bound). The two dual pairs are independent, so you can mix a dual pair with normal bars |
 | **Animation (ms)** | Duration of the ease-out transition when the bar value changes (0–5000 ms). Default: 300. Set to 0 for instant updates (no animation). The first value after screen load always snaps immediately |
+| **Gridlines** | Number of evenly spaced scale lines drawn across the bar (0–20, 0 = none), with configurable width and bindable color |
+| **Target Value** | A bindable value on the scale drawn as a marker line across the bar (e.g. a setpoint). Empty = no target |
+| **Target Zone %** | A shaded band centered on the target, sized as a percentage of the min–max range (0 = no band). The marker line width and the marker/zone colors are configurable and bindable |
 
 **Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: pick your zone colors, set breakpoints, and the expression auto-generates as you type. For a solar panel with a 5 kW max:
 
@@ -666,6 +707,8 @@ The bar chart widget draws a vertical or horizontal bar that fills based on a nu
 Green below 1 kW, light green 1–3 kW, orange 3–4.5 kW, red above 4.5 kW.
 
 Labels, icons, and colors still work alongside the widget. A typical bar chart button uses the top label for a title ("Solar") and the bottom label for the current value (`[mqtt:solar/power;watts;%.0f W]`).
+
+**Dual binding bars** — enable **Dual Binding Bar 1 and 2** (and/or **Bar 3 and 4**) to merge a pair of bars into a single bar that fills outward from the scale's zero point. The lower-numbered bar grows toward the minimum and the higher-numbered bar grows toward the maximum, with their captions on opposite ends — horizontally this reads `CAPTION1 ──‖████──‖ CAPTION2`, and vertically the captions sit top and bottom. Both halves keep their own color and caption, and both scale on the full `min..max` range, so use a symmetric range like min `-100` / max `100` for an even split. This is handy for opposing quantities such as charge vs discharge, in vs out, or left vs right channel.
 
 ### Gauge
 
@@ -704,8 +747,8 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Tick Color** | Color of the tick marks. Supports binding expressions for dynamic color |
 | **Target Value** | Bindable value on the scale that positions a target marker and optional zone across all active rings. Empty = no target. For example `[mqtt:hvac/setpoint;temperature]` |
 | **Target Zone Angle** | Total zone width in degrees centered on the target value (0 = no zone, max 90). The zone is rendered as a semi-transparent overlay on all rings |
-| **Target Tick Width** | Tick line width at the target value position (0 = no tick, 1–5 px). Boundary ticks at the zone edges use the same width |
-| **Target Marker Color** | Color of the target value tick and zone boundary ticks. Supports binding expressions |
+| **Target Tick Width** | Tick line width at the target value position (0 = no tick, 1–5 px) |
+| **Target Marker Color** | Color of the target value tick. Supports binding expressions |
 | **Target Zone Color** | Color of the zone overlay arc. Supports binding expressions |
 | **Animation (ms)** | Duration of the ease-out transition when arc and needle values change (0–5000 ms). Default: 300. Set to 0 for instant updates (no animation). Applies to all rings and the needle. The first value after screen load always snaps immediately |
 
@@ -761,6 +804,7 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
 | **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
 | **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
+| **Line separation** | Per-line vertical offset in pixels (0 = off, 1–6). When non-zero and the widget has more than one line, each line is nudged by a small symmetric offset (e.g. two lines fan out by ±offset, three lines by −offset / 0 / +offset) so lines with near-identical values stay visually distinct instead of drawing on top of each other. The current-value dot and min/max markers move with their line. Note: this shifts lines a couple of pixels off their exact value, so leave it at 0 when precise pixel-accurate readout matters |
 | **Max marker size** | Dot radius for the maximum-value marker (0 = off, 1–20 px). When non-zero, a dot and optional label are drawn at the highest point in the visible data |
 | **Max format** | Printf format string for the max label (e.g., `hi %.1f`). Only one `%f`/`%e`/`%g` specifier allowed. Leave empty for dot only (no label) |
 | **Max label color** | Override color for the max label text. White (#FFFFFF) means "auto" — the label inherits the line's current color |

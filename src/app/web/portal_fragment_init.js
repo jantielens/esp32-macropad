@@ -36,6 +36,7 @@ async function saveFragmentConfig(requiresReboot) {
         'ble_burst_count', 'ble_adv_interval_ms',
         'mqtt_publish_scope',
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
+        'mcp_enabled', 'mcp_control_enabled', 'mcp_authoring_enabled',
         'ble_enabled',
         'audio_volume', 'tap_beep', 'lp_beep',
         'backlight_brightness',
@@ -303,6 +304,79 @@ window.init_network_fragment = function () {
 };
 
 // ============================================================================
+// MCP Server (AI assistant)
+// ============================================================================
+
+window.init_mcp_fragment = function () {
+    // Loads config (populates the MCP fields + endpoint URL) and wires the
+    // save button. MCP settings apply live (no reboot).
+    initConfigFragment('mcp-save-btn', false);
+
+    // Fill the VS Code mcp.json sample with this device's actual endpoint.
+    var cfgBox = document.getElementById('mcp_vscode_config');
+    if (cfgBox) {
+        var url = 'http://' + window.location.host + '/mcp';
+        cfgBox.value =
+            '{\n' +
+            '  "servers": {\n' +
+            '    "esp32-macropad": {\n' +
+            '      "type": "http",\n' +
+            '      "url": "' + url + '",\n' +
+            '      "headers": {\n' +
+            '        "Authorization": "Bearer YOUR_TOKEN_HERE"\n' +
+            '      }\n' +
+            '    }\n' +
+            '  }\n' +
+            '}';
+    }
+
+    var cfgCopyBtn = document.getElementById('mcp-copy-config-btn');
+    if (cfgCopyBtn) cfgCopyBtn.addEventListener('click', function () {
+        if (cfgBox && cfgBox.value && navigator.clipboard) {
+            navigator.clipboard.writeText(cfgBox.value);
+            showMessage('Configuration copied', 'success');
+        }
+    });
+
+    var mcpGenBtn = document.getElementById('mcp-generate-token-btn');
+    if (mcpGenBtn) mcpGenBtn.addEventListener('click', async function () {
+        if (!confirm('Generate a new MCP token? Any existing token will stop working.')) return;
+        try {
+            var resp = await fetch('/api/config?no_reboot=1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mcp_generate_token: true })
+            });
+            var r = await resp.json();
+            if (r.success && r.mcp_token) {
+                var grp = document.getElementById('mcp_token_display_group');
+                var val = document.getElementById('mcp_token_value');
+                var warn = document.getElementById('mcp_token_warning');
+                var status = document.getElementById('mcp_token_status');
+                if (val) val.value = r.mcp_token;
+                if (grp) grp.style.display = '';
+                if (warn) warn.style.display = '';
+                if (status) status.textContent = 'A token is set (hidden). Generate a new one to replace it.';
+                showMessage('New MCP token generated', 'success');
+            } else {
+                showMessage('Failed to generate token', 'error');
+            }
+        } catch (e) {
+            showMessage('Error generating token: ' + e.message, 'error');
+        }
+    });
+
+    var mcpCopyBtn = document.getElementById('mcp-copy-token-btn');
+    if (mcpCopyBtn) mcpCopyBtn.addEventListener('click', function () {
+        var val = document.getElementById('mcp_token_value');
+        if (val && val.value && navigator.clipboard) {
+            navigator.clipboard.writeText(val.value);
+            showMessage('Token copied', 'success');
+        }
+    });
+};
+
+// ============================================================================
 // Operating Mode
 // ============================================================================
 
@@ -447,6 +521,22 @@ window.init_boot_actions_fragment = function () {
 };
 
 // ============================================================================
+// Hardware Buttons
+// ============================================================================
+
+window.init_hw_buttons_fragment = function () {
+    if (typeof initHwButtons === 'function') initHwButtons();
+};
+
+// ============================================================================
+// MQTT Triggers
+// ============================================================================
+
+window.init_mqtt_triggers_fragment = function () {
+    if (typeof initMqttTriggers === 'function') initMqttTriggers();
+};
+
+// ============================================================================
 // Timers
 // ============================================================================
 
@@ -479,7 +569,10 @@ window.init_ble_fragment = function () {
 // ============================================================================
 
 window.init_ha_discovery_fragment = function () {
-    // Static informational fragment — no data to load
+    if (typeof registerConfigFields === 'function') {
+        registerConfigFields(['ha_url', 'ha_token']);
+    }
+    initConfigFragment('ha-save-btn', false);
 };
 
 // ============================================================================

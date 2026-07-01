@@ -1,5 +1,5 @@
-// Coffee-brew ActionTypeDef — parse, serialize, resolve_bindings,
-// has_binding, dispatch for the "brew" action type. Registered via
+// Coffee-brew ActionTypeDef — parse, serialize, dispatch and a value_field
+// accessor for the "brew" action type. Registered via
 // REGISTER_ACTION_TYPE so action_dispatch.cpp / action_parse.cpp do not need
 // to know about the brew arm at compile time.
 //
@@ -19,10 +19,6 @@
 #include "scale_hal.h"
 #include "brew/brew_manager.h"
 
-#if HAS_MQTT
-#include "../../binding_template.h"
-#endif
-
 #include <string.h>
 
 #define TAG "BrewAction"
@@ -41,23 +37,14 @@ static void brew_serialize(const ButtonAction& act, JsonObject obj) {
     if (p.value[0])   obj["brew_value"]   = p.value;
 }
 
-#if HAS_MQTT
-// Only `value` is bindable (e.g. set_template using [list:brew_presets.selected]).
-// `command` is structural and never bindable.
-static void brew_resolve_bindings(ButtonAction& act) {
-    char* field = brew_payload(act).value;
-    if (field[0] && binding_template_has_bindings(field)) {
-        char tmp[BINDING_TEMPLATE_MAX_LEN];
-        binding_template_resolve(field, tmp, sizeof(tmp));
-        strlcpy(field, tmp, sizeof(brew_payload(act).value));
-    }
+// `value` is the single bindable field (e.g. set_template using
+// [list:brew_presets.selected]). Expose it so shared code drives binding
+// resolution + {step} substitution. `command` is structural, never bindable.
+static char* brew_value_field(ButtonAction& act, size_t* out_size) {
+    BrewPayload& p = brew_payload(act);
+    *out_size = sizeof(p.value);
+    return p.value;
 }
-
-static bool brew_has_binding(const ButtonAction& act) {
-    const char* f = brew_payload(act).value;
-    return f[0] && memchr(f, '[', strlen(f)) != nullptr;
-}
-#endif
 
 #if HAS_SCALE
 static void brew_dispatch(const ButtonAction& act, const char* label) {
@@ -100,14 +87,11 @@ static void brew_dispatch(const ButtonAction& /*act*/, const char* label) {
 #endif
 
 static const ActionTypeDef brew_action_type = {
-    /* type_name        */ ACTION_TYPE_BREW,
-    /* parse            */ brew_parse,
-    /* serialize        */ brew_serialize,
-#if HAS_MQTT
-    /* resolve_bindings */ brew_resolve_bindings,
-    /* has_binding      */ brew_has_binding,
-#endif
-    /* dispatch         */ brew_dispatch,
+    /* type_name   */ ACTION_TYPE_BREW,
+    /* parse       */ brew_parse,
+    /* serialize   */ brew_serialize,
+    /* dispatch    */ brew_dispatch,
+    /* value_field */ brew_value_field,
 };
 
 REGISTER_ACTION_TYPE(brew_action_type);

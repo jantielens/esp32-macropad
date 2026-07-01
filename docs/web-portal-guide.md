@@ -185,6 +185,18 @@ Configure up to 3 sequential actions to run automatically when the device boots 
 
 Actions are dispatched once after the first screen is shown during boot. Changes take effect on next reboot.
 
+### MQTT Triggers
+
+*Shown on boards with MQTT and either a display or a physical button.*
+
+Dispatch actions automatically when a matching MQTT message arrives — no button press or screen interaction needed. Each trigger has a **Topic**, an optional **Value filter**, and up to 3 sequential actions (the same action editor as buttons, swipe, and boot actions).
+
+When a message is received on the topic, its payload is compared to the value filter: leave the filter empty to match any message on the topic, or set it to an exact string (e.g. `ON`) to fire only on that payload. Wildcard topics (`#`, `+`) are not supported — enter exact topic names.
+
+> **Tip:** Avoid an empty-value trigger on a topic that the trigger's own actions publish to, to prevent message loops.
+
+The number of available trigger slots depends on the board (8 by default, fewer on memory-constrained boards). Changes apply immediately and subscriptions are re-established whenever the device reconnects to the MQTT broker.
+
 ### Timers
 
 *Shown only on boards with a display.*
