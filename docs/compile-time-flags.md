@@ -888,6 +888,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/test_strip_actions.cpp
   - src/app/device_classes/darkroom_timer/web_portal_prints.cpp
   - src/app/device_classes/darkroom_timer/web_portal_relay.cpp
+  - src/app/mcp_components.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
 - **IS_SHUTTER_TESTER**

@@ -286,6 +286,66 @@ compile none of it.
 > buffers (live series, brew-log parsing) allocate with `MALLOC_CAP_SPIRAM` and
 > have no internal-RAM fallback.
 
+**Darkroom Timer** (`IS_DARKROOM_TIMER` boards, e.g. `jc4880p433-darkroom`):
+
+- `get_expose_status` — single-exposure timer state: state
+  (stopped/running/paused/focus), exposure time setting, dry-down-compensated
+  effective time, dry-down percent, countdown remaining/elapsed, and the relay
+  on/off state. *(read)*
+- `get_strip_status` — f-stop test strip sequencer state: state
+  (idle/countdown/exposing/pausing), current segment + total count, base time,
+  step interval (stops + label), countdown/pause settings, current-phase
+  remaining/elapsed, estimated total sequence time, relay state, and the
+  per-segment table (cumulative/incremental seconds + f-stop offset). *(read)*
+- `get_meter_status` — print-prep light meter state: Lref + Zone V inputs,
+  bright/dark spot lux, computed Subject Brightness Range, recommended grade +
+  label, recommended exposure time, and magnification-compensation readings
+  (lux A/B + factor). *(read)*
+- `get_relay_config` — the enlarger/safelight relay action configuration (an
+  object keyed `enlarger_on`/`enlarger_off`/`safelight_on`/`safelight_off`). *(read)*
+- `list_prints` / `get_print` — saved print sessions: a newest-first (capped)
+  manifest with summary fields, notes, star, and a `detail_url`, plus one print's
+  full record (exposure fields, metering context, test-strip segments, notes,
+  star). Stream `GET /api/prints?id=ID` for the raw file. *(read)*
+- `expose_control` — one single-exposure command (`command` + optional `value`)
+  covering `start`/`stop`/`toggle`/`pause`/`resume`/`reset`, focus
+  (`focus`/`focus_off`/`focus_toggle`), and settings (`set_time`,
+  `adjust_seconds`, `adjust_stops`, `set_dry_down`, `adjust_dry_down`). The tool
+  description reminds the assistant that `start` exposes real paper on the easel
+  (and `focus` floods the enlarger lamp), so it confirms the user is ready before
+  starting. *(control)*
+- `strip_control` — one test-strip command covering `start`/`cancel` and the
+  configuration setters (`set_base`, `adjust_base`, `step_up`, `step_down`,
+  `set_segments`, `adjust_segments`, `set_countdown`, `adjust_countdown`,
+  `set_pause`, `adjust_pause`, `set_tick`). Config commands are rejected while a
+  sequence runs. The tool description explains that `start` runs a hands-on
+  automated sequence (the user slides a mask to uncover the next strip during
+  each beeped pause) issued **once**, not per segment, so the assistant confirms
+  the setup before starting. *(control)*
+- `meter_control` — one meter command covering sensor reads
+  (`read_lref`/`read_bright`/`read_dark`), manual inputs
+  (`set_lref`/`adjust_lref`/`set_zone5`/`adjust_zone5`), and magnification
+  (`mag_measure_a`/`mag_measure_b`/`mag_clear`). The tool description tells the
+  assistant to take the sensor reads **one at a time** — because the single
+  physical probe must be repositioned between readings, it prompts the user for
+  placement (bare bulb, brightest highlight, deepest shadow) and waits for
+  confirmation before each read. *(control)*
+- `relay_control` — switch the enlarger/safelight relay (`on` boolean or `state`
+  `on`/`off`). The description cautions that switching the enlarger on floods the
+  easel with light (use `expose_control`/`strip_control` for timed exposures). *(control)*
+- `print_control` — star/unstar the most recently saved print
+  (`toggle_star` / `set_star`). *(control)*
+- `delete_print` — delete one saved print by id. *(control, destructive)*
+- `delete_all_prints` — clear the whole print log (requires `confirm=true`).
+  *(control, destructive)*
+- `set_print` — edit any saved print's `notes` and/or `starred` flag by id
+  (unlike `print_control`, which only stars the most recent print). *(authoring)*
+- `set_relay_config` — create or replace the relay action configuration. *(authoring)*
+
+> **Note:** The Darkroom Timer read tools assume a PSRAM board — their scratch
+> buffers (print-log id list, record parsing) allocate with `MALLOC_CAP_SPIRAM`
+> and have no internal-RAM fallback.
+
 ## Visually verifying the display
 
 The assistant cannot see the panel directly, but it can capture exactly what is

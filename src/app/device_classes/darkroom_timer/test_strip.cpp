@@ -787,10 +787,48 @@ void test_strip_init() {
     }
 }
 
+void test_strip_get_status(StripStatus* out) {
+    if (!out) return;
+    // Lock-free scalar snapshot — matches the binding-resolver read path. The
+    // segment table is kept current by every config command, so copying it here
+    // (outside a sequence) reflects the configured strip.
+    out->phase              = (uint8_t)g_strip.phase;
+    out->segment            = g_strip.current_segment;
+    out->segment_count      = g_strip.segment_count;
+    out->base_time_s        = g_strip.base_time_s;
+    out->step_stops         = current_step_value();
+    out->step_label         = current_step_label();
+    out->countdown_s        = g_strip.countdown_s;
+    out->pause_s            = g_strip.pause_s;
+    out->exposure_tick      = g_strip.exposure_tick;
+    out->phase_remaining_ms = phase_remaining_ms();
+    out->phase_elapsed_ms   = phase_elapsed_ms();
+    out->total_time_s       = estimate_total_time_s();
+    int n = g_strip.segment_count;
+    if (n > STRIP_STATUS_MAX_SEGMENTS) n = STRIP_STATUS_MAX_SEGMENTS;
+    for (int i = 0; i < n; i++) {
+        out->segments[i].cumulative_s  = g_strip.segments[i].cumulative_s;
+        out->segments[i].incremental_s = g_strip.segments[i].incremental_s;
+        out->segments[i].offset_stops  = g_strip.segments[i].offset_stops;
+    }
+}
+
+const char* test_strip_phase_str(uint8_t phase) {
+    switch (phase) {
+        case STRIP_INITIAL_COUNTDOWN: return "countdown";
+        case STRIP_EXPOSING:          return "exposing";
+        case STRIP_BETWEEN_SEGMENTS:  return "pausing";
+        case STRIP_IDLE:
+        default:                      return "idle";
+    }
+}
+
 #else // !IS_DARKROOM_TIMER
 
 void test_strip_init() {}
 void test_strip_dispatch(const char*, const char*) {}
 void test_strip_tick() {}
+void test_strip_get_status(StripStatus* out) { if (out) *out = StripStatus{}; }
+const char* test_strip_phase_str(uint8_t) { return "idle"; }
 
 #endif // IS_DARKROOM_TIMER

@@ -514,6 +514,28 @@ float meter_get_mag_factor() {
     return factor;
 }
 
+float meter_get_time() {
+    return g_meter.time_s;  // atomic float read on ESP32
+}
+
+float meter_get_mag_lux_a() {
+    portENTER_CRITICAL(&g_meter_lock);
+    float a = g_meter.mag_lux_a;
+    portEXIT_CRITICAL(&g_meter_lock);
+    return a;
+}
+
+float meter_get_mag_lux_b() {
+    portENTER_CRITICAL(&g_meter_lock);
+    float b = g_meter.mag_lux_b;
+    portEXIT_CRITICAL(&g_meter_lock);
+    return b;
+}
+
+bool meter_get_has_results() {
+    return g_meter.has_results;
+}
+
 void meter_init() {
     if (!binding_template_register("meter", meter_resolve, meter_collect)) {
         LOGE(TAG, "Failed to register meter binding scheme");
@@ -536,5 +558,9 @@ float meter_get_sbr() { return 0.0f; }
 float meter_get_grade() { return 0.0f; }
 const char* meter_get_grade_label() { return "---"; }
 float meter_get_mag_factor() { return -1.0f; }
+float meter_get_time() { return -1.0f; }
+float meter_get_mag_lux_a() { return -1.0f; }
+float meter_get_mag_lux_b() { return -1.0f; }
+bool meter_get_has_results() { return false; }
 
 #endif // IS_DARKROOM_TIMER

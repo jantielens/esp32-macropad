@@ -29,4 +29,8 @@
 #include "device_classes/coffee_scale/mcp/mcp_tools_coffee_scale.cpp"
 #endif
 
+#if IS_DARKROOM_TIMER
+#include "device_classes/darkroom_timer/mcp/mcp_tools_darkroom.cpp"
+#endif
+
 #endif // HAS_MCP
