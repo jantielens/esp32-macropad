@@ -8,6 +8,7 @@
 // ============================================================================
 
 #include "mcp_tool_registry.h"
+#include "mcp_tool_util.h"
 #include "web_mcp.h"
 
 #include "board_config.h"
@@ -48,15 +49,13 @@
 // mcp_tool_registry.h).
 static constexpr int TOOL_ERR_PARAMS   = MCP_RPC_ERR_PARAMS;
 static constexpr int TOOL_ERR_INTERNAL = MCP_RPC_ERR_INTERNAL;
-static constexpr int TOOL_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 
 static constexpr uint32_t TOOL_CONTROL_TIMEOUT_MS = 2000;
 
-// Convenience: set a tool error code + message and return false.
+// Thin adapter over the shared mcp_tool_fail (mcp_tool_util.h): keeps the local
+// call sites readable while the fail logic lives in one place.
 static bool tool_fail(JsonObject& result, String& err, int code, const char* msg) {
-    err = msg ? msg : "error";
-    result[MCP_RESULT_ERRCODE_KEY] = code;
-    return false;
+    return mcp_tool_fail(result, err, code, msg);
 }
 
 // ============================================================================
@@ -191,8 +190,7 @@ static bool tool_list_pads(const JsonObject& args, JsonObject& result, String& e
         filter_page = atoi(filter + 4);
     }
 
-    PadConfig* cfg = (PadConfig*)heap_caps_malloc(sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
+    PadConfig* cfg = (PadConfig*)mcp_psram_alloc(sizeof(PadConfig));
     if (!cfg) return tool_fail(result, err, TOOL_ERR_INTERNAL, "out of memory");
 
     JsonArray pads = result.createNestedArray("pads");
@@ -269,26 +267,6 @@ static bool tool_get_pad(const JsonObject& args, JsonObject& result, String& err
 // Control tools (gated by mcp_control_enabled; deferred to the main loop)
 // ============================================================================
 
-// Map an mcp_control_dispatch() outcome onto the tool result/err contract.
-static bool finish_control(McpControlResult r, bool ok, const char* msg,
-                           JsonObject& result, String& err) {
-    if (r == MCP_CONTROL_BUSY) {
-        return tool_fail(result, err, TOOL_ERR_BUSY, "control busy, retry");
-    }
-    if (r == MCP_CONTROL_TIMEOUT) {
-        return tool_fail(result, err, TOOL_ERR_INTERNAL, "control dispatch timed out");
-    }
-    if (!ok) {
-        return tool_fail(result, err, TOOL_ERR_INTERNAL, (msg && msg[0]) ? msg : "control failed");
-    }
-    result["ok"] = true;
-    // Copy the message: `msg` is the caller's local char[] which is out of scope
-    // by the time the result doc is serialized. Assigning a String forces
-    // ArduinoJson to duplicate the bytes (const char* would be stored by ref).
-    if (msg && msg[0]) result["message"] = String(msg);
-    return true;
-}
-
 #if HAS_DISPLAY
 
 // --- press_button ----------------------------------------------------------
@@ -302,8 +280,7 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
     const PressCtx* c = (const PressCtx*)ctx;
     *ok = false;
 
-    PadConfig* cfg = (PadConfig*)heap_caps_malloc(sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
+    PadConfig* cfg = (PadConfig*)mcp_psram_alloc(sizeof(PadConfig));
     if (!cfg) { strlcpy(msg, "out of memory", msg_len); return; }
 
     if (!pad_config_load(c->page, cfg)) {
@@ -366,12 +343,8 @@ static bool tool_press_button(const JsonObject& args, JsonObject& result, String
     ctx.position = has_pos ? (int16_t)(args["position"] | 0) : -1;
     if (label) strlcpy(ctx.label, label, sizeof(ctx.label));
 
-    bool ok = false;
-    char msg[160];
-    msg[0] = '\0';
-    McpControlResult r = mcp_control_dispatch(exec_press_button, &ctx, sizeof(ctx),
-                                              TOOL_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return finish_control(r, ok, msg, result, err);
+    return mcp_run_control(exec_press_button, &ctx, sizeof(ctx),
+                           TOOL_CONTROL_TIMEOUT_MS, result, err);
 }
 
 // --- set_screen ------------------------------------------------------------
@@ -400,12 +373,8 @@ static bool tool_set_screen(const JsonObject& args, JsonObject& result, String& 
     memset(&ctx, 0, sizeof(ctx));
     strlcpy(ctx.screen, screen, sizeof(ctx.screen));
 
-    bool ok = false;
-    char msg[160];
-    msg[0] = '\0';
-    McpControlResult r = mcp_control_dispatch(exec_set_screen, &ctx, sizeof(ctx),
-                                              TOOL_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return finish_control(r, ok, msg, result, err);
+    return mcp_run_control(exec_set_screen, &ctx, sizeof(ctx),
+                           TOOL_CONTROL_TIMEOUT_MS, result, err);
 }
 
 // --- set_backlight ---------------------------------------------------------
@@ -430,12 +399,8 @@ static bool tool_set_backlight(const JsonObject& args, JsonObject& result, Strin
     BacklightCtx ctx;
     ctx.brightness = (uint8_t)b;
 
-    bool ok = false;
-    char msg[160];
-    msg[0] = '\0';
-    McpControlResult r = mcp_control_dispatch(exec_set_backlight, &ctx, sizeof(ctx),
-                                              TOOL_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return finish_control(r, ok, msg, result, err);
+    return mcp_run_control(exec_set_backlight, &ctx, sizeof(ctx),
+                           TOOL_CONTROL_TIMEOUT_MS, result, err);
 }
 
 // --- wake ------------------------------------------------------------------
@@ -448,12 +413,8 @@ static void exec_wake(const void* ctx, bool* ok, char* msg, size_t msg_len) {
 
 static bool tool_wake(const JsonObject& args, JsonObject& result, String& err) {
     (void)args;
-    bool ok = false;
-    char msg[160];
-    msg[0] = '\0';
-    McpControlResult r = mcp_control_dispatch(exec_wake, nullptr, 0,
-                                              TOOL_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return finish_control(r, ok, msg, result, err);
+    return mcp_run_control(exec_wake, nullptr, 0,
+                           TOOL_CONTROL_TIMEOUT_MS, result, err);
 }
 
 #endif // HAS_DISPLAY
@@ -509,12 +470,8 @@ static bool tool_system_command(const JsonObject& args, JsonObject& result, Stri
     memset(&ctx, 0, sizeof(ctx));
     strlcpy(ctx.command, cmd, sizeof(ctx.command));
 
-    bool ok = false;
-    char msg[160];
-    msg[0] = '\0';
-    McpControlResult r = mcp_control_dispatch(exec_system_command, &ctx, sizeof(ctx),
-                                              TOOL_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return finish_control(r, ok, msg, result, err);
+    return mcp_run_control(exec_system_command, &ctx, sizeof(ctx),
+                           TOOL_CONTROL_TIMEOUT_MS, result, err);
 }
 
 // ============================================================================

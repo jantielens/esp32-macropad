@@ -40,6 +40,7 @@
 #if HAS_MCP && IS_DARKROOM_TIMER
 
 #include "mcp_tool_registry.h"
+#include "mcp_tool_util.h"
 #include "web_mcp.h"
 
 #include "../expose_timer.h"
@@ -66,7 +67,6 @@
 // JSON-RPC error codes (canonical values in mcp_tool_registry.h).
 static constexpr int DR_ERR_PARAMS   = MCP_RPC_ERR_PARAMS;
 static constexpr int DR_ERR_INTERNAL = MCP_RPC_ERR_INTERNAL;
-static constexpr int DR_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 
 static constexpr uint32_t DR_CONTROL_TIMEOUT_MS = 3000;
 
@@ -87,9 +87,7 @@ static constexpr uint32_t DR_CONTROL_TIMEOUT_MS = 3000;
 #endif
 
 static bool dr_fail(JsonObject& result, String& err, int code, const char* msg) {
-    err = msg ? msg : "error";
-    result[MCP_RESULT_ERRCODE_KEY] = code;
-    return false;
+    return mcp_tool_fail(result, err, code, msg);
 }
 
 // True when a print id is well-formed and path-safe.
@@ -333,18 +331,6 @@ static void exec_dr_control(const void* ctx, bool* ok, char* msg, size_t msg_len
     snprintf(msg, msg_len, "dispatched %s", c->command);
 }
 
-static bool finish_control(McpControlResult r, bool ok, const char* msg,
-                           JsonObject& result, String& err) {
-    if (r == MCP_CONTROL_BUSY)    return dr_fail(result, err, DR_ERR_BUSY, "another control action is in progress");
-    if (r == MCP_CONTROL_TIMEOUT) return dr_fail(result, err, DR_ERR_INTERNAL, "control action timed out");
-    if (!ok)                      return dr_fail(result, err, DR_ERR_INTERNAL, msg && msg[0] ? msg : "control action failed");
-    // Wrap in String() so ArduinoJson COPIES the text into the result document;
-    // `msg` points at the caller's stack buffer and would dangle otherwise.
-    if (msg && msg[0]) result["status"] = String(msg);
-    else               result["status"] = "ok";
-    return true;
-}
-
 static bool dispatch_dr_control(const char* type, const char* cmd, const char* value,
                                 JsonObject& result, String& err) {
     DrCtrlCtx ctx;
@@ -353,12 +339,8 @@ static bool dispatch_dr_control(const char* type, const char* cmd, const char* v
     strlcpy(ctx.command, cmd, sizeof(ctx.command));
     strlcpy(ctx.value, value ? value : "", sizeof(ctx.value));
 
-    bool ok = false;
-    char msg[96];
-    msg[0] = '\0';
-    McpControlResult r = mcp_control_dispatch(exec_dr_control, &ctx, sizeof(ctx),
-                                              DR_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return finish_control(r, ok, msg, result, err);
+    return mcp_run_control(exec_dr_control, &ctx, sizeof(ctx),
+                           DR_CONTROL_TIMEOUT_MS, result, err);
 }
 
 static bool cmd_in(const char* cmd, const char* const* list, size_t count) {

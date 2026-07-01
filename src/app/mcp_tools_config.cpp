@@ -22,6 +22,7 @@
 // ============================================================================
 
 #include "mcp_tool_registry.h"
+#include "mcp_tool_util.h"
 #include "web_mcp.h"
 
 #include "board_config.h"
@@ -81,23 +82,10 @@ static constexpr int CFG_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 static constexpr uint32_t CFG_CONTROL_TIMEOUT_MS = 2000;
 static constexpr uint32_t CFG_WRITE_TIMEOUT_MS   = 4000;
 
-// Set a tool error code + message and return false (mirrors mcp_tools_core.cpp).
+// Set a tool error code + message and return false (thin adapter over the shared
+// mcp_tool_fail in mcp_tool_util.h).
 static bool cfg_fail(JsonObject& result, String& err, int code, const char* msg) {
-    err = msg ? msg : "error";
-    result[MCP_RESULT_ERRCODE_KEY] = code;
-    return false;
-}
-
-// Map an mcp_control_dispatch() outcome onto the tool result/err contract
-// (mirrors finish_control in mcp_tools_core.cpp; each TU keeps its own copy).
-static bool cfg_finish(McpControlResult r, bool ok, const char* msg,
-                       JsonObject& result, String& err) {
-    if (r == MCP_CONTROL_BUSY)    return cfg_fail(result, err, CFG_ERR_BUSY, "control busy, retry");
-    if (r == MCP_CONTROL_TIMEOUT) return cfg_fail(result, err, CFG_ERR_INTERNAL, "control dispatch timed out");
-    if (!ok)                      return cfg_fail(result, err, CFG_ERR_INTERNAL, (msg && msg[0]) ? msg : "control failed");
-    result["ok"] = true;
-    if (msg && msg[0]) result["message"] = String(msg);
-    return true;
+    return mcp_tool_fail(result, err, code, msg);
 }
 
 // ============================================================================
@@ -394,20 +382,19 @@ static bool tool_set_component_config(const JsonObject& args, JsonObject& result
     if (need > entry->max_bytes) {
         return cfg_fail(result, err, CFG_ERR_PARAMS, "config too large for this component");
     }
-    uint8_t* buf = (uint8_t*)heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!buf) buf = (uint8_t*)heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    uint8_t* buf = (uint8_t*)mcp_psram_alloc(need);
     if (!buf) return cfg_fail(result, err, CFG_ERR_INTERNAL, "out of memory");
     size_t len = serializeJson(cfg, buf, need);
 
     result["component"] = entry->name;
 
     CompWriteCtx ctx; ctx.save = entry->save; ctx.buf = buf; ctx.len = len;
-    bool ok = false; char msg[64] = {0};
+    bool ok = false; char msg[MCP_TOOL_MSG_LEN] = {0};
     McpControlResult r = mcp_control_dispatch(exec_comp_save, &ctx, sizeof(ctx),
                                               CFG_WRITE_TIMEOUT_MS, &ok, msg, sizeof(msg));
     if (r == MCP_CONTROL_BUSY) { heap_caps_free(buf); return cfg_fail(result, err, CFG_ERR_BUSY, "busy, retry"); }
     // On TIMEOUT the deferred job may still run and free buf, so do not free here.
-    return cfg_finish(r, ok, msg, result, err);
+    return mcp_finish_control(r, ok, msg, result, err);
 }
 
 #endif // HAS_DISPLAY || HAS_BUTTON || MQTT_TRIGGERS_ENABLED
@@ -469,10 +456,8 @@ static bool tool_notify(const JsonObject& args, JsonObject& result, String& err)
     ctx.opacity   = (uint8_t)op;
     ctx.font_size = (uint8_t)fs;
 
-    bool ok = false; char msg[64] = {0};
-    McpControlResult r = mcp_control_dispatch(exec_notify, &ctx, sizeof(ctx),
-                                              CFG_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return cfg_finish(r, ok, msg, result, err);
+    return mcp_run_control(exec_notify, &ctx, sizeof(ctx),
+                           CFG_CONTROL_TIMEOUT_MS, result, err);
 }
 
 #endif // HAS_DISPLAY
@@ -517,10 +502,8 @@ static bool tool_set_volume(const JsonObject& args, JsonObject& result, String& 
         snprintf(ctx.value, sizeof(ctx.value), "%ld", (long)(args["value"] | 0));
     }
 
-    bool ok = false; char msg[64] = {0};
-    McpControlResult r = mcp_control_dispatch(exec_set_volume, &ctx, sizeof(ctx),
-                                              CFG_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return cfg_finish(r, ok, msg, result, err);
+    return mcp_run_control(exec_set_volume, &ctx, sizeof(ctx),
+                           CFG_CONTROL_TIMEOUT_MS, result, err);
 }
 
 #endif // HAS_AUDIO && (HAS_DISPLAY || HAS_BUTTON)
@@ -586,10 +569,8 @@ static bool tool_timer_control(const JsonObject& args, JsonObject& result, Strin
         }
     }
 
-    bool ok = false; char msg[64] = {0};
-    McpControlResult r = mcp_control_dispatch(exec_timer_control, &ctx, sizeof(ctx),
-                                              CFG_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return cfg_finish(r, ok, msg, result, err);
+    return mcp_run_control(exec_timer_control, &ctx, sizeof(ctx),
+                           CFG_CONTROL_TIMEOUT_MS, result, err);
 }
 
 #endif // HAS_DISPLAY
@@ -675,8 +656,7 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
     DeviceConfig* cur = web_portal_get_current_config();
     if (!cur) return cfg_fail(result, err, CFG_ERR_INTERNAL, "config not initialized");
 
-    SetConfigReq* q = (SetConfigReq*)heap_caps_malloc(sizeof(SetConfigReq), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!q) q = (SetConfigReq*)malloc(sizeof(SetConfigReq));
+    SetConfigReq* q = (SetConfigReq*)mcp_psram_alloc(sizeof(SetConfigReq));
     if (!q) return cfg_fail(result, err, CFG_ERR_INTERNAL, "out of memory");
     memset(q, 0, sizeof(SetConfigReq));
 
@@ -772,12 +752,12 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
     result["reboot_recommended"] = reboot_note;
 
     SetConfigCtx ctx; ctx.req = q;
-    bool ok = false; char msg[64] = {0};
+    bool ok = false; char msg[MCP_TOOL_MSG_LEN] = {0};
     McpControlResult r = mcp_control_dispatch(exec_set_config, &ctx, sizeof(ctx),
                                               CFG_WRITE_TIMEOUT_MS, &ok, msg, sizeof(msg));
     if (r == MCP_CONTROL_BUSY) { heap_caps_free(q); return cfg_fail(result, err, CFG_ERR_BUSY, "busy, retry"); }
     // On TIMEOUT the deferred job may still run and free q, so do not free here.
-    return cfg_finish(r, ok, msg, result, err);
+    return mcp_finish_control(r, ok, msg, result, err);
 }
 
 // ============================================================================

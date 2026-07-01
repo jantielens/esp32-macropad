@@ -25,6 +25,7 @@
 #if HAS_MCP && HAS_DISPLAY
 
 #include "mcp_tool_registry.h"
+#include "mcp_tool_util.h"
 #include "web_mcp.h"
 #include "pad_config.h"
 #include "psram_json_allocator.h"
@@ -47,10 +48,9 @@ static constexpr int PAD_ERR_INTERNAL = MCP_RPC_ERR_INTERNAL;
 static constexpr int PAD_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 static constexpr uint32_t PAD_WRITE_TIMEOUT_MS = 4000;
 
+// Thin adapter over the shared mcp_tool_fail (mcp_tool_util.h).
 static bool pad_fail(JsonObject& result, String& err, int code, const char* msg) {
-    err = msg ? msg : "error";
-    result[MCP_RESULT_ERRCODE_KEY] = code;
-    return false;
+    return mcp_tool_fail(result, err, code, msg);
 }
 
 // Built-in action types + their flat JSON fields, mirroring the action_parse.cpp
@@ -451,20 +451,17 @@ static bool commit_pad(uint8_t page, JsonDocument& doc, JsonObject& result, Stri
     if (verr) return pad_fail(result, err, PAD_ERR_PARAMS, verr);
 
     size_t need = measureJson(doc) + 1;
-    uint8_t* buf = (uint8_t*)heap_caps_malloc(need, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!buf) buf = (uint8_t*)heap_caps_malloc(need, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    uint8_t* buf = (uint8_t*)mcp_psram_alloc(need);
     if (!buf) return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
     size_t len = serializeJson(doc, buf, need);
 
     PadWriteCtx ctx; ctx.page = page; ctx.buf = buf; ctx.len = len;
-    bool ok = false; char msg[160] = {0};
+    bool ok = false; char msg[MCP_TOOL_MSG_LEN] = {0};
     McpControlResult r = mcp_control_dispatch(exec_pad_save, &ctx, sizeof(ctx),
                                               PAD_WRITE_TIMEOUT_MS, &ok, msg, sizeof(msg));
     if (r == MCP_CONTROL_BUSY) { heap_caps_free(buf); return pad_fail(result, err, PAD_ERR_BUSY, "busy, retry"); }
-    if (r == MCP_CONTROL_TIMEOUT) return pad_fail(result, err, PAD_ERR_INTERNAL, "save timed out");
-    if (!ok) return pad_fail(result, err, PAD_ERR_INTERNAL, msg[0] ? msg : "save failed");
-    result["ok"] = true;
-    return true;
+    // On TIMEOUT the deferred job may still run and free buf, so do not free here.
+    return mcp_finish_control(r, ok, msg, result, err);
 }
 
 // Resolve a pad reference (id 'pad_N' or friendly name) to a page index. On

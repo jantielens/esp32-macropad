@@ -34,12 +34,14 @@
 //
 // A handler may request a specific JSON-RPC error code by writing an integer to
 // result[MCP_RESULT_ERRCODE_KEY] before returning false; the dispatcher reads
-// and strips that key. When absent, handler failures map to -32603 (internal
-// error) per the MCP/JSON-RPC contract.
+// that key to build the error envelope (the failing `result` object itself is
+// not serialized, so the key never reaches the client). When absent, handler
+// failures map to -32603 (internal error) per the MCP/JSON-RPC contract.
 typedef bool (*McpToolHandler)(const JsonObject& args, JsonObject& result, String& err);
 
 // Key a handler may set on `result` to override the JSON-RPC error code used
-// when it returns false. The dispatcher removes this key from the result.
+// when it returns false. The dispatcher reads it to build the error envelope;
+// the failing `result` object is not serialized, so the key is not exposed.
 #define MCP_RESULT_ERRCODE_KEY "__mcp_code"
 
 // ----------------------------------------------------------------------------

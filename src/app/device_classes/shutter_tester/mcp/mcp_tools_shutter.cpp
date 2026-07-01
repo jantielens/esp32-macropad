@@ -34,6 +34,7 @@
 #if HAS_MCP && IS_SHUTTER_TESTER
 
 #include "mcp_tool_registry.h"
+#include "mcp_tool_util.h"
 #include "web_mcp.h"
 
 #include "../shutter_capture.h"
@@ -62,7 +63,6 @@ using PsramDoc = std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>>;
 // JSON-RPC error codes (canonical values in mcp_tool_registry.h).
 static constexpr int SH_ERR_PARAMS   = MCP_RPC_ERR_PARAMS;
 static constexpr int SH_ERR_INTERNAL = MCP_RPC_ERR_INTERNAL;
-static constexpr int SH_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 
 static constexpr uint32_t SH_CONTROL_TIMEOUT_MS = 3000;
 
@@ -89,9 +89,7 @@ void list_provider_shutter_tests_refresh();
 #endif
 
 static bool sh_fail(JsonObject& result, String& err, int code, const char* msg) {
-    err = msg ? msg : "error";
-    result[MCP_RESULT_ERRCODE_KEY] = code;
-    return false;
+    return mcp_tool_fail(result, err, code, msg);
 }
 
 static const char* sh_verdict_str(uint8_t v) {
@@ -477,20 +475,6 @@ static void exec_shutter_control(const void* ctx, bool* ok, char* msg, size_t ms
     snprintf(msg, msg_len, "dispatched %s", c->command);
 }
 
-static bool finish_control(McpControlResult r, bool ok, const char* msg,
-                           JsonObject& result, String& err) {
-    if (r == MCP_CONTROL_BUSY)    return sh_fail(result, err, SH_ERR_BUSY, "another control action is in progress");
-    if (r == MCP_CONTROL_TIMEOUT) return sh_fail(result, err, SH_ERR_INTERNAL, "control action timed out");
-    if (!ok)                      return sh_fail(result, err, SH_ERR_INTERNAL, msg && msg[0] ? msg : "control action failed");
-    // Wrap in String() so ArduinoJson COPIES the text into the result document.
-    // `msg` points at the caller's stack buffer; assigning it as a const char*
-    // would only link the pointer, which dangles once the handler returns and
-    // before the dispatcher serializes the result (garbage output).
-    if (msg && msg[0]) result["status"] = String(msg);
-    else               result["status"] = "ok";
-    return true;
-}
-
 static bool tool_shutter_control(const JsonObject& args, JsonObject& result, String& err) {
     const char* cmd = args["command"] | (const char*)nullptr;
     if (!cmd || !cmd[0]) return sh_fail(result, err, SH_ERR_PARAMS, "missing command");
@@ -523,12 +507,8 @@ static bool tool_shutter_control(const JsonObject& args, JsonObject& result, Str
     strlcpy(ctx.command, cmd, sizeof(ctx.command));
     strlcpy(ctx.value, value, sizeof(ctx.value));
 
-    bool ok = false;
-    char msg[96];
-    msg[0] = '\0';
-    McpControlResult r = mcp_control_dispatch(exec_shutter_control, &ctx, sizeof(ctx),
-                                              SH_CONTROL_TIMEOUT_MS, &ok, msg, sizeof(msg));
-    return finish_control(r, ok, msg, result, err);
+    return mcp_run_control(exec_shutter_control, &ctx, sizeof(ctx),
+                           SH_CONTROL_TIMEOUT_MS, result, err);
 }
 
 // ============================================================================
