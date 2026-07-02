@@ -28,6 +28,7 @@
 #include "web_portal_firmware.h"
 #include "web_portal_ap.h"
 #include "web_mcp.h"
+#include "main_loop_bridge.h"
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -110,6 +111,10 @@ void web_portal_init(DeviceConfig *config) {
 		// CORS default headers for GitHub Pages (if repo slug is available).
 		web_portal_add_default_cors_headers();
 
+		// Deferred web-task -> main-loop bridge (used by MCP control tools and by
+		// the portal's own deferred REST handlers). Idempotent; independent of MCP.
+		loop_bridge_init();
+
 		// Routes (factored out for maintainability)
 		web_portal_register_routes(server);
 		
@@ -130,6 +135,10 @@ void web_portal_handle() {
 		web_portal_ap_handle();
 
 		web_portal_config_loop();
+
+		// Drain any deferred web-task -> main-loop job (runs here on the main
+		// loop, regardless of HAS_MCP).
+		loop_bridge_drain();
 
 		web_mcp_loop();
 

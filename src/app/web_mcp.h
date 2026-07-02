@@ -29,33 +29,32 @@ size_t mcp_token_generate(char* out, size_t out_len);
 
 // --- Deferred control bridge (web task -> main loop) -----------------------
 //
-// Control tools must never call action_dispatch, LVGL, the display manager, or
-// blocking I/O on the AsyncWebServer (web) task. Instead they package a job and
-// call mcp_control_dispatch(), which copies the context into an internal slot,
-// schedules exec() to run on the main loop in web_mcp_loop(), and blocks
-// (bounded) until it completes. Single in-flight: a second concurrent request
-// returns MCP_CONTROL_BUSY.
+// The deferred bridge is now generic (main_loop_bridge). These aliases keep the
+// existing MCP tool call sites (mcp_control_dispatch / McpControlResult /
+// McpControlExec / MCP_CONTROL_*) working unchanged. Control tools must never
+// call action_dispatch, LVGL, or blocking I/O on the AsyncWebServer task; they
+// package a job and dispatch it to run on the main loop. Single in-flight: a
+// second concurrent request returns MCP_CONTROL_BUSY.
+#include "main_loop_bridge.h"
+
+typedef LoopBridgeExec McpControlExec;
 
 enum McpControlResult {
-    MCP_CONTROL_OK = 0,    // exec ran; *out_ok / out_msg are populated
-    MCP_CONTROL_BUSY,      // another control job is in flight
-    MCP_CONTROL_TIMEOUT,   // exec did not complete within timeout
+    MCP_CONTROL_OK      = LOOP_BRIDGE_OK,       // exec ran; *out_ok / out_msg populated
+    MCP_CONTROL_BUSY    = LOOP_BRIDGE_BUSY,     // another job is in flight
+    MCP_CONTROL_TIMEOUT = LOOP_BRIDGE_TIMEOUT,  // exec did not complete within timeout
 };
 
-// Job executed on the main loop. `ctx` points at the internal copy of the
-// context bytes. The job writes success into *ok and an optional short message
-// into msg (capacity msg_len). It runs in main/LVGL task context, so
-// action_dispatch / display calls are safe here.
-typedef void (*McpControlExec)(const void* ctx, bool* ok, char* msg, size_t msg_len);
+#define MCP_CONTROL_CTX_BYTES LOOP_BRIDGE_CTX_BYTES
 
-// Maximum context size copied into the internal control slot.
-#define MCP_CONTROL_CTX_BYTES 256
-
-McpControlResult mcp_control_dispatch(McpControlExec exec,
-                                      const void* ctx, size_t ctx_len,
-                                      uint32_t timeout_ms,
-                                      bool* out_ok,
-                                      char* out_msg, size_t out_msg_len);
+static inline McpControlResult mcp_control_dispatch(McpControlExec exec,
+                                                    const void* ctx, size_t ctx_len,
+                                                    uint32_t timeout_ms,
+                                                    bool* out_ok,
+                                                    char* out_msg, size_t out_msg_len) {
+    return (McpControlResult)loop_bridge_dispatch(exec, ctx, ctx_len, timeout_ms,
+                                                  out_ok, out_msg, out_msg_len);
+}
 
 // Request a deferred device reboot. The restart fires from web_mcp_loop() after
 // a short grace period so the in-flight JSON-RPC response flushes first.
