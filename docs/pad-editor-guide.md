@@ -910,6 +910,8 @@ Use it to confirm that an MQTT topic is publishing, a `[health:…]` key returns
 
 > **Note:** Preview resolves **values**, not pixels — it does not render the button's final appearance. It also uses the current pad's `[pad:name]` bindings, so save the pad first if you just added or changed a named binding you want the preview to see.
 
+The pad's **Bindings** list (in Pad Settings) shows the same live preview: each named binding displays its resolved value on its own line beneath the row, updating as you edit it.
+
 ### Pipe Fallback
 
 **Syntax:** `[scheme:params|fallback]`

@@ -1519,6 +1519,9 @@ body {
   width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto;
   border: 1px solid var(--portal-border); display: inline-block;
 }
+/* Pad-binding rows: preview drops to its own line, indented under the value */
+.pad-binding-preview { flex-basis: 100%; max-width: none; margin: 0 0 2px 116px; }
+.pad-binding-preview .pad-pv-text { max-width: 320px; }
 .reset-hint {
   display: none; font-size: 11px; margin-left: 2px; vertical-align: baseline;
   color: rgba(255,59,48,0.6); cursor: pointer; user-select: none;
