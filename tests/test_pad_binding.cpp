@@ -178,6 +178,17 @@ static PadConfig make_page(std::initializer_list<std::pair<const char*, const ch
     return page;
 }
 
+// Direct string compare (for pad_resolve outputs, which are not re-resolved).
+static void check_str(const char* got, const char* expected, const char* label) {
+    if (strcmp(got, expected) != 0) {
+        printf("  FAIL [%s]:\n        got:      \"%s\"\n        expected: \"%s\"\n",
+               label, got, expected);
+        g_fail++;
+    } else {
+        g_pass++;
+    }
+}
+
 // ============================================================================
 // Test groups
 // ============================================================================
@@ -488,6 +499,38 @@ static void test_expand_null_page() {
 }
 
 // ============================================================================
+// pad_resolve() batch helper
+// ============================================================================
+
+static void test_pad_resolve_batch() {
+    printf("--- pad_resolve() batch helper ---\n");
+    g_mqtt_values["solar/power;$.value"] = "3200";
+
+    PadBinding binds[1] = {};
+    strlcpy(binds[0].name,  "power", PAD_BINDING_NAME_MAX_LEN);
+    strlcpy(binds[0].value, "[mqtt:solar/power;$.value]", CONFIG_LABEL_MAX_LEN);
+
+    const char* inputs[3] = {
+        "[pad:power] W",                      // pad context applied
+        "[expr:[pad:power] / 1000;%.1f]",     // expr + format through pad
+        "plain text",                         // literal passthrough
+    };
+    const size_t stride = BINDING_TEMPLATE_MAX_LEN;
+    char out[3 * BINDING_TEMPLATE_MAX_LEN];
+    pad_resolve(inputs, 3, binds, 1, out, stride);
+
+    check_str(out + 0 * stride, "3200 W", "pad_resolve mqtt + suffix");
+    check_str(out + 1 * stride, "3.2",    "pad_resolve expr format");
+    check_str(out + 2 * stride, "plain text", "pad_resolve literal passthrough");
+
+    // pad_resolve clears the context afterwards, so a later [pad:] token with no
+    // context set resolves to the placeholder (mirrors the live per-frame reset).
+    char one[BINDING_TEMPLATE_MAX_LEN];
+    binding_template_resolve("[pad:power]", one, sizeof(one));
+    check_str(one, "---", "pad_resolve clears context after");
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -513,6 +556,7 @@ int main() {
     test_set_bindings_api();
     test_multiple_pad_tokens();
     test_health_in_pad_binding();
+    test_pad_resolve_batch();
 
     // Expand tests
     test_expand_basic();
