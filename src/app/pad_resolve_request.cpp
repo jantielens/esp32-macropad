@@ -29,7 +29,7 @@ static constexpr uint32_t RESOLVE_TIMEOUT_MS = 2000;
 // widget data bindings). Names match set_button.
 static const char* const kResolveButtonFields[] = {
     "label_top", "label_center", "label_bottom",
-    "bg_color", "fg_color", "border_color", "btn_state",
+    "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "btn_state",
     "widget_data_binding", "widget_data_binding_2",
     "widget_data_binding_3", "widget_data_binding_4",
 };

@@ -633,6 +633,8 @@ var PAD_PV_FIELDS = [
     { id: 'pad-edit-bg-color',            kind: 'color', field: 'bg_color' },
     { id: 'pad-edit-fg-color',            kind: 'color', field: 'fg_color' },
     { id: 'pad-edit-border-color',        kind: 'color', field: 'border_color' },
+    { id: 'pad-edit-border-width',        kind: 'text',  field: 'border_width' },
+    { id: 'pad-edit-corner-radius',       kind: 'text',  field: 'corner_radius' },
     { id: 'pad-edit-btn-state',           kind: 'text',  field: 'btn_state' },
     { id: 'pad-edit-widget-data-binding', kind: 'text',  field: 'widget_data_binding' }
 ];
