@@ -267,6 +267,7 @@ static void pad_scheme_describe(void* out) {
     o["syntax"]  = "[pad:name]";
     o["example"] = "[pad:power]";
     o["note"]    = "resolves a pad-level named binding declared in pad.bindings; usable inside [expr:..]";
+    o["limit"]   = "one level only: a pad binding's VALUE may not contain another [pad:...] token (the engine will not resolve pad-through-pad and renders blank). Inline the underlying binding instead. validate_pad rejects this.";
 }
 #endif
 

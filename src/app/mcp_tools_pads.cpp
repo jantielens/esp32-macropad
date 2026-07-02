@@ -411,6 +411,12 @@ static const char* validate_pad_doc(JsonObjectConst pad) {
             if (strlen(kv.key().c_str()) >= PAD_BINDING_NAME_MAX_LEN) return "binding name too long (max 31 chars)";
             const char* val = kv.value().as<const char*>();
             if (val && strlen(val) >= CONFIG_LABEL_MAX_LEN) return "binding value too long (max 191 chars)";
+            // A pad binding's value may not itself contain a [pad:...] token: the
+            // engine refuses to resolve one pad binding through another (guards
+            // against recursion) and renders blank. Catch it here instead of
+            // letting it fail silently at render time. Inline the underlying
+            // binding (or reference the base pad binding directly from the field).
+            if (val && strstr(val, "[pad:")) return "pad binding value cannot reference another [pad:...] binding (renders blank); inline the underlying binding instead";
             const char* be = validate_binding_tokens(val);
             if (be) return be;
         }
