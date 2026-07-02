@@ -29,6 +29,7 @@
 #include "web_mcp.h"
 #include "pad_config.h"
 #include "pad_validate.h"
+#include "pad_binding.h"
 #include "psram_json_allocator.h"
 #include "widgets/widget.h"
 #include "binding_template.h"
@@ -317,6 +318,158 @@ static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String
     return true;
 }
 
+#if HAS_MQTT
+// ============================================================================
+// resolve_bindings (read tool, authoring-gated) — resolve binding tokens
+// against LIVE data on the main loop; no save. Powers debugging/preview of what
+// a binding or a proposed button's fields resolve to right now. Values only
+// (not a pixel render). Runs pad_resolve() on the main loop via the deferred
+// control bridge (binding_template_resolve is LVGL/main-task only).
+// ============================================================================
+static constexpr size_t   RESOLVE_MAX        = 32;
+static constexpr size_t   RESOLVE_STRIDE     = BINDING_TEMPLATE_MAX_LEN;
+static constexpr uint32_t RESOLVE_TIMEOUT_MS = 2000;
+
+// Bindable button fields resolved for the `button` form (labels/colors/state +
+// widget data bindings). Names match set_button.
+static const char* const kResolveButtonFields[] = {
+    "label_top", "label_center", "label_bottom",
+    "bg_color", "fg_color", "border_color", "btn_state",
+    "widget_data_binding", "widget_data_binding_2",
+    "widget_data_binding_3", "widget_data_binding_4",
+};
+
+struct ResolveCtx {
+    const char* const* inputs;
+    size_t             count;
+    const PadBinding*  binds;
+    uint8_t            bind_count;
+    char*              out;
+    size_t             stride;
+};
+
+static void exec_resolve(const void* ctx, bool* ok, char* msg, size_t msg_len) {
+    const ResolveCtx* c = (const ResolveCtx*)ctx;
+    pad_resolve(c->inputs, c->count, c->binds, c->bind_count, c->out, c->stride);
+    *ok = true;
+    snprintf(msg, msg_len, "resolved %u", (unsigned)c->count);
+}
+
+// Copy a pad's stored [pad:name] bindings into a heap PadBinding[]. Returns the
+// count and sets *out_binds (caller frees), or 0 with *out_binds == nullptr.
+static uint8_t load_pad_bindings(uint8_t page, PadBinding** out_binds) {
+    *out_binds = nullptr;
+    size_t len = 0;
+    char* raw = pad_config_read_raw(page, &len);
+    if (!raw) return 0;
+    BasicJsonDocument<PsramJsonAllocator> doc(len + 512);
+    DeserializationError e = deserializeJson(doc, raw, len);
+    free(raw);
+    if (e) return 0;
+    JsonObjectConst pb = doc["bindings"];
+    if (pb.isNull() || pb.size() == 0) return 0;
+    PadBinding* arr = (PadBinding*)mcp_psram_alloc(sizeof(PadBinding) * PAD_MAX_BINDINGS);
+    if (!arr) return 0;
+    uint8_t n = 0;
+    for (JsonPairConst kv : pb) {
+        if (n >= PAD_MAX_BINDINGS) break;
+        strlcpy(arr[n].name, kv.key().c_str(), PAD_BINDING_NAME_MAX_LEN);
+        const char* v = kv.value().as<const char*>();
+        strlcpy(arr[n].value, v ? v : "", CONFIG_LABEL_MAX_LEN);
+        n++;
+    }
+    *out_binds = arr;
+    return n;
+}
+
+static bool tool_resolve_bindings(const JsonObject& args, JsonObject& result, String& err) {
+    JsonArrayConst  in_bindings = args["bindings"];
+    JsonObjectConst in_button   = args["button"];
+    const bool has_bindings = !in_bindings.isNull() && in_bindings.size() > 0;
+    const bool has_button   = !in_button.isNull();
+    if (!has_bindings && !has_button)
+        return pad_fail(result, err, PAD_ERR_PARAMS, "provide 'bindings' (array of strings) and/or 'button' (object)");
+
+    // Optional pad context so [pad:name] tokens resolve for the given pad.
+    PadBinding* binds = nullptr;
+    uint8_t bind_count = 0;
+    const char* screen = args["screen"] | "";
+    if (screen[0]) {
+        int pg = pad_index(screen);
+        if (pg < 0) return pad_fail(result, err, PAD_ERR_PARAMS, s_pad_err);
+        bind_count = load_pad_bindings((uint8_t)pg, &binds);
+    }
+
+    // Collect input template strings. The pointers reference the request args
+    // doc, which stays alive while this handler blocks on mcp_control_dispatch.
+    const char* inputs[RESOLVE_MAX];
+    const char* field_names[RESOLVE_MAX];  // non-null => came from a button field
+    size_t count = 0;
+    if (has_bindings) {
+        for (JsonVariantConst v : in_bindings) {
+            if (count >= RESOLVE_MAX) break;
+            const char* s = v.as<const char*>();
+            if (!s) continue;
+            inputs[count] = s; field_names[count] = nullptr; count++;
+        }
+    }
+    const size_t button_start = count;
+    if (has_button) {
+        for (const char* f : kResolveButtonFields) {
+            if (count >= RESOLVE_MAX) break;
+            const char* s = in_button[f].as<const char*>();
+            if (!s || !s[0]) continue;
+            inputs[count] = s; field_names[count] = f; count++;
+        }
+    }
+    if (count == 0) {
+        if (binds) heap_caps_free(binds);
+        return pad_fail(result, err, PAD_ERR_PARAMS, "no resolvable string fields provided");
+    }
+
+    char* out = (char*)mcp_psram_alloc(count * RESOLVE_STRIDE);
+    if (!out) {
+        if (binds) heap_caps_free(binds);
+        return pad_fail(result, err, PAD_ERR_INTERNAL, "out of memory");
+    }
+
+    ResolveCtx ctx = { inputs, count, binds, bind_count, out, RESOLVE_STRIDE };
+    bool ok = false; char msg[MCP_TOOL_MSG_LEN] = {0};
+    McpControlResult r = mcp_control_dispatch(exec_resolve, &ctx, sizeof(ctx),
+                                              RESOLVE_TIMEOUT_MS, &ok, msg, sizeof(msg));
+    if (r == MCP_CONTROL_BUSY) {
+        heap_caps_free(out); if (binds) heap_caps_free(binds);
+        return pad_fail(result, err, PAD_ERR_BUSY, "busy, retry");
+    }
+    if (r != MCP_CONTROL_OK) {
+        // TIMEOUT: the deferred job may still run and read out/binds on the main
+        // loop, so we cannot free them here (only reachable if the main loop is
+        // wedged — a bounded, single-in-flight leak). Report the failure.
+        return mcp_finish_control(r, ok, msg, result, err);
+    }
+
+    // Success — copy resolved values into the result (String forces ArduinoJson
+    // to duplicate the bytes; `out` is freed before the response serializes).
+    if (has_bindings) {
+        JsonArray arr = result.createNestedArray("resolved");
+        for (size_t i = 0; i < button_start; i++) {
+            JsonObject o = arr.createNestedObject();
+            o["input"] = String(inputs[i]);
+            o["value"] = String(out + i * RESOLVE_STRIDE);
+        }
+    }
+    if (has_button) {
+        JsonObject bo = result.createNestedObject("button");
+        for (size_t i = button_start; i < count; i++) {
+            bo[field_names[i]] = String(out + i * RESOLVE_STRIDE);
+        }
+    }
+    heap_caps_free(out);
+    if (binds) heap_caps_free(binds);
+    return true;
+}
+#endif // HAS_MQTT
+
 // get_pad_blocks — list pre-built button groups (building blocks) the client can
 // drop onto a pad instead of hand-building. Generated from the live catalog.
 static bool tool_get_pad_blocks(const JsonObject& args, JsonObject& result, String& err) {
@@ -445,6 +598,16 @@ static const McpTool s_tool_validate_pad = {
     tool_validate_pad, true, false, false, false
 };
 REGISTER_MCP_TOOL(s_tool_validate_pad);
+
+#if HAS_MQTT
+static const McpTool s_tool_resolve_bindings = {
+    "resolve_bindings",
+    "Resolve [scheme:params] binding tokens against the device's LIVE data and return the resolved text — to debug/preview what a binding or a proposed button renders to, WITHOUT saving. Args: bindings (array of template strings) and/or button (a proposed button object; its bindable fields label_*/*_color/btn_state/widget_data_binding[_2..4] are resolved), plus optional screen (pad_N or friendly name) to supply that pad's [pad:name] context. Returns resolved VALUES only — it does not render pixels (use GET /api/screenshot for a visual). Read-only; nothing is persisted. Requires pad authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"bindings\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"button\":{\"type\":\"object\"}}}",
+    tool_resolve_bindings, true, false, false, true
+};
+REGISTER_MCP_TOOL(s_tool_resolve_bindings);
+#endif // HAS_MQTT
 
 static const McpTool s_tool_get_pad_blocks = {
     "get_pad_blocks",

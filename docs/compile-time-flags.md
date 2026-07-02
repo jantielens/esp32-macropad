@@ -484,6 +484,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_block.cpp
   - src/app/pad_block.h
   - src/app/pad_config.cpp
+  - src/app/pad_validate.cpp
+  - src/app/pad_validate.h
   - src/app/portal_components.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
@@ -646,6 +648,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.cpp
   - src/app/ha_discovery.h
   - src/app/mcp_tools_config.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
   - src/app/mqtt_manager.cpp
