@@ -619,12 +619,12 @@ function padDialogClear() {
 }
 
 // --- Live binding preview (in-context) -------------------------------------
-// Each bindable field (labels, colors, state, primary data binding) gets a small
-// eye affordance next to its "fx" hint. Clicking it resolves that field against
-// live device data (POST /api/pad/resolve) and shows the value in a popover
-// anchored to the field; color fields also show a resolved swatch. On dialog
-// open, all bound fields are batch-resolved once so the popover is instant.
-// Resolves VALUES only (not a pixel render); reads fields directly from the form.
+// Each bindable field (labels, colors, state, primary data binding) that holds
+// a binding shows its live resolved value INLINE, right after the field's "fx"
+// hint — no popover, so nothing can be hidden behind the modal. Values resolve
+// via POST /api/pad/resolve on dialog open and refresh (debounced) as bindings
+// are edited; click a value to force a fresh reading. Color values also show a
+// swatch. Resolves VALUES only (not a pixel render); reads fields from the form.
 
 var PAD_PV_FIELDS = [
     { id: 'pad-edit-label-top',           kind: 'text',  field: 'label_top' },
@@ -636,10 +636,7 @@ var PAD_PV_FIELDS = [
     { id: 'pad-edit-btn-state',           kind: 'text',  field: 'btn_state' },
     { id: 'pad-edit-widget-data-binding', kind: 'text',  field: 'widget_data_binding' }
 ];
-var padPvCache = {};      // inputId -> resolved value string
-var padPvPopover = null;  // shared popover element (appended to body)
-var padPvOpenFor = null;  // inputId whose popover is open
-var padPvEyeTimer = null; // debounce for eye visibility refresh
+var padPvTimer = null;  // debounce for edit-triggered refresh
 
 function padPreviewEsc(s) {
     return String(s == null ? '' : s)
@@ -660,8 +657,13 @@ function padPvFieldValue(id) {
 
 function padPvIsBinding(v) { return !!v && v.indexOf('[') !== -1; }
 
-// Find the field's visible "fx" hint to anchor the eye next to (uniform across
-// text inputs and the display:none color inputs).
+function padPvHex(v) {
+    var s = String(v == null ? '' : v).trim();
+    return /^#[0-9a-fA-F]{6}$/.test(s) ? s : null;
+}
+
+// Anchor the inline value chip next to each field's visible "fx" hint (uniform
+// across text inputs and the display:none color inputs).
 function padPvAnchor(id) {
     var el = document.getElementById(id);
     if (!el) return null;
@@ -674,134 +676,90 @@ function padPvAnchor(id) {
     return null;
 }
 
+// Create the inline value chip for each field once (idempotent), and hook a
+// debounced refresh so values track edits.
 function padPvMount() {
     PAD_PV_FIELDS.forEach(function (f) {
         var anchor = padPvAnchor(f.id);
-        if (!anchor || anchor.parentNode.querySelector('.pad-pv-eye[data-pv="' + f.id + '"]')) return;
-        var eye = document.createElement('span');
-        eye.className = 'pad-pv-eye';
-        eye.setAttribute('data-pv', f.id);
-        eye.setAttribute('role', 'button');
-        eye.title = 'Preview live value';
-        eye.textContent = '\uD83D\uDC41';  // eye glyph
-        eye.style.display = 'none';
-        eye.addEventListener('click', function (ev) { ev.stopPropagation(); padPvToggle(f.id, eye); });
-        anchor.insertAdjacentElement('afterend', eye);
+        if (!anchor || anchor.parentNode.querySelector('.pad-pv-val[data-pv="' + f.id + '"]')) return;
+        var chip = document.createElement('span');
+        chip.className = 'pad-pv-val';
+        chip.setAttribute('data-pv', f.id);
+        chip.style.display = 'none';
+        chip.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); padPvRefreshField(f.id); });
+        anchor.insertAdjacentElement('afterend', chip);
     });
-    // One delegated listener refreshes eye visibility as the user edits.
     var overlay = document.getElementById('pad-edit-overlay');
     if (overlay && !overlay._pvHooked) {
         overlay._pvHooked = true;
         var refresh = function () {
-            if (padPvEyeTimer) clearTimeout(padPvEyeTimer);
-            padPvEyeTimer = setTimeout(padPvUpdateAllEyes, 200);
+            if (padPvTimer) clearTimeout(padPvTimer);
+            padPvTimer = setTimeout(padPvRefreshAll, 350);
         };
         overlay.addEventListener('input', refresh);
         overlay.addEventListener('change', refresh);
     }
 }
 
-function padPvUpdateEye(id) {
-    var eye = document.querySelector('.pad-pv-eye[data-pv="' + id + '"]');
-    if (!eye) return;
-    eye.style.display = padPvIsBinding(padPvFieldValue(id)) ? 'inline-block' : 'none';
-}
-
-function padPvUpdateAllEyes() { PAD_PV_FIELDS.forEach(function (f) { padPvUpdateEye(f.id); }); }
-
-function padPvPopoverEl() {
-    if (!padPvPopover) {
-        padPvPopover = document.createElement('div');
-        padPvPopover.className = 'pad-pv-pop';
-        padPvPopover.style.display = 'none';
-        document.body.appendChild(padPvPopover);
-        document.addEventListener('click', function (ev) {
-            if (padPvPopover.style.display === 'none') return;
-            if (padPvPopover.contains(ev.target)) return;
-            if (ev.target.classList && ev.target.classList.contains('pad-pv-eye')) return;
-            padPvHide();
-        });
-        document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') padPvHide(); });
-        window.addEventListener('resize', padPvHide);
+// Render one chip. state 'loading' shows a spinner-ish ellipsis; hidden when the
+// field holds no binding.
+function padPvSetChip(id, value, state) {
+    var chip = document.querySelector('.pad-pv-val[data-pv="' + id + '"]');
+    if (!chip) return;
+    if (!padPvIsBinding(padPvFieldValue(id))) { chip.style.display = 'none'; chip.title = ''; return; }
+    chip.style.display = 'inline-flex';
+    if (state === 'loading') {
+        chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">\u2026</span>';
+        chip.title = 'Resolving\u2026';
+        return;
     }
-    return padPvPopover;
+    var shown = (value === '' || value == null) ? '(empty)' : String(value);
+    var muted = shown.indexOf('---') !== -1 ? ' pad-pv-muted' : '';
+    var hex = padPvHex(value);
+    var inner = '<span class="pad-pv-arrow">\u2192</span>';
+    if (hex) inner += '<span class="pad-pv-swatch" style="background:' + padPreviewEsc(hex) + ';"></span>';
+    inner += '<span class="pad-pv-text' + muted + '">' + padPreviewEsc(shown) + '</span>';
+    chip.innerHTML = inner;
+    chip.title = shown + ' \u2014 click to refresh';
 }
 
-function padPvHide() {
-    if (padPvPopover) padPvPopover.style.display = 'none';
-    padPvOpenFor = null;
-}
-
-function padPvPosition(eye) {
-    var pop = padPvPopoverEl();
-    var r = eye.getBoundingClientRect();
-    pop.style.top = (r.bottom + 6) + 'px';
-    pop.style.left = Math.max(8, Math.min(r.left - 4, window.innerWidth - 340)) + 'px';
-}
-
-function padPvHex(v) {
-    var s = String(v == null ? '' : v).trim();
-    return /^#[0-9a-fA-F]{6}$/.test(s) ? s : null;
-}
-
-function padPvRender(id, value, loading) {
-    var pop = padPvPopoverEl();
-    var html = '<div class="pad-pv-pop-title">live value</div>';
-    if (loading) {
-        html += '<div class="pad-pv-pop-val pad-pv-muted">resolving\u2026</div>';
-    } else {
-        var shown = (value === '' || value == null) ? '(empty)' : value;
-        var muted = (String(value).indexOf('---') !== -1) ? ' pad-pv-muted' : '';
-        var hex = padPvHex(value);
-        html += '<div class="pad-pv-pop-val' + muted + '">';
-        if (hex) html += '<span class="pad-pv-swatch" style="background:' + padPreviewEsc(hex) + ';"></span>';
-        html += '<span>' + padPreviewEsc(shown) + '</span></div>';
-    }
-    pop.innerHTML = html;
-}
-
-function padPvToggle(id, eye) {
-    if (padPvOpenFor === id && padPvPopover && padPvPopover.style.display !== 'none') { padPvHide(); return; }
-    padPvOpenFor = id;
-    padPvPosition(eye);
-    padPvRender(id, padPvCache[id], !(id in padPvCache));
-    padPvPopoverEl().style.display = 'block';
-    padPvResolveOne(id, function () {
-        if (padPvOpenFor === id) { padPvPosition(eye); padPvRender(id, padPvCache[id], false); }
-    });
-}
-
-function padPvResolveOne(id, done) {
+// Resolve one field (used on click for a fresh reading).
+function padPvRefreshField(id) {
     var val = padPvFieldValue(id);
-    if (!padPvIsBinding(val)) { padPvCache[id] = val; if (done) done(); return; }
+    if (!padPvIsBinding(val)) { padPvSetChip(id); return; }
+    padPvSetChip(id, null, 'loading');
     fetch('/api/pad/resolve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ screen: 'pad_' + padState.page, bindings: [val] })
-    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
-        if (j && j.resolved && j.resolved[0]) padPvCache[id] = j.resolved[0].value;
-        if (done) done();
-    }).catch(function () { if (done) done(); });
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { padPvSetChip(id, (j && j.resolved && j.resolved[0]) ? j.resolved[0].value : '---'); })
+      .catch(function () { padPvSetChip(id, '---'); });
 }
 
-// C3 — batch-resolve all bound fields once when the dialog opens.
-function padPvOnOpen() {
-    padPvHide();
-    padPvCache = {};
+// Batch-resolve all bound fields in one request (dialog open + debounced edits).
+function padPvRefreshAll() {
     padPvMount();
-    padPvUpdateAllEyes();
-    var btn = {};
+    var btn = {}, any = false;
     PAD_PV_FIELDS.forEach(function (f) {
         var v = padPvFieldValue(f.id);
-        if (padPvIsBinding(v)) btn[f.field] = v;
+        if (padPvIsBinding(v)) { btn[f.field] = v; any = true; padPvSetChip(f.id, null, 'loading'); }
+        else padPvSetChip(f.id);
     });
-    if (Object.keys(btn).length === 0) return;
+    if (!any) return;
     fetch('/api/pad/resolve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ screen: 'pad_' + padState.page, button: btn })
-    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
-        if (!j || !j.button) return;
-        PAD_PV_FIELDS.forEach(function (f) {
-            if (j.button[f.field] !== undefined) padPvCache[f.id] = j.button[f.field];
-        });
-    }).catch(function () {});
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+          var fields = (j && j.button) || {};
+          PAD_PV_FIELDS.forEach(function (f) {
+              if (padPvIsBinding(padPvFieldValue(f.id))) padPvSetChip(f.id, fields[f.field] !== undefined ? fields[f.field] : '---');
+          });
+      })
+      .catch(function () {
+          PAD_PV_FIELDS.forEach(function (f) { if (padPvIsBinding(padPvFieldValue(f.id))) padPvSetChip(f.id, '---'); });
+      });
 }
+
+function padPvOnOpen() { padPvMount(); padPvRefreshAll(); }
+function padPvHide() { /* inline chips live inside the dialog; nothing to tear down */ }

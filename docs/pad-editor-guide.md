@@ -904,9 +904,9 @@ The pad editor and Home page validate binding syntax **in real time** as you typ
 
 ### Preview Live Values
 
-Syntax validation confirms a binding is *well-formed*, but not what it actually resolves to right now. To close that gap, every bindable field that contains a binding shows a small **👁 eye** next to its **fx** hint. Click it to resolve **that field** against live device data and see the value in a small popover anchored to the field — no saving required. The three labels, the background / text / border colors, the button state, and the primary widget data binding are all covered; a color that resolves to a hex value also shows a **swatch** of the resolved color.
+Syntax validation confirms a binding is *well-formed*, but not what it actually resolves to right now. To close that gap, every bindable field that contains a binding shows its **live resolved value inline**, right after the field's **fx** hint (e.g. `Center Label  fx  → 14:32`). Values are resolved against live device data when you open a button and refresh automatically as you edit a binding; click a value to force a fresh reading. The three labels, the background / text / border colors, the button state, and the primary widget data binding are all covered; a color that resolves to a hex value also shows a **swatch** of the resolved color.
 
-When you open a button, all of its bound fields are resolved once up front, so the value appears instantly on click; clicking always re-resolves for a fresh reading. Use it to confirm that an MQTT topic is publishing, a `[health:…]` key returns what you expect, an `[expr:…]` conditional picks the right branch, or a `[pad:name]` alias points at the intended value. A field that resolves to a placeholder shows `---` (unresolved) just as it would on the device.
+Use it to confirm that an MQTT topic is publishing, a `[health:…]` key returns what you expect, an `[expr:…]` conditional picks the right branch, or a `[pad:name]` alias points at the intended value. A field that resolves to a placeholder shows `---` (unresolved) just as it would on the device.
 
 > **Note:** Preview resolves **values**, not pixels — it does not render the button's final appearance. It also uses the current pad's `[pad:name]` bindings, so save the pad first if you just added or changed a named binding you want the preview to see.
 
