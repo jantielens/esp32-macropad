@@ -484,6 +484,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/pad_block.cpp
   - src/app/pad_block.h
   - src/app/pad_config.cpp
+  - src/app/pad_resolve_request.cpp
+  - src/app/pad_resolve_request.h
   - src/app/pad_validate.cpp
   - src/app/pad_validate.h
   - src/app/portal_components.cpp
@@ -663,6 +665,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_wake.h
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
+  - src/app/pad_resolve_request.cpp
+  - src/app/pad_resolve_request.h
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen_events.cpp

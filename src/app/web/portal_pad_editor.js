@@ -139,6 +139,8 @@ function padInit() {
     document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
     document.getElementById('pad-edit-cancel').addEventListener('click', padDialogClose);
+    var _padPreviewBtn = document.getElementById('pad-edit-preview-btn');
+    if (_padPreviewBtn) _padPreviewBtn.addEventListener('click', padDialogPreview);
 
     // Wire appearance field input listeners for reset-hint visibility (once)
     PAD_APPEARANCE_FIELDS.forEach(function(f) {

@@ -6,6 +6,10 @@ function padDialogOpen(col, row) {
     padState.editCol = col;
     padState.editRow = row;
 
+    // Clear any stale live-preview result from a previously edited button.
+    var _pv = document.getElementById('pad-edit-preview-result');
+    if (_pv) { _pv.style.display = 'none'; _pv.innerHTML = ''; }
+
     // Refresh target screen dropdowns so pad names are current
     padPopulateScreenDropdown();
     padPopulateSoundDropdown();
@@ -612,4 +616,68 @@ function padDialogClear() {
     padMarkDirty();
     padDialogClose();
     padRenderGrid();
+}
+
+// --- Live binding preview (POST /api/pad/resolve) --------------------------
+// Resolves the button's bindable label/color/state/data-binding fields against
+// live device data and shows the resolved VALUES (not a pixel render). Reads the
+// fields directly from the form (no side effects on padState).
+function padPreviewEsc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function padPreviewShow(html) {
+    var el = document.getElementById('pad-edit-preview-result');
+    if (!el) return;
+    el.innerHTML = html;
+    el.style.display = 'block';
+}
+
+function padDialogPreview() {
+    var btn = {};
+    var lt = padLabelFromInput('pad-edit-label-top');    if (lt) btn.label_top = lt;
+    var lc = padLabelFromInput('pad-edit-label-center'); if (lc) btn.label_center = lc;
+    var lb = padLabelFromInput('pad-edit-label-bottom'); if (lb) btn.label_bottom = lb;
+    var bg = padGetBindableColor('pad-edit-bg-color');     if (bg) btn.bg_color = bg;
+    var fg = padGetBindableColor('pad-edit-fg-color');     if (fg) btn.fg_color = fg;
+    var bc = padGetBindableColor('pad-edit-border-color'); if (bc) btn.border_color = bc;
+    var stEl = document.getElementById('pad-edit-btn-state');
+    if (stEl && stEl.value.trim()) btn.btn_state = stEl.value.trim();
+    var wdEl = document.getElementById('pad-edit-widget-data-binding');
+    if (wdEl && wdEl.value.trim()) btn.widget_data_binding = wdEl.value.trim();
+
+    if (Object.keys(btn).length === 0) {
+        padPreviewShow('<span style="color:#86868b;">No bindable label, color, state, or data-binding field to preview.</span>');
+        return;
+    }
+
+    padPreviewShow('<span style="color:#86868b;">Resolving\u2026</span>');
+    fetch('/api/pad/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screen: 'pad_' + padState.page, button: btn })
+    }).then(function (resp) {
+        return resp.json().catch(function () { return {}; }).then(function (j) {
+            return { ok: resp.ok, status: resp.status, j: j };
+        });
+    }).then(function (r) {
+        if (!r.ok) {
+            padPreviewShow('<span style="color:#ff3b30;">' +
+                padPreviewEsc((r.j && r.j.error) || ('HTTP ' + r.status)) + '</span>');
+            return;
+        }
+        var fields = (r.j && r.j.button) || {};
+        var keys = Object.keys(fields);
+        if (keys.length === 0) { padPreviewShow('<span style="color:#86868b;">Nothing resolved.</span>'); return; }
+        var rows = keys.map(function (k) {
+            return '<div style="display:flex; gap:8px; align-items:baseline;">' +
+                '<span style="color:#86868b; min-width:120px;">' + padPreviewEsc(k) + '</span>' +
+                '<span style="color:#86868b;">\u2192</span>' +
+                '<span style="color:#34c759; word-break:break-all;">' + padPreviewEsc(fields[k]) + '</span></div>';
+        }).join('');
+        padPreviewShow(rows);
+    }).catch(function (e) {
+        padPreviewShow('<span style="color:#ff3b30;">Preview failed: ' + padPreviewEsc(String(e)) + '</span>');
+    });
 }
