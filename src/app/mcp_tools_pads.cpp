@@ -132,6 +132,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
 
     JsonObject style = result.createNestedObject("label_style");
     style["format"] = "font:24;font_family:dseg7;font_upscale:1.4;align:right;y:-3;mode:scroll;color:#FF0000";
+    style["color_note"] = "color: accepts either a #RRGGBB hex value or a binding token (e.g. [expr:...] or [net:...]) that resolves live, like fg_color and the other color fields; a per-label color overrides fg_color. Style DSL max length 127 chars.";
     JsonArray fam = style.createNestedArray("font_family");
     fam.add("dseg7"); fam.add("bebas"); fam.add("doto");
     JsonArray al = style.createNestedArray("align");

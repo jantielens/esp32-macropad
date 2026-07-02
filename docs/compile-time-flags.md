@@ -459,6 +459,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
+  - src/app/label_style.cpp
   - src/app/list_binding.cpp
   - src/app/list_provider.cpp
   - src/app/list_provider.h
