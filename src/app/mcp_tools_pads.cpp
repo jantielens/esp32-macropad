@@ -471,7 +471,7 @@ REGISTER_MCP_TOOL(s_tool_validate_pad);
 #if HAS_MQTT
 static const McpTool s_tool_resolve_bindings = {
     "resolve_bindings",
-    "Resolve [scheme:params] binding tokens against the device's LIVE data and return the resolved text — to debug/preview what a binding or a proposed button renders to, WITHOUT saving. Args: bindings (array of template strings) and/or button (a proposed button object; its bindable fields label_*/*_color/btn_state/widget_data_binding[_2..4] are resolved), plus optional screen (pad_N or friendly name) to supply that pad's [pad:name] context. Returns resolved VALUES only — it does not render pixels (use GET /api/screenshot for a visual). Read-only; nothing is persisted. Requires pad authoring.",
+    "Resolve [scheme:params] binding tokens against the device's LIVE data and return the resolved text — to debug/preview what a binding or a proposed button renders to, WITHOUT saving. Args: bindings (array of template strings) and/or button (a proposed button object; its bindable fields label_*/*_color/btn_state/widget_data_binding[_2..4] are resolved), plus optional screen (pad_N or friendly name) to supply that pad's [pad:name] context. Best practice: after adding or editing any binding, call this to confirm it resolves to the intended value — writes only check binding SYNTAX, so a valid binding can still resolve to '---' or the wrong value. Returns resolved VALUES only — it does not render pixels (use GET /api/screenshot for a visual). Read-only; nothing is persisted. Requires pad authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"bindings\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"button\":{\"type\":\"object\"}}}",
     tool_resolve_bindings, true, false, false, true
 };
@@ -488,7 +488,7 @@ REGISTER_MCP_TOOL(s_tool_get_pad_blocks);
 
 static const McpTool s_tool_set_button = {
     "set_button",
-    "Create/replace one button. position = 0-based index in the button array (NOT a grid cell; placement is col/row). A position at/past the end appends. Args: screen (pad id or friendly name), position (int), button (JSON, portal pad schema). Requires authoring.",
+    "Create/replace one button. position = 0-based index in the button array (NOT a grid cell; placement is col/row). A position at/past the end appends. Args: screen (pad id or friendly name), position (int), button (JSON, portal pad schema). If the button uses any [scheme:params] binding, verify it afterward with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"screen\",\"position\",\"button\"]}",
     tool_set_button, false, true, false, true
 };
@@ -496,7 +496,7 @@ REGISTER_MCP_TOOL(s_tool_set_button);
 
 static const McpTool s_tool_set_buttons = {
     "set_buttons",
-    "Create/replace many buttons in one save (processed in array order). Each item.position is a 0-based array index (NOT a grid cell); positions past the end append. To rebuild a pad, clear_pad first then use positions 0,1,2,... Args: screen (pad id or friendly name), buttons (array of {position, button}). Requires authoring.",
+    "Create/replace many buttons in one save (processed in array order). Each item.position is a 0-based array index (NOT a grid cell); positions past the end append. To rebuild a pad, clear_pad first then use positions 0,1,2,... Args: screen (pad id or friendly name), buttons (array of {position, button}). If any button uses [scheme:params] bindings, verify them afterward with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"buttons\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"position\",\"button\"]}}},\"required\":[\"screen\",\"buttons\"]}",
     tool_set_buttons, false, true, false, true
 };
@@ -520,7 +520,7 @@ REGISTER_MCP_TOOL(s_tool_clear_pad);
 
 static const McpTool s_tool_set_pad = {
     "set_pad",
-    "Set pad-level fields (preserves buttons): pad_name (friendly label; arg is 'pad_name' not 'name'), layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), and bindings (object of [pad:name] templates). Only provided keys change. 'screen' may be a 'pad_N' id or friendly name. Requires authoring.",
+    "Set pad-level fields (preserves buttons): pad_name (friendly label; arg is 'pad_name' not 'name'), layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), and bindings (object of [pad:name] templates). Only provided keys change. 'screen' may be a 'pad_N' id or friendly name. After setting 'bindings', verify each resolves with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"pad_name\":{\"type\":\"string\"},\"layout\":{\"type\":\"string\"},\"cols\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"wake_screen\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"template_pad\":{\"type\":\"integer\"},\"bindings\":{\"type\":\"object\"}},\"required\":[\"screen\"]}",
     tool_set_pad, false, true, false, true
 };

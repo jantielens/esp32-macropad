@@ -207,6 +207,13 @@ Writes are validated before saving and persisted on the main loop. Concurrent
 edits from the LLM and the portal editor are **last-write-wins per pad** — the
 last save replaces the pad, so avoid editing the same pad in both at once.
 
+> **Verify bindings, don't assume.** A write rejects malformed binding *syntax*,
+> but a syntactically valid `[scheme:params]` binding can still resolve to `---`
+> (no data) or an unintended value. Make `resolve_bindings` part of the authoring
+> loop: after adding or editing any binding, call it to confirm the binding
+> resolves to the intended live value. The server's `initialize` instructions
+> tell connected assistants to do this as a matter of course.
+
 ### Device-class tools
 
 Some device classes register their own tools, which appear only on firmware

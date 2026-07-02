@@ -381,6 +381,13 @@ static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantCon
         "element. Call get_capabilities for the exact recipe (visual_inspection) plus the full "
         "pad/widget/binding schema. Verifying a specific pad first needs set_screen (a control tool) to "
         "bring it on-screen.";
+    instructions +=
+        " When authoring pads with [scheme:params] bindings, ALWAYS verify them as part of the workflow, "
+        "not only when asked: a write rejects malformed binding SYNTAX, but a syntactically valid binding "
+        "can still resolve to '---' (no data) or an unintended value. After adding or editing any binding, "
+        "call resolve_bindings (pass the binding strings and/or the proposed button, with screen for "
+        "[pad:name] context) to confirm each resolves to the intended LIVE value; use validate_pad to "
+        "dry-run a whole pad without saving.";
 #endif
     result["instructions"] = instructions;
 
