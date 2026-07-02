@@ -902,6 +902,14 @@ The pad editor and Home page validate binding syntax **in real time** as you typ
 
 > **Tip:** Validation is purely syntactic — it checks that your binding is well-formed, not that the MQTT topic exists or that the data path returns a value. Runtime resolution issues still show `---` or `ERR:` on the device.
 
+### Preview Live Values
+
+Syntax validation confirms a binding is *well-formed*, but not what it actually resolves to right now. The button editor's **Preview live values** button (below the settings, above OK/Cancel) closes that gap: it sends the button's bindable fields — the three labels, the background / text / border colors, the button state, and the primary widget data binding — to the device and shows what each one resolves to **against live data**, without saving.
+
+Use it to confirm that an MQTT topic is publishing, a `[health:…]` key returns what you expect, an `[expr:…]` conditional picks the right branch, or a `[pad:name]` alias points at the intended value. The preview lists each field as `field → resolved value`; a field that resolves to a placeholder shows `---` (unresolved) just as it would on the device.
+
+> **Note:** Preview resolves **values**, not pixels — it does not render the button's final appearance. It also uses the current pad's `[pad:name]` bindings, so save the pad first if you just added or changed a named binding you want the preview to see.
+
 ### Pipe Fallback
 
 **Syntax:** `[scheme:params|fallback]`

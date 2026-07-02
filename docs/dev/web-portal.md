@@ -1292,6 +1292,32 @@ Return the building block catalog — pre-configured button groups that can be i
 Each button's `col_offset` / `row_offset` is relative to the placement anchor cell. The editor adds the anchor position to compute absolute grid coordinates.
 
 
+#### `POST /api/pad/resolve`
+
+Resolve `[scheme:params]` binding tokens against the device's **live** data and return the resolved text — used by the pad editor's **Preview live values** button to show what a binding renders to without saving. Resolution runs on the main loop (LVGL task), so the request is deferred through the shared main-loop bridge; it resolves **values** only (not a pixel render). Nothing is persisted. Requires the same portal auth as the other `/api/pad*` routes. Gated `HAS_DISPLAY && HAS_MQTT`. Shares one resolver with the MCP `resolve_bindings` tool.
+
+- **Request:**
+```json
+{
+  "screen": "pad_0",
+  "bindings": ["[time:%H:%M]", "[health:heap_free]"],
+  "button": { "label_center": "[mqtt:home/solar;power;%.0f]W", "fg_color": "[expr:[net:any]?\"#22c55e\":\"#334155\"]" }
+}
+```
+  `screen` (optional) supplies that pad's `[pad:name]` context. At least one of `bindings` / `button` is required; a `button` object resolves its bindable `label_*` / `*_color` / `btn_state` / `widget_data_binding[_2..4]` fields.
+
+- **Response:**
+```json
+{
+  "resolved": [ { "input": "[time:%H:%M]", "value": "14:32" }, { "input": "[health:heap_free]", "value": "182 KB" } ],
+  "button": { "label_center": "1240W", "fg_color": "#22c55e" }
+}
+```
+  Errors: `400` (bad params / invalid JSON), `503` (busy — another resolve/control job is in flight, retry; or out of memory), `500` (internal).
+
+> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
+
+
 ## Implementation Details
 
 ### Architecture

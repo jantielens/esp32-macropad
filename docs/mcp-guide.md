@@ -189,6 +189,14 @@ into the board.
   dropped onto a pad. Read-only.
 - `validate_pad` — dry-run validate a pad JSON (grid bounds, span overflow,
   widget types, colors, binding tokens) without saving. Read-only.
+- `resolve_bindings` — resolve `[scheme:params]` tokens against the device's
+  **live** data and return the resolved text, to debug/preview what a binding or
+  a proposed button renders to **without saving**. Takes `bindings` (array of
+  template strings) and/or a `button` object (its bindable `label_*` / `*_color`
+  / `btn_state` / `widget_data_binding[_2..4]` fields are resolved), plus an
+  optional `screen` (`pad_N` or friendly name) for that pad's `[pad:name]`
+  context. Returns resolved **values** only — it does not render pixels (use
+  `GET /api/screenshot` for a visual). Read-only; nothing is persisted.
 - `set_button` / `set_buttons` — create or replace a button (or many in one save)
   by position, using the same schema as the portal pad editor.
 - `set_pad` — set pad-level fields (layout, cols/rows, wake_screen, bg_color,
