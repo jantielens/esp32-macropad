@@ -6,10 +6,6 @@ function padDialogOpen(col, row) {
     padState.editCol = col;
     padState.editRow = row;
 
-    // Clear any stale live-preview result from a previously edited button.
-    var _pv = document.getElementById('pad-edit-preview-result');
-    if (_pv) { _pv.style.display = 'none'; _pv.innerHTML = ''; }
-
     // Refresh target screen dropdowns so pad names are current
     padPopulateScreenDropdown();
     padPopulateSoundDropdown();
@@ -291,9 +287,13 @@ function padDialogOpen(col, row) {
 
     // Refresh binding length warnings for the loaded values
     if (typeof padScanMaxlenHints === 'function') padScanMaxlenHints();
+
+    // Mount + prefetch the in-context live-value preview affordances.
+    if (typeof padPvOnOpen === 'function') padPvOnOpen();
 }
 
 function padDialogClose() {
+    if (typeof padPvHide === 'function') padPvHide();
     document.getElementById('pad-edit-overlay').style.display = 'none';
     document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
@@ -618,66 +618,190 @@ function padDialogClear() {
     padRenderGrid();
 }
 
-// --- Live binding preview (POST /api/pad/resolve) --------------------------
-// Resolves the button's bindable label/color/state/data-binding fields against
-// live device data and shows the resolved VALUES (not a pixel render). Reads the
-// fields directly from the form (no side effects on padState).
+// --- Live binding preview (in-context) -------------------------------------
+// Each bindable field (labels, colors, state, primary data binding) gets a small
+// eye affordance next to its "fx" hint. Clicking it resolves that field against
+// live device data (POST /api/pad/resolve) and shows the value in a popover
+// anchored to the field; color fields also show a resolved swatch. On dialog
+// open, all bound fields are batch-resolved once so the popover is instant.
+// Resolves VALUES only (not a pixel render); reads fields directly from the form.
+
+var PAD_PV_FIELDS = [
+    { id: 'pad-edit-label-top',           kind: 'text',  field: 'label_top' },
+    { id: 'pad-edit-label-center',        kind: 'text',  field: 'label_center' },
+    { id: 'pad-edit-label-bottom',        kind: 'text',  field: 'label_bottom' },
+    { id: 'pad-edit-bg-color',            kind: 'color', field: 'bg_color' },
+    { id: 'pad-edit-fg-color',            kind: 'color', field: 'fg_color' },
+    { id: 'pad-edit-border-color',        kind: 'color', field: 'border_color' },
+    { id: 'pad-edit-btn-state',           kind: 'text',  field: 'btn_state' },
+    { id: 'pad-edit-widget-data-binding', kind: 'text',  field: 'widget_data_binding' }
+];
+var padPvCache = {};      // inputId -> resolved value string
+var padPvPopover = null;  // shared popover element (appended to body)
+var padPvOpenFor = null;  // inputId whose popover is open
+var padPvEyeTimer = null; // debounce for eye visibility refresh
+
 function padPreviewEsc(s) {
     return String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function padPreviewShow(html) {
-    var el = document.getElementById('pad-edit-preview-result');
-    if (!el) return;
-    el.innerHTML = html;
-    el.style.display = 'block';
+function padPvFieldDef(id) {
+    for (var i = 0; i < PAD_PV_FIELDS.length; i++) if (PAD_PV_FIELDS[i].id === id) return PAD_PV_FIELDS[i];
+    return null;
 }
 
-function padDialogPreview() {
-    var btn = {};
-    var lt = padLabelFromInput('pad-edit-label-top');    if (lt) btn.label_top = lt;
-    var lc = padLabelFromInput('pad-edit-label-center'); if (lc) btn.label_center = lc;
-    var lb = padLabelFromInput('pad-edit-label-bottom'); if (lb) btn.label_bottom = lb;
-    var bg = padGetBindableColor('pad-edit-bg-color');     if (bg) btn.bg_color = bg;
-    var fg = padGetBindableColor('pad-edit-fg-color');     if (fg) btn.fg_color = fg;
-    var bc = padGetBindableColor('pad-edit-border-color'); if (bc) btn.border_color = bc;
-    var stEl = document.getElementById('pad-edit-btn-state');
-    if (stEl && stEl.value.trim()) btn.btn_state = stEl.value.trim();
-    var wdEl = document.getElementById('pad-edit-widget-data-binding');
-    if (wdEl && wdEl.value.trim()) btn.widget_data_binding = wdEl.value.trim();
+function padPvFieldValue(id) {
+    var f = padPvFieldDef(id);
+    if (f && f.kind === 'color') return padGetBindableColor(id);
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+}
 
-    if (Object.keys(btn).length === 0) {
-        padPreviewShow('<span style="color:#86868b;">No bindable label, color, state, or data-binding field to preview.</span>');
-        return;
+function padPvIsBinding(v) { return !!v && v.indexOf('[') !== -1; }
+
+// Find the field's visible "fx" hint to anchor the eye next to (uniform across
+// text inputs and the display:none color inputs).
+function padPvAnchor(id) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    var node = el;
+    while (node && node !== document.body) {
+        var fx = node.querySelector ? node.querySelector('.fx-hint') : null;
+        if (fx) return fx;
+        node = node.parentElement;
     }
+    return null;
+}
 
-    padPreviewShow('<span style="color:#86868b;">Resolving\u2026</span>');
-    fetch('/api/pad/resolve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ screen: 'pad_' + padState.page, button: btn })
-    }).then(function (resp) {
-        return resp.json().catch(function () { return {}; }).then(function (j) {
-            return { ok: resp.ok, status: resp.status, j: j };
-        });
-    }).then(function (r) {
-        if (!r.ok) {
-            padPreviewShow('<span style="color:#ff3b30;">' +
-                padPreviewEsc((r.j && r.j.error) || ('HTTP ' + r.status)) + '</span>');
-            return;
-        }
-        var fields = (r.j && r.j.button) || {};
-        var keys = Object.keys(fields);
-        if (keys.length === 0) { padPreviewShow('<span style="color:#86868b;">Nothing resolved.</span>'); return; }
-        var rows = keys.map(function (k) {
-            return '<div style="display:flex; gap:8px; align-items:baseline;">' +
-                '<span style="color:#86868b; min-width:120px;">' + padPreviewEsc(k) + '</span>' +
-                '<span style="color:#86868b;">\u2192</span>' +
-                '<span style="color:#34c759; word-break:break-all;">' + padPreviewEsc(fields[k]) + '</span></div>';
-        }).join('');
-        padPreviewShow(rows);
-    }).catch(function (e) {
-        padPreviewShow('<span style="color:#ff3b30;">Preview failed: ' + padPreviewEsc(String(e)) + '</span>');
+function padPvMount() {
+    PAD_PV_FIELDS.forEach(function (f) {
+        var anchor = padPvAnchor(f.id);
+        if (!anchor || anchor.parentNode.querySelector('.pad-pv-eye[data-pv="' + f.id + '"]')) return;
+        var eye = document.createElement('span');
+        eye.className = 'pad-pv-eye';
+        eye.setAttribute('data-pv', f.id);
+        eye.setAttribute('role', 'button');
+        eye.title = 'Preview live value';
+        eye.textContent = '\uD83D\uDC41';  // eye glyph
+        eye.style.display = 'none';
+        eye.addEventListener('click', function (ev) { ev.stopPropagation(); padPvToggle(f.id, eye); });
+        anchor.insertAdjacentElement('afterend', eye);
     });
+    // One delegated listener refreshes eye visibility as the user edits.
+    var overlay = document.getElementById('pad-edit-overlay');
+    if (overlay && !overlay._pvHooked) {
+        overlay._pvHooked = true;
+        var refresh = function () {
+            if (padPvEyeTimer) clearTimeout(padPvEyeTimer);
+            padPvEyeTimer = setTimeout(padPvUpdateAllEyes, 200);
+        };
+        overlay.addEventListener('input', refresh);
+        overlay.addEventListener('change', refresh);
+    }
+}
+
+function padPvUpdateEye(id) {
+    var eye = document.querySelector('.pad-pv-eye[data-pv="' + id + '"]');
+    if (!eye) return;
+    eye.style.display = padPvIsBinding(padPvFieldValue(id)) ? 'inline-block' : 'none';
+}
+
+function padPvUpdateAllEyes() { PAD_PV_FIELDS.forEach(function (f) { padPvUpdateEye(f.id); }); }
+
+function padPvPopoverEl() {
+    if (!padPvPopover) {
+        padPvPopover = document.createElement('div');
+        padPvPopover.className = 'pad-pv-pop';
+        padPvPopover.style.display = 'none';
+        document.body.appendChild(padPvPopover);
+        document.addEventListener('click', function (ev) {
+            if (padPvPopover.style.display === 'none') return;
+            if (padPvPopover.contains(ev.target)) return;
+            if (ev.target.classList && ev.target.classList.contains('pad-pv-eye')) return;
+            padPvHide();
+        });
+        document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') padPvHide(); });
+        window.addEventListener('resize', padPvHide);
+    }
+    return padPvPopover;
+}
+
+function padPvHide() {
+    if (padPvPopover) padPvPopover.style.display = 'none';
+    padPvOpenFor = null;
+}
+
+function padPvPosition(eye) {
+    var pop = padPvPopoverEl();
+    var r = eye.getBoundingClientRect();
+    pop.style.top = (r.bottom + 6) + 'px';
+    pop.style.left = Math.max(8, Math.min(r.left - 4, window.innerWidth - 340)) + 'px';
+}
+
+function padPvHex(v) {
+    var s = String(v == null ? '' : v).trim();
+    return /^#[0-9a-fA-F]{6}$/.test(s) ? s : null;
+}
+
+function padPvRender(id, value, loading) {
+    var pop = padPvPopoverEl();
+    var html = '<div class="pad-pv-pop-title">live value</div>';
+    if (loading) {
+        html += '<div class="pad-pv-pop-val pad-pv-muted">resolving\u2026</div>';
+    } else {
+        var shown = (value === '' || value == null) ? '(empty)' : value;
+        var muted = (String(value).indexOf('---') !== -1) ? ' pad-pv-muted' : '';
+        var hex = padPvHex(value);
+        html += '<div class="pad-pv-pop-val' + muted + '">';
+        if (hex) html += '<span class="pad-pv-swatch" style="background:' + padPreviewEsc(hex) + ';"></span>';
+        html += '<span>' + padPreviewEsc(shown) + '</span></div>';
+    }
+    pop.innerHTML = html;
+}
+
+function padPvToggle(id, eye) {
+    if (padPvOpenFor === id && padPvPopover && padPvPopover.style.display !== 'none') { padPvHide(); return; }
+    padPvOpenFor = id;
+    padPvPosition(eye);
+    padPvRender(id, padPvCache[id], !(id in padPvCache));
+    padPvPopoverEl().style.display = 'block';
+    padPvResolveOne(id, function () {
+        if (padPvOpenFor === id) { padPvPosition(eye); padPvRender(id, padPvCache[id], false); }
+    });
+}
+
+function padPvResolveOne(id, done) {
+    var val = padPvFieldValue(id);
+    if (!padPvIsBinding(val)) { padPvCache[id] = val; if (done) done(); return; }
+    fetch('/api/pad/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screen: 'pad_' + padState.page, bindings: [val] })
+    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+        if (j && j.resolved && j.resolved[0]) padPvCache[id] = j.resolved[0].value;
+        if (done) done();
+    }).catch(function () { if (done) done(); });
+}
+
+// C3 — batch-resolve all bound fields once when the dialog opens.
+function padPvOnOpen() {
+    padPvHide();
+    padPvCache = {};
+    padPvMount();
+    padPvUpdateAllEyes();
+    var btn = {};
+    PAD_PV_FIELDS.forEach(function (f) {
+        var v = padPvFieldValue(f.id);
+        if (padPvIsBinding(v)) btn[f.field] = v;
+    });
+    if (Object.keys(btn).length === 0) return;
+    fetch('/api/pad/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screen: 'pad_' + padState.page, button: btn })
+    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+        if (!j || !j.button) return;
+        PAD_PV_FIELDS.forEach(function (f) {
+            if (j.button[f.field] !== undefined) padPvCache[f.id] = j.button[f.field];
+        });
+    }).catch(function () {});
 }

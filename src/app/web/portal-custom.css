@@ -1503,6 +1503,29 @@ body {
   user-select: none; letter-spacing: -0.5px; cursor: pointer;
 }
 .fx-hint:hover { color: rgba(var(--portal-primary-rgb), 0.85); }
+
+/* In-context live binding preview: per-field eye affordance + popover */
+.pad-pv-eye {
+  display: none; cursor: pointer; margin-left: 6px; font-size: 11px;
+  vertical-align: baseline; opacity: 0.7; user-select: none; line-height: 1;
+}
+.pad-pv-eye:hover { opacity: 1; }
+.pad-pv-pop {
+  position: fixed; z-index: 4000; max-width: 320px; padding: 8px 10px;
+  border-radius: 8px; background: var(--portal-surface); color: var(--portal-text);
+  border: 1px solid var(--portal-border); box-shadow: 0 6px 20px rgba(0,0,0,0.28);
+  font-size: 13px; line-height: 1.4;
+}
+.pad-pv-pop-title {
+  font-size: 10px; color: var(--portal-text-muted); margin-bottom: 3px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.pad-pv-pop-val { display: flex; align-items: center; gap: 8px; color: #34c759; word-break: break-all; }
+.pad-pv-pop-val.pad-pv-muted, .pad-pv-muted { color: var(--portal-text-muted); }
+.pad-pv-swatch {
+  width: 16px; height: 16px; border-radius: 4px; flex: 0 0 auto;
+  border: 1px solid var(--portal-border); display: inline-block;
+}
 .reset-hint {
   display: none; font-size: 11px; margin-left: 2px; vertical-align: baseline;
   color: rgba(255,59,48,0.6); cursor: pointer; user-select: none;
