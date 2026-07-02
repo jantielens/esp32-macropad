@@ -84,15 +84,17 @@ static const char* validate_action_array(JsonArrayConst arr) {
     return nullptr;
 }
 
-static const char* validate_button(JsonObjectConst b, int cols, int rows) {
+static const char* validate_button(JsonObjectConst b, int cols, int rows, bool tolerate_offgrid) {
     int col = b["col"] | 0;
     int row = b["row"] | 0;
     int cspan = b["col_span"] | 1;
     int rspan = b["row_span"] | 1;
     if (col < 0 || row < 0) return "button col/row negative";
     if (cspan < 1 || rspan < 1) return "span must be >= 1";
-    if (col + cspan > cols) return "button overflows grid columns";
-    if (row + rspan > rows) return "button overflows grid rows";
+    if (!tolerate_offgrid) {
+        if (col + cspan > cols) return "button overflows grid columns";
+        if (row + rspan > rows) return "button overflows grid rows";
+    }
     if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
@@ -175,7 +177,7 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows) {
 }
 
 // Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
-const char* pad_validate(JsonObjectConst pad) {
+const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid) {
     const char* layout = pad["layout"] | "grid";
     int cols = pad["cols"] | 0;
     int rows = pad["rows"] | 0;
@@ -216,7 +218,7 @@ const char* pad_validate(JsonObjectConst pad) {
     // renders over / hides an earlier one). Rejecting overlaps here was stricter
     // than the device and broke incremental set_buttons edits.
     for (JsonObjectConst b : btns) {
-        const char* e = validate_button(b, cols, rows);
+        const char* e = validate_button(b, cols, rows, tolerate_offgrid);
         if (e) return e;
     }
     return nullptr;

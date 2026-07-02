@@ -22,7 +22,13 @@
 // Returns nullptr on success, or a short human-readable error string. The
 // returned pointer is either a string literal or a static buffer valid until
 // the next call — validation is single-threaded (web task), so this is safe.
+//
+// tolerate_offgrid: when true, buttons whose col/row+span extend past the grid
+// are accepted instead of rejected. The web portal sets this because it treats
+// off-grid buttons as a feature (they are hidden when the grid shrinks and
+// reappear when it grows back); MCP authoring leaves it false so a mis-placed
+// button is caught up front. All other checks are identical for both callers.
 // ============================================================================
-const char* pad_validate(JsonObjectConst pad);
+const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid = false);
 
 #endif // HAS_DISPLAY

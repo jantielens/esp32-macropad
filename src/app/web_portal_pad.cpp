@@ -7,6 +7,7 @@
 #include "log_manager.h"
 #include "pad_block.h"
 #include "pad_config.h"
+#include "pad_validate.h"
 #include "psram_json_allocator.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
@@ -58,27 +59,18 @@ static int parse_page_param(AsyncWebServerRequest *request) {
     return page;
 }
 
-// Validate grid JSON: cols/rows in range, button placement within grid bounds.
+// Validate a pad JSON body before saving. Delegates to the shared pad_validate
+// (single source of truth, identical to the MCP write/validate tools) so the
+// portal rejects the same invalid pads MCP does — binding tokens, widget
+// fields, colors, action arrays, length caps, and the one-level [pad:] rule.
+// tolerate_offgrid=true preserves the portal's feature of keeping buttons that
+// fall outside a shrunken grid (they are hidden and reappear when it grows).
 // Returns error message or nullptr on success.
 static const char* validate_pad_json(const uint8_t* json, size_t len) {
     BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 512);
     DeserializationError err = deserializeJson(doc, json, len);
     if (err) return "Invalid JSON";
-
-    const char* layout = doc["layout"] | "grid";
-
-    if (strcmp(layout, "grid") == 0) {
-        uint8_t cols = doc["cols"] | (uint8_t)0;
-        uint8_t rows = doc["rows"] | (uint8_t)0;
-        if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be 1-8";
-        if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be 1-8";
-
-        // Buttons outside the current grid are allowed — they are
-        // silently hidden and reappear when cols/rows grow back.
-    }
-    // Non-grid layouts (curated) are not validated in v0
-
-    return nullptr; // Valid
+    return pad_validate(doc.as<JsonObjectConst>(), /*tolerate_offgrid=*/true);
 }
 
 // ============================================================================
