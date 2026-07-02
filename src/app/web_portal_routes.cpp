@@ -125,6 +125,18 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		registerOptions("/api/pad/blocks");
 		server->on("/api/pad/blocks", HTTP_GET, handleGetPadBlocks);
 
+#if HAS_MQTT
+		// Pad binding live-resolve (registered before /api/pad to avoid prefix match)
+		registerOptions("/api/pad/resolve");
+		server->on(
+				"/api/pad/resolve",
+				HTTP_POST,
+				[](AsyncWebServerRequest *request) {},
+				NULL,
+				handlePostPadResolve
+		);
+#endif
+
 		// Pad config API
 		registerOptions("/api/pad");
 		server->on("/api/pad", HTTP_GET, handleGetPadConfig);
