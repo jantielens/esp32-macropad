@@ -1511,7 +1511,7 @@ body {
 }
 .pad-pv-eye:hover { opacity: 1; }
 .pad-pv-pop {
-  position: fixed; z-index: 4000; max-width: 320px; padding: 8px 10px;
+  position: fixed; z-index: 10001; max-width: 320px; padding: 8px 10px;
   border-radius: 8px; background: var(--portal-surface); color: var(--portal-text);
   border: 1px solid var(--portal-border); box-shadow: 0 6px 20px rgba(0,0,0,0.28);
   font-size: 13px; line-height: 1.4;
