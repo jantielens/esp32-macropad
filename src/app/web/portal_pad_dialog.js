@@ -664,6 +664,14 @@ function padPvHex(v) {
     return /^#[0-9a-fA-F]{6}$/.test(s) ? s : null;
 }
 
+// A value counts as "not resolved yet" when it is empty or a placeholder. A
+// just-subscribed MQTT topic resolves to EMPTY (not '---') until its (retained)
+// message arrives, so both must trigger the delayed retry.
+function padPvUnresolved(v) {
+    var s = String(v == null ? '' : v).trim();
+    return s === '' || s.indexOf('---') !== -1;
+}
+
 // Anchor the inline value chip next to each field's visible "fx" hint (uniform
 // across text inputs and the display:none color inputs).
 function padPvAnchor(id) {
@@ -725,22 +733,31 @@ function padPvSetChip(id, value, state) {
     chip.title = shown + ' \u2014 click to refresh';
 }
 
-// Resolve one field (used on click for a fresh reading).
-function padPvRefreshField(id) {
+// Resolve one field (used on click for a fresh reading). A single delayed retry
+// covers a just-subscribed MQTT topic whose (retained) message arrives shortly
+// after the first resolve.
+function padPvRefreshField(id, retriesLeft) {
     var val = padPvFieldValue(id);
     if (!padPvIsBinding(val)) { padPvSetChip(id); return; }
+    var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
     padPvSetChip(id, null, 'loading');
     fetch('/api/pad/resolve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ screen: 'pad_' + padState.page, bindings: [val] })
     }).then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) { padPvSetChip(id, (j && j.resolved && j.resolved[0]) ? j.resolved[0].value : '---'); })
+      .then(function (j) {
+          var v = (j && j.resolved && j.resolved[0]) ? j.resolved[0].value : '---';
+          padPvSetChip(id, v);
+          if (padPvUnresolved(v) && rl > 0)
+              setTimeout(function () { padPvRefreshField(id, rl - 1); }, 1000);
+      })
       .catch(function () { padPvSetChip(id, '---'); });
 }
 
 // Batch-resolve all bound fields in one request (dialog open + debounced edits).
-function padPvRefreshAll() {
+function padPvRefreshAll(retriesLeft) {
     padPvMount();
+    var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
     var btn = {}, any = false;
     PAD_PV_FIELDS.forEach(function (f) {
         var v = padPvFieldValue(f.id);
@@ -754,9 +771,15 @@ function padPvRefreshAll() {
     }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
           var fields = (j && j.button) || {};
+          var anyUnresolved = false;
           PAD_PV_FIELDS.forEach(function (f) {
-              if (padPvIsBinding(padPvFieldValue(f.id))) padPvSetChip(f.id, fields[f.field] !== undefined ? fields[f.field] : '---');
+              if (padPvIsBinding(padPvFieldValue(f.id))) {
+                  var v = fields[f.field] !== undefined ? fields[f.field] : '---';
+                  padPvSetChip(f.id, v);
+                  if (padPvUnresolved(v)) anyUnresolved = true;
+              }
           });
+          if (anyUnresolved && rl > 0) setTimeout(function () { padPvRefreshAll(rl - 1); }, 1000);
       })
       .catch(function () {
           PAD_PV_FIELDS.forEach(function (f) { if (padPvIsBinding(padPvFieldValue(f.id))) padPvSetChip(f.id, '---'); });

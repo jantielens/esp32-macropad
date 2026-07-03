@@ -4,6 +4,7 @@
 
 #include "binding_template.h"
 #include "log_manager.h"
+#include "mqtt_sub_store.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -271,6 +272,11 @@ void pad_resolve(const char* const* inputs, size_t count,
         char* dst = out + i * stride;
         const char* in = inputs[i];
         if (!in) { dst[0] = '\0'; continue; }
+        // Live-preview aid: if this input references an MQTT topic the device is
+        // not yet subscribed to (e.g. a binding the user is typing that isn't
+        // saved), subscribe now so it resolves on a subsequent refresh once the
+        // (retained) message arrives. Reconciled by the next subscribe_all().
+        mqtt_sub_store_ensure_binding_subscribed(in);
         binding_template_resolve(in, dst, stride);
     }
     // Clear context: the live pad screen re-sets it every frame, so this avoids

@@ -252,12 +252,13 @@ function padRenderBindings() {
 // row (pad binding values are standalone — the one-level rule forbids [pad:]
 // inside them — so each resolves independently). Reuses the shared preview
 // helpers (padPvIsBinding / padPvHex / padPreviewEsc).
-function padBindingPreviewUpdate(chip, valueInput) {
+function padBindingPreviewUpdate(chip, valueInput, retriesLeft) {
     if (!chip || !valueInput) return;
     var val = valueInput.value.trim();
     if (typeof padPvIsBinding !== 'function' || !padPvIsBinding(val)) {
         chip.style.display = 'none'; chip.title = ''; chip.innerHTML = ''; return;
     }
+    var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
     chip.style.display = 'flex';
     chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">\u2026</span>';
     fetch('/api/pad/resolve', {
@@ -274,6 +275,12 @@ function padBindingPreviewUpdate(chip, valueInput) {
           inner += '<span class="pad-pv-text' + muted + '">' + padPreviewEsc(shown) + '</span>';
           chip.innerHTML = inner;
           chip.title = shown;
+          // A freshly typed [mqtt:...] topic gets subscribed on this resolve but
+          // its message may arrive just after — retry so it fills in. A
+          // not-yet-delivered topic resolves to EMPTY (not '---'), so retry on
+          // either.
+          if ((typeof padPvUnresolved === 'function' ? padPvUnresolved(v) : shown.indexOf('---') !== -1) && rl > 0)
+              setTimeout(function() { padBindingPreviewUpdate(chip, valueInput, rl - 1); }, 1000);
       })
       .catch(function() {
           chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">---</span>';

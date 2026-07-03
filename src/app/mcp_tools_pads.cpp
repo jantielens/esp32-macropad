@@ -37,6 +37,9 @@
 #include "health_binding.h"
 #include "list_provider.h"
 #include "pad_block.h"
+#if HAS_MQTT
+#include "mqtt_sub_store.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
@@ -247,6 +250,13 @@ static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) 
     heap_caps_free(c->buf);
     if (!saved) { strlcpy(msg, "save failed", msg_len); return; }
     pad_config_rebuild_all_caches();
+#if HAS_MQTT
+    // Subscribe to any MQTT topics newly referenced by this pad's bindings so
+    // they start resolving immediately — matching the portal save path. Without
+    // this, an [mqtt:...] binding added via MCP showed '---' until the pad was
+    // re-saved in the portal (issue #37).
+    mqtt_sub_store_subscribe_all();
+#endif
     *ok = true;
     strlcpy(msg, "saved", msg_len);
 }
