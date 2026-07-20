@@ -8,6 +8,7 @@
 #include "rtos_task_utils.h"
 
 #include "data_stream.h"
+#include "button_confirmation.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "timer_engine.h"
@@ -85,6 +86,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				// Process pending screen switch (deferred from external calls)
 				if (mgr->pendingScreen) {
 						Screen* target = mgr->pendingScreen;
+						button_confirmation_cancel();
 						if (mgr->currentScreen) {
 								mgr->currentScreen->hide();
 						}

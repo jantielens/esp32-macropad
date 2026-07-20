@@ -43,6 +43,7 @@
 #define CONFIG_FORMAT_MAX_LEN          24
 #define CONFIG_STATE_ON_VALUE_MAX_LEN  32
 #define CONFIG_BTN_STATE_MAX_LEN      192
+#define CONFIG_CONFIRM_TEXT_MAX_LEN   128
 #define CONFIG_BG_IMAGE_URL_MAX_LEN   256
 #define CONFIG_BG_IMAGE_USER_MAX_LEN   32
 #define CONFIG_BG_IMAGE_PASS_MAX_LEN   64
@@ -322,6 +323,8 @@ struct ScreenButtonConfig {
     uint8_t action_count;                          // number of tap actions (0-3)
     ButtonAction lp_actions[MAX_BUTTON_ACTIONS];   // long-press actions (executed sequentially)
     uint8_t lp_action_count;                       // number of long-press actions (0-3)
+    bool confirm;                                  // require confirmation before either action list
+    char confirm_text[CONFIG_CONFIRM_TEXT_MAX_LEN]; // optional confirmation prompt
 
     // Background image (fetched from URL, displayed as tile background)
     char bg_image_url[CONFIG_BG_IMAGE_URL_MAX_LEN];       // empty = no image

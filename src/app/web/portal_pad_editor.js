@@ -387,6 +387,13 @@ function padWidgetTypeChanged() {
         const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
         if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
     });
+    var confirmGroup = document.getElementById('pad-edit-confirm-group');
+    var confirmInput = document.getElementById('pad-edit-confirm');
+    if (confirmGroup) confirmGroup.style.display = wtype ? 'none' : '';
+    if (wtype && confirmInput) {
+        confirmInput.checked = false;
+        padConfirmChanged();
+    }
     // Refresh icon position visibility (widgets may override layout)
     padIconTypeChanged();
 

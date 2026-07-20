@@ -1,4 +1,7 @@
-# Web Portal Guide
+---
+title: Web Portal Guide
+description: Configure ESP32 Macropad device settings, pads, integrations, and firmware from the web portal
+---
 
 The ESP32 Macropad includes a built-in web portal for configuring every aspect of your device — from Wi-Fi settings to pad layouts and e-paper image scheduling — all from your browser.
 
@@ -245,6 +248,8 @@ The Pads page has its own floating footer with **Save Pad**, **Show on Device**,
 The **Button Defaults** section (collapsible, at the bottom of the Pads page) lets you set device-wide default colors, borders, and label styles that all buttons on all pads inherit automatically — saving you from repeating the same appearance settings on every button. Per-button overrides still take precedence.
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
+
+For sensitive normal-button actions, open **Action Safety** in the Actions group and enable **Confirm before tap or long-press actions**. The device shows an explicit Cancel/Confirm prompt before running either action list, uses the optional custom message when present, and cancels automatically after 10 seconds.
 
 The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
 

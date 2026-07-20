@@ -125,7 +125,8 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "label_top", "label_center", "label_bottom",
         "label_top_style", "label_center_style", "label_bottom_style",
         "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad",
-        "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
+        "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions",
+        "confirm", "confirm_text"
     };
     for (const char* f : fields) bf.add(f);
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
@@ -134,6 +135,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
     btn["btn_state_note"] = "accepts a binding for conditional visibility, e.g. [expr:[mqtt:printer;state]==\"online\"?\"enabled\":\"hidden\"] (unresolved -> enabled)";
+    btn["confirm_note"] = "confirm=true requires an on-device Cancel/Confirm prompt before normal button tap or long-press actions run; unsupported on widgets; confirm_text is optional plain text (max 127 chars); timeout is 10 seconds; programmatic MCP press_button bypasses the dialog";
 
     JsonObject style = result.createNestedObject("label_style");
     style["format"] = "font:24;font_family:dseg7;font_upscale:1.4;align:right;y:-3;mode:scroll;color:#FF0000";

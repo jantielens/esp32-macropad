@@ -221,7 +221,22 @@
                 <!-- Actions group (open by default) -->
                 <details class="editor-group" open>
                     <summary>Actions</summary>
-                    <div class="editor-group-body" id="pad-action-editors"></div>
+                    <div class="editor-group-body">
+                        <div id="pad-action-editors"></div>
+                        <div id="pad-edit-confirm-group" style="margin-top:16px;">
+                            <div class="form-label">Action Safety</div>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="pad-edit-confirm" onchange="padConfirmChanged()">
+                                <label class="form-check-label" for="pad-edit-confirm">Confirm before tap or long-press actions</label>
+                            </div>
+                            <small>Either gesture asks once before running its complete action list.</small>
+                        </div>
+                        <div class="form-group" id="pad-edit-confirm-text-group" style="display:none; margin-top:10px;">
+                            <label for="pad-edit-confirm-text">Confirmation message (optional)</label>
+                            <input type="text" id="pad-edit-confirm-text" maxlength="127" placeholder="Generated from the button label">
+                            <small>Leave empty to generate a message from the button label. Cancel or no response after 10 seconds runs no actions.</small>
+                        </div>
+                    </div>
                 </details>
 
                 <!-- Icon -->

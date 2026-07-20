@@ -91,6 +91,8 @@ struct ButtonTile {
     uint8_t action_count;
     ButtonAction lp_actions[MAX_BUTTON_ACTIONS]; // Long-press actions (sequential)
     uint8_t lp_action_count;
+    bool confirm;
+    char confirm_text[CONFIG_CONFIRM_TEXT_MAX_LEN];
     // Widget runtime state (non-null widget_type = this tile is a widget)
     const WidgetType* widget_type;
     WidgetConfig widget_cfg;   // Copy of config (needed for update calls)

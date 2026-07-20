@@ -1,4 +1,7 @@
-# Pad Editor Guide
+---
+title: Pad Editor Guide
+description: Configure pads, buttons, actions, bindings, widgets, and visual styles on ESP32 Macropad
+---
 
 The pad editor is the heart of ESP32 Macropad — it turns your touch screen into a fully custom dashboard, remote control, or status panel. Each device supports up to **16 independent pads**, each with its own grid of buttons that can display live data, control smart home devices, and react to real-time conditions.
 
@@ -331,6 +334,12 @@ For static images or cameras that only expose a snapshot endpoint, set the URL t
 Each button supports up to **3 sequential actions** per gesture — one for **tap** and one for **long-press** (triggered after holding ~500ms). Actions execute in order: for example, action 1 publishes an MQTT message, action 2 plays a beep, and action 3 navigates to another screen.
 
 By default, only the first action slot is shown. Click **"+ Add tap action"** or **"+ Add long-press action"** to reveal additional slots. Use the **"× Remove"** link to hide a slot and clear its action.
+
+Under **Action Safety**, enable **Confirm before tap or long-press actions** to show a modal prompt before either action list runs. You can provide a custom confirmation message or leave it empty to generate one from the button label. **Confirm** runs the complete action list in order; **Cancel** or 10 seconds without a response runs none of the actions.
+
+Confirmation applies to normal buttons only. Widget-owned interactions, including list items, rocker zones, and numeric rocker adjustments, dispatch without this prompt.
+
+Programmatic activation through the MCP `press_button` tool also bypasses the on-device prompt. MCP clients should inspect a confirmation-protected button before activating it.
 
 **Action types:**
 

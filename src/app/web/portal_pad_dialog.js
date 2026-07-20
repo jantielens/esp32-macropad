@@ -2,6 +2,11 @@
 // Part of the ESP32 Macropad configuration portal.
 // Bundled into portal_pad_editor.js during minification.
 
+function padConfirmChanged() {
+    var enabled = document.getElementById('pad-edit-confirm').checked;
+    document.getElementById('pad-edit-confirm-text-group').style.display = enabled ? '' : 'none';
+}
+
 function padDialogOpen(col, row) {
     padState.editCol = col;
     padState.editRow = row;
@@ -115,6 +120,11 @@ function padDialogOpen(col, row) {
         if (wrap) wrap.style.display = (ai === 0 || (lpActions[ai] && lpActions[ai].type)) ? '' : 'none';
     }
     padUpdateAddLink('lp');
+
+    document.getElementById('pad-edit-confirm').checked =
+        !!btn.confirm && !document.getElementById('pad-edit-widget-type').value;
+    document.getElementById('pad-edit-confirm-text').value = btn.confirm_text || '';
+    padConfirmChanged();
 
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
@@ -364,6 +374,12 @@ function padDialogOk(keepOpen) {
         if (a.type) lpArr.push(a);
     }
     if (lpArr.length) btn.lp_actions = lpArr;
+
+    if (document.getElementById('pad-edit-confirm').checked) {
+        btn.confirm = true;
+        const confirmText = document.getElementById('pad-edit-confirm-text').value.trim();
+        if (confirmText) btn.confirm_text = confirmText;
+    }
 
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();

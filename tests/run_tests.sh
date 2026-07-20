@@ -89,6 +89,21 @@ echo "=== Running unit tests: label_style ==="
 ./tests/bin/test_label_style
 echo
 
+echo "=== Building unit tests: pad_confirmation ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    -I ~/Arduino/libraries/lvgl/src \
+    tests/test_pad_confirmation.cpp \
+    src/app/pad_validate.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_pad_confirmation
+
+echo "=== Running unit tests: pad_confirmation ==="
+./tests/bin/test_pad_confirmation
+echo
+
 echo "=== Building unit tests: widget_common ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \
