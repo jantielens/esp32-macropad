@@ -27,6 +27,32 @@ window.registerConfigFields = function (names) {
     Array.prototype.push.apply(window.__extra_config_fields, names);
 };
 
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return;
+        } catch (err) {
+            console.warn('Clipboard API failed, using fallback:', err);
+        }
+    }
+
+    var temp = document.createElement('textarea');
+    temp.value = text;
+    temp.setAttribute('readonly', '');
+    temp.style.position = 'absolute';
+    temp.style.left = '-9999px';
+    document.body.appendChild(temp);
+    try {
+        temp.select();
+        if (!document.execCommand('copy')) {
+            throw new Error('Browser rejected clipboard copy');
+        }
+    } finally {
+        document.body.removeChild(temp);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Fetch concurrency limiter
 // ---------------------------------------------------------------------------

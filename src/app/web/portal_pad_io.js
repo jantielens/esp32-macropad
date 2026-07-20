@@ -1,23 +1,6 @@
 // portal_pad_io.js - Pad clipboard, import/export, and device config I/O
 // Part of the ESP32 Macropad configuration portal.
 
-async function copyTextToClipboard(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        return;
-    }
-
-    const temp = document.createElement('textarea');
-    temp.value = text;
-    temp.setAttribute('readonly', '');
-    temp.style.position = 'absolute';
-    temp.style.left = '-9999px';
-    document.body.appendChild(temp);
-    temp.select();
-    document.execCommand('copy');
-    document.body.removeChild(temp);
-}
-
 function copyBindingExample(button) {
     const example = button.closest('.binding-example');
     const code = example ? example.querySelector('code') : null;

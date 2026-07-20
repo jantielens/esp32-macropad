@@ -312,9 +312,9 @@ window.init_mcp_fragment = function () {
     // save button. MCP settings apply live (no reboot).
     initConfigFragment('mcp-save-btn', false);
 
-    // Fill the VS Code mcp.json sample with this device's actual endpoint.
     var cfgBox = document.getElementById('mcp_vscode_config');
-    if (cfgBox) {
+    function fillVsCodeConfig(token) {
+        if (!cfgBox) return;
         var url = 'http://' + window.location.host + '/mcp';
         cfgBox.value =
             '{\n' +
@@ -323,18 +323,22 @@ window.init_mcp_fragment = function () {
             '      "type": "http",\n' +
             '      "url": "' + url + '",\n' +
             '      "headers": {\n' +
-            '        "Authorization": "Bearer YOUR_TOKEN_HERE"\n' +
+            '        "Authorization": "Bearer ' + (token || 'YOUR_TOKEN_HERE') + '"\n' +
             '      }\n' +
             '    }\n' +
             '  }\n' +
             '}';
     }
+    fillVsCodeConfig();
 
     var cfgCopyBtn = document.getElementById('mcp-copy-config-btn');
-    if (cfgCopyBtn) cfgCopyBtn.addEventListener('click', function () {
-        if (cfgBox && cfgBox.value && navigator.clipboard) {
-            navigator.clipboard.writeText(cfgBox.value);
+    if (cfgCopyBtn) cfgCopyBtn.addEventListener('click', async function () {
+        if (!cfgBox || !cfgBox.value) return;
+        try {
+            await copyTextToClipboard(cfgBox.value);
             showMessage('Configuration copied', 'success');
+        } catch (e) {
+            showMessage('Could not copy configuration', 'error');
         }
     });
 
@@ -353,10 +357,13 @@ window.init_mcp_fragment = function () {
                 var val = document.getElementById('mcp_token_value');
                 var warn = document.getElementById('mcp_token_warning');
                 var status = document.getElementById('mcp_token_status');
+                var configWarning = document.getElementById('mcp_config_token_warning');
                 if (val) val.value = r.mcp_token;
                 if (grp) grp.style.display = '';
                 if (warn) warn.style.display = '';
                 if (status) status.textContent = 'A token is set (hidden). Generate a new one to replace it.';
+                fillVsCodeConfig(r.mcp_token);
+                if (configWarning) configWarning.style.display = '';
                 showMessage('New MCP token generated', 'success');
             } else {
                 showMessage('Failed to generate token', 'error');
@@ -367,11 +374,14 @@ window.init_mcp_fragment = function () {
     });
 
     var mcpCopyBtn = document.getElementById('mcp-copy-token-btn');
-    if (mcpCopyBtn) mcpCopyBtn.addEventListener('click', function () {
+    if (mcpCopyBtn) mcpCopyBtn.addEventListener('click', async function () {
         var val = document.getElementById('mcp_token_value');
-        if (val && val.value && navigator.clipboard) {
-            navigator.clipboard.writeText(val.value);
+        if (!val || !val.value) return;
+        try {
+            await copyTextToClipboard(val.value);
             showMessage('Token copied', 'success');
+        } catch (e) {
+            showMessage('Could not copy token', 'error');
         }
     });
 };
