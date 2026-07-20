@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "binding_template.h"
 #include "pad_binding.h"
@@ -24,6 +25,12 @@
 // ============================================================================
 
 static std::map<std::string, std::string> g_mqtt_values;
+static std::vector<std::string> g_collected_topics;
+static std::vector<std::string> g_subscription_checks;
+
+extern "C" void mqtt_sub_store_ensure_binding_subscribed(const char* binding_template) {
+    g_subscription_checks.emplace_back(binding_template ? binding_template : "");
+}
 
 static bool mock_mqtt_resolve(const char* params, char* out, size_t out_len) {
     if (!params) return false;
@@ -51,7 +58,10 @@ static bool mock_mqtt_resolve(const char* params, char* out, size_t out_len) {
 }
 
 static void mock_mqtt_collect(const char* params, void* user_data) {
-    (void)params; (void)user_data;
+    (void)user_data;
+    if (!params) return;
+    const char* separator = strchr(params, ';');
+    g_collected_topics.emplace_back(params, separator ? (size_t)(separator - params) : strlen(params));
 }
 
 // ============================================================================
@@ -373,6 +383,26 @@ static void test_health_in_pad_binding() {
     pad_binding_set_page(nullptr);
 }
 
+static void test_pad_topic_collection() {
+    printf("--- MQTT topic collection via [pad:] ---\n");
+    auto page = make_page({
+        {"power", "[mqtt:solar/power;$.value]"},
+    });
+    pad_binding_set_page(&page);
+    g_collected_topics.clear();
+
+    binding_template_collect_topics("[pad:power]", nullptr);
+
+    if (g_collected_topics.size() != 1 || g_collected_topics[0] != "solar/power") {
+        printf("  FAIL [pad topic collection]: expected solar/power, got %zu topic(s)\n",
+               g_collected_topics.size());
+        g_fail++;
+    } else {
+        g_pass++;
+    }
+    pad_binding_set_page(nullptr);
+}
+
 // ============================================================================
 // pad_binding_expand() tests (text substitution for data streams)
 // ============================================================================
@@ -517,11 +547,23 @@ static void test_pad_resolve_batch() {
     };
     const size_t stride = BINDING_TEMPLATE_MAX_LEN;
     char out[3 * BINDING_TEMPLATE_MAX_LEN];
+    g_subscription_checks.clear();
     pad_resolve(inputs, 3, binds, 1, out, stride);
 
     check_str(out + 0 * stride, "3200 W", "pad_resolve mqtt + suffix");
     check_str(out + 1 * stride, "3.2",    "pad_resolve expr format");
     check_str(out + 2 * stride, "plain text", "pad_resolve literal passthrough");
+
+    if (g_subscription_checks.size() != 3 ||
+        g_subscription_checks[0] != inputs[0] ||
+        g_subscription_checks[1] != inputs[1] ||
+        g_subscription_checks[2] != inputs[2]) {
+        printf("  FAIL [pad_resolve subscription checks]: got %zu call(s)\n",
+               g_subscription_checks.size());
+        g_fail++;
+    } else {
+        g_pass++;
+    }
 
     // pad_resolve clears the context afterwards, so a later [pad:] token with no
     // context set resolves to the placeholder (mirrors the live per-frame reset).
@@ -556,6 +598,7 @@ int main() {
     test_set_bindings_api();
     test_multiple_pad_tokens();
     test_health_in_pad_binding();
+    test_pad_topic_collection();
     test_pad_resolve_batch();
 
     // Expand tests
