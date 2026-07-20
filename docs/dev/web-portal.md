@@ -238,7 +238,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
 **Sections:**
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
-- **Sensor & Display settings**: Threshold and display configuration sections
+- **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview, and screen saver configuration
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
 
@@ -984,23 +984,35 @@ Requires `HAS_DISPLAY`. Gated by Basic Auth when enabled.
 
 #### `GET /api/screenshot`
 
-Capture the current display contents as a 24-bit BMP image.
+Capture the current display contents as an image. ESP32-P4 boards default to a
+hardware-encoded JPEG; other boards retain the 24-bit BMP default.
 
-- **Response:** `image/bmp` — 24-bit uncompressed BMP (RGB888, bottom-up row order)
-- **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary PSRAM buffer, converts from RGB565 to BGR888, and streams the result as a chunked HTTP response.
-- **Memory:** The snapshot buffer is allocated on demand and freed after the response completes. No persistent memory cost.
-- **Thread safety:** Acquires the LVGL mutex with a 1-second timeout. Returns `503 Display busy` if the mutex cannot be acquired.
+- **Query parameters:** `format=bmp|jpg` overrides the format. `quality=1..100` controls JPEG quality and defaults to `85`.
+- **Response:** `image/jpeg` for JPEG or `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order).
+- **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV420 subsampling. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
+- **Memory:** Per-request snapshot, conversion, and JPEG buffers are released as soon as the final response chunk is produced. Interrupted responses release any remaining buffers when their response context is destroyed. On ESP32-P4, the lazily initialized JPEG encoder and its synchronization primitive remain allocated after first use.
+- **Thread safety:** Acquires the LVGL mutex with a 1-second timeout and serializes access to the hardware JPEG encoder. Returns `503 Display busy` if the LVGL mutex cannot be acquired.
+- **Fallback:** If hardware JPEG encoding fails, the endpoint transparently returns BMP with `Content-Type: image/bmp`. Requesting `format=jpg` on a non-P4 board returns `400`.
 
 **Example:**
 
 ```bash
+# Default on ESP32-P4
+curl -u user:pass http://<device-ip>/api/screenshot -o screenshot.jpg
+
+# Default on non-P4 display boards
 curl -u user:pass http://<device-ip>/api/screenshot -o screenshot.bmp
+
+# Explicit format and JPEG quality
+curl -u user:pass 'http://<device-ip>/api/screenshot?format=bmp' -o screenshot.bmp
+curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=70' -o screenshot.jpg
 ```
 
 **Notes:**
 
 - Image dimensions match the device's display resolution.
-- The BMP is uncompressed, so file sizes range from ~253 KB (360×360) to ~1.2 MB (1024×600) depending on the board.
+- BMP is uncompressed, so BMP files range from ~253 KB (360×360) to ~1.2 MB (1024×600) depending on the board.
+- The portal exposes this endpoint under **Display > Screen Preview**. Opening the fragment does not capture an image; **Capture Preview** and **Refresh Preview** request a fresh framebuffer.
 
 ---
 

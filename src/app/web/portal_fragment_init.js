@@ -468,25 +468,89 @@ window.init_brightness_fragment = function () {
     initConfigFragment('brightness-save-btn', false);
     var slider = document.getElementById('backlight_brightness');
     if (slider) slider.addEventListener('input', handleBrightnessChange);
-    var screenSelect = document.getElementById('screen_selection');
-    if (screenSelect) screenSelect.addEventListener('change', handleScreenChange);
+};
 
-    // Load screen selection dropdown if available
+// ============================================================================
+// Screen Preview
+// ============================================================================
+
+window.init_screen_preview_fragment = function () {
+    var frame = document.getElementById('screen-preview-frame');
+    var image = document.getElementById('screen-preview-image');
+    var placeholder = document.getElementById('screen-preview-placeholder');
+    var captureButton = document.getElementById('screen-preview-capture-btn');
+    var captureLabel = document.getElementById('screen-preview-capture-label');
+    var spinner = document.getElementById('screen-preview-spinner');
+    var status = document.getElementById('screen-preview-status');
+    var screenSelect = document.getElementById('screen_preview_selection');
+
+    if (!frame || !image || !captureButton) return;
+
     getDeviceInfo().then(function (info) {
-        if (!info || !info.screens || info.screens.length === 0) return;
-        var group = document.getElementById('screen-selection-group');
-        var sel = document.getElementById('screen_selection');
-        if (group && sel) {
-            group.style.display = '';
-            sel.innerHTML = '';
-            info.screens.forEach(function (s) {
-                var opt = document.createElement('option');
-                opt.value = s.index;
-                opt.textContent = s.name;
-                if (s.active) opt.selected = true;
-                sel.appendChild(opt);
-            });
+        if (!info || !frame.isConnected) return;
+
+        var width = Number(info.display_coord_width);
+        var height = Number(info.display_coord_height);
+        if (width > 0 && height > 0) {
+            frame.style.setProperty('--screen-preview-ratio', width + ' / ' + height);
+            frame.classList.toggle('screen-preview-frame-portrait', height > width);
         }
+
+        var screens = info.available_screens;
+        var group = document.getElementById('screen-preview-selection-group');
+        if (group && screenSelect && screens && screens.length > 0) {
+            group.style.display = '';
+            screenSelect.innerHTML = '';
+            screens.forEach(function (screen) {
+                var opt = document.createElement('option');
+                opt.value = screen.id;
+                opt.textContent = screen.name;
+                opt.selected = screen.id === info.current_screen;
+                screenSelect.appendChild(opt);
+            });
+            screenSelect.dataset.currentScreen = info.current_screen || screenSelect.value;
+        }
+    });
+
+    if (screenSelect) {
+        screenSelect.addEventListener('change', async function (event) {
+            var previousScreen = screenSelect.dataset.currentScreen || '';
+            captureButton.disabled = true;
+            if (status) status.textContent = 'Switching screen...';
+            var changed = await handleScreenChange(event);
+            if (!captureButton.isConnected) return;
+            captureButton.disabled = false;
+            if (changed) {
+                screenSelect.dataset.currentScreen = screenSelect.value;
+                if (status) status.textContent = 'Screen changed. Refresh the preview to capture it.';
+            } else {
+                screenSelect.value = previousScreen;
+                if (status) status.textContent = 'Screen change failed. The previous screen remains active.';
+            }
+        });
+    }
+
+    captureButton.addEventListener('click', function () {
+        captureButton.disabled = true;
+        if (spinner) spinner.style.display = '';
+        if (status) status.textContent = 'Capturing preview...';
+
+        image.onload = function () {
+            if (!image.isConnected) return;
+            image.style.display = '';
+            if (placeholder) placeholder.style.display = 'none';
+            captureButton.disabled = false;
+            if (spinner) spinner.style.display = 'none';
+            if (captureLabel) captureLabel.textContent = 'Refresh Preview';
+            if (status) status.textContent = 'Preview captured at ' + new Date().toLocaleTimeString() + '.';
+        };
+        image.onerror = function () {
+            if (!image.isConnected) return;
+            captureButton.disabled = false;
+            if (spinner) spinner.style.display = 'none';
+            if (status) status.textContent = 'Preview capture failed. Try again.';
+        };
+        image.src = '/api/screenshot?_=' + Date.now();
     });
 };
 

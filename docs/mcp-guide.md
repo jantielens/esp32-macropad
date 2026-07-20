@@ -397,9 +397,11 @@ compile none of it.
 
 The assistant cannot see the panel directly, but it can capture exactly what is
 on-screen through a browser. The device serves the live framebuffer at
-`GET /api/screenshot` as a 24-bit BMP. The image is large and image-only, so an
-assistant must **not** fetch it as text — it renders the URL in a browser and
-captures the image element instead.
+`GET /api/screenshot` as a hardware-encoded JPEG by default on ESP32-P4 boards
+and as a 24-bit BMP elsewhere. The image is image-only, so an assistant must
+**not** fetch it as text — it renders the URL in a browser and captures the
+image element instead. `?format=bmp|jpg` selects a format explicitly on P4;
+`?quality=1..100` sets JPEG quality (default `85`).
 
 With a Playwright-style browser tool (such as the one in VS Code), the recipe is:
 

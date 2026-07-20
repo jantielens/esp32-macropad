@@ -444,7 +444,7 @@ async function handleBrightnessChange(event) {
 async function handleScreenChange(event) {
     const screenId = event.target.value;
     
-    if (!screenId) return;
+    if (!screenId) return false;
     
     try {
         const response = await fetch('/api/component/display/screen', {
@@ -458,15 +458,13 @@ async function handleScreenChange(event) {
         if (!response.ok) {
             console.error('Failed to switch screen:', response.statusText);
             showMessage('Failed to switch screen', 'error');
-            // Revert dropdown to previous value
-            loadVersion(); // Refresh to get current screen
+            return false;
         }
-        // Success - dropdown already shows new value
+        return true;
     } catch (error) {
         console.error('Error switching screen:', error);
         showMessage('Error switching screen: ' + error.message, 'error');
-        // Revert dropdown to previous value
-        loadVersion(); // Refresh to get current screen
+        return false;
     }
 }
 

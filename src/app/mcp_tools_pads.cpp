@@ -206,12 +206,13 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
 
     // Visual inspection: the device cannot hand the model an image directly, but
     // a Playwright-driven browser can. /api/screenshot is the live framebuffer as
-    // a large 24-bit BMP — too big and not directly understandable as text/data,
-    // so it must be rendered in a browser and captured as an <img>, never fetched
-    // inline. This is the one reliable way to verify on-panel rendering.
+    // JPEG on ESP32-P4 or BMP elsewhere. It must be rendered in a browser and
+    // captured as an <img>, never fetched inline. This is the one reliable way to
+    // verify on-panel rendering.
     JsonObject vis = result.createNestedObject("visual_inspection");
     vis["endpoint"] = "GET /api/screenshot";
-    vis["format"] = "24-bit BMP of the current on-device screen; large and image-only — do NOT fetch it as text/data, render it in a browser instead";
+    vis["format"] = "JPEG by default on ESP32-P4, 24-bit BMP elsewhere; image-only — do NOT fetch it as text/data, render it in a browser instead";
+    vis["format_options"] = "use ?format=bmp|jpg on ESP32-P4; optional JPEG quality is ?quality=1..100 (default 85)";
     vis["why"] = "the only reliable way to verify how a pad/button/widget actually renders on the panel (colors, resolved bindings, overflow, layout) without the physical device";
     JsonArray steps = vis.createNestedArray("playwright_steps");
     steps.add("To verify a specific pad, first set_screen('pad_N') so it is on-screen (requires control tools enabled).");

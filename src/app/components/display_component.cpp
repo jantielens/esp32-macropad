@@ -145,7 +145,7 @@ static const ComponentAction display_actions[] = {
 static ComponentDef display_component = {
     .id = "display",
     .category = "display",
-    .display_name = "Display",
+    .display_name = "Brightness",
     .nav_order = 10,
     .get_config = nullptr,
     .save_config = nullptr,
@@ -157,3 +157,4 @@ static ComponentDef display_component = {
 };
 
 REGISTER_COMPONENT(display);
+REGISTER_NAV_COMPONENT(screen_preview, "screen-preview", "display", "Screen Preview", 15, "screen-preview")

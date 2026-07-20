@@ -147,16 +147,23 @@ The firmware exposes two BLE health signals for bindings and diagnostics:
 | `secured` | BLE has an encrypted active connection |
 | `error` | BLE initialization failed or the BLE stack entered a fault state |
 
-### Display Settings
+### Brightness
 
 *Shown only on boards with a display.*
 
 | Setting | Description |
 |---------|-------------|
 | **Backlight Brightness** | Slider (0–100%). Changes take effect immediately; save to persist across reboots |
-| **Current Screen** | Switch the active screen on the device. This is a live control, not saved — resets on reboot |
 
-#### Screen Saver (Burn-in Prevention)
+### Screen Preview
+
+Select the active screen and capture the current device framebuffer in the
+portal. Screen changes apply immediately and are not saved. Preview capture is
+manual, so opening the fragment does not allocate a framebuffer or encode an
+image. Use **Refresh Preview** after changing screens or when the displayed
+content changes.
+
+### Screen Saver (Burn-in Prevention)
 
 Protects your LCD from burn-in by turning off the backlight after a period of inactivity. A built-in pixel-shift mechanism moves content slightly each sleep cycle to prevent ghosting.
 
