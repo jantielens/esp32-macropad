@@ -53,6 +53,8 @@ select { color-scheme: light; }
   --portal-border: #d2d2d7;
   --portal-border-light: #e5e5ea;
   --portal-editor-bg: #fafafa;
+  --portal-editor-nested-bg: #f3f7fc;
+  --portal-editor-nested-accent: rgba(21, 101, 192, 0.55);
   --portal-overlay-bg: rgba(0, 0, 0, 0.6);
   --portal-blue: #007aff;
   --portal-blue-hover: #0051d5;
@@ -100,6 +102,8 @@ select { color-scheme: light; }
   --portal-border: rgba(255, 255, 255, 0.15);
   --portal-border-light: rgba(255, 255, 255, 0.08);
   --portal-editor-bg: #22262a;
+  --portal-editor-nested-bg: #282f38;
+  --portal-editor-nested-accent: rgba(78, 140, 255, 0.65);
   --portal-overlay-bg: rgba(0, 0, 0, 0.75);
   --portal-blue: #4e8cff;
   --portal-blue-hover: #6ea0ff;
@@ -1515,6 +1519,11 @@ body {
   border-radius: 10px; margin-bottom: 10px;
   background: var(--portal-editor-bg);
 }
+.editor-group .editor-group {
+  margin-left: 14px;
+  border-left: 3px solid var(--portal-editor-nested-accent);
+  background: var(--portal-editor-nested-bg);
+}
 .editor-group > summary {
   cursor: pointer; font-weight: 600; font-size: 14px;
   color: var(--portal-text); padding: 10px 14px;
@@ -1858,6 +1867,7 @@ input[type="text"].label-style-input {
 }
 
 @media (max-width: 767px) {
+  .editor-group .editor-group { margin-left: 8px; }
   .binding-docs-modal { width: calc(100vw - 12px); }
   .binding-docs-header,
   .binding-docs-body,
