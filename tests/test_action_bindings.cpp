@@ -73,6 +73,8 @@ static void resolve_action_bindings(ButtonAction& act) {
         test_try_resolve(act.payload.notify.notify_text_color,   sizeof(act.payload.notify.notify_text_color));
         test_try_resolve(act.payload.notify.notify_bg_color,     sizeof(act.payload.notify.notify_bg_color));
         test_try_resolve(act.payload.notify.notify_border_color, sizeof(act.payload.notify.notify_border_color));
+    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
+        test_try_resolve(act.payload.visual_alert.va_color, sizeof(act.payload.visual_alert.va_color));
     }
     // sound, system, back, ble_pair: no bindable fields today.
 }
@@ -167,6 +169,12 @@ static void test_value_fields_resolved() {
         check_str(act.payload.notify.notify_text_color,   "RESOLVED", "notify_text_color resolved");
         check_str(act.payload.notify.notify_bg_color,     "RESOLVED", "notify_bg_color resolved");
         check_str(act.payload.notify.notify_border_color, "RESOLVED", "notify_border_color resolved");
+    }
+    {
+        ButtonAction act = make_action(ACTION_TYPE_VISUAL_ALERT);
+        strlcpy(act.payload.visual_alert.va_color, "[mock:c]", sizeof(act.payload.visual_alert.va_color));
+        resolve_action_bindings(act);
+        check_str(act.payload.visual_alert.va_color, "RESOLVED", "va_color resolved");
     }
 }
 

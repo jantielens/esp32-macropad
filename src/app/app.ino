@@ -47,6 +47,7 @@
 #include "screen_saver_manager.h"
 #include "action_dispatch.h"
 #include "message_bubble.h"
+#include "visual_alert.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
 #endif
@@ -553,6 +554,7 @@ void loop()
 	screen_saver_manager_loop();
 	action_dispatch_loop();
 	message_bubble_loop();
+	visual_alert_loop();
 	#endif
 
 	#if HAS_TOUCH

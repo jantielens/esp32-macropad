@@ -516,6 +516,46 @@ TEST(system_action_screensaver) {
     ASSERT_STR(act.payload.system.system_command, "screensaver");
 }
 
+// ============================================================================
+// Visual alert action
+// ============================================================================
+
+TEST(visual_alert_action_parse) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"visual_alert\",\"op\":\"start\",\"color\":\"#FF0000\","
+        "\"pattern\":\"blink\",\"period_ms\":600,\"intensity\":80,\"duration_ms\":30000}");
+    ASSERT_STR(act.type, "visual_alert");
+    ASSERT_STR(act.payload.visual_alert.va_op, "start");
+    ASSERT_STR(act.payload.visual_alert.va_color, "#FF0000");
+    ASSERT_STR(act.payload.visual_alert.va_pattern, "blink");
+    ASSERT_EQ(act.payload.visual_alert.va_period_ms, 600);
+    ASSERT_EQ(act.payload.visual_alert.va_intensity, 80);
+    ASSERT_TRUE(act.payload.visual_alert.va_duration_ms == 30000u);
+}
+
+TEST(visual_alert_action_round_trip) {
+    ButtonAction act = round_trip(
+        "{\"type\":\"visual_alert\",\"op\":\"stop\",\"pattern\":\"breathe\","
+        "\"color\":\"[expr:...]\",\"duration_ms\":0}");
+    ASSERT_STR(act.type, "visual_alert");
+    ASSERT_STR(act.payload.visual_alert.va_op, "stop");
+    ASSERT_STR(act.payload.visual_alert.va_pattern, "breathe");
+    ASSERT_STR(act.payload.visual_alert.va_color, "[expr:...]");
+    ASSERT_TRUE(act.payload.visual_alert.va_duration_ms == 0u);
+}
+
+TEST(visual_alert_zero_fields_not_serialized) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"visual_alert\",\"op\":\"start\",\"period_ms\":0,\"intensity\":0,\"duration_ms\":0}");
+    StaticJsonDocument<512> doc;
+    JsonObject obj = doc.to<JsonObject>();
+    action_to_json(act, obj);
+    ASSERT_TRUE(obj.containsKey("op"));
+    ASSERT_TRUE(!obj.containsKey("period_ms"));
+    ASSERT_TRUE(!obj.containsKey("intensity"));
+    ASSERT_TRUE(!obj.containsKey("duration_ms"));
+}
+
 int main() {
     printf("=== ButtonAction Parse/Serialize Tests ===\n\n");
 
@@ -586,6 +626,11 @@ int main() {
     RUN(system_action_round_trip);
     RUN(system_command_not_serialized_when_empty);
     RUN(system_action_screensaver);
+
+    printf("\n--- Visual alert action ---\n");
+    RUN(visual_alert_action_parse);
+    RUN(visual_alert_action_round_trip);
+    RUN(visual_alert_zero_fields_not_serialized);
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

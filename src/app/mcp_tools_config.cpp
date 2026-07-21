@@ -460,6 +460,59 @@ static bool tool_notify(const JsonObject& args, JsonObject& result, String& err)
                            CFG_CONTROL_TIMEOUT_MS, result, err);
 }
 
+// ============================================================================
+// visual_alert — raise/clear a full-screen pulsing color overlay
+// ============================================================================
+struct VisualAlertCtx {
+    char op[8];         // "start" | "stop"
+    char color[16];     // #RRGGBB or binding; "" = red
+    char pattern[8];    // "breathe" | "blink" | "solid"
+    uint16_t period_ms; // 0 = default 800
+    uint16_t intensity; // 0 = default 100
+    uint32_t duration_ms; // 0 = persist until stopped
+};
+
+static void exec_visual_alert(const void* ctx, bool* ok, char* msg, size_t msg_len) {
+    const VisualAlertCtx* c = (const VisualAlertCtx*)ctx;
+    ButtonAction act;
+    memset(&act, 0, sizeof(act));
+    strlcpy(act.type, ACTION_TYPE_VISUAL_ALERT, sizeof(act.type));
+    VisualAlertPayload& v = act.payload.visual_alert;
+    strlcpy(v.va_op,      c->op,      sizeof(v.va_op));
+    strlcpy(v.va_color,   c->color,   sizeof(v.va_color));
+    strlcpy(v.va_pattern, c->pattern, sizeof(v.va_pattern));
+    v.va_period_ms   = c->period_ms;
+    v.va_intensity   = c->intensity;
+    v.va_duration_ms = c->duration_ms;
+    action_dispatch(act, "MCP");
+    *ok = true;
+    strlcpy(msg, (strcmp(c->op, "stop") == 0) ? "cleared" : "raised", msg_len);
+}
+
+static bool tool_visual_alert(const JsonObject& args, JsonObject& result, String& err) {
+    VisualAlertCtx ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    strlcpy(ctx.op,      args["op"]      | "start", sizeof(ctx.op));
+    if (strcmp(ctx.op, "start") != 0 && strcmp(ctx.op, "stop") != 0) {
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "op must be 'start' or 'stop'");
+    }
+    strlcpy(ctx.color,   args["color"]   | "", sizeof(ctx.color));
+    strlcpy(ctx.pattern, args["pattern"] | "", sizeof(ctx.pattern));
+    if (ctx.pattern[0] && strcmp(ctx.pattern, "breathe") != 0 &&
+        strcmp(ctx.pattern, "blink") != 0 && strcmp(ctx.pattern, "solid") != 0) {
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "pattern must be 'breathe', 'blink', or 'solid'");
+    }
+    int period_ms = args["period_ms"] | 0; if (period_ms < 0) period_ms = 0; if (period_ms > 10000) period_ms = 10000;
+    int intensity = args["intensity"] | 0; if (intensity < 0) intensity = 0; if (intensity > 100) intensity = 100;
+    long duration_ms = args["duration_ms"] | 0; if (duration_ms < 0) duration_ms = 0;
+    ctx.period_ms   = (uint16_t)period_ms;
+    ctx.intensity   = (uint16_t)intensity;
+    ctx.duration_ms = (uint32_t)duration_ms;
+
+    return mcp_run_control(exec_visual_alert, &ctx, sizeof(ctx),
+                           CFG_CONTROL_TIMEOUT_MS, result, err);
+}
+
 #endif // HAS_DISPLAY
 
 // ============================================================================
@@ -819,6 +872,19 @@ static const McpTool s_tool_notify = {
     tool_notify, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_notify);
+
+static const McpTool s_tool_visual_alert = {
+    "visual_alert",
+    "Raise or clear a full-screen pulsing color overlay on the device screen — a strong ambient visual "
+    "alarm to grab attention across the room (e.g. a critical threshold). op 'start' (default) raises it and "
+    "wakes the screen; op 'stop' clears it. Optional: color (#RRGGBB, default red), pattern "
+    "(breathe|blink|solid, default breathe), period_ms (pulse cadence, default 800), intensity (max opacity "
+    "1-100, default 100), duration_ms (0 = persist until stopped/tapped). Pairs well with the 'beep'/notify "
+    "tools for a coordinated alarm.",
+    "{\"type\":\"object\",\"properties\":{\"op\":{\"type\":\"string\",\"enum\":[\"start\",\"stop\"]},\"color\":{\"type\":\"string\"},\"pattern\":{\"type\":\"string\",\"enum\":[\"breathe\",\"blink\",\"solid\"]},\"period_ms\":{\"type\":\"integer\",\"minimum\":0},\"intensity\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":100},\"duration_ms\":{\"type\":\"integer\",\"minimum\":0}},\"required\":[]}",
+    tool_visual_alert, false, false, true
+};
+REGISTER_MCP_TOOL(s_tool_visual_alert);
 #endif
 
 #if HAS_AUDIO && (HAS_DISPLAY || HAS_BUTTON)

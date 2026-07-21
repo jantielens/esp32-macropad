@@ -1079,7 +1079,7 @@ Save hardware button action configuration.
 
 - **Body:** JSON object with a `buttons` array of `{ tap_actions, hold_actions }` objects, positional by button index. Entries beyond `NUM_HW_BUTTONS` are ignored.
 - **Response:** standard component save response on success; JSON error on failure.
-- On screenless boards, display-only action types (screen, brightness, notify, timer) parse and store normally but log a no-op when dispatched.
+- On screenless boards, display-only action types (screen, brightness, notify, visual_alert, timer) parse and store normally but log a no-op when dispatched.
 
 ---
 

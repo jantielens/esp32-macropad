@@ -81,6 +81,16 @@ static const char* validate_action_array(JsonArrayConst arr) {
     for (JsonObjectConst a : arr) {
         const char* t = a["type"] | "";
         if (!t[0]) return "action missing type";
+        // visual_alert.color is bindable and stored in a CONFIG_BINDABLE_SHORT_LEN
+        // buffer; reject unknown schemes / non-color values and over-long tokens
+        // up front (they would otherwise truncate on save and fall back to red).
+        if (strcmp(t, ACTION_TYPE_VISUAL_ALERT) == 0) {
+            const char* color = a["color"] | "";
+            if (strlen(color) >= CONFIG_BINDABLE_SHORT_LEN) return "visual_alert color too long (max 63 chars)";
+            if (!color_ok(color)) return "visual_alert color must be #RRGGBB or a binding";
+            const char* e = validate_binding_tokens(color);
+            if (e) return e;
+        }
     }
     return nullptr;
 }

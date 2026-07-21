@@ -419,6 +419,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/boot_actions.cpp
   - src/app/boot_actions.h
+  - src/app/button_confirmation.cpp
+  - src/app/button_confirmation.h
   - src/app/button_defaults.cpp
   - src/app/button_defaults.h
   - src/app/config_manager.cpp
@@ -632,6 +634,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.h
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
+  - src/app/action_dispatch.h
   - src/app/action_registry.cpp
   - src/app/action_registry.h
   - src/app/app.ino

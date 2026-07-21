@@ -131,6 +131,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_NOTIFY   "notify"
 #define ACTION_TYPE_SYSTEM   "system"
 #define ACTION_TYPE_HA_SERVICE "ha_service"
+#define ACTION_TYPE_VISUAL_ALERT "visual_alert"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -200,6 +201,14 @@ struct HaServicePayload {
     char service[20];     // e.g. "toggle", "turn_on", "set_cover_position"
     char data_json[64];   // optional extra JSON object, e.g. {"brightness_pct":80}
 };
+struct VisualAlertPayload {
+    char     va_op[8];                            // "start" (default) | "stop"
+    char     va_color[CONFIG_BINDABLE_SHORT_LEN]; // overlay color hex (bindable), "" = red
+    char     va_pattern[8];                       // "breathe" (default) | "blink" | "solid"
+    uint16_t va_period_ms;                        // pulse cadence, 0 = default 800
+    uint16_t va_intensity;                        // max overlay opacity 0-100%, 0 = default 100
+    uint32_t va_duration_ms;                       // 0 = persist until stopped
+};
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -229,6 +238,7 @@ union ActionPayload {
     NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
     SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
     HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
+    VisualAlertPayload visual_alert; // type == ACTION_TYPE_VISUAL_ALERT
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, "" (none) carry no payload data — only the type tag.
@@ -264,6 +274,7 @@ static_assert(sizeof(ButtonAction) <= 420,
     printf_fn("  NotifyPayload     = %zu\n", sizeof(NotifyPayload));     \
     printf_fn("  SystemPayload     = %zu\n", sizeof(SystemPayload));     \
     printf_fn("  HaServicePayload  = %zu\n", sizeof(HaServicePayload));  \
+    printf_fn("  VisualAlertPayload= %zu\n", sizeof(VisualAlertPayload)); \
 } while (0)
 
 // LabelBinding removed — MQTT bindings are now inline in label text.

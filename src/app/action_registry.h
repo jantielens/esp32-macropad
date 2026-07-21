@@ -61,6 +61,9 @@ void action_type_substitute_step(const ActionTypeDef* def, ButtonAction& act, fl
 #if HAS_MQTT
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act);
 void action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act);
+// Collect MQTT topics referenced by the type's bindable value field (if any)
+// into a binding_template_collect_topics() context. No-op without value_field.
+void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& act, void* user_data);
 #endif
 
 // Auto-register an ActionTypeDef instance via a static constructor.

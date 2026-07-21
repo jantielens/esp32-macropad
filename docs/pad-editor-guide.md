@@ -359,6 +359,7 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. Set and adjust countdown values support binding templates. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
+| **Visual Alert** | Raise or clear a full-screen pulsing color overlay as an ambient alarm. Configure the color (bindable), pattern (breathe/blink/solid), period, intensity, and duration. ESP32-P4 boards only. See [Visual Alert Action](#visual-alert-action) below. |
 | **Home Assistant Service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
 | **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, **Enable Screensaver**, **Set/Adjust Volume**, or **Set/Adjust Brightness**. |
 
@@ -470,6 +471,29 @@ The bubble fades in over 200 ms, displays for the configured duration, then fade
 - **Tap action**: Show Notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, duration: `0`, bg_color: `#1a3a1a`, location: `center`
 
 > **Home Assistant integration**: Notifications can also be triggered remotely via the **Notify** text entity. See the [Home Assistant Integration Guide](ha-integration-guide.md#notifications) for details and automation examples.
+
+### Visual Alert Action
+
+The **Visual Alert** action raises a full-screen pulsing color overlay on the device screen — a strong ambient cue meant to grab attention across the room (for example, a critical threshold crossing). It complements audio feedback: pair it with a **Play Beep** action for a coordinated alarm. Unlike a notification, it draws no text — just a pulsing tint that sits above everything (including the screensaver).
+
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| **Action** | **Start Alert** (default) raises the overlay and wakes the screen; **Stop Alert** clears it. |
+| **Color** | Overlay tint hex (default red `#FF0000`). Supports binding templates, so an `[expr:...]` can pick red vs. amber based on severity. |
+| **Pattern** | **Breathe** (default, smooth eased pulse), **Blink** (hard on/off), or **Solid** (static tint). |
+| **Period (ms)** | Pulse cadence for breathe/blink (default `800`). Ignored for solid. |
+| **Intensity (%)** | Maximum overlay opacity, 1–100 (default `100` = full flash; lower values give a translucent tint). |
+| **Duration (ms)** | How long the alert runs. `0` (default) persists until stopped, tapped, or replaced by another alert. |
+
+Raising an alert wakes the screen first, so it is visible even when the display is asleep. Clear it with a **Stop Alert** action, by letting the duration elapse, or by tapping anywhere on the overlay. A new alert replaces the current one (last-write-wins). A notification bubble raised afterward stacks above the tint, so words stay readable.
+
+**Example: energy alarm from an MQTT trigger**
+- **Trigger**: MQTT topic `home/solar/power` with an `[expr:...]` threshold
+- **Action 1**: Visual Alert → op: `start`, color: `#FF0000`, pattern: `breathe`, duration: `0`
+- **Action 2**: Play Beep → pattern: `1000:200 100 1000:200`
+- A separate button (or a recovery trigger) fires **Visual Alert → op: `stop`** to clear it.
 
 ### Home Assistant Service Action
 

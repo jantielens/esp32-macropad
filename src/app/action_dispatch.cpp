@@ -8,6 +8,7 @@
 #if HAS_DISPLAY
 #include "display_manager.h"
 #include "message_bubble.h"
+#include "visual_alert.h"
 #include "screen_saver_manager.h"
 #endif
 
@@ -75,6 +76,8 @@ static void resolve_action_bindings(ButtonAction& act) {
         try_resolve(act.payload.notify.notify_text_color,   sizeof(act.payload.notify.notify_text_color));
         try_resolve(act.payload.notify.notify_bg_color,     sizeof(act.payload.notify.notify_bg_color));
         try_resolve(act.payload.notify.notify_border_color, sizeof(act.payload.notify.notify_border_color));
+    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
+        try_resolve(act.payload.visual_alert.va_color, sizeof(act.payload.visual_alert.va_color));
     } else {
         // Device-class action types (e.g. shutter) self-register via the
         // action type registry; resolve bindings generically against their
@@ -110,13 +113,52 @@ static bool action_has_any_binding(const ButtonAction& act) {
             || has(act.payload.notify.notify_text_color)
             || has(act.payload.notify.notify_bg_color)
             || has(act.payload.notify.notify_border_color);
+    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
+        return has(act.payload.visual_alert.va_color);
     }
     const ActionTypeDef* t = action_type_find(act.type);
     return action_type_has_binding(t, act);
 }
+
+// Collect MQTT topics from every bindable field of an action. Mirrors the
+// field set in resolve_action_bindings() so a token used only inside a button
+// action still gets subscribed by mqtt_sub_store's scan.
+void action_collect_binding_topics(const ButtonAction& act, void* user_data) {
+    auto collect = [&](const char* field) {
+        if (field[0]) binding_template_collect_topics(field, user_data);
+    };
+    if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
+        collect(act.payload.screen.screen_id);
+    } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
+        collect(act.payload.mqtt.mqtt_topic);
+        collect(act.payload.mqtt.mqtt_payload);
+    } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
+        collect(act.payload.key.key_sequence);
+    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
+        collect(act.payload.beep.beep_pattern);
+    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
+        collect(act.payload.volume.volume_value);
+    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
+        collect(act.payload.brightness.brightness_value);
+    } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
+        collect(act.payload.timer.timer_value);
+    } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
+        collect(act.payload.notify.notify_text);
+        collect(act.payload.notify.notify_duration_ms);
+        collect(act.payload.notify.notify_text_color);
+        collect(act.payload.notify.notify_bg_color);
+        collect(act.payload.notify.notify_border_color);
+    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
+        collect(act.payload.visual_alert.va_color);
+    } else {
+        const ActionTypeDef* t = action_type_find(act.type);
+        action_type_collect_topics(t, act, user_data);
+    }
+}
 #endif // HAS_MQTT
 
 static void action_dispatch_resolved(const ButtonAction& act, const char* label);
+
 
 void action_dispatch(const ButtonAction& act_in, const char* label) {
     if (!act_in.type[0]) return;
@@ -320,6 +362,31 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
         }
 #else
         LOGW(TAG, "%s notify: no display", label);
+#endif
+    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
+#if HAS_DISPLAY
+        const auto& va = act.payload.visual_alert;
+        if (strcmp(va.va_op, "stop") == 0) {
+            visual_alert_stop();
+            LOGI(TAG, "%s visual_alert: stop", label);
+        } else {
+            // Wake first so the alert is visible even if the screen is asleep.
+            screen_saver_manager_notify_activity(true);
+
+            VisualAlertParams params = {};
+            const char* col = va.va_color[0] ? va.va_color : "#FF0000";
+            if (!parse_hex_color(col, &params.color)) params.color = 0xFF0000;
+            params.pattern     = visual_alert_pattern_from_str(va.va_pattern);
+            params.period_ms   = va.va_period_ms > 0 ? va.va_period_ms : VA_DEFAULT_PERIOD_MS;
+            params.intensity   = va.va_intensity  > 0 ? (uint8_t)va.va_intensity : VA_DEFAULT_INTENSITY;
+            params.duration_ms = va.va_duration_ms;
+
+            visual_alert_show(&params);
+            LOGI(TAG, "%s visual_alert: start pat=%u per=%u int=%u dur=%u", label,
+                 params.pattern, params.period_ms, params.intensity, params.duration_ms);
+        }
+#else
+        LOGW(TAG, "%s visual_alert: no display", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
         const char* syscmd = act.payload.system.system_command;

@@ -8,6 +8,7 @@
 #include "mqtt_manager.h"
 #include "pad_binding.h"
 #include "pad_config.h"
+#include "action_dispatch.h"
 
 #include <ArduinoJson.h>
 #include "psram_json_allocator.h"
@@ -260,6 +261,14 @@ void mqtt_sub_store_subscribe_all() {
             binding_template_collect_topics(btn.label_bottom_color_bind, &ctx);
             for (uint8_t i = 0; i < MAX_WIDGET_BINDINGS; i++) {
                 binding_template_collect_topics(btn.widget.data_binding[i], &ctx);
+            }
+            // Scan tap / long-press action fields for binding tokens (e.g. a
+            // bound visual-alert color, or an [mqtt:...] inside a notify field).
+            for (uint8_t a = 0; a < btn.action_count; a++) {
+                action_collect_binding_topics(btn.actions[a], &ctx);
+            }
+            for (uint8_t a = 0; a < btn.lp_action_count; a++) {
+                action_collect_binding_topics(btn.lp_actions[a], &ctx);
             }
         }
     }

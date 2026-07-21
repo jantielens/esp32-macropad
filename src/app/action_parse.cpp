@@ -58,6 +58,13 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         strlcpy(act.payload.ha_service.entity_id, a["entity_id"] | "", sizeof(act.payload.ha_service.entity_id));
         strlcpy(act.payload.ha_service.service,   a["service"]   | "", sizeof(act.payload.ha_service.service));
         strlcpy(act.payload.ha_service.data_json, a["data_json"] | "", sizeof(act.payload.ha_service.data_json));
+    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
+        strlcpy(act.payload.visual_alert.va_op,      a["op"]      | "", sizeof(act.payload.visual_alert.va_op));
+        strlcpy(act.payload.visual_alert.va_color,   a["color"]   | "", sizeof(act.payload.visual_alert.va_color));
+        strlcpy(act.payload.visual_alert.va_pattern, a["pattern"] | "", sizeof(act.payload.visual_alert.va_pattern));
+        act.payload.visual_alert.va_period_ms  = (uint16_t)(a["period_ms"]   | 0);
+        act.payload.visual_alert.va_intensity  = (uint16_t)(a["intensity"]   | 0);
+        act.payload.visual_alert.va_duration_ms = (uint32_t)(a["duration_ms"] | 0);
     } else {
         // Device-class action types (e.g. shutter) self-register via
         // action_type_register(); fall through to the registry.
@@ -109,6 +116,13 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
         if (act.payload.ha_service.entity_id[0]) obj["entity_id"] = act.payload.ha_service.entity_id;
         if (act.payload.ha_service.service[0])   obj["service"]   = act.payload.ha_service.service;
         if (act.payload.ha_service.data_json[0]) obj["data_json"] = act.payload.ha_service.data_json;
+    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
+        if (act.payload.visual_alert.va_op[0])       obj["op"]          = act.payload.visual_alert.va_op;
+        if (act.payload.visual_alert.va_color[0])    obj["color"]       = act.payload.visual_alert.va_color;
+        if (act.payload.visual_alert.va_pattern[0])  obj["pattern"]     = act.payload.visual_alert.va_pattern;
+        if (act.payload.visual_alert.va_period_ms > 0)   obj["period_ms"]   = act.payload.visual_alert.va_period_ms;
+        if (act.payload.visual_alert.va_intensity > 0)   obj["intensity"]   = act.payload.visual_alert.va_intensity;
+        if (act.payload.visual_alert.va_duration_ms > 0) obj["duration_ms"] = act.payload.visual_alert.va_duration_ms;
     } else {
         const ActionTypeDef* t = action_type_find(act.type);
         if (t && t->serialize) t->serialize(act, obj);

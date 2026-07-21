@@ -139,7 +139,7 @@ graph LR
     GATE --> READ["Read tools<br/>(always available)"]
     GATE --> CONTROL["Control tools<br/>(control toggle on)"]
     READ --> INFO["status · health · screens<br/>pads · sensors · config"]
-    CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system<br/>notify · volume · timers · config"]
+    CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system<br/>notify · visual_alert · volume · timers · config"]
 ```
 
 **Read tools** (always available once enabled):
@@ -162,6 +162,10 @@ graph LR
 - `set_screen` — navigate to a screen.
 - `set_backlight` / `wake` — adjust display brightness or cancel the screen saver.
 - `notify` — show a message bubble on the screen (empty text dismisses it).
+- `visual_alert` — raise (`op:start`) or clear (`op:stop`) a full-screen pulsing
+  color overlay as an ambient alarm: bindable `color` (default red), `pattern`
+  (`breathe`/`blink`/`solid`), `period_ms`, `intensity` (1-100), and `duration_ms`
+  (0 = until stopped/tapped). Wakes the screen; pairs well with `beep`.
 - `set_volume` — set (0-100) or adjust (signed delta) the speaker volume.
 - `timer_control` — start/stop/toggle/pause/resume/reset/lap/set/adjust one of
   the three on-screen timers.

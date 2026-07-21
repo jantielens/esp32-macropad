@@ -26,6 +26,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **MQTT Screen Control** (`HAS_MQTT && HAS_DISPLAY`): HA `select` entity for remote screen navigation.
 - **MQTT Wake** (`HAS_MQTT && HAS_DISPLAY`): Binding-driven screensaver wakeup with idle-timer keep-alive.
 - **Notification Bubble** (`HAS_DISPLAY`): Message overlay with fade animation, tap-to-dismiss, HA remote trigger, `ACTION_TYPE_NOTIFY`.
+- **Visual Alert** (`HAS_DISPLAY`): Full-screen pulsing color overlay (`breathe`/`blink`/`solid`) on `lv_layer_top()`, wake-first, tap-to-dismiss, `ACTION_TYPE_VISUAL_ALERT`. Bindable color; deferred `portMUX` show/stop drained by `visual_alert_loop()` (`visual_alert.{h,cpp}`). Symmetric with `beep` — fires from every trigger source; MCP control tool `visual_alert`.
 - **Swipe Actions** (`HAS_DISPLAY`): 4-direction configurable swipe gestures with full ButtonAction parity.
 - **Boot Actions** (`HAS_DISPLAY`): Device-level actions dispatched once at boot after first screen.
 - **Button Defaults** (`HAS_DISPLAY`): Device-wide default button appearance (colors, border, radius, label styles).
