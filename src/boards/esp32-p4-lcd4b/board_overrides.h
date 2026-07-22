@@ -16,6 +16,8 @@
 #define HAS_BACKLIGHT true
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
+// Reclaim 12 KB of internal DMA-capable RAM from AsyncTCP's conservative 16 KB default; measured portal traffic uses under 1 KB of stack.
+#define CONFIG_ASYNC_TCP_STACK_SIZE 4096
 
 // ============================================================================
 // Driver Selection (HAL)

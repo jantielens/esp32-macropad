@@ -91,6 +91,7 @@ struct AudioCommand {
 
 static QueueHandle_t audio_queue = NULL;
 static TaskHandle_t audio_task_handle = NULL;
+static constexpr uint32_t AUDIO_TASK_STACK_BYTES = 24576;
 // Cross-task flags: written by audio_enqueue()/audio_stop() (caller task),
 // read/written by audio_task (FreeRTOS task).  volatile provides visibility;
 // no mutex needed because the only race (g_playing read in audio_enqueue vs
@@ -483,7 +484,21 @@ void audio_init(uint8_t initial_volume) {
     // Stack: minimp3 puts ~14 KB mp3dec_scratch_t on stack per decode call;
     // RISC-V (P4) needs ~50% more per call frame. 24 KB provides margin.
     audio_queue = xQueueCreate(AUDIO_QUEUE_DEPTH, sizeof(AudioCommand));
-    xTaskCreatePinnedToCore(audio_task, "audio", 24576, NULL, 5, &audio_task_handle, 1);
+    if (!audio_queue) {
+        LOGE(TAG, "Failed to create command queue");
+        return;
+    }
+
+    if (xTaskCreatePinnedToCore(
+            audio_task, "audio", AUDIO_TASK_STACK_BYTES, NULL, 5,
+            &audio_task_handle, 1) != pdPASS) {
+        LOGE(TAG, "Failed to create audio task");
+        vQueueDelete(audio_queue);
+        audio_queue = NULL;
+        return;
+    }
+    LOGI(TAG, "Audio task created (internal stack, %u bytes)",
+         (unsigned)AUDIO_TASK_STACK_BYTES);
 
     audio_initialized = true;
     LOGI(TAG, "Audio ready (volume=%u%%, PA always-on)", current_volume);

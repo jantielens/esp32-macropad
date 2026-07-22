@@ -157,6 +157,7 @@ void setup()
 	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
 	// which can run in the background while display, config, and pads initialize.
 	wifi_manager_early_init();
+	device_telemetry_log_memory_snapshot("hosted-start");
 
 	LOGI("SYS", "Boot");
 	LOGI("SYS", "Firmware: v%s", FIRMWARE_VERSION);
@@ -213,6 +214,7 @@ void setup()
 	#if HAS_DISPLAY
 	display_manager_init(&device_config);
 	display_manager_set_splash_status("Loading config...");
+	device_telemetry_log_memory_snapshot("display");
 	#endif
 
 	#if USE_SD_STORAGE
@@ -273,6 +275,7 @@ void setup()
 	// so device_config.audio_volume is available).
 	#if HAS_AUDIO
 	audio_init(device_config.audio_volume);
+	device_telemetry_log_memory_snapshot("audio");
 	#endif
 
 	const bool force_config_mode_burst = power_manager_should_force_config_mode();
@@ -399,9 +402,11 @@ void setup()
 				web_portal_start_ap();
 			}
 		}
+		device_telemetry_log_memory_snapshot("wifi");
 
 		// Initialize web portal AFTER WiFi is started
 		web_portal_init(&device_config);
+		device_telemetry_log_memory_snapshot("portal");
 
 		portal_idle_init();
 		portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);
@@ -466,6 +471,7 @@ void setup()
 			LOGI("Main", "MQTT not configured: skipping handler init");
 		}
 	}
+	device_telemetry_log_memory_snapshot("mqtt");
 	#endif
 
 	#if HAS_DISPLAY
@@ -536,6 +542,7 @@ void setup()
 	// ESP-Hosted RPC) during the critical early-boot window.
 	#if HAS_IMAGE_FETCH
 	image_fetch_init();
+	device_telemetry_log_memory_snapshot("image-fetch");
 	#endif
 
 	// Start the screen saver inactivity timer after the first runtime screen is visible.

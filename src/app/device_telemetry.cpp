@@ -315,6 +315,9 @@ void device_telemetry_log_memory_snapshot(const char *tag) {
 		size_t psram_free = 0;
 		size_t psram_min = 0;
 		size_t psram_largest = 0;
+		const size_t dma_internal_free = heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		const size_t dma_internal_min = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		const size_t dma_internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 
 		get_memory_snapshot(
 				&heap_free,
@@ -330,6 +333,7 @@ void device_telemetry_log_memory_snapshot(const char *tag) {
 		// Keep this line short to avoid fixed log buffers truncating the output.
 		// Keys:
 		// hf=heap_free hm=heap_min hl=heap_largest hi=internal_free hin=internal_min
+		// df=dma_internal_free dm=dma_internal_min dl=dma_internal_largest
 		// pf=psram_free pm=psram_min pl=psram_largest
 		// frag=heap fragmentation percent (based on hl/hf)
 
@@ -343,13 +347,16 @@ void device_telemetry_log_memory_snapshot(const char *tag) {
 
 		LOGI(
 				"Mem",
-				"%s hf=%u hm=%u hl=%u hi=%u hin=%u frag=%u pf=%u pm=%u pl=%u",
+				"%s hf=%u hm=%u hl=%u hi=%u hin=%u df=%u dm=%u dl=%u frag=%u pf=%u pm=%u pl=%u",
 				tag ? tag : "(null)",
 				(unsigned)heap_free,
 				(unsigned)heap_min,
 				(unsigned)heap_largest,
 				(unsigned)internal_free,
 				(unsigned)internal_min,
+				(unsigned)dma_internal_free,
+				(unsigned)dma_internal_min,
+				(unsigned)dma_internal_largest,
 				(unsigned)frag_percent,
 				(unsigned)psram_free,
 				(unsigned)psram_min,

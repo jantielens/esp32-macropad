@@ -16,14 +16,14 @@ static inline bool psram_available() {
 static bool create_task_psram_impl(
 		TaskFunction_t taskFunction,
 		const char* name,
-		uint32_t stackDepthWords,
+		uint32_t stackDepthBytes,
 		void* param,
 		UBaseType_t priority,
 		TaskHandle_t* outHandle,
 		RtosTaskPsramAlloc* outAlloc,
 		BaseType_t coreId   // tskNO_AFFINITY = no pinning
 ) {
-		if (!taskFunction || !name || stackDepthWords == 0 || !outHandle) {
+		if (!taskFunction || !name || stackDepthBytes == 0 || !outHandle) {
 				return false;
 		}
 
@@ -34,7 +34,7 @@ static bool create_task_psram_impl(
 		}
 
 		StackType_t* stack = static_cast<StackType_t*>(
-				heap_caps_malloc(stackDepthWords * sizeof(StackType_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+				heap_caps_malloc(stackDepthBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
 		);
 
 		if (stack == nullptr) {
@@ -53,11 +53,11 @@ static bool create_task_psram_impl(
 		TaskHandle_t handle;
 #if !CONFIG_FREERTOS_UNICORE
 		if (coreId != tskNO_AFFINITY) {
-				handle = xTaskCreateStaticPinnedToCore(taskFunction, name, stackDepthWords, param, priority, stack, tcb, coreId);
+				handle = xTaskCreateStaticPinnedToCore(taskFunction, name, stackDepthBytes, param, priority, stack, tcb, coreId);
 		} else
 #endif
 		{
-				handle = xTaskCreateStatic(taskFunction, name, stackDepthWords, param, priority, stack, tcb);
+				handle = xTaskCreateStatic(taskFunction, name, stackDepthBytes, param, priority, stack, tcb);
 		}
 
 		if (handle == nullptr) {
@@ -69,7 +69,7 @@ static bool create_task_psram_impl(
 		if (outAlloc) {
 				outAlloc->tcb = tcb;
 				outAlloc->stack = stack;
-				outAlloc->stackDepthWords = stackDepthWords;
+				outAlloc->stackDepthBytes = stackDepthBytes;
 		}
 
 		*outHandle = handle;
@@ -79,24 +79,24 @@ static bool create_task_psram_impl(
 bool rtos_create_task_psram_stack(
 		TaskFunction_t taskFunction,
 		const char* name,
-		uint32_t stackDepthWords,
+		uint32_t stackDepthBytes,
 		void* param,
 		UBaseType_t priority,
 		TaskHandle_t* outHandle,
 		RtosTaskPsramAlloc* outAlloc
 ) {
-		return create_task_psram_impl(taskFunction, name, stackDepthWords, param, priority, outHandle, outAlloc, tskNO_AFFINITY);
+		return create_task_psram_impl(taskFunction, name, stackDepthBytes, param, priority, outHandle, outAlloc, tskNO_AFFINITY);
 }
 
 bool rtos_create_task_psram_stack_pinned(
 		TaskFunction_t taskFunction,
 		const char* name,
-		uint32_t stackDepthWords,
+		uint32_t stackDepthBytes,
 		void* param,
 		UBaseType_t priority,
 		TaskHandle_t* outHandle,
 		RtosTaskPsramAlloc* outAlloc,
 		BaseType_t coreId
 ) {
-		return create_task_psram_impl(taskFunction, name, stackDepthWords, param, priority, outHandle, outAlloc, coreId);
+		return create_task_psram_impl(taskFunction, name, stackDepthBytes, param, priority, outHandle, outAlloc, coreId);
 }

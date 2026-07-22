@@ -311,7 +311,7 @@ void DisplayManager::initLVGL() {
 		
 		// Allocate LVGL draw buffer(s).
 		// v9 uses raw byte buffers; size = pixels × bytes_per_pixel (2 for RGB565).
-		// Buffers must be aligned to LV_DRAW_BUF_ALIGN (64 bytes on P4) for PPA DMA.
+		// Buffers must be cache-line aligned for PPA DMA.
 		const size_t buf_size_bytes = LVGL_BUFFER_SIZE * sizeof(uint16_t);
 		const size_t buf_align = LV_DRAW_BUF_ALIGN;
 		

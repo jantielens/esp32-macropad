@@ -198,7 +198,8 @@ Replaced synchronous CPU memcpy with hardware DMA2D. The biggest single optimiza
 #define LV_USE_PPA 1  // in lv_conf.h
 ```
 ESP32-P4's Pixel Processing Accelerator for hardware-accelerated fills, blits, and
-rotations. Requires `LV_DRAW_BUF_STRIDE_ALIGN 1` and `LV_DRAW_BUF_ALIGN 64`.
+rotations. Requires `LV_DRAW_BUF_STRIDE_ALIGN 1` and an `LV_DRAW_BUF_ALIGN`
+value matching the active ESP-IDF L2 cache-line size.
 
 ### ✅ IRAM fast-mem (APPLIED — LVGL v9)
 ```cpp
@@ -496,7 +497,7 @@ All cache management is internal — callers never need `esp_cache_msync()`.
 #define LV_USE_OS               LV_OS_NONE      // Manual mutex, no LVGL threads
 #define LV_DRAW_SW_DRAW_UNIT_CNT  1             // Single draw unit (multi regressed)
 #define LV_DRAW_BUF_STRIDE_ALIGN  1             // Required for PPA compatibility
-#define LV_DRAW_BUF_ALIGN         64            // P4 L2 cache line alignment
+#define LV_DRAW_BUF_ALIGN         CONFIG_CACHE_L2_CACHE_LINE_SIZE
 #define LV_USE_PPA                1             // Hardware pixel acceleration
 #define LV_ATTRIBUTE_FAST_MEM     IRAM_ATTR     // Hot functions in IRAM
 ```

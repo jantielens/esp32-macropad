@@ -78,12 +78,19 @@
  * Must be 1 when LV_USE_PPA is enabled: the ESP-IDF PPA driver computes row
  * stride from pic_w * bpp (no padding).  A value >1 that adds padding causes
  * PPA to write at wrong offsets, producing horizontal-line artefacts.
- * Buffer *start* alignment is handled by LV_DRAW_BUF_ALIGN (64) below. */
+ * Buffer *start* alignment is handled by LV_DRAW_BUF_ALIGN below. */
 #define LV_DRAW_BUF_STRIDE_ALIGN   1
 
 /* Draw buffer start address alignment (bytes).
- * 64 = ESP32-P4 L2 cache line size — required for PPA and optimal DMA. */
-#define LV_DRAW_BUF_ALIGN          64
+ * ESP32-P4 PPA requires this to match the active L2 cache line size. */
+#if __has_include("sdkconfig.h")
+    #include "sdkconfig.h"
+#endif
+#ifdef CONFIG_CACHE_L2_CACHE_LINE_SIZE
+    #define LV_DRAW_BUF_ALIGN      CONFIG_CACHE_L2_CACHE_LINE_SIZE
+#else
+    #define LV_DRAW_BUF_ALIGN      64
+#endif
 
 /* Software renderer */
 #define LV_USE_DRAW_SW 1
