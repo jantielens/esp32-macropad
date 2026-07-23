@@ -5,16 +5,7 @@
 
 #include "binding_template.h"
 #include "pad_validate.h"
-#include "widgets/widget.h"
-
-extern "C" {
-const lv_font_t lv_font_montserrat_12 = {};
-const lv_font_t lv_font_montserrat_14 = {};
-const lv_font_t lv_font_montserrat_18 = {};
-const lv_font_t lv_font_montserrat_24 = {};
-const lv_font_t lv_font_montserrat_32 = {};
-const lv_font_t lv_font_montserrat_36 = {};
-}
+#include "widgets/widget_registry.h"
 
 static int g_failures = 0;
 

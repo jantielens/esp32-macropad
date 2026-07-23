@@ -12,7 +12,7 @@
 
 #include "pad_config.h"
 #include "psram_json_allocator.h"
-#include "widgets/widget.h"
+#include "widgets/widget_registry.h"
 #include "binding_template.h"
 
 #include <stdio.h>
