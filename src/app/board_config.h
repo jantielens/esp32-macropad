@@ -340,6 +340,16 @@ struct HwButtonDef {
 #define HAS_SOUND_PLAYER HAS_AUDIO
 #endif
 
+// Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
+#ifndef AUDIO_MP3_SCRATCH_PSRAM
+#define AUDIO_MP3_SCRATCH_PSRAM false
+#endif
+
+// Audio worker stack size in bytes.
+#ifndef AUDIO_TASK_STACK_SIZE
+#define AUDIO_TASK_STACK_SIZE 24576
+#endif
+
 // ============================================================================
 // SD Card Storage (optional)
 // ============================================================================

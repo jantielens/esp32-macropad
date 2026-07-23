@@ -16,6 +16,9 @@
 #define HAS_BACKLIGHT true
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
+// Keep minimp3's 16 KB per-frame workspace out of scarce internal RAM.
+#define AUDIO_MP3_SCRATCH_PSRAM true
+#define AUDIO_TASK_STACK_SIZE 12288
 
 // ============================================================================
 // Driver Selection (HAL)

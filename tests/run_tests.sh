@@ -114,6 +114,16 @@ echo "=== Running unit tests: widget_common ==="
 ./tests/bin/test_widget_common
 echo
 
+echo "=== Building unit tests: minimp3_scratch ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_minimp3_scratch.cpp \
+    -o tests/bin/test_minimp3_scratch -lm
+
+echo "=== Running unit tests: minimp3_scratch ==="
+./tests/bin/test_minimp3_scratch
+echo
+
 echo "=== Building unit tests: key_sequence ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     tests/test_key_sequence.cpp \

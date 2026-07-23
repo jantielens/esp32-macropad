@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 230
+Total flags: 232
 
 ### Features (HAS_*)
 
@@ -121,6 +121,7 @@ Total flags: 230
 ### Limits & Tuning
 
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
+- **AUDIO_TASK_STACK_SIZE** default: `24576` — Audio worker stack size in bytes.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
@@ -158,6 +159,7 @@ Total flags: 230
 - **AUDIO_I2S_DOUT** default: `-1` — I2S data out pin (ESP32 TX → codec data input).
 - **AUDIO_I2S_LRCK** default: `-1` — I2S word select / left-right clock pin.
 - **AUDIO_I2S_MCLK** default: `-1` — I2S master clock pin.
+- **AUDIO_MP3_SCRATCH_PSRAM** default: `false` — Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
 - **AUDIO_PA_ACTIVE_LOW** default: `false` — Some boards route the PA enable through an inverting transistor.
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS** default: `100` — BLE telemetry advertising interval (ms between adv packets within a burst).
 - **BLE_TELEMETRY_DEFAULT_BURST_COUNT** default: `3` — BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
@@ -790,9 +792,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **AUDIO_I2S_MCLK**
   - src/app/board_config.h
+- **AUDIO_MP3_SCRATCH_PSRAM**
+  - src/app/board_config.h
+  - src/app/sound_player.cpp
 - **AUDIO_PA_ACTIVE_LOW**
   - src/app/board_config.h
 - **AUDIO_PA_PIN**
+  - src/app/board_config.h
+- **AUDIO_TASK_STACK_SIZE**
   - src/app/board_config.h
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS**
   - src/app/board_config.h

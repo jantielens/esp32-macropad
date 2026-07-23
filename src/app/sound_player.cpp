@@ -171,10 +171,28 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
     }
     mp3dec_init(mp3d);
 
+#if AUDIO_MP3_SCRATCH_PSRAM
+    const size_t scratch_size = mp3dec_scratch_size();
+    void* decode_scratch = heap_caps_malloc(
+        scratch_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!decode_scratch) {
+        LOGE(TAG, "Failed to allocate MP3 scratch in PSRAM (%u bytes)",
+             (unsigned)scratch_size);
+        heap_caps_free(mp3d);
+        heap_caps_free(out_buf);
+        heap_caps_free(read_buf);
+        file.close();
+        return false;
+    }
+#endif
+
     // PCM decode buffer (4.5 KB)
     int16_t* pcm = (int16_t*)ps_alloc(MINIMP3_MAX_SAMPLES_PER_FRAME * sizeof(int16_t));
     if (!pcm) {
         LOGE(TAG, "Failed to allocate PCM buffer");
+#if AUDIO_MP3_SCRATCH_PSRAM
+        heap_caps_free(decode_scratch);
+#endif
         heap_caps_free(mp3d);
         heap_caps_free(out_buf);
         heap_caps_free(read_buf);
@@ -211,9 +229,16 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
 
         // Decode one frame
         mp3dec_frame_info_t frame_info;
-        int samples = mp3dec_decode_frame(mp3d, read_buf + buf_consumed,
-                                          (int)(buf_filled - buf_consumed),
-                                          pcm, &frame_info);
+    #if AUDIO_MP3_SCRATCH_PSRAM
+        int samples = mp3dec_decode_frame_with_scratch(
+            mp3d, read_buf + buf_consumed,
+            (int)(buf_filled - buf_consumed), pcm, &frame_info,
+            decode_scratch);
+    #else
+        int samples = mp3dec_decode_frame(
+            mp3d, read_buf + buf_consumed,
+            (int)(buf_filled - buf_consumed), pcm, &frame_info);
+    #endif
 
         if (frame_info.frame_bytes == 0) {
             // No more frames can be decoded
@@ -277,6 +302,9 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
     }
 
     heap_caps_free(pcm);
+#if AUDIO_MP3_SCRATCH_PSRAM
+    heap_caps_free(decode_scratch);
+#endif
     heap_caps_free(mp3d);
     heap_caps_free(out_buf);
     heap_caps_free(read_buf);

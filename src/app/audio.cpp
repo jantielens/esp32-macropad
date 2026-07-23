@@ -6,6 +6,8 @@
 #include <math.h>
 #include "driver/i2s_std.h"
 #include "driver/gpio.h"
+#include "esp_heap_caps.h"
+#include "esp_memory_utils.h"
 #include "log_manager.h"
 #include "i2c_bus.h"
 #include <freertos/FreeRTOS.h>
@@ -478,12 +480,56 @@ void audio_init(uint8_t initial_volume) {
     // Set initial volume
     es8311_apply_volume(current_volume);
 
-    // Create command queue and audio task
+    // Create command queue and audio task. The stack remains internal because
+    // sound playback reads LittleFS while the flash cache is disabled.
     // Priority 5: above LVGL (4) to avoid I2S DMA underruns during heavy rendering
-    // Stack: minimp3 puts ~14 KB mp3dec_scratch_t on stack per decode call;
-    // RISC-V (P4) needs ~50% more per call frame. 24 KB provides margin.
+    // Boards can move minimp3's 16 KB scratch workspace to PSRAM and select a
+    // smaller internal stack with AUDIO_TASK_STACK_SIZE.
     audio_queue = xQueueCreate(AUDIO_QUEUE_DEPTH, sizeof(AudioCommand));
-    xTaskCreatePinnedToCore(audio_task, "audio", 24576, NULL, 5, &audio_task_handle, 1);
+    if (!audio_queue) {
+        LOGE(TAG, "Failed to create audio queue");
+        i2s_channel_disable(rx_handle);
+        i2s_channel_disable(tx_handle);
+        i2s_del_channel(rx_handle);
+        i2s_del_channel(tx_handle);
+        rx_handle = NULL;
+        tx_handle = NULL;
+        return;
+    }
+
+    BaseType_t task_result = xTaskCreatePinnedToCoreWithCaps(
+        audio_task, "audio", AUDIO_TASK_STACK_SIZE, NULL, 5,
+        &audio_task_handle, 1,
+        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (task_result != pdPASS) {
+        LOGE(TAG, "Failed to create audio task with internal stack");
+        vQueueDelete(audio_queue);
+        audio_queue = NULL;
+        i2s_channel_disable(rx_handle);
+        i2s_channel_disable(tx_handle);
+        i2s_del_channel(rx_handle);
+        i2s_del_channel(tx_handle);
+        rx_handle = NULL;
+        tx_handle = NULL;
+        return;
+    }
+
+    uint8_t* stack_start = pxTaskGetStackStart(audio_task_handle);
+    uint8_t* stack_end = stack_start + AUDIO_TASK_STACK_SIZE - 1;
+    if (!esp_ptr_internal(stack_start) || !esp_ptr_internal(stack_end)) {
+        LOGE(TAG, "Audio task stack is not internal: %p-%p", stack_start, stack_end);
+        vTaskDelete(audio_task_handle);
+        audio_task_handle = NULL;
+        vQueueDelete(audio_queue);
+        audio_queue = NULL;
+        i2s_channel_disable(rx_handle);
+        i2s_channel_disable(tx_handle);
+        i2s_del_channel(rx_handle);
+        i2s_del_channel(tx_handle);
+        rx_handle = NULL;
+        tx_handle = NULL;
+        return;
+    }
 
     audio_initialized = true;
     LOGI(TAG, "Audio ready (volume=%u%%, PA always-on)", current_volume);
