@@ -1,4 +1,7 @@
-# Web Configuration Portal
+---
+title: Web Configuration Portal
+description: Developer reference for the ESP32 Macropad web portal architecture, pages, and REST APIs
+---
 
 The ESP32 template includes a full-featured web portal for device configuration, monitoring, and firmware updates. The portal uses an async web server with captive portal support for initial setup.
 
@@ -238,7 +241,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
 **Sections:**
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
-- **Sensor & Display settings**: Threshold and display configuration sections
+- **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview, and screen saver configuration
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
 
@@ -253,6 +256,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
   - **Pad selection & naming**: Dropdown for Pad 1–16 with optional custom names (max 31 chars)
   - **Grid preview**: Click any cell to open the button editor dialog
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
+  - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, content padding, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
@@ -984,23 +988,35 @@ Requires `HAS_DISPLAY`. Gated by Basic Auth when enabled.
 
 #### `GET /api/screenshot`
 
-Capture the current display contents as a 24-bit BMP image.
+Capture the current display contents as an image. ESP32-P4 boards default to a
+hardware-encoded JPEG; other boards retain the 24-bit BMP default.
 
-- **Response:** `image/bmp` — 24-bit uncompressed BMP (RGB888, bottom-up row order)
-- **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary PSRAM buffer, converts from RGB565 to BGR888, and streams the result as a chunked HTTP response.
-- **Memory:** The snapshot buffer is allocated on demand and freed after the response completes. No persistent memory cost.
-- **Thread safety:** Acquires the LVGL mutex with a 1-second timeout. Returns `503 Display busy` if the mutex cannot be acquired.
+- **Query parameters:** `format=bmp|jpg` overrides the format. `quality=1..100` controls JPEG quality and defaults to `85`.
+- **Response:** `image/jpeg` for JPEG or `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order).
+- **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV420 subsampling. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
+- **Memory:** Per-request snapshot, conversion, and JPEG buffers are released as soon as the final response chunk is produced. Interrupted responses release any remaining buffers when their response context is destroyed. On ESP32-P4, the lazily initialized JPEG encoder and its synchronization primitive remain allocated after first use.
+- **Thread safety:** Acquires the LVGL mutex with a 1-second timeout and serializes access to the hardware JPEG encoder. Returns `503 Display busy` if the LVGL mutex cannot be acquired.
+- **Fallback:** If hardware JPEG encoding fails, the endpoint transparently returns BMP with `Content-Type: image/bmp`. Requesting `format=jpg` on a non-P4 board returns `400`.
 
 **Example:**
 
 ```bash
+# Default on ESP32-P4
+curl -u user:pass http://<device-ip>/api/screenshot -o screenshot.jpg
+
+# Default on non-P4 display boards
 curl -u user:pass http://<device-ip>/api/screenshot -o screenshot.bmp
+
+# Explicit format and JPEG quality
+curl -u user:pass 'http://<device-ip>/api/screenshot?format=bmp' -o screenshot.bmp
+curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=70' -o screenshot.jpg
 ```
 
 **Notes:**
 
 - Image dimensions match the device's display resolution.
-- The BMP is uncompressed, so file sizes range from ~253 KB (360×360) to ~1.2 MB (1024×600) depending on the board.
+- BMP is uncompressed, so BMP files range from ~253 KB (360×360) to ~1.2 MB (1024×600) depending on the board.
+- The portal exposes this endpoint under **Display > Screen Preview**. Opening the fragment does not capture an image; **Capture Preview** and **Refresh Preview** request a fresh framebuffer.
 
 ---
 
@@ -1063,7 +1079,7 @@ Save hardware button action configuration.
 
 - **Body:** JSON object with a `buttons` array of `{ tap_actions, hold_actions }` objects, positional by button index. Entries beyond `NUM_HW_BUTTONS` are ignored.
 - **Response:** standard component save response on success; JSON error on failure.
-- On screenless boards, display-only action types (screen, brightness, notify, timer) parse and store normally but log a no-op when dispatched.
+- On screenless boards, display-only action types (screen, brightness, notify, visual_alert, timer) parse and store normally but log a no-op when dispatched.
 
 ---
 
@@ -1290,6 +1306,32 @@ Return the building block catalog — pre-configured button groups that can be i
 ```
 
 Each button's `col_offset` / `row_offset` is relative to the placement anchor cell. The editor adds the anchor position to compute absolute grid coordinates.
+
+
+#### `POST /api/pad/resolve`
+
+Resolve `[scheme:params]` binding tokens against the device's **live** data and return the resolved text — used by the pad editor's **Preview live values** button to show what a binding renders to without saving. Resolution runs on the main loop (LVGL task), so the request is deferred through the shared main-loop bridge; it resolves **values** only (not a pixel render). Nothing is persisted. Requires the same portal auth as the other `/api/pad*` routes. Gated `HAS_DISPLAY && HAS_MQTT`. Shares one resolver with the MCP `resolve_bindings` tool.
+
+- **Request:**
+```json
+{
+  "screen": "pad_0",
+  "bindings": ["[time:%H:%M]", "[health:heap_free]"],
+  "button": { "label_center": "[mqtt:home/solar;power;%.0f]W", "fg_color": "[expr:[net:any]?\"#22c55e\":\"#334155\"]" }
+}
+```
+  `screen` (optional) supplies that pad's `[pad:name]` context. At least one of `bindings` / `button` is required; a `button` object resolves its bindable `label_*` / `*_color` / `btn_state` / `widget_data_binding[_2..4]` fields.
+
+- **Response:**
+```json
+{
+  "resolved": [ { "input": "[time:%H:%M]", "value": "14:32" }, { "input": "[health:heap_free]", "value": "182 KB" } ],
+  "button": { "label_center": "1240W", "fg_color": "#22c55e" }
+}
+```
+  Errors: `400` (bad params / invalid JSON), `503` (busy — another resolve/control job is in flight, retry; or out of memory), `500` (internal).
+
+> **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 
 
 ## Implementation Details

@@ -4,6 +4,7 @@
 
 #include "binding_template.h"
 #include "log_manager.h"
+#include "mqtt_sub_store.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -257,6 +258,33 @@ bool pad_binding_expand(const PadConfig* page, const char* templ,
 }
 
 // ============================================================================
+// Batch resolve — set context, resolve N templates, restore
+// ============================================================================
+
+void pad_resolve(const char* const* inputs, size_t count,
+                 const PadBinding* binds, uint8_t bind_count,
+                 char* out, size_t stride) {
+    if (!inputs || !out || stride == 0) return;
+    // Set the requested pad context (NULL clears -> [pad:] tokens resolve to the
+    // placeholder). Single-threaded (LVGL/main task) so no lock is needed.
+    pad_binding_set_bindings(binds, bind_count);
+    for (size_t i = 0; i < count; i++) {
+        char* dst = out + i * stride;
+        const char* in = inputs[i];
+        if (!in) { dst[0] = '\0'; continue; }
+        // Live-preview aid: if this input references an MQTT topic the device is
+        // not yet subscribed to (e.g. a binding the user is typing that isn't
+        // saved), subscribe now so it resolves on a subsequent refresh once the
+        // (retained) message arrives. Reconciled by the next subscribe_all().
+        mqtt_sub_store_ensure_binding_subscribed(in);
+        binding_template_resolve(in, dst, stride);
+    }
+    // Clear context: the live pad screen re-sets it every frame, so this avoids
+    // leaking a transient authoring/preview context into an unrelated render.
+    pad_binding_set_bindings(nullptr, 0);
+}
+
+// ============================================================================
 // Init
 // ============================================================================
 
@@ -267,6 +295,7 @@ static void pad_scheme_describe(void* out) {
     o["syntax"]  = "[pad:name]";
     o["example"] = "[pad:power]";
     o["note"]    = "resolves a pad-level named binding declared in pad.bindings; usable inside [expr:..]";
+    o["limit"]   = "one level only: a pad binding's VALUE may not contain another [pad:...] token (the engine will not resolve pad-through-pad and renders blank). Inline the underlying binding instead. validate_pad rejects this.";
 }
 #endif
 

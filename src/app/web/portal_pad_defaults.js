@@ -222,10 +222,20 @@ function padRenderBindings() {
             padMarkDirty();
         });
         var valueInput = row.querySelector('.pad-binding-value');
+        var preview = document.createElement('span');
+        preview.className = 'pad-pv-val pad-binding-preview';
+        preview.style.display = 'none';
+        row.appendChild(preview);
+        var pvTimer = null;
+        var schedulePreview = function() {
+            if (pvTimer) clearTimeout(pvTimer);
+            pvTimer = setTimeout(function() { padBindingPreviewUpdate(preview, valueInput); }, 350);
+        };
         valueInput.addEventListener('input', function() {
             padState.bindings[idx].value = this.value;
             padMarkDirty();
             if (this.classList.contains('binding-error')) bindingClearError(this);
+            schedulePreview();
         });
         if (typeof bindingAttachValidation === 'function') bindingAttachValidation(valueInput);
         row.querySelector('.pad-binding-del').addEventListener('click', function() {
@@ -234,7 +244,47 @@ function padRenderBindings() {
             padMarkDirty();
         });
         list.appendChild(row);
+        padBindingPreviewUpdate(preview, valueInput);  // initial live value
     });
+}
+
+// Resolve one pad-binding value against live data and show it inline below the
+// row (pad binding values are standalone — the one-level rule forbids [pad:]
+// inside them — so each resolves independently). Reuses the shared preview
+// helpers (padPvIsBinding / padPvHex / padPreviewEsc).
+function padBindingPreviewUpdate(chip, valueInput, retriesLeft) {
+    if (!chip || !valueInput) return;
+    var val = valueInput.value.trim();
+    if (typeof padPvIsBinding !== 'function' || !padPvIsBinding(val)) {
+        chip.style.display = 'none'; chip.title = ''; chip.innerHTML = ''; return;
+    }
+    var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
+    chip.style.display = 'flex';
+    chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">\u2026</span>';
+    fetch('/api/pad/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bindings: [val] })
+    }).then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(j) {
+          var v = (j && j.resolved && j.resolved[0]) ? j.resolved[0].value : '---';
+          var shown = (v === '' || v == null) ? '(empty)' : String(v);
+          var muted = shown.indexOf('---') !== -1 ? ' pad-pv-muted' : '';
+          var hex = padPvHex(v);
+          var inner = '<span class="pad-pv-arrow">\u2192</span>';
+          if (hex) inner += '<span class="pad-pv-swatch" style="background:' + padPreviewEsc(hex) + ';"></span>';
+          inner += '<span class="pad-pv-text' + muted + '">' + padPreviewEsc(shown) + '</span>';
+          chip.innerHTML = inner;
+          chip.title = shown;
+          // A freshly typed [mqtt:...] topic gets subscribed on this resolve but
+          // its message may arrive just after — retry so it fills in. A
+          // not-yet-delivered topic resolves to EMPTY (not '---'), so retry on
+          // either.
+          if ((typeof padPvUnresolved === 'function' ? padPvUnresolved(v) : shown.indexOf('---') !== -1) && rl > 0)
+              setTimeout(function() { padBindingPreviewUpdate(chip, valueInput, rl - 1); }, 1000);
+      })
+      .catch(function() {
+          chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">---</span>';
+      });
 }
 
 function padIsValidBindingName(name) {

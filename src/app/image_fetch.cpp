@@ -4,6 +4,7 @@
 
 #include "image_decoder.h"
 #include "log_manager.h"
+#include "net_activity.h"
 #include "rtos_task_utils.h"
 
 #include <HTTPClient.h>
@@ -63,7 +64,7 @@ static ImageSlot* g_slots = nullptr;
 static SemaphoreHandle_t g_mutex = nullptr;
 static TaskHandle_t g_task = nullptr;
 static RtosTaskPsramAlloc g_task_alloc;
-static const uint32_t FETCH_TASK_STACK_WORDS = 16384;
+static const uint32_t FETCH_TASK_STACK_BYTES = 16384;
 static const UBaseType_t FETCH_TASK_PRIORITY = 2;  // Below LVGL (4), above idle
 static const uint32_t IDLE_DELAY_MS = 500;
 static volatile bool g_suspended = false;  // Global gate (screen saver)
@@ -176,6 +177,7 @@ static bool conn_download(int slot, uint8_t** out_data, size_t* out_len) {
 
     SlotConn& c = g_conn[slot];
     int code = c.http.GET();
+    net_activity_mark(NET_CH_HTTP);
     if (code != 200) {
         LOGW(TAG, "HTTP %d for slot %d", code, slot);
         c.http.end();        // clears response; keep-alive preserves socket
@@ -334,6 +336,7 @@ static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
     // ---- Step 1: First call — open connection and parse headers ----
     if (!c.is_streaming) {
         int code = c.http.GET();
+        net_activity_mark(NET_CH_HTTP);
         if (code != 200) {
             LOGW(TAG, "MJPEG slot %d: HTTP %d", slot, code);
             c.http.end();
@@ -689,7 +692,7 @@ void image_fetch_init() {
     // least the cores no longer fight for compute time.
     bool ok = rtos_create_task_psram_stack_pinned(
         fetch_task, "img_fetch",
-        FETCH_TASK_STACK_WORDS, nullptr,
+        FETCH_TASK_STACK_BYTES, nullptr,
         FETCH_TASK_PRIORITY, &g_task, &g_task_alloc,
         0);
 
@@ -697,8 +700,8 @@ void image_fetch_init() {
         LOGE(TAG, "Failed to create fetch task");
         g_task = nullptr;
     } else {
-        LOGI(TAG, "Fetch task created (stack=%u words, pri=%u)",
-             (unsigned)FETCH_TASK_STACK_WORDS, (unsigned)FETCH_TASK_PRIORITY);
+           LOGI(TAG, "Fetch task created (stack=%u bytes, pri=%u)",
+               (unsigned)FETCH_TASK_STACK_BYTES, (unsigned)FETCH_TASK_PRIORITY);
     }
 }
 

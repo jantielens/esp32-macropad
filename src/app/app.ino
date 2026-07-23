@@ -39,6 +39,7 @@
 #include "pad_block.h"
 #include "list_provider.h"
 #include "list_binding.h"
+#include "net_binding.h"
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "timer_config.h"
@@ -46,6 +47,7 @@
 #include "screen_saver_manager.h"
 #include "action_dispatch.h"
 #include "message_bubble.h"
+#include "visual_alert.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
 #endif
@@ -473,6 +475,7 @@ void setup()
 	pad_binding_init();
 	timer_binding_init();
 	list_binding_init();
+	net_binding_init();
 	timer_config_init();
 	#endif
 
@@ -551,6 +554,7 @@ void loop()
 	screen_saver_manager_loop();
 	action_dispatch_loop();
 	message_bubble_loop();
+	visual_alert_loop();
 	#endif
 
 	#if HAS_TOUCH

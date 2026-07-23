@@ -1,4 +1,7 @@
-# Web Portal Guide
+---
+title: Web Portal Guide
+description: Configure ESP32 Macropad device settings, pads, integrations, and firmware from the web portal
+---
 
 The ESP32 Macropad includes a built-in web portal for configuring every aspect of your device — from Wi-Fi settings to pad layouts and e-paper image scheduling — all from your browser.
 
@@ -147,16 +150,23 @@ The firmware exposes two BLE health signals for bindings and diagnostics:
 | `secured` | BLE has an encrypted active connection |
 | `error` | BLE initialization failed or the BLE stack entered a fault state |
 
-### Display Settings
+### Brightness
 
 *Shown only on boards with a display.*
 
 | Setting | Description |
 |---------|-------------|
 | **Backlight Brightness** | Slider (0–100%). Changes take effect immediately; save to persist across reboots |
-| **Current Screen** | Switch the active screen on the device. This is a live control, not saved — resets on reboot |
 
-#### Screen Saver (Burn-in Prevention)
+### Screen Preview
+
+Select the active screen and capture the current device framebuffer in the
+portal. Screen changes apply immediately and are not saved. Preview capture is
+manual, so opening the fragment does not allocate a framebuffer or encode an
+image. Use **Refresh Preview** after changing screens or when the displayed
+content changes.
+
+### Screen Saver (Burn-in Prevention)
 
 Protects your LCD from burn-in by turning off the backlight after a period of inactivity. A built-in pixel-shift mechanism moves content slightly each sleep cycle to prevent ghosting.
 
@@ -238,6 +248,8 @@ The Pads page has its own floating footer with **Save Pad**, **Show on Device**,
 The **Button Defaults** section (collapsible, at the bottom of the Pads page) lets you set device-wide default colors, borders, and label styles that all buttons on all pads inherit automatically — saving you from repeating the same appearance settings on every button. Per-button overrides still take precedence.
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
+
+For sensitive normal-button actions, open **Action Safety** in the Actions group and enable **Confirm before tap or long-press actions**. The device shows an explicit Cancel/Confirm prompt before running either action list, uses the optional custom message when present, and cancels automatically after 10 seconds.
 
 The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
 

@@ -33,7 +33,7 @@
                     </tr>
                     <tr>
                         <td style="padding:4px 0;"><strong>color</strong></td>
-                        <td style="padding:4px 0;color:#86868b;">Hex color (e.g. <code>#FF0</code>, <code>#FF6600</code>)</td>
+                        <td style="padding:4px 0;color:#86868b;">Hex color (e.g. <code>#FF0</code>, <code>#FF6600</code>) or a binding, e.g. <code>[expr:[net:any]?&quot;#22c55e&quot;:&quot;#94a3b8&quot;]</code></td>
                     </tr>
                 </table>
                 <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#1d1d1f;">Examples</p>
@@ -53,6 +53,10 @@
                     <tr>
                         <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">y:-4;align:right</code></td>
                         <td style="padding:4px 0;color:#86868b;">Shifted up, right-aligned</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 0;"><code style="background:rgba(255,255,255,0.7);padding:2px 6px;border-radius:4px;">color:[expr:[net:any]?&quot;#22c55e&quot;:&quot;#94a3b8&quot;]</code></td>
+                        <td style="padding:4px 0;color:#86868b;">Live color driven by a binding</td>
                     </tr>
                 </table>
             </div>

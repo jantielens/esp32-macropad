@@ -83,6 +83,8 @@ If the build fails:
 - Release workflow modified → Update `docs/dev/build-and-release-process.md` and `README.md` release section
 - New requirement added → Update `README.md` prerequisites
 - REST API endpoint added/changed → Update `docs/dev/web-portal.md` and `README.md` API table
+- New binding scheme added → Register an MCP `describe` hook (and a `validate` hook for constrained schemes) via `binding_template_set_scheme_describe()` / `binding_template_set_scheme_validate()` so the scheme appears in the MCP pad-authoring manifest; `tests/test_mcp_scheme_parity.sh` enforces this
+- New user-facing control or feature added → Consider whether it should be exposed to the MCP server (a control/authoring tool via `REGISTER_MCP_TOOL`, and/or advertised in `get_capabilities`) so AI clients can use it; update `docs/mcp-guide.md`
 - Web UI feature changed → Update `docs/dev/web-portal.md` features section and `docs/web-portal-guide.md`
 - Display/touch driver added/changed → Update `docs/dev/display-touch-architecture.md` driver sections
 - Screen management changed → Update `docs/dev/display-touch-architecture.md` screen lifecycle

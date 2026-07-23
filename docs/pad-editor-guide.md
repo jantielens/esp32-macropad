@@ -1,4 +1,7 @@
-# Pad Editor Guide
+---
+title: Pad Editor Guide
+description: Configure pads, buttons, actions, bindings, widgets, and visual styles on ESP32 Macropad
+---
 
 The pad editor is the heart of ESP32 Macropad — it turns your touch screen into a fully custom dashboard, remote control, or status panel. Each device supports up to **16 independent pads**, each with its own grid of buttons that can display live data, control smart home devices, and react to real-time conditions.
 
@@ -175,7 +178,7 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
 | `y` | `-999` to `999` | Shift the label up (negative) or down (positive) in pixels |
 | `mode` | `clip`, `scroll`, `dot`, `wrap` | How to handle text that doesn't fit |
-| `color` | `#RGB` or `#RRGGBB` | Override the label's text color |
+| `color` | `#RGB` / `#RRGGBB`, or a `[binding]` | Override the label's text color (static or live-bound) |
 
 Combine them with semicolons:
 
@@ -195,6 +198,9 @@ A few more examples:
 - `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
 - `font_size:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
+- `color:[expr:[net:any]?"#22c55e":"#94a3b8"]` — text color driven by a live binding
+
+> The `color:` property accepts a full binding template just like the button's own colors, so a label's text color can update live (e.g. green when active, gray when idle). A per-label `color:` always wins over the button's foreground color. The style input holds up to 127 characters; if a binding expression is longer, declare it once as a pad-level `[pad:name]` binding and reference `color:[pad:name]`.
 
 > Without style overrides, font size is chosen automatically based on the grid dimensions and display resolution. The default alignment is center, and overflow is clipped.
 
@@ -329,6 +335,12 @@ Each button supports up to **3 sequential actions** per gesture — one for **ta
 
 By default, only the first action slot is shown. Click **"+ Add tap action"** or **"+ Add long-press action"** to reveal additional slots. Use the **"× Remove"** link to hide a slot and clear its action.
 
+Under **Action Safety**, enable **Confirm before tap or long-press actions** to show a modal prompt before either action list runs. You can provide a custom confirmation message or leave it empty to generate one from the button label. **Confirm** runs the complete action list in order; **Cancel** or 10 seconds without a response runs none of the actions.
+
+Confirmation applies to normal buttons only. Widget-owned interactions, including list items, rocker zones, and numeric rocker adjustments, dispatch without this prompt.
+
+Programmatic activation through the MCP `press_button` tool also bypasses the on-device prompt. MCP clients should inspect a confirmation-protected button before activating it.
+
 **Action types:**
 
 | Type | What it does |
@@ -347,6 +359,7 @@ By default, only the first action slot is shown. Click **"+ Add tap action"** or
 | **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
 | **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. Set and adjust countdown values support binding templates. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
+| **Visual Alert** | Raise or clear a full-screen pulsing color overlay as an ambient alarm. Configure the color (bindable), pattern (breathe/blink/solid), period, intensity, and duration. ESP32-P4 boards only. See [Visual Alert Action](#visual-alert-action) below. |
 | **Home Assistant Service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
 | **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, **Enable Screensaver**, **Set/Adjust Volume**, or **Set/Adjust Brightness**. |
 
@@ -458,6 +471,29 @@ The bubble fades in over 200 ms, displays for the configured duration, then fade
 - **Tap action**: Show Notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, duration: `0`, bg_color: `#1a3a1a`, location: `center`
 
 > **Home Assistant integration**: Notifications can also be triggered remotely via the **Notify** text entity. See the [Home Assistant Integration Guide](ha-integration-guide.md#notifications) for details and automation examples.
+
+### Visual Alert Action
+
+The **Visual Alert** action raises a full-screen pulsing color overlay on the device screen — a strong ambient cue meant to grab attention across the room (for example, a critical threshold crossing). It complements audio feedback: pair it with a **Play Beep** action for a coordinated alarm. Unlike a notification, it draws no text — just a pulsing tint that sits above everything (including the screensaver).
+
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| **Action** | **Start Alert** (default) raises the overlay and wakes the screen; **Stop Alert** clears it. |
+| **Color** | Overlay tint hex (default red `#FF0000`). Supports binding templates, so an `[expr:...]` can pick red vs. amber based on severity. |
+| **Pattern** | **Breathe** (default, smooth eased pulse), **Blink** (hard on/off), or **Solid** (static tint). |
+| **Period (ms)** | Pulse cadence for breathe/blink (default `800`). Ignored for solid. |
+| **Intensity (%)** | Maximum overlay opacity, 1–100 (default `100` = full flash; lower values give a translucent tint). |
+| **Duration (ms)** | How long the alert runs. `0` (default) persists until stopped, tapped, or replaced by another alert. |
+
+Raising an alert wakes the screen first, so it is visible even when the display is asleep. Clear it with a **Stop Alert** action, by letting the duration elapse, or by tapping anywhere on the overlay. A new alert replaces the current one (last-write-wins). A notification bubble raised afterward stacks above the tint, so words stay readable.
+
+**Example: energy alarm from an MQTT trigger**
+- **Trigger**: MQTT topic `home/solar/power` with an `[expr:...]` threshold
+- **Action 1**: Visual Alert → op: `start`, color: `#FF0000`, pattern: `breathe`, duration: `0`
+- **Action 2**: Play Beep → pattern: `1000:200 100 1000:200`
+- A separate button (or a recovery trigger) fires **Visual Alert → op: `stop`** to clear it.
 
 ### Home Assistant Service Action
 
@@ -899,6 +935,16 @@ The pad editor and Home page validate binding syntax **in real time** as you typ
 
 > **Tip:** Validation is purely syntactic — it checks that your binding is well-formed, not that the MQTT topic exists or that the data path returns a value. Runtime resolution issues still show `---` or `ERR:` on the device.
 
+### Preview Live Values
+
+Syntax validation confirms a binding is *well-formed*, but not what it actually resolves to right now. To close that gap, every bindable field that contains a binding shows its **live resolved value inline**, right after the field's **fx** hint (e.g. `Center Label  fx  → 14:32`). Values are resolved against live device data when you open a button and refresh automatically as you edit a binding; click a value to force a fresh reading. The three labels, the background / text / border colors, the button state, and the primary widget data binding are all covered; a color that resolves to a hex value also shows a **swatch** of the resolved color.
+
+Use it to confirm that an MQTT topic is publishing, a `[health:…]` key returns what you expect, an `[expr:…]` conditional picks the right branch, or a `[pad:name]` alias points at the intended value. A field that resolves to a placeholder shows `---` (unresolved) just as it would on the device.
+
+> **Note:** Preview resolves **values**, not pixels — it does not render the button's final appearance. It also uses the current pad's `[pad:name]` bindings, so save the pad first if you just added or changed a named binding you want the preview to see.
+
+The pad's **Bindings** list (in Pad Settings) shows the same live preview: each named binding displays its resolved value on its own line beneath the row, updating as you edit it.
+
 ### Pipe Fallback
 
 **Syntax:** `[scheme:params|fallback]`
@@ -1062,6 +1108,39 @@ WiFi: [health:rssi] dBm                               → WiFi: -54 dBm
 [health:wifi_connected]                                → ON
 [health:ip]                                            → 192.168.1.42
 ```
+
+### Network Binding
+
+**Syntax:** `[net:channel]` or `[net:channel;age]`
+
+Exposes live network / transport activity so labels, icon colors, and widget inputs can react with a subtle visual cue whenever the device sends or receives data. Each channel tracks the time of its most recent activity; the binding is resolved on-screen every frame, so an icon flashes on activity and settles back when idle.
+
+| Channel | Activity tracked |
+|---------|------------------|
+| `portal` | Inbound web portal HTTP requests |
+| `mcp` | Inbound MCP (Model Context Protocol) calls |
+| `mqtt_rx` | Inbound MQTT messages |
+| `mqtt_tx` | Outbound MQTT publishes |
+| `mqtt` | Either MQTT direction — active on `mqtt_rx` or `mqtt_tx` |
+| `http` | Outbound HTTP client (image fetch, Home Assistant REST) |
+| `ble` | BLE HID reports (ESP32-P4 only) |
+| `ota` | Firmware OTA flash writes |
+| `any` | Aggregate — active when *any* channel is active |
+
+| Sub-key | Returns |
+|---------|---------|
+| *(none)* | `1` when the channel saw activity in the last ~400 ms, else `0` |
+| `age` | Milliseconds since the last activity (capped at `999999`, which also means "never") |
+
+**Examples:**
+
+```
+[net:mqtt_rx]                                          → 1 briefly on each message, else 0
+[expr:[net:any]?"#22c55e":"#334155"]                   → green on activity, gray idle (icon color)
+[expr:[net:portal;age]<1000?"ACTIVE":"idle"]           → label stays ACTIVE for 1 s after a request
+```
+
+> **Tip**: Bind a small status button's icon color to `[expr:[net:any]?"#22c55e":"#334155"]` for a device-wide "network heartbeat" LED.
 
 ### Time Binding
 

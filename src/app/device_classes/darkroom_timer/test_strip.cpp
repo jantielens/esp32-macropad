@@ -787,6 +787,17 @@ void test_strip_tick() {
     }
 }
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void strip_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[strip:key] or [strip:key;format]";
+    o["example"] = "[strip:segment] / [strip:segments]";
+    o["keys"]    = "state, base_time, total_time, elapsed, remaining, segment, segments, seg_inc, step, range, progress, countdown, tick, relay, table";
+    o["note"]    = "Darkroom f-stop test-strip sequencer state.";
+}
+#endif
+
 void test_strip_init() {
     recalculate_segments();
     if (!binding_template_register("strip", strip_resolve, strip_collect)) {
@@ -794,6 +805,9 @@ void test_strip_init() {
     } else {
         LOGI(TAG, "Strip binding scheme registered");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("strip", strip_scheme_describe);
+#endif
 }
 
 #if HAS_MCP

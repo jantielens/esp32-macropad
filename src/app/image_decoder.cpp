@@ -876,14 +876,15 @@ bool image_decode_to_rgb565(
     }
 
     // Allocate output RGB565 buffer.
-    // On ESP32-P4 the buffer is 64-byte cache-line aligned so PPA can write
+    // On ESP32-P4 the buffer is cache-line aligned so PPA can write
     // directly into it.  heap_caps_aligned_alloc is compatible with
     // heap_caps_free used by the caller (image_fetch.cpp).
     size_t out_bytes = (size_t)target_w * target_h * 2;
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-    size_t out_aligned_size = (out_bytes + 63) & ~63UL;
+    constexpr size_t out_alignment = CONFIG_CACHE_L2_CACHE_LINE_SIZE;
+    size_t out_aligned_size = (out_bytes + out_alignment - 1) & ~(out_alignment - 1);
     uint16_t* out = (uint16_t*)heap_caps_aligned_alloc(
-        64, out_aligned_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        out_alignment, out_aligned_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 #else
     size_t out_aligned_size = out_bytes;
     uint16_t* out = (uint16_t*)psram_alloc(out_bytes);

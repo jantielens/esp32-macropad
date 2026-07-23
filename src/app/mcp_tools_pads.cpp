@@ -28,6 +28,8 @@
 #include "mcp_tool_util.h"
 #include "web_mcp.h"
 #include "pad_config.h"
+#include "pad_validate.h"
+#include "pad_resolve_request.h"
 #include "psram_json_allocator.h"
 #include "widgets/widget.h"
 #include "binding_template.h"
@@ -35,6 +37,9 @@
 #include "health_binding.h"
 #include "list_provider.h"
 #include "pad_block.h"
+#if HAS_MQTT
+#include "mqtt_sub_store.h"
+#endif
 
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
@@ -120,7 +125,8 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "label_top", "label_center", "label_bottom",
         "label_top_style", "label_center_style", "label_bottom_style",
         "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad",
-        "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
+        "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions",
+        "confirm", "confirm_text"
     };
     for (const char* f : fields) bf.add(f);
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
@@ -129,9 +135,11 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
     btn["btn_state_note"] = "accepts a binding for conditional visibility, e.g. [expr:[mqtt:printer;state]==\"online\"?\"enabled\":\"hidden\"] (unresolved -> enabled)";
+    btn["confirm_note"] = "confirm=true requires an on-device Cancel/Confirm prompt before normal button tap or long-press actions run; unsupported on widgets; confirm_text is optional plain text (max 127 chars); timeout is 10 seconds; programmatic MCP press_button bypasses the dialog";
 
     JsonObject style = result.createNestedObject("label_style");
     style["format"] = "font:24;font_family:dseg7;font_upscale:1.4;align:right;y:-3;mode:scroll;color:#FF0000";
+    style["color_note"] = "color: accepts either a #RRGGBB hex value or a binding token (e.g. [expr:...] or [net:...]) that resolves live, like fg_color and the other color fields; a per-label color overrides fg_color. Style DSL max length 127 chars.";
     JsonArray fam = style.createNestedArray("font_family");
     fam.add("dseg7"); fam.add("bebas"); fam.add("doto");
     JsonArray al = style.createNestedArray("align");
@@ -200,12 +208,13 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
 
     // Visual inspection: the device cannot hand the model an image directly, but
     // a Playwright-driven browser can. /api/screenshot is the live framebuffer as
-    // a large 24-bit BMP — too big and not directly understandable as text/data,
-    // so it must be rendered in a browser and captured as an <img>, never fetched
-    // inline. This is the one reliable way to verify on-panel rendering.
+    // JPEG on ESP32-P4 or BMP elsewhere. It must be rendered in a browser and
+    // captured as an <img>, never fetched inline. This is the one reliable way to
+    // verify on-panel rendering.
     JsonObject vis = result.createNestedObject("visual_inspection");
     vis["endpoint"] = "GET /api/screenshot";
-    vis["format"] = "24-bit BMP of the current on-device screen; large and image-only — do NOT fetch it as text/data, render it in a browser instead";
+    vis["format"] = "JPEG by default on ESP32-P4, 24-bit BMP elsewhere; image-only — do NOT fetch it as text/data, render it in a browser instead";
+    vis["format_options"] = "use ?format=bmp|jpg on ESP32-P4; optional JPEG quality is ?quality=1..100 (default 85)";
     vis["why"] = "the only reliable way to verify how a pad/button/widget actually renders on the panel (colors, resolved bindings, overflow, layout) without the physical device";
     JsonArray steps = vis.createNestedArray("playwright_steps");
     steps.add("To verify a specific pad, first set_screen('pad_N') so it is on-screen (requires control tools enabled).");
@@ -225,208 +234,11 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
 }
 
 // ============================================================================
-// Validation — shared by validate_pad and every write tool. Runs before any
-// save: pad_config_save_raw truncates in place, so a bad pass would corrupt the
-// pad. Returns nullptr on success or a short error string.
+// Validation — the full pad validator now lives in pad_validate.{h,cpp} so the
+// web portal save path and these MCP tools validate through identical logic
+// (single source of truth). Call pad_validate(JsonObjectConst) — it runs before
+// every write because pad_config_save_raw truncates in place.
 // ============================================================================
-
-// A color is valid if it parses as hex or carries a binding template ([..]).
-static bool color_ok(const char* s) {
-    if (!s || !s[0]) return true;  // empty => default
-    uint32_t tmp;
-    if (parse_hex_color(s, &tmp)) return true;
-    return strchr(s, '[') != nullptr;  // binding template
-}
-
-// Return `msg` if b[key] would be truncated on store (>= cap, since strlcpy
-// needs room for the NUL). Fields that hold binding templates can overflow when
-// an LLM inlines a long [expr:..]/[mqtt:..]; the message steers it to factor the
-// expression into a reusable pad-level [pad:name] binding.
-static const char* check_max(JsonObjectConst b, const char* key, size_t cap, const char* msg) {
-    const char* v = b[key] | "";
-    return (strlen(v) >= cap) ? msg : nullptr;
-}
-static const char* LEN_MSG_LABEL = "field too long (max 191 chars); factor long binding expressions into a pad-level [pad:name] binding and reference it";
-static const char* LEN_MSG_SHORT = "field too long (max 63 chars)";
-// Single in-flight MCP request, so a static buffer for a formatted validation
-// message is safe (and the validator returns const char*).
-static char s_len_err[96];
-
-// Validate every [scheme:params] token in a string: the scheme must be a
-// registered binding scheme, and (if that scheme provides a validate hook) its
-// params must pass. This is generic across all schemes — health keys, list
-// providers, timer ids, etc. are each checked by the scheme's own hook (open
-// schemes like mqtt/expr/time have no hook and accept anything). nullptr = ok.
-static const char* validate_binding_tokens(const char* s) {
-    if (!s) return nullptr;
-    const char* p = s;
-    while ((p = strchr(p, '[')) != nullptr) {
-        const char* scheme = p + 1;
-        const char* c = scheme;
-        while ((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z')) c++;
-        if (*c != ':' || c == scheme) { p++; continue; }  // not a [scheme:...] token
-        size_t schemelen = (size_t)(c - scheme);
-        if (!binding_template_scheme_known(scheme, schemelen)) {
-            char sbuf[16];
-            size_t nn = schemelen < sizeof(sbuf) - 1 ? schemelen : sizeof(sbuf) - 1;
-            memcpy(sbuf, scheme, nn); sbuf[nn] = '\0';
-            snprintf(s_len_err, sizeof(s_len_err), "unknown binding scheme '%s'", sbuf);
-            return s_len_err;
-        }
-        // Simple params (up to ; ] |) for the scheme's validate hook. Schemes with
-        // nested params (expr) have no hook, so this approximation is unused there.
-        const char* pp = c + 1;
-        char pbuf[48];
-        size_t pn = 0;
-        while (*pp && *pp != ';' && *pp != ']' && *pp != '|' && pn < sizeof(pbuf) - 1) pbuf[pn++] = *pp++;
-        pbuf[pn] = '\0';
-        const char* e = binding_template_validate_params(scheme, schemelen, pbuf);
-        if (e) return e;
-        p++;  // keep scanning (nested tokens too)
-    }
-    return nullptr;
-}
-
-static const char* validate_action_array(JsonArrayConst arr) {
-    if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
-    for (JsonObjectConst a : arr) {
-        const char* t = a["type"] | "";
-        if (!t[0]) return "action missing type";
-    }
-    return nullptr;
-}
-
-static const char* validate_button(JsonObjectConst b, int cols, int rows) {
-    int col = b["col"] | 0;
-    int row = b["row"] | 0;
-    int cspan = b["col_span"] | 1;
-    int rspan = b["row_span"] | 1;
-    if (col < 0 || row < 0) return "button col/row negative";
-    if (cspan < 1 || rspan < 1) return "span must be >= 1";
-    if (col + cspan > cols) return "button overflows grid columns";
-    if (row + rspan > rows) return "button overflows grid rows";
-    if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
-    if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
-    if (!color_ok(b["border_color"] | "")) return "bad border_color";
-    const char* wt = b["widget_type"] | "";
-    const WidgetType* wtype = wt[0] ? widget_find(wt) : nullptr;
-    if (wt[0] && !wtype) return "unknown widget type";
-    // Widget config field length limits, enforced from the widget's own
-    // describeSchema (single source): each field may declare its own "max"
-    // (e.g. caption fields are 63, others differ or declare none). Only fields
-    // that declare a "max" are length-checked, so an over-long value is rejected
-    // here instead of silently truncating on the device.
-    if (wtype && wtype->describeSchema) {
-        BasicJsonDocument<PsramJsonAllocator> sd(4096);
-        JsonObject so = sd.to<JsonObject>();
-        wtype->describeSchema(so);
-        JsonArrayConst cf = so["config_fields"];
-        for (JsonObjectConst f : cf) {
-            const char* fname = f["name"] | "";
-            if (!fname[0]) continue;
-            // Action-typed fields (e.g. numericrocker's adjust action) are nested
-            // action OBJECTS, not strings. Catch the common LLM mistake of passing
-            // a bare string/number here so validate_pad rejects it up front,
-            // instead of the device silently ignoring it at render time.
-            if (strcmp(f["type"] | "", "action") == 0) {
-                JsonVariantConst av = b[fname];
-                if (!av.isNull()) {
-                    if (!av.is<JsonObjectConst>()) {
-                        snprintf(s_len_err, sizeof(s_len_err),
-                                 "widget field '%s' must be a nested action object {type,...}, not a bare value", fname);
-                        return s_len_err;
-                    }
-                    const char* at = av["type"] | "";
-                    if (!at[0]) {
-                        snprintf(s_len_err, sizeof(s_len_err),
-                                 "widget field '%s' action is missing 'type'", fname);
-                        return s_len_err;
-                    }
-                }
-                continue;  // action fields carry no length cap
-            }
-            int mx = f["max"] | 0;
-            if (mx <= 0) continue;
-            const char* fname_val = b[fname] | "";
-            if ((int)strlen(fname_val) > mx) {
-                snprintf(s_len_err, sizeof(s_len_err),
-                         "widget field '%s' too long (max %d); factor a long binding into a [pad:name] binding",
-                         fname, mx);
-                return s_len_err;
-            }
-        }
-    }
-    // Length limits (truncation guard). Labels/bindings/state: 192-byte buffers;
-    // border/radius: 64-byte; colors: 192-byte.
-    const char* e;
-    if ((e = check_max(b, "label_top",    CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "label_center", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "label_bottom", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "btn_state",    CONFIG_BTN_STATE_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "bg_color",     CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "fg_color",     CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "border_color", CONFIG_COLOR_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "border_width", CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
-    if ((e = check_max(b, "corner_radius",CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
-    if ((e = check_max(b, "content_pad",  CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
-    if ((e = check_max(b, "widget_data_binding",   CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "widget_data_binding_2", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "widget_data_binding_3", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if ((e = check_max(b, "widget_data_binding_4", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
-    if (b["actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["actions"]); if (ae) return ae; }
-    if (b["lp_actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["lp_actions"]); if (ae) return ae; }
-    // Reject invalid binding tokens (unknown scheme, bad health key / list
-    // provider / timer id) in any string field (labels, widget bindings...).
-    for (JsonPairConst kv : b) {
-        if (kv.value().is<const char*>()) {
-            const char* he = validate_binding_tokens(kv.value().as<const char*>());
-            if (he) return he;
-        }
-    }
-    return nullptr;
-}
-
-// Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
-static const char* validate_pad_doc(JsonObjectConst pad) {
-    const char* layout = pad["layout"] | "grid";
-    int cols = pad["cols"] | 0;
-    int rows = pad["rows"] | 0;
-    bool is_grid = strcmp(layout, "grid") == 0;
-    if (is_grid) {
-        if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be 1-8";
-        if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be 1-8";
-    } else {
-        cols = MAX_GRID_COLS; rows = MAX_GRID_ROWS;  // skip overflow checks for curated
-    }
-    if (pad.containsKey("template_pad")) {
-        int tp = pad["template_pad"] | -1;
-        if (tp < -1 || tp >= MAX_PADS) return "template_pad out of range";
-    }
-    if (pad["bindings"].size() > PAD_MAX_BINDINGS) return "too many bindings";
-    // Pad-level binding name/value length limits.
-    JsonObjectConst pbind = pad["bindings"];
-    if (!pbind.isNull()) {
-        for (JsonPairConst kv : pbind) {
-            if (strlen(kv.key().c_str()) >= PAD_BINDING_NAME_MAX_LEN) return "binding name too long (max 31 chars)";
-            const char* val = kv.value().as<const char*>();
-            if (val && strlen(val) >= CONFIG_LABEL_MAX_LEN) return "binding value too long (max 191 chars)";
-            const char* be = validate_binding_tokens(val);
-            if (be) return be;
-        }
-    }
-    JsonArrayConst btns = pad["buttons"];
-    if (btns.isNull()) return nullptr;
-    if (btns.size() > MAX_PAD_BUTTONS) return "too many buttons";
-    // Per-button checks. NOTE: grid-cell overlaps are intentionally NOT rejected
-    // — the firmware (and the portal save path) tolerate them (a later button
-    // renders over / hides an earlier one). Rejecting overlaps here was stricter
-    // than the device and broke incremental set_buttons edits.
-    for (JsonObjectConst b : btns) {
-        const char* e = validate_button(b, cols, rows);
-        if (e) return e;
-    }
-    return nullptr;
-}
 
 // ============================================================================
 // Deferred save (ptr+len in ctx; main loop saves+rebuilds+frees) — D6
@@ -441,13 +253,20 @@ static void exec_pad_save(const void* ctx, bool* ok, char* msg, size_t msg_len) 
     heap_caps_free(c->buf);
     if (!saved) { strlcpy(msg, "save failed", msg_len); return; }
     pad_config_rebuild_all_caches();
+#if HAS_MQTT
+    // Subscribe to any MQTT topics newly referenced by this pad's bindings so
+    // they start resolving immediately — matching the portal save path. Without
+    // this, an [mqtt:...] binding added via MCP showed '---' until the pad was
+    // re-saved in the portal (issue #37).
+    mqtt_sub_store_subscribe_all();
+#endif
     *ok = true;
     strlcpy(msg, "saved", msg_len);
 }
 
 // Serialize `doc` into a PSRAM buffer and defer the save. Validates first.
 static bool commit_pad(uint8_t page, JsonDocument& doc, JsonObject& result, String& err) {
-    const char* verr = validate_pad_doc(doc.as<JsonObjectConst>());
+    const char* verr = pad_validate(doc.as<JsonObjectConst>());
     if (verr) return pad_fail(result, err, PAD_ERR_PARAMS, verr);
 
     size_t need = measureJson(doc) + 1;
@@ -506,11 +325,32 @@ static bool splice_button(JsonArray btns, int pos, JsonVariantConst button) {
 static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String& err) {
     JsonObjectConst pad = args["pad"];
     if (pad.isNull()) return pad_fail(result, err, PAD_ERR_PARAMS, "missing pad object");
-    const char* verr = validate_pad_doc(pad);
+    const char* verr = pad_validate(pad);
     if (verr) { result["valid"] = false; result["error"] = verr; return true; }
     result["valid"] = true;
     return true;
 }
+
+#if HAS_MQTT
+// ============================================================================
+// resolve_bindings (read tool, authoring-gated) — resolve binding tokens
+// against LIVE data on the main loop; no save. Powers debugging/preview of what
+// a binding or a proposed button's fields resolve to right now. Values only
+// (not a pixel render). Thin wrapper over the shared pad_resolve_request()
+// (also used by the portal POST /api/pad/resolve endpoint); the actual
+// resolution runs on the main loop via the deferred bridge.
+// ============================================================================
+static bool tool_resolve_bindings(const JsonObject& args, JsonObject& result, String& err) {
+    const char* em = nullptr;
+    switch (pad_resolve_request(args, result, &em)) {
+        case PAD_RESOLVE_OK:         return true;
+        case PAD_RESOLVE_BAD_PARAMS: return pad_fail(result, err, PAD_ERR_PARAMS, em ? em : "bad params");
+        case PAD_RESOLVE_BUSY:       return pad_fail(result, err, PAD_ERR_BUSY, em ? em : "busy, retry");
+        case PAD_RESOLVE_OOM:        return pad_fail(result, err, PAD_ERR_INTERNAL, em ? em : "out of memory");
+        default:                     return pad_fail(result, err, PAD_ERR_INTERNAL, em ? em : "resolve failed");
+    }
+}
+#endif // HAS_MQTT
 
 // get_pad_blocks — list pre-built button groups (building blocks) the client can
 // drop onto a pad instead of hand-building. Generated from the live catalog.
@@ -641,6 +481,16 @@ static const McpTool s_tool_validate_pad = {
 };
 REGISTER_MCP_TOOL(s_tool_validate_pad);
 
+#if HAS_MQTT
+static const McpTool s_tool_resolve_bindings = {
+    "resolve_bindings",
+    "Resolve [scheme:params] binding tokens against the device's LIVE data and return the resolved text — to debug/preview what a binding or a proposed button renders to, WITHOUT saving. Args: bindings (array of template strings) and/or button (a proposed button object; its bindable fields label_*/*_color/btn_state/widget_data_binding[_2..4] are resolved), plus optional screen (pad_N or friendly name) to supply that pad's [pad:name] context. Best practice: after adding or editing any binding, call this to confirm it resolves to the intended value — writes only check binding SYNTAX, so a valid binding can still resolve to '---' or the wrong value. Returns resolved VALUES only — it does not render pixels (use GET /api/screenshot for a visual). Read-only; nothing is persisted. Requires pad authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"bindings\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"button\":{\"type\":\"object\"}}}",
+    tool_resolve_bindings, true, false, false, true
+};
+REGISTER_MCP_TOOL(s_tool_resolve_bindings);
+#endif // HAS_MQTT
+
 static const McpTool s_tool_get_pad_blocks = {
     "get_pad_blocks",
     "List pre-built button groups (building blocks) that can be dropped onto a pad: id, name, description, size requirements, button count. Read-only.",
@@ -651,7 +501,7 @@ REGISTER_MCP_TOOL(s_tool_get_pad_blocks);
 
 static const McpTool s_tool_set_button = {
     "set_button",
-    "Create/replace one button. position = 0-based index in the button array (NOT a grid cell; placement is col/row). A position at/past the end appends. Args: screen (pad id or friendly name), position (int), button (JSON, portal pad schema). Requires authoring.",
+    "Create/replace one button. position = 0-based index in the button array (NOT a grid cell; placement is col/row). A position at/past the end appends. Args: screen (pad id or friendly name), position (int), button (JSON, portal pad schema). If the button uses any [scheme:params] binding, verify it afterward with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"screen\",\"position\",\"button\"]}",
     tool_set_button, false, true, false, true
 };
@@ -659,7 +509,7 @@ REGISTER_MCP_TOOL(s_tool_set_button);
 
 static const McpTool s_tool_set_buttons = {
     "set_buttons",
-    "Create/replace many buttons in one save (processed in array order). Each item.position is a 0-based array index (NOT a grid cell); positions past the end append. To rebuild a pad, clear_pad first then use positions 0,1,2,... Args: screen (pad id or friendly name), buttons (array of {position, button}). Requires authoring.",
+    "Create/replace many buttons in one save (processed in array order). Each item.position is a 0-based array index (NOT a grid cell); positions past the end append. To rebuild a pad, clear_pad first then use positions 0,1,2,... Args: screen (pad id or friendly name), buttons (array of {position, button}). If any button uses [scheme:params] bindings, verify them afterward with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"buttons\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"position\":{\"type\":\"integer\"},\"button\":{\"type\":\"object\"}},\"required\":[\"position\",\"button\"]}}},\"required\":[\"screen\",\"buttons\"]}",
     tool_set_buttons, false, true, false, true
 };
@@ -683,7 +533,7 @@ REGISTER_MCP_TOOL(s_tool_clear_pad);
 
 static const McpTool s_tool_set_pad = {
     "set_pad",
-    "Set pad-level fields (preserves buttons): pad_name (friendly label; arg is 'pad_name' not 'name'), layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), and bindings (object of [pad:name] templates). Only provided keys change. 'screen' may be a 'pad_N' id or friendly name. Requires authoring.",
+    "Set pad-level fields (preserves buttons): pad_name (friendly label; arg is 'pad_name' not 'name'), layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), and bindings (object of [pad:name] templates). Only provided keys change. 'screen' may be a 'pad_N' id or friendly name. After setting 'bindings', verify each resolves with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"pad_name\":{\"type\":\"string\"},\"layout\":{\"type\":\"string\"},\"cols\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"wake_screen\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"template_pad\":{\"type\":\"integer\"},\"bindings\":{\"type\":\"object\"}},\"required\":[\"screen\"]}",
     tool_set_pad, false, true, false, true
 };

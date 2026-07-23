@@ -8,6 +8,7 @@
 #include "mqtt_manager.h"
 #include "pad_binding.h"
 #include "pad_config.h"
+#include "action_dispatch.h"
 
 #include <ArduinoJson.h>
 #include "psram_json_allocator.h"
@@ -254,8 +255,20 @@ void mqtt_sub_store_subscribe_all() {
             binding_template_collect_topics(btn.bg_color, &ctx);
             binding_template_collect_topics(btn.fg_color, &ctx);
             binding_template_collect_topics(btn.border_color, &ctx);
+            // Scan per-label style colors (color: sub-field bindings)
+            binding_template_collect_topics(btn.label_top_color_bind, &ctx);
+            binding_template_collect_topics(btn.label_center_color_bind, &ctx);
+            binding_template_collect_topics(btn.label_bottom_color_bind, &ctx);
             for (uint8_t i = 0; i < MAX_WIDGET_BINDINGS; i++) {
                 binding_template_collect_topics(btn.widget.data_binding[i], &ctx);
+            }
+            // Scan tap / long-press action fields for binding tokens (e.g. a
+            // bound visual-alert color, or an [mqtt:...] inside a notify field).
+            for (uint8_t a = 0; a < btn.action_count; a++) {
+                action_collect_binding_topics(btn.actions[a], &ctx);
+            }
+            for (uint8_t a = 0; a < btn.lp_action_count; a++) {
+                action_collect_binding_topics(btn.lp_actions[a], &ctx);
             }
         }
     }
@@ -335,6 +348,47 @@ void mqtt_sub_store_resubscribe() {
     if (count > 0) {
         LOGI(TAG, "Re-subscribed to %d topics", count);
     }
+}
+
+// ============================================================================
+// Lazy single-topic subscribe (live preview of not-yet-saved bindings)
+// ============================================================================
+
+bool mqtt_sub_store_ensure_subscribed(const char* topic) {
+    if (!g_entries || !g_mutex || !topic || !topic[0]) return false;
+    bool need_sub = false;
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        int slot = -1;
+        for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+            if (g_entries[i].in_use && strcmp(g_entries[i].topic, topic) == 0) { slot = i; break; }
+        }
+        if (slot < 0) {
+            for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+                if (!g_entries[i].in_use) { slot = i; break; }
+            }
+            if (slot >= 0) {
+                strlcpy(g_entries[slot].topic, topic, CONFIG_MQTT_TOPIC_MAX_LEN);
+                g_entries[slot].value[0] = '\0';
+                g_entries[slot].dirty = false;
+                g_entries[slot].truncated = false;
+                g_entries[slot].in_use = true;
+                need_sub = true;
+            }
+        }
+        xSemaphoreGive(g_mutex);
+    }
+    if (need_sub) mqtt_manager.subscribe(topic);
+    return need_sub;
+}
+
+void mqtt_sub_store_ensure_binding_subscribed(const char* templ) {
+    if (!templ || !templ[0] || !g_entries || !g_mutex) return;
+    if (!strstr(templ, "[")) return;  // no binding token -> nothing to do
+    TopicCollectorCtx::Entry topics[8];
+    int n = 0;
+    TopicCollectorCtx ctx; ctx.list = topics; ctx.count = &n; ctx.max = 8;
+    binding_template_collect_topics(templ, &ctx);
+    for (int i = 0; i < n; i++) mqtt_sub_store_ensure_subscribed(topics[i].topic);
 }
 
 // ============================================================================

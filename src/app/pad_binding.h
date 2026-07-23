@@ -47,6 +47,17 @@ void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count);
 bool pad_binding_expand(const PadConfig* page, const char* templ,
                         char* out, size_t out_len);
 
+// Resolve `count` binding-template strings against an optional pad binding
+// context (binds/bind_count may be NULL/0 — then [pad:] tokens resolve to the
+// placeholder). Result i is written to out + i*stride (NUL-terminated, capped
+// at stride). Sets the requested context, resolves, then clears it (the live
+// pad screen re-establishes its own context every frame, so clearing is safe).
+// LVGL/main task only — calls binding_template_resolve(). Powers the MCP
+// resolve_bindings tool and the portal /api/pad/resolve preview.
+void pad_resolve(const char* const* inputs, size_t count,
+                 const PadBinding* binds, uint8_t bind_count,
+                 char* out, size_t stride);
+
 #ifdef __cplusplus
 }
 #endif

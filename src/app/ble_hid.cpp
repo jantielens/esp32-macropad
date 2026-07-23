@@ -4,6 +4,7 @@
 
 #include "config_manager.h"
 #include "key_sequence.h"
+#include "net_activity.h"
 
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -338,6 +339,8 @@ static void send_report_notification(uint16_t value_handle, const void* data, ui
     const int rc = ble_gatts_notify_custom(bleServer->getConnId(), value_handle, om);
     if (rc != 0) {
         LOGW(TAG, "ble_gatts_notify_custom failed (handle=%u rc=%d)", value_handle, rc);
+    } else {
+        net_activity_mark(NET_CH_BLE);
     }
 }
 

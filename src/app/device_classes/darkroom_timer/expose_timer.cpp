@@ -472,12 +472,26 @@ const char* expose_state_str(uint8_t state) {
 }
 #endif // HAS_MCP
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void expose_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[expose:key] or [expose:key;format]";
+    o["example"] = "[expose:remaining;%.1f]s";
+    o["keys"]    = "time, elapsed, remaining, effective_time, dry_down, state, running, paused, stopped, focus, relay";
+    o["note"]    = "Darkroom single-exposure timer state.";
+}
+#endif
+
 void expose_timer_init() {
     if (!binding_template_register("expose", expose_resolve, expose_collect)) {
         LOGE(TAG, "Failed to register expose binding scheme");
     } else {
         LOGI(TAG, "Expose binding scheme registered");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("expose", expose_scheme_describe);
+#endif
 }
 
 #else // !IS_DARKROOM_TIMER

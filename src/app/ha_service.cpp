@@ -5,6 +5,7 @@
 #include "config_manager.h"
 #include "web_portal_state.h"  // web_portal_get_current_config()
 #include "log_manager.h"
+#include "net_activity.h"
 
 #include <HTTPClient.h>
 #include <WiFi.h>
@@ -115,6 +116,7 @@ void ha_service_execute() {
     http.addHeader("Content-Type", "application/json");
 
     const int code = http.POST((uint8_t*)body, strlen(body));
+    net_activity_mark(NET_CH_HTTP);
     if (code >= 200 && code < 300) {
         LOGI(TAG, "%s -> HTTP %d", url, code);
     } else {

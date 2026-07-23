@@ -16,6 +16,7 @@
                 <a href="#binding-docs-fallback" onclick="showBindingHelp('fallback'); return false;">Fallback</a>
                 <a href="#binding-docs-mqtt" onclick="showBindingHelp('mqtt'); return false;">MQTT</a>
                 <a href="#binding-docs-health" onclick="showBindingHelp('health'); return false;">Health</a>
+                <a href="#binding-docs-net" onclick="showBindingHelp('net'); return false;">Network</a>
                 <a href="#binding-docs-time" onclick="showBindingHelp('time'); return false;">Time</a>
                 <a href="#binding-docs-expr" onclick="showBindingHelp('expr'); return false;">Expr</a>
                 <a href="#binding-docs-pad" onclick="showBindingHelp('pad'); return false;">Pad</a>
@@ -367,6 +368,62 @@
                         </div>
                         <pre class="binding-example-code"><code>[expr:[health:ble_status]=="connected"?"#16a34a":[health:ble_status]=="pairing"?"#f59e0b":[health:ble_status]=="ready"?"#3b82f6":[health:ble_status]=="error"?"#dc2626":"#64748b"]</code></pre>
                         <p>Map BLE status to a color: green connected, amber pairing, blue ready, red error, gray disabled.</p>
+                    </article>
+                </div>
+            </section>
+
+            <section id="binding-docs-net" class="binding-docs-section" data-binding-section="net">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Network bindings</h4>
+                        <p>Subtle visual cues for live network / transport activity.</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[net:channel;sub]</code></pre>
+                </div>
+
+                <p class="binding-docs-note" style="margin-bottom:4px"><strong>Channels</strong></p>
+                <dl class="binding-docs-spec">
+                    <div><dt>portal</dt><dd>Inbound web portal HTTP requests</dd></div>
+                    <div><dt>mcp</dt><dd>Inbound MCP (Model Context Protocol) calls</dd></div>
+                    <div><dt>mqtt_rx</dt><dd>Inbound MQTT messages</dd></div>
+                    <div><dt>mqtt_tx</dt><dd>Outbound MQTT publishes</dd></div>
+                    <div><dt>mqtt</dt><dd>Either MQTT direction (rx or tx)</dd></div>
+                    <div><dt>http</dt><dd>Outbound HTTP client (image fetch, Home Assistant REST)</dd></div>
+                    <div><dt>ble</dt><dd>BLE HID reports (ESP32-P4 only)</dd></div>
+                    <div><dt>ota</dt><dd>Firmware OTA flash writes</dd></div>
+                    <div><dt>any</dt><dd>Aggregate — active when <em>any</em> channel is active</dd></div>
+                </dl>
+
+                <p class="binding-docs-note" style="margin-bottom:4px"><strong>Sub-key</strong></p>
+                <dl class="binding-docs-spec">
+                    <div><dt>(none)</dt><dd><code>1</code> when the channel saw activity in the last ~400&nbsp;ms, else <code>0</code></dd></div>
+                    <div><dt>age</dt><dd>Milliseconds since the last activity (capped at <code>999999</code>, which also means "never")</dd></div>
+                </dl>
+
+                <div class="binding-example-grid">
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Activity color</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[net:any]?"#22c55e":"#334155"]</code></pre>
+                        <p>Use as an icon color — green briefly whenever any transport is active, gray when idle.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">MQTT receive blink</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[net:mqtt_rx]?"#f59e0b":"#1e293b"]</code></pre>
+                        <p>Flash an indicator each time an MQTT message arrives.</p>
+                    </article>
+                    <article class="binding-example">
+                        <div class="binding-example-head">
+                            <span class="binding-example-title">Portal fade</span>
+                            <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
+                        </div>
+                        <pre class="binding-example-code"><code>[expr:[net:portal;age]&lt;1000?"ACTIVE":"idle"]</code></pre>
+                        <p>Show a label for a second after the last portal request, then fall back to idle.</p>
                     </article>
                 </div>
             </section>

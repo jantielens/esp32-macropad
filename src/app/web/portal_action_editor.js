@@ -31,6 +31,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="sound">Play Sound</option>';
     h += '<option value="timer">Timer Control</option>';
     h += '<option value="notify">Show Notification</option>';
+    h += '<option value="visual_alert">Visual Alert</option>';
     h += '<option value="system">System Command</option>';
     _actionEditorExtensions.forEach(function(ext) { if (ext.options) h += ext.options(); });
     h += '</select>';
@@ -168,6 +169,49 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</div>';
     h += '</div>';
     h += '</div>';
+    // Visual Alert
+    h += '<div id="' + prefix + '-va-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-va-op">Action</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-va-op" onchange="actionEditorVaOpChanged(\'' + prefix + '\')">';
+    h += '<option value="start" selected>Start Alert</option>';
+    h += '<option value="stop">Stop Alert</option>';
+    h += '</select>';
+    h += '<small>Start raises a full-screen pulsing overlay (wakes the screen). Stop clears it.</small>';
+    h += '</div>';
+    // Config fields — only relevant for "start" (hidden for "stop")
+    h += '<div id="' + prefix + '-va-config-group">';
+    h += '<div class="form-group">';
+    h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<div class="bindable-color" id="' + prefix + '-va-color-wrap"><div class="bc-swatch"></div>';
+    h += '<input type="text" id="' + prefix + '-va-color" class="bc-input" maxlength="63" spellcheck="false" placeholder="#ff0000 or [binding]"></div>';
+    h += '<small>Overlay tint. Supports bindings (e.g. red via [expr:...]). Empty = red.</small>';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-va-pattern">Pattern</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-va-pattern">';
+    h += '<option value="breathe" selected>Breathe</option>';
+    h += '<option value="blink">Blink</option>';
+    h += '<option value="solid">Solid</option>';
+    h += '</select>';
+    h += '</div>';
+    h += '<div class="grid-2col">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-va-period">Period (ms)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-va-period" min="0" max="10000" placeholder="800">';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-va-intensity">Intensity (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-va-intensity" min="0" max="100" placeholder="100">';
+    h += '</div>';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-va-duration">Duration (ms)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-va-duration" min="0" placeholder="0 = until stopped">';
+    h += '<small>0 = persist until Stop, tap, or another alert. Tap the overlay to dismiss.</small>';
+    h += '</div>';
+    h += '</div>';  // va-config-group
+    h += '</div>';  // va-group
     // System command
     h += '<div id="' + prefix + '-system-group" style="display:none;">';
     h += '<div class="form-group">';
@@ -233,9 +277,17 @@ function actionEditorTypeChanged(prefix) {
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     var notifyGrp = document.getElementById(prefix + '-notify-group');
     if (notifyGrp) notifyGrp.style.display = (type === 'notify') ? '' : 'none';
+    var vaGrp = document.getElementById(prefix + '-va-group');
+    if (vaGrp) vaGrp.style.display = (type === 'visual_alert') ? '' : 'none';
+    if (type === 'visual_alert') {
+        // Default the color to pure red when unset, so the swatch shows red.
+        var vaCol = document.getElementById(prefix + '-va-color');
+        if (vaCol && !vaCol.value) padSetBindableColor(prefix + '-va-color', '#ff0000', '#ff0000');
+        actionEditorVaOpChanged(prefix);
+    }
     var systemGrp = document.getElementById(prefix + '-system-group');
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
-    if (['notify', 'mqtt', 'key', 'beep', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
+    if (['notify', 'visual_alert', 'mqtt', 'key', 'beep', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
     if (type === 'system') actionEditorSystemChanged(prefix);
     // Extension-contributed type-change hooks (e.g. shutter group visibility)
@@ -267,6 +319,14 @@ function actionEditorSystemChanged(prefix) {
     }
 }
 
+// Show/hide the visual-alert config fields based on the op dropdown.
+// Stop only needs the op selector; start needs color/pattern/period/etc.
+function actionEditorVaOpChanged(prefix) {
+    var op = document.getElementById(prefix + '-va-op');
+    var cfg = document.getElementById(prefix + '-va-config-group');
+    if (cfg) cfg.style.display = (op && op.value === 'stop') ? 'none' : '';
+}
+
 // Show/hide timer sub-fields based on the timer action dropdown.
 function actionEditorTimerChanged(prefix) {
     var sel = document.getElementById(prefix + '-timer-action');
@@ -289,8 +349,8 @@ var _ACTION_BIND_SUFFIXES = [
 // Initialize bindable-color pickers and binding font toggles for all bindable fields.
 // Idempotent — safe to call on every type-change.
 function actionEditorInitBindings(prefix) {
-    // Init color pickers (notify only)
-    ['-notify-text-color-wrap', '-notify-bg-color-wrap', '-notify-border-color-wrap'].forEach(function(suffix) {
+    // Init action color pickers (notify + visual alert)
+    ['-notify-text-color-wrap', '-notify-bg-color-wrap', '-notify-border-color-wrap', '-va-color-wrap'].forEach(function(suffix) {
         var wrap = document.getElementById(prefix + suffix);
         if (wrap) padInitBindableColor(wrap);
     });
@@ -370,6 +430,18 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.notify_font_size > 0) ? action.notify_font_size : '';
     el = document.getElementById(prefix + '-notify-location');
     if (el) el.value = action.notify_location || 'bottom';
+    // Visual alert fields
+    el = document.getElementById(prefix + '-va-op');
+    if (el) el.value = action.op || 'start';
+    padSetBindableColor(prefix + '-va-color', action.color || '', '#ff0000');
+    el = document.getElementById(prefix + '-va-pattern');
+    if (el) el.value = action.pattern || 'breathe';
+    el = document.getElementById(prefix + '-va-period');
+    if (el) el.value = (action.period_ms > 0) ? action.period_ms : '';
+    el = document.getElementById(prefix + '-va-intensity');
+    if (el) el.value = (action.intensity > 0) ? action.intensity : '';
+    el = document.getElementById(prefix + '-va-duration');
+    if (el) el.value = (action.duration_ms > 0) ? action.duration_ms : '';
     // System fields — also handles volume/brightness mapped into system command
     if (action.type === 'volume' || action.type === 'brightness') {
         // Map volume/brightness type into system command UI
@@ -462,6 +534,20 @@ function actionEditorBuild(prefix) {
         if (nfs && nfs.value !== '') act.notify_font_size = parseInt(nfs.value, 10);
         var nloc = document.getElementById(prefix + '-notify-location');
         if (nloc) act.notify_location = nloc.value;
+    }
+    if (type === 'visual_alert') {
+        var vaOp = document.getElementById(prefix + '-va-op');
+        if (vaOp) act.op = vaOp.value;
+        var vaCol = padGetBindableColor(prefix + '-va-color');
+        if (vaCol) act.color = vaCol;
+        var vaPat = document.getElementById(prefix + '-va-pattern');
+        if (vaPat) act.pattern = vaPat.value;
+        var vaPer = document.getElementById(prefix + '-va-period');
+        if (vaPer && vaPer.value !== '') act.period_ms = parseInt(vaPer.value, 10);
+        var vaInt = document.getElementById(prefix + '-va-intensity');
+        if (vaInt && vaInt.value !== '') act.intensity = parseInt(vaInt.value, 10);
+        var vaDur = document.getElementById(prefix + '-va-duration');
+        if (vaDur && vaDur.value !== '') act.duration_ms = parseInt(vaDur.value, 10);
     }
     if (type === 'system') {
         var sc = document.getElementById(prefix + '-system-command');

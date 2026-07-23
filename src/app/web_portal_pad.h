@@ -18,4 +18,10 @@ void handleDeletePadConfig(AsyncWebServerRequest *request);
 // GET /api/pad/blocks — return building block catalog
 void handleGetPadBlocks(AsyncWebServerRequest *request);
 
+#if HAS_MQTT
+// POST /api/pad/resolve — resolve binding tokens against live data (body handler).
+// Body: { screen?, bindings?[], button? }. Powers the pad editor's live preview.
+void handlePostPadResolve(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
+#endif
+
 #endif // HAS_DISPLAY

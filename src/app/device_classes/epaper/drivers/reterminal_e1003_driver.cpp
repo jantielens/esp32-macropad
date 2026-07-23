@@ -661,7 +661,7 @@ struct JpegDecodeCtx {
 		TaskHandle_t caller;
 };
 
-constexpr uint32_t JPEG_DECODE_STACK_WORDS = 16384;  // 64 KB PSRAM stack
+constexpr uint32_t JPEG_DECODE_STACK_BYTES = 16384;
 
 void jpeg_decode_worker(void* arg) {
 		JpegDecodeCtx* ctx = (JpegDecodeCtx*)arg;
@@ -691,7 +691,7 @@ struct PrewarmCtx {
 		TaskHandle_t caller;
 };
 
-constexpr uint32_t PREWARM_STACK_WORDS = 2048;  // 8 KB PSRAM stack (power_on only)
+constexpr uint32_t PREWARM_STACK_BYTES = 2048;
 
 void prewarm_worker(void* arg) {
 		PrewarmCtx* ctx = (PrewarmCtx*)arg;
@@ -717,7 +717,7 @@ void prewarm_start(Prewarm* pw) {
 		pw->worker = nullptr;
 		pw->alloc = {};
 		pw->spawned = rtos_create_task_psram_stack(
-				prewarm_worker, "epwarm", PREWARM_STACK_WORDS, &pw->ctx, 5, &pw->worker,
+				prewarm_worker, "epwarm", PREWARM_STACK_BYTES, &pw->ctx, 5, &pw->worker,
 				&pw->alloc);
 		if (!pw->spawned)
 				LOGW("Epaper", "pre-warm spawn failed; power_on will run inline at display");
@@ -833,7 +833,7 @@ struct BeginCtx {
 		TaskHandle_t caller;
 		bool ok;
 };
-constexpr uint32_t BEGIN_STACK_WORDS = 4096;  // 16 KB PSRAM stack (full init)
+constexpr uint32_t BEGIN_STACK_BYTES = 4096;
 BeginCtx s_begin_ctx = {};
 TaskHandle_t s_begin_worker = nullptr;
 RtosTaskPsramAlloc s_begin_alloc = {};
@@ -861,7 +861,7 @@ void epaper_driver_begin_async() {
 		s_begin_worker = nullptr;
 		s_begin_alloc = {};
 		s_begin_spawned = rtos_create_task_psram_stack(
-				begin_worker, "epbegin", BEGIN_STACK_WORDS, &s_begin_ctx, 5,
+				begin_worker, "epbegin", BEGIN_STACK_BYTES, &s_begin_ctx, 5,
 				&s_begin_worker, &s_begin_alloc);
 		if (!s_begin_spawned) {
 				// Spawn failed: run begin() inline so the panel is still ready. The
@@ -1040,7 +1040,7 @@ bool epaper_driver_draw_url(const char* url) {
 		RtosTaskPsramAlloc alloc = {};
 		bool ok = false;
 		if (rtos_create_task_psram_stack(jpeg_decode_worker, "jpegdec",
-				JPEG_DECODE_STACK_WORDS, &ctx, 5, &worker, &alloc)) {
+				JPEG_DECODE_STACK_BYTES, &ctx, 5, &worker, &alloc)) {
 				ulTaskNotifyTake(pdTRUE, portMAX_DELAY);  // wait for decode to finish
 				ok = ctx.ok;
 				vTaskDelete(worker);  // worker is blocked, not running — safe to reap

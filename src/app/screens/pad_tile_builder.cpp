@@ -320,6 +320,8 @@ void PadScreen::buildTiles() {
         memcpy(tile.actions, bcfg.actions, bcfg.action_count * sizeof(ButtonAction));
         tile.lp_action_count = bcfg.lp_action_count;
         memcpy(tile.lp_actions, bcfg.lp_actions, bcfg.lp_action_count * sizeof(ButtonAction));
+        tile.confirm = bcfg.confirm;
+        strlcpy(tile.confirm_text, bcfg.confirm_text, sizeof(tile.confirm_text));
 
         // Create MQTT-bound center label early so widgets can position it
 #if HAS_MQTT
@@ -414,6 +416,29 @@ void PadScreen::buildTiles() {
         addColorBinding(i, bcfg.bg_color, bg_def, 0);
         addColorBinding(i, bcfg.fg_color, fg_def, 1);
         addColorBinding(i, bcfg.border_color, border_def, 2);
+
+        // Per-label text colors. Only for normal button tiles (widget tiles manage
+        // their own labels, which may be null). A per-label color — static or
+        // binding — sets an override bit so the fg (target=1) poll does not clobber
+        // the label's text color. Binding-valued colors are additionally registered
+        // as runtime color bindings (targets 3/4/5) resolved live each poll cycle.
+        if (!bcfg.widget.type[0]) {
+            if (bcfg.style_top.color    & 0x01000000) tile.labelColorOverride |= 0x01;
+            if (bcfg.style_center.color & 0x01000000) tile.labelColorOverride |= 0x02;
+            if (bcfg.style_bottom.color & 0x01000000) tile.labelColorOverride |= 0x04;
+            if (bcfg.label_top_color_bind[0]) {
+                addColorBinding(i, bcfg.label_top_color_bind, fg_def, 3);
+                tile.labelColorOverride |= 0x01;
+            }
+            if (bcfg.label_center_color_bind[0]) {
+                addColorBinding(i, bcfg.label_center_color_bind, fg_def, 4);
+                tile.labelColorOverride |= 0x02;
+            }
+            if (bcfg.label_bottom_color_bind[0]) {
+                addColorBinding(i, bcfg.label_bottom_color_bind, fg_def, 5);
+                tile.labelColorOverride |= 0x04;
+            }
+        }
 
         // Register number bindings for border_width and corner_radius
         auto addNumberBinding = [this](uint8_t ti, const char* templ, lv_coord_t def, uint8_t target) {

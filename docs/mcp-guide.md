@@ -139,7 +139,7 @@ graph LR
     GATE --> READ["Read tools<br/>(always available)"]
     GATE --> CONTROL["Control tools<br/>(control toggle on)"]
     READ --> INFO["status · health · screens<br/>pads · sensors · config"]
-    CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system<br/>notify · volume · timers · config"]
+    CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system<br/>notify · visual_alert · volume · timers · config"]
 ```
 
 **Read tools** (always available once enabled):
@@ -162,6 +162,10 @@ graph LR
 - `set_screen` — navigate to a screen.
 - `set_backlight` / `wake` — adjust display brightness or cancel the screen saver.
 - `notify` — show a message bubble on the screen (empty text dismisses it).
+- `visual_alert` — raise (`op:start`) or clear (`op:stop`) a full-screen pulsing
+  color overlay as an ambient alarm: bindable `color` (default red), `pattern`
+  (`breathe`/`blink`/`solid`), `period_ms`, `intensity` (1-100), and `duration_ms`
+  (0 = until stopped/tapped). Wakes the screen; pairs well with `beep`.
 - `set_volume` — set (0-100) or adjust (signed delta) the speaker volume.
 - `timer_control` — start/stop/toggle/pause/resume/reset/lap/set/adjust one of
   the three on-screen timers.
@@ -189,6 +193,14 @@ into the board.
   dropped onto a pad. Read-only.
 - `validate_pad` — dry-run validate a pad JSON (grid bounds, span overflow,
   widget types, colors, binding tokens) without saving. Read-only.
+- `resolve_bindings` — resolve `[scheme:params]` tokens against the device's
+  **live** data and return the resolved text, to debug/preview what a binding or
+  a proposed button renders to **without saving**. Takes `bindings` (array of
+  template strings) and/or a `button` object (its bindable `label_*` / `*_color`
+  / `btn_state` / `widget_data_binding[_2..4]` fields are resolved), plus an
+  optional `screen` (`pad_N` or friendly name) for that pad's `[pad:name]`
+  context. Returns resolved **values** only — it does not render pixels (use
+  `GET /api/screenshot` for a visual). Read-only; nothing is persisted.
 - `set_button` / `set_buttons` — create or replace a button (or many in one save)
   by position, using the same schema as the portal pad editor.
 - `set_pad` — set pad-level fields (layout, cols/rows, wake_screen, bg_color,
@@ -198,6 +210,13 @@ into the board.
 Writes are validated before saving and persisted on the main loop. Concurrent
 edits from the LLM and the portal editor are **last-write-wins per pad** — the
 last save replaces the pad, so avoid editing the same pad in both at once.
+
+> **Verify bindings, don't assume.** A write rejects malformed binding *syntax*,
+> but a syntactically valid `[scheme:params]` binding can still resolve to `---`
+> (no data) or an unintended value. Make `resolve_bindings` part of the authoring
+> loop: after adding or editing any binding, call it to confirm the binding
+> resolves to the intended live value. The server's `initialize` instructions
+> tell connected assistants to do this as a matter of course.
 
 ### Device-class tools
 
@@ -382,9 +401,11 @@ compile none of it.
 
 The assistant cannot see the panel directly, but it can capture exactly what is
 on-screen through a browser. The device serves the live framebuffer at
-`GET /api/screenshot` as a 24-bit BMP. The image is large and image-only, so an
-assistant must **not** fetch it as text — it renders the URL in a browser and
-captures the image element instead.
+`GET /api/screenshot` as a hardware-encoded JPEG by default on ESP32-P4 boards
+and as a 24-bit BMP elsewhere. The image is image-only, so an assistant must
+**not** fetch it as text — it renders the URL in a browser and captures the
+image element instead. `?format=bmp|jpg` selects a format explicitly on P4;
+`?quality=1..100` sets JPEG quality (default `85`).
 
 With a Playwright-style browser tool (such as the one in VS Code), the recipe is:
 

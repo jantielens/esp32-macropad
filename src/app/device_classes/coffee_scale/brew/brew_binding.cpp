@@ -337,10 +337,24 @@ static void brew_binding_collect(const char* params, void* user_data) {
 // Init
 // ============================================================================
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void brew_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[brew:key] or [brew:key;format]";
+    o["example"] = "[brew:weight;%.1f] g @ [brew:flow_rate;%.1f] g/s";
+    o["keys"]    = "weight, flow_rate, timer, stage, active, template, dose, water, ratio, instruction, next_label, stage_weight_target/_current/_remaining/_pct, stage_time_target/_current/_remaining/_pct, stage_flow_target/_current/_pct, display_name, stages_json, summary_json, template_count, tpl_*";
+    o["note"]    = "Live brew-session guidance and per-stage progress.";
+}
+#endif
+
 void brew_binding_init() {
     if (!binding_template_register("brew", brew_binding_resolve, brew_binding_collect)) {
         LOGE(TAG, "Failed to register brew binding scheme");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("brew", brew_scheme_describe);
+#endif
 }
 
 #else // !HAS_DISPLAY || !HAS_SCALE

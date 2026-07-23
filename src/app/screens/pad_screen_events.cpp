@@ -1,5 +1,6 @@
 #include "pad_screen.h"
 #include "../action_dispatch.h"
+#include "../button_confirmation.h"
 #include "../display_manager.h"
 #include "../log_manager.h"
 #include "../swipe_actions.h"
@@ -38,6 +39,23 @@ static bool has_audio_action(const ButtonAction* acts, uint8_t count) {
         if (strcmp(acts[i].type, ACTION_TYPE_BEEP) == 0 ||
             strcmp(acts[i].type, ACTION_TYPE_SOUND) == 0) return true;
     return false;
+}
+
+static const char* button_display_label(const ButtonTile* tile) {
+    const char* label = tile->label_center ? lv_label_get_text(tile->label_center) : nullptr;
+    if ((!label || !label[0]) && tile->label_top) label = lv_label_get_text(tile->label_top);
+    if ((!label || !label[0]) && tile->label_bottom) label = lv_label_get_text(tile->label_bottom);
+    return label ? label : "";
+}
+
+static bool confirm_or_dispatch(const ButtonTile* tile, const ButtonAction* actions,
+                                uint8_t count, const char* event_label) {
+    if (tile->confirm) {
+        return button_confirmation_show(actions, count, event_label,
+                                        tile->confirm_text, button_display_label(tile));
+    }
+    for (uint8_t i = 0; i < count; i++) action_dispatch(actions[i], event_label);
+    return true;
 }
 
 // ============================================================================
@@ -305,8 +323,10 @@ void PadScreen::onTap(lv_event_t* e) {
 #endif
     }
 
-    for (uint8_t i = 0; i < count; i++) {
-        action_dispatch(local[i], event_label);
+    if (tile->widget_type) {
+        for (uint8_t i = 0; i < count; i++) action_dispatch(local[i], event_label);
+    } else {
+        confirm_or_dispatch(tile, local, count, event_label);
     }
 
 #if HAS_MQTT
@@ -361,8 +381,10 @@ void PadScreen::onLongPress(lv_event_t* e) {
 #endif
     }
 
-    for (uint8_t i = 0; i < count; i++) {
-        action_dispatch(local[i], "LP");
+    if (tile->widget_type) {
+        for (uint8_t i = 0; i < count; i++) action_dispatch(local[i], "LP");
+    } else {
+        confirm_or_dispatch(tile, local, count, "LP");
     }
 
 #if HAS_MQTT

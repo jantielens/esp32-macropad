@@ -11,6 +11,13 @@
 #define HAS_BLE_HID true
 #define IS_SHUTTER_TESTER true
 
+#ifndef MAX_PADS
+#define MAX_PADS 16
+#endif
+#ifndef UI_SCALE_TIER
+#define UI_SCALE_TIER 0
+#endif
+
 // Shutter verdict thresholds (mirrors real src/app/board_config.h defaults).
 // Needed in the host stub because shutter_measure.h now lives in a
 // device_classes/ subfolder, so `#include "board_config.h"` from that file

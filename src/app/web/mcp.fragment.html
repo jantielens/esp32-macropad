@@ -90,7 +90,10 @@
     <div class="input-group mb-2">
       <textarea class="form-control font-monospace" id="mcp_vscode_config" rows="11" readonly style="white-space:pre; overflow-x:auto;"></textarea>
     </div>
-    <button type="button" class="btn btn-outline-secondary btn-sm mb-3" id="mcp-copy-config-btn">Copy configuration</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm mb-2" id="mcp-copy-config-btn">Copy configuration</button>
+    <p class="small text-warning mb-3" id="mcp_config_token_warning" style="display:none;">
+      This configuration contains a live access token. Store it securely; it will disappear on reload.
+    </p>
     <p class="small text-muted mb-0">
       📖 Full setup for VS Code, Cursor, and Claude Desktop is in the
       <a href="https://github.com/jantielens/esp32-macropad/blob/main/docs/mcp-guide.md" target="_blank" rel="noopener">MCP guide</a>.

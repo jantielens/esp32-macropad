@@ -40,6 +40,19 @@ void mqtt_sub_store_subscribe_all();
 // Re-subscribe all tracked topics (call on MQTT reconnect).
 void mqtt_sub_store_resubscribe();
 
+// Lazily ensure ONE topic is tracked + subscribed, for live preview of a
+// not-yet-saved binding. No-op if already tracked or the store is full. The
+// next mqtt_sub_store_subscribe_all() reconciles/reclaims any topic that no
+// saved config references, so preview subscriptions do not accumulate. Returns
+// true if a new subscription was issued. Thread-safe.
+bool mqtt_sub_store_ensure_subscribed(const char* topic);
+
+// Collect the MQTT topics a binding template references (recursing through
+// [pad:]/[expr:]) and ensure each is subscribed (see above). Call with the pad
+// binding context set if the template uses [pad:name]. Used by the live-preview
+// resolve path so a freshly typed [mqtt:...] can resolve on a later refresh.
+void mqtt_sub_store_ensure_binding_subscribed(const char* binding_template);
+
 // Store an incoming MQTT payload for a topic. Thread-safe.
 // Called from the PubSubClient message callback.
 void mqtt_sub_store_set(const char* topic, const uint8_t* payload, unsigned int len);

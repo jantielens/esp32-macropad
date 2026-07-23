@@ -53,6 +53,10 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 			padScreens(nullptr), padIds(nullptr), padNames(nullptr),
 			lruCache(nullptr), lruCount(0),
 							lvglTaskHandle(nullptr), lvglTaskAlloc{}, lvglMutex(nullptr),
+					displayJobDone(nullptr), displayJobBusy(false), displayJobPending(false),
+					displayJobDoneFlag(false), displayJobWaiter(false), displayJobExec(nullptr),
+					displayJobCleanup(nullptr),
+					displayJobCtx{}, displayJobCtxLen(0), displayJobOk(false), displayJobMessage{},
 						presentTaskHandle(nullptr), presentTaskAlloc{}, presentSem(nullptr), sharedLvTimerUs(0),
 						screenCount(0), buf(nullptr), buf2(nullptr), flushPending(false), pendingSplashStatusSet(false) {
 				pendingSplashStatus[0] = '\0';
@@ -77,6 +81,7 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		
 		// Create mutex for thread-safe LVGL access
 		lvglMutex = xSemaphoreCreateMutex();
+		displayJobDone = xSemaphoreCreateBinary();
 
 		// Allocate pad screens and their ID/name strings dynamically
 		padScreens = new PadScreen*[MAX_PADS];
@@ -124,6 +129,10 @@ DisplayManager::~DisplayManager() {
 		if (lvglTaskHandle) {
 				vTaskDelete(lvglTaskHandle);
 				lvglTaskHandle = nullptr;
+		}
+		if (displayJobDone) {
+				vSemaphoreDelete(displayJobDone);
+				displayJobDone = nullptr;
 		}
 		
 		if (currentScreen) {
@@ -418,17 +427,17 @@ void DisplayManager::init() {
 		// On dual-core: pin to configured core (LVGL_TASK_CORE)
 		// On single-core: runs on Core 0 (time-sliced with Arduino loop)
 		// Stack allocated in PSRAM when available to save internal RAM.
-		static constexpr uint32_t kLvglStack = 16384;
+		static constexpr uint32_t kLvglStackBytes = 16384;
 		#if CONFIG_FREERTOS_UNICORE
-	if (!rtos_create_task_psram_stack(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc)) {
-				xTaskCreate(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle);
+	if (!rtos_create_task_psram_stack(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc)) {
+				xTaskCreate(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle);
 				LOGI("Display", "Rendering task created (single-core, internal stack)");
 		} else {
 				LOGI("Display", "Rendering task created (single-core, PSRAM stack)");
 		}
 		#else
-		if (!rtos_create_task_psram_stack_pinned(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE)) {
-				xTaskCreatePinnedToCore(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, LVGL_TASK_CORE);
+		if (!rtos_create_task_psram_stack_pinned(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE)) {
+				xTaskCreatePinnedToCore(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, LVGL_TASK_CORE);
 				LOGI("Display", "Rendering task created (Core %d, internal stack)", LVGL_TASK_CORE);
 		} else {
 				LOGI("Display", "Rendering task created (Core %d, PSRAM stack)", LVGL_TASK_CORE);

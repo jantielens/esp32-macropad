@@ -119,10 +119,24 @@ static void scale_binding_collect(const char* params, void* user_data) {
 // Init — register the "scale" scheme
 // ============================================================================
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void scale_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[scale:key] or [scale:key;format]";
+    o["example"] = "[scale:weight;%.1f] g";
+    o["keys"]    = "weight, flow_rate, calibration_factor, offset, available, cal_weight, status";
+    o["note"]    = "Live coffee-scale sensor readings.";
+}
+#endif
+
 void scale_binding_init() {
     if (!binding_template_register("scale", scale_binding_resolve, scale_binding_collect)) {
         LOGE(TAG, "Failed to register scale binding scheme");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("scale", scale_scheme_describe);
+#endif
 }
 
 #else // !HAS_DISPLAY || !HAS_SCALE

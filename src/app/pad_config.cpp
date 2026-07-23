@@ -45,77 +45,9 @@ static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
 // ============================================================================
 // Label Style DSL parser
 // ============================================================================
-// Format: "key:value;key:value;..."
-// Keys: font (12/14/18/24/32/36/48), font_upscale (1.0..2.0),
-//        align (left/center/right), x/y (int offset),
-//        mode (clip/scroll/dot/wrap), color (#RRGGBB)
-void label_style_parse(const char* dsl, LabelStyle* out) {
-    memset(out, 0, sizeof(LabelStyle));
-    if (!dsl || !dsl[0]) return;
-
-    // Work on a local copy to tokenize
-    char buf[CONFIG_LABEL_STYLE_MAX_LEN];
-    strlcpy(buf, dsl, sizeof(buf));
-
-    char* saveptr = nullptr;
-    char* token = strtok_r(buf, ";", &saveptr);
-    while (token) {
-        // Skip leading whitespace
-        while (*token == ' ') token++;
-        char* colon = strchr(token, ':');
-        if (colon) {
-            *colon = '\0';
-            const char* key = token;
-            const char* val = colon + 1;
-
-            if (strcmp(key, "font_size") == 0 || strcmp(key, "font") == 0) {
-                int sz = atoi(val);
-                if (sz == 12 || sz == 14 || sz == 18 || sz == 24 || sz == 32 || sz == 36 || sz == 48) {
-                    out->font_size = (uint8_t)sz;
-                }
-            } else if (strcmp(key, "font_family") == 0) {
-                if (strcmp(val, "segment") == 0 || strcmp(val, "dseg7") == 0)  out->font_family = 1;
-                else if (strcmp(val, "bebas") == 0)                           out->font_family = 2;
-                else if (strcmp(val, "doto") == 0 || strcmp(val, "pixel") == 0) out->font_family = 3;
-            } else if (strcmp(key, "font_upscale") == 0) {
-                char* end = nullptr;
-                double f = strtod(val, &end);
-                if (end != val) {
-                    if (f < 1.0) f = 1.0;
-                    if (f > 2.0) f = 2.0;
-                    // Store using LVGL transform scale units where 256 == 1.0x.
-                    out->font_upscale = (uint16_t)(f * 256.0 + 0.5);
-                    if (out->font_upscale <= 256) out->font_upscale = 0;
-                }
-            } else if (strcmp(key, "align") == 0) {
-                if (strcmp(val, "left") == 0)        out->align = LABEL_ALIGN_LEFT;
-                else if (strcmp(val, "right") == 0)  out->align = LABEL_ALIGN_RIGHT;
-                else if (strcmp(val, "center") == 0) out->align = LABEL_ALIGN_CENTER;
-            } else if (strcmp(key, "x") == 0) {
-                int x = atoi(val);
-                if (x < -999) x = -999;
-                if (x > 999)  x = 999;
-                out->x_offset = (int16_t)x;
-            } else if (strcmp(key, "y") == 0) {
-                int y = atoi(val);
-                if (y < -999) y = -999;
-                if (y > 999)  y = 999;
-                out->y_offset = (int16_t)y;
-            } else if (strcmp(key, "mode") == 0) {
-                if (strcmp(val, "clip") == 0)        out->long_mode = LABEL_MODE_CLIP;
-                else if (strcmp(val, "scroll") == 0) out->long_mode = LABEL_MODE_SCROLL;
-                else if (strcmp(val, "dot") == 0)    out->long_mode = LABEL_MODE_DOT;
-                else if (strcmp(val, "wrap") == 0)   out->long_mode = LABEL_MODE_WRAP;
-            } else if (strcmp(key, "color") == 0) {
-                uint32_t c;
-                if (parse_hex_color(val, &c)) {
-                    out->color = c | 0x01000000; // Set marker bit
-                }
-            }
-        }
-        token = strtok_r(nullptr, ";", &saveptr);
-    }
-}
+// label_style_parse() lives in label_style.cpp (extracted so host-native tests
+// can exercise the DSL tokenizer + binding-color capture without pulling in the
+// full pad_config translation unit).
 
 // Validate a pad binding name: [a-zA-Z][a-zA-Z0-9_]*, non-empty, max len.
 static bool is_valid_binding_name(const char* name) {
@@ -251,9 +183,12 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     if (!dsl_top[0] && defs) dsl_top = defs->label_top_style;
     if (!dsl_ctr[0] && defs) dsl_ctr = defs->label_center_style;
     if (!dsl_bot[0] && defs) dsl_bot = defs->label_bottom_style;
-    label_style_parse(dsl_top, &btn->style_top);
-    label_style_parse(dsl_ctr, &btn->style_center);
-    label_style_parse(dsl_bot, &btn->style_bottom);
+    label_style_parse(dsl_top, &btn->style_top,
+                      btn->label_top_color_bind, sizeof(btn->label_top_color_bind));
+    label_style_parse(dsl_ctr, &btn->style_center,
+                      btn->label_center_color_bind, sizeof(btn->label_center_color_bind));
+    label_style_parse(dsl_bot, &btn->style_bottom,
+                      btn->label_bottom_color_bind, sizeof(btn->label_bottom_color_bind));
 
     strlcpy(btn->icon_id, obj["icon_id"] | "", CONFIG_ICON_ID_MAX_LEN);
     btn->icon_scale_pct = obj["icon_scale_pct"] | (uint8_t)0;
@@ -317,6 +252,9 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
             if (btn->lp_actions[0].type[0]) btn->lp_action_count = 1;
         }
     }
+
+    btn->confirm = obj["confirm"] | false;
+    strlcpy(btn->confirm_text, obj["confirm_text"] | "", sizeof(btn->confirm_text));
 
     // Background image fields
     strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);

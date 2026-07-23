@@ -60,6 +60,7 @@ Mixed static + binding: `"Temperature: [mqtt:sensors/temp;$.value;%.1f]°C"`
 2. Optionally implement `collector(params, user_data)` for MQTT topic collection
 3. Call `binding_template_register("scheme_name", resolver, collector)` during init
 4. Gate with appropriate `#if HAS_*` flags
+5. **Expose it to the MCP server** (so LLM pad-authoring clients can discover and use it): under `#if HAS_MCP`, add a `describe(void* out_json)` hook and register it with `binding_template_set_scheme_describe("scheme_name", describe)`. If the scheme has a constrained key/param set, also add a `validate(params)` hook via `binding_template_set_scheme_validate(...)` so authoring writes reject bad tokens. This is enforced by `tests/test_mcp_scheme_parity.sh` — a scheme registered without a describe hook fails the test suite (unless explicitly allowlisted with a justification).
 
 ## Key Files
 

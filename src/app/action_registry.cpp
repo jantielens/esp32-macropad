@@ -80,6 +80,14 @@ void action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act) {
         strlcpy(field, tmp, size);
     }
 }
+
+void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& act, void* user_data) {
+    if (!def || !def->value_field) return;
+    size_t size = 0;
+    // Reading the field pointer through a const ButtonAction is safe (see above).
+    char* field = def->value_field(const_cast<ButtonAction&>(act), &size);
+    if (field && field[0]) binding_template_collect_topics(field, user_data);
+}
 #endif
 
 #endif // HAS_DISPLAY || HAS_BUTTON

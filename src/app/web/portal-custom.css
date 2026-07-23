@@ -53,6 +53,8 @@ select { color-scheme: light; }
   --portal-border: #d2d2d7;
   --portal-border-light: #e5e5ea;
   --portal-editor-bg: #fafafa;
+  --portal-editor-nested-bg: #f3f7fc;
+  --portal-editor-nested-accent: rgba(21, 101, 192, 0.55);
   --portal-overlay-bg: rgba(0, 0, 0, 0.6);
   --portal-blue: #007aff;
   --portal-blue-hover: #0051d5;
@@ -100,6 +102,8 @@ select { color-scheme: light; }
   --portal-border: rgba(255, 255, 255, 0.15);
   --portal-border-light: rgba(255, 255, 255, 0.08);
   --portal-editor-bg: #22262a;
+  --portal-editor-nested-bg: #282f38;
+  --portal-editor-nested-accent: rgba(78, 140, 255, 0.65);
   --portal-overlay-bg: rgba(0, 0, 0, 0.75);
   --portal-blue: #4e8cff;
   --portal-blue-hover: #6ea0ff;
@@ -653,6 +657,89 @@ body {
   color: var(--portal-text-muted);
   font-size: 0.88rem;
   margin: 0;
+}
+
+/* ================================================================
+   Screen preview
+   ================================================================ */
+.screen-preview-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.screen-preview-selection {
+  flex: 1 1 320px;
+  max-width: 520px;
+}
+
+.screen-preview-capture {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 138px;
+}
+
+.screen-preview-spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.screen-preview-frame {
+  --screen-preview-ratio: 1 / 1;
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  aspect-ratio: var(--screen-preview-ratio);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--portal-card-border);
+  border-radius: 6px;
+  background: var(--portal-surface-alt);
+}
+
+.screen-preview-frame-portrait {
+  max-width: 480px;
+}
+
+.screen-preview-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.screen-preview-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--portal-text-muted);
+  font-size: 0.85rem;
+}
+
+.screen-preview-status {
+  margin-top: 8px;
+  text-align: center;
+}
+
+@media (max-width: 575.98px) {
+  .screen-preview-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .screen-preview-selection {
+    flex-basis: auto;
+    max-width: none;
+  }
+
+  .screen-preview-capture {
+    width: 100%;
+  }
 }
 
 /* ================================================================
@@ -1432,6 +1519,11 @@ body {
   border-radius: 10px; margin-bottom: 10px;
   background: var(--portal-editor-bg);
 }
+.editor-group .editor-group {
+  margin-left: 14px;
+  border-left: 3px solid var(--portal-editor-nested-accent);
+  background: var(--portal-editor-nested-bg);
+}
 .editor-group > summary {
   cursor: pointer; font-weight: 600; font-size: 14px;
   color: var(--portal-text); padding: 10px 14px;
@@ -1503,6 +1595,25 @@ body {
   user-select: none; letter-spacing: -0.5px; cursor: pointer;
 }
 .fx-hint:hover { color: rgba(var(--portal-primary-rgb), 0.85); }
+
+/* In-context live binding preview: inline resolved-value chip per field */
+.pad-pv-val {
+  display: none; align-items: center; gap: 4px; margin-left: 6px;
+  font-size: 11px; vertical-align: baseline; cursor: pointer; max-width: 240px;
+}
+.pad-pv-val .pad-pv-arrow { color: var(--portal-text-muted); }
+.pad-pv-val .pad-pv-text {
+  color: #34c759; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 190px;
+}
+.pad-pv-val .pad-pv-text.pad-pv-muted, .pad-pv-muted { color: var(--portal-text-muted); }
+.pad-pv-swatch {
+  width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto;
+  border: 1px solid var(--portal-border); display: inline-block;
+}
+/* Pad-binding rows: preview drops to its own line, indented under the value */
+.pad-binding-preview { flex-basis: 100%; max-width: none; margin: 0 0 2px 116px; }
+.pad-binding-preview .pad-pv-text { max-width: 320px; }
 .reset-hint {
   display: none; font-size: 11px; margin-left: 2px; vertical-align: baseline;
   color: rgba(255,59,48,0.6); cursor: pointer; user-select: none;
@@ -1756,6 +1867,7 @@ input[type="text"].label-style-input {
 }
 
 @media (max-width: 767px) {
+  .editor-group .editor-group { margin-left: 8px; }
   .binding-docs-modal { width: calc(100vw - 12px); }
   .binding-docs-header,
   .binding-docs-body,

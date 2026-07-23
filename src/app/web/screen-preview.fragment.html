@@ -1,0 +1,26 @@
+<div class="section-header">
+  <h2>Screen Preview</h2>
+  <p>Capture the screen currently shown on the device.</p>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="screen-preview-toolbar">
+      <div id="screen-preview-selection-group" class="screen-preview-selection" style="display:none;">
+        <label class="form-label" for="screen_preview_selection">Current Screen</label>
+        <select class="form-select" id="screen_preview_selection"></select>
+        <div class="form-text">Screen changes apply immediately and are not saved.</div>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm screen-preview-capture" id="screen-preview-capture-btn">
+        <span class="spinner-border spinner-border-sm screen-preview-spinner" id="screen-preview-spinner" aria-hidden="true" style="display:none;"></span>
+        <span id="screen-preview-capture-label">Capture Preview</span>
+      </button>
+    </div>
+
+    <div class="screen-preview-frame" id="screen-preview-frame">
+      <div class="screen-preview-placeholder" id="screen-preview-placeholder">No preview captured</div>
+      <img id="screen-preview-image" alt="Current device screen" style="display:none;">
+    </div>
+    <div class="form-text screen-preview-status" id="screen-preview-status" aria-live="polite">Capture is performed only when requested.</div>
+  </div>
+</div>

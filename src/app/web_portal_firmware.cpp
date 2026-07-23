@@ -6,6 +6,7 @@
 #include "device_telemetry.h"
 #include "image_fetch.h"
 #include "log_manager.h"
+#include "net_activity.h"
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
 
@@ -222,6 +223,7 @@ static void firmware_update_task(void *pv) {
 				}
 
 				const size_t written = Update.write(buf, (size_t)read_bytes);
+				net_activity_mark(NET_CH_OTA);
 				if (written != (size_t)read_bytes) {
 						strlcpy(firmware_update_state, "error", sizeof(firmware_update_state));
 						strlcpy(firmware_update_error, "Flash write failed", sizeof(firmware_update_error));

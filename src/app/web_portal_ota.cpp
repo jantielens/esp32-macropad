@@ -6,6 +6,7 @@
 
 #include "device_telemetry.h"
 #include "log_manager.h"
+#include "net_activity.h"
 
 #include <Update.h>
 
@@ -87,6 +88,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 
 		// Write chunk to flash
 		if (len) {
+				net_activity_mark(NET_CH_OTA);
 				if (Update.write(data, len) != len) {
 								LOGE("OTA", "Write failed");
 						Update.printError(Serial);

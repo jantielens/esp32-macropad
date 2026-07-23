@@ -29,7 +29,7 @@ static const char* SLOT_KEYS[RELAY_SLOT_COUNT] = {
 // Configuration
 // ============================================================================
 
-static constexpr uint32_t RELAY_TASK_STACK_WORDS = 8192;
+static constexpr uint32_t RELAY_TASK_STACK_BYTES = 8192;
 static constexpr UBaseType_t RELAY_TASK_PRIORITY  = 2;
 
 // ============================================================================
@@ -313,7 +313,7 @@ void relay_controller_init() {
 
     bool ok = rtos_create_task_psram_stack_pinned(
         relay_task_fn, "relay",
-        RELAY_TASK_STACK_WORDS, nullptr,
+        RELAY_TASK_STACK_BYTES, nullptr,
         RELAY_TASK_PRIORITY, &g_relay_task, &g_relay_alloc,
         tskNO_AFFINITY);
 

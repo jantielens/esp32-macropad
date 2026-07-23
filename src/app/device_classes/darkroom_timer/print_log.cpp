@@ -435,6 +435,17 @@ static void print_collect(const char* params, void* user_data) {
     (void)user_data;
 }
 
+#if HAS_MCP
+#include <ArduinoJson.h>
+static void print_scheme_describe(void* out) {
+    JsonObject& o = *static_cast<JsonObject*>(out);
+    o["syntax"]  = "[print:key] or [print:key;format]";
+    o["example"] = "Prints: [print:count]";
+    o["keys"]    = "id, last_id, count";
+    o["note"]    = "Darkroom print-log counters.";
+}
+#endif
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -538,6 +549,9 @@ void print_log_init() {
     } else {
         LOGI(TAG, "Print binding scheme registered");
     }
+#if HAS_MCP
+    binding_template_set_scheme_describe("print", print_scheme_describe);
+#endif
 
     LOGI(TAG, "Init: next=%s count=%u", s_next_id, (unsigned)s_count);
 }

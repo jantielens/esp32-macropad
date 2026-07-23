@@ -7,6 +7,8 @@
 #include "log_manager.h"
 #include "pad_block.h"
 #include "pad_config.h"
+#include "pad_resolve_request.h"
+#include "pad_validate.h"
 #include "psram_json_allocator.h"
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
@@ -58,27 +60,18 @@ static int parse_page_param(AsyncWebServerRequest *request) {
     return page;
 }
 
-// Validate grid JSON: cols/rows in range, button placement within grid bounds.
+// Validate a pad JSON body before saving. Delegates to the shared pad_validate
+// (single source of truth, identical to the MCP write/validate tools) so the
+// portal rejects the same invalid pads MCP does — binding tokens, widget
+// fields, colors, action arrays, length caps, and the one-level [pad:] rule.
+// tolerate_offgrid=true preserves the portal's feature of keeping buttons that
+// fall outside a shrunken grid (they are hidden and reappear when it grows).
 // Returns error message or nullptr on success.
 static const char* validate_pad_json(const uint8_t* json, size_t len) {
     BasicJsonDocument<PsramJsonAllocator> doc(len * 2 + 512);
     DeserializationError err = deserializeJson(doc, json, len);
     if (err) return "Invalid JSON";
-
-    const char* layout = doc["layout"] | "grid";
-
-    if (strcmp(layout, "grid") == 0) {
-        uint8_t cols = doc["cols"] | (uint8_t)0;
-        uint8_t rows = doc["rows"] | (uint8_t)0;
-        if (cols < 1 || cols > MAX_GRID_COLS) return "cols must be 1-8";
-        if (rows < 1 || rows > MAX_GRID_ROWS) return "rows must be 1-8";
-
-        // Buttons outside the current grid are allowed — they are
-        // silently hidden and reappear when cols/rows grow back.
-    }
-    // Non-grid layouts (curated) are not validated in v0
-
-    return nullptr; // Valid
+    return pad_validate(doc.as<JsonObjectConst>(), /*tolerate_offgrid=*/true);
 }
 
 // ============================================================================
@@ -296,5 +289,96 @@ void handleGetPadBlocks(AsyncWebServerRequest *request) {
     response->print(']');
     request->send(response);
 }
+
+#if HAS_MQTT
+// ============================================================================
+// POST /api/pad/resolve — resolve binding tokens against LIVE data (no save).
+// Body: { screen?, bindings?[], button? }. Powers the pad editor live preview.
+// Delegates to the shared pad_resolve_request() (same engine as the MCP
+// resolve_bindings tool); resolution runs on the main loop via the bridge.
+// ============================================================================
+#define PAD_RESOLVE_MAX_JSON_BYTES (8 * 1024)
+
+static struct {
+    bool     in_progress;
+    uint32_t started_ms;
+    size_t   total;
+    size_t   received;
+    uint8_t* buf;
+} g_resolve_post = {false, 0, 0, 0, nullptr};
+
+static void resolve_post_reset() {
+    if (g_resolve_post.buf) { heap_caps_free(g_resolve_post.buf); g_resolve_post.buf = nullptr; }
+    g_resolve_post.in_progress = false;
+    g_resolve_post.total = 0;
+    g_resolve_post.received = 0;
+    g_resolve_post.started_ms = 0;
+}
+
+void handlePostPadResolve(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    if (!portal_auth_gate(request)) return;
+
+    if (index == 0) {
+        const uint32_t now = millis();
+        if (g_resolve_post.in_progress && g_resolve_post.started_ms &&
+            (now - g_resolve_post.started_ms > 10000)) {
+            resolve_post_reset();
+        }
+        if (g_resolve_post.in_progress) {
+            web_portal_send_json_error(request, 409, "Resolve already in progress");
+            return;
+        }
+        if (total == 0 || total > PAD_RESOLVE_MAX_JSON_BYTES) {
+            web_portal_send_json_error(request, 413, "JSON body too large");
+            return;
+        }
+        uint8_t* buf = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!buf) buf = (uint8_t*)heap_caps_malloc(total + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (!buf) { web_portal_send_json_error(request, 503, "Out of memory"); return; }
+        g_resolve_post.in_progress = true;
+        g_resolve_post.started_ms = now;
+        g_resolve_post.total = total;
+        g_resolve_post.received = 0;
+        g_resolve_post.buf = buf;
+    }
+
+    if (!g_resolve_post.in_progress || !g_resolve_post.buf ||
+        g_resolve_post.total != total || (index + len) > total) {
+        web_portal_send_json_error(request, 400, "Invalid upload state");
+        resolve_post_reset();
+        return;
+    }
+
+    memcpy(g_resolve_post.buf + index, data, len);
+    size_t new_received = index + len;
+    if (new_received > g_resolve_post.received) g_resolve_post.received = new_received;
+    if (g_resolve_post.received < g_resolve_post.total) return;  // more chunks
+
+    g_resolve_post.buf[g_resolve_post.total] = '\0';
+
+    BasicJsonDocument<PsramJsonAllocator> doc(g_resolve_post.total * 2 + 1024);
+    DeserializationError perr = deserializeJson(doc, g_resolve_post.buf, g_resolve_post.total);
+    resolve_post_reset();
+    if (perr) { web_portal_send_json_error(request, 400, "Invalid JSON"); return; }
+
+    auto out = make_psram_json_doc(8 * 1024);
+    if (!out) { web_portal_send_json_error(request, 503, "Out of memory"); return; }
+    JsonObject result = out->to<JsonObject>();
+
+    const char* em = nullptr;
+    PadResolveStatus st = pad_resolve_request(doc.as<JsonObjectConst>(), result, &em);
+    if (st != PAD_RESOLVE_OK) {
+        int code = (st == PAD_RESOLVE_BAD_PARAMS) ? 400
+                 : (st == PAD_RESOLVE_BUSY)       ? 503
+                 : (st == PAD_RESOLVE_OOM)        ? 503 : 500;
+        web_portal_send_json_error(request, code, em ? em : "resolve failed");
+        return;
+    }
+
+    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    serializeJson(result, *response);
+    request->send(response);
+}
+#endif // HAS_MQTT
 
 #endif // HAS_DISPLAY

@@ -38,7 +38,8 @@ struct RuntimeColorBinding {
     char templ[CONFIG_COLOR_MAX_LEN];                 // Original color string (template or static)
     uint32_t defaultColor;                            // Fallback color when unresolved
     uint32_t lastApplied;                             // Last applied color (skip if unchanged)
-    uint8_t target;                                   // 0=bg, 1=fg (labels+icon recolor), 2=border
+    uint8_t target;                                   // 0=bg, 1=fg (labels+icon recolor), 2=border,
+                                                      // 3=label_top text, 4=label_center text, 5=label_bottom text
     bool active;
     bool hasBindings;                                 // true if template contains [xxx:...] tokens
 };
@@ -79,6 +80,10 @@ struct ButtonTile {
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr
     lv_obj_t* icon_img;       // Icon image widget (or nullptr)
     bool icon_is_mono;        // True if icon uses fg recolor
+    // Per-label text-color override: bit0=top, bit1=center, bit2=bottom. Set when a
+    // label has its own `color:` (static or binding) so the fg (target=1) poll does
+    // not clobber it. Icon recolor is NOT gated by this mask.
+    uint8_t labelColorOverride;
     uint8_t page;             // Page index (for HA event)
     uint8_t col;              // Grid column (for HA event)
     uint8_t row;              // Grid row (for HA event)
@@ -86,6 +91,8 @@ struct ButtonTile {
     uint8_t action_count;
     ButtonAction lp_actions[MAX_BUTTON_ACTIONS]; // Long-press actions (sequential)
     uint8_t lp_action_count;
+    bool confirm;
+    char confirm_text[CONFIG_CONFIRM_TEXT_MAX_LEN];
     // Widget runtime state (non-null widget_type = this tile is a widget)
     const WidgetType* widget_type;
     WidgetConfig widget_cfg;   // Copy of config (needed for update calls)
@@ -119,7 +126,8 @@ private:
     RuntimeLabelBinding* bindings;
     uint16_t bindingCount;
 
-    static const int MAX_COLOR_BINDINGS = MAX_PAD_BUTTONS * 3 + 1;
+    // Up to 6 color bindings per button: bg + fg + border + 3 per-label text colors.
+    static const int MAX_COLOR_BINDINGS = MAX_PAD_BUTTONS * 6 + 1;
     RuntimeColorBinding* colorBindings;
     uint16_t colorBindingCount;
 

@@ -2,6 +2,11 @@
 // Part of the ESP32 Macropad configuration portal.
 // Bundled into portal_pad_editor.js during minification.
 
+function padConfirmChanged() {
+    var enabled = document.getElementById('pad-edit-confirm').checked;
+    document.getElementById('pad-edit-confirm-text-group').style.display = enabled ? '' : 'none';
+}
+
 function padDialogOpen(col, row) {
     padState.editCol = col;
     padState.editRow = row;
@@ -115,6 +120,11 @@ function padDialogOpen(col, row) {
         if (wrap) wrap.style.display = (ai === 0 || (lpActions[ai] && lpActions[ai].type)) ? '' : 'none';
     }
     padUpdateAddLink('lp');
+
+    document.getElementById('pad-edit-confirm').checked =
+        !!btn.confirm && !document.getElementById('pad-edit-widget-type').value;
+    document.getElementById('pad-edit-confirm-text').value = btn.confirm_text || '';
+    padConfirmChanged();
 
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
@@ -287,9 +297,13 @@ function padDialogOpen(col, row) {
 
     // Refresh binding length warnings for the loaded values
     if (typeof padScanMaxlenHints === 'function') padScanMaxlenHints();
+
+    // Mount + prefetch the in-context live-value preview affordances.
+    if (typeof padPvOnOpen === 'function') padPvOnOpen();
 }
 
 function padDialogClose() {
+    if (typeof padPvHide === 'function') padPvHide();
     document.getElementById('pad-edit-overlay').style.display = 'none';
     document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
@@ -360,6 +374,12 @@ function padDialogOk(keepOpen) {
         if (a.type) lpArr.push(a);
     }
     if (lpArr.length) btn.lp_actions = lpArr;
+
+    if (document.getElementById('pad-edit-confirm').checked) {
+        btn.confirm = true;
+        const confirmText = document.getElementById('pad-edit-confirm-text').value.trim();
+        if (confirmText) btn.confirm_text = confirmText;
+    }
 
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();
@@ -613,3 +633,174 @@ function padDialogClear() {
     padDialogClose();
     padRenderGrid();
 }
+
+// --- Live binding preview (in-context) -------------------------------------
+// Each bindable field (labels, colors, state, primary data binding) that holds
+// a binding shows its live resolved value INLINE, right after the field's "fx"
+// hint — no popover, so nothing can be hidden behind the modal. Values resolve
+// via POST /api/pad/resolve on dialog open and refresh (debounced) as bindings
+// are edited; click a value to force a fresh reading. Color values also show a
+// swatch. Resolves VALUES only (not a pixel render); reads fields from the form.
+
+var PAD_PV_FIELDS = [
+    { id: 'pad-edit-label-top',           kind: 'text',  field: 'label_top' },
+    { id: 'pad-edit-label-center',        kind: 'text',  field: 'label_center' },
+    { id: 'pad-edit-label-bottom',        kind: 'text',  field: 'label_bottom' },
+    { id: 'pad-edit-bg-color',            kind: 'color', field: 'bg_color' },
+    { id: 'pad-edit-fg-color',            kind: 'color', field: 'fg_color' },
+    { id: 'pad-edit-border-color',        kind: 'color', field: 'border_color' },
+    { id: 'pad-edit-border-width',        kind: 'text',  field: 'border_width' },
+    { id: 'pad-edit-corner-radius',       kind: 'text',  field: 'corner_radius' },
+    { id: 'pad-edit-btn-state',           kind: 'text',  field: 'btn_state' },
+    { id: 'pad-edit-widget-data-binding', kind: 'text',  field: 'widget_data_binding' }
+];
+var padPvTimer = null;  // debounce for edit-triggered refresh
+
+function padPreviewEsc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function padPvFieldDef(id) {
+    for (var i = 0; i < PAD_PV_FIELDS.length; i++) if (PAD_PV_FIELDS[i].id === id) return PAD_PV_FIELDS[i];
+    return null;
+}
+
+function padPvFieldValue(id) {
+    var f = padPvFieldDef(id);
+    if (f && f.kind === 'color') return padGetBindableColor(id);
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+}
+
+function padPvIsBinding(v) { return !!v && v.indexOf('[') !== -1; }
+
+function padPvHex(v) {
+    var s = String(v == null ? '' : v).trim();
+    return /^#[0-9a-fA-F]{6}$/.test(s) ? s : null;
+}
+
+// A value counts as "not resolved yet" when it is empty or a placeholder. A
+// just-subscribed MQTT topic resolves to EMPTY (not '---') until its (retained)
+// message arrives, so both must trigger the delayed retry.
+function padPvUnresolved(v) {
+    var s = String(v == null ? '' : v).trim();
+    return s === '' || s.indexOf('---') !== -1;
+}
+
+// Anchor the inline value chip next to each field's visible "fx" hint (uniform
+// across text inputs and the display:none color inputs).
+function padPvAnchor(id) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    var node = el;
+    while (node && node !== document.body) {
+        var fx = node.querySelector ? node.querySelector('.fx-hint') : null;
+        if (fx) return fx;
+        node = node.parentElement;
+    }
+    return null;
+}
+
+// Create the inline value chip for each field once (idempotent), and hook a
+// debounced refresh so values track edits.
+function padPvMount() {
+    PAD_PV_FIELDS.forEach(function (f) {
+        var anchor = padPvAnchor(f.id);
+        if (!anchor || anchor.parentNode.querySelector('.pad-pv-val[data-pv="' + f.id + '"]')) return;
+        var chip = document.createElement('span');
+        chip.className = 'pad-pv-val';
+        chip.setAttribute('data-pv', f.id);
+        chip.style.display = 'none';
+        chip.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); padPvRefreshField(f.id); });
+        anchor.insertAdjacentElement('afterend', chip);
+    });
+    var overlay = document.getElementById('pad-edit-overlay');
+    if (overlay && !overlay._pvHooked) {
+        overlay._pvHooked = true;
+        var refresh = function () {
+            if (padPvTimer) clearTimeout(padPvTimer);
+            padPvTimer = setTimeout(padPvRefreshAll, 350);
+        };
+        overlay.addEventListener('input', refresh);
+        overlay.addEventListener('change', refresh);
+    }
+}
+
+// Render one chip. state 'loading' shows a spinner-ish ellipsis; hidden when the
+// field holds no binding.
+function padPvSetChip(id, value, state) {
+    var chip = document.querySelector('.pad-pv-val[data-pv="' + id + '"]');
+    if (!chip) return;
+    if (!padPvIsBinding(padPvFieldValue(id))) { chip.style.display = 'none'; chip.title = ''; return; }
+    chip.style.display = 'inline-flex';
+    if (state === 'loading') {
+        chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">\u2026</span>';
+        chip.title = 'Resolving\u2026';
+        return;
+    }
+    var shown = (value === '' || value == null) ? '(empty)' : String(value);
+    var muted = shown.indexOf('---') !== -1 ? ' pad-pv-muted' : '';
+    var hex = padPvHex(value);
+    var inner = '<span class="pad-pv-arrow">\u2192</span>';
+    if (hex) inner += '<span class="pad-pv-swatch" style="background:' + padPreviewEsc(hex) + ';"></span>';
+    inner += '<span class="pad-pv-text' + muted + '">' + padPreviewEsc(shown) + '</span>';
+    chip.innerHTML = inner;
+    chip.title = shown + ' \u2014 click to refresh';
+}
+
+// Resolve one field (used on click for a fresh reading). A single delayed retry
+// covers a just-subscribed MQTT topic whose (retained) message arrives shortly
+// after the first resolve.
+function padPvRefreshField(id, retriesLeft) {
+    var val = padPvFieldValue(id);
+    if (!padPvIsBinding(val)) { padPvSetChip(id); return; }
+    var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
+    padPvSetChip(id, null, 'loading');
+    fetch('/api/pad/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screen: 'pad_' + padState.page, bindings: [val] })
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+          var v = (j && j.resolved && j.resolved[0]) ? j.resolved[0].value : '---';
+          padPvSetChip(id, v);
+          if (padPvUnresolved(v) && rl > 0)
+              setTimeout(function () { padPvRefreshField(id, rl - 1); }, 1000);
+      })
+      .catch(function () { padPvSetChip(id, '---'); });
+}
+
+// Batch-resolve all bound fields in one request (dialog open + debounced edits).
+function padPvRefreshAll(retriesLeft) {
+    padPvMount();
+    var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
+    var btn = {}, any = false;
+    PAD_PV_FIELDS.forEach(function (f) {
+        var v = padPvFieldValue(f.id);
+        if (padPvIsBinding(v)) { btn[f.field] = v; any = true; padPvSetChip(f.id, null, 'loading'); }
+        else padPvSetChip(f.id);
+    });
+    if (!any) return;
+    fetch('/api/pad/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screen: 'pad_' + padState.page, button: btn })
+    }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+          var fields = (j && j.button) || {};
+          var anyUnresolved = false;
+          PAD_PV_FIELDS.forEach(function (f) {
+              if (padPvIsBinding(padPvFieldValue(f.id))) {
+                  var v = fields[f.field] !== undefined ? fields[f.field] : '---';
+                  padPvSetChip(f.id, v);
+                  if (padPvUnresolved(v)) anyUnresolved = true;
+              }
+          });
+          if (anyUnresolved && rl > 0) setTimeout(function () { padPvRefreshAll(rl - 1); }, 1000);
+      })
+      .catch(function () {
+          PAD_PV_FIELDS.forEach(function (f) { if (padPvIsBinding(padPvFieldValue(f.id))) padPvSetChip(f.id, '---'); });
+      });
+}
+
+function padPvOnOpen() { padPvMount(); padPvRefreshAll(); }
+function padPvHide() { /* inline chips live inside the dialog; nothing to tear down */ }

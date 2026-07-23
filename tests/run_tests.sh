@@ -76,6 +76,34 @@ echo "=== Running integration tests: pad_binding ==="
 ./tests/bin/test_pad_binding
 echo
 
+echo "=== Building unit tests: label_style ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I src/app \
+    tests/test_label_style.cpp \
+    src/app/label_style.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_label_style -lm
+
+echo "=== Running unit tests: label_style ==="
+./tests/bin/test_label_style
+echo
+
+echo "=== Building unit tests: pad_confirmation ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    -I ~/Arduino/libraries/lvgl/src \
+    tests/test_pad_confirmation.cpp \
+    src/app/pad_validate.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_pad_confirmation
+
+echo "=== Running unit tests: pad_confirmation ==="
+./tests/bin/test_pad_confirmation
+echo
+
 echo "=== Building unit tests: widget_common ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \
@@ -84,6 +112,16 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running unit tests: widget_common ==="
 ./tests/bin/test_widget_common
+echo
+
+echo "=== Building unit tests: minimp3_scratch ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_minimp3_scratch.cpp \
+    -o tests/bin/test_minimp3_scratch -lm
+
+echo "=== Running unit tests: minimp3_scratch ==="
+./tests/bin/test_minimp3_scratch
 echo
 
 echo "=== Building unit tests: key_sequence ==="
@@ -270,6 +308,17 @@ echo "=== Running unit tests: list_provider ==="
 ./tests/bin/test_list_provider
 echo
 
+echo "=== Building unit tests: net_activity ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I tests -I src/app \
+    tests/test_net_activity.cpp \
+    src/app/net_activity.cpp \
+    -o tests/bin/test_net_activity
+
+echo "=== Running unit tests: net_activity ==="
+./tests/bin/test_net_activity
+echo
+
 echo "=== Building unit tests: shutter_session ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -Wno-deprecated-declarations \
@@ -366,6 +415,10 @@ echo
 
 echo "=== Running guard: widget schema parity (describe <-> parse) ==="
 python3 tools/lint_widget_schema.py
+echo
+
+echo "=== Running guard: MCP binding-scheme parity (register <-> describe) ==="
+./tests/test_mcp_scheme_parity.sh
 echo
 
 echo "=== All tests passed ==="

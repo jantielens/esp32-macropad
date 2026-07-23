@@ -43,10 +43,11 @@
 #define CONFIG_FORMAT_MAX_LEN          24
 #define CONFIG_STATE_ON_VALUE_MAX_LEN  32
 #define CONFIG_BTN_STATE_MAX_LEN      192
+#define CONFIG_CONFIRM_TEXT_MAX_LEN   128
 #define CONFIG_BG_IMAGE_URL_MAX_LEN   256
 #define CONFIG_BG_IMAGE_USER_MAX_LEN   32
 #define CONFIG_BG_IMAGE_PASS_MAX_LEN   64
-#define CONFIG_LABEL_STYLE_MAX_LEN     64
+#define CONFIG_LABEL_STYLE_MAX_LEN    128
 #define PAD_MAX_BINDINGS              16
 #define PAD_BINDING_NAME_MAX_LEN      32
 
@@ -109,7 +110,11 @@ struct LabelStyle {
 
 // Parse a label style DSL string into a LabelStyle struct.
 // Unknown keys are silently ignored. Empty/null input → all defaults (zeros).
-void label_style_parse(const char* dsl, LabelStyle* out);
+// When the `color:` value is a binding template (contains '['), the raw token is
+// copied to color_bind_out (if provided) and out->color is left unset (marker bit
+// clear) so the runtime resolves it live; a static #RRGGBB sets out->color instead.
+void label_style_parse(const char* dsl, LabelStyle* out,
+                       char* color_bind_out = nullptr, size_t color_bind_len = 0);
 
 // Action types (string constants for type field)
 #define ACTION_TYPE_NONE     ""
@@ -126,6 +131,7 @@ void label_style_parse(const char* dsl, LabelStyle* out);
 #define ACTION_TYPE_NOTIFY   "notify"
 #define ACTION_TYPE_SYSTEM   "system"
 #define ACTION_TYPE_HA_SERVICE "ha_service"
+#define ACTION_TYPE_VISUAL_ALERT "visual_alert"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -195,6 +201,14 @@ struct HaServicePayload {
     char service[20];     // e.g. "toggle", "turn_on", "set_cover_position"
     char data_json[64];   // optional extra JSON object, e.g. {"brightness_pct":80}
 };
+struct VisualAlertPayload {
+    char     va_op[8];                            // "start" (default) | "stop"
+    char     va_color[CONFIG_BINDABLE_SHORT_LEN]; // overlay color hex (bindable), "" = red
+    char     va_pattern[8];                       // "breathe" (default) | "blink" | "solid"
+    uint16_t va_period_ms;                        // pulse cadence, 0 = default 800
+    uint16_t va_intensity;                        // max overlay opacity 0-100%, 0 = default 100
+    uint32_t va_duration_ms;                       // 0 = persist until stopped
+};
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -224,6 +238,7 @@ union ActionPayload {
     NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
     SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
     HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
+    VisualAlertPayload visual_alert; // type == ACTION_TYPE_VISUAL_ALERT
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, "" (none) carry no payload data — only the type tag.
@@ -259,6 +274,7 @@ static_assert(sizeof(ButtonAction) <= 420,
     printf_fn("  NotifyPayload     = %zu\n", sizeof(NotifyPayload));     \
     printf_fn("  SystemPayload     = %zu\n", sizeof(SystemPayload));     \
     printf_fn("  HaServicePayload  = %zu\n", sizeof(HaServicePayload));  \
+    printf_fn("  VisualAlertPayload= %zu\n", sizeof(VisualAlertPayload)); \
 } while (0)
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
@@ -289,6 +305,14 @@ struct ScreenButtonConfig {
     LabelStyle style_center;
     LabelStyle style_bottom;
 
+    // Raw binding token from each label style's `color:` sub-field (empty when the
+    // color is static or absent). Sized at CONFIG_LABEL_STYLE_MAX_LEN because a
+    // color token can never exceed the style DSL it is a substring of. Registered
+    // as a runtime color binding so per-label text colors update live.
+    char label_top_color_bind[CONFIG_LABEL_STYLE_MAX_LEN];
+    char label_center_color_bind[CONFIG_LABEL_STYLE_MAX_LEN];
+    char label_bottom_color_bind[CONFIG_LABEL_STYLE_MAX_LEN];
+
     // Icon reference
     char icon_id[CONFIG_ICON_ID_MAX_LEN];
     uint8_t icon_scale_pct;             // 0 = auto (widget-aware), 1-250 = explicit scale %
@@ -310,6 +334,8 @@ struct ScreenButtonConfig {
     uint8_t action_count;                          // number of tap actions (0-3)
     ButtonAction lp_actions[MAX_BUTTON_ACTIONS];   // long-press actions (executed sequentially)
     uint8_t lp_action_count;                       // number of long-press actions (0-3)
+    bool confirm;                                  // require confirmation before either action list
+    char confirm_text[CONFIG_CONFIRM_TEXT_MAX_LEN]; // optional confirmation prompt
 
     // Background image (fetched from URL, displayed as tile background)
     char bg_image_url[CONFIG_BG_IMAGE_URL_MAX_LEN];       // empty = no image
@@ -325,6 +351,13 @@ struct ScreenButtonConfig {
     // Empty = enabled. Supports binding templates for dynamic state.
     char btn_state[CONFIG_BTN_STATE_MAX_LEN];
 };
+
+// Size canary: per-label color-bind capture must stay sized at the label-style cap
+// (a color token is a substring of the style DSL), NOT the larger color cap. This
+// guards against a future edit silently re-oversizing ScreenButtonConfig ×3×buttons.
+static_assert(sizeof(((ScreenButtonConfig*)nullptr)->label_center_color_bind)
+                  == CONFIG_LABEL_STYLE_MAX_LEN,
+              "label color-bind fields must be sized at CONFIG_LABEL_STYLE_MAX_LEN");
 
 // Named binding: [pad:name] resolves to the stored template at runtime.
 // Names must match [a-zA-Z][a-zA-Z0-9_]* (max PAD_BINDING_NAME_MAX_LEN chars).

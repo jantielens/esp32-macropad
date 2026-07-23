@@ -139,7 +139,7 @@ After flashing, the device creates its own Wi-Fi hotspot for initial configurati
 Everything is configured from your browser — no flashing or coding needed after the initial install. The portal is a single-page app with a responsive sidebar organizing settings into 8 categories:
 
 - **Device** — operating mode, boot actions, timers, and swipe gestures
-- **Display** — brightness, screensaver, and button defaults
+- **Display** — brightness, on-demand screen preview, screen saver, and button defaults
 - **Pads** — visual pad editor for designing button layouts
 - **Actions** — boot actions, swipe gestures, hardware buttons, and MQTT triggers
 - **Connectivity** — Wi-Fi, MQTT, BLE, device name, static IP, and security

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 230
+Total flags: 233
 
 ### Features (HAS_*)
 
@@ -121,6 +121,8 @@ Total flags: 230
 ### Limits & Tuning
 
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
+- **AUDIO_TASK_STACK_SIZE** default: `24576` — Audio worker stack size in bytes.
+- **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
@@ -158,6 +160,7 @@ Total flags: 230
 - **AUDIO_I2S_DOUT** default: `-1` — I2S data out pin (ESP32 TX → codec data input).
 - **AUDIO_I2S_LRCK** default: `-1` — I2S word select / left-right clock pin.
 - **AUDIO_I2S_MCLK** default: `-1` — I2S master clock pin.
+- **AUDIO_MP3_SCRATCH_PSRAM** default: `false` — Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
 - **AUDIO_PA_ACTIVE_LOW** default: `false` — Some boards route the PA enable through an inverting transistor.
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS** default: `100` — BLE telemetry advertising interval (ms between adv packets within a burst).
 - **BLE_TELEMETRY_DEFAULT_BURST_COUNT** default: `3` — BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
@@ -419,6 +422,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/boot_actions.cpp
   - src/app/boot_actions.h
+  - src/app/button_confirmation.cpp
+  - src/app/button_confirmation.h
   - src/app/button_defaults.cpp
   - src/app/button_defaults.h
   - src/app/config_manager.cpp
@@ -459,6 +464,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
+  - src/app/label_style.cpp
   - src/app/list_binding.cpp
   - src/app/list_provider.cpp
   - src/app/list_provider.h
@@ -477,11 +483,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_sub_store.cpp
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
+  - src/app/net_binding.cpp
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
   - src/app/pad_block.cpp
   - src/app/pad_block.h
   - src/app/pad_config.cpp
+  - src/app/pad_resolve_request.cpp
+  - src/app/pad_resolve_request.h
+  - src/app/pad_validate.cpp
+  - src/app/pad_validate.h
   - src/app/portal_components.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
@@ -496,6 +507,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/timer_config.h
   - src/app/timer_engine.cpp
   - src/app/touch_manager.cpp
+  - src/app/visual_alert.cpp
+  - src/app/visual_alert.h
   - src/app/web_mcp.cpp
   - src/app/web_portal.cpp
   - src/app/web_portal_config.cpp
@@ -518,6 +531,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
+  - src/app/widgets/widget_registry.h
 - **HAS_EPAPER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
@@ -583,17 +597,21 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
   - src/app/device_classes/coffee_scale/brew/brew_manager.cpp
   - src/app/device_classes/coffee_scale/brew/brew_manager.h
   - src/app/device_classes/coffee_scale/mcp/mcp_tools_coffee_scale.cpp
+  - src/app/device_classes/coffee_scale/scale_binding.cpp
   - src/app/device_classes/darkroom_timer/expose_timer.cpp
   - src/app/device_classes/darkroom_timer/expose_timer.h
   - src/app/device_classes/darkroom_timer/mcp/mcp_tools_darkroom.cpp
   - src/app/device_classes/darkroom_timer/meter.cpp
   - src/app/device_classes/darkroom_timer/meter.h
+  - src/app/device_classes/darkroom_timer/print_log.cpp
   - src/app/device_classes/darkroom_timer/test_strip.cpp
   - src/app/device_classes/darkroom_timer/test_strip.h
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
+  - src/app/device_classes/shutter_tester/shutter_binding.cpp
   - src/app/expr_binding.cpp
   - src/app/health_binding.cpp
   - src/app/list_binding.cpp
@@ -605,6 +623,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_sub_store.cpp
+  - src/app/net_binding.cpp
   - src/app/pad_binding.cpp
   - src/app/portal_components.cpp
   - src/app/time_binding.cpp
@@ -621,6 +640,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.h
 - **HAS_MQTT**
   - src/app/action_dispatch.cpp
+  - src/app/action_dispatch.h
   - src/app/action_registry.cpp
   - src/app/action_registry.h
   - src/app/app.ino
@@ -639,6 +659,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.cpp
   - src/app/ha_discovery.h
   - src/app/mcp_tools_config.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
   - src/app/mqtt_manager.cpp
@@ -653,6 +674,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_wake.h
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
+  - src/app/pad_resolve_request.cpp
+  - src/app/pad_resolve_request.h
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen_events.cpp
@@ -666,6 +689,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/sensor_manager.cpp
   - src/app/sensors/sensor_manager.h
   - src/app/web_portal_pad.cpp
+  - src/app/web_portal_pad.h
+  - src/app/web_portal_routes.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
@@ -769,9 +794,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **AUDIO_I2S_MCLK**
   - src/app/board_config.h
+- **AUDIO_MP3_SCRATCH_PSRAM**
+  - src/app/board_config.h
+  - src/app/sound_player.cpp
 - **AUDIO_PA_ACTIVE_LOW**
   - src/app/board_config.h
 - **AUDIO_PA_PIN**
+  - src/app/board_config.h
+- **AUDIO_TASK_STACK_SIZE**
   - src/app/board_config.h
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS**
   - src/app/board_config.h
@@ -783,6 +813,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **BUTTON_PIN**
   - src/app/board_config.h
+- **CONFIG_ASYNC_TCP_STACK_SIZE**
+  - src/app/web_portal.cpp
 - **CONFIG_DEFAULT_PORTAL_IDLE_SECONDS**
   - src/app/board_config.h
 - **DATA_STREAM_MAX_STREAMS**
