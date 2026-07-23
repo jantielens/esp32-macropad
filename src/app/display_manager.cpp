@@ -418,17 +418,17 @@ void DisplayManager::init() {
 		// On dual-core: pin to configured core (LVGL_TASK_CORE)
 		// On single-core: runs on Core 0 (time-sliced with Arduino loop)
 		// Stack allocated in PSRAM when available to save internal RAM.
-		static constexpr uint32_t kLvglStack = 16384;
+		static constexpr uint32_t kLvglStackBytes = 16384;
 		#if CONFIG_FREERTOS_UNICORE
-	if (!rtos_create_task_psram_stack(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc)) {
-				xTaskCreate(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle);
+	if (!rtos_create_task_psram_stack(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc)) {
+				xTaskCreate(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle);
 				LOGI("Display", "Rendering task created (single-core, internal stack)");
 		} else {
 				LOGI("Display", "Rendering task created (single-core, PSRAM stack)");
 		}
 		#else
-		if (!rtos_create_task_psram_stack_pinned(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE)) {
-				xTaskCreatePinnedToCore(lvglTask, "LVGL", kLvglStack, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, LVGL_TASK_CORE);
+		if (!rtos_create_task_psram_stack_pinned(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE)) {
+				xTaskCreatePinnedToCore(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, LVGL_TASK_CORE);
 				LOGI("Display", "Rendering task created (Core %d, internal stack)", LVGL_TASK_CORE);
 		} else {
 				LOGI("Display", "Rendering task created (Core %d, PSRAM stack)", LVGL_TASK_CORE);

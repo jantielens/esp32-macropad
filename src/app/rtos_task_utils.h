@@ -6,19 +6,19 @@
 struct RtosTaskPsramAlloc {
 		StaticTask_t* tcb;
 		StackType_t* stack;
-		uint32_t stackDepthWords;
+		uint32_t stackDepthBytes;
 };
 
 // Create a FreeRTOS task whose stack is allocated from PSRAM.
 // Returns false if PSRAM is not available or allocation/task creation fails.
 //
 // Notes:
-// - `stackDepthWords` is in FreeRTOS stack words (not bytes).
+// - `stackDepthBytes` is in bytes, matching the ESP-IDF FreeRTOS API.
 // - The task control block (TCB) is allocated from internal 8-bit RAM.
 bool rtos_create_task_psram_stack(
 		TaskFunction_t taskFunction,
 		const char* name,
-		uint32_t stackDepthWords,
+		uint32_t stackDepthBytes,
 		void* param,
 		UBaseType_t priority,
 		TaskHandle_t* outHandle,
@@ -30,7 +30,7 @@ bool rtos_create_task_psram_stack(
 bool rtos_create_task_psram_stack_pinned(
 		TaskFunction_t taskFunction,
 		const char* name,
-		uint32_t stackDepthWords,
+		uint32_t stackDepthBytes,
 		void* param,
 		UBaseType_t priority,
 		TaskHandle_t* outHandle,

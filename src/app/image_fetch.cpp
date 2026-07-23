@@ -64,7 +64,7 @@ static ImageSlot* g_slots = nullptr;
 static SemaphoreHandle_t g_mutex = nullptr;
 static TaskHandle_t g_task = nullptr;
 static RtosTaskPsramAlloc g_task_alloc;
-static const uint32_t FETCH_TASK_STACK_WORDS = 16384;
+static const uint32_t FETCH_TASK_STACK_BYTES = 16384;
 static const UBaseType_t FETCH_TASK_PRIORITY = 2;  // Below LVGL (4), above idle
 static const uint32_t IDLE_DELAY_MS = 500;
 static volatile bool g_suspended = false;  // Global gate (screen saver)
@@ -692,7 +692,7 @@ void image_fetch_init() {
     // least the cores no longer fight for compute time.
     bool ok = rtos_create_task_psram_stack_pinned(
         fetch_task, "img_fetch",
-        FETCH_TASK_STACK_WORDS, nullptr,
+        FETCH_TASK_STACK_BYTES, nullptr,
         FETCH_TASK_PRIORITY, &g_task, &g_task_alloc,
         0);
 
@@ -700,8 +700,8 @@ void image_fetch_init() {
         LOGE(TAG, "Failed to create fetch task");
         g_task = nullptr;
     } else {
-        LOGI(TAG, "Fetch task created (stack=%u words, pri=%u)",
-             (unsigned)FETCH_TASK_STACK_WORDS, (unsigned)FETCH_TASK_PRIORITY);
+           LOGI(TAG, "Fetch task created (stack=%u bytes, pri=%u)",
+               (unsigned)FETCH_TASK_STACK_BYTES, (unsigned)FETCH_TASK_PRIORITY);
     }
 }
 
