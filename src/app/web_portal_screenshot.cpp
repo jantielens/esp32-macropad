@@ -10,6 +10,7 @@
 #include <lvgl.h>
 #include <esp_heap_caps.h>
 #include <memory>
+#include <new>
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
 #include "driver/jpeg_encode.h"
@@ -23,19 +24,20 @@ static const size_t BMP_HEADER_SIZE = 54;
 static const uint8_t DEFAULT_JPEG_QUALITY = 85;
 
 struct ScreenshotContext {
-		lv_draw_buf_t* drawBuf = nullptr;
+		uint8_t* pixelBuf = nullptr;
 		uint8_t* jpegBuf = nullptr;
 		size_t jpegSize = 0;
 		uint16_t width = 0;
 		uint16_t height = 0;
+		uint32_t pixelStride = 0;
 		uint32_t rowStride = 0;   // BMP row stride (padded to 4 bytes)
 		uint32_t totalSize = 0;   // Total BMP file size
 		uint8_t* rowBuf = nullptr; // Reusable BGR888 row conversion buffer (PSRAM)
 
 		void releasePayload() {
-				if (drawBuf) {
-						lv_draw_buf_destroy(drawBuf);
-						drawBuf = nullptr;
+				if (pixelBuf) {
+						free(pixelBuf);
+						pixelBuf = nullptr;
 				}
 				if (jpegBuf) {
 						free(jpegBuf);
@@ -55,6 +57,17 @@ struct ScreenshotContext {
 enum class ScreenshotFormat {
 		Bmp,
 		Jpeg,
+};
+
+struct ScreenshotCaptureResult {
+		uint8_t* pixels = nullptr;
+		uint16_t width = 0;
+		uint16_t height = 0;
+		uint32_t stride = 0;
+};
+
+struct ScreenshotCaptureRequest {
+		ScreenshotCaptureResult* result;
 };
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
@@ -84,7 +97,8 @@ static bool initHwJpeg() {
 		return true;
 }
 
-static bool encodeJpeg(lv_draw_buf_t* drawBuf, uint8_t quality, uint8_t** jpegBuf, size_t* jpegSize) {
+static bool encodeJpeg(const ScreenshotCaptureResult* capture, uint8_t quality,
+		uint8_t** jpegBuf, size_t* jpegSize) {
 		SemaphoreHandle_t mutex = jpegMutex();
 		if (!mutex || xSemaphoreTake(mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
 				LOGE(TAG, "HW JPEG encoder busy");
@@ -97,8 +111,8 @@ static bool encodeJpeg(lv_draw_buf_t* drawBuf, uint8_t quality, uint8_t** jpegBu
 		do {
 				if (!initHwJpeg()) break;
 
-				uint32_t width = drawBuf->header.w;
-				uint32_t height = drawBuf->header.h;
+				uint32_t width = capture->width;
+				uint32_t height = capture->height;
 				size_t rawSize = (size_t)width * height * sizeof(uint16_t);
 
 				jpeg_encode_memory_alloc_cfg_t inputCfg = {};
@@ -113,7 +127,7 @@ static bool encodeJpeg(lv_draw_buf_t* drawBuf, uint8_t quality, uint8_t** jpegBu
 				size_t packedStride = (size_t)width * sizeof(uint16_t);
 				for (uint32_t row = 0; row < height; ++row) {
 						memcpy(input + row * packedStride,
-								drawBuf->data + row * drawBuf->header.stride,
+								capture->pixels + row * capture->stride,
 								packedStride);
 				}
 
@@ -157,6 +171,49 @@ static bool encodeJpeg(lv_draw_buf_t* drawBuf, uint8_t quality, uint8_t** jpegBu
 }
 #endif
 
+static void captureScreenshot(const void* opaque, bool* ok, char* msg, size_t msgLen) {
+		const ScreenshotCaptureRequest* request = static_cast<const ScreenshotCaptureRequest*>(opaque);
+		ScreenshotCaptureResult* result = request ? request->result : nullptr;
+		if (!result) {
+				snprintf(msg, msgLen, "invalid capture request");
+				return;
+		}
+
+		lv_draw_buf_t* drawBuf = lv_snapshot_take(lv_screen_active(), LV_COLOR_FORMAT_RGB565);
+		if (!drawBuf) {
+				snprintf(msg, msgLen, "screenshot capture failed");
+				return;
+		}
+
+		result->width = drawBuf->header.w;
+		result->height = drawBuf->header.h;
+		result->stride = (uint32_t)result->width * sizeof(uint16_t);
+		const size_t pixelBytes = (size_t)result->stride * result->height;
+		result->pixels = static_cast<uint8_t*>(
+				heap_caps_malloc(pixelBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+		if (!result->pixels) {
+				lv_draw_buf_destroy(drawBuf);
+				snprintf(msg, msgLen, "screenshot buffer allocation failed");
+				return;
+		}
+
+		for (uint16_t row = 0; row < result->height; ++row) {
+				memcpy(result->pixels + (size_t)row * result->stride,
+						drawBuf->data + (size_t)row * drawBuf->header.stride,
+						result->stride);
+		}
+		lv_draw_buf_destroy(drawBuf);
+		*ok = true;
+}
+
+static void cleanupAbandonedScreenshot(const void* opaque) {
+		const ScreenshotCaptureRequest* request = static_cast<const ScreenshotCaptureRequest*>(opaque);
+		ScreenshotCaptureResult* result = request ? request->result : nullptr;
+		if (!result) return;
+		if (result->pixels) free(result->pixels);
+		delete result;
+}
+
 static void writeBmpHeader(uint8_t* buf, uint16_t width, uint16_t height, uint32_t fileSize) {
 		// BMP file header (14 bytes)
 		buf[0] = 'B'; buf[1] = 'M';
@@ -192,18 +249,21 @@ static void convertRow(const uint16_t* src, uint8_t* dst, uint16_t width) {
 		}
 }
 
-static void sendBmp(AsyncWebServerRequest* request, lv_draw_buf_t* drawBuf) {
-		uint16_t width = drawBuf->header.w;
-		uint16_t height = drawBuf->header.h;
+static void sendBmp(AsyncWebServerRequest* request, ScreenshotCaptureResult* capture) {
+		uint16_t width = capture->width;
+		uint16_t height = capture->height;
 		uint32_t rowStride = ((width * 3 + 3) / 4) * 4;
 		uint32_t totalSize = BMP_HEADER_SIZE + rowStride * height;
 
 		auto ctx = std::make_shared<ScreenshotContext>();
-		ctx->drawBuf = drawBuf;
+		ctx->pixelBuf = capture->pixels;
+		capture->pixels = nullptr;
 		ctx->width = width;
 		ctx->height = height;
+		ctx->pixelStride = capture->stride;
 		ctx->rowStride = rowStride;
 		ctx->totalSize = totalSize;
+		delete capture;
 
 		// Allocate row conversion buffer in PSRAM
 		ctx->rowBuf = (uint8_t*)heap_caps_malloc(rowStride, MALLOC_CAP_SPIRAM);
@@ -240,7 +300,7 @@ static void sendBmp(AsyncWebServerRequest* request, lv_draw_buf_t* drawBuf) {
 
 								// Convert the source image row (top-down) to BGR888
 								uint32_t imgRow = (ctx->height - 1) - bmpRow;
-								const uint8_t* srcRow = ctx->drawBuf->data + (imgRow * ctx->drawBuf->header.stride);
+								const uint8_t* srcRow = ctx->pixelBuf + (imgRow * ctx->pixelStride);
 								convertRow((const uint16_t*)srcRow, ctx->rowBuf, ctx->width);
 
 								// Zero-fill BMP row padding
@@ -266,17 +326,18 @@ static void sendBmp(AsyncWebServerRequest* request, lv_draw_buf_t* drawBuf) {
 }
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-static bool sendJpeg(AsyncWebServerRequest* request, lv_draw_buf_t* drawBuf, uint8_t quality) {
+static bool sendJpeg(AsyncWebServerRequest* request, ScreenshotCaptureResult* capture, uint8_t quality) {
 		uint8_t* jpegBuf = nullptr;
 		size_t jpegSize = 0;
-		if (!encodeJpeg(drawBuf, quality, &jpegBuf, &jpegSize)) return false;
+		if (!encodeJpeg(capture, quality, &jpegBuf, &jpegSize)) return false;
 
 		auto ctx = std::make_shared<ScreenshotContext>();
 		ctx->jpegBuf = jpegBuf;
 		ctx->jpegSize = jpegSize;
-		ctx->width = drawBuf->header.w;
-		ctx->height = drawBuf->header.h;
-		lv_draw_buf_destroy(drawBuf);
+		ctx->width = capture->width;
+		ctx->height = capture->height;
+		free(capture->pixels);
+		delete capture;
 
 		LOGI(TAG, "Capture %dx%d, JPEG %u bytes, quality %u",
 				ctx->width, ctx->height, (unsigned)ctx->jpegSize, quality);
@@ -347,28 +408,47 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 				return;
 		}
 
-		if (!display_manager_try_lock(1000)) {
-				request->send(503, "text/plain", "Display busy");
+		ScreenshotCaptureResult* capture = new (std::nothrow) ScreenshotCaptureResult();
+		if (!capture) {
+				request->send(500, "text/plain", "Out of memory");
 				return;
 		}
-
-		lv_draw_buf_t* drawBuf = lv_snapshot_take(lv_screen_active(), LV_COLOR_FORMAT_RGB565);
-		display_manager_unlock();
-
-		if (!drawBuf) {
-				LOGE(TAG, "lv_snapshot_take failed");
-				request->send(500, "text/plain", "Screenshot capture failed");
+		ScreenshotCaptureRequest captureRequest = { capture };
+		bool captureOk = false;
+		char captureMessage[160] = {0};
+		DisplayTaskDispatchResult dispatchResult = display_manager_dispatch(
+				captureScreenshot, cleanupAbandonedScreenshot,
+				&captureRequest, sizeof(captureRequest), 3000,
+				&captureOk, captureMessage, sizeof(captureMessage));
+		if (dispatchResult == DISPLAY_TASK_DISPATCH_BUSY) {
+				delete capture;
+				request->send(503, "text/plain", "Screenshot service busy");
+				return;
+		}
+		if (dispatchResult == DISPLAY_TASK_DISPATCH_UNAVAILABLE) {
+				delete capture;
+				request->send(503, "text/plain", "Screenshot service unavailable");
+				return;
+		}
+		if (dispatchResult != DISPLAY_TASK_DISPATCH_OK) {
+				request->send(504, "text/plain", "Screenshot capture timed out");
+				return;
+		}
+		if (!captureOk) {
+				delete capture;
+				request->send(500, "text/plain",
+						captureMessage[0] ? captureMessage : "Screenshot capture failed");
 				return;
 		}
 
 		#ifdef CONFIG_IDF_TARGET_ESP32P4
 		if (format == ScreenshotFormat::Jpeg) {
-				if (sendJpeg(request, drawBuf, quality)) return;
+				if (sendJpeg(request, capture, quality)) return;
 				LOGW(TAG, "Falling back to BMP screenshot");
 		}
 		#endif
 
-		sendBmp(request, drawBuf);
+		sendBmp(request, capture);
 }
 
 #endif // HAS_DISPLAY

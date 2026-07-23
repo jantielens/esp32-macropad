@@ -36,6 +36,18 @@ struct ScreenInfo {
 		Screen* instance;          // Pointer to screen instance
 };
 
+typedef void (*DisplayTaskExec)(const void* ctx, bool* ok, char* msg, size_t msg_len);
+typedef void (*DisplayTaskCleanup)(const void* ctx);
+
+enum DisplayTaskDispatchResult {
+		DISPLAY_TASK_DISPATCH_OK = 0,
+		DISPLAY_TASK_DISPATCH_BUSY,
+		DISPLAY_TASK_DISPATCH_TIMEOUT,
+		DISPLAY_TASK_DISPATCH_UNAVAILABLE,
+};
+
+#define DISPLAY_TASK_DISPATCH_CTX_BYTES 64
+
 // ============================================================================
 // Display Manager
 // ============================================================================
@@ -64,6 +76,18 @@ private:
 		TaskHandle_t lvglTaskHandle;
 		RtosTaskPsramAlloc lvglTaskAlloc;  // PSRAM stack allocation (if used)
 		SemaphoreHandle_t lvglMutex;
+		SemaphoreHandle_t displayJobDone;
+		portMUX_TYPE displayJobMux = portMUX_INITIALIZER_UNLOCKED;
+		volatile bool displayJobBusy;
+		volatile bool displayJobPending;
+		volatile bool displayJobDoneFlag;
+		volatile bool displayJobWaiter;
+		DisplayTaskExec displayJobExec;
+		DisplayTaskCleanup displayJobCleanup;
+		uint8_t displayJobCtx[DISPLAY_TASK_DISPATCH_CTX_BYTES];
+		size_t displayJobCtxLen;
+		bool displayJobOk;
+		char displayJobMessage[160];
 		
 		// Async present task (Buffered render mode only).
 		// Decouples the slow panel transfer from the LVGL timer loop
@@ -135,6 +159,7 @@ private:
 
 		// FreeRTOS task for LVGL rendering
 		static void lvglTask(void* pvParameter);
+		void processDisplayJob();
 		
 		// FreeRTOS task for async panel transfer (Buffered render mode only)
 		static void presentTask(void* pvParameter);
@@ -179,6 +204,11 @@ public:
 		// Returns true if the lock was acquired.
 		bool tryLock(uint32_t timeoutMs);
 
+		DisplayTaskDispatchResult dispatch(
+				DisplayTaskExec exec, DisplayTaskCleanup cleanup,
+				const void* ctx, size_t ctxLen,
+				uint32_t timeoutMs, bool* outOk, char* outMsg, size_t outMsgLen);
+
 		// Active LVGL logical resolution (post driver->configureLVGL()).
 		// Prefer using these instead of calling LVGL APIs from non-LVGL tasks.
 	int getActiveWidth() const;
@@ -221,6 +251,10 @@ uint8_t display_manager_get_backlight_brightness();  // 0-100%
 void display_manager_lock();
 void display_manager_unlock();
 bool display_manager_try_lock(uint32_t timeout_ms);
+DisplayTaskDispatchResult display_manager_dispatch(
+		DisplayTaskExec exec, DisplayTaskCleanup cleanup,
+		const void* ctx, size_t ctx_len,
+		uint32_t timeout_ms, bool* out_ok, char* out_msg, size_t out_msg_len);
 // Lock only when called from outside the LVGL task; no-op (and reports
 // did_lock=false) when already running on the LVGL task. Pair the returned
 // flag with display_manager_unlock_if_needed().

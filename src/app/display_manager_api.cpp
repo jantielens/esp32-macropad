@@ -97,6 +97,15 @@ bool display_manager_try_lock(uint32_t timeout_ms) {
 		return displayManager->tryLock(timeout_ms);
 }
 
+DisplayTaskDispatchResult display_manager_dispatch(
+		DisplayTaskExec exec, DisplayTaskCleanup cleanup,
+		const void* ctx, size_t ctx_len,
+		uint32_t timeout_ms, bool* out_ok, char* out_msg, size_t out_msg_len) {
+		if (!displayManager) return DISPLAY_TASK_DISPATCH_UNAVAILABLE;
+		return displayManager->dispatch(
+				exec, cleanup, ctx, ctx_len, timeout_ms, out_ok, out_msg, out_msg_len);
+}
+
 void display_manager_lock_if_needed(bool* did_lock) {
 		bool d = false;
 		if (displayManager) {

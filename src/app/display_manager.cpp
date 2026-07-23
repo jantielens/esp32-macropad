@@ -53,6 +53,10 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 			padScreens(nullptr), padIds(nullptr), padNames(nullptr),
 			lruCache(nullptr), lruCount(0),
 							lvglTaskHandle(nullptr), lvglTaskAlloc{}, lvglMutex(nullptr),
+					displayJobDone(nullptr), displayJobBusy(false), displayJobPending(false),
+					displayJobDoneFlag(false), displayJobWaiter(false), displayJobExec(nullptr),
+					displayJobCleanup(nullptr),
+					displayJobCtx{}, displayJobCtxLen(0), displayJobOk(false), displayJobMessage{},
 						presentTaskHandle(nullptr), presentTaskAlloc{}, presentSem(nullptr), sharedLvTimerUs(0),
 						screenCount(0), buf(nullptr), buf2(nullptr), flushPending(false), pendingSplashStatusSet(false) {
 				pendingSplashStatus[0] = '\0';
@@ -77,6 +81,7 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		
 		// Create mutex for thread-safe LVGL access
 		lvglMutex = xSemaphoreCreateMutex();
+		displayJobDone = xSemaphoreCreateBinary();
 
 		// Allocate pad screens and their ID/name strings dynamically
 		padScreens = new PadScreen*[MAX_PADS];
@@ -124,6 +129,10 @@ DisplayManager::~DisplayManager() {
 		if (lvglTaskHandle) {
 				vTaskDelete(lvglTaskHandle);
 				lvglTaskHandle = nullptr;
+		}
+		if (displayJobDone) {
+				vSemaphoreDelete(displayJobDone);
+				displayJobDone = nullptr;
 		}
 		
 		if (currentScreen) {

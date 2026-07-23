@@ -22,6 +22,96 @@ extern bool g_perf_ready;
 extern uint32_t g_perf_window_start_ms;
 extern uint16_t g_perf_frames_in_window;
 
+DisplayTaskDispatchResult DisplayManager::dispatch(
+		DisplayTaskExec exec, DisplayTaskCleanup cleanup,
+		const void* ctx, size_t ctxLen,
+		uint32_t timeoutMs, bool* outOk, char* outMsg, size_t outMsgLen) {
+		if (!exec || !displayJobDone || ctxLen > sizeof(displayJobCtx)) {
+				return DISPLAY_TASK_DISPATCH_UNAVAILABLE;
+		}
+
+		portENTER_CRITICAL(&displayJobMux);
+		if (displayJobBusy) {
+				portEXIT_CRITICAL(&displayJobMux);
+				return DISPLAY_TASK_DISPATCH_BUSY;
+		}
+		displayJobBusy = true;
+		displayJobPending = false;
+		portEXIT_CRITICAL(&displayJobMux);
+
+		xSemaphoreTake(displayJobDone, 0);
+
+		portENTER_CRITICAL(&displayJobMux);
+		displayJobDoneFlag = false;
+		displayJobWaiter = true;
+		displayJobExec = exec;
+		displayJobCleanup = cleanup;
+		displayJobCtxLen = ctxLen;
+		if (ctx && ctxLen) memcpy(displayJobCtx, ctx, ctxLen);
+		displayJobOk = false;
+		displayJobMessage[0] = '\0';
+		displayJobPending = true;
+		portEXIT_CRITICAL(&displayJobMux);
+
+		if (xSemaphoreTake(displayJobDone, pdMS_TO_TICKS(timeoutMs)) == pdTRUE) {
+				portENTER_CRITICAL(&displayJobMux);
+				if (outOk) *outOk = displayJobOk;
+				if (outMsg && outMsgLen) strlcpy(outMsg, displayJobMessage, outMsgLen);
+				displayJobBusy = false;
+				displayJobWaiter = false;
+				portEXIT_CRITICAL(&displayJobMux);
+				return DISPLAY_TASK_DISPATCH_OK;
+		}
+
+		portENTER_CRITICAL(&displayJobMux);
+		if (displayJobDoneFlag) {
+				portEXIT_CRITICAL(&displayJobMux);
+				xSemaphoreTake(displayJobDone, portMAX_DELAY);
+				portENTER_CRITICAL(&displayJobMux);
+				if (outOk) *outOk = displayJobOk;
+				if (outMsg && outMsgLen) strlcpy(outMsg, displayJobMessage, outMsgLen);
+				displayJobBusy = false;
+				displayJobWaiter = false;
+				portEXIT_CRITICAL(&displayJobMux);
+				return DISPLAY_TASK_DISPATCH_OK;
+		}
+		displayJobWaiter = false;
+		portEXIT_CRITICAL(&displayJobMux);
+		return DISPLAY_TASK_DISPATCH_TIMEOUT;
+}
+
+void DisplayManager::processDisplayJob() {
+		DisplayTaskExec exec = nullptr;
+		DisplayTaskCleanup cleanup = nullptr;
+		portENTER_CRITICAL(&displayJobMux);
+		if (displayJobPending) {
+				displayJobPending = false;
+				exec = displayJobExec;
+				cleanup = displayJobCleanup;
+		}
+		portEXIT_CRITICAL(&displayJobMux);
+		if (!exec) return;
+
+		bool ok = false;
+		char msg[160] = {0};
+		exec(displayJobCtx, &ok, msg, sizeof(msg));
+
+		portENTER_CRITICAL(&displayJobMux);
+		displayJobOk = ok;
+		strlcpy(displayJobMessage, msg, sizeof(displayJobMessage));
+		displayJobDoneFlag = true;
+		const bool notify = displayJobWaiter;
+		portEXIT_CRITICAL(&displayJobMux);
+		if (notify) {
+				xSemaphoreGive(displayJobDone);
+		} else {
+				if (cleanup) cleanup(displayJobCtx);
+				portENTER_CRITICAL(&displayJobMux);
+				displayJobBusy = false;
+				portEXIT_CRITICAL(&displayJobMux);
+		}
+}
+
 // Definition for the async-flush-busy flag declared in display_driver.h.
 // Set true by async drivers (e.g. MIPI-DSI DMA2D) while a pixel transfer
 // is in flight; cleared from the completion ISR.
@@ -66,6 +156,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 		
 		while (true) {
 				mgr->lock();
+				mgr->processDisplayJob();
 
 				// Apply any deferred splash status update.
 				if (mgr->pendingSplashStatusSet) {

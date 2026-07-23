@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 232
+Total flags: 233
 
 ### Features (HAS_*)
 
@@ -122,6 +122,7 @@ Total flags: 232
 
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
 - **AUDIO_TASK_STACK_SIZE** default: `24576` — Audio worker stack size in bytes.
+- **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
@@ -811,6 +812,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **BUTTON_PIN**
   - src/app/board_config.h
+- **CONFIG_ASYNC_TCP_STACK_SIZE**
+  - src/app/web_portal.cpp
 - **CONFIG_DEFAULT_PORTAL_IDLE_SECONDS**
   - src/app/board_config.h
 - **DATA_STREAM_MAX_STREAMS**
