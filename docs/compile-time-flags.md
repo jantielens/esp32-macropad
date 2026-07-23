@@ -531,6 +531,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
+  - src/app/widgets/widget_registry.h
 - **HAS_EPAPER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
