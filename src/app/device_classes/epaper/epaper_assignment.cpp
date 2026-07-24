@@ -160,19 +160,23 @@ EpaperRefreshOutcome epaper_assignment_run(DeviceConfig* config, bool force) {
 			LOGW("Epaper", "Assignment sync returned a stale revision");
 			status = HTTP_CODE_CONFLICT;
 		}
-		if (status != HTTP_CODE_OK) {
-			if (!force || displayed.revision == 0) {
+		const bool sync_succeeded = status == HTTP_CODE_OK;
+		const bool content_unchanged = sync_succeeded && same_content(displayed, assignment);
+		const EpaperAssignmentRefreshAction refresh_action = epaper_assignment_refresh_action(
+			force, sync_succeeded, displayed.revision != 0, content_unchanged);
+		if (refresh_action == EpaperAssignmentRefreshAction::Fail) {
 				failed.sidecar_http_status = status;
 				failed.elapsed_ms = millis() - started;
 				return failed;
-			}
+		}
+		if (refresh_action == EpaperAssignmentRefreshAction::UseAccepted) {
 			assignment.revision = displayed.revision;
 			key_to_hex(displayed.image_key, assignment.image_key);
 			assignment.content_crc32 = displayed.content_crc32;
 			assignment.format[0] = '\0';
 		}
 
-		if (!force && same_content(displayed, assignment)) {
+		if (refresh_action == EpaperAssignmentRefreshAction::SkipUnchanged) {
 			const EpaperAssignmentState accepted = accepted_state(assignment);
 			persist_state(accepted);
 			Assignment successor = {};

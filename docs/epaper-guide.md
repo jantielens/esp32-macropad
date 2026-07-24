@@ -157,6 +157,12 @@ successful panel update or an accepted unchanged revision, so a reset before
 display leaves the pending assignment uncommitted. A later sync safely replays
 a displayed revision when the final acknowledgement was interrupted.
 
+The site is authoritative for `image_key`. Firmware treats the supplied 16-hex
+value as an opaque identity: it stores, compares, and returns the value but does
+not derive it from the image ID or transport bytes. SHA-256 derivation vectors
+therefore belong to the site tests; no firmware SHA-256 round-trip vector is
+expected.
+
 The portal Refresh e-paper now action always drives a panel refresh in assignment
 mode. It synchronizes metadata first when online and can avoid the image-body
 download through a validated assignment cache hit. On a reTerminal E1003 with

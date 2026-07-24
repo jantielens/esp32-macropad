@@ -243,6 +243,62 @@ def test_ack_commits_once_and_preserves_successor_on_duplicate():
     assert duplicate == current and document["committed_revision"] == 1
 
 
+def test_committing_one_device_does_not_mutate_another_device():
+    sas_a = "sas-a"
+    sas_b = "sas-b"
+    document_a = _document_with_current()
+    document_a["current"].update(from_queue=True, planned_countdown=3)
+    document_b = {
+        "schema": 1,
+        "device_id": "frame-b",
+        "committed_revision": 4,
+        "last_revision": 5,
+        "current": store.pending_from_pick("frame-b", 5, _pick()),
+        "journal": [],
+    }
+    queues = {sas_a: ["photo-1"], sas_b: ["photo-b"]}
+    schedules = {sas_a: 9, sas_b: 7}
+    metadata = {
+        sas_a: {"permanent": True, "last_shown_at": "2026-06-01T00:00:00+00:00"},
+        sas_b: {"permanent": True, "last_shown_at": "2026-06-02T00:00:00+00:00"},
+    }
+    device_b_before = copy.deepcopy(document_b)
+    queue_b_before = list(queues[sas_b])
+    schedule_b_before = schedules[sas_b]
+    metadata_b_before = copy.deepcopy(metadata[sas_b])
+    originals = store.bs.set_blob_metadata, store.queue_remove, store.write_schedule
+
+    def _set_metadata(sas, _name, updated):
+        metadata[sas] = copy.deepcopy(updated)
+
+    def _remove(sas, image_id):
+        queues[sas] = [value for value in queues[sas] if value != image_id]
+
+    store.bs.set_blob_metadata = _set_metadata
+    store.queue_remove = _remove
+    store.write_schedule = lambda sas, value: schedules.__setitem__(sas, value)
+    try:
+        current, accepted, changed = store.commit_assignment(
+            sas_a,
+            "frame-a",
+            document_a,
+            1,
+            document_a["current"]["image_key"],
+            lambda: None,
+        )
+    finally:
+        store.bs.set_blob_metadata, store.queue_remove, store.write_schedule = originals
+
+    assert accepted and changed and current is None
+    assert document_a["committed_revision"] == 1
+    assert queues[sas_a] == [] and schedules[sas_a] == 3
+    assert metadata[sas_a]["last_shown_at"] != "2026-06-01T00:00:00+00:00"
+    assert document_b == device_b_before
+    assert queues[sas_b] == queue_b_before
+    assert schedules[sas_b] == schedule_b_before
+    assert metadata[sas_b] == metadata_b_before
+
+
 def test_dead_uncommitted_ack_is_rejected_before_effects():
     document = _document_with_current()
     effects: list[int] = []

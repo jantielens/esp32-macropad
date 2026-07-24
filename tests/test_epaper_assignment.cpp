@@ -4,6 +4,97 @@
 #include <cstring>
 #include <iostream>
 
+enum class CharacterizedRefreshResult {
+		Unchanged,
+		RedrawSynchronizedCache,
+		RedrawSynchronizedDownload,
+		RedrawAcceptedCache,
+		RedrawAcceptedDownload,
+		Failed,
+};
+
+struct CharacterizedRefreshCase {
+		const char* name;
+		bool force;
+		bool sync_succeeded;
+		bool accepted_state_present;
+		bool content_unchanged;
+		bool cache_valid;
+		bool body_available;
+		CharacterizedRefreshResult expected;
+};
+
+static CharacterizedRefreshResult characterize_current_refresh(
+		const CharacterizedRefreshCase& test) {
+		const EpaperAssignmentRefreshAction refresh_action = epaper_assignment_refresh_action(
+			test.force, test.sync_succeeded, test.accepted_state_present,
+			test.content_unchanged);
+		if (refresh_action == EpaperAssignmentRefreshAction::Fail) {
+				return CharacterizedRefreshResult::Failed;
+		}
+		if (refresh_action == EpaperAssignmentRefreshAction::SkipUnchanged) {
+				return CharacterizedRefreshResult::Unchanged;
+		}
+		const EpaperAssignmentTransportAction transport_action =
+			epaper_assignment_transport_action(test.cache_valid);
+		if (transport_action == EpaperAssignmentTransportAction::Download &&
+			!test.body_available) {
+				return CharacterizedRefreshResult::Failed;
+		}
+		if (refresh_action == EpaperAssignmentRefreshAction::UseAccepted) {
+				return transport_action == EpaperAssignmentTransportAction::UseCache
+						? CharacterizedRefreshResult::RedrawAcceptedCache
+						: CharacterizedRefreshResult::RedrawAcceptedDownload;
+		}
+		return transport_action == EpaperAssignmentTransportAction::UseCache
+				? CharacterizedRefreshResult::RedrawSynchronizedCache
+				: CharacterizedRefreshResult::RedrawSynchronizedDownload;
+}
+
+static void characterize_refresh_truth_table() {
+		const CharacterizedRefreshCase cases[] = {
+				{"scheduled unchanged", false, true, true, true, true, true,
+					CharacterizedRefreshResult::Unchanged},
+				{"scheduled changed cache valid", false, true, true, false, true, true,
+					CharacterizedRefreshResult::RedrawSynchronizedCache},
+				{"scheduled changed cache missing", false, true, true, false, false, true,
+					CharacterizedRefreshResult::RedrawSynchronizedDownload},
+				{"scheduled first assignment", false, true, false, false, false, true,
+					CharacterizedRefreshResult::RedrawSynchronizedDownload},
+				{"scheduled sync failure with accepted state", false, false, true, true, true, true,
+					CharacterizedRefreshResult::Failed},
+				{"scheduled sync failure without accepted state", false, false, false, false, false, false,
+					CharacterizedRefreshResult::Failed},
+				{"forced unchanged cache valid", true, true, true, true, true, true,
+					CharacterizedRefreshResult::RedrawSynchronizedCache},
+				{"forced unchanged cache corrupt", true, true, true, true, false, true,
+					CharacterizedRefreshResult::RedrawSynchronizedDownload},
+				{"forced newer pending", true, true, true, false, false, true,
+					CharacterizedRefreshResult::RedrawSynchronizedDownload},
+				{"forced synchronized cache missing and WiFi unavailable", true, true, true, false, false, false,
+					CharacterizedRefreshResult::Failed},
+				{"forced sync failure accepted cache valid", true, false, true, true, true, false,
+					CharacterizedRefreshResult::RedrawAcceptedCache},
+				{"forced sync failure accepted cache missing transport available", true, false, true, true, false, true,
+					CharacterizedRefreshResult::RedrawAcceptedDownload},
+				{"forced WiFi unavailable accepted cache corrupt", true, false, true, true, false, false,
+					CharacterizedRefreshResult::Failed},
+				{"forced sync failure without accepted state", true, false, false, false, true, true,
+					CharacterizedRefreshResult::Failed},
+		};
+
+		for (const CharacterizedRefreshCase& test : cases) {
+				const CharacterizedRefreshResult actual = characterize_current_refresh(test);
+				assert(actual == test.expected);
+				if (!test.sync_succeeded) {
+						assert(actual != CharacterizedRefreshResult::Unchanged);
+				}
+				if (!test.cache_valid && !test.body_available) {
+						assert(actual == CharacterizedRefreshResult::Failed);
+				}
+		}
+}
+
 static void check_url(const char* carousel, const char* override_url,
 		const char* action, uint32_t revision, const char* expected) {
 		char result[384] = {};
@@ -14,6 +105,7 @@ static void check_url(const char* carousel, const char* override_url,
 
 int main() {
 		static_assert(sizeof(EpaperAssignmentState) == 16, "packed NVS state changed");
+		characterize_refresh_truth_table();
 
 		check_url("https://frame.test/api/next?device_id=one&key=secret", "",
 			"sync", 0,

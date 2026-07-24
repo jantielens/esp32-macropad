@@ -27,6 +27,16 @@ DEVICE = type(
     },
 )()
 
+DEVICE_B = type(
+    "Device",
+    (),
+    {
+        "device_id": "frame-b",
+        "container_sas_url": "https://example.invalid/frame-b?sas=2",
+        "serve_mode": "inline",
+    },
+)()
+
 
 def _record(revision: int) -> dict:
     return {
@@ -152,6 +162,63 @@ def test_image_rejects_dead_assignment_and_bad_credentials():
     assert dead.status_code == 410
 
 
+def test_image_revision_is_isolated_per_device():
+    record_a = _record(1)
+    record_b = _record(2)
+    record_b.update(device_id="frame-b", image_id="photo-2", image_key=store.image_key("photo-2"))
+    documents = {
+        "frame-a": {"current": record_a, "journal": []},
+        "frame-b": {"current": record_b, "journal": []},
+    }
+    devices = {"frame-a": DEVICE, "frame-b": DEVICE_B}
+    delivered: list[tuple[str, str]] = []
+    originals = (
+        app._assignment_device,
+        app.store.read_assignment,
+        app.bs.list_blobs_with_metadata,
+        app._deliver_image,
+    )
+
+    def _device(device_id, key):
+        if key != f"secret-{device_id}":
+            raise app.HTTPException(status_code=401, detail="Unauthorized")
+        return devices[device_id]
+
+    app._assignment_device = _device
+    app.store.read_assignment = lambda _sas, device_id: (documents[device_id], '"etag"')
+    app.bs.list_blobs_with_metadata = lambda sas, _prefix: {
+        store.image_name(
+            "photo-1" if sas == DEVICE.container_sas_url else "photo-2",
+            store.G16P_EXT,
+        ): {"permanent": "true"}
+    }
+
+    def _deliver(_device, blob_name, image_format, *, proxy, headers=None, **_kwargs):
+        delivered.append((blob_name, image_format))
+        return Response(b"image", media_type="application/octet-stream", headers=headers)
+
+    app._deliver_image = _deliver
+    try:
+        with TestClient(app.app) as client:
+            cross_device = client.get(
+                "/api/assignment/image?device_id=frame-a&key=secret-frame-a&revision=2"
+            )
+            own_image = client.get(
+                "/api/assignment/image?device_id=frame-b&key=secret-frame-b&revision=2"
+            )
+    finally:
+        (
+            app._assignment_device,
+            app.store.read_assignment,
+            app.bs.list_blobs_with_metadata,
+            app._deliver_image,
+        ) = originals
+
+    assert cross_device.status_code == 404
+    assert own_image.status_code == 200
+    assert delivered == [(store.image_name("photo-2", store.G16P_EXT), "g16z")]
+
+
 def test_failed_assignment_marker_replays_and_commits_once():
     persisted = {
         "schema": 1,
@@ -219,6 +286,7 @@ def main() -> int:
         test_current_honors_etag_and_changes_after_supersede,
         test_failed_assignment_marker_replays_and_commits_once,
         test_image_rejects_dead_assignment_and_bad_credentials,
+        test_image_revision_is_isolated_per_device,
         test_image_rejects_unknown_revision_and_maps_wire_headers,
     ]
     failures = 0

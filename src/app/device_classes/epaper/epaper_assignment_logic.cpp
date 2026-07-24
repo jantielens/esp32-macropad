@@ -9,6 +9,24 @@ uint32_t s_expected_transport_crc = 0;
 
 } // namespace
 
+EpaperAssignmentRefreshAction epaper_assignment_refresh_action(bool force,
+		bool sync_succeeded, bool accepted_state_present, bool content_unchanged) {
+		if (!sync_succeeded) {
+				return force && accepted_state_present
+						? EpaperAssignmentRefreshAction::UseAccepted
+						: EpaperAssignmentRefreshAction::Fail;
+		}
+		if (!force && accepted_state_present && content_unchanged) {
+				return EpaperAssignmentRefreshAction::SkipUnchanged;
+		}
+		return EpaperAssignmentRefreshAction::UseSynchronized;
+}
+
+EpaperAssignmentTransportAction epaper_assignment_transport_action(bool cache_valid) {
+		return cache_valid ? EpaperAssignmentTransportAction::UseCache
+				: EpaperAssignmentTransportAction::Download;
+}
+
 bool epaper_assignment_revision_newer(uint32_t left, uint32_t right) {
 		const uint32_t delta = left - right;
 		return delta != 0 && delta < 0x80000000U;

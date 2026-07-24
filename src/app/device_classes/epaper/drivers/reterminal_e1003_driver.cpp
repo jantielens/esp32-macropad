@@ -904,11 +904,14 @@ bool epaper_driver_draw_url(const char* url) {
 		String blob_url;
 		char img_id[64] = {0};
 		if (epaper_sd_cache_is_enabled()) {
-			if (epaper_sd_cache_has_assignment_context() &&
-					epaper_sd_cache_read(nullptr, &data, &len)) {
+			if (epaper_sd_cache_has_assignment_context()) {
+				const bool cache_valid = epaper_sd_cache_read(nullptr, &data, &len);
+				if (epaper_assignment_transport_action(cache_valid) ==
+						EpaperAssignmentTransportAction::UseCache) {
 				from_cache = true;
 				epaper_timing_set_fetch(0, true /*from_cache*/);
 				LOGI("Epaper", "Assignment SD cache hit");
+				}
 			}
 		}
 		if (epaper_sd_cache_is_enabled() && !from_cache) {

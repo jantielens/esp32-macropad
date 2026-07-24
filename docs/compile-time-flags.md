@@ -542,6 +542,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/components/epaper_vcom_component.cpp
   - src/app/device_classes/epaper/drivers/inkplate_driver.cpp
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+  - src/app/device_classes/epaper/epaper_assignment.cpp
+  - src/app/device_classes/epaper/epaper_assignment.h
   - src/app/device_classes/epaper/epaper_carousel.cpp
   - src/app/device_classes/epaper/epaper_carousel.h
   - src/app/device_classes/epaper/epaper_config.h
