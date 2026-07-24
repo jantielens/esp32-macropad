@@ -165,6 +165,16 @@ revision. Assignment state is isolated by device and persisted under
 `state/assignment/<sha256-device-id>.json`; the document also stores and verifies
 the original device ID.
 
+Configure the frame in Display assignments mode with its complete `/api/next`
+URL, including `device_id` and `key`, as the Assignment source URL. For example:
+
+```text
+https://example.com/api/next?device_id=E1003-1&key=<api_key>
+```
+
+The firmware preserves the host and query while deriving the sync and image
+endpoints below. No separate assignment API host is required.
+
 ```text
 GET  /api/assignment/current?device_id=<id>&key=<api_key>
 POST /api/assignment/ack?device_id=<id>&key=<api_key>

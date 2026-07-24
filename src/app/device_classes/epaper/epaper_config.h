@@ -7,10 +7,15 @@
 
 #include <stdint.h>
 
+#include "epaper_source_mode.h"
+
 // E-Paper image URL (full HTTP/HTTPS). Sized to fit a realistic dashboard URL.
 #ifndef CONFIG_EPAPER_URL_MAX_LEN
 #define CONFIG_EPAPER_URL_MAX_LEN 256
 #endif
+
+static constexpr uint32_t EPAPER_REFRESH_INTERVAL_DEFAULT_SECONDS = 900;
+static constexpr uint32_t EPAPER_REFRESH_INTERVAL_MAX_SECONDS = 86400;
 
 // Carousel entry: URL, per-entry refresh interval, and stay flag (pause rotation when CRC unchanged).
 struct EpaperCarouselEntry {
@@ -28,8 +33,9 @@ struct EpaperConfig {
 		uint32_t epaper_last_crc32;                   // CRC32 of last successfully rendered image (0 = none)
 		bool epaper_crc32_enabled;                    // fetch "<url>.crc32" sidecar to skip unchanged refreshes (default false)
 		bool epaper_sd_cache_enabled;                 // cache downloaded image blobs (G16Z/G16P) on microSD to skip the HTTP download on a cache hit (default false; only effective on boards with EPAPER_SD_CS_PIN)
-		bool epaper_assignment_enabled;               // use the HTTP assignment transaction instead of legacy /api/next (default false)
-		char epaper_assignment_url[CONFIG_EPAPER_URL_MAX_LEN]; // optional split-host assignment API base URL
+		EpaperImageSourceMode image_source_mode;      // explicit slot-images or display-assignments selection
+		char assignment_source_url[CONFIG_EPAPER_URL_MAX_LEN]; // full credential-bearing assignment source URL
+		uint32_t assignment_refresh_interval_seconds; // assignment wake cadence, independent of slot durations
 
 		// On-image status overlay
 		bool epaper_overlay_enabled;                  // default false

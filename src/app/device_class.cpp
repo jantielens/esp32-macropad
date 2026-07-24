@@ -107,6 +107,16 @@ void device_class_dispatch_config_api_get(const DeviceConfig *config, JsonObject
 		}
 }
 
+const char *device_class_dispatch_config_api_validate(const DeviceConfig *config, JsonObject &body) {
+		for (unsigned i = 0; i < g_count; ++i) {
+				const DeviceClass *c = g_classes[i];
+				if (!c || !c->config_api_validate) continue;
+				const char *error = c->config_api_validate(config, body);
+				if (error) return error;
+		}
+		return nullptr;
+}
+
 void device_class_dispatch_config_api_set(DeviceConfig *config, JsonObject &body) {
 		for (unsigned i = 0; i < g_count; ++i) {
 				const DeviceClass *c = g_classes[i];

@@ -353,6 +353,7 @@ g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \
     tests/test_epaper_assignment.cpp \
     src/app/device_classes/epaper/epaper_assignment_logic.cpp \
+    src/app/device_classes/epaper/epaper_source_mode.cpp \
     -o tests/bin/test_epaper_assignment
 
 echo "=== Running unit tests: epaper_assignment ==="

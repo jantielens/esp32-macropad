@@ -135,10 +135,11 @@ EpaperRefreshOutcome epaper_assignment_run(DeviceConfig* config, bool force) {
 		EpaperRefreshOutcome failed = {EpaperRefreshResult::FailedFetch, 0, 0, 0, 0, 0};
 		const uint32_t started = millis();
 		char sync_url[384];
-		if (!epaper_assignment_build_url(g_epaper_config.epaper_url,
-			g_epaper_config.epaper_assignment_url, "sync", 0, sync_url, sizeof(sync_url))) {
-			LOGW("Epaper", "Assignment disabled for non-/api/next carousel URL");
-			return epaper_refresh_run(config, force);
+		if (!epaper_assignment_build_url(g_epaper_config.assignment_source_url,
+			"", "sync", 0, sync_url, sizeof(sync_url))) {
+			LOGW("Epaper", "Assignment source URL cannot derive the sync endpoint");
+			failed.elapsed_ms = millis() - started;
+			return failed;
 		}
 
 		EpaperAssignmentState displayed = {};
@@ -186,8 +187,8 @@ EpaperRefreshOutcome epaper_assignment_run(DeviceConfig* config, bool force) {
 		}
 
 		char image_url[384];
-		if (!epaper_assignment_build_url(g_epaper_config.epaper_url,
-			g_epaper_config.epaper_assignment_url, "image", assignment.revision,
+		if (!epaper_assignment_build_url(g_epaper_config.assignment_source_url,
+			"", "image", assignment.revision,
 			image_url, sizeof(image_url))) {
 			failed.elapsed_ms = millis() - started;
 			return failed;

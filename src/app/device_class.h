@@ -101,6 +101,11 @@ struct DeviceClass {
 		const char *pad_hold_scheme;
 		bool (*pad_hold_acquire)(const char *holder);
 		void (*pad_hold_release)(const char *holder);
+
+		// Validate device-class fields in a POST /api/config request before any
+		// config state is mutated. Return nullptr when the request is valid or a
+		// user-facing error message when it must be rejected.
+		const char *(*config_api_validate)(const DeviceConfig *config, JsonObject &body);
 };
 
 // Registration ----------------------------------------------------------------
@@ -126,6 +131,7 @@ void device_class_dispatch_config_defaults(DeviceConfig *config);
 void device_class_dispatch_config_load(DeviceConfig *config, Preferences &preferences);
 void device_class_dispatch_config_save(const DeviceConfig *config, Preferences &preferences);
 void device_class_dispatch_config_api_get(const DeviceConfig *config, JsonObject &root);
+const char *device_class_dispatch_config_api_validate(const DeviceConfig *config, JsonObject &body);
 void device_class_dispatch_config_api_set(DeviceConfig *config, JsonObject &body);
 // MQTT
 void device_class_dispatch_mqtt_discovery(MqttManager &mqtt, bool *skip_generic);

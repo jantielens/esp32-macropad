@@ -12,6 +12,7 @@
 #include "device_classes/epaper/epaper_battery.h"
 #include "device_classes/epaper/epaper_config.h"
 #include "device_classes/epaper/epaper_refresh.h"
+#include "device_classes/epaper/epaper_source_mode.h"
 #include "device_classes/epaper/epaper_timing.h"
 #include "log_manager.h"
 #include "web_portal_auth.h"
@@ -32,20 +33,28 @@ static void epaper_status_refresh_post(AsyncWebServerRequest* request) {
         return;
     }
 
-    if (!epaper_resolve_current_url()) {
+    const bool assignment_mode = epaper_source_uses_assignments(
+        g_epaper_config.image_source_mode);
+    if (assignment_mode) {
+        if (g_epaper_config.assignment_source_url[0] == '\0') {
+            request->send(400, "application/json",
+                          "{\"success\":false,\"message\":\"No assignment source configured\"}");
+            return;
+        }
+    } else if (!epaper_resolve_current_url()) {
         request->send(400, "application/json",
-                      "{\"success\":false,\"message\":\"No carousel image configured\"}");
+                      "{\"success\":false,\"message\":\"No slot image configured\"}");
         return;
     }
 
-    if (!g_epaper_config.epaper_assignment_enabled && !WiFi.isConnected()) {
+    if (!assignment_mode && !WiFi.isConnected()) {
         request->send(503, "application/json",
                       "{\"success\":false,\"message\":\"WiFi not connected\"}");
         return;
     }
 
     LOGI("API", "POST /api/component/epaper-status/refresh");
-    EpaperRefreshOutcome out = g_epaper_config.epaper_assignment_enabled
+    EpaperRefreshOutcome out = assignment_mode
         ? epaper_assignment_run(cfg, true /*force*/)
         : epaper_refresh_run(cfg, true /*force*/);
 

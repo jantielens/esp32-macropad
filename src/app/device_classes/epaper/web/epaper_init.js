@@ -11,7 +11,6 @@ if (typeof window.registerConfigFields === 'function') {
         'epaper_rotation',
         'epaper_crc32_enabled',
         'epaper_sd_cache_enabled',
-        'epaper_assignment_enabled', 'epaper_assignment_url',
         'epaper_overlay_enabled', 'epaper_overlay_position',
         'epaper_overlay_color', 'epaper_overlay_items',
         'epaper_frontlight_brightness', 'epaper_frontlight_duration_s',
@@ -155,6 +154,21 @@ window.init_epaper_image_fragment = function () {
     var grid = document.getElementById('epaper-schedule-grid');
     var saveBtn = document.getElementById('epaper-image-save-btn');
     var showNowStatus = document.getElementById('epaper-show-now-status');
+    var assignmentPanel = document.getElementById('epaper-assignment-source-panel');
+    var slotPanel = document.getElementById('epaper-slot-source-panel');
+    var crcRow = document.getElementById('epaper_crc32_row');
+
+    function selectedSourceMode() {
+        var selected = document.querySelector('[name="epaper_image_source_mode"]:checked');
+        return selected ? selected.value : 'slots';
+    }
+
+    function updateSourceModePanels() {
+        var assignmentMode = selectedSourceMode() === 'assignments';
+        if (assignmentPanel) assignmentPanel.hidden = !assignmentMode;
+        if (slotPanel) slotPanel.hidden = assignmentMode;
+        if (crcRow) crcRow.hidden = assignmentMode;
+    }
 
     function setShowNowStatus(text, isErr) {
         if (!showNowStatus) return;
@@ -244,8 +258,12 @@ window.init_epaper_image_fragment = function () {
                 var sdRow = document.getElementById('epaper_sd_cache_row');
                 if (sdRow) sdRow.hidden = !cfg.epaper_sd_cache_supported;
                 setNamedValue('epaper_sd_cache_enabled', !!cfg.epaper_sd_cache_enabled);
-                setNamedValue('epaper_assignment_enabled', !!cfg.epaper_assignment_enabled);
-                setNamedValue('epaper_assignment_url', cfg.epaper_assignment_url || '');
+                var sourceMode = cfg.epaper_image_source_mode === 'assignments' ? 'assignments' : 'slots';
+                var sourceRadio = document.querySelector('[name="epaper_image_source_mode"][value="' + sourceMode + '"]');
+                if (sourceRadio) sourceRadio.checked = true;
+                setNamedValue('epaper_assignment_source_url', cfg.epaper_assignment_source_url || '');
+                setNamedValue('epaper_assignment_refresh_interval_seconds',
+                    cfg.epaper_assignment_refresh_interval_seconds || 900);
 
                 var arr = Array.isArray(cfg.epaper_carousel) ? cfg.epaper_carousel : [];
                 for (var i = 0; i < 5; i++) {
@@ -255,6 +273,7 @@ window.init_epaper_image_fragment = function () {
                     setNamedValue('ep_c' + i + '_stay', !!row.stay);
                 }
 
+                updateSourceModePanels();
                 renderHourButtons();
             })
             .catch(function () { /* keep defaults */ });
@@ -283,6 +302,11 @@ window.init_epaper_image_fragment = function () {
     if (workBtn) workBtn.addEventListener('click', function () {
         setQuickHours(8, 17);
     });
+
+    document.querySelectorAll('[name="epaper_image_source_mode"]').forEach(function (radio) {
+        radio.addEventListener('change', updateSourceModePanels);
+    });
+    updateSourceModePanels();
 
     var clearSdBtn = document.getElementById('epaper_clear_sd_cache');
     if (clearSdBtn) clearSdBtn.addEventListener('click', function () {
@@ -336,12 +360,38 @@ window.init_epaper_image_fragment = function () {
         config.epaper_schedule_hours = readHoursMask();
         config.epaper_schedule_tz_offset = tzSelect ? parseInt(tzSelect.value || '0', 10) : 0;
         if (isNaN(config.epaper_schedule_tz_offset)) config.epaper_schedule_tz_offset = 0;
-        var carouselPayload = buildCarouselPayload();
-        if (!carouselPayload.ok) {
-            showMessage(carouselPayload.message, 'error');
-            return;
+        config.epaper_image_source_mode = selectedSourceMode();
+        if (config.epaper_image_source_mode === 'assignments') {
+            var sourceEl = document.querySelector('[name="epaper_assignment_source_url"]');
+            var intervalEl = document.querySelector('[name="epaper_assignment_refresh_interval_seconds"]');
+            var sourceUrl = sourceEl ? String(sourceEl.value || '').trim() : '';
+            var assignmentInterval = intervalEl ? parseInt(intervalEl.value || '0', 10) : 0;
+            if (!sourceUrl) {
+                showMessage('Assignment source URL is required.', 'error');
+                return;
+            }
+            if (!sourceUrl.includes('/api/next') && !sourceUrl.includes('/api/assignment')) {
+                showMessage('Assignment source URL must contain /api/next or /api/assignment.', 'error');
+                return;
+            }
+            if (isNaN(assignmentInterval) || assignmentInterval < 1 || assignmentInterval > 86400) {
+                showMessage('Assignment refresh interval must be between 1 and 86400 seconds.', 'error');
+                return;
+            }
+            config.epaper_assignment_source_url = sourceUrl;
+            config.epaper_assignment_refresh_interval_seconds = assignmentInterval;
+        } else {
+            var carouselPayload = buildCarouselPayload();
+            if (!carouselPayload.ok) {
+                showMessage(carouselPayload.message, 'error');
+                return;
+            }
+            if (carouselPayload.value.length === 0) {
+                showMessage('At least one slot image URL is required.', 'error');
+                return;
+            }
+            config.epaper_carousel = carouselPayload.value;
         }
-        config.epaper_carousel = carouselPayload.value;
 
         var validation = validateConfig(config);
         if (!validation.valid) {
@@ -355,8 +405,8 @@ window.init_epaper_image_fragment = function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(config)
             });
-            if (!response.ok) throw new Error('Failed to save configuration');
-            var result = await response.json();
+            var result = await response.json().catch(function () { return null; });
+            if (!response.ok) throw new Error(result && result.message ? result.message : ('HTTP ' + response.status));
             if (result && result.success) {
                 showMessage('Configuration saved', 'success');
             } else {

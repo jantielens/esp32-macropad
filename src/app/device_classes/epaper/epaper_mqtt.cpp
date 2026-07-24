@@ -3,6 +3,7 @@
 #if HAS_EPAPER && HAS_MQTT
 
 #include "epaper_battery.h"
+#include "epaper_source_mode.h"
 #include "ha_discovery.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
@@ -53,11 +54,18 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		doc["refresh_count"]   = epaper_refresh_get_count();
 		doc["sidecar_http_status"] = outcome.sidecar_http_status;
 
-		// Carousel telemetry
-		doc["carousel_count"] = g_epaper_config.carousel_count;
-		if (g_epaper_config.carousel_count > 0) {
-				doc["carousel_index"] = g_epaper_carousel_index;
-				doc["carousel_url"] = g_epaper_config.carousel[g_epaper_carousel_index].url;
+		const bool assignment_mode = epaper_source_uses_assignments(
+				g_epaper_config.image_source_mode);
+		doc["image_source_mode"] = assignment_mode ? "assignments" : "slots";
+		if (assignment_mode) {
+				doc["assignment_refresh_interval_seconds"] =
+						g_epaper_config.assignment_refresh_interval_seconds;
+		} else {
+				doc["carousel_count"] = g_epaper_config.carousel_count;
+				if (g_epaper_config.carousel_count > 0) {
+						doc["carousel_index"] = g_epaper_carousel_index;
+						doc["carousel_url"] = g_epaper_config.carousel[g_epaper_carousel_index].url;
+				}
 		}
 
 		// Schedule telemetry

@@ -21,6 +21,7 @@
 #include "epaper/epaper_refresh.h"
 #include "epaper/epaper_schedule.h"
 #include "epaper/epaper_screens.h"
+#include "epaper/epaper_source_mode.h"
 #include "epaper/epaper_timing.h"
 #include "log_manager.h"
 #include "power_config.h"
@@ -61,8 +62,12 @@ static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
 static const char *kKeyCrcEnabled     = "ep_crc_en";
 static const char *kKeySdCacheEn      = "ep_sd_en";
-static const char *kKeyAssignmentEn   = "ep_asg_en";
-static const char *kKeyAssignmentUrl  = "ep_asg_url";
+static const char *kKeySourceMode     = "ep_src_mode";
+static const char *kKeyAssignmentSrc  = "ep_asg_src";
+static const char *kKeyAssignmentInt  = "ep_asg_int";
+static_assert(sizeof("ep_src_mode") - 1 <= 14, "NVS key exceeds 14 characters");
+static_assert(sizeof("ep_asg_src") - 1 <= 14, "NVS key exceeds 14 characters");
+static_assert(sizeof("ep_asg_int") - 1 <= 14, "NVS key exceeds 14 characters");
 static const char *kKeyOverlayEn      = "ep_ovl_en";
 static const char *kKeyOverlayPos     = "ep_ovl_pos";
 static const char *kKeyOverlayCol     = "ep_ovl_col";
@@ -73,7 +78,82 @@ static const char *kKeyFrontDuration  = "ep_fl_d";
 static const char *kKeyCarouselCount  = "ep_c_cnt";
 static const char *kKeyScheduleHours  = "ep_sch_hrs";
 static const char *kKeyScheduleTzOff  = "ep_sch_tz";
-static const uint32_t kDefaultCarouselDurationS = 900;
+static const uint32_t kDefaultCarouselDurationS = EPAPER_REFRESH_INTERVAL_DEFAULT_SECONDS;
+
+static bool epaper_assignment_mode(const EpaperConfig &config) {
+		return epaper_source_uses_assignments(config.image_source_mode);
+}
+
+static EpaperImageSourceMode epaper_parse_source_mode(const char *value,
+		EpaperImageSourceMode fallback) {
+		if (value && strcmp(value, "assignments") == 0) {
+				return EpaperImageSourceMode::DisplayAssignments;
+		}
+		if (value && strcmp(value, "slots") == 0) {
+				return EpaperImageSourceMode::SlotImages;
+		}
+		return fallback;
+}
+
+static uint32_t epaper_json_interval(JsonVariant value, uint32_t fallback) {
+		if (value.is<const char*>()) {
+				const char *text = value.as<const char*>();
+				if (!text || text[0] == '\0') return fallback;
+				char *end = nullptr;
+				const unsigned long parsed = strtoul(text, &end, 10);
+				return end && *end == '\0' ? (uint32_t)parsed : 0;
+		}
+		if (value.is<int64_t>()) {
+				const int64_t parsed = value.as<int64_t>();
+				if (parsed <= 0 || parsed > UINT32_MAX) return 0;
+				return (uint32_t)parsed;
+		}
+		return fallback;
+}
+
+static void epaper_apply_source_fields(EpaperConfig &config, JsonObject &body) {
+		if (body.containsKey("epaper_image_source_mode")) {
+				config.image_source_mode = epaper_parse_source_mode(
+						body["epaper_image_source_mode"] | "", config.image_source_mode);
+		}
+		if (body.containsKey("epaper_assignment_source_url")) {
+				strlcpy(config.assignment_source_url,
+						body["epaper_assignment_source_url"] | "", CONFIG_EPAPER_URL_MAX_LEN);
+		}
+		if (body.containsKey("epaper_assignment_refresh_interval_seconds")) {
+				config.assignment_refresh_interval_seconds = epaper_json_interval(
+						body["epaper_assignment_refresh_interval_seconds"],
+						config.assignment_refresh_interval_seconds);
+		}
+
+		if (body.containsKey("epaper_carousel")) {
+				JsonArray carousel_array = body["epaper_carousel"];
+				uint8_t count = 0;
+				for (int i = 0; i < 5; ++i) {
+						if (i < (int)carousel_array.size() && carousel_array[i].is<JsonObject>()) {
+								JsonObject entry = carousel_array[i].as<JsonObject>();
+								const char *url = entry["url"] | "";
+								if (url[0] != '\0') {
+										strlcpy(config.carousel[i].url, url, CONFIG_EPAPER_URL_MAX_LEN);
+										uint32_t interval = entry["interval_seconds"] | 0;
+										if (interval == 0) interval = kDefaultCarouselDurationS;
+										config.carousel[i].interval_seconds = interval;
+										config.carousel[i].stay = entry["stay"] | false;
+										count = (uint8_t)(i + 1);
+								} else {
+										config.carousel[i].url[0] = '\0';
+										config.carousel[i].interval_seconds = 0;
+										config.carousel[i].stay = false;
+								}
+						} else {
+								config.carousel[i].url[0] = '\0';
+								config.carousel[i].interval_seconds = 0;
+								config.carousel[i].stay = false;
+						}
+				}
+				config.carousel_count = count;
+		}
+}
 
 bool epaper_resolve_current_url() {
 		if (g_epaper_config.carousel_count == 0) {
@@ -182,8 +262,9 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.epaper_last_crc32 = 0;
 		g_epaper_config.epaper_crc32_enabled = false;
 		g_epaper_config.epaper_sd_cache_enabled = false;
-		g_epaper_config.epaper_assignment_enabled = false;
-		g_epaper_config.epaper_assignment_url[0] = '\0';
+		g_epaper_config.image_source_mode = EpaperImageSourceMode::SlotImages;
+		g_epaper_config.assignment_source_url[0] = '\0';
+		g_epaper_config.assignment_refresh_interval_seconds = EPAPER_REFRESH_INTERVAL_DEFAULT_SECONDS;
 		g_epaper_config.epaper_overlay_enabled = false;
 		g_epaper_config.epaper_overlay_position = 3;
 		g_epaper_config.epaper_overlay_color = 0;
@@ -213,10 +294,19 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		g_epaper_config.epaper_last_crc32 = prefs.getUInt(kKeyCrc32, 0);
 		g_epaper_config.epaper_crc32_enabled = prefs.getBool(kKeyCrcEnabled, false);
 		g_epaper_config.epaper_sd_cache_enabled = prefs.getBool(kKeySdCacheEn, false);
-		g_epaper_config.epaper_assignment_enabled = prefs.getBool(kKeyAssignmentEn, false);
-		String assignment_url = prefs.getString(kKeyAssignmentUrl, "");
-		strlcpy(g_epaper_config.epaper_assignment_url, assignment_url.c_str(),
+		const uint8_t source_mode = prefs.getUChar(kKeySourceMode,
+				(uint8_t)EpaperImageSourceMode::SlotImages);
+		g_epaper_config.image_source_mode = source_mode == (uint8_t)EpaperImageSourceMode::DisplayAssignments
+				? EpaperImageSourceMode::DisplayAssignments : EpaperImageSourceMode::SlotImages;
+		String assignment_url = prefs.getString(kKeyAssignmentSrc, "");
+		strlcpy(g_epaper_config.assignment_source_url, assignment_url.c_str(),
 				CONFIG_EPAPER_URL_MAX_LEN);
+		g_epaper_config.assignment_refresh_interval_seconds = prefs.getUInt(
+				kKeyAssignmentInt, EPAPER_REFRESH_INTERVAL_DEFAULT_SECONDS);
+		if (g_epaper_config.assignment_refresh_interval_seconds == 0 ||
+				g_epaper_config.assignment_refresh_interval_seconds > EPAPER_REFRESH_INTERVAL_MAX_SECONDS) {
+				g_epaper_config.assignment_refresh_interval_seconds = EPAPER_REFRESH_INTERVAL_DEFAULT_SECONDS;
+		}
 
 		g_epaper_config.epaper_overlay_enabled = prefs.getBool(kKeyOverlayEn, false);
 		g_epaper_config.epaper_overlay_position = prefs.getUChar(kKeyOverlayPos, 3);
@@ -255,8 +345,9 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_last_crc32);
 		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_crc32_enabled);
 		prefs.putBool(kKeySdCacheEn, g_epaper_config.epaper_sd_cache_enabled);
-		prefs.putBool(kKeyAssignmentEn, g_epaper_config.epaper_assignment_enabled);
-		prefs.putString(kKeyAssignmentUrl, g_epaper_config.epaper_assignment_url);
+		prefs.putUChar(kKeySourceMode, (uint8_t)g_epaper_config.image_source_mode);
+		prefs.putString(kKeyAssignmentSrc, g_epaper_config.assignment_source_url);
+		prefs.putUInt(kKeyAssignmentInt, g_epaper_config.assignment_refresh_interval_seconds);
 		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_overlay_enabled);
 		prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_overlay_position);
 		prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_overlay_color);
@@ -289,8 +380,11 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 		root["epaper_rotation"] = g_epaper_config.epaper_rotation;
 		root["epaper_crc32_enabled"] = g_epaper_config.epaper_crc32_enabled;
 		root["epaper_sd_cache_enabled"] = g_epaper_config.epaper_sd_cache_enabled;
-		root["epaper_assignment_enabled"] = g_epaper_config.epaper_assignment_enabled;
-		root["epaper_assignment_url"] = g_epaper_config.epaper_assignment_url;
+		root["epaper_image_source_mode"] = epaper_assignment_mode(g_epaper_config)
+				? "assignments" : "slots";
+		root["epaper_assignment_source_url"] = g_epaper_config.assignment_source_url;
+		root["epaper_assignment_refresh_interval_seconds"] =
+				g_epaper_config.assignment_refresh_interval_seconds;
 		root["epaper_sd_cache_supported"] = (bool)
 #ifdef EPAPER_SD_CS_PIN
 			true
@@ -322,6 +416,7 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 }
 
 static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
+		epaper_apply_source_fields(g_epaper_config, body);
 		if (body.containsKey("epaper_rotation")) {
 				uint8_t v = body["epaper_rotation"].is<const char*>()
 						? (uint8_t)atoi(body["epaper_rotation"].as<const char*>())
@@ -332,12 +427,6 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 			g_epaper_config.epaper_crc32_enabled = body["epaper_crc32_enabled"] | false;
 		}		if (body.containsKey("epaper_sd_cache_enabled")) {
 			g_epaper_config.epaper_sd_cache_enabled = body["epaper_sd_cache_enabled"] | false;
-		} 		if (body.containsKey("epaper_assignment_enabled")) {
-			g_epaper_config.epaper_assignment_enabled = body["epaper_assignment_enabled"] | false;
-		}
-		if (body.containsKey("epaper_assignment_url")) {
-			strlcpy(g_epaper_config.epaper_assignment_url,
-					body["epaper_assignment_url"] | "", CONFIG_EPAPER_URL_MAX_LEN);
 		}		if (body.containsKey("epaper_overlay_enabled")) {
 				g_epaper_config.epaper_overlay_enabled = body["epaper_overlay_enabled"] | false;
 		}
@@ -373,35 +462,6 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 						: (uint16_t)(body["epaper_frontlight_duration_s"] | 30);
 		}
 
-		// Parse carousel
-		if (body.containsKey("epaper_carousel")) {
-				JsonArray carousel_array = body["epaper_carousel"];
-				uint8_t count = 0;
-				for (int i = 0; i < 5; ++i) {
-						if (i < (int)carousel_array.size() && carousel_array[i].is<JsonObject>()) {
-								JsonObject entry = carousel_array[i].as<JsonObject>();
-								const char *url = entry["url"] | "";
-								if (url[0] != '\0') {
-										strlcpy(g_epaper_config.carousel[i].url, url, CONFIG_EPAPER_URL_MAX_LEN);
-										uint32_t interval = entry["interval_seconds"] | 0;
-										if (interval == 0) interval = kDefaultCarouselDurationS;
-										g_epaper_config.carousel[i].interval_seconds = interval;
-										g_epaper_config.carousel[i].stay = entry["stay"] | false;
-										count = (uint8_t)(i + 1);
-								} else {
-										g_epaper_config.carousel[i].url[0] = '\0';
-										g_epaper_config.carousel[i].interval_seconds = 0;
-										g_epaper_config.carousel[i].stay = false;
-								}
-						} else {
-								g_epaper_config.carousel[i].url[0] = '\0';
-								g_epaper_config.carousel[i].interval_seconds = 0;
-								g_epaper_config.carousel[i].stay = false;
-						}
-				}
-				g_epaper_config.carousel_count = count;
-		}
-
 		// Parse schedule
 		if (body.containsKey("epaper_schedule_hours")) {
 				uint32_t v = body["epaper_schedule_hours"].is<const char*>()
@@ -417,6 +477,97 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 				if (v > 14) v = 14;
 				g_epaper_config.schedule_tz_offset = v;
 		}
+}
+
+static const char *config_api_validate_hook(const DeviceConfig * /*cfg*/, JsonObject &body) {
+		const bool touches_source = body.containsKey("epaper_image_source_mode") ||
+				body.containsKey("epaper_assignment_source_url") ||
+				body.containsKey("epaper_assignment_refresh_interval_seconds") ||
+				body.containsKey("epaper_carousel");
+		if (!touches_source) return nullptr;
+
+		if (body.containsKey("epaper_image_source_mode")) {
+				if (!body["epaper_image_source_mode"].is<const char*>()) {
+						return "Image source mode must be a string";
+				}
+				const char *mode = body["epaper_image_source_mode"] | "";
+				if (strcmp(mode, "slots") != 0 && strcmp(mode, "assignments") != 0) {
+						return "Image source mode must be 'slots' or 'assignments'";
+				}
+		}
+		if (body.containsKey("epaper_assignment_source_url") &&
+				!body["epaper_assignment_source_url"].is<const char*>()) {
+				return "Assignment source URL must be a string";
+		}
+		if (body.containsKey("epaper_assignment_refresh_interval_seconds")) {
+				JsonVariant interval = body["epaper_assignment_refresh_interval_seconds"];
+				if (!interval.is<const char*>() && !interval.is<int64_t>()) {
+						return "Assignment refresh interval must be an integer";
+				}
+		}
+		if (body.containsKey("epaper_carousel")) {
+				if (!body["epaper_carousel"].is<JsonArray>()) {
+						return "E-paper carousel must be an array";
+				}
+				JsonArray carousel = body["epaper_carousel"];
+				if (carousel.size() > 5) return "E-paper carousel supports at most 5 slots";
+				bool found_empty = false;
+				for (JsonVariant entry_value : carousel) {
+						if (!entry_value.is<JsonObject>()) return "Each e-paper slot must be an object";
+						JsonObject entry = entry_value.as<JsonObject>();
+						if (!entry["url"].is<const char*>()) return "Each e-paper slot URL must be a string";
+						const char *url = entry["url"] | "";
+						if (url[0] == '\0') {
+								found_empty = true;
+								continue;
+						}
+						if (found_empty) return "E-paper slots must be filled top-to-bottom";
+						if (!entry.containsKey("interval_seconds") ||
+								(!entry["interval_seconds"].is<const char*>() &&
+								 !entry["interval_seconds"].is<int64_t>())) {
+								return "Each configured e-paper slot duration must be an integer";
+						}
+						const uint32_t interval = epaper_json_interval(entry["interval_seconds"], 0);
+						if (interval == 0 || interval > EPAPER_REFRESH_INTERVAL_MAX_SECONDS) {
+								return "Each configured e-paper slot duration must be between 1 and 86400 seconds";
+						}
+						if (entry.containsKey("stay") && !entry["stay"].is<bool>()) {
+								return "Each e-paper slot Stay value must be boolean";
+						}
+				}
+		}
+
+		EpaperConfig candidate = g_epaper_config;
+		epaper_apply_source_fields(candidate, body);
+		bool slot_source_present = false;
+		for (uint8_t i = 0; i < candidate.carousel_count; ++i) {
+				if (candidate.carousel[i].url[0] != '\0') {
+						slot_source_present = true;
+						break;
+				}
+		}
+		const EpaperSourceConfigError source_error = epaper_source_config_error(
+				candidate.image_source_mode, candidate.assignment_source_url[0] != '\0',
+				candidate.assignment_refresh_interval_seconds, slot_source_present,
+				EPAPER_REFRESH_INTERVAL_MAX_SECONDS);
+		if (source_error == EpaperSourceConfigError::MissingAssignmentSource) {
+				return "Assignment source URL is required in Display assignments mode";
+		}
+		if (source_error == EpaperSourceConfigError::InvalidAssignmentInterval) {
+				return "Assignment refresh interval must be between 1 and 86400 seconds";
+		}
+		if (source_error == EpaperSourceConfigError::MissingSlotSource) {
+				return "At least one slot image URL is required in Slot images mode";
+		}
+
+		if (epaper_assignment_mode(candidate)) {
+				char derived_url[384];
+				if (!epaper_assignment_build_url(candidate.assignment_source_url, "", "sync", 0,
+						derived_url, sizeof(derived_url))) {
+						return "Assignment source URL must contain /api/next or /api/assignment";
+				}
+		}
+		return nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -635,8 +786,11 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		}
 
 		if (!connected) {
+				const uint32_t backoff_seed = epaper_assignment_mode(g_epaper_config)
+						? g_epaper_config.assignment_refresh_interval_seconds
+						: epaper_current_slot_duration_seconds();
 				const uint32_t backoff = power_manager_note_wifi_failure(
-						epaper_current_slot_duration_seconds(),
+							backoff_seed,
 						config->wifi_backoff_max_seconds);
 				epaper_timing_last.boot_to_wifi_ms = millis();
 				epaper_timing_last.total_active_ms = millis();
@@ -731,29 +885,37 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 #endif
 
 
-		if (!epaper_resolve_current_url()) {
-				LOGW("Epaper", "Refresh skipped: no carousel URL configured");
-				power_manager_sleep_for(kDefaultCarouselDurationS);
-				return true;
-		}
-		const uint8_t active_slot_index = g_epaper_carousel_index;
-		if (g_epaper_config.epaper_assignment_enabled) {
-			LOGI("Epaper", "Carousel: using slot %u with assignment sync", g_epaper_carousel_index);
+		const bool assignment_mode = epaper_assignment_mode(g_epaper_config);
+		uint8_t active_slot_index = 0;
+		if (assignment_mode) {
+				if (g_epaper_config.assignment_source_url[0] == '\0') {
+						LOGW("Epaper", "Refresh skipped: no assignment source URL configured");
+						power_manager_sleep_for(g_epaper_config.assignment_refresh_interval_seconds);
+						return true;
+				}
+				LOGI("Epaper", "Using display assignment source");
 		} else {
+				if (!epaper_resolve_current_url()) {
+						LOGW("Epaper", "Refresh skipped: no slot image URL configured");
+						power_manager_sleep_for(kDefaultCarouselDurationS);
+						return true;
+				}
+				active_slot_index = g_epaper_carousel_index;
 			LOGI("Epaper", "Carousel: using slot %u URL: %s", g_epaper_carousel_index, g_epaper_config.epaper_url);
 		}
 
 		// Clear the per-draw sub-step timings so a CRC-skip wake (no fetch/draw)
 		// reports zeros rather than the previous cycle's resolve/fetch/draw.
 		epaper_timing_reset_draw_steps();
-		const EpaperRefreshOutcome outcome = g_epaper_config.epaper_assignment_enabled
+		const EpaperRefreshOutcome outcome = assignment_mode
 			? epaper_assignment_run(config, force_refresh)
 			: epaper_refresh_run(config, force_refresh);
 		const uint32_t t_draw_done = millis();
 		epaper_timing_last.crc_retry_count = outcome.crc_retry_count;
 
 		// Carousel: advance index after refresh (on success or skip)
-		if (g_epaper_config.carousel_count > 0) {
+		if (epaper_source_advances_carousel(g_epaper_config.image_source_mode,
+				g_epaper_config.carousel_count)) {
 				uint8_t next_idx = epaper_carousel_next_index(
 						g_epaper_carousel_index,
 						g_epaper_config.carousel_count,
@@ -789,8 +951,11 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// cadence approximates duty_cycle_wake_seconds. Skip when target is 0
 		// (button-only mode) so we don't accidentally re-arm the timer.
 		// Per-entry interval: if carousel active, use current entry's interval (if > 0)
-		uint32_t target_s = kDefaultCarouselDurationS;
-		if (g_epaper_config.carousel_count > 0) {
+		uint32_t target_s = epaper_source_refresh_interval(
+				g_epaper_config.image_source_mode,
+				g_epaper_config.assignment_refresh_interval_seconds,
+				kDefaultCarouselDurationS);
+		if (!assignment_mode && g_epaper_config.carousel_count > 0) {
 				target_s = g_epaper_config.carousel[active_slot_index].interval_seconds;
 				if (target_s == 0) target_s = kDefaultCarouselDurationS;
 				LOGI("Epaper", "Using carousel slot %u duration: %u seconds", active_slot_index, target_s);
@@ -879,6 +1044,10 @@ static const DeviceClass kEpaperClass = {
 		/* mqtt_on_discovery */ nullptr,
 #endif
 		/* mqtt_publish_state */ nullptr,
+		/* pad_hold_scheme */    nullptr,
+		/* pad_hold_acquire */   nullptr,
+		/* pad_hold_release */   nullptr,
+		/* config_api_validate */ config_api_validate_hook,
 };
 
 void epaper_device_class_register() {
@@ -900,6 +1069,7 @@ void epaper_device_class_register() {
 #include "epaper/epaper_screens.cpp"
 #include "epaper/epaper_sd_cache.cpp"
 #include "epaper/epaper_assignment_logic.cpp"
+#include "epaper/epaper_source_mode.cpp"
 #include "epaper/epaper_assignment.cpp"
 #include "epaper/epaper_timing.cpp"
 

@@ -1,4 +1,5 @@
 #include "device_classes/epaper/epaper_assignment_logic.h"
+#include "device_classes/epaper/epaper_source_mode.h"
 
 #include <cassert>
 #include <cstring>
@@ -106,6 +107,25 @@ static void check_url(const char* carousel, const char* override_url,
 int main() {
 		static_assert(sizeof(EpaperAssignmentState) == 16, "packed NVS state changed");
 		characterize_refresh_truth_table();
+
+		assert(!epaper_source_uses_assignments(EpaperImageSourceMode::SlotImages));
+		assert(epaper_source_uses_assignments(EpaperImageSourceMode::DisplayAssignments));
+		assert(epaper_source_advances_carousel(EpaperImageSourceMode::SlotImages, 3));
+		assert(!epaper_source_advances_carousel(EpaperImageSourceMode::DisplayAssignments, 3));
+		assert(epaper_source_refresh_interval(EpaperImageSourceMode::SlotImages, 120, 900) == 900);
+		assert(epaper_source_refresh_interval(EpaperImageSourceMode::DisplayAssignments, 120, 900) == 120);
+		assert(epaper_source_config_error(EpaperImageSourceMode::DisplayAssignments,
+				false, 900, true, 86400) == EpaperSourceConfigError::MissingAssignmentSource);
+		assert(epaper_source_config_error(EpaperImageSourceMode::DisplayAssignments,
+				true, 0, true, 86400) == EpaperSourceConfigError::InvalidAssignmentInterval);
+		assert(epaper_source_config_error(EpaperImageSourceMode::DisplayAssignments,
+				true, 86401, true, 86400) == EpaperSourceConfigError::InvalidAssignmentInterval);
+		assert(epaper_source_config_error(EpaperImageSourceMode::DisplayAssignments,
+				true, 900, true, 86400) == EpaperSourceConfigError::None);
+		assert(epaper_source_config_error(EpaperImageSourceMode::SlotImages,
+				true, 900, false, 86400) == EpaperSourceConfigError::MissingSlotSource);
+		assert(epaper_source_config_error(EpaperImageSourceMode::SlotImages,
+				false, 0, true, 86400) == EpaperSourceConfigError::None);
 
 		check_url("https://frame.test/api/next?device_id=one&key=secret", "",
 			"sync", 0,

@@ -128,16 +128,23 @@ If the sidecar fetch fails, times out, or returns unparseable content, the devic
 
 ## HTTP Assignment Mode
 
-The Image Sources page can opt a frame into the photoframe site's durable HTTP
-assignment transaction. The `Use display assignments` toggle is off by default.
-When it is off, scheduled and manual refreshes retain the legacy `/api/next` and
-CRC-sidecar behavior.
+The Image Sources page has two explicit modes. Slot images uses the configured
+image slots, their individual durations, and optional CRC sidecars. Display
+assignments uses a dedicated assignment source URL and refresh interval. Slot
+URLs and durations do not affect assignment refreshes, even when they remain
+stored on the device.
 
-When assignment mode is enabled, the firmware derives `/api/assignment/sync`
-and `/api/assignment/image` from the active `/api/next` URL. An optional
-Assignment API base URL can select a different host while retaining the device
-ID and key query parameters. URLs containing device keys or redirected storage
-tokens are never written to firmware logs.
+Display assignments requires a full credential-bearing source URL, such as
+`https://example.com/api/next?device_id=frame-1&key=secret`. The firmware
+derives `/api/assignment/sync` and `/api/assignment/image` from that URL while
+preserving its host and query parameters. There is no separate assignment host
+override. URLs containing device keys or redirected storage tokens are never
+written to firmware logs.
+
+> [!WARNING]
+> This configuration model does not migrate the former `ep_asg_en` and
+> `ep_asg_url` NVS values. After upgrading, a device that previously used
+> assignments starts in Slot images mode and must be reconfigured.
 
 Each enabled wake follows this sequence:
 
@@ -150,7 +157,7 @@ Each enabled wake follows this sequence:
 5. Refresh the panel, persist the accepted state, and sync again to commit the
   displayed revision and request its successor.
 
-The packed NVS state is read and written only while assignment mode is enabled.
+The packed NVS state is read and written only in Display assignments mode.
 A CRC value of zero means unknown: it always forces an image-body download and
 can never produce an unchanged or SD-cache hit. State is persisted only after a
 successful panel update or an accepted unchanged revision, so a reset before
@@ -163,15 +170,16 @@ not derive it from the image ID or transport bytes. SHA-256 derivation vectors
 therefore belong to the site tests; no firmware SHA-256 round-trip vector is
 expected.
 
-The portal Refresh e-paper now action always drives a panel refresh in assignment
-mode. It synchronizes metadata first when online and can avoid the image-body
-download through a validated assignment cache hit. On a reTerminal E1003 with
-no network, it attempts to redraw the last accepted cached image. With assignment
-mode disabled, the existing offline `503 WiFi not connected` response is unchanged.
+The portal Refresh e-paper now action validates the active mode's source. In
+Display assignments mode it never requires a slot URL. It synchronizes metadata
+first when online and can avoid the image-body download through a validated
+assignment cache hit. On a reTerminal E1003 with no network, it attempts to
+redraw the last accepted cached image. Slot images mode retains the existing
+offline `503 WiFi not connected` response.
 
 ## Image Carousel
 
-The portal can configure up to five image slots. Each slot has:
+Slot images mode can configure up to five image slots. Each slot has:
 
 * A URL
 * A per-slot Duration in seconds

@@ -320,6 +320,18 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
+		{
+				JsonObject body = doc.as<JsonObject>();
+				const char *validation_error = device_class_dispatch_config_api_validate(current_config, body);
+				if (validation_error) {
+						web_portal_send_json_error(request, 400, validation_error);
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+		}
+
 		// Partial update: only update fields that are present in the request
 		// This allows different pages to update only their relevant fields
 

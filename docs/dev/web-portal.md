@@ -1433,19 +1433,29 @@ DNS server redirects all requests to device IP in AP mode:
 
 ## E-Paper Assignment Settings
 
-The e-paper Image Sources fragment exposes two assignment fields through the
+The e-paper Image Sources fragment exposes an explicit source mode through the
 shared `/api/config` contract:
 
-- `epaper_assignment_enabled` selects the durable HTTP assignment refresh path
-  and defaults to `false`
-- `epaper_assignment_url` optionally selects a split-host assignment API base;
-  an empty value derives the endpoints from the active `/api/next` carousel URL
+- `epaper_image_source_mode` is `slots` or `assignments`
+- `epaper_assignment_source_url` is the full credential-bearing source URL
+- `epaper_assignment_refresh_interval_seconds` is an integer from 1 through
+  86400 and defaults to 900
+- `epaper_carousel` remains the Slot images configuration
 
-The backend persists these values as `ep_asg_en` and `ep_asg_url`. The packed
-`ep_assign` accepted-display state is separate from ordinary config and is
-accessed only while assignment mode is enabled. Keep disabled behavior routed
-through the existing refresh functions so legacy request, error, and manual
-refresh semantics remain unchanged.
+The backend stores the mode as a `uint8_t` in `ep_src_mode`, the source URL in
+`ep_asg_src`, and the interval in `ep_asg_int`. It validates the merged active
+mode before mutating or saving configuration. Display assignments requires a
+nonempty URL containing `/api/next` or `/api/assignment`; Slot images requires
+at least one nonempty slot URL.
+
+The source URL owns its host, path, and query. Firmware passes an empty override
+to assignment endpoint derivation, so there is no split-host setting. The
+packed `ep_assign` accepted-display state remains separate from ordinary config.
+
+> [!WARNING]
+> The old `ep_asg_en` and `ep_asg_url` keys are not read or migrated. Devices
+> using the former assignment toggle return to Slot images mode after upgrade
+> and require reconfiguration.
 
 ## Development Workflow
 
