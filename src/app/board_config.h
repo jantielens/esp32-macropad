@@ -126,6 +126,12 @@ struct HwButtonDef {
 #define IS_DARKROOM_TIMER false
 #endif
 
+// E-paper BLE bridge product variant. This mains-powered headless device
+// polls assignment state and relays it over BLE. Off by default.
+#ifndef IS_EPAPER_BLE_BRIDGE
+#define IS_EPAPER_BLE_BRIDGE false
+#endif
+
 // Feature-rich device classes (shutter tester, coffee scale, darkroom timer)
 // allocate large scratch/history buffers directly in PSRAM with no internal-RAM
 // fallback — a deliberate policy, since these classes are always shipped on

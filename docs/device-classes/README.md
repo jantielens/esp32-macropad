@@ -11,6 +11,7 @@ The ESP32 Macropad firmware compiles for multiple hardware classes from a single
 | `shutter_tester` | `ESP32-MP Shutter Tester` | `jc4880p433-shutter`                                      | Specialized capture rig measuring camera shutter speeds via an ADC sensor array. See [shutter-tester/](shutter-tester/README.md). |
 | `coffee_scale`   | `ESP32-MP Coffee Scale`   | `jc4880p433-nau7802`, `jc4880p433-hx711`                  | Connected espresso / pour-over scale with a stage-based brew engine and weight logging. See [coffee-scale/](coffee-scale/README.md). |
 | `darkroom_timer` | `ESP32-MP Darkroom Timer` | `jc4880p433-darkroom`                                     | Enlarger exposure timer with f-stop test strips, light metering, relay control, and a print session log. See [darkroom-timer/](darkroom-timer/README.md). |
+| `epaper_ble_bridge` | `ESP32-MP E-Paper BLE Bridge` | `esp32s3-ble-bridge`                                  | Headless, mains-powered bridge that polls e-paper assignment APIs and relays compact assignment and authenticated ACK packets over BLE. |
 
 ## How class detection works
 
@@ -20,10 +21,11 @@ flowchart TD
     Flags -->|IS_SHUTTER_TESTER| Shutter[shutter_tester]
     Flags -->|IS_COFFEE_SCALE| Coffee[coffee_scale]
     Flags -->|IS_DARKROOM_TIMER| Darkroom[darkroom_timer]
+    Flags -->|IS_EPAPER_BLE_BRIDGE| Bridge[epaper_ble_bridge]
     Flags -->|HAS_EPAPER| EPaper[epaper]
     Flags -->|HAS_DISPLAY| Macropad[macropad]
     Flags -->|else| Headless[headless]
-    Shutter & Coffee & Darkroom & EPaper & Macropad & Headless --> Reg[device_class_registry.cpp DESCRIPTORS]
+    Shutter & Coffee & Darkroom & Bridge & EPaper & Macropad & Headless --> Reg[device_class_registry.cpp DESCRIPTORS]
     Reg --> Brand[Branding, default device name, AP SSID, HA mdl, web portal title]
 ```
 

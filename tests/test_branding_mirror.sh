@@ -62,11 +62,12 @@ cpp_headless="$(extract_full_name HEADLESS)"
 cpp_shutter="$( extract_full_name SHUTTER_TESTER)"
 cpp_coffee="$(  extract_full_name COFFEE_SCALE)"
 cpp_darkroom="$(extract_full_name DARKROOM_TIMER)"
+cpp_bridge="$(extract_full_name EPAPER_BLE_BRIDGE)"
 
 # Sanity check: every extraction must yield a non-empty literal. An empty
 # value means the table format changed in a way the extractor cannot parse,
 # and we MUST fail loud rather than silently compare empty strings.
-for pair in "macropad=$cpp_macropad" "epaper=$cpp_epaper" "headless=$cpp_headless" "shutter_tester=$cpp_shutter" "coffee_scale=$cpp_coffee" "darkroom_timer=$cpp_darkroom"; do
+for pair in "macropad=$cpp_macropad" "epaper=$cpp_epaper" "headless=$cpp_headless" "shutter_tester=$cpp_shutter" "coffee_scale=$cpp_coffee" "darkroom_timer=$cpp_darkroom" "epaper_ble_bridge=$cpp_bridge"; do
     cls="${pair%%=*}"
     val="${pair#*=}"
     if [[ -z "$val" ]]; then
@@ -85,6 +86,7 @@ sh_macropad="$(device_class_brand_prefix macropad)"
 sh_shutter="$( device_class_brand_prefix shutter_tester)"
 sh_coffee="$(  device_class_brand_prefix coffee_scale)"
 sh_darkroom="$(device_class_brand_prefix darkroom_timer)"
+sh_bridge="$(device_class_brand_prefix epaper_ble_bridge)"
 
 fail=0
 check() {
@@ -105,6 +107,7 @@ check headless "$cpp_headless" "$sh_headless"
 check shutter_tester "$cpp_shutter" "$sh_shutter"
 check coffee_scale   "$cpp_coffee"   "$sh_coffee"
 check darkroom_timer "$cpp_darkroom" "$sh_darkroom"
+check epaper_ble_bridge "$cpp_bridge" "$sh_bridge"
 
 # Bonus: catch silently-added unknown classes by asserting the bash helper
 # returns empty for one. Keeps the whitelist honest.

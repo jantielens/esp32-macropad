@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 233
+Total flags: 234
 
 ### Features (HAS_*)
 
@@ -187,6 +187,7 @@ Total flags: 233
 - **HW_BUTTON_HOLD_MS** default: `500` — the "hold" action; a shorter press fires the "tap" action on release).
 - **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
+- **IS_EPAPER_BLE_BRIDGE** default: `false` — polls assignment state and relays it over BLE. Off by default.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
@@ -293,6 +294,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
 | jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ✅ | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
+| esp32s3-ble-bridge |  |  | ✅ |  |  |  | ? |  |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
 | inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
 | reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
@@ -314,6 +316,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc4880p433-darkroom | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | — | — |
+| esp32s3-ble-bridge | — | — |
 | inkplate5v2 | — | — |
 | inkplate6flick | — | — |
 | reterminal-e1003 | — | — |
@@ -942,6 +945,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_components.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
+- **IS_EPAPER_BLE_BRIDGE**
+  - src/app/board_config.h
+  - src/app/device_class_registry.cpp
+  - src/app/device_classes.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp

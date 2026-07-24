@@ -1,0 +1,16 @@
+{
+  "device_ids": [
+    {"value":"frame-a","sha256_prefix_hex":"277381a9","device_key_le":2843833127},
+    {"value":"främé-ß","sha256_prefix_hex":"5c94bacd","device_key_le":3451556956},
+    {"value":"Frame-A","sha256_prefix_hex":"06ba9f67","device_key_le":1738521094},
+    {"value":"frame-A","sha256_prefix_hex":"9668eb43","device_key_le":1139501206}
+  ],
+  "image_id":"photos/2026/07/sunrise.jpg",
+  "image_key_hex":"9ce85b849b504eb7",
+  "format_codes":{"g16z":1,"jpeg":2,"g16p":3},
+  "crc_input":"123456789",
+  "crc32":3421780262,
+  "api_key":"test-device-api-key-01",
+  "ack_prefix_hex":"1201277381a9785634129ce85b849b504eb7",
+  "ack_tag_hex":"2cda9f16"
+}

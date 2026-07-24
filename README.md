@@ -88,6 +88,7 @@ ESP32 Macropad runs on these ESP32 development boards:
 | **Soldered Inkplate 5V2** | ESP32 | 5.17" 3-bit grayscale e-paper | 720 × 1280 | Portrait |
 | **Soldered Inkplate 6FLICK** | ESP32 | 6.0" 3-bit grayscale e-paper | 1024 × 758 | Landscape |
 | **Seeed reTerminal E1003** | ESP32-S3 | 10.3" 16-level grayscale e-paper | 1404 × 1872 | Portrait |
+| **E-Paper BLE Bridge** | ESP32-S3 | Headless BLE/WiFi bridge | N/A | No display |
 
 Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are the current non-touch e-paper targets.
 
@@ -103,6 +104,7 @@ The firmware auto-detects a device class at build time based on board capability
 | **Shutter Tester** | `IS_SHUTTER_TESTER` | `ESP32-MP Shutter Tester` | `ESP32-MP-SHUTTER-XXXXXX` | `jc4880p433-shutter` — see [docs/device-classes/shutter-tester/](docs/device-classes/shutter-tester/README.md) |
 | **Coffee Scale** | `IS_COFFEE_SCALE` | `ESP32-MP Coffee Scale` | `ESP32-MP-SCALE-XXXXXX` | `jc4880p433-nau7802`, `jc4880p433-hx711` — see [docs/device-classes/coffee-scale/](docs/device-classes/coffee-scale/README.md) |
 | **Darkroom Timer** | `IS_DARKROOM_TIMER` | `ESP32-MP Darkroom Timer` | `ESP32-MP-DARKROOM-XXXXXX` | `jc4880p433-darkroom` — see [docs/device-classes/darkroom-timer/](docs/device-classes/darkroom-timer/README.md) |
+| **E-Paper BLE Bridge** | `IS_EPAPER_BLE_BRIDGE` | `ESP32-MP E-Paper BLE Bridge` | `BRIDGE-XXXXXX` | `esp32s3-ble-bridge` |
 
 `XXXXXX` is the last six hex digits of the ESP32 chip ID. Per-board metadata (label, description, specs) lives in `src/boards/<board>/metadata.json` and is consumed by the flash page generator.
 

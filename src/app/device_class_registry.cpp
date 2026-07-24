@@ -20,6 +20,8 @@ DeviceClass device_class_detect() {
     return DeviceClass::COFFEE_SCALE;
 #elif IS_DARKROOM_TIMER
     return DeviceClass::DARKROOM_TIMER;
+#elif IS_EPAPER_BLE_BRIDGE
+    return DeviceClass::EPAPER_BLE_BRIDGE;
 #elif HAS_EPAPER
     return DeviceClass::EPAPER;
 #elif !HAS_DISPLAY
@@ -40,6 +42,7 @@ static const DeviceClassDescriptor DESCRIPTORS[] = {
     { DeviceClass::SHUTTER_TESTER, "Shutter Tester", "SHUTTER",  "ESP32-MP Shutter Tester" },
     { DeviceClass::COFFEE_SCALE,   "Coffee Scale",   "SCALE",    "ESP32-MP Coffee Scale"   },
     { DeviceClass::DARKROOM_TIMER, "Darkroom Timer", "DARKROOM", "ESP32-MP Darkroom Timer" },
+    { DeviceClass::EPAPER_BLE_BRIDGE, "E-Paper BLE Bridge", "BRIDGE", "ESP32-MP E-Paper BLE Bridge" },
 };
 
 static const size_t DESCRIPTOR_COUNT = sizeof(DESCRIPTORS) / sizeof(DESCRIPTORS[0]);

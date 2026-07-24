@@ -26,6 +26,7 @@ enum class DeviceClass {
     SHUTTER_TESTER,
     COFFEE_SCALE,
     DARKROOM_TIMER,
+    EPAPER_BLE_BRIDGE,
 };
 
 struct DeviceClassDescriptor {

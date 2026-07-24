@@ -360,6 +360,62 @@ echo "=== Running unit tests: epaper_assignment ==="
 ./tests/bin/test_epaper_assignment
 echo
 
+echo "=== Building unit tests: epaper_ble_codec (ASan/UBSan) ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -fsanitize=address,undefined -fno-omit-frame-pointer \
+    -DHAS_BLE=1 -DEPAPER_BLE_CODEC_HOST_BACKEND \
+    -I tests -I src/app -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_epaper_ble_codec.cpp \
+    tests/epaper_ble_host_crypto.cpp \
+    src/app/epaper_ble_codec.cpp \
+    -o tests/bin/test_epaper_ble_codec
+
+echo "=== Running unit tests: epaper_ble_codec ==="
+ASAN_OPTIONS=detect_leaks=1 ./tests/bin/test_epaper_ble_codec
+python3 tests/test_epaper_ble_vectors.py
+echo
+
+echo "=== Building unit tests: epaper_ble_bridge_logic ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_BLE=1 -DEPAPER_BLE_CODEC_HOST_BACKEND \
+    -I tests -I src/app \
+    tests/test_epaper_ble_bridge_logic.cpp \
+    tests/epaper_ble_host_crypto.cpp \
+    src/app/epaper_ble_codec.cpp \
+    src/app/device_classes/epaper_ble_bridge/epaper_ble_bridge_logic.cpp \
+    -o tests/bin/test_epaper_ble_bridge_logic
+
+echo "=== Running unit tests: epaper_ble_bridge_logic ==="
+./tests/bin/test_epaper_ble_bridge_logic
+python3 tests/test_epaper_ble_security.py
+echo
+
+echo "=== Building unit tests: epaper_ble_config_budget ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_epaper_ble_config_budget.cpp \
+    -o tests/bin/test_epaper_ble_config_budget
+
+echo "=== Running unit tests: epaper_ble_config_budget ==="
+./tests/bin/test_epaper_ble_config_budget
+echo
+
+echo "=== Building unit tests: epaper_ble_bridge_config ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_BLE=1 -DIS_EPAPER_BLE_BRIDGE=1 \
+    -DEPAPER_BLE_CODEC_HOST_BACKEND \
+    -I tests -I src/app -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_epaper_ble_bridge_config.cpp \
+    tests/epaper_ble_host_crypto.cpp \
+    src/app/epaper_ble_codec.cpp \
+    src/app/device_classes/epaper_ble_bridge/epaper_ble_bridge_logic.cpp \
+    src/app/device_classes/epaper_ble_bridge/epaper_ble_bridge_config.cpp \
+    -o tests/bin/test_epaper_ble_bridge_config
+
+echo "=== Running unit tests: epaper_ble_bridge_config ==="
+./tests/bin/test_epaper_ble_bridge_config
+echo
+
 echo "=== Building guard: coffee_scale command length ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -DIS_COFFEE_SCALE=true \

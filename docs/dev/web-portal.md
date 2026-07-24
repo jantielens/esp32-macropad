@@ -664,6 +664,7 @@ Returns current device configuration (passwords excluded).
   - Other feature-specific fields may be present depending on firmware configuration.
 - `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config` — it is always reported as an empty string.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
+- E-Paper BLE Bridge builds return `epaper_ble_bridge_frames`, an array of up to two records. Each record contains `site_url`, `device_id`, and `api_key_set`. The device API key is never returned.
 
 #### `POST /api/config`
 
@@ -731,6 +732,7 @@ Save new configuration. Device reboots after successful save.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
+- E-Paper BLE Bridge builds accept `epaper_ble_bridge_frames`, with `site_url`, `device_id`, and `api_key` per record. An empty `api_key` keeps the existing key for the same device ID. The backend rejects more than two records, invalid URLs, missing credentials, device-key collisions, and configurations that exceed the BLE rotation budget before mutating stored configuration.
 
 #### `DELETE /api/config`
 

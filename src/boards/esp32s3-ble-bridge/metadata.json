@@ -1,0 +1,12 @@
+{
+  "device_class": "epaper_ble_bridge",
+  "board_label": "ESP32-S3 BLE Bridge",
+  "description": "Mains-powered ESP32-S3 bridge for e-paper assignment advertising and acknowledgements.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 4,
+  "psram_mb": 0,
+  "wireless": {
+    "wifi": true,
+    "ble": true
+  }
+}

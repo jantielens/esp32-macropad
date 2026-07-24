@@ -66,6 +66,7 @@ declare -A FQBN_TARGETS=(
     ["jc4880p433-darkroom"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + TSL2591 light sensor + Shelly relays (Darkroom Timer variant)
     ["jc1060p470c"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC1060P470C (1024x600 MIPI-DSI JD9165 + GT911 touch; 16MB + 32MB PSRAM)
     ["esp32c3-withsensors"]="esp32:esp32:nologo_esp32c3_super_mini:CDCOnBoot=cdc,PartitionScheme=ota_2mb" # ESP32-C3 Super Mini headless sensor node (no display; HAS_BLE + sensors)
+    ["esp32s3-ble-bridge"]="esp32:esp32:esp32s3:FlashSize=4M,PSRAM=disabled,PartitionScheme=min_spiffs,CDCOnBoot=default" # ESP32-S3 e-paper BLE bridge (headless, mains-powered, no PSRAM)
     ["inkplate5v2"]="Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb" # Soldered Inkplate 5V2 (ESP32 classic, 5.17" 720x1280 3-bit grayscale e-paper; 4MB flash + 4MB QSPI PSRAM)
     ["inkplate6flick"]="Inkplate_Boards:esp32:Inkplate6Flick:PartitionScheme=min_spiffs" # Soldered Inkplate 6FLICK (ESP32 classic, 6.0" 1024x758 3-bit grayscale e-paper touchscreen + frontlight; 4MB flash + 8MB PSRAM). min_spiffs = 1.9MB APP with OTA (6FLICK variant has no ota_1_9mb scheme)
     ["reterminal-e1003"]="esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default" # Seeed reTerminal E1003 (ESP32-S3, 10.3" 1404x1872 16-level grayscale IT8951 e-paper; 32MB flash + 8MB OPI PSRAM). Serial is a CH340 USB-UART bridge on UART0 (GPIO43/44), NOT native USB — use CDCOnBoot=default, no USBMode=hwcdc, or Serial.print blocks on the disconnected USB-CDC FIFO and the device appears to hang.
@@ -244,6 +245,7 @@ device_class_brand_prefix() {
         shutter_tester) echo "ESP32-MP Shutter Tester" ;;
         coffee_scale)   echo "ESP32-MP Coffee Scale" ;;
         darkroom_timer) echo "ESP32-MP Darkroom Timer" ;;
+        epaper_ble_bridge) echo "ESP32-MP E-Paper BLE Bridge" ;;
         *)              echo "" ;;
     esac
 }
@@ -270,6 +272,10 @@ device_class_for_board() {
         fi
         if grep -qE '^[[:space:]]*#define[[:space:]]+IS_DARKROOM_TIMER[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
             echo "darkroom_timer"
+            return
+        fi
+        if grep -qE '^[[:space:]]*#define[[:space:]]+IS_EPAPER_BLE_BRIDGE[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+            echo "epaper_ble_bridge"
             return
         fi
         if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_EPAPER[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
