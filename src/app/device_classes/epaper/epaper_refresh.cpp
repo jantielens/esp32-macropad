@@ -8,6 +8,7 @@
 #include "epaper_driver.h"
 #include "epaper_overlay.h"
 #include "epaper_screens.h"
+#include "epaper_sd_cache.h"
 #include "log_manager.h"
 #include "power_manager.h"
 
@@ -111,7 +112,8 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 
 		// Serve from / write to the SD image cache per the user's setting. On a
 		// cache hit this lets draw_url() skip the multi-second HTTP body download.
-		epaper_driver_set_sd_cache_enabled(g_epaper_config.epaper_sd_cache_enabled);
+		epaper_driver_set_sd_cache_enabled(g_epaper_config.epaper_sd_cache_enabled ||
+			epaper_sd_cache_has_assignment_context());
 
 		const bool drew = epaper_driver_draw_url(image_url);
 
@@ -197,6 +199,12 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 EpaperRefreshOutcome epaper_refresh_show_url(DeviceConfig* config, const char* image_url) {
 		return epaper_refresh_run_url(config, image_url,
 				true /*force*/, false /*allow_crc*/, false /*persist_crc*/);
+}
+
+EpaperRefreshOutcome epaper_refresh_record_assignment_skip(uint32_t crc, uint32_t elapsed_ms) {
+		EpaperRefreshOutcome out = {EpaperRefreshResult::Skipped, crc, 200, 0, 0, elapsed_ms};
+		s_last_outcome = out;
+		return out;
 }
 
 uint32_t epaper_refresh_last_unix() {

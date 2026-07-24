@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import math
 import re
+import hashlib
+import zlib
 from datetime import datetime, timedelta, timezone
-from typing import NamedTuple, Optional
+from typing import Callable, NamedTuple, Optional
 
 import blobstore as bs
 
@@ -25,6 +27,9 @@ IMAGE_PREFIX = "images/"
 QUEUE_BLOB = "state/queue.json"
 SCHEDULE_BLOB = "state/schedule.json"
 SETTINGS_BLOB = "state/settings.json"
+ASSIGNMENT_PREFIX = "state/assignment/"
+ASSIGNMENT_SCHEMA = 1
+ASSIGNMENT_JOURNAL_DEPTH = 2
 G16P_EXT = ".g16p"
 JPEG_EXT = ".jpg"
 THUMB_SUFFIX = "__thumb.png"
@@ -151,11 +156,19 @@ def selection_blob_metadata(meta: dict) -> dict:
     image_format = meta.get("format")
     if image_format:
         md["format"] = str(image_format)
+    if meta.get("content_crc32") is not None:
+        md["content_crc32"] = str(int(meta["content_crc32"]) & 0xFFFFFFFF)
     return md
 
 
 def _selection_from_blob_metadata(md: dict) -> dict:
     """Inverse of selection_blob_metadata: reconstruct selection fields."""
+    content_crc32 = None
+    if "content_crc32" in md:
+        try:
+            content_crc32 = int(md["content_crc32"]) & 0xFFFFFFFF
+        except (TypeError, ValueError):
+            content_crc32 = None
     return {
         "permanent": md.get("permanent") == "1",
         "expires_at": md.get("expires_at") or None,
@@ -163,6 +176,7 @@ def _selection_from_blob_metadata(md: dict) -> dict:
         "served_at": md.get("served_at") or None,
         "uploaded_at": md.get("uploaded_at") or None,
         "format": md.get("format") or None,
+        "content_crc32": content_crc32,
     }
 
 
@@ -321,6 +335,16 @@ def store_image(
         # LIFO: a new upload jumps to the front so the most recent action (upload
         # or "Show next") is what the device serves next.
         queue_unshift(sas, image_id)
+
+
+def content_crc32(payload: bytes) -> int:
+    return zlib.crc32(payload) & 0xFFFFFFFF
+
+
+def image_key(image_id: str) -> str:
+    if not is_valid_id(image_id):
+        raise ValueError("invalid image id")
+    return hashlib.sha256(image_id.encode("utf-8")).digest()[:8].hex()
 
 
 # --- Two-bucket rotation scheduler (pure) -------------------------------------
@@ -553,9 +577,10 @@ class NextPick(NamedTuple):
     ext: str
     sel_meta: dict
     from_queue: bool
+    planned_countdown: int
 
 
-def select_next(
+def plan_next(
     sas: str,
     *,
     temp_min_spacing: int = 4,
@@ -565,14 +590,14 @@ def select_next(
     queue: Optional[list] = None,
     countdown: Optional[int] = None,
 ) -> Optional[NextPick]:
-    """Pick the next image to serve as a NextPick, or None.
+    """Plan the next image without applying display effects.
 
     Order: first servable id in the queue (explicit one-shots), then the
     two-bucket round-robin rotation. The featured bucket holds temporary photos
     (those with an expiry) and fresh photos (permanent photos uploaded within
     fresh_window_days); permanent photos past the window form the everyday pool.
-    Skips expired images and queued ids with no backing blob, reaping expired
-    blobs opportunistically.
+    Skips expired images and queued ids with no backing blob. Cleanup is left to
+    maintenance paths so repeated planning never mutates queue or image state.
 
     temp_min_spacing is the per-device cadence knob: a featured photo repeats at
     most once per this many displays. fresh_window_days sets how long a new photo
@@ -584,7 +609,8 @@ def select_next(
     flat (list + queue + schedule) regardless of gallery size. The handler may
     pass already-fetched ``blobs``/``queue``/``countdown`` (e.g. read in parallel)
     to fold those into the single fan-out; any left None are fetched here so
-    standalone callers keep working.
+    standalone callers keep working. The proposed countdown is returned in the
+    pick and is committed only after the frame acknowledges a display.
     """
     now = datetime.now(timezone.utc)
 
@@ -602,10 +628,10 @@ def select_next(
         if "permanent" in md:
             metas[image_id] = _selection_from_blob_metadata(md)
         else:
-            # Backfill: image uploaded before metadata stamping existed. Read its
-            # .json once and stamp the blob so subsequent polls are metadata-only.
+            # Legacy image: read its JSON projection without stamping metadata.
+            # Planning must remain side-effect-free; the standalone backfill owns
+            # transport CRC and metadata migration.
             full = read_meta(sas, image_id) or {}
-            bs.set_blob_metadata(sas, name, selection_blob_metadata(full))
             metas[image_id] = {
                 "permanent": bool(full.get("permanent", False)),
                 "expires_at": full.get("expires_at"),
@@ -613,43 +639,37 @@ def select_next(
                 "served_at": full.get("served_at"),
                 "uploaded_at": full.get("uploaded_at"),
                 "format": full.get("format"),
+                "content_crc32": full.get("content_crc32"),
             }
 
     existing = set(metas.keys())
 
-    def _pick(image_id: str, *, from_queue: bool) -> NextPick:
+    if countdown is None:
+        countdown = read_schedule(sas)
+
+    def _pick(image_id: str, *, from_queue: bool, planned_countdown: int) -> NextPick:
         ext = ext_by_id.get(image_id, DEFAULT_IMAGE_EXT)
         sel = dict(metas[image_id])
         # Format is authoritative from the on-disk extension; stamp it so the
         # handler resolves media type + X-Image-Format without a .json GET.
         sel["format"] = format_from_ext(ext)
-        return NextPick(image_id=image_id, ext=ext, sel_meta=sel, from_queue=from_queue)
-
-    # 0) Deferred one-shot reap: a one-shot served on a previous poll kept its
-    # blob alive so the /api/next redirect target stayed valid while the device
-    # fetched it. Delete it now -- the device (which sleeps between cycles) has
-    # long since downloaded it, and it was dequeued at serve time so it will
-    # never be selected again.
-    for image_id in list(existing):
-        sel = metas[image_id]
-        if not sel.get("permanent") and sel.get("served_at"):
-            delete_image(sas, image_id)
-            existing.discard(image_id)
-            metas.pop(image_id, None)
+        return NextPick(
+            image_id=image_id,
+            ext=ext,
+            sel_meta=sel,
+            from_queue=from_queue,
+            planned_countdown=planned_countdown,
+        )
 
     # 1) Queue: first non-expired id that still has a backing blob.
     if queue is None:
         queue = read_queue(sas)
     for image_id in queue:
         if image_id not in existing:
-            queue_remove(sas, image_id)  # stale pointer
             continue
         if is_expired(metas[image_id], at=now):
-            delete_image(sas, image_id)
-            existing.discard(image_id)
-            metas.pop(image_id, None)
             continue
-        return _pick(image_id, from_queue=True)
+        return _pick(image_id, from_queue=True, planned_countdown=countdown)
 
     # 2) Two-bucket round-robin rotation. The featured bucket holds temporary
     # photos (have an expiry) and fresh photos (permanent, uploaded within
@@ -663,7 +683,6 @@ def select_next(
     for image_id in sorted(existing):  # sorted -> deterministic LRU tie-break
         sel = metas[image_id]
         if is_expired(sel, at=now):
-            delete_image(sas, image_id)
             continue
         if not sel.get("permanent"):
             continue
@@ -673,17 +692,93 @@ def select_next(
         else:
             perm.append((image_id, shown))
 
-    if countdown is None:
-        countdown = read_schedule(sas)
     chosen, _source, new_countdown = bucket_schedule_pick(
         perm, temp, temp_countdown=countdown, n=temp_min_spacing,
         floor=share_pct_to_floor(max_temp_share_pct),
     )
-    if chosen is not None and new_countdown != countdown:
-        write_schedule(sas, new_countdown)
     if chosen is None:
         return None
-    return _pick(chosen, from_queue=False)
+    return _pick(chosen, from_queue=False, planned_countdown=new_countdown)
+
+
+def select_next(
+    sas: str,
+    *,
+    temp_min_spacing: int = 4,
+    fresh_window_days: int = 7,
+    max_temp_share_pct: int = 50,
+    blobs: Optional[dict] = None,
+    queue: Optional[list] = None,
+    countdown: Optional[int] = None,
+) -> Optional[NextPick]:
+    """Legacy immediate selection, retaining countdown-at-serve behavior."""
+    if blobs is None:
+        blobs = bs.list_blobs_with_metadata(sas, IMAGE_PREFIX)
+    blobs = dict(blobs)
+    if queue is None:
+        queue = read_queue(sas)
+    queue = list(queue)
+
+    now = datetime.now(timezone.utc)
+    metas: dict[str, dict] = {}
+    canonical_names: dict[str, str] = {}
+    for name, metadata in list(blobs.items()):
+        split = _split_image_name(name)
+        if split is None:
+            continue
+        image_id, _ext = split
+        canonical_names[image_id] = name
+        if "permanent" in metadata:
+            metas[image_id] = _selection_from_blob_metadata(metadata)
+        else:
+            full = read_meta(sas, image_id) or {}
+            stamped = selection_blob_metadata(full)
+            bs.set_blob_metadata(sas, name, stamped)
+            blobs[name] = stamped
+            metas[image_id] = _selection_from_blob_metadata(stamped)
+
+    for image_id, selection in list(metas.items()):
+        if not selection.get("permanent") and selection.get("served_at"):
+            delete_image(sas, image_id)
+            blobs.pop(canonical_names[image_id], None)
+            metas.pop(image_id, None)
+
+    maintained_queue: list[str] = []
+    for image_id in queue:
+        if image_id not in metas:
+            queue_remove(sas, image_id)
+            continue
+        if is_expired(metas[image_id], at=now):
+            delete_image(sas, image_id)
+            blobs.pop(canonical_names[image_id], None)
+            metas.pop(image_id, None)
+            continue
+        maintained_queue.append(image_id)
+
+    for image_id, selection in list(metas.items()):
+        if is_expired(selection, at=now):
+            delete_image(sas, image_id)
+            blobs.pop(canonical_names[image_id], None)
+            metas.pop(image_id, None)
+
+    if countdown is None:
+        countdown = read_schedule(sas)
+    pick = plan_next(
+        sas,
+        temp_min_spacing=temp_min_spacing,
+        fresh_window_days=fresh_window_days,
+        max_temp_share_pct=max_temp_share_pct,
+        blobs=blobs,
+        queue=maintained_queue,
+        countdown=countdown,
+    )
+    if (
+        pick is not None
+        and not pick.from_queue
+        and pick.planned_countdown != countdown
+    ):
+        write_schedule(sas, pick.planned_countdown)
+    return pick
 
 
 def mark_served(sas: str, image_id: str, sel_meta: dict, ext: str, *, from_queue: bool) -> None:
@@ -706,4 +801,194 @@ def mark_served(sas: str, image_id: str, sel_meta: dict, ext: str, *, from_queue
     bs.set_blob_metadata(sas, image_name(image_id, ext), selection_blob_metadata(sel_meta))
     if from_queue:
         queue_remove(sas, image_id)
+
+
+def commit_displayed(sas: str, pending: dict) -> None:
+    """Replay-safe absolute display effects for one assignment record."""
+    sel_meta = dict(pending.get("sel_meta") or {})
+    displayed_at = pending.get("displayed_at") or now_iso()
+    if sel_meta.get("permanent", False):
+        sel_meta["last_shown_at"] = displayed_at
+    else:
+        sel_meta["served_at"] = displayed_at
+    bs.set_blob_metadata(
+        sas,
+        image_name(str(pending["image_id"]), str(pending["ext"])),
+        selection_blob_metadata(sel_meta),
+    )
+    if pending.get("from_queue"):
+        queue_remove(sas, str(pending["image_id"]))
+    write_schedule(sas, int(pending["planned_countdown"]))
+
+
+# --- Assignment transaction --------------------------------------------------
+
+
+def assignment_name(device_id: str) -> str:
+    digest = hashlib.sha256(device_id.encode("utf-8")).hexdigest()
+    return f"{ASSIGNMENT_PREFIX}{digest}.json"
+
+
+def read_assignment(sas: str, device_id: str) -> tuple[dict, Optional[str]]:
+    data, etag = bs.download_json_with_etag(sas, assignment_name(device_id))
+    if (
+        not isinstance(data, dict)
+        or data.get("schema") != ASSIGNMENT_SCHEMA
+        or data.get("device_id") != device_id
+    ):
+        data = {
+            "schema": ASSIGNMENT_SCHEMA,
+            "device_id": device_id,
+            "committed_revision": 0,
+            "last_revision": 0,
+            "current": None,
+            "journal": [],
+        }
+    return data, etag
+
+
+def write_assignment(
+    sas: str, device_id: str, document: dict, *, etag: Optional[str]
+) -> Optional[str]:
+    return bs.upload_json(
+        sas,
+        assignment_name(device_id),
+        document,
+        if_match=etag,
+        if_none_match="*" if etag is None else None,
+    )
+
+
+def revision_newer(left: int, right: int) -> bool:
+    delta = (int(left) - int(right)) & 0xFFFFFFFF
+    return delta != 0 and delta < 0x80000000
+
+
+def revision_at_or_before(left: int, right: int) -> bool:
+    return int(left) == int(right) or revision_newer(right, left)
+
+
+def alloc_revision(previous: int) -> int:
+    value = (int(previous) + 1) & 0xFFFFFFFF
+    return value or 1
+
+
+def pending_from_pick(device_id: str, revision: int, pick: NextPick) -> dict:
+    return {
+        "schema": ASSIGNMENT_SCHEMA,
+        "device_id": device_id,
+        "revision": revision,
+        "image_id": pick.image_id,
+        "image_key": image_key(pick.image_id),
+        "content_crc32": int(pick.sel_meta.get("content_crc32") or 0),
+        "format": pick.sel_meta.get("format") or format_from_ext(pick.ext),
+        "ext": pick.ext,
+        "from_queue": pick.from_queue,
+        "planned_countdown": pick.planned_countdown,
+        "sel_meta": pick.sel_meta,
+        "created_at": now_iso(),
+        "state": "pending",
+    }
+
+
+def find_assignment(document: dict, revision: int) -> Optional[dict]:
+    current = document.get("current")
+    if isinstance(current, dict) and int(current.get("revision", 0)) == int(revision):
+        return current
+    for entry in document.get("journal") or []:
+        if isinstance(entry, dict) and int(entry.get("revision", 0)) == int(revision):
+            return entry
+    return None
+
+
+def assignment_is_live(record: dict, blobs: dict, *, at: Optional[datetime] = None) -> bool:
+    blob_name = image_name(str(record.get("image_id", "")), str(record.get("ext", "")))
+    if blob_name not in blobs:
+        return False
+    metadata = blobs[blob_name]
+    selection = (
+        _selection_from_blob_metadata(metadata)
+        if "permanent" in metadata
+        else record.get("sel_meta") or {}
+    )
+    return not is_expired(selection, at=at)
+
+
+def supersede_current(document: dict, *, dequeue_one_shot_sas: Optional[str] = None) -> None:
+    current = document.get("current")
+    if not isinstance(current, dict):
+        return
+    superseded = dict(current)
+    superseded["state"] = "superseded"
+    if dequeue_one_shot_sas is not None and superseded.get("from_queue"):
+        queue_remove(dequeue_one_shot_sas, str(superseded["image_id"]))
+    previous = [entry for entry in document.get("journal", []) if isinstance(entry, dict)]
+    document["journal"] = [superseded, *previous][:ASSIGNMENT_JOURNAL_DEPTH]
+    document["current"] = None
+
+
+def install_pending(document: dict, device_id: str, pick: Optional[NextPick]) -> Optional[dict]:
+    if pick is None:
+        document["current"] = None
+        return None
+    revision = alloc_revision(int(document.get("last_revision", 0)))
+    document["last_revision"] = revision
+    current = pending_from_pick(device_id, revision, pick)
+    document["current"] = current
+    return current
+
+
+def invalidate_assignment(sas: str, device_id: str) -> None:
+    document, etag = read_assignment(sas, device_id)
+    if document.get("current") is None and not document.get("journal"):
+        return
+    document["current"] = None
+    document["journal"] = []
+    write_assignment(sas, device_id, document, etag=etag)
+
+
+def commit_assignment(
+    sas: str,
+    device_id: str,
+    document: dict,
+    revision: int,
+    expected_image_key: str,
+    plan_successor: Callable[[], Optional[NextPick]],
+    validate_record: Optional[Callable[[dict], bool]] = None,
+) -> tuple[Optional[dict], bool, bool]:
+    """Apply effects before mutating the assignment marker.
+
+    Returns ``(current, accepted, marker_changed)``. The caller must CAS-write
+    the changed document last; that write is the transaction's linearization
+    point. If it fails, replay applies the same absolute effects and retries.
+    """
+    record = find_assignment(document, revision)
+    if record is None or record.get("image_key") != expected_image_key:
+        return None, False, False
+
+    committed_revision = int(document.get("committed_revision", 0))
+    if revision_at_or_before(revision, committed_revision):
+        current = document.get("current")
+        return current if isinstance(current, dict) else None, True, False
+    if record.get("state") not in ("pending", "superseded"):
+        current = document.get("current")
+        return current if isinstance(current, dict) else None, True, False
+    if validate_record is not None and not validate_record(record):
+        return None, False, False
+
+    record["displayed_at"] = record.get("displayed_at") or record["created_at"]
+    commit_displayed(sas, record)
+    committed = dict(record)
+    committed["state"] = "committed"
+    document["committed_revision"] = revision
+
+    current = document.get("current")
+    if isinstance(current, dict) and int(current.get("revision", 0)) == revision:
+        document["current"] = None
+        document["journal"] = [committed]
+        current = install_pending(document, device_id, plan_successor())
+    else:
+        document["journal"] = [committed]
+        current = document.get("current")
+    return current if isinstance(current, dict) else None, True, True
 

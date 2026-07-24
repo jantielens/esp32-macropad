@@ -46,7 +46,7 @@ fi
 
 echo "==> Setting startup command"
 az webapp config set -g "$RG" -n "$APP" \
-  --startup-file 'python -m uvicorn app:app --host 0.0.0.0 --port $PORT' >/dev/null
+  --startup-file 'python -m uvicorn app:app --host 0.0.0.0 --port $PORT --no-access-log' >/dev/null
 
 echo "==> Setting app settings"
 az webapp config appsettings set -g "$RG" -n "$APP" --settings \

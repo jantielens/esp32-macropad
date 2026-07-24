@@ -14,6 +14,7 @@
 
 #include "config_manager.h"
 #include "device_class.h"
+#include "epaper/epaper_assignment.h"
 #include "epaper/epaper_battery.h"
 #include "epaper/epaper_carousel.h"
 #include "epaper/epaper_driver.h"
@@ -60,6 +61,8 @@ static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
 static const char *kKeyCrcEnabled     = "ep_crc_en";
 static const char *kKeySdCacheEn      = "ep_sd_en";
+static const char *kKeyAssignmentEn   = "ep_asg_en";
+static const char *kKeyAssignmentUrl  = "ep_asg_url";
 static const char *kKeyOverlayEn      = "ep_ovl_en";
 static const char *kKeyOverlayPos     = "ep_ovl_pos";
 static const char *kKeyOverlayCol     = "ep_ovl_col";
@@ -179,6 +182,8 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.epaper_last_crc32 = 0;
 		g_epaper_config.epaper_crc32_enabled = false;
 		g_epaper_config.epaper_sd_cache_enabled = false;
+		g_epaper_config.epaper_assignment_enabled = false;
+		g_epaper_config.epaper_assignment_url[0] = '\0';
 		g_epaper_config.epaper_overlay_enabled = false;
 		g_epaper_config.epaper_overlay_position = 3;
 		g_epaper_config.epaper_overlay_color = 0;
@@ -208,6 +213,10 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		g_epaper_config.epaper_last_crc32 = prefs.getUInt(kKeyCrc32, 0);
 		g_epaper_config.epaper_crc32_enabled = prefs.getBool(kKeyCrcEnabled, false);
 		g_epaper_config.epaper_sd_cache_enabled = prefs.getBool(kKeySdCacheEn, false);
+		g_epaper_config.epaper_assignment_enabled = prefs.getBool(kKeyAssignmentEn, false);
+		String assignment_url = prefs.getString(kKeyAssignmentUrl, "");
+		strlcpy(g_epaper_config.epaper_assignment_url, assignment_url.c_str(),
+				CONFIG_EPAPER_URL_MAX_LEN);
 
 		g_epaper_config.epaper_overlay_enabled = prefs.getBool(kKeyOverlayEn, false);
 		g_epaper_config.epaper_overlay_position = prefs.getUChar(kKeyOverlayPos, 3);
@@ -246,6 +255,8 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_last_crc32);
 		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_crc32_enabled);
 		prefs.putBool(kKeySdCacheEn, g_epaper_config.epaper_sd_cache_enabled);
+		prefs.putBool(kKeyAssignmentEn, g_epaper_config.epaper_assignment_enabled);
+		prefs.putString(kKeyAssignmentUrl, g_epaper_config.epaper_assignment_url);
 		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_overlay_enabled);
 		prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_overlay_position);
 		prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_overlay_color);
@@ -278,6 +289,8 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 		root["epaper_rotation"] = g_epaper_config.epaper_rotation;
 		root["epaper_crc32_enabled"] = g_epaper_config.epaper_crc32_enabled;
 		root["epaper_sd_cache_enabled"] = g_epaper_config.epaper_sd_cache_enabled;
+		root["epaper_assignment_enabled"] = g_epaper_config.epaper_assignment_enabled;
+		root["epaper_assignment_url"] = g_epaper_config.epaper_assignment_url;
 		root["epaper_sd_cache_supported"] = (bool)
 #ifdef EPAPER_SD_CS_PIN
 			true
@@ -319,6 +332,12 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 			g_epaper_config.epaper_crc32_enabled = body["epaper_crc32_enabled"] | false;
 		}		if (body.containsKey("epaper_sd_cache_enabled")) {
 			g_epaper_config.epaper_sd_cache_enabled = body["epaper_sd_cache_enabled"] | false;
+		} 		if (body.containsKey("epaper_assignment_enabled")) {
+			g_epaper_config.epaper_assignment_enabled = body["epaper_assignment_enabled"] | false;
+		}
+		if (body.containsKey("epaper_assignment_url")) {
+			strlcpy(g_epaper_config.epaper_assignment_url,
+					body["epaper_assignment_url"] | "", CONFIG_EPAPER_URL_MAX_LEN);
 		}		if (body.containsKey("epaper_overlay_enabled")) {
 				g_epaper_config.epaper_overlay_enabled = body["epaper_overlay_enabled"] | false;
 		}
@@ -718,12 +737,18 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				return true;
 		}
 		const uint8_t active_slot_index = g_epaper_carousel_index;
-		LOGI("Epaper", "Carousel: using slot %u URL: %s", g_epaper_carousel_index, g_epaper_config.epaper_url);
+		if (g_epaper_config.epaper_assignment_enabled) {
+			LOGI("Epaper", "Carousel: using slot %u with assignment sync", g_epaper_carousel_index);
+		} else {
+			LOGI("Epaper", "Carousel: using slot %u URL: %s", g_epaper_carousel_index, g_epaper_config.epaper_url);
+		}
 
 		// Clear the per-draw sub-step timings so a CRC-skip wake (no fetch/draw)
 		// reports zeros rather than the previous cycle's resolve/fetch/draw.
 		epaper_timing_reset_draw_steps();
-		const EpaperRefreshOutcome outcome = epaper_refresh_run(config, force_refresh);
+		const EpaperRefreshOutcome outcome = g_epaper_config.epaper_assignment_enabled
+			? epaper_assignment_run(config, force_refresh)
+			: epaper_refresh_run(config, force_refresh);
 		const uint32_t t_draw_done = millis();
 		epaper_timing_last.crc_retry_count = outcome.crc_retry_count;
 
@@ -874,6 +899,8 @@ void epaper_device_class_register() {
 #include "epaper/epaper_schedule.cpp"
 #include "epaper/epaper_screens.cpp"
 #include "epaper/epaper_sd_cache.cpp"
+#include "epaper/epaper_assignment_logic.cpp"
+#include "epaper/epaper_assignment.cpp"
 #include "epaper/epaper_timing.cpp"
 
 #endif // HAS_EPAPER

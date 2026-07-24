@@ -348,6 +348,17 @@ echo "=== Running unit tests: epaper_battery ==="
 ./tests/bin/test_epaper_battery
 echo
 
+echo "=== Building unit tests: epaper_assignment ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_epaper_assignment.cpp \
+    src/app/device_classes/epaper/epaper_assignment_logic.cpp \
+    -o tests/bin/test_epaper_assignment
+
+echo "=== Running unit tests: epaper_assignment ==="
+./tests/bin/test_epaper_assignment
+echo
+
 echo "=== Building guard: coffee_scale command length ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -DIS_COFFEE_SCALE=true \

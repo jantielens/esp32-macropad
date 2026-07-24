@@ -11,6 +11,7 @@ if (typeof window.registerConfigFields === 'function') {
         'epaper_rotation',
         'epaper_crc32_enabled',
         'epaper_sd_cache_enabled',
+        'epaper_assignment_enabled', 'epaper_assignment_url',
         'epaper_overlay_enabled', 'epaper_overlay_position',
         'epaper_overlay_color', 'epaper_overlay_items',
         'epaper_frontlight_brightness', 'epaper_frontlight_duration_s',
@@ -243,6 +244,8 @@ window.init_epaper_image_fragment = function () {
                 var sdRow = document.getElementById('epaper_sd_cache_row');
                 if (sdRow) sdRow.hidden = !cfg.epaper_sd_cache_supported;
                 setNamedValue('epaper_sd_cache_enabled', !!cfg.epaper_sd_cache_enabled);
+                setNamedValue('epaper_assignment_enabled', !!cfg.epaper_assignment_enabled);
+                setNamedValue('epaper_assignment_url', cfg.epaper_assignment_url || '');
 
                 var arr = Array.isArray(cfg.epaper_carousel) ? cfg.epaper_carousel : [];
                 for (var i = 0; i < 5; i++) {

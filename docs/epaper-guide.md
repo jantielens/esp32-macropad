@@ -1,7 +1,7 @@
 ---
 title: E-Paper Guide
 description: Detailed guide for the ESP32 Macropad e-paper device class, including hardware model, wake behavior, image refresh flow, portal configuration, and current limitations.
-ms.date: 2026-06-05
+ms.date: 2026-07-24
 ms.topic: concept
 ---
 
@@ -125,6 +125,43 @@ Sidecar body formats currently accepted:
 * `305419896` (decimal)
 
 If the sidecar fetch fails, times out, or returns unparseable content, the device treats the image as changed and proceeds with a normal refresh.
+
+## HTTP Assignment Mode
+
+The Image Sources page can opt a frame into the photoframe site's durable HTTP
+assignment transaction. The `Use display assignments` toggle is off by default.
+When it is off, scheduled and manual refreshes retain the legacy `/api/next` and
+CRC-sidecar behavior.
+
+When assignment mode is enabled, the firmware derives `/api/assignment/sync`
+and `/api/assignment/image` from the active `/api/next` URL. An optional
+Assignment API base URL can select a different host while retaining the device
+ID and key query parameters. URLs containing device keys or redirected storage
+tokens are never written to firmware logs.
+
+Each enabled wake follows this sequence:
+
+1. POST the last accepted 16-byte NVS state to `/api/assignment/sync`.
+2. Accept only the current or a newer revision under RFC 1982 serial arithmetic.
+3. Skip a scheduled panel update when the image key and nonzero transport CRC
+  match the accepted image.
+4. Otherwise fetch `/api/assignment/image?revision=<revision>` and validate the
+  CRC over the exact downloaded transport bytes.
+5. Refresh the panel, persist the accepted state, and sync again to commit the
+  displayed revision and request its successor.
+
+The packed NVS state is read and written only while assignment mode is enabled.
+A CRC value of zero means unknown: it always forces an image-body download and
+can never produce an unchanged or SD-cache hit. State is persisted only after a
+successful panel update or an accepted unchanged revision, so a reset before
+display leaves the pending assignment uncommitted. A later sync safely replays
+a displayed revision when the final acknowledgement was interrupted.
+
+The portal Refresh e-paper now action always drives a panel refresh in assignment
+mode. It synchronizes metadata first when online and can avoid the image-body
+download through a validated assignment cache hit. On a reTerminal E1003 with
+no network, it attempts to redraw the last accepted cached image. With assignment
+mode disabled, the existing offline `503 WiFi not connected` response is unchanged.
 
 ## Image Carousel
 
@@ -344,7 +381,7 @@ On the Inkplate board, the default portal idle timeout is 300 seconds. That give
 
 The SD image cache is a **device-class capability** for e-paper boards that expose a microSD slot on the *same* SPI bus as the panel controller. It is gated by the `EPAPER_SD_CS_PIN` compile-time flag and lives in the shared `epaper/epaper_sd_cache` module, so any future e-paper board can opt in from its `board_overrides.h` without touching a driver. Among the current targets only the reTerminal E1003 qualifies; the Inkplate 5V2 has no shared-bus SD slot, so the entire cache is compiled out there.
 
-It is a downloaded-blob cache, not a generic image store. It caches the original transport blob the publisher served — a compressed **G16Z** wrapper when the server sent one, or a raw **G16P** framebuffer otherwise. A cache hit skips the re-download and reads the small blob off the card (~0.4 MB for G16Z vs ~1.3 MB for G16P), then re-inflates in PSRAM if needed, which is far cheaper than the extra SD read a full-size frame would cost. The entry is keyed by the content-stable image id parsed from the publisher's redirect URL and stored on the card as `/cache/<id>.g16z`.
+It is a downloaded-blob cache, not a generic image store. It caches the original transport blob the publisher served — a compressed **G16Z** wrapper when the server sent one, or a raw **G16P** framebuffer otherwise. A cache hit skips the re-download and reads the small blob off the card (~0.4 MB for G16Z vs ~1.3 MB for G16P), then re-inflates in PSRAM if needed, which is far cheaper than the extra SD read a full-size frame would cost. Legacy entries are keyed by the content-stable image id parsed from the publisher's redirect URL and stored as `/cache/<id>.g16z`. Assignment entries use `/cache/<image-key>.blob` plus a packed `.meta` sidecar containing schema, format, byte length, and transport CRC.
 
 How a cached refresh works:
 
@@ -367,7 +404,7 @@ Current limitations include:
 
 * Public image URLs only
 * Full refresh only, no partial-update pipeline
-* No offline image fallback when the network is unreachable (the SD blob cache speeds up repeated images on boards with a shared-bus microSD slot, but is not an offline carousel)
+* No general offline carousel when the network is unreachable. Assignment mode can redraw only the last accepted image from a valid shared-bus SD cache entry.
 * No touch UI runtime
 * Carousel slots all point to remote URLs; the SD cache stores only previously fetched blobs, not user-managed local images
 * Hourly schedule uses a fixed UTC offset rather than full timezone rules (DST must be adjusted manually)

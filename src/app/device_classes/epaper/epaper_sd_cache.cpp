@@ -9,6 +9,7 @@
 
 #if HAS_EPAPER && defined(EPAPER_SD_CS_PIN)
 
+#include "device_classes/epaper/epaper_assignment_logic.h"
 #include "device_classes/epaper/epaper_sd_cache.h"
 #include "device_classes/epaper/epaper_driver.h"
 #include "log_manager.h"
@@ -34,6 +35,18 @@ bool s_mounted = false;
 uint8_t* s_pending_buf = nullptr;
 size_t   s_pending_len = 0;
 char     s_pending_id[64] = {0};
+char     s_assignment_key[17] = {0};
+uint32_t s_assignment_crc = 0;
+uint8_t  s_assignment_format = 0;
+
+struct __attribute__((packed)) AssignmentCacheMeta {
+		uint8_t schema;
+		uint8_t format;
+		uint16_t reserved;
+		uint32_t content_length;
+		uint32_t content_crc32;
+};
+static_assert(sizeof(AssignmentCacheMeta) == 12, "assignment cache meta size");
 
 void restore_panel_bus() {
 		if (s_cfg.restore_panel_bus) s_cfg.restore_panel_bus();
@@ -114,6 +127,52 @@ void sd_cache_path(const char* id, char* out, size_t out_sz) {
 		snprintf(out, out_sz, "/cache/%s.g16z", id);
 }
 
+void assignment_cache_paths(char* blob, size_t blob_sz, char* meta, size_t meta_sz) {
+		snprintf(blob, blob_sz, "/cache/%s.blob", s_assignment_key);
+		snprintf(meta, meta_sz, "/cache/%s.meta", s_assignment_key);
+}
+
+bool read_file(const char* path, uint8_t** out_buf, size_t* out_len) {
+		File file = SD.open(path, FILE_READ);
+		if (!file) return false;
+		const size_t size = file.size();
+		uint8_t* data = size ? (uint8_t*)heap_caps_malloc(
+			size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : nullptr;
+		const size_t got = data ? file.read(data, size) : 0;
+		file.close();
+		if (!data || got != size) {
+			if (data) heap_caps_free(data);
+			return false;
+		}
+		*out_buf = data;
+		*out_len = size;
+		return true;
+}
+
+bool read_assignment_cache(uint8_t** out_buf, size_t* out_len) {
+		if (!s_assignment_key[0] || s_assignment_crc == 0 || !sd_cache_mount()) return false;
+		char blob_path[64], meta_path[64];
+		assignment_cache_paths(blob_path, sizeof(blob_path), meta_path, sizeof(meta_path));
+		AssignmentCacheMeta meta = {};
+		File meta_file = SD.open(meta_path, FILE_READ);
+		const bool meta_ok = meta_file && meta_file.read((uint8_t*)&meta, sizeof(meta)) == sizeof(meta);
+		if (meta_file) meta_file.close();
+		bool ok = meta_ok && meta.schema == 1 &&
+			(s_assignment_format == 0 || meta.format == s_assignment_format) &&
+			meta.content_crc32 == s_assignment_crc && read_file(blob_path, out_buf, out_len) &&
+			meta.content_length == *out_len &&
+			epaper_assignment_transport_crc32(*out_buf, *out_len) == s_assignment_crc;
+		if (!ok) {
+			if (*out_buf) heap_caps_free(*out_buf);
+			*out_buf = nullptr;
+			*out_len = 0;
+			SD.remove(blob_path);
+			SD.remove(meta_path);
+		}
+		sd_cache_unmount();
+		return ok;
+}
+
 // Parse the blob id out of a redirect Location like
 // "https://.../<container>/images/<id>.g16p?<sas>". Returns false when the
 // URL is not an images/<id>.g16p target (e.g. a non-blob redirect).
@@ -166,6 +225,37 @@ bool sd_cache_write(const char* id, const uint8_t* data, size_t len) {
 		return ok;
 }
 
+bool assignment_cache_write(const uint8_t* data, size_t len) {
+		if (!s_assignment_key[0] || s_assignment_crc == 0 ||
+			!data || len == 0 || !sd_cache_mount()) return false;
+		SD.mkdir("/cache");
+		char blob_path[64], meta_path[64], blob_tmp[68], meta_tmp[68];
+		assignment_cache_paths(blob_path, sizeof(blob_path), meta_path, sizeof(meta_path));
+		snprintf(blob_tmp, sizeof(blob_tmp), "%s.tmp", blob_path);
+		snprintf(meta_tmp, sizeof(meta_tmp), "%s.tmp", meta_path);
+		SD.remove(blob_tmp);
+		SD.remove(meta_tmp);
+		AssignmentCacheMeta meta = {1, s_assignment_format, 0, (uint32_t)len, s_assignment_crc};
+		File blob_file = SD.open(blob_tmp, FILE_WRITE);
+		const bool blob_ok = blob_file && blob_file.write(data, len) == len;
+		if (blob_file) blob_file.close();
+		File meta_file = blob_ok ? SD.open(meta_tmp, FILE_WRITE) : File();
+		const bool meta_ok = meta_file && meta_file.write((const uint8_t*)&meta, sizeof(meta)) == sizeof(meta);
+		if (meta_file) meta_file.close();
+		bool ok = blob_ok && meta_ok;
+		if (ok) {
+			SD.remove(blob_path);
+			SD.remove(meta_path);
+			ok = SD.rename(blob_tmp, blob_path) && SD.rename(meta_tmp, meta_path);
+		}
+		if (!ok) {
+			SD.remove(blob_tmp);
+			SD.remove(meta_tmp);
+		}
+		sd_cache_unmount();
+		return ok;
+}
+
 }  // namespace
 
 void epaper_sd_cache_init(const EpaperSdCacheConfig& cfg) {
@@ -189,6 +279,21 @@ void epaper_sd_cache_set_enabled(bool enabled) {
 
 bool epaper_sd_cache_is_enabled() {
 		return s_enabled;
+}
+
+void epaper_sd_cache_set_assignment_context(const char* image_key,
+		uint32_t content_crc32, const char* format) {
+		s_assignment_key[0] = '\0';
+		s_assignment_crc = content_crc32;
+		s_assignment_format = !format || !format[0] ? 0
+			: (strcmp(format, "jpeg") == 0 ? 2 : 1);
+		if (image_key && strlen(image_key) == 16) {
+			strlcpy(s_assignment_key, image_key, sizeof(s_assignment_key));
+		}
+}
+
+bool epaper_sd_cache_has_assignment_context() {
+		return s_assignment_key[0] != '\0';
 }
 
 // Issue the GET and resolve its 302 to the blob URL + image id WITHOUT
@@ -244,6 +349,8 @@ bool epaper_sd_cache_resolve(const char* url, String& out_blob_url,
 bool epaper_sd_cache_read(const char* id, uint8_t** out_buf, size_t* out_len) {
 		*out_buf = nullptr;
 		*out_len = 0;
+		if (s_assignment_key[0] && read_assignment_cache(out_buf, out_len)) return true;
+		if (!id || !*id || (s_assignment_key[0] && s_assignment_crc == 0)) return false;
 		if (!sd_cache_mount()) return false;
 		char path[96];
 		sd_cache_path(id, path, sizeof(path));
@@ -273,6 +380,13 @@ bool epaper_sd_cache_read(const char* id, uint8_t** out_buf, size_t* out_len) {
 				f.close();
 		}
 		sd_cache_unmount();
+		if (ok && s_assignment_key[0] &&
+			epaper_assignment_transport_crc32(*out_buf, *out_len) != s_assignment_crc) {
+			heap_caps_free(*out_buf);
+			*out_buf = nullptr;
+			*out_len = 0;
+			ok = false;
+		}
 		return ok;
 }
 
@@ -281,12 +395,13 @@ void epaper_sd_cache_stage_pending(const char* id, uint8_t* buf, size_t len) {
 		epaper_sd_cache_discard_pending();
 		s_pending_buf = buf;
 		s_pending_len = len;
-		strlcpy(s_pending_id, id, sizeof(s_pending_id));
+		strlcpy(s_pending_id, (id && *id) ? id : "assignment", sizeof(s_pending_id));
 }
 
 void epaper_sd_cache_flush() {
 		if (s_pending_buf && s_pending_id[0]) {
-				sd_cache_write(s_pending_id, s_pending_buf, s_pending_len);
+			if (s_assignment_key[0]) assignment_cache_write(s_pending_buf, s_pending_len);
+			else sd_cache_write(s_pending_id, s_pending_buf, s_pending_len);
 		}
 		epaper_sd_cache_discard_pending();
 }

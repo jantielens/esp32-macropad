@@ -236,7 +236,10 @@ def upload_blob(
     payload: bytes,
     content_type: str = "application/octet-stream",
     metadata: Optional[dict] = None,
-) -> None:
+    *,
+    if_match: Optional[str] = None,
+    if_none_match: Optional[str] = None,
+) -> Optional[str]:
     url = build_blob_url(container_sas_url, blob_name)
     headers = {
         "x-ms-blob-type": "BlockBlob",
@@ -248,9 +251,16 @@ def upload_blob(
     # blob-authoritative and is readable via List Blobs (no per-blob GET).
     for key, value in (metadata or {}).items():
         headers[f"x-ms-meta-{key}"] = str(value)
-    status, _, _ = _request("PUT", url, op="upload", headers=headers, data=payload, timeout=120.0)
+    if if_match is not None:
+        headers["If-Match"] = if_match
+    if if_none_match is not None:
+        headers["If-None-Match"] = if_none_match
+    status, response_headers, _ = _request(
+        "PUT", url, op="upload", headers=headers, data=payload, timeout=120.0
+    )
     if status not in (200, 201):
         raise BlobError(status, "unexpected status uploading blob")
+    return response_headers.get("etag")
 
 
 def set_blob_metadata(container_sas_url: str, blob_name: str, metadata: dict) -> None:
@@ -270,14 +280,24 @@ def set_blob_metadata(container_sas_url: str, blob_name: str, metadata: dict) ->
 
 def download_blob(container_sas_url: str, blob_name: str) -> Optional[bytes]:
     """Return blob bytes, or ``None`` if the blob does not exist (404)."""
+    body, _etag = download_blob_with_etag(container_sas_url, blob_name)
+    return body
+
+
+def download_blob_with_etag(
+    container_sas_url: str, blob_name: str
+) -> tuple[Optional[bytes], Optional[str]]:
+    """Return ``(bytes, etag)``, or ``(None, None)`` when absent."""
     url = build_blob_url(container_sas_url, blob_name)
     headers = {"x-ms-version": API_VERSION}
-    status, _, body = _request("GET", url, op="download", headers=headers, timeout=60.0)
+    status, response_headers, body = _request(
+        "GET", url, op="download", headers=headers, timeout=60.0
+    )
     if status == 404:
-        return None
+        return None, None
     if status not in (200, 206):
         raise BlobError(status, _redacted(url))
-    return body
+    return body, response_headers.get("etag")
 
 
 def delete_blob(container_sas_url: str, blob_name: str) -> bool:
@@ -374,16 +394,37 @@ def list_blobs_with_metadata(
 
 
 def download_json(container_sas_url: str, blob_name: str) -> Optional[dict]:
-    raw = download_blob(container_sas_url, blob_name)
+    value, _etag = download_json_with_etag(container_sas_url, blob_name)
+    return value
+
+
+def download_json_with_etag(
+    container_sas_url: str, blob_name: str
+) -> tuple[Optional[dict], Optional[str]]:
+    raw, etag = download_blob_with_etag(container_sas_url, blob_name)
     if raw is None:
-        return None
+        return None, None
     try:
-        return json.loads(raw.decode("utf-8"))
+        return json.loads(raw.decode("utf-8")), etag
     except (ValueError, UnicodeDecodeError):
         # Corrupt soft-state degrades to "absent" rather than breaking the caller.
-        return None
+        return None, etag
 
 
-def upload_json(container_sas_url: str, blob_name: str, obj) -> None:
+def upload_json(
+    container_sas_url: str,
+    blob_name: str,
+    obj,
+    *,
+    if_match: Optional[str] = None,
+    if_none_match: Optional[str] = None,
+) -> Optional[str]:
     payload = json.dumps(obj, separators=(",", ":")).encode("utf-8")
-    upload_blob(container_sas_url, blob_name, payload, content_type="application/json")
+    return upload_blob(
+        container_sas_url,
+        blob_name,
+        payload,
+        content_type="application/json",
+        if_match=if_match,
+        if_none_match=if_none_match,
+    )

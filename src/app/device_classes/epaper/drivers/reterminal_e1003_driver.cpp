@@ -20,6 +20,7 @@
 #if HAS_EPAPER && defined(BOARD_RETERMINAL_E1003)
 
 #include "device_classes/epaper/epaper_driver.h"
+#include "device_classes/epaper/epaper_assignment_logic.h"
 #include "device_classes/epaper/epaper_http.h"
 #include "device_classes/epaper/epaper_sd_cache.h"
 #include "device_classes/epaper/epaper_timing.h"
@@ -903,6 +904,14 @@ bool epaper_driver_draw_url(const char* url) {
 		String blob_url;
 		char img_id[64] = {0};
 		if (epaper_sd_cache_is_enabled()) {
+			if (epaper_sd_cache_has_assignment_context() &&
+					epaper_sd_cache_read(nullptr, &data, &len)) {
+				from_cache = true;
+				epaper_timing_set_fetch(0, true /*from_cache*/);
+				LOGI("Epaper", "Assignment SD cache hit");
+			}
+		}
+		if (epaper_sd_cache_is_enabled() && !from_cache) {
 				// Hide the ~1.6s panel power-on under the network resolve: power_on
 				// drives the HSPI panel bus while the resolve waits on WiFi -- two
 				// independent buses, so they run concurrently. Join before any HSPI
@@ -966,6 +975,11 @@ bool epaper_driver_draw_url(const char* url) {
 				prewarm_join(&pw);
 
 				if (!dl_ok) return false;
+				if (!epaper_assignment_validate_transport(data, len)) {
+					LOGW("Epaper", "Assignment image CRC mismatch");
+					heap_caps_free(data);
+					return false;
+				}
 				epaper_timing_set_fetch(millis() - t_fetch, false /*downloaded*/);
 		}
 
@@ -1000,7 +1014,8 @@ bool epaper_driver_draw_url(const char* url) {
 				// Stage the original transport bytes (compressed G16Z when the server
 				// sent it) for write-back to SD after display. Transfer buffer
 				// ownership to the pending slot (don't free below).
-				if (ok && !from_cache && epaper_sd_cache_is_enabled() && img_id[0]) {
+				if (ok && !from_cache && epaper_sd_cache_is_enabled() &&
+						(img_id[0] || epaper_sd_cache_has_assignment_context())) {
 						epaper_sd_cache_stage_pending(img_id, data, len);
 						data = nullptr;
 				}
@@ -1014,7 +1029,7 @@ bool epaper_driver_draw_url(const char* url) {
 		// crash the device or brick the panel mid-upload. The image endpoint
 		// must emit baseline JPEGs.
 		if (jpeg_is_progressive(data, len)) {
-				LOGW("Epaper", "progressive JPEG not supported; serve baseline: %s", url);
+				LOGW("Epaper", "progressive JPEG not supported; serve baseline");
 				heap_caps_free(data);
 				return false;
 		}
@@ -1047,7 +1062,7 @@ bool epaper_driver_draw_url(const char* url) {
 				if (alloc.stack) heap_caps_free(alloc.stack);
 				if (alloc.tcb) heap_caps_free(alloc.tcb);
 		} else {
-				LOGW("Epaper", "JPEG decode task spawn failed; skipping %s", url);
+				LOGW("Epaper", "JPEG decode task spawn failed");
 		}
 
 		// Quantize + dither the decoded frame into the canvas. When no dither
@@ -1063,7 +1078,12 @@ bool epaper_driver_draw_url(const char* url) {
 				s_gray16 = nullptr;
 		}
 
-		heap_caps_free(data);
+		if (ok && !from_cache && epaper_sd_cache_is_enabled() &&
+				epaper_sd_cache_has_assignment_context()) {
+			epaper_sd_cache_stage_pending(nullptr, data, len);
+			data = nullptr;
+		}
+		if (data) heap_caps_free(data);
 		return ok;
 }
 

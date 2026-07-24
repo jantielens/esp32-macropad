@@ -19,10 +19,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from PIL import Image
+from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 import blobstore as bs
@@ -45,6 +46,9 @@ _NEXT_PROFILE_LOG = os.environ.get("NEXT_PROFILE", "").strip().lower() in ("1", 
 # level (not per-request) so each worker thread keeps its blobstore keep-alive
 # connection warm across requests; max_workers matches the four parallel reads.
 _NEXT_IO_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="next-io")
+
+_device_locks_guard = threading.Lock()
+_device_locks: dict[str, threading.Lock] = {}
 
 logger = logging.getLogger("photoframe")
 if not logging.getLogger().handlers:
@@ -219,6 +223,152 @@ class _Redirect(Exception):
 
 class _Forbidden(Exception):
     pass
+
+
+class AssignmentAck(BaseModel):
+    revision: int
+    image_key: str
+    ack_tag: str = ""
+
+
+class AssignmentSync(BaseModel):
+    last_displayed_revision: int = 0
+    image_key: str = ""
+    ack_tag: str = ""
+
+
+def _device_lock(device_id: str) -> threading.Lock:
+    with _device_locks_guard:
+        return _device_locks.setdefault(device_id, threading.Lock())
+
+
+def _assignment_public(record: dict) -> dict:
+    return {
+        key: record[key]
+        for key in (
+            "schema", "device_id", "revision", "image_id", "image_key",
+            "content_crc32", "format", "created_at", "state",
+        )
+        if key in record
+    }
+
+
+def _assignment_response(record: Optional[dict], etag: Optional[str]) -> Response:
+    if record is None:
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+    headers = {"Cache-Control": "no-store"}
+    if etag:
+        headers["ETag"] = etag
+    return Response(
+        json.dumps(_assignment_public(record), separators=(",", ":")),
+        media_type="application/json",
+        headers=headers,
+    )
+
+
+def _assignment_pick(device: cfg.Device, *, blobs: Optional[dict] = None) -> Optional[store.NextPick]:
+    sas = device.container_sas_url
+    settings = store.read_settings(sas)
+    params = _resolve_selection_params_from(device, settings)
+    return store.plan_next(
+        sas,
+        temp_min_spacing=params["temp_min_spacing"],
+        fresh_window_days=params["fresh_window_days"],
+        max_temp_share_pct=params["max_temp_share_pct"],
+        blobs=blobs,
+        queue=store.read_queue(sas),
+        countdown=store.read_schedule(sas),
+    )
+
+
+def _assignment_current_locked(device: cfg.Device) -> tuple[dict, Optional[dict], Optional[str]]:
+    sas = device.container_sas_url
+    document, etag = store.read_assignment(sas, device.device_id)
+    blobs = bs.list_blobs_with_metadata(sas, store.IMAGE_PREFIX)
+    current = document.get("current")
+    changed = False
+    if isinstance(current, dict) and not store.assignment_is_live(current, blobs):
+        store.supersede_current(document, dequeue_one_shot_sas=sas)
+        current = None
+        changed = True
+    if not isinstance(current, dict):
+        current = store.install_pending(
+            document, device.device_id, _assignment_pick(device, blobs=blobs)
+        )
+        changed = current is not None or changed
+    if changed:
+        etag = store.write_assignment(sas, device.device_id, document, etag=etag)
+    return document, current, etag
+
+
+def _commit_assignment_locked(
+    device: cfg.Device, revision: int, expected_image_key: str
+) -> tuple[Optional[dict], Optional[str], bool]:
+    sas = device.container_sas_url
+    document, etag = store.read_assignment(sas, device.device_id)
+    blobs: Optional[dict] = None
+
+    def _blobs() -> dict:
+        nonlocal blobs
+        if blobs is None:
+            blobs = bs.list_blobs_with_metadata(sas, store.IMAGE_PREFIX)
+        return blobs
+
+    def _successor() -> Optional[store.NextPick]:
+        return _assignment_pick(device, blobs=_blobs())
+
+    current, accepted, marker_changed = store.commit_assignment(
+        sas,
+        device.device_id,
+        document,
+        revision,
+        expected_image_key,
+        _successor,
+        lambda record: store.assignment_is_live(record, _blobs()),
+    )
+    if marker_changed:
+        etag = store.write_assignment(sas, device.device_id, document, etag=etag)
+    return current, etag, accepted
+
+
+def _preempt_assignment_locked(
+    device: cfg.Device, preferred_image_id: Optional[str] = None
+) -> None:
+    sas = device.container_sas_url
+    document, etag = store.read_assignment(sas, device.device_id)
+    if isinstance(document.get("current"), dict):
+        store.supersede_current(document, dequeue_one_shot_sas=sas)
+    if preferred_image_id is not None:
+        store.queue_unshift(sas, preferred_image_id)
+    blobs = bs.list_blobs_with_metadata(sas, store.IMAGE_PREFIX)
+    store.install_pending(document, device.device_id, _assignment_pick(device, blobs=blobs))
+    store.write_assignment(sas, device.device_id, document, etag=etag)
+
+
+def _deliver_image(
+    device: cfg.Device,
+    blob_name: str,
+    image_format: str,
+    *,
+    proxy: int,
+    headers: Optional[dict] = None,
+    missing_status: int = 404,
+) -> Response:
+    sas = device.container_sas_url
+    response_headers = dict(headers or {})
+    response_headers["Cache-Control"] = "no-store"
+    if not proxy and device.serve_mode == cfg.SERVE_REDIRECT:
+        return RedirectResponse(
+            bs.build_blob_url(sas, blob_name), status_code=302, headers=response_headers
+        )
+    data = bs.download_blob(sas, blob_name)
+    if data is None:
+        return Response(status_code=missing_status, headers=response_headers)
+    media_type = "image/jpeg" if image_format == "jpeg" else "application/octet-stream"
+    response_headers.setdefault(
+        "X-Image-Format", "jpeg" if image_format == "jpeg" else "g16p"
+    )
+    return Response(data, media_type=media_type, headers=response_headers)
 
 
 @app.exception_handler(_Redirect)
@@ -621,8 +771,13 @@ def upload_submit(
         "knobs": {k: v for k, v in knob_vals.items() if k != "panel_calibration"} if is_jpeg else knob_vals,
         "crop": crop or {},
         "resampler": resampler,
+        "content_crc32": store.content_crc32(image_bytes),
     }
-    store.store_image(device.container_sas_url, image_id, image_bytes, thumb_png, meta)
+    with _device_lock(device_id):
+        store.store_image(
+            device.container_sas_url, image_id, image_bytes, thumb_png, meta, enqueue=False
+        )
+        _preempt_assignment_locked(device, image_id)
     return RedirectResponse(f"/photos?device_id={device_id}", status_code=303)
 
 
@@ -650,7 +805,8 @@ def photos_show_next(
     user = _require_user(request, config)
     device = _require_device(user, config, device_id)
     if store.is_valid_id(image_id):
-        store.queue_unshift(device.container_sas_url, image_id)
+        with _device_lock(device_id):
+            _preempt_assignment_locked(device, image_id)
     return RedirectResponse(f"/photos?device_id={device_id}", status_code=303)
 
 
@@ -772,35 +928,40 @@ def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
     # rotation countdown. Each is a separate Azure Blob round-trip; overlapping
     # them collapses ~4x the long-haul latency into roughly one. Each worker binds
     # this request's profiling sink so the round-trips are still counted.
-    t0 = time.perf_counter()
-    f_settings = _NEXT_IO_POOL.submit(_bound(store.read_settings, sas))
-    f_blobs = _NEXT_IO_POOL.submit(_bound(bs.list_blobs_with_metadata, sas, store.IMAGE_PREFIX))
-    f_queue = _NEXT_IO_POOL.submit(_bound(store.read_queue, sas))
-    f_countdown = _NEXT_IO_POOL.submit(_bound(store.read_schedule, sas))
-    settings = f_settings.result()
-    blobs = f_blobs.result()
-    queue = f_queue.result()
-    countdown = f_countdown.result()
-    _phase("fetch", t0)
+    with _device_lock(device_id):
+        t0 = time.perf_counter()
+        f_settings = _NEXT_IO_POOL.submit(_bound(store.read_settings, sas))
+        f_blobs = _NEXT_IO_POOL.submit(
+            _bound(bs.list_blobs_with_metadata, sas, store.IMAGE_PREFIX)
+        )
+        f_queue = _NEXT_IO_POOL.submit(_bound(store.read_queue, sas))
+        f_countdown = _NEXT_IO_POOL.submit(_bound(store.read_schedule, sas))
+        settings = f_settings.result()
+        blobs = f_blobs.result()
+        queue = f_queue.result()
+        countdown = f_countdown.result()
+        _phase("fetch", t0)
 
-    params = _resolve_selection_params_from(device, settings)
+        params = _resolve_selection_params_from(device, settings)
 
-    t0 = time.perf_counter()
-    pick = store.select_next(
-        sas,
-        temp_min_spacing=params["temp_min_spacing"],
-        fresh_window_days=params["fresh_window_days"],
-        max_temp_share_pct=params["max_temp_share_pct"],
-        blobs=blobs,
-        queue=queue,
-        countdown=countdown,
-    )
-    _phase("select", t0)
-    if pick is None:
-        return finish(Response(status_code=204))
-
-    t0 = time.perf_counter()
-    store.mark_served(sas, pick.image_id, pick.sel_meta, pick.ext, from_queue=pick.from_queue)
+        t0 = time.perf_counter()
+        store.invalidate_assignment(sas, device_id)
+        pick = store.select_next(
+            sas,
+            temp_min_spacing=params["temp_min_spacing"],
+            fresh_window_days=params["fresh_window_days"],
+            max_temp_share_pct=params["max_temp_share_pct"],
+            blobs=blobs,
+            queue=queue,
+            countdown=countdown,
+        )
+        _phase("select", t0)
+        if pick is None:
+            return finish(Response(status_code=204))
+        t0 = time.perf_counter()
+        store.mark_served(
+            sas, pick.image_id, pick.sel_meta, pick.ext, from_queue=pick.from_queue
+        )
     _phase("served", t0)
 
     image_format = pick.sel_meta.get("format", "g16z")
@@ -837,6 +998,87 @@ def api_next(device_id: str, key: str, proxy: int = 0) -> Response:
         media_type=media_type,
         headers={"X-Image-Format": header_format, "Cache-Control": "no-store"},
     ))
+
+
+def _assignment_device(device_id: str, key: str) -> cfg.Device:
+    device = cfg.load_config().device(device_id)
+    if device is None or not cfg.verify_device_key(key, device.api_key):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return device
+
+
+@app.get("/api/assignment/current")
+def api_assignment_current(
+    request: Request, device_id: str, key: str
+) -> Response:
+    device = _assignment_device(device_id, key)
+    with _device_lock(device_id):
+        _document, current, etag = _assignment_current_locked(device)
+    if current is not None and etag and request.headers.get("if-none-match") == etag:
+        return Response(
+            status_code=304, headers={"ETag": etag, "Cache-Control": "no-store"}
+        )
+    return _assignment_response(current, etag)
+
+
+@app.post("/api/assignment/ack")
+def api_assignment_ack(
+    ack: AssignmentAck, device_id: str, key: str
+) -> Response:
+    device = _assignment_device(device_id, key)
+    with _device_lock(device_id):
+        current, etag, accepted = _commit_assignment_locked(
+            device, ack.revision, ack.image_key
+        )
+    if not accepted:
+        raise HTTPException(
+            status_code=409, detail="assignment revision or image key mismatch"
+        )
+    return _assignment_response(current, etag)
+
+
+@app.post("/api/assignment/sync")
+def api_assignment_sync(
+    sync: AssignmentSync, device_id: str, key: str
+) -> Response:
+    device = _assignment_device(device_id, key)
+    with _device_lock(device_id):
+        if sync.last_displayed_revision:
+            current, etag, accepted = _commit_assignment_locked(
+                device, sync.last_displayed_revision, sync.image_key
+            )
+            if not accepted:
+                raise HTTPException(
+                    status_code=409,
+                    detail="assignment revision or image key mismatch",
+                )
+        else:
+            _document, current, etag = _assignment_current_locked(device)
+    return _assignment_response(current, etag)
+
+
+@app.get("/api/assignment/image")
+def api_assignment_image(
+    device_id: str, key: str, revision: int, proxy: int = 0
+) -> Response:
+    device = _assignment_device(device_id, key)
+    with _device_lock(device_id):
+        document, _etag = store.read_assignment(device.container_sas_url, device_id)
+        record = store.find_assignment(document, revision)
+        if record is None:
+            return Response(status_code=404, headers={"Cache-Control": "no-store"})
+        blobs = bs.list_blobs_with_metadata(device.container_sas_url, store.IMAGE_PREFIX)
+        if not store.assignment_is_live(record, blobs):
+            return Response(status_code=410, headers={"Cache-Control": "no-store"})
+        blob_name = store.image_name(str(record["image_id"]), str(record["ext"]))
+        image_format = str(record["format"])
+        headers = {
+            "X-Image-Key": str(record["image_key"]),
+            "X-Content-CRC32": f'{int(record.get("content_crc32", 0)):08x}',
+        }
+    return _deliver_image(
+        device, blob_name, image_format, proxy=proxy, headers=headers
+    )
 
 
 @app.get("/healthz")

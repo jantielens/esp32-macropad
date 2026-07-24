@@ -58,4 +58,4 @@ if [[ -z "${SECRET_KEY:-}" ]]; then
   export SECRET_KEY
 fi
 
-exec uvicorn app:app --host 127.0.0.1 --port 8080 --reload
+exec uvicorn app:app --host 127.0.0.1 --port 8080 --reload --no-access-log

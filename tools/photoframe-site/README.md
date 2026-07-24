@@ -1,4 +1,7 @@
-# Photoframe site — sample image server
+---
+title: Photoframe site sample image server
+description: Run and operate the FastAPI image server for e-paper photoframes
+---
 
 > **Sample reference implementation, not a hosted production service.** This
 > small FastAPI app exists so you can stand up an end-to-end image source for an
@@ -12,7 +15,8 @@ It does two jobs from one process:
 
 - A **human web UI** (login, gallery, upload) for managing the images a device
   rotates through.
-- A **device API** (`/api/next`) that hands the board the next image to draw.
+- Device APIs for legacy immediate selection (`/api/next`) and durable
+  assignment transactions (`/api/assignment/*`).
 
 Images are converted to the panel's calibrated **G16P** format at upload time
 and served verbatim. The board never scales or re-tones; it draws what it is
@@ -30,9 +34,10 @@ flowchart LR
 ```
 
 The board's e-paper refresh path is documented in
-[`../../docs/epaper-guide.md`](../../docs/epaper-guide.md). The only contract the
-firmware depends on is the [`/api/next` response](#device-api-apinext) and the
-[image-format requirements](#image-format-g16p-and-jpeg).
+[`../../docs/epaper-guide.md`](../../docs/epaper-guide.md). Legacy firmware uses
+the [`/api/next` response](#device-api-apinext). Assignment-enabled firmware uses
+the [assignment transaction API](#assignment-transaction-api). Both paths share
+the [image-format requirements](#image-format-g16p-and-jpeg).
 
 ## Requirements
 
@@ -124,7 +129,10 @@ pip install -r requirements.txt
 
 `run_local.sh` persists a dev `SECRET_KEY` to `./.secret_key` so login sessions
 survive restarts. Override `CONFIG_JSON` or `SECRET_KEY` by exporting them before
-running.
+running. The supplied local and Azure startup commands disable Uvicorn access
+logs because device API keys are query parameters. Keep request-target logging
+disabled in other deployments, or configure the reverse proxy to redact the
+`key` parameter.
 
 ## Device API: `/api/next`
 
@@ -147,6 +155,53 @@ downloading the body, so a cache hit skips the blob pull entirely.
 A separate `<image-url>.crc32` change-detection sidecar is part of the firmware
 contract; see the e-paper guide. The device skips a panel refresh when the CRC
 is unchanged.
+
+## Assignment transaction API
+
+Assignment-enabled frames use a durable plan, display, acknowledge, and commit
+cycle. Planning does not advance display history or the featured-slot countdown.
+The matching acknowledgement applies those effects once and creates the next
+revision. Assignment state is isolated by device and persisted under
+`state/assignment/<sha256-device-id>.json`; the document also stores and verifies
+the original device ID.
+
+```text
+GET  /api/assignment/current?device_id=<id>&key=<api_key>
+POST /api/assignment/ack?device_id=<id>&key=<api_key>
+POST /api/assignment/sync?device_id=<id>&key=<api_key>
+GET  /api/assignment/image?device_id=<id>&key=<api_key>&revision=<revision>
+```
+
+`current` returns the existing pending revision or plans one when none exists.
+Send its `ETag` in `If-None-Match` to receive `304 Not Modified` when the pending
+assignment is unchanged. `ack` accepts `revision` and `image_key`; `sync` accepts
+`last_displayed_revision` and `image_key`. Both commit a valid displayed revision
+at most once and return its successor. `image` verifies that the revision belongs
+to the device before redirecting or streaming according to `serve_mode`.
+
+Image responses include `X-Image-Key`, `X-Content-CRC32`, and
+`X-Image-Format`. The CRC covers the exact canonical blob bytes. A wire CRC of
+zero means unknown and clients must download rather than accept unchanged.
+
+Legacy `/api/next` remains available. It invalidates any uncommitted assignment
+inside the same per-device transaction before selecting and marking an image as
+served, preventing a stale acknowledgement after fallback.
+
+### Backfill legacy transport CRCs
+
+Uploads stamp transport CRC metadata immediately. Backfill older blobs with the
+standalone resumable tool:
+
+```bash
+source .venv/bin/activate
+python3 backfill_crc.py --dry-run
+python3 backfill_crc.py
+python3 backfill_crc.py --device-id E1003-1
+```
+
+The metadata key's presence is the completion marker. A genuine computed CRC of
+zero is stamped once and skipped on later sweeps. Assignment mode does not wait
+for the sweep to finish; legacy images without the key are exposed as CRC zero.
 
 ## How the next image is chosen
 
@@ -229,6 +284,8 @@ python3 simulate_selection.py --fresh --perm 1000 --fresh-count 1     # fresh ph
 python3 simulate_selection.py --fresh --perm 1000 --fresh-count 50 --max-share 25  # bulk upload, capped
 python3 sweep_selection.py --temp 1 --n 4                            # prove featured share is pool-independent
 python3 tests/test_selection.py                                     # unit tests for the pure core
+python3 tests/test_assignment.py                                    # assignment transaction invariants
+python3 tests/test_assignment_api.py                                # assignment HTTP contract
 python3 tests/test_security.py                                      # login throttle, SECRET_KEY fail-fast, headers
 ```
 

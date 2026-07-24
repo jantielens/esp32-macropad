@@ -62,6 +62,13 @@ void epaper_sd_cache_set_enabled(bool enabled);
 // Whether SD caching is currently enabled (runtime toggle).
 bool epaper_sd_cache_is_enabled();
 
+// Select assignment-aware cache identity for the next draw. A zero CRC always
+// forces a miss. Pass nullptr to clear the context after the draw.
+void epaper_sd_cache_set_assignment_context(const char* image_key,
+											 uint32_t content_crc32,
+											 const char* format);
+bool epaper_sd_cache_has_assignment_context();
+
 // Resolve a publisher URL (e.g. /api/next) to its blob URL + a content-stable
 // image id WITHOUT downloading the body, so the caller can decide hit/miss
 // before paying for the slow body GET. Returns false on any non-redirect or
@@ -99,6 +106,8 @@ bool epaper_sd_cache_clear();
 inline void epaper_driver_set_sd_cache_enabled(bool /*enabled*/) {}
 inline void epaper_driver_cache_flush() {}
 inline bool epaper_driver_sd_cache_clear() { return false; }
+inline void epaper_sd_cache_set_assignment_context(const char*, uint32_t, const char*) {}
+inline bool epaper_sd_cache_has_assignment_context() { return false; }
 
 #endif // defined(EPAPER_SD_CS_PIN)
 

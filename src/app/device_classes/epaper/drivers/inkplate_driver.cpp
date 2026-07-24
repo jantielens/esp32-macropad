@@ -12,6 +12,7 @@
 
 #if HAS_EPAPER && (defined(BOARD_INKPLATE5V2) || defined(BOARD_INKPLATE6FLICK))
 
+#include "device_classes/epaper/epaper_assignment_logic.h"
 #include "device_classes/epaper/epaper_driver.h"
 #include "device_classes/epaper/epaper_http.h"
 #include "log_manager.h"
@@ -100,25 +101,29 @@ bool epaper_driver_draw_url(const char* url) {
 		uint8_t* buf = nullptr;
 		size_t len = 0;
 		if (!epaper_http_download(url, &buf, &len)) {
-				LOGW("Epaper", "download failed for %s", url);
+				LOGW("Epaper", "image download failed");
+				return false;
+		}
+		if (!epaper_assignment_validate_transport(buf, len)) {
+				LOGW("Epaper", "assignment image CRC mismatch");
+				heap_caps_free(buf);
 				return false;
 		}
 
 		bool ok = false;
-		if (buf[0] == 0xFF && buf[1] == 0xD8 && buf[2] == 0xFF) {
+		if (len >= 3 && buf[0] == 0xFF && buf[1] == 0xD8 && buf[2] == 0xFF) {
 				ok = s_display->image.drawJpegFromBuffer(buf, (int32_t)len, 0, 0, true /*dither*/, false /*invert*/);
-		} else if (buf[0] == 0x89 && buf[1] == 'P' && buf[2] == 'N' && buf[3] == 'G') {
+		} else if (len >= 4 && buf[0] == 0x89 && buf[1] == 'P' && buf[2] == 'N' && buf[3] == 'G') {
 				ok = s_display->image.drawPngFromBuffer(buf, (int32_t)len, 0, 0, true /*dither*/, false /*invert*/);
-		} else if (buf[0] == 'B' && buf[1] == 'M') {
+		} else if (len >= 2 && buf[0] == 'B' && buf[1] == 'M') {
 				ok = s_display->image.drawBitmapFromBuffer(buf, 0, 0, true /*dither*/, false /*invert*/);
 		} else {
-				LOGW("Epaper", "unknown image format for %s (magic %02X %02X %02X %02X)",
-				     url, buf[0], buf[1], buf[2], buf[3]);
+				LOGW("Epaper", "unknown image format");
 		}
 
 		heap_caps_free(buf);
 		if (!ok) {
-				LOGW("Epaper", "decode/draw failed for %s", url);
+				LOGW("Epaper", "image decode/draw failed");
 		}
 		return ok;
 }

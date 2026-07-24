@@ -47,6 +47,9 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force);
 // row-level "Show now" action for rapid testing.
 EpaperRefreshOutcome epaper_refresh_show_url(DeviceConfig* config, const char* image_url);
 
+// Record an assignment revision that reused the already displayed content.
+EpaperRefreshOutcome epaper_refresh_record_assignment_skip(uint32_t crc, uint32_t elapsed_ms);
+
 // Unix epoch seconds of the last successful refresh. Persisted in RTC_DATA
 // memory so the value survives deep sleep across duty-cycle wakes (but is
 // lost on power loss / hard reset). Returns 0 if no refresh has been

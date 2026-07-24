@@ -1431,6 +1431,22 @@ DNS server redirects all requests to device IP in AP mode:
 - Wildcard DNS: `*` → `192.168.4.1`
 - Works with most mobile OS captive portal detection
 
+## E-Paper Assignment Settings
+
+The e-paper Image Sources fragment exposes two assignment fields through the
+shared `/api/config` contract:
+
+- `epaper_assignment_enabled` selects the durable HTTP assignment refresh path
+  and defaults to `false`
+- `epaper_assignment_url` optionally selects a split-host assignment API base;
+  an empty value derives the endpoints from the active `/api/next` carousel URL
+
+The backend persists these values as `ep_asg_en` and `ep_asg_url`. The packed
+`ep_assign` accepted-display state is separate from ordinary config and is
+accessed only while assignment mode is enabled. Keep disabled behavior routed
+through the existing refresh functions so legacy request, error, and manual
+refresh semantics remain unchanged.
+
 ## Development Workflow
 
 ### Modifying the Web Interface

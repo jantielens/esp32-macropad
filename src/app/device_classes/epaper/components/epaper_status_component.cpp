@@ -8,6 +8,7 @@
 
 #include "component_registry.h"
 #include "config_manager.h"
+#include "device_classes/epaper/epaper_assignment.h"
 #include "device_classes/epaper/epaper_battery.h"
 #include "device_classes/epaper/epaper_config.h"
 #include "device_classes/epaper/epaper_refresh.h"
@@ -37,14 +38,16 @@ static void epaper_status_refresh_post(AsyncWebServerRequest* request) {
         return;
     }
 
-    if (!WiFi.isConnected()) {
+    if (!g_epaper_config.epaper_assignment_enabled && !WiFi.isConnected()) {
         request->send(503, "application/json",
                       "{\"success\":false,\"message\":\"WiFi not connected\"}");
         return;
     }
 
     LOGI("API", "POST /api/component/epaper-status/refresh");
-    EpaperRefreshOutcome out = epaper_refresh_run(cfg, true /*force*/);
+    EpaperRefreshOutcome out = g_epaper_config.epaper_assignment_enabled
+        ? epaper_assignment_run(cfg, true /*force*/)
+        : epaper_refresh_run(cfg, true /*force*/);
 
     StaticJsonDocument<256> resp;
     resp["success"] = (out.result == EpaperRefreshResult::Updated ||
