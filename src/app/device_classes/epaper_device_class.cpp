@@ -665,6 +665,8 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						for (uint32_t waited = 0; waited < kEpaperNtpMaxWaitMs && !s_epaper_ntp_synced; waited += 50) {
 								delay(50);
 						}
+						esp_sntp_stop();
+						sntp_set_time_sync_notification_cb(nullptr);
 						epaper_timing_last.ntp_sync_ms = millis() - ntp_start;
 						if (s_epaper_ntp_synced) {
 								s_epaper_last_ntp_epoch = time(nullptr);
