@@ -46,6 +46,7 @@ EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force);
 // config and without CRC sidecar checks. Used by the Image & Schedule portal
 // row-level "Show now" action for rapid testing.
 EpaperRefreshOutcome epaper_refresh_show_url(DeviceConfig* config, const char* image_url);
+EpaperRefreshOutcome epaper_refresh_show_assignment_cache(DeviceConfig* config);
 
 // Record an assignment revision that reused the already displayed content.
 EpaperRefreshOutcome epaper_refresh_record_assignment_skip(uint32_t crc, uint32_t elapsed_ms);

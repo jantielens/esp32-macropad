@@ -99,6 +99,10 @@ portal.js
 # the shell chunk is immaterial.
 epaper_init.js
 
+# [chunk:epaper_ble_bridge IS_EPAPER_BLE_BRIDGE]
+# E-paper BLE bridge frame assignment editor.
+epaper_ble_bridge.js
+
 # [chunk:coffee_scale_actions IS_COFFEE_SCALE]
 # Coffee Scale action-editor extensions. Registers "scale" + "brew" types
 # with the shared editor via the _actionEditorExtensions hook array. Must come

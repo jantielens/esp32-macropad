@@ -68,6 +68,8 @@ void epaper_sd_cache_set_assignment_context(const char* image_key,
 											 uint32_t content_crc32,
 											 const char* format);
 bool epaper_sd_cache_has_assignment_context();
+void epaper_sd_cache_set_cache_only(bool cache_only);
+bool epaper_sd_cache_cache_only();
 
 // Resolve a publisher URL (e.g. /api/next) to its blob URL + a content-stable
 // image id WITHOUT downloading the body, so the caller can decide hit/miss
@@ -108,6 +110,8 @@ inline void epaper_driver_cache_flush() {}
 inline bool epaper_driver_sd_cache_clear() { return false; }
 inline void epaper_sd_cache_set_assignment_context(const char*, uint32_t, const char*) {}
 inline bool epaper_sd_cache_has_assignment_context() { return false; }
+inline void epaper_sd_cache_set_cache_only(bool) {}
+inline bool epaper_sd_cache_cache_only() { return false; }
 
 #endif // defined(EPAPER_SD_CS_PIN)
 

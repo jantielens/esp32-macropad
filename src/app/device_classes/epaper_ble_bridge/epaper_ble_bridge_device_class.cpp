@@ -13,7 +13,11 @@ void epaper_ble_bridge_config_api_set(JsonObject &body);
 
 namespace {
 
-void setup_late(DeviceConfig *, PowerMode) {
+void setup_late(DeviceConfig *, PowerMode current_mode) {
+    if (current_mode == PowerMode::Ap) {
+        LOGI("EpaperBleBridge", "AP mode: bridge runtime deferred until configuration reboot");
+        return;
+    }
     epaper_ble_bridge_runtime_setup();
 }
 

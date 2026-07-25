@@ -15,6 +15,11 @@
 #define HAS_EPAPER false
 #define HAS_BLE true
 
+// AsyncTCP uses less than 1 KB on this headless bridge. Keeping its default
+// 16 KB stack fragments internal RAM enough to prevent the 16.7 KB TLS input
+// buffer from being allocated after BLE starts.
+#define CONFIG_ASYNC_TCP_STACK_SIZE 8192
+
 // Keep MQTT enabled unless the measured 4 MB image requires the documented
 // size fallback.
 #define HAS_MQTT true
@@ -27,3 +32,10 @@
 
 // Limit SRAM-backed MQTT trigger storage on the no-PSRAM target.
 #define MAX_MQTT_TRIGGERS 3
+
+// Promote bridge frame assignments to the primary portal page after the
+// AP-mode WiFi setup wizard completes and the device joins the LAN.
+#define PORTAL_PRIMARY_FRAGMENT "epaper-ble-bridge"
+#define PORTAL_PRIMARY_CATEGORY "bridge"
+#define PORTAL_PRIMARY_LABEL    "BLE Bridge"
+#define PORTAL_PRIMARY_ICON     "\xf0\x9f\x93\xa1"

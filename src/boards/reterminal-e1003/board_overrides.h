@@ -25,7 +25,7 @@
 #define HAS_AUDIO false
 #define HAS_SOUND_PLAYER false
 #define HAS_BLE_HID false
-#define HAS_BLE false
+#define HAS_BLE true
 #define HAS_IMAGE_FETCH false
 #define HAS_CUSTOM_FONTS false
 #define HAS_BUTTON false  // see HAS_EPAPER_WAKE_BUTTON below for the e-paper-specific wake handler

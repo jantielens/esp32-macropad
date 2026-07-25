@@ -38,6 +38,7 @@ char     s_pending_id[64] = {0};
 char     s_assignment_key[17] = {0};
 uint32_t s_assignment_crc = 0;
 uint8_t  s_assignment_format = 0;
+bool s_cache_only = false;
 
 struct __attribute__((packed)) AssignmentCacheMeta {
 		uint8_t schema;
@@ -294,6 +295,14 @@ void epaper_sd_cache_set_assignment_context(const char* image_key,
 
 bool epaper_sd_cache_has_assignment_context() {
 		return s_assignment_key[0] != '\0';
+}
+
+void epaper_sd_cache_set_cache_only(bool cache_only) {
+		s_cache_only = cache_only;
+}
+
+bool epaper_sd_cache_cache_only() {
+		return s_cache_only;
 }
 
 // Issue the GET and resolve its 302 to the blob URL + image id WITHOUT

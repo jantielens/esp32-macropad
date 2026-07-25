@@ -7,6 +7,46 @@ namespace {
 
 uint32_t s_expected_transport_crc = 0;
 
+bool hex_digit(char value, uint8_t* decoded) {
+	if (value >= '0' && value <= '9') *decoded = (uint8_t)(value - '0');
+	else if (value >= 'a' && value <= 'f') *decoded = (uint8_t)(value - 'a' + 10);
+	else if (value >= 'A' && value <= 'F') *decoded = (uint8_t)(value - 'A' + 10);
+	else return false;
+	return true;
+}
+
+bool query_value(const char* query, const char* name, char* out, size_t out_size) {
+	if (!query || !name || !out || out_size == 0) return false;
+	const size_t name_length = strlen(name);
+	for (const char* field = query; *field; ) {
+		if (*field == '?' || *field == '&') ++field;
+		const char* end = strchr(field, '&');
+		if (!end) end = field + strlen(field);
+		const char* equals = (const char*)memchr(field, '=', (size_t)(end - field));
+		if (equals && (size_t)(equals - field) == name_length &&
+				memcmp(field, name, name_length) == 0) {
+			size_t written = 0;
+			for (const char* input = equals + 1; input < end; ++input) {
+				char decoded = *input == '+' ? ' ' : *input;
+				if (*input == '%' && input + 2 < end) {
+					uint8_t high = 0, low = 0;
+					if (!hex_digit(input[1], &high) || !hex_digit(input[2], &low)) {
+						return false;
+					}
+					decoded = (char)((high << 4) | low);
+					input += 2;
+				}
+				if (written + 1 >= out_size) return false;
+				out[written++] = decoded;
+			}
+			out[written] = '\0';
+			return written != 0;
+		}
+		field = end;
+	}
+	return false;
+}
+
 } // namespace
 
 EpaperAssignmentRefreshAction epaper_assignment_refresh_action(bool force,
@@ -89,3 +129,13 @@ bool epaper_assignment_build_url(const char* carousel_url, const char* override_
 				(int)base_length, source, action, query_text);
 		return written >= 0 && (size_t)written < out_size;
 }
+
+	bool epaper_assignment_extract_credentials(const char* source_url,
+			char* device_id, size_t device_id_size, char* api_key,
+			size_t api_key_size) {
+		if (!source_url) return false;
+		const char* query = strchr(source_url, '?');
+		if (!query) return false;
+		return query_value(query, "device_id", device_id, device_id_size) &&
+			query_value(query, "key", api_key, api_key_size);
+	}

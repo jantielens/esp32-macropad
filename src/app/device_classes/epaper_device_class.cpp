@@ -16,11 +16,15 @@
 #include "device_class.h"
 #include "epaper/epaper_assignment.h"
 #include "epaper/epaper_battery.h"
+#if HAS_BLE
+#include "epaper/epaper_ble_frame.h"
+#endif
 #include "epaper/epaper_carousel.h"
 #include "epaper/epaper_driver.h"
 #include "epaper/epaper_refresh.h"
 #include "epaper/epaper_schedule.h"
 #include "epaper/epaper_screens.h"
+#include "epaper/epaper_sd_cache.h"
 #include "epaper/epaper_source_mode.h"
 #include "epaper/epaper_timing.h"
 #include "log_manager.h"
@@ -65,9 +69,11 @@ static const char *kKeySdCacheEn      = "ep_sd_en";
 static const char *kKeySourceMode     = "ep_src_mode";
 static const char *kKeyAssignmentSrc  = "ep_asg_src";
 static const char *kKeyAssignmentInt  = "ep_asg_int";
+static const char *kKeyBleAssignEn    = "ep_ble_en";
 static_assert(sizeof("ep_src_mode") - 1 <= 14, "NVS key exceeds 14 characters");
 static_assert(sizeof("ep_asg_src") - 1 <= 14, "NVS key exceeds 14 characters");
 static_assert(sizeof("ep_asg_int") - 1 <= 14, "NVS key exceeds 14 characters");
+static_assert(sizeof("ep_ble_en") - 1 <= 14, "NVS key exceeds 14 characters");
 static const char *kKeyOverlayEn      = "ep_ovl_en";
 static const char *kKeyOverlayPos     = "ep_ovl_pos";
 static const char *kKeyOverlayCol     = "ep_ovl_col";
@@ -265,6 +271,7 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.image_source_mode = EpaperImageSourceMode::SlotImages;
 		g_epaper_config.assignment_source_url[0] = '\0';
 		g_epaper_config.assignment_refresh_interval_seconds = EPAPER_REFRESH_INTERVAL_DEFAULT_SECONDS;
+		g_epaper_config.ble_assignment_enabled = false;
 		g_epaper_config.epaper_overlay_enabled = false;
 		g_epaper_config.epaper_overlay_position = 3;
 		g_epaper_config.epaper_overlay_color = 0;
@@ -307,6 +314,7 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 				g_epaper_config.assignment_refresh_interval_seconds > EPAPER_REFRESH_INTERVAL_MAX_SECONDS) {
 				g_epaper_config.assignment_refresh_interval_seconds = EPAPER_REFRESH_INTERVAL_DEFAULT_SECONDS;
 		}
+		g_epaper_config.ble_assignment_enabled = prefs.getBool(kKeyBleAssignEn, false);
 
 		g_epaper_config.epaper_overlay_enabled = prefs.getBool(kKeyOverlayEn, false);
 		g_epaper_config.epaper_overlay_position = prefs.getUChar(kKeyOverlayPos, 3);
@@ -348,6 +356,7 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putUChar(kKeySourceMode, (uint8_t)g_epaper_config.image_source_mode);
 		prefs.putString(kKeyAssignmentSrc, g_epaper_config.assignment_source_url);
 		prefs.putUInt(kKeyAssignmentInt, g_epaper_config.assignment_refresh_interval_seconds);
+		prefs.putBool(kKeyBleAssignEn, g_epaper_config.ble_assignment_enabled);
 		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_overlay_enabled);
 		prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_overlay_position);
 		prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_overlay_color);
@@ -385,6 +394,8 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 		root["epaper_assignment_source_url"] = g_epaper_config.assignment_source_url;
 		root["epaper_assignment_refresh_interval_seconds"] =
 				g_epaper_config.assignment_refresh_interval_seconds;
+		root["epaper_ble_assignment_enabled"] = g_epaper_config.ble_assignment_enabled;
+		root["epaper_ble_assignment_supported"] = (bool)HAS_BLE;
 		root["epaper_sd_cache_supported"] = (bool)
 #ifdef EPAPER_SD_CS_PIN
 			true
@@ -423,11 +434,18 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 						: (uint8_t)(body["epaper_rotation"] | 0);
 				if (v > 3) v = 0;
 				g_epaper_config.epaper_rotation = v;
-		}		if (body.containsKey("epaper_crc32_enabled")) {
+		}
+		if (body.containsKey("epaper_crc32_enabled")) {
 			g_epaper_config.epaper_crc32_enabled = body["epaper_crc32_enabled"] | false;
-		}		if (body.containsKey("epaper_sd_cache_enabled")) {
+		}
+		if (body.containsKey("epaper_sd_cache_enabled")) {
 			g_epaper_config.epaper_sd_cache_enabled = body["epaper_sd_cache_enabled"] | false;
-		}		if (body.containsKey("epaper_overlay_enabled")) {
+		}
+		if (body.containsKey("epaper_ble_assignment_enabled")) {
+			g_epaper_config.ble_assignment_enabled =
+					body["epaper_ble_assignment_enabled"] | false;
+		}
+		if (body.containsKey("epaper_overlay_enabled")) {
 				g_epaper_config.epaper_overlay_enabled = body["epaper_overlay_enabled"] | false;
 		}
 		if (body.containsKey("epaper_overlay_position")) {
@@ -483,6 +501,7 @@ static const char *config_api_validate_hook(const DeviceConfig * /*cfg*/, JsonOb
 		const bool touches_source = body.containsKey("epaper_image_source_mode") ||
 				body.containsKey("epaper_assignment_source_url") ||
 				body.containsKey("epaper_assignment_refresh_interval_seconds") ||
+				body.containsKey("epaper_ble_assignment_enabled") ||
 				body.containsKey("epaper_carousel");
 		if (!touches_source) return nullptr;
 
@@ -504,6 +523,10 @@ static const char *config_api_validate_hook(const DeviceConfig * /*cfg*/, JsonOb
 				if (!interval.is<const char*>() && !interval.is<int64_t>()) {
 						return "Assignment refresh interval must be an integer";
 				}
+		}
+		if (body.containsKey("epaper_ble_assignment_enabled") &&
+				!body["epaper_ble_assignment_enabled"].is<bool>()) {
+			return "BLE assignment enabled must be boolean";
 		}
 		if (body.containsKey("epaper_carousel")) {
 				if (!body["epaper_carousel"].is<JsonArray>()) {
@@ -539,6 +562,10 @@ static const char *config_api_validate_hook(const DeviceConfig * /*cfg*/, JsonOb
 
 		EpaperConfig candidate = g_epaper_config;
 		epaper_apply_source_fields(candidate, body);
+		if (body.containsKey("epaper_ble_assignment_enabled")) {
+			candidate.ble_assignment_enabled =
+					body["epaper_ble_assignment_enabled"] | false;
+		}
 		bool slot_source_present = false;
 		for (uint8_t i = 0; i < candidate.carousel_count; ++i) {
 				if (candidate.carousel[i].url[0] != '\0') {
@@ -566,6 +593,21 @@ static const char *config_api_validate_hook(const DeviceConfig * /*cfg*/, JsonOb
 						derived_url, sizeof(derived_url))) {
 						return "Assignment source URL must contain /api/next or /api/assignment";
 				}
+		}
+		if (candidate.ble_assignment_enabled) {
+	#if !HAS_BLE
+			return "BLE assignment acceleration is not supported on this board";
+	#else
+			if (!epaper_assignment_mode(candidate)) {
+				return "BLE assignment acceleration requires Display assignments mode";
+			}
+			char device_id[64] = {};
+			char api_key[128] = {};
+			if (!epaper_assignment_extract_credentials(candidate.assignment_source_url,
+					device_id, sizeof(device_id), api_key, sizeof(api_key))) {
+				return "BLE assignment acceleration requires device_id and key in the assignment URL";
+			}
+	#endif
 		}
 		return nullptr;
 }
@@ -707,6 +749,21 @@ RTC_DATA_ATTR static time_t s_epaper_last_ntp_epoch = 0;
 // block plus the splash decisions that lived in app.ino).
 // ---------------------------------------------------------------------------
 static bool run_duty_cycle_hook(DeviceConfig *config) {
+		const bool is_cold_boot = !power_manager_is_deep_sleep_wake();
+		const bool is_button_wake = epaper_button_is_button_wake();
+#if HAS_BLE
+		const bool ble_wake_enabled = g_epaper_config.ble_assignment_enabled &&
+			epaper_assignment_mode(g_epaper_config);
+#else
+		const bool ble_wake_enabled = false;
+#endif
+		epaper_timing_reset_ble();
+		if (!ble_wake_enabled) {
+			wifi_manager_early_init();
+		}
+		if (ble_wake_enabled) {
+			LOGI("Epaper", "BLE assignment acceleration enabled");
+		}
 		// Splash policy (moved from app.ino):
 		//   - Cold boot: always show the boot splash so a freshly plugged-in
 		//     device gets proof of life.
@@ -715,11 +772,9 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		//   - Button wake on a slow panel: skip; the extra full refresh would
 		//     dominate the time-to-new-image budget.
 		//   - Timer wake: never any splash -- periodic refreshes are silent.
-		const bool is_cold_boot = !power_manager_is_deep_sleep_wake();
-		const bool is_button_wake = epaper_button_is_button_wake();
 		const bool show_boot_splash    = is_cold_boot;
 		const bool show_manual_refresh = (EPAPER_FAST_REFRESH && is_button_wake);
-		if (show_boot_splash || show_manual_refresh) {
+		if (!ble_wake_enabled && (show_boot_splash || show_manual_refresh)) {
 				epaper_show_status(g_epaper_config.epaper_rotation, [show_boot_splash, config]() {
 						if (show_boot_splash) {
 								epaper_screen_boot_splash(config->device_name, FIRMWARE_VERSION);
@@ -757,8 +812,10 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				}
 				// Healthy: start panel init on a background task so it overlaps the
 				// WiFi connect below. Joined before the first draw.
-				epaper_driver_begin_async();
-				begin_started = true;
+				if (!ble_wake_enabled) {
+					epaper_driver_begin_async();
+					begin_started = true;
+				}
 		} else if (epaper_driver_begin()) {
 				const uint16_t mv = epaper_driver_battery_mv();
 				LOGI("Epaper", "Battery %u mV", mv);
@@ -772,6 +829,62 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		} else {
 				LOGW("Epaper", "driver begin returned false");
 		}
+
+#if HAS_BLE
+		EpaperBleFrameSelection ble_selection = {};
+		bool ble_ack_after_http = false;
+		if (ble_wake_enabled) {
+			const time_t retained_now = time(nullptr);
+			const bool retained_clock_valid =
+				retained_now >= (time_t)EPAPER_SCHEDULE_MIN_VALID_EPOCH;
+			if (retained_clock_valid &&
+					g_epaper_config.schedule_hours != 0x00FFFFFF &&
+					!is_button_wake &&
+					!epaper_schedule_should_refresh(g_epaper_config.schedule_hours,
+						g_epaper_config.schedule_tz_offset, retained_now)) {
+				const uint32_t sleep_s = epaper_schedule_seconds_to_next(
+					g_epaper_config.schedule_hours,
+					g_epaper_config.schedule_tz_offset, retained_now);
+				power_manager_sleep_for(sleep_s);
+				return true;
+			}
+			const EpaperBleFrameWakeResult ble_result =
+				epaper_ble_frame_try(config, &ble_selection);
+			if (ble_result != EpaperBleFrameWakeResult::HttpFallback) {
+				if (ble_result == EpaperBleFrameWakeResult::AcceptedUnchanged) {
+					epaper_refresh_record_assignment_skip(
+						ble_selection.packet.content_crc32, millis());
+				}
+				epaper_timing_last.total_active_ms = millis();
+				uint32_t sleep_s = g_epaper_config.assignment_refresh_interval_seconds;
+				const uint32_t active_s = epaper_timing_last.total_active_ms / 1000u;
+				if (active_s < sleep_s) sleep_s -= active_s;
+				else sleep_s = 10;
+				if (sleep_s < 10) sleep_s = 10;
+				power_manager_sleep_for(sleep_s);
+				return true;
+			}
+			wifi_manager_early_init();
+			EpaperAssignmentState accepted = {};
+			epaper_assignment_load_state(&accepted);
+			ble_ack_after_http = epaper_ble_frame_action(
+				ble_selection, accepted, true) == EpaperBleFrameAction::RenderCached;
+			if (show_boot_splash || show_manual_refresh) {
+				epaper_show_status(g_epaper_config.epaper_rotation,
+					[show_boot_splash, config]() {
+						if (show_boot_splash) {
+							epaper_screen_boot_splash(config->device_name, FIRMWARE_VERSION);
+						} else {
+							epaper_screen_manual_refresh(nullptr);
+						}
+					});
+			}
+			if (epaper_driver_battery_ready_before_begin()) {
+				epaper_driver_begin_async();
+				begin_started = true;
+			}
+		}
+#endif
 
 		// WiFi -> CRC check -> conditional draw -> sleep. Each checkpoint feeds
 		// the RTC-retained timing budget so the portal can show a per-cycle
@@ -856,12 +969,8 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// actively looking at the panel and expects fresh content, so a button
 		// wake bypasses the schedule gate below and forces a refresh even
 		// outside the enabled hours.
-		const bool cold_boot = !power_manager_is_deep_sleep_wake();
-#if HAS_EPAPER_WAKE_BUTTON
-		const bool button_wake = epaper_button_is_button_wake();
-#else
-		const bool button_wake = false;
-#endif
+		const bool cold_boot = is_cold_boot;
+		const bool button_wake = is_button_wake;
 
 		// Schedule check BEFORE image fetch: if disabled at this hour, sleep and
 		// skip refresh. Skipped on a button wake so the button always refreshes.
@@ -945,6 +1054,27 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		}
 #else
 		epaper_timing_last.draw_to_mqtt_ms = 0;
+#endif
+
+#if HAS_BLE
+		if (ble_ack_after_http && outcome.result == EpaperRefreshResult::Updated) {
+			EpaperAssignmentState accepted = {};
+			epaper_assignment_load_state(&accepted);
+			const bool accepted_ble_packet =
+				accepted.revision == ble_selection.packet.revision &&
+				accepted.content_crc32 == ble_selection.packet.content_crc32 &&
+				memcmp(accepted.image_key, ble_selection.packet.image_key,
+					sizeof(accepted.image_key)) == 0;
+			if (accepted_ble_packet) {
+				LOGI("Epaper", "HTTP fallback accepted BLE rev=%lu; sending ACK",
+					(unsigned long)ble_selection.packet.revision);
+				WiFi.disconnect(true, false);
+				epaper_ble_frame_ack(ble_selection.packet);
+			} else {
+				LOGI("Epaper", "HTTP fallback accepted different assignment; BLE rev=%lu not acknowledged",
+					(unsigned long)ble_selection.packet.revision);
+			}
+		}
 #endif
 
 		// Sleep-time compensation: subtract active loop duration so wake-to-wake
@@ -1069,8 +1199,14 @@ void epaper_device_class_register() {
 #include "epaper/epaper_screens.cpp"
 #include "epaper/epaper_sd_cache.cpp"
 #include "epaper/epaper_assignment_logic.cpp"
+#if HAS_BLE
+#include "epaper/epaper_ble_frame_logic.cpp"
+#endif
 #include "epaper/epaper_source_mode.cpp"
 #include "epaper/epaper_assignment.cpp"
 #include "epaper/epaper_timing.cpp"
+#if HAS_BLE
+#include "epaper/epaper_ble_frame.cpp"
+#endif
 
 #endif // HAS_EPAPER

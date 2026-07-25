@@ -914,6 +914,7 @@ bool epaper_driver_draw_url(const char* url) {
 				}
 			}
 		}
+		if (!from_cache && epaper_sd_cache_cache_only()) return false;
 		if (epaper_sd_cache_is_enabled() && !from_cache) {
 				// Hide the ~1.6s panel power-on under the network resolve: power_on
 				// drives the HSPI panel bus while the resolve waits on WiFi -- two

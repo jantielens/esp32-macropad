@@ -50,6 +50,11 @@
         <label class="form-label" for="epaper_assignment_refresh_interval_seconds">Refresh interval (s)</label>
         <input type="number" class="form-control" id="epaper_assignment_refresh_interval_seconds" name="epaper_assignment_refresh_interval_seconds" min="1" max="86400" value="900" style="max-width: 180px;">
       </div>
+      <div class="mb-3 form-check" id="epaper_ble_assignment_row" hidden>
+        <input type="checkbox" class="form-check-input" id="epaper_ble_assignment_enabled" name="epaper_ble_assignment_enabled">
+        <label class="form-check-label" for="epaper_ble_assignment_enabled">Use nearby BLE assignment bridge</label>
+        <div class="form-text">Checks for a recent assignment over BLE before starting WiFi. WiFi remains the fallback when no acceptable cached assignment is available.</div>
+      </div>
     </div>
     <div class="mt-3" id="epaper-slot-source-panel">
       <div class="epaper-slot border rounded p-2 mb-2">

@@ -156,7 +156,11 @@ void setup()
 	// Start WiFi hardware as early as possible.
 	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
 	// which can run in the background while display, config, and pads initialize.
+	// BLE-capable e-paper frames defer this until their persisted acceleration
+	// setting is loaded so BLE-hit wakes never start the WiFi radio.
+	#if !(HAS_EPAPER && HAS_BLE)
 	wifi_manager_early_init();
+	#endif
 
 	LOGI("SYS", "Boot");
 	LOGI("SYS", "Firmware: v%s", FIRMWARE_VERSION);

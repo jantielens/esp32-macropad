@@ -106,3 +106,8 @@
 #include "device_classes/epaper/components/epaper_overlay_component.cpp"
 #include "device_classes/epaper/components/epaper_vcom_component.cpp"
 #endif // HAS_EPAPER
+
+// --- E-Paper BLE Bridge components ---
+#if IS_EPAPER_BLE_BRIDGE
+#include "device_classes/epaper_ble_bridge/components/epaper_ble_bridge_component.cpp"
+#endif

@@ -36,6 +36,7 @@ struct EpaperConfig {
 		EpaperImageSourceMode image_source_mode;      // explicit slot-images or display-assignments selection
 		char assignment_source_url[CONFIG_EPAPER_URL_MAX_LEN]; // full credential-bearing assignment source URL
 		uint32_t assignment_refresh_interval_seconds; // assignment wake cadence, independent of slot durations
+		bool ble_assignment_enabled;                  // opt-in BLE assignment acceleration (default false)
 
 		// On-image status overlay
 		bool epaper_overlay_enabled;                  // default false

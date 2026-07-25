@@ -26,7 +26,7 @@ RTC_DATA_ATTR static uint32_t g_refresh_count = 0;
 static EpaperRefreshOutcome s_last_outcome = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 
 static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const char* image_url,
-		bool force, bool allow_crc, bool persist_crc) {
+		bool force, bool allow_crc, bool persist_crc, bool show_failure) {
 		EpaperRefreshOutcome out = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 		const uint32_t t0 = millis();
 
@@ -154,7 +154,7 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 				// failure in all cases regardless of what the panel shows.
 				const bool is_timer_wake =
 						power_manager_is_deep_sleep_wake() && !epaper_button_is_button_wake();
-				if (!is_timer_wake && epaper_driver_begin()) {
+				if (show_failure && !is_timer_wake && epaper_driver_begin()) {
 						epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
 						const char* detail = sidecar_transport_failed
 								? "Network or server unreachable"
@@ -193,12 +193,18 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 
 EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
 		return epaper_refresh_run_url(config, g_epaper_config.epaper_url,
-				force, true /*allow_crc*/, true /*persist_crc*/);
+				force, true /*allow_crc*/, true /*persist_crc*/, true /*show_failure*/);
 }
 
 EpaperRefreshOutcome epaper_refresh_show_url(DeviceConfig* config, const char* image_url) {
 		return epaper_refresh_run_url(config, image_url,
-				true /*force*/, false /*allow_crc*/, false /*persist_crc*/);
+				true /*force*/, false /*allow_crc*/, false /*persist_crc*/, true /*show_failure*/);
+}
+
+EpaperRefreshOutcome epaper_refresh_show_assignment_cache(DeviceConfig* config) {
+		return epaper_refresh_run_url(config, "cache://assignment",
+				true /*force*/, false /*allow_crc*/, false /*persist_crc*/,
+				false /*show_failure*/);
 }
 
 EpaperRefreshOutcome epaper_refresh_record_assignment_skip(uint32_t crc, uint32_t elapsed_ms) {

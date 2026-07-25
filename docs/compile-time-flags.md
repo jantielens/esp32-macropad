@@ -297,7 +297,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | esp32s3-ble-bridge |  |  | ✅ |  |  |  | ? |  |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
 | inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
-| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| reterminal-e1003 |  |  | ✅ |  |  |  |  |  | ✅ |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -362,7 +362,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/device_classes/epaper/epaper_ble_frame.cpp
+  - src/app/device_classes/epaper/epaper_ble_frame.h
+  - src/app/device_classes/epaper_device_class.cpp
   - src/app/duty_cycle.cpp
+  - src/app/epaper_ble_codec.cpp
   - src/app/mcp_tools_config.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/web_portal_config.cpp
@@ -536,6 +540,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.h
   - src/app/widgets/widget_registry.h
 - **HAS_EPAPER**
+  - src/app/app.ino
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
@@ -547,6 +552,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
   - src/app/device_classes/epaper/epaper_assignment.cpp
   - src/app/device_classes/epaper/epaper_assignment.h
+  - src/app/device_classes/epaper/epaper_ble_frame.cpp
+  - src/app/device_classes/epaper/epaper_ble_frame.h
   - src/app/device_classes/epaper/epaper_carousel.cpp
   - src/app/device_classes/epaper/epaper_carousel.h
   - src/app/device_classes/epaper/epaper_config.h
@@ -949,6 +956,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
+  - src/app/device_classes/epaper_ble_bridge/components/epaper_ble_bridge_component.cpp
+  - src/app/device_classes/epaper_ble_bridge/epaper_ble_bridge_config.cpp
+  - src/app/device_classes/epaper_ble_bridge/epaper_ble_bridge_device_class.cpp
+  - src/app/device_classes/epaper_ble_bridge/epaper_ble_bridge_runtime.cpp
+  - src/app/portal_components.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp

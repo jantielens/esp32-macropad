@@ -33,3 +33,6 @@ bool epaper_assignment_validate_transport(const uint8_t* data, size_t len);
 
 bool epaper_assignment_build_url(const char* carousel_url, const char* override_url,
 		const char* action, uint32_t revision, char* out, size_t out_size);
+bool epaper_assignment_extract_credentials(const char* source_url,
+		char* device_id, size_t device_id_size, char* api_key,
+		size_t api_key_size);

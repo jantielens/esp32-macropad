@@ -11,6 +11,7 @@ if (typeof window.registerConfigFields === 'function') {
         'epaper_rotation',
         'epaper_crc32_enabled',
         'epaper_sd_cache_enabled',
+        'epaper_ble_assignment_enabled',
         'epaper_overlay_enabled', 'epaper_overlay_position',
         'epaper_overlay_color', 'epaper_overlay_items',
         'epaper_frontlight_brightness', 'epaper_frontlight_duration_s',
@@ -157,6 +158,8 @@ window.init_epaper_image_fragment = function () {
     var assignmentPanel = document.getElementById('epaper-assignment-source-panel');
     var slotPanel = document.getElementById('epaper-slot-source-panel');
     var crcRow = document.getElementById('epaper_crc32_row');
+    var bleAssignmentRow = document.getElementById('epaper_ble_assignment_row');
+    var bleAssignmentSupported = false;
 
     function selectedSourceMode() {
         var selected = document.querySelector('[name="epaper_image_source_mode"]:checked');
@@ -168,6 +171,7 @@ window.init_epaper_image_fragment = function () {
         if (assignmentPanel) assignmentPanel.hidden = !assignmentMode;
         if (slotPanel) slotPanel.hidden = assignmentMode;
         if (crcRow) crcRow.hidden = assignmentMode;
+        if (bleAssignmentRow) bleAssignmentRow.hidden = !assignmentMode || !bleAssignmentSupported;
     }
 
     function setShowNowStatus(text, isErr) {
@@ -264,6 +268,9 @@ window.init_epaper_image_fragment = function () {
                 setNamedValue('epaper_assignment_source_url', cfg.epaper_assignment_source_url || '');
                 setNamedValue('epaper_assignment_refresh_interval_seconds',
                     cfg.epaper_assignment_refresh_interval_seconds || 900);
+                bleAssignmentSupported = !!cfg.epaper_ble_assignment_supported;
+                setNamedValue('epaper_ble_assignment_enabled',
+                    !!cfg.epaper_ble_assignment_enabled);
 
                 var arr = Array.isArray(cfg.epaper_carousel) ? cfg.epaper_carousel : [];
                 for (var i = 0; i < 5; i++) {
@@ -380,6 +387,10 @@ window.init_epaper_image_fragment = function () {
             }
             config.epaper_assignment_source_url = sourceUrl;
             config.epaper_assignment_refresh_interval_seconds = assignmentInterval;
+            var bleAssignmentEl = document.querySelector('[name="epaper_ble_assignment_enabled"]');
+            if (bleAssignmentSupported && bleAssignmentEl) {
+                config.epaper_ble_assignment_enabled = !!bleAssignmentEl.checked;
+            }
         } else {
             var carouselPayload = buildCarouselPayload();
             if (!carouselPayload.ok) {

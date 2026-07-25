@@ -9,6 +9,9 @@
 struct DeviceConfig;
 struct EpaperRefreshOutcome;
 
+bool epaper_assignment_load_state(EpaperAssignmentState* state);
+void epaper_assignment_accept_state(const EpaperAssignmentState& state);
+
 // Resolve, display when needed, and acknowledge one assignment wake.
 EpaperRefreshOutcome epaper_assignment_run(DeviceConfig* config, bool force);
 

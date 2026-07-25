@@ -14,6 +14,16 @@ void epaper_timing_reset_draw_steps() {
 		epaper_timing_last.image_from_cache = 0;
 }
 
+void epaper_timing_reset_ble() {
+		epaper_timing_last.ble_init_ms = 0;
+		epaper_timing_last.ble_scan_ms = 0;
+		epaper_timing_last.ble_match_ms = 0;
+		epaper_timing_last.ble_ack_tx_ms = 0;
+		epaper_timing_last.ble_path = EpaperBlePath::WifiOnly;
+		epaper_timing_last.ble_packets_seen = 0;
+		epaper_timing_last.ble_rssi = 0;
+}
+
 void epaper_timing_set_resolve_ms(uint32_t ms) {
 		epaper_timing_last.resolve_ms = ms;
 }

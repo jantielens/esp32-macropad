@@ -47,7 +47,7 @@ bool hex_to_key(const char* value, uint8_t out[8]) {
 		return true;
 }
 
-bool load_state(EpaperAssignmentState* state) {
+bool load_state_internal(EpaperAssignmentState* state) {
 		memset(state, 0, sizeof(*state));
 		Preferences prefs;
 		if (!prefs.begin(kAssignmentNvsNamespace, true)) return false;
@@ -57,9 +57,9 @@ bool load_state(EpaperAssignmentState* state) {
 		return ok;
 }
 
-void persist_state(const EpaperAssignmentState& state) {
+void persist_state_internal(const EpaperAssignmentState& state) {
 		EpaperAssignmentState existing = {};
-		if (load_state(&existing) && memcmp(&existing, &state, sizeof(state)) == 0) return;
+		if (load_state_internal(&existing) && memcmp(&existing, &state, sizeof(state)) == 0) return;
 		Preferences prefs;
 		if (!prefs.begin(kAssignmentNvsNamespace, false)) {
 			LOGW("Epaper", "Assignment state NVS open failed");
@@ -131,6 +131,14 @@ EpaperAssignmentState accepted_state(const Assignment& assignment) {
 
 } // namespace
 
+bool epaper_assignment_load_state(EpaperAssignmentState* state) {
+		return state && load_state_internal(state);
+}
+
+void epaper_assignment_accept_state(const EpaperAssignmentState& state) {
+		persist_state_internal(state);
+}
+
 EpaperRefreshOutcome epaper_assignment_run(DeviceConfig* config, bool force) {
 		EpaperRefreshOutcome failed = {EpaperRefreshResult::FailedFetch, 0, 0, 0, 0, 0};
 		const uint32_t started = millis();
@@ -143,7 +151,7 @@ EpaperRefreshOutcome epaper_assignment_run(DeviceConfig* config, bool force) {
 		}
 
 		EpaperAssignmentState displayed = {};
-		load_state(&displayed);
+		load_state_internal(&displayed);
 		Assignment assignment = {};
 		int status = post_sync(sync_url, displayed, &assignment);
 		if (status == HTTP_CODE_CONFLICT) {
@@ -179,7 +187,7 @@ EpaperRefreshOutcome epaper_assignment_run(DeviceConfig* config, bool force) {
 
 		if (refresh_action == EpaperAssignmentRefreshAction::SkipUnchanged) {
 			const EpaperAssignmentState accepted = accepted_state(assignment);
-			persist_state(accepted);
+			persist_state_internal(accepted);
 			Assignment successor = {};
 			post_sync(sync_url, accepted, &successor);
 			return epaper_refresh_record_assignment_skip(assignment.content_crc32,
@@ -201,7 +209,7 @@ EpaperRefreshOutcome epaper_assignment_run(DeviceConfig* config, bool force) {
 		epaper_sd_cache_set_assignment_context(nullptr, 0, nullptr);
 		if (outcome.result == EpaperRefreshResult::Updated) {
 			const EpaperAssignmentState accepted = accepted_state(assignment);
-			persist_state(accepted);
+			persist_state_internal(accepted);
 			Assignment successor = {};
 			post_sync(sync_url, accepted, &successor);
 		}

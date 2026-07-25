@@ -390,6 +390,21 @@ echo "=== Running unit tests: epaper_ble_bridge_logic ==="
 python3 tests/test_epaper_ble_security.py
 echo
 
+echo "=== Building unit tests: epaper_ble_frame_logic ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_BLE=1 -DEPAPER_BLE_CODEC_HOST_BACKEND \
+    -I tests -I src/app \
+    tests/test_epaper_ble_frame_logic.cpp \
+    tests/epaper_ble_host_crypto.cpp \
+    src/app/epaper_ble_codec.cpp \
+    src/app/device_classes/epaper/epaper_assignment_logic.cpp \
+    src/app/device_classes/epaper/epaper_ble_frame_logic.cpp \
+    -o tests/bin/test_epaper_ble_frame_logic
+
+echo "=== Running unit tests: epaper_ble_frame_logic ==="
+./tests/bin/test_epaper_ble_frame_logic
+echo
+
 echo "=== Building unit tests: epaper_ble_config_budget ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I ~/Arduino/libraries/ArduinoJson/src \
