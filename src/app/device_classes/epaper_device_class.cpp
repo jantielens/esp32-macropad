@@ -832,7 +832,6 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 
 #if HAS_BLE
 		EpaperBleFrameSelection ble_selection = {};
-		bool ble_ack_after_http = false;
 		if (ble_wake_enabled) {
 			const time_t retained_now = time(nullptr);
 			const bool retained_clock_valid =
@@ -865,10 +864,6 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				return true;
 			}
 			wifi_manager_early_init();
-			EpaperAssignmentState accepted = {};
-			epaper_assignment_load_state(&accepted);
-			ble_ack_after_http = epaper_ble_frame_action(
-				ble_selection, accepted, true) == EpaperBleFrameAction::RenderCached;
 			if (show_boot_splash || show_manual_refresh) {
 				epaper_show_status(g_epaper_config.epaper_rotation,
 					[show_boot_splash, config]() {
@@ -924,10 +919,10 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// When a fetch is due we block until an actual SNTP response lands (or
 		// the ceiling elapses) BEFORE starting the download. A fire-and-forget
 		// configTime() leaves the SNTP service doing DNS lookups + UDP traffic
-		// concurrently with the download, which inflated crc_to_draw_ms by ~10s
-		// on some wakes. Waiting synchronously keeps the download contention-free
-		// and makes ntp_sync_ms reflect the true cost. Fail-open: if no response
-		// arrives within the ceiling, proceed with the current clock.
+		// concurrently with the download. Stop SNTP after the bounded wait so a
+		// pending DNS callback cannot run from the assignment HTTP lookup's task.
+		// Fail-open: if no response arrives within the ceiling, proceed with the
+		// current clock.
 		{
 				static const uint32_t kEpaperNtpMaxWaitMs    = 5000;  // ceiling for an unreachable server
 				static const time_t   kEpaperNtpResyncIntervalS = 3600;  // 1 h, matches ESP-IDF SNTP default
@@ -951,6 +946,8 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						for (uint32_t waited = 0; waited < kEpaperNtpMaxWaitMs && !s_epaper_ntp_synced; waited += 50) {
 								delay(50);
 						}
+						esp_sntp_stop();
+						sntp_set_time_sync_notification_cb(nullptr);
 						epaper_timing_last.ntp_sync_ms = millis() - ntp_start;
 						if (s_epaper_ntp_synced) {
 								s_epaper_last_ntp_epoch = time(nullptr);
@@ -1054,27 +1051,6 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		}
 #else
 		epaper_timing_last.draw_to_mqtt_ms = 0;
-#endif
-
-#if HAS_BLE
-		if (ble_ack_after_http && outcome.result == EpaperRefreshResult::Updated) {
-			EpaperAssignmentState accepted = {};
-			epaper_assignment_load_state(&accepted);
-			const bool accepted_ble_packet =
-				accepted.revision == ble_selection.packet.revision &&
-				accepted.content_crc32 == ble_selection.packet.content_crc32 &&
-				memcmp(accepted.image_key, ble_selection.packet.image_key,
-					sizeof(accepted.image_key)) == 0;
-			if (accepted_ble_packet) {
-				LOGI("Epaper", "HTTP fallback accepted BLE rev=%lu; sending ACK",
-					(unsigned long)ble_selection.packet.revision);
-				WiFi.disconnect(true, false);
-				epaper_ble_frame_ack(ble_selection.packet);
-			} else {
-				LOGI("Epaper", "HTTP fallback accepted different assignment; BLE rev=%lu not acknowledged",
-					(unsigned long)ble_selection.packet.revision);
-			}
-		}
 #endif
 
 		// Sleep-time compensation: subtract active loop duration so wake-to-wake

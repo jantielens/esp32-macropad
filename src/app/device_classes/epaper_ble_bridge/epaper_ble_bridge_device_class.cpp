@@ -6,12 +6,20 @@
 #include "device_classes/epaper_ble_bridge/epaper_ble_bridge_config.h"
 #include "device_classes/epaper_ble_bridge/epaper_ble_bridge_runtime.h"
 #include "log_manager.h"
+#include "tls_allocator.h"
 
 void epaper_ble_bridge_config_api_get(JsonObject &root);
 const char *epaper_ble_bridge_config_api_validate(JsonObject &body);
 void epaper_ble_bridge_config_api_set(JsonObject &body);
 
 namespace {
+
+void setup_early(DeviceConfig *, PowerMode) {
+    tls_allocator_init();
+    if (!psramFound()) {
+        LOGE("EpaperBleBridge", "PSRAM unavailable; HTTPS may lack contiguous memory");
+    }
+}
 
 void setup_late(DeviceConfig *, PowerMode current_mode) {
     if (current_mode == PowerMode::Ap) {
@@ -49,7 +57,7 @@ void config_set(DeviceConfig *, JsonObject &body) {
 const DeviceClass kEpaperBleBridgeClass = {
     /* name */ "epaper_ble_bridge",
     /* owned_mode */ PowerMode::AlwaysOn,
-    /* on_setup_early */ nullptr,
+    /* on_setup_early */ setup_early,
     /* on_setup_late */ setup_late,
     /* on_loop */ epaper_ble_bridge_runtime_loop,
     /* run_duty_cycle */ nullptr,

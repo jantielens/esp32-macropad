@@ -898,6 +898,7 @@ bool epaper_driver_draw_url(const char* url) {
 		uint8_t* data = nullptr;
 		size_t len = 0;
 		bool from_cache = false;
+		bool from_assignment_cache = false;
 #ifdef EPAPER_SD_CS_PIN
 		// Clear any image staged by a previous draw that was never flushed.
 		epaper_sd_cache_discard_pending();
@@ -909,6 +910,7 @@ bool epaper_driver_draw_url(const char* url) {
 				if (epaper_assignment_transport_action(cache_valid) ==
 						EpaperAssignmentTransportAction::UseCache) {
 				from_cache = true;
+					from_assignment_cache = true;
 				epaper_timing_set_fetch(0, true /*from_cache*/);
 				LOGI("Epaper", "Assignment SD cache hit");
 				}
@@ -1018,8 +1020,15 @@ bool epaper_driver_draw_url(const char* url) {
 				// Stage the original transport bytes (compressed G16Z when the server
 				// sent it) for write-back to SD after display. Transfer buffer
 				// ownership to the pending slot (don't free below).
-				if (ok && !from_cache && epaper_sd_cache_is_enabled() &&
-						(img_id[0] || epaper_sd_cache_has_assignment_context())) {
+				const bool promote_legacy_assignment = from_cache &&
+					!from_assignment_cache && epaper_sd_cache_has_assignment_context();
+				if (ok && epaper_sd_cache_is_enabled() &&
+						((!from_cache && (img_id[0] ||
+							epaper_sd_cache_has_assignment_context())) ||
+						 promote_legacy_assignment)) {
+					if (promote_legacy_assignment) {
+						LOGI("Epaper", "Promoting legacy SD cache to assignment cache");
+					}
 						epaper_sd_cache_stage_pending(img_id, data, len);
 						data = nullptr;
 				}
@@ -1082,8 +1091,14 @@ bool epaper_driver_draw_url(const char* url) {
 				s_gray16 = nullptr;
 		}
 
-		if (ok && !from_cache && epaper_sd_cache_is_enabled() &&
+		const bool promote_legacy_assignment = from_cache &&
+			!from_assignment_cache && epaper_sd_cache_has_assignment_context();
+		if (ok && epaper_sd_cache_is_enabled() &&
+				(!from_cache || promote_legacy_assignment) &&
 				epaper_sd_cache_has_assignment_context()) {
+			if (promote_legacy_assignment) {
+				LOGI("Epaper", "Promoting legacy SD cache to assignment cache");
+			}
 			epaper_sd_cache_stage_pending(nullptr, data, len);
 			data = nullptr;
 		}

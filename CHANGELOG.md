@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* E-paper BLE frames now stop BLE before an HTTPS assignment fallback, restore the core mbedTLS allocator for reliable frame downloads, and use the existing assignment sync request as the acknowledgement after rendering. BLE-only cache hits still send the authenticated BLE ACK. The bridge retains PSRAM-first mbedTLS allocation because BLE and HTTPS coexist there.
+* E-paper image downloads now use bulk TLS reads instead of byte-at-a-time `Stream::readBytes`, time out after 15 seconds without progress instead of 15 seconds total, report symbolic HTTP errors and expected byte counts, and reject truncated known-length responses.
+* E-paper NTP resync now stops the SNTP service before assignment HTTPS begins, preventing pending SNTP DNS callbacks from triggering lwIP core-lock assertions during an HTTP hostname lookup.
+
 ## [1.22.0] - 2026-07-23
 
 ### Added

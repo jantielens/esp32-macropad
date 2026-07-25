@@ -157,14 +157,15 @@ bool copy_config(uint8_t index, EpaperBleBridgeFrameConfig *output,
     return valid;
 }
 
-int perform_request(HTTPClient &http, const EpaperBleBridgeFrameConfig &config,
-                    const char *endpoint, bool post, const String &payload,
-                    const char *etag, String *response, char *response_etag,
+int perform_request(const EpaperBleBridgeFrameConfig &config, const char *endpoint,
+                    bool post, const String &payload, const char *etag,
+                    String *response, char *response_etag,
                     size_t response_etag_len) {
     char url[kUrlMaxLen];
     if (!build_endpoint(config, endpoint, url, sizeof(url))) return 0;
     WiFiClient plain;
     WiFiClientSecure secure;
+    HTTPClient http;
     bool began = false;
     if (strncmp(url, "https://", 8) == 0) {
         secure.setInsecure();
@@ -225,26 +226,35 @@ void poll_frame(uint8_t index, uint32_t now_ms) {
     portEXIT_CRITICAL(&g_state_mux);
     if ((int32_t)(now_ms - snapshot.next_poll_ms) < 0) return;
 
-    HTTPClient http;
     String response;
     char response_etag[kEtagMaxLen] = {};
-    const int status = perform_request(http, config, "current", false, String(),
+    const int status = perform_request(config, "current", false, String(),
                                        snapshot.etag, &response, response_etag,
                                        sizeof(response_etag));
     EpaperBleAssignmentPacket assignment = snapshot.assignment;
     const EpaperBleBridgeSiteAction action = epaper_ble_bridge_site_action(status);
     bool succeeded = false;
+    bool assignment_changed = false;
+    bool assignment_cleared = false;
     if (action == EpaperBleBridgeSiteAction::ReplaceAssignment) {
         succeeded = parse_assignment(response, epaper_ble_device_key(config.device_id),
                                      &assignment);
+        assignment_changed = succeeded &&
+            (!snapshot.assignment.valid ||
+             snapshot.assignment.revision != assignment.revision ||
+             snapshot.assignment.content_crc32 != assignment.content_crc32 ||
+             memcmp(snapshot.assignment.image_key, assignment.image_key,
+                    sizeof(assignment.image_key)) != 0);
     } else if (action == EpaperBleBridgeSiteAction::ClearAssignment) {
         memset(&assignment, 0, sizeof(assignment));
         assignment.device_key = epaper_ble_device_key(config.device_id);
         succeeded = true;
+        assignment_cleared = snapshot.assignment.valid;
     } else if (action == EpaperBleBridgeSiteAction::KeepAssignment) {
         succeeded = true;
     }
 
+    uint32_t retry_delay_ms = 0;
     portENTER_CRITICAL(&g_state_mux);
     if (generation != g_config_generation) {
         portEXIT_CRITICAL(&g_state_mux);
@@ -259,10 +269,22 @@ void poll_frame(uint8_t index, uint32_t now_ms) {
         if (response_etag[0]) strlcpy(frame.etag, response_etag, sizeof(frame.etag));
     } else {
         if (frame.poll_failures < UINT8_MAX) ++frame.poll_failures;
-        frame.next_poll_ms = now_ms +
-            epaper_ble_bridge_retry_delay_ms(frame.poll_failures - 1);
+        retry_delay_ms = epaper_ble_bridge_retry_delay_ms(frame.poll_failures - 1);
+        frame.next_poll_ms = now_ms + retry_delay_ms;
     }
     portEXIT_CRITICAL(&g_state_mux);
+
+    if (assignment_changed) {
+        LOGI(TAG, "Frame %u assignment ready: revision=%u format=%u crc=%08x",
+             (unsigned)(index + 1), (unsigned)assignment.revision,
+             (unsigned)assignment.image_format,
+             (unsigned)assignment.content_crc32);
+    } else if (assignment_cleared) {
+        LOGI(TAG, "Frame %u assignment cleared", (unsigned)(index + 1));
+    } else if (!succeeded) {
+        LOGW(TAG, "Frame %u poll failed: HTTP %d, retry in %u ms",
+             (unsigned)(index + 1), status, (unsigned)retry_delay_ms);
+    }
 }
 
 void forward_ack(uint8_t index, uint32_t now_ms) {
@@ -287,13 +309,19 @@ void forward_ack(uint8_t index, uint32_t now_ms) {
     document["image_key"] = image_key;
     String payload;
     serializeJson(document, payload);
-    HTTPClient http;
     String response;
     char response_etag[kEtagMaxLen] = {};
-    const int status = perform_request(http, config, "ack", true, payload,
+    const int status = perform_request(config, "ack", true, payload,
                                        nullptr, &response, response_etag,
                                        sizeof(response_etag));
     const bool terminal = epaper_ble_bridge_ack_status_terminal(status);
+    if (terminal) {
+        LOGI(TAG, "Frame %u ACK forwarded: revision=%u HTTP %d",
+             (unsigned)(index + 1), (unsigned)pending.packet.revision, status);
+    } else {
+        LOGW(TAG, "Frame %u ACK forward failed: revision=%u HTTP %d",
+             (unsigned)(index + 1), (unsigned)pending.packet.revision, status);
+    }
     EpaperBleAssignmentPacket successor = {};
     bool has_successor = false;
     if (status == HTTP_CODE_OK) {
@@ -466,8 +494,10 @@ void radio_task(void *) {
 
 void epaper_ble_bridge_runtime_reload_config() {
     if (!g_config_mutex) return;
+    uint8_t frame_count = 0;
     if (xSemaphoreTake(g_config_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
         g_runtime_config = g_epaper_ble_bridge_config;
+        frame_count = g_runtime_config.frame_count;
         xSemaphoreGive(g_config_mutex);
     }
     portENTER_CRITICAL(&g_state_mux);
@@ -475,9 +505,12 @@ void epaper_ble_bridge_runtime_reload_config() {
     memset(g_frames, 0, sizeof(g_frames));
     memset(g_acks, 0, sizeof(g_acks));
     portEXIT_CRITICAL(&g_state_mux);
+    LOGI(TAG, "Configuration active: %u frame(s)",
+            (unsigned)frame_count);
 }
 
 void epaper_ble_bridge_runtime_setup() {
+    LOGI(TAG, "Runtime initialization start");
     if (!epaper_ble_codec_self_test()) {
         LOGE(TAG, "BLE codec self-test failed; bridge disabled");
         return;
@@ -507,6 +540,8 @@ void epaper_ble_bridge_runtime_setup() {
     g_scan->setAdvertisedDeviceCallbacks(&g_ack_callbacks, true);
     if (!g_scan->start(0, nullptr, false)) {
         LOGE(TAG, "Passive ACK scan failed to start");
+    } else {
+        LOGI(TAG, "Passive ACK scan started");
     }
     if (xTaskCreate(worker_task, "epaper_ble_http", kWorkerStackBytes, nullptr, 1,
                     &g_worker_task) != pdPASS) {
@@ -517,6 +552,11 @@ void epaper_ble_bridge_runtime_setup() {
                     &g_radio_task) != pdPASS) {
         g_radio_task = nullptr;
         LOGE(TAG, "BLE radio task creation failed");
+    }
+    if (g_worker_task && g_radio_task) {
+        LOGI(TAG, "Runtime ready: poll=%u ms advertise=%u ms",
+             (unsigned)kSitePollIntervalMs,
+             (unsigned)EPAPER_BLE_BRIDGE_ADV_INTERVAL_MS);
     }
 }
 

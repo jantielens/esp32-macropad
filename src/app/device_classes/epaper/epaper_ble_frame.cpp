@@ -16,6 +16,7 @@ namespace {
 constexpr uint32_t kScanDeadlineMs = 400;
 constexpr uint32_t kAckIntervalMs = 30;
 constexpr uint32_t kAckAdvertisementCount = 3;
+constexpr char kBleDeviceName[] = "epaper-frame";
 
 EpaperBleFrameSelection* s_selection = nullptr;
 uint32_t s_device_key = 0;
@@ -64,7 +65,7 @@ AssignmentCallbacks s_callbacks;
 
 bool start_ble() {
 	const uint32_t started = millis();
-	if (!BLEDevice::init("")) {
+	if (!BLEDevice::init(kBleDeviceName)) {
 		LOGW("Epaper", "BLE assignment init failed");
 		return false;
 	}
@@ -73,7 +74,7 @@ bool start_ble() {
 }
 
 void stop_ble() {
-	if (BLEDevice::getInitialized()) BLEDevice::deinit(true);
+	if (BLEDevice::getInitialized()) BLEDevice::deinit(false);
 }
 
 bool scan(EpaperBleFrameSelection* selection) {
@@ -151,6 +152,7 @@ void epaper_ble_frame_ack(const EpaperBleAssignmentPacket& packet) {
 			g_epaper_config.assignment_source_url, device_id, sizeof(device_id),
 			api_key, sizeof(api_key))) {
 		LOGW("Epaper", "BLE assignment ACK skipped: assignment credentials unavailable");
+		stop_ble();
 		return;
 	}
 	if (!BLEDevice::getInitialized() && !start_ble()) return;

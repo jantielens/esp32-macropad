@@ -20,6 +20,13 @@
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 
+namespace {
+
+constexpr uint32_t kHttpTimeoutMs = 15000;
+constexpr uint32_t kDownloadIdleTimeoutMs = 15000;
+
+}  // namespace
+
 bool epaper_http_download(const char* url, uint8_t** out_buf, size_t* out_len) {
 	*out_buf = nullptr;
 	*out_len = 0;
@@ -44,7 +51,7 @@ bool epaper_http_download(const char* url, uint8_t** out_buf, size_t* out_len) {
 			LOGW("Epaper", "image GET begin failed%s", hop ? " (redirect)" : "");
 			return false;
 		}
-		http.setTimeout(8000);
+		http.setTimeout(kHttpTimeoutMs);
 		const char* collect[] = {"Location"};
 		http.collectHeaders(collect, 1);
 
@@ -70,7 +77,8 @@ bool epaper_http_download(const char* url, uint8_t** out_buf, size_t* out_len) {
 		}
 
 		if (code != HTTP_CODE_OK) {
-			LOGW("Epaper", "image GET HTTP %d%s", code, hop ? " (redirect)" : "");
+			LOGW("Epaper", "image GET HTTP %d (%s)%s", code,
+				http.errorToString(code).c_str(), hop ? " (redirect)" : "");
 			http.end();
 			return false;
 		}
@@ -89,9 +97,14 @@ bool epaper_http_download(const char* url, uint8_t** out_buf, size_t* out_len) {
 		size_t total = 0;
 		bool stalled = false;
 		const uint32_t t0 = millis();
+		uint32_t last_progress_ms = t0;
 		while (http.connected() && (len < 0 || total < (size_t)len)) {
-			const size_t avail = stream->available();
+			size_t avail = stream->available();
 			if (avail) {
+				if (len > 0) {
+					const size_t remaining = (size_t)len - total;
+					if (avail > remaining) avail = remaining;
+				}
 				if (total + avail > cap) {
 					// Chunked stream outgrew the estimate — grow the buffer.
 					size_t new_cap = cap * 2;
@@ -107,13 +120,15 @@ bool epaper_http_download(const char* url, uint8_t** out_buf, size_t* out_len) {
 					buf = grown;
 					cap = new_cap;
 				}
-				const int n = stream->readBytes(buf + total, avail);
+				const int n = stream->read(buf + total, avail);
 				if (n <= 0) break;
 				total += (size_t)n;
+				last_progress_ms = millis();
 			} else {
 				if (len > 0 && total >= (size_t)len) break;
-				if (millis() - t0 > 15000) {
-					LOGW("Epaper", "image download stalled after %u bytes", (unsigned)total);
+				if (millis() - last_progress_ms > kDownloadIdleTimeoutMs) {
+					LOGW("Epaper", "image download stalled after %u/%d bytes",
+						(unsigned)total, len);
 					stalled = true;
 					break;
 				}
@@ -126,8 +141,10 @@ bool epaper_http_download(const char* url, uint8_t** out_buf, size_t* out_len) {
 		http.end();
 		delay(100);
 
-		if (stalled || total < 4) {
-			LOGW("Epaper", "image download incomplete (%u bytes)", (unsigned)total);
+		const bool truncated = len > 0 && total != (size_t)len;
+		if (stalled || truncated || total < 4) {
+			LOGW("Epaper", "image download incomplete (%u/%d bytes)",
+				(unsigned)total, len);
 			heap_caps_free(buf);
 			return false;
 		}

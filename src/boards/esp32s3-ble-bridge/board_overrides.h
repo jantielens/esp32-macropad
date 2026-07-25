@@ -30,7 +30,7 @@
 #define HAS_SENSOR_DUMMY false
 #define HAS_BUTTON false
 
-// Limit SRAM-backed MQTT trigger storage on the no-PSRAM target.
+// Limit internal-RAM-backed MQTT trigger storage on the compact bridge target.
 #define MAX_MQTT_TRIGGERS 3
 
 // Promote bridge frame assignments to the primary portal page after the
