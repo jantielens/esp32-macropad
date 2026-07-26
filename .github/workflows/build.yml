@@ -133,9 +133,12 @@ jobs:
         mkdir -p ~/Arduino/libraries
         git clone --depth 1 --branch v7.2.1 https://github.com/bblanchon/ArduinoJson.git ~/Arduino/libraries/ArduinoJson
 
+    - name: Install photoframe vector dependencies
+      run: python3 -m pip install pillow==12.2.0
+
     - name: Run host-native tests
       run: |
-        chmod +x tests/run_tests.sh
+        chmod +x tests/run_tests.sh tests/test_photoframe_vector_drift.sh
         ./tests/run_tests.sh
 
   compile-flags-doc:
