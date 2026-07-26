@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -173,25 +174,28 @@ def test_client_key_falls_back_to_peer():
     assert app._client_key(_Req()) == "198.51.100.4"
 
 
-# --- SECRET_KEY fail-fast (subprocess: import must raise in production) --------
+# --- Session secret persistence ------------------------------------------------
 
-def test_secret_key_required_in_production():
-    env = dict(os.environ)
-    env["COOKIE_SECURE"] = "1"
-    env.pop("SECRET_KEY", None)
-    code = (
-        "import app; "
-        "raise SystemExit('FAIL: import should have raised RuntimeError')"
-    )
-    proc = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    assert proc.returncode != 0
-    assert "SECRET_KEY is required" in proc.stderr, proc.stderr
+def test_secret_key_persists_in_production():
+    with tempfile.TemporaryDirectory() as data_root:
+        env = dict(os.environ)
+        env["COOKIE_SECURE"] = "1"
+        env["PHOTOFRAME_DATA_DIR"] = data_root
+        env.pop("SECRET_KEY", None)
+        code = "import app; print(app._secret_key)"
+        values = []
+        for _ in range(2):
+            proc = subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            assert proc.returncode == 0, proc.stderr
+            values.append(proc.stdout.strip())
+        assert values[0] == values[1]
+        assert len(values[0]) == 64
 
 
 def test_secret_key_dev_fallback_imports():
@@ -231,6 +235,7 @@ def test_security_headers_present():
     csp = resp.headers.get("Content-Security-Policy", "")
     assert "frame-ancestors 'none'" in csp
     assert "cdn.jsdelivr.net" in csp
+    assert "connect-src 'self' https://cdn.jsdelivr.net" in csp
 
 
 def _run_all() -> int:

@@ -1,104 +1,26 @@
-"""Per-image and queue domain logic over the single-copy blob store.
-
-Blob layout (blob-authoritative; ``state/queue.json`` is disposable soft-state):
-
-    images/<id>.g16p          canonical panel image
-    images/<id>__thumb.png    gallery thumbnail
-    images/<id>.json          authoritative per-image meta
-    state/queue.json          ordered list of ids to show next
-
-All lifecycle facts (permanent, expires_at, last_shown_at) live in the per-image meta,
-never in the queue. The queue only orders "what to show next" and is rebuildable: a
-missing/corrupt queue, or a queued id with no backing blob, degrades to rotation-only.
-"""
+"""Files-as-truth photo index and best-effort selection policy."""
 
 from __future__ import annotations
 
 import math
 import re
+import threading
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import NamedTuple, Optional
+from typing import Optional
 
 import blobstore as bs
 
-IMAGE_PREFIX = "images/"
-QUEUE_BLOB = "state/queue.json"
-SCHEDULE_BLOB = "state/schedule.json"
-SETTINGS_BLOB = "state/settings.json"
-G16P_EXT = ".g16p"
-JPEG_EXT = ".jpg"
-THUMB_SUFFIX = "__thumb.png"
-META_EXT = ".json"
-
-# Canonical-image extensions, keyed by output format (see config.py). g16z keeps
-# the historical .g16p extension so existing E1003 blobs stay valid; jpeg uses
-# .jpg so on-device image libraries (Inkplate) pick the right decoder by URL.
-FORMAT_EXT = {"g16z": G16P_EXT, "jpeg": JPEG_EXT}
-DEFAULT_IMAGE_EXT = G16P_EXT
-# Inverse of FORMAT_EXT: resolve the output format from a canonical blob's
-# extension so /api/next can derive media type + X-Image-Format without a meta GET.
-_EXT_FORMAT = {ext: fmt for fmt, ext in FORMAT_EXT.items()}
-# All extensions we may have written, for format-agnostic scans/cleanup.
-KNOWN_IMAGE_EXTS = (G16P_EXT, JPEG_EXT)
-# Content type per format, for the canonical blob upload.
-FORMAT_CONTENT_TYPE = {"g16z": "application/octet-stream", "jpeg": "image/jpeg"}
-
-# Image ids are server-minted; restrict to a safe charset to prevent blob-name
-# injection / path traversal when building URLs.
+PHOTO_CONTAINER = "photos"
+STATE_CONTAINER = "state"
+QUEUE_BLOB = "queue.json"
+SETTINGS_BLOB = "settings.json"
+SIDECAR_NAME = "sidecar.json"
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def is_valid_id(image_id: str) -> bool:
-    return bool(_ID_RE.match(image_id))
-
-
-def format_ext(image_format: Optional[str]) -> str:
-    """Canonical-blob extension for an output format (default .g16p)."""
-    return FORMAT_EXT.get((image_format or "").lower(), DEFAULT_IMAGE_EXT)
-
-
-def meta_image_ext(meta: dict) -> str:
-    """Canonical-blob extension implied by a per-image meta's ``format`` field."""
-    return format_ext(meta.get("format"))
-
-
-def format_from_ext(ext: str) -> str:
-    """Output format implied by a canonical-blob extension (inverse of format_ext)."""
-    return _EXT_FORMAT.get((ext or "").lower(), "g16z")
-
-
-def image_name(image_id: str, ext: str = DEFAULT_IMAGE_EXT) -> str:
-    return f"{IMAGE_PREFIX}{image_id}{ext}"
-
-
-def g16p_name(image_id: str) -> str:
-    return image_name(image_id, G16P_EXT)
-
-
-def _split_image_name(name: str) -> Optional[tuple[str, str]]:
-    """Split a blob name into ``(image_id, ext)`` for canonical image blobs only.
-
-    Returns None for thumbnails, meta JSON, non-image blobs, or invalid ids.
-    """
-    if not name.startswith(IMAGE_PREFIX):
-        return None
-    rest = name[len(IMAGE_PREFIX):]
-    if rest.endswith(THUMB_SUFFIX) or rest.endswith(META_EXT):
-        return None
-    for ext in KNOWN_IMAGE_EXTS:
-        if rest.endswith(ext):
-            image_id = rest[:-len(ext)]
-            if is_valid_id(image_id):
-                return image_id, ext
-    return None
-
-
-def thumb_name(image_id: str) -> str:
-    return f"{IMAGE_PREFIX}{image_id}{THUMB_SUFFIX}"
-
-
-def meta_name(image_id: str) -> str:
-    return f"{IMAGE_PREFIX}{image_id}{META_EXT}"
+    return bool(_ID_RE.fullmatch(image_id))
 
 
 def now_iso() -> str:
@@ -109,262 +31,233 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
     try:
-        dt = datetime.fromisoformat(value)
+        result = datetime.fromisoformat(value)
     except ValueError:
         return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt
+    return result.replace(tzinfo=result.tzinfo or timezone.utc)
 
 
 def is_expired(meta: dict, *, at: Optional[datetime] = None) -> bool:
     expires = _parse_iso(meta.get("expires_at"))
-    if expires is None:
-        return False
-    return (at or datetime.now(timezone.utc)) >= expires
+    return expires is not None and (at or datetime.now(timezone.utc)) >= expires
 
 
-# --- Selection metadata (stamped on the .g16p blob) ---------------------------
-#
-# The fields /api/next needs to choose an image -- permanent, expires_at,
-# last_shown_at, served_at -- are stamped as x-ms-meta-* pairs on the canonical
-# .g16p blob so select_next() can read them all in one List Blobs call instead
-# of a GET per image. The per-image .json remains the human-facing record of
-# truth (captions, knobs, crop); these are a denormalized projection of its
-# selection-relevant subset, kept in sync on every mutation that touches them.
+@dataclass(frozen=True)
+class TransportDescriptor:
+    image_key: str
+    content_crc32: str
+    format_code: int
+    media_type: str
+    width: int
+    height: int
+    blob_name: str
+    content_length: int
+    schedule_countdown: Optional[int] = None
 
 
-def selection_blob_metadata(meta: dict) -> dict:
-    """Project the selection-relevant fields into x-ms-meta string pairs.
-
-    Null/absent timestamps are omitted (absence == None on read); ``permanent``
-    is always present so its key doubles as the "metadata is stamped" marker.
-    ``format`` rides along so the canonical-blob extension and the served
-    ``X-Image-Format`` can be resolved from the List Blobs response alone, with
-    no per-image .json GET on the /api/next hot path.
-    """
-    md = {"permanent": "1" if meta.get("permanent", False) else "0"}
-    for key in ("expires_at", "last_shown_at", "served_at", "uploaded_at"):
-        value = meta.get(key)
-        if value:
-            md[key] = str(value)
-    image_format = meta.get("format")
-    if image_format:
-        md["format"] = str(image_format)
-    return md
+MEDIA_TYPES = {
+    1: "image/jpeg",
+    2: "application/vnd.photoframe.g16p",
+    3: "application/vnd.photoframe.g16z",
+}
 
 
-def _selection_from_blob_metadata(md: dict) -> dict:
-    """Inverse of selection_blob_metadata: reconstruct selection fields."""
-    return {
-        "permanent": md.get("permanent") == "1",
-        "expires_at": md.get("expires_at") or None,
-        "last_shown_at": md.get("last_shown_at") or None,
-        "served_at": md.get("served_at") or None,
-        "uploaded_at": md.get("uploaded_at") or None,
-        "format": md.get("format") or None,
-    }
+class PhotoIndex:
+    """Derived in-memory index whose durable source is per-photo sidecars."""
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._photos: dict[str, dict] = {}
+
+    def rebuild(self) -> None:
+        rebuilt = {}
+        for name in bs.list_blobs(PHOTO_CONTAINER, ""):
+            if not name.endswith(f"/{SIDECAR_NAME}"):
+                continue
+            image_id = name.split("/", 1)[0]
+            value = bs.download_json(PHOTO_CONTAINER, name)
+            if is_valid_id(image_id) and isinstance(value, dict) and value.get("id") == image_id:
+                rebuilt[image_id] = value
+        with self._lock:
+            self._photos = rebuilt
+
+    def all(self) -> list[dict]:
+        with self._lock:
+            return [dict(meta) for meta in self._photos.values()]
+
+    def get(self, image_id: str) -> Optional[dict]:
+        with self._lock:
+            meta = self._photos.get(image_id)
+            return dict(meta) if meta else None
+
+    def put(self, meta: dict) -> None:
+        image_id = str(meta["id"])
+        if not is_valid_id(image_id):
+            raise ValueError("invalid image id")
+        with self._lock:
+            bs.upload_json(PHOTO_CONTAINER, f"{image_id}/{SIDECAR_NAME}", meta)
+            self._photos[image_id] = dict(meta)
+
+    def delete(self, image_id: str) -> None:
+        with self._lock:
+            prefix = f"{image_id}/"
+            for name in bs.list_blobs(PHOTO_CONTAINER, prefix):
+                bs.delete_blob(PHOTO_CONTAINER, name)
+            self._photos.pop(image_id, None)
+            queue_remove(image_id)
+
+    def select(
+        self,
+        *,
+        width: int,
+        height: int,
+        format_codes: tuple[int, ...],
+        variant_keys: dict[int, str],
+        temp_min_spacing: int,
+        fresh_window_days: int,
+        max_temp_share_pct: int,
+        fingerprint: tuple[str, str] | None,
+    ) -> Optional[TransportDescriptor]:
+        with self._lock:
+            now = datetime.now(timezone.utc)
+            eligible: dict[str, tuple[dict, dict]] = {}
+            for image_id, meta in self._photos.items():
+                if is_expired(meta, at=now) or (not meta.get("permanent", False) and meta.get("served_at")):
+                    continue
+                variants = meta.get("variants") or []
+                chosen_variant = None
+                for code in format_codes:
+                    chosen_variant = next(
+                        (
+                            variant for variant in variants
+                            if int(variant.get("format_code", 0)) == code
+                            and int(variant.get("width", 0)) == width
+                            and int(variant.get("height", 0)) == height
+                            and variant.get("profile_key") == variant_keys[code]
+                        ),
+                        None,
+                    )
+                    if chosen_variant is not None:
+                        break
+                if chosen_variant is not None:
+                    eligible[image_id] = (meta, chosen_variant)
+
+            if fingerprint and len(eligible) > 1:
+                eligible = {
+                    image_id: item for image_id, item in eligible.items()
+                    if (image_id, item[1].get("content_crc32")) != fingerprint
+                }
+            if not eligible:
+                return None
+
+            selected_id = next((item for item in read_queue() if item in eligible), None)
+            new_countdown = None
+            if selected_id is None:
+                perm, featured = [], []
+                for image_id in sorted(eligible):
+                    meta = eligible[image_id][0]
+                    if not meta.get("permanent", False):
+                        continue
+                    shown = _parse_iso(meta.get("last_shown_at"))
+                    if meta.get("expires_at") or is_fresh(meta, now=now, window_days=fresh_window_days):
+                        featured.append((image_id, shown))
+                    else:
+                        perm.append((image_id, shown))
+                countdown = read_schedule()
+                selected_id, _source, new_countdown = bucket_schedule_pick(
+                    perm,
+                    featured,
+                    temp_countdown=countdown,
+                    n=temp_min_spacing,
+                    floor=share_pct_to_floor(max_temp_share_pct),
+                )
+                if selected_id is not None and countdown == new_countdown:
+                    new_countdown = None
+            if selected_id is None:
+                return None
+
+            meta, variant = eligible[selected_id]
+            code = int(variant["format_code"])
+            return TransportDescriptor(
+                image_key=selected_id,
+                content_crc32=str(variant["content_crc32"]),
+                format_code=code,
+                media_type=MEDIA_TYPES[code],
+                width=int(variant["width"]),
+                height=int(variant["height"]),
+                blob_name=str(variant["blob_name"]),
+                content_length=int(variant["content_length"]),
+                schedule_countdown=new_countdown,
+            )
+
+    def commit_selection(self, descriptor: TransportDescriptor) -> None:
+        with self._lock:
+            meta = self._photos.get(descriptor.image_key)
+            if meta is None:
+                return
+            updated = dict(meta)
+            if updated.get("permanent", False):
+                updated["last_shown_at"] = now_iso()
+            else:
+                updated["served_at"] = now_iso()
+            bs.upload_json(PHOTO_CONTAINER, f"{descriptor.image_key}/{SIDECAR_NAME}", updated)
+            self._photos[descriptor.image_key] = updated
+            if descriptor.schedule_countdown is not None:
+                write_schedule(descriptor.schedule_countdown)
+            queue_remove(descriptor.image_key)
 
 
-# --- Queue (soft-state) -------------------------------------------------------
+def read_queue() -> list[str]:
+    value = bs.download_json(STATE_CONTAINER, QUEUE_BLOB)
+    return [str(item) for item in value if is_valid_id(str(item))] if isinstance(value, list) else []
 
 
-def read_queue(sas: str) -> list[str]:
-    data = bs.download_json(sas, QUEUE_BLOB)
-    if not isinstance(data, list):
-        return []
-    return [str(x) for x in data if is_valid_id(str(x))]
+def write_queue(ids: list[str]) -> None:
+    bs.upload_json(STATE_CONTAINER, QUEUE_BLOB, ids)
 
 
-def write_queue(sas: str, ids: list[str]) -> None:
-    bs.upload_json(sas, QUEUE_BLOB, ids)
-
-
-def queue_remove(sas: str, image_id: str) -> None:
-    ids = read_queue(sas)
+def queue_remove(image_id: str) -> None:
+    ids = read_queue()
     if image_id in ids:
-        write_queue(sas, [i for i in ids if i != image_id])
+        write_queue([item for item in ids if item != image_id])
 
 
-def queue_unshift(sas: str, image_id: str) -> None:
-    """Place an id at the front of the queue (show it next), de-duplicated."""
-    ids = [i for i in read_queue(sas) if i != image_id]
-    ids.insert(0, image_id)
-    write_queue(sas, ids)
+def queue_unshift(image_id: str) -> None:
+    write_queue([image_id] + [item for item in read_queue() if item != image_id])
 
 
-# --- Scheduler soft-state -----------------------------------------------------
-#
-# The two-bucket scheduler (see bucket_schedule_pick) needs one integer between
-# polls: how many displays remain until the next temporary-photo slot. It lives
-# in its own disposable blob so a lost/corrupt value simply restarts the cadence
-# (temporary photos keep showing; only the phase resets) -- the image blobs stay
-# the sole authoritative state.
+def read_schedule() -> int:
+    value = bs.download_json(STATE_CONTAINER, "schedule.json")
+    try:
+        return max(0, int(value.get("temp_countdown", 0))) if isinstance(value, dict) else 0
+    except (TypeError, ValueError):
+        return 0
 
 
-def read_schedule(sas: str) -> int:
-    """Temp-slot countdown (disposable soft-state). Missing/corrupt -> 0 (temp due)."""
-    data = bs.download_json(sas, SCHEDULE_BLOB)
-    if isinstance(data, dict):
-        try:
-            return max(0, int(data.get("temp_countdown", 0)))
-        except (TypeError, ValueError):
-            return 0
-    return 0
+def write_schedule(value: int) -> None:
+    bs.upload_json(STATE_CONTAINER, "schedule.json", {"temp_countdown": max(0, value)})
 
 
-def write_schedule(sas: str, temp_countdown: int) -> None:
-    bs.upload_json(sas, SCHEDULE_BLOB, {"temp_countdown": int(max(0, temp_countdown))})
+def read_settings() -> dict:
+    value = bs.download_json(STATE_CONTAINER, SETTINGS_BLOB)
+    return value if isinstance(value, dict) else {}
 
 
-# --- Per-device settings (operator override) ----------------------------------
-#
-# A small map of per-device knobs the owner can tune from the gallery UI without
-# editing CONFIG_JSON (which the app only reads). Currently just temp_min_spacing,
-# the temporary-photo cadence. Absence falls back to the config default, so a
-# lost/corrupt blob degrades gracefully to the deployed configuration.
+def write_settings(settings: dict) -> None:
+    bs.upload_json(STATE_CONTAINER, SETTINGS_BLOB, settings)
 
 
-def read_settings(sas: str) -> dict:
-    """Per-device UI settings override. Missing/corrupt -> {} (use config defaults)."""
-    data = bs.download_json(sas, SETTINGS_BLOB)
-    return data if isinstance(data, dict) else {}
-
-
-def write_settings(sas: str, settings: dict) -> None:
-    bs.upload_json(sas, SETTINGS_BLOB, settings)
-
-
-# --- Per-image meta -----------------------------------------------------------
-
-
-def read_meta(sas: str, image_id: str) -> Optional[dict]:
-    return bs.download_json(sas, meta_name(image_id))
-
-
-def write_meta(sas: str, image_id: str, meta: dict) -> None:
-    bs.upload_json(sas, meta_name(image_id), meta)
-
-
-def list_image_ids(sas: str) -> list[str]:
-    """All image ids that have a canonical image blob (any known format)."""
-    names = bs.list_blobs(sas, IMAGE_PREFIX)
-    ids: list[str] = []
-    for name in names:
-        split = _split_image_name(name)
-        if split:
-            ids.append(split[0])
-    return ids
-
-
-def list_selection_meta(sas: str) -> dict[str, dict]:
-    """Map every image id to its blob selection metadata (one List Blobs call).
-
-    Stamped images map to their reconstructed selection fields; unstamped (legacy)
-    images map to ``{}``. The gallery merges the mutable timestamps from here over
-    the per-image .json -- which select_next/mark_served no longer rewrites -- so
-    blob metadata stays the authority for last_shown_at / served_at.
-    """
-    blobs = bs.list_blobs_with_metadata(sas, IMAGE_PREFIX)
-    out: dict[str, dict] = {}
-    for name, md in blobs.items():
-        split = _split_image_name(name)
-        if not split:
-            continue
-        image_id = split[0]
-        out[image_id] = _selection_from_blob_metadata(md) if "permanent" in md else {}
-    return out
-
-
-def delete_image(sas: str, image_id: str) -> None:
-    """Remove an image's blob(s), thumb, meta, and any queue reference.
-
-    Deletes every known canonical extension (delete_blob tolerates 404) so the
-    format does not need to be known at delete time.
-    """
-    for ext in KNOWN_IMAGE_EXTS:
-        bs.delete_blob(sas, image_name(image_id, ext))
-    bs.delete_blob(sas, thumb_name(image_id))
-    bs.delete_blob(sas, meta_name(image_id))
-    queue_remove(sas, image_id)
-
-
-def store_image(
-    sas: str,
-    image_id: str,
-    image_bytes: bytes,
-    thumb_png: bytes,
-    meta: dict,
-    *,
-    enqueue: bool = True,
-) -> None:
-    """Persist a new image (blob + thumb + meta) and optionally enqueue it.
-
-    The canonical blob's extension and content type are derived from the meta's
-    ``format`` field (default g16z/.g16p).
-    """
-    image_format = meta.get("format")
-    ext = meta_image_ext(meta)
-    content_type = FORMAT_CONTENT_TYPE.get(
-        (image_format or "").lower(), "application/octet-stream"
-    )
-    bs.upload_blob(
-        sas,
-        image_name(image_id, ext),
-        image_bytes,
-        content_type=content_type,
-        metadata=selection_blob_metadata(meta),
-    )
-    bs.upload_blob(sas, thumb_name(image_id), thumb_png, content_type="image/png")
-    write_meta(sas, image_id, meta)
-    if enqueue:
-        # LIFO: a new upload jumps to the front so the most recent action (upload
-        # or "Show next") is what the device serves next.
-        queue_unshift(sas, image_id)
-
-
-# --- Two-bucket rotation scheduler (pure) -------------------------------------
-#
-# Rotation photos split into two buckets by lifecycle:
-#   * permanent  -- permanent && no expiry  -> the everyday wallpaper pool
-#   * temporary  -- permanent && has expiry -> short-lived photos to feature
-# A temporary slot fires every `spacing` displays, where spacing is chosen so any
-# single temporary photo repeats at most once per `n` displays. This makes a
-# temporary photo's on-screen share independent of how big the permanent pool is
-# (the failing property of a weight multiplier, whose share is boost/pool). The
-# functions below are pure (no blob I/O) so they are unit-tested directly and
-# drive the offline simulator/sweep.
-
+# The cadence functions below are ported unchanged from the original site.
 
 def temp_slot_spacing(n: int, k: int, floor: int = 2) -> int:
-    """Displays between featured slots for k featured photos at knob n.
-
-    Each featured photo should repeat at most once per n displays, so the bucket
-    fires every ceil(n / k) displays. Floored at ``floor`` (default 2) to cap the
-    featured bucket's combined share: one permanent between featured slots caps it
-    at 50%, a floor of 4 at 25%, etc. (see share_pct_to_floor).
-    """
     return max(floor, math.ceil(n / max(1, k)))
 
 
 def share_pct_to_floor(pct: int) -> int:
-    """Spacing floor that caps the featured bucket at ~pct% of displays (pure).
-
-    A featured slot fires at most once per ``floor`` displays, so the bucket's
-    share is 1/floor. floor = ceil(100/pct) keeps the actual share <= pct
-    (50 -> 2, 25 -> 4, 33 -> 4, 100 -> 1). Floored at 1.
-    """
     return max(1, math.ceil(100 / max(1, pct)))
 
 
 def is_fresh(sel: dict, *, now: datetime, window_days: int) -> bool:
-    """Whether a permanent (no-expiry) photo is still in its post-upload boost window.
-
-    Fresh photos join the featured bucket so a newly uploaded photo is shown often
-    for a while instead of being lost at 1/pool odds, then graduate into normal
-    permanent rotation automatically once uploaded_at ages past the window. A
-    window of 0 (or a missing uploaded_at) means "never fresh".
-    """
     if window_days <= 0:
         return False
     if not sel.get("permanent") or sel.get("expires_at"):
@@ -376,11 +269,6 @@ def is_fresh(sel: dict, *, now: datetime, window_days: int) -> bool:
 
 
 def _lru_id(items: list) -> Optional[str]:
-    """Least-recently-shown id from [(id, last_shown_at | None), ...].
-
-    Never-shown (None) sorts first; ties keep the first encountered, so callers
-    that pass a stably-ordered list get deterministic picks.
-    """
     best: Optional[str] = None
     best_t: Optional[datetime] = None
     for image_id, shown in items:
@@ -398,32 +286,11 @@ def bucket_schedule_pick(
     n: int,
     floor: int = 2,
 ) -> tuple:
-    """Pick the next rotation image from the permanent/featured buckets (pure).
-
-    perm / temp are lists of (id, last_shown_at | None) for eligible images in
-    each bucket; ``temp`` is the featured bucket (temporary + fresh photos).
-    temp_countdown is displays remaining until the next featured slot (soft-state).
-    n is the per-device min spacing; ``floor`` caps the featured bucket's combined
-    share (see share_pct_to_floor).
-
-    Returns (chosen_id, source, new_countdown) where source is "permanent",
-    "temporary", or None when nothing is eligible.
-
-    Cadence: when both buckets are populated, a featured photo is served once
-    every temp_slot_spacing(n, len(temp), floor) displays and a permanent fills the
-    rest; within the featured bucket the least-recently-shown photo rotates, so
-    multiple featured photos share the slot fairly. Fallbacks: only permanents ->
-    100% permanent; only featured -> they rotate among themselves (a missing
-    permanent must not blank the screen).
-    """
     if not perm and not temp:
         return None, None, temp_countdown
     if not temp:
-        # No featured photos: pure permanent rotation; reset so a freshly added
-        # featured photo is immediately due.
         return _lru_id(perm), "permanent", 0
     if not perm:
-        # No separators available; rotate featured photos among themselves.
         return _lru_id(temp), "temporary", temp_countdown
     if temp_countdown <= 0:
         spacing = temp_slot_spacing(n, len(temp), floor)
@@ -431,93 +298,44 @@ def bucket_schedule_pick(
     return _lru_id(perm), "permanent", temp_countdown - 1
 
 
-# --- Expected-exposure estimates (gallery "how often is this shown" hints) -----
-#
-# The scheduler is deterministic, so a photo's *share* of displays is closed-form
-# arithmetic on the current gallery + config -- no simulation needed. Turning that
-# share into "per hour/day/week" needs a displays-per-day figure, which we infer
-# from recent last_shown_at history (the server never sees the device's poll
-# cadence directly). These are best-effort hints, not guarantees.
-
-
-def estimate_displays_per_day(
-    last_shown: list,
-    *,
-    now: Optional[datetime] = None,
-    default: float = 24.0,
-    lookback_days: float = 14.0,
-) -> float:
-    """Estimate displays/day from recent last_shown_at history (median serve gap).
-
-    Each serve stamps exactly one photo's last_shown_at, so the distinct recent
-    timestamps across the gallery sample the device's poll cadence. Uses the
-    median gap between consecutive serves (robust to downtime and outliers), and
-    falls back to ``default`` until at least two recent serves are available.
-
-    ``last_shown`` is an iterable of ISO strings and/or datetimes; None/blank and
-    entries older than ``lookback_days`` are ignored.
-    """
+def estimate_displays_per_day(last_shown: list, *, now: Optional[datetime] = None,
+                              default: float = 24.0, lookback_days: float = 14.0) -> float:
     now = now or datetime.now(timezone.utc)
     cutoff = now - timedelta(days=lookback_days)
     times = []
     for value in last_shown:
-        dt = value if isinstance(value, datetime) else _parse_iso(value)
-        if dt is not None and dt >= cutoff:
-            times.append(dt)
+        parsed = value if isinstance(value, datetime) else _parse_iso(value)
+        if parsed is not None and parsed >= cutoff:
+            times.append(parsed)
     times = sorted(set(times))
     if len(times) < 2:
         return default
-    gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a]
+    gaps = sorted((b - a).total_seconds() for a, b in zip(times, times[1:]) if b > a)
     if not gaps:
         return default
-    gaps.sort()
-    mid = len(gaps) // 2
-    median = gaps[mid] if len(gaps) % 2 else (gaps[mid - 1] + gaps[mid]) / 2.0
-    if median <= 0:
-        return default
-    return 86400.0 / median
+    middle = len(gaps) // 2
+    median = gaps[middle] if len(gaps) % 2 else (gaps[middle - 1] + gaps[middle]) / 2.0
+    return 86400.0 / median if median > 0 else default
 
 
-def expected_share(
-    *,
-    is_featured: bool,
-    perm_count: int,
-    featured_count: int,
-    n: int,
-    floor: int,
-) -> float:
-    """Expected fraction of displays one photo receives under the scheduler.
-
-    Mirrors bucket_schedule_pick exactly: the featured slot fires every
-    ``s = temp_slot_spacing(n, k, floor)`` displays and is shared by the ``k``
-    featured photos (1/(s*k) each); the remaining s-1 of every s displays are
-    shared by the ``p`` permanents ((s-1)/(s*p) each). Degenerate buckets fall
-    back to even rotation within whichever bucket is non-empty.
-    """
-    p = max(0, perm_count)
-    k = max(0, featured_count)
+def expected_share(*, is_featured: bool, perm_count: int, featured_count: int,
+                   n: int, floor: int) -> float:
+    p, k = max(0, perm_count), max(0, featured_count)
     if is_featured:
         if k == 0:
             return 0.0
         if p == 0:
-            return 1.0 / k  # only featured photos -> they rotate among themselves
-        s = temp_slot_spacing(n, k, floor)
-        return 1.0 / (s * k)
+            return 1.0 / k
+        return 1.0 / (temp_slot_spacing(n, k, floor) * k)
     if p == 0:
         return 0.0
     if k == 0:
-        return 1.0 / p  # no featured photos -> pure permanent rotation
-    s = temp_slot_spacing(n, k, floor)
-    return (s - 1) / (s * p)
+        return 1.0 / p
+    spacing = temp_slot_spacing(n, k, floor)
+    return (spacing - 1) / (spacing * p)
 
 
 def frequency_label(share: float, displays_per_day: float) -> str:
-    """Short human 'how often is this shown' string from a share + cadence.
-
-    Picks the coarsest-but-still-meaningful horizon: a rate of >=1/hour reads as
-    '~N\u00d7/hour', >=1/day as '~N\u00d7/day', >=1/week as '~N\u00d7/week', and
-    anything rarer as an interval ('~once every N weeks'). Best-effort, not exact.
-    """
     rate_day = max(0.0, share) * max(0.0, displays_per_day)
     if rate_day <= 0.0:
         return "not in rotation"
@@ -535,175 +353,3 @@ def frequency_label(share: float, displays_per_day: float) -> str:
     if interval_days < 60:
         return f"~once every {round(interval_days / 7)} weeks"
     return f"~once every {round(interval_days / 30)} months"
-
-
-# --- Selection for /api/next --------------------------------------------------
-
-
-class NextPick(NamedTuple):
-    """Result of select_next: which image to serve and how it was chosen.
-
-    ``ext`` is the canonical blob's extension (e.g. ``.g16p``/``.jpg``) and
-    ``sel_meta`` carries the selection fields plus a resolved ``format``, so the
-    handler can build the redirect URL, media type, and ``X-Image-Format`` header
-    -- and call mark_served -- without any per-image .json GET.
-    """
-
-    image_id: str
-    ext: str
-    sel_meta: dict
-    from_queue: bool
-
-
-def select_next(
-    sas: str,
-    *,
-    temp_min_spacing: int = 4,
-    fresh_window_days: int = 7,
-    max_temp_share_pct: int = 50,
-    blobs: Optional[dict] = None,
-    queue: Optional[list] = None,
-    countdown: Optional[int] = None,
-) -> Optional[NextPick]:
-    """Pick the next image to serve as a NextPick, or None.
-
-    Order: first servable id in the queue (explicit one-shots), then the
-    two-bucket round-robin rotation. The featured bucket holds temporary photos
-    (those with an expiry) and fresh photos (permanent photos uploaded within
-    fresh_window_days); permanent photos past the window form the everyday pool.
-    Skips expired images and queued ids with no backing blob, reaping expired
-    blobs opportunistically.
-
-    temp_min_spacing is the per-device cadence knob: a featured photo repeats at
-    most once per this many displays. fresh_window_days sets how long a new photo
-    stays featured (0 disables). max_temp_share_pct caps the featured bucket's
-    combined share (via share_pct_to_floor), bounding bulk-upload bursts.
-
-    Selection reads are metadata-only: a single List Blobs (include=metadata)
-    call returns every image's selection state, so the cost is ~3 round-trips
-    flat (list + queue + schedule) regardless of gallery size. The handler may
-    pass already-fetched ``blobs``/``queue``/``countdown`` (e.g. read in parallel)
-    to fold those into the single fan-out; any left None are fetched here so
-    standalone callers keep working.
-    """
-    now = datetime.now(timezone.utc)
-
-    # 1 round-trip (or reuse a prefetched one): every image blob's metadata.
-    if blobs is None:
-        blobs = bs.list_blobs_with_metadata(sas, IMAGE_PREFIX)
-    metas: dict[str, dict] = {}
-    ext_by_id: dict[str, str] = {}
-    for name, md in blobs.items():
-        split = _split_image_name(name)
-        if not split:
-            continue
-        image_id, ext = split
-        ext_by_id[image_id] = ext
-        if "permanent" in md:
-            metas[image_id] = _selection_from_blob_metadata(md)
-        else:
-            # Backfill: image uploaded before metadata stamping existed. Read its
-            # .json once and stamp the blob so subsequent polls are metadata-only.
-            full = read_meta(sas, image_id) or {}
-            bs.set_blob_metadata(sas, name, selection_blob_metadata(full))
-            metas[image_id] = {
-                "permanent": bool(full.get("permanent", False)),
-                "expires_at": full.get("expires_at"),
-                "last_shown_at": full.get("last_shown_at"),
-                "served_at": full.get("served_at"),
-                "uploaded_at": full.get("uploaded_at"),
-                "format": full.get("format"),
-            }
-
-    existing = set(metas.keys())
-
-    def _pick(image_id: str, *, from_queue: bool) -> NextPick:
-        ext = ext_by_id.get(image_id, DEFAULT_IMAGE_EXT)
-        sel = dict(metas[image_id])
-        # Format is authoritative from the on-disk extension; stamp it so the
-        # handler resolves media type + X-Image-Format without a .json GET.
-        sel["format"] = format_from_ext(ext)
-        return NextPick(image_id=image_id, ext=ext, sel_meta=sel, from_queue=from_queue)
-
-    # 0) Deferred one-shot reap: a one-shot served on a previous poll kept its
-    # blob alive so the /api/next redirect target stayed valid while the device
-    # fetched it. Delete it now -- the device (which sleeps between cycles) has
-    # long since downloaded it, and it was dequeued at serve time so it will
-    # never be selected again.
-    for image_id in list(existing):
-        sel = metas[image_id]
-        if not sel.get("permanent") and sel.get("served_at"):
-            delete_image(sas, image_id)
-            existing.discard(image_id)
-            metas.pop(image_id, None)
-
-    # 1) Queue: first non-expired id that still has a backing blob.
-    if queue is None:
-        queue = read_queue(sas)
-    for image_id in queue:
-        if image_id not in existing:
-            queue_remove(sas, image_id)  # stale pointer
-            continue
-        if is_expired(metas[image_id], at=now):
-            delete_image(sas, image_id)
-            existing.discard(image_id)
-            metas.pop(image_id, None)
-            continue
-        return _pick(image_id, from_queue=True)
-
-    # 2) Two-bucket round-robin rotation. The featured bucket holds temporary
-    # photos (have an expiry) and fresh photos (permanent, uploaded within
-    # fresh_window_days); permanent photos past the window form the everyday pool.
-    # Featured slots are spaced so any single featured photo repeats at most once
-    # per `temp_min_spacing` displays, and max_temp_share_pct caps the bucket's
-    # combined share. One-shots (`permanent=false`) are served via the queue only,
-    # never here. Expired images are reaped as we scan.
-    perm: list = []
-    temp: list = []
-    for image_id in sorted(existing):  # sorted -> deterministic LRU tie-break
-        sel = metas[image_id]
-        if is_expired(sel, at=now):
-            delete_image(sas, image_id)
-            continue
-        if not sel.get("permanent"):
-            continue
-        shown = _parse_iso(sel.get("last_shown_at"))
-        if sel.get("expires_at") or is_fresh(sel, now=now, window_days=fresh_window_days):
-            temp.append((image_id, shown))  # temporary or fresh -> featured bucket
-        else:
-            perm.append((image_id, shown))
-
-    if countdown is None:
-        countdown = read_schedule(sas)
-    chosen, _source, new_countdown = bucket_schedule_pick(
-        perm, temp, temp_countdown=countdown, n=temp_min_spacing,
-        floor=share_pct_to_floor(max_temp_share_pct),
-    )
-    if chosen is not None and new_countdown != countdown:
-        write_schedule(sas, new_countdown)
-    if chosen is None:
-        return None
-    return _pick(chosen, from_queue=False)
-
-
-def mark_served(sas: str, image_id: str, sel_meta: dict, ext: str, *, from_queue: bool) -> None:
-    """Apply serve-time effects without a .json round-trip.
-
-    Stamps the mutable selection timestamp on the blob's x-ms-meta-* (which is
-    authoritative for last_shown_at / served_at -- the gallery merges these over
-    the frozen .json) and dequeues one-shots. ``sel_meta`` is the selection dict
-    returned by select_next; ``ext`` is the canonical blob extension; ``from_queue``
-    is True only for queue (one-shot) picks, so rotation picks skip queue_remove.
-
-    Permanent picks advance rotation via last_shown_at. One-shots stamp served_at
-    (marking them for deferred reap on the next poll) and dequeue, but keep the
-    blob alive so the /api/next redirect / proxy fetch can still deliver it.
-    """
-    if sel_meta.get("permanent", False):
-        sel_meta["last_shown_at"] = now_iso()
-    else:
-        sel_meta["served_at"] = now_iso()
-    bs.set_blob_metadata(sas, image_name(image_id, ext), selection_blob_metadata(sel_meta))
-    if from_queue:
-        queue_remove(sas, image_id)
-

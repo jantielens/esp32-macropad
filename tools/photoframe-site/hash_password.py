@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Mint a salted PBKDF2 password hash for CONFIG_JSON user accounts.
+"""Mint a salted PBKDF2 password hash for a users.json account.
 
 Usage:
     python3 hash_password.py                 # prompts for the password (no echo)
     python3 hash_password.py "the password"  # password as an argument (dev only)
 
-Paste the printed string into the user's "password_hash" field in CONFIG_JSON.
+Paste the printed string into the user's "password_hash" field in users.json.
 """
 
 import getpass

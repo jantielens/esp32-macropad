@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Set up Photoframe{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-7">
+    <div class="card section-card border-0">
+      <div class="card-body p-4 p-md-5">
+        <h1 class="h3 page-title mb-2">Set up Photoframe</h1>
+        <p class="text-body-secondary mb-4">Create the administrator account and connect your first frame.</p>
+        {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+        <form method="post" action="/setup">
+          <input type="hidden" name="setup_nonce" value="{{ setup_nonce }}">
+          <h2 class="h5 mb-3">Administrator</h2>
+          <div class="mb-3">
+            <label for="email" class="form-label">Email</label>
+            <input type="email" class="form-control" id="email" name="email" value="{{ values.email or '' }}" required autofocus>
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label for="password" class="form-label">Password</label>
+              <input type="password" class="form-control" id="password" name="password" minlength="12" required>
+            </div>
+            <div class="col-md-6">
+              <label for="password-confirm" class="form-label">Confirm password</label>
+              <input type="password" class="form-control" id="password-confirm" name="password_confirm" minlength="12" required>
+            </div>
+          </div>
+          <h2 class="h5 mb-3">Frame</h2>
+          <div class="mb-3">
+            <label for="frame-id" class="form-label">Frame ID</label>
+            <input type="text" class="form-control" id="frame-id" name="frame_id" value="{{ values.frame_id }}" pattern="[a-z0-9][a-z0-9-]{0,63}" required>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+              <label for="width" class="form-label">Width</label>
+              <input type="number" class="form-control" id="width" name="width" value="{{ values.width }}" min="1" max="10000" required>
+            </div>
+            <div class="col-sm-6">
+              <label for="height" class="form-label">Height</label>
+              <input type="number" class="form-control" id="height" name="height" value="{{ values.height }}" min="1" max="10000" required>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label for="output-profile" class="form-label">Output format</label>
+            <select class="form-select" id="output-profile" name="output_profile">
+              <option value="gray16" {% if values.output_profile != 'jpeg' %}selected{% endif %}>Gray16 compressed (recommended)</option>
+              <option value="jpeg" {% if values.output_profile == 'jpeg' %}selected{% endif %}>JPEG</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-accent w-100">Create site</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

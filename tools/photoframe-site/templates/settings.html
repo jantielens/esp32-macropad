@@ -74,4 +74,60 @@
     </form>
   </div>
 </section>
+
+<section class="mb-4" style="max-width: 44rem;">
+  <div class="section-card p-3 p-md-4">
+    <h2 class="eyebrow text-body-secondary mb-3">Device credential</h2>
+    <div class="mb-3">
+      <label class="form-label small mb-1 fw-semibold" for="token-fingerprint">Token fingerprint</label>
+      <input class="form-control form-control-sm font-monospace" id="token-fingerprint"
+             value="{{ token_fingerprint }}" readonly style="max-width: 18rem;">
+    </div>
+    {% if token_error %}
+    <div class="alert alert-danger py-2" role="alert">{{ token_error }}</div>
+    {% endif %}
+    {% if frame_token %}
+    <div class="mb-3">
+      <label class="form-label small mb-1 fw-semibold" for="frame-token">Device token</label>
+      <div class="input-group">
+        <input class="form-control form-control-sm font-monospace" id="frame-token"
+               value="{{ frame_token }}" readonly>
+        <button class="btn btn-sm btn-outline-secondary" id="copy-frame-token" type="button">Copy</button>
+      </div>
+    </div>
+    {% else %}
+    <form method="post" action="/settings/token/reveal" class="m-0">
+      <input type="hidden" name="device_id" value="{{ device_id }}">
+      <input type="hidden" name="token_nonce" value="{{ token_nonce }}">
+      <div class="mb-3">
+        <label class="form-label small mb-1 fw-semibold" for="token-password">Current password</label>
+        <input type="password" class="form-control form-control-sm" id="token-password"
+               name="password" autocomplete="current-password" required style="max-width: 22rem;">
+      </div>
+      <button class="btn btn-sm btn-accent-soft" type="submit">Reveal token</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+{% if frame_token %}
+<script>
+  document.getElementById('copy-frame-token').addEventListener('click', async function () {
+    const input = document.getElementById('frame-token');
+    try {
+      let copied = true;
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(input.value);
+      } else {
+        input.select();
+        input.setSelectionRange(0, input.value.length);
+        copied = document.execCommand('copy');
+      }
+      this.textContent = copied ? 'Copied' : 'Copy failed';
+    } catch (_error) {
+      this.textContent = 'Copy failed';
+    }
+  });
+  history.replaceState(null, '', '/settings?device_id=' + encodeURIComponent({{ device_id | tojson }}));
+</script>
+{% endif %}
 {% endblock %}
