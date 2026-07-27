@@ -233,6 +233,20 @@ def logout(request: Request) -> Response:
     return RedirectResponse("/login", status_code=303)
 
 
+def _time_left_label(ends_at: Optional[datetime], *, now: datetime) -> str:
+    if ends_at is None or ends_at <= now:
+        return ""
+    seconds = int((ends_at - now).total_seconds())
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes = remainder // 60
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
 @router.get("/photos", response_class=HTMLResponse)
 def gallery(request: Request, device_id: str) -> Response:
     user = _require_user(request)
@@ -247,13 +261,19 @@ def gallery(request: Request, device_id: str) -> Response:
         if not meta.get("permanent", False) and meta.get("served_at"):
             continue
         fresh = store.is_fresh(meta, now=now, window_days=frame.fresh_window_days)
+        uploaded_at = store._parse_iso(meta.get("uploaded_at"))
+        expires_at = store._parse_iso(meta.get("expires_at"))
+        fresh_until = (
+            uploaded_at + timedelta(days=frame.fresh_window_days)
+            if fresh and uploaded_at is not None else None
+        )
         items.append({
             **meta,
             "in_rotation": bool(meta.get("permanent")) and not store.is_expired(meta, at=now),
             "is_featured": bool(meta.get("expires_at")) or fresh,
             "fresh": fresh,
-            "fresh_in": "",
-            "expires_in": "",
+            "fresh_in": _time_left_label(fresh_until, now=now),
+            "expires_in": _time_left_label(expires_at, now=now),
             "expired": store.is_expired(meta, at=now),
             "exposure": "",
             "knobs_adjusted": False,
