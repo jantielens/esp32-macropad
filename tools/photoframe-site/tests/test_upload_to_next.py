@@ -19,6 +19,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import app as application  # noqa: E402
 import config  # noqa: E402
+import gray16  # noqa: E402
+import knobs  # noqa: E402
+import transport  # noqa: E402
 
 
 def test_edit_photo_caption_and_lifecycle_preserves_image_metadata():
@@ -166,6 +169,56 @@ def test_bulk_upload_reuses_defaults_and_shared_lifetime():
             assert sidecar["crop"] == {}
             assert sidecar["resampler"] == ""
             assert len(sidecar["variants"]) == 1
+
+
+def test_optimized_g16_upload_preserves_adjusted_outputs():
+    root = Path(tempfile.mkdtemp())
+    (root / "config").mkdir()
+    (root / "config/frames.json").write_text(json.dumps({"frames": {
+        "test": {"token": "0123456789abcdef0123456789abcdef",
+                 "profile": {"width": 32, "height": 24, "format_codes": [3, 2]}}
+    }}))
+    (root / "config/users.json").write_text(json.dumps({"users": {
+        "owner@example.com": {"password_hash": config.hash_password("secret"), "frames": ["test"]}
+    }}))
+    source = Image.new("RGB", (47, 31))
+    pixels = source.load()
+    for y in range(source.height):
+        for x in range(source.width):
+            pixels[x, y] = (
+                (x * 17 + y * 3) % 256,
+                (x * 5 + y * 19) % 256,
+                (x * 11 + y * 7) % 256,
+            )
+    source_bytes = io.BytesIO()
+    source.save(source_bytes, format="PNG")
+    knob_values = {**knobs.defaults(), "brightness": 0.12, "gamma": 0.75}
+    expected = {
+        code: transport.encode_variant(
+            source, width=32, height=24, format_code=code, knobs=knob_values,
+        )
+        for code in (3, 2)
+    }
+    _, legacy_preview = gray16.encode_jpeg(source, width=32, height=24)
+    expected_thumb = application.ui._make_thumbnail(legacy_preview)
+
+    application.DATA_ROOT = root
+    with TestClient(application.app) as client:
+        client.post("/login", data={"email": "owner@example.com", "password": "secret"})
+        response = client.post(
+            "/upload",
+            data={"device_id": "test", "permanent": "1", "knob_values": json.dumps(knob_values)},
+            files={"file": ("adjusted.png", source_bytes.getvalue(), "image/png")},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+    image_root = next((root / "devices/test/images").iterdir())
+    sidecar = json.loads((image_root / "sidecar.json").read_text())
+    assert [variant["format_code"] for variant in sidecar["variants"]] == [3, 2]
+    for variant in sidecar["variants"]:
+        assert (image_root / variant["blob_name"]).read_bytes() == expected[variant["format_code"]]
+    assert (image_root / "thumb.png").read_bytes() == expected_thumb
 
 
 def test_same_profile_devices_are_isolated_both_directions():

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -94,6 +95,61 @@ def test_encode_g16_variants_are_exact_formats():
     assert g16p.startswith(b"G16P")
     assert g16z.startswith(gray16.G16Z_MAGIC)
     assert zlib.decompress(g16z[4:], wbits=-15) == g16p
+
+
+def test_image_pipeline_output_hashes():
+    source = Image.new("RGB", (47, 31))
+    pixels = source.load()
+    for y in range(source.height):
+        for x in range(source.width):
+            pixels[x, y] = (
+                (x * 17 + y * 3) % 256,
+                (x * 5 + y * 19) % 256,
+                (x * 11 + y * 7) % 256,
+            )
+    transform = {"rotate_deg": 90, "mirror_x": True}
+    crop = {"x": -0.1, "y": 0.05, "w": 1.2, "h": 0.9}
+    knob_values = {
+        "panel_calibration": 1.0,
+        "brightness": 0.04,
+        "contrast": 1.15,
+        "midtone": 2.0,
+        "highlights": -0.1,
+        "gamma": 0.85,
+    }
+    common = {
+        "width": 32,
+        "height": 24,
+        "transform": transform,
+        "crop": crop,
+        "knobs": knob_values,
+        "resampler": "lanczos",
+        "jpeg_quality": 87,
+    }
+    expected_hashes = {
+        2: "04096ce23c0d1ad745a4ad9bc5ed92120e4134f36f2b1ad31fdb5da412b4db1e",
+        3: "d209755bf08fc9c5564d39e9ba91747d79486c4483e4d0bb5dd57ba51c67a76c",
+    }
+    for code, expected in expected_hashes.items():
+        payload = transport.encode_variant(source, format_code=code, **common)
+        assert hashlib.sha256(payload).hexdigest() == expected
+
+    g16p, g16z, preview = transport.encode_g16_pair(
+        source,
+        width=32,
+        height=24,
+        transform=transform,
+        crop=crop,
+        knobs=knob_values,
+        resampler="lanczos",
+    )
+    assert hashlib.sha256(g16p).hexdigest() == expected_hashes[2]
+    assert hashlib.sha256(g16z).hexdigest() == expected_hashes[3]
+    output = io.BytesIO()
+    preview.save(output, format="PNG")
+    assert hashlib.sha256(output.getvalue()).hexdigest() == (
+        "6ad55b57a8156a18f2bf465ee2d26f547550e77171d0ec462b17032cef3b361f"
+    )
 
 
 if __name__ == "__main__":

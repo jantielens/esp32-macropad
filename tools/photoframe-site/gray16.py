@@ -594,13 +594,15 @@ def encode_g16p(
     midtone: float = CAL_MIDTONE,
     panel_calibration: float = CAL_PANEL_STRENGTH,
     resampler: str | None = None,
+    preview_before_panel_calibration: bool = False,
 ) -> tuple[bytes, Image.Image]:
     """Full upload pipeline: orientation -> fit -> calibrated tone -> dither -> G16P.
 
     Returns ``(g16p_bytes, preview_L)`` where ``preview_L`` is the post-tone,
     post-calibration (source-level) grayscale image; ``simulate_display`` turns it
     into a panel-faithful gallery thumbnail. ``resampler`` names the panel-fit
-    downscale filter (see ``RESAMPLERS``).
+    downscale filter (see ``RESAMPLERS``). ``preview_before_panel_calibration``
+    returns the same pre-calibration preview used by the JPEG upload path.
     """
     oriented = apply_orientation(img, transform or {})
     framed = apply_crop(oriented, crop)
@@ -614,9 +616,15 @@ def encode_g16p(
         brightness=brightness,
         contrast=contrast,
         midtone=midtone,
-        panel_calibration=panel_calibration,
+        panel_calibration=0.0,
     )
-    preview = gray_levels_to_preview(gray, width, height)
+    preview = (
+        gray_levels_to_preview(gray, width, height)
+        if preview_before_panel_calibration else None
+    )
+    apply_panel_calibration(gray, panel_calibration)
+    if preview is None:
+        preview = gray_levels_to_preview(gray, width, height)
     nibbles = _dither_to_nibbles(gray, width, height)
     return pack_g16p(nibbles, width, height), preview
 

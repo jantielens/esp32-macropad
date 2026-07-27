@@ -679,18 +679,40 @@ def upload_submit(
             source_image = source.copy()
             variants = []
             preview = None
+            g16_payloads = None
             for width, height, code, profile_key in frame.variant_requirements():
-                payload = transport.encode_variant(
-                    source_image, width=width, height=height, format_code=code,
-                    transform=frame.image_transform, crop=crop,
-                    knobs=knob_values_clean, resampler=resampler,
-                    jpeg_quality=frame.jpeg_quality,
-                )
+                if code in (cfg.FORMAT_G16P, cfg.FORMAT_G16Z):
+                    if g16_payloads is None:
+                        g16p, g16z, preview = transport.encode_g16_pair(
+                            source_image, width=width, height=height,
+                            transform=frame.image_transform, crop=crop,
+                            knobs=knob_values_clean, resampler=resampler,
+                        )
+                        g16_payloads = {
+                            cfg.FORMAT_G16P: g16p,
+                            cfg.FORMAT_G16Z: g16z,
+                        }
+                        if any(
+                            knob_values_clean.get(setting.id) != setting.default
+                            for setting in knobs.KNOBS if not setting.panel_only
+                        ):
+                            preview = None
+                    payload = g16_payloads[code]
+                else:
+                    payload = transport.encode_variant(
+                        source_image, width=width, height=height, format_code=code,
+                        transform=frame.image_transform, crop=crop,
+                        knobs=knob_values_clean, resampler=resampler,
+                        jpeg_quality=frame.jpeg_quality,
+                    )
                 extension = {1: "jpg", 2: "g16p", 3: "g16z"}[code]
                 variants.append((width, height, code, profile_key, extension, payload))
-            _, preview = gray16.encode_jpeg(source_image, width=frame.width, height=frame.height,
-                                            transform=frame.image_transform, crop=crop,
-                                            resampler=resampler, quality=frame.jpeg_quality)
+            if preview is None:
+                _, preview = gray16.encode_jpeg(
+                    source_image, width=frame.width, height=frame.height,
+                    transform=frame.image_transform, crop=crop,
+                    resampler=resampler, quality=frame.jpeg_quality,
+                )
     except Exception as exc:
         if bulk:
             return Response(f"Could not process image: {exc}", status_code=400)
