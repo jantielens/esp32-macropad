@@ -22,15 +22,16 @@
     <div class="mb-3" id="epaper-source-mode-row" hidden>
       <label class="form-label" for="epaper_source_mode">Image source</label>
       <select class="form-select" id="epaper_source_mode" name="epaper_source_mode">
-        <option value="slot-carousel">Slot carousel</option>
-        <option value="service">Service</option>
+        <option value="slot-carousel">Direct image URLs</option>
+        <option value="service">Photoframe API service</option>
       </select>
     </div>
     <div id="epaper-service-settings" hidden>
+      <p class="form-text">Connect to a server that implements the Photoframe Next Image API Version 1. The frame requests <code>GET /api/v1/next</code> with the bearer token.</p>
       <div class="mb-3">
-        <label class="form-label" for="epaper_service_url">Service URL</label>
+        <label class="form-label" for="epaper_service_url">Service base URL</label>
         <input type="url" class="form-control" id="epaper_service_url" name="epaper_service_url" maxlength="255" placeholder="https://frame.example.com">
-        <div class="form-text"><code>/api/v1/next</code> is appended automatically.</div>
+        <div class="form-text">Enter the server origin or base path. <code>/api/v1/next</code> is appended automatically.</div>
       </div>
       <div class="mb-3">
         <label class="form-label" for="epaper_service_token">Bearer token</label>
