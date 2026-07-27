@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import zlib
+from datetime import datetime, timezone
 from pathlib import Path
 
 from PIL import Image
@@ -18,6 +19,61 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import app as application  # noqa: E402
 import config  # noqa: E402
+
+
+def test_edit_photo_caption_and_lifecycle_preserves_image_metadata():
+    root = Path(tempfile.mkdtemp())
+    (root / "config").mkdir()
+    (root / "config/frames.json").write_text(json.dumps({"frames": {
+        "test": {"token": "0123456789abcdef0123456789abcdef",
+                 "profile": {"width": 8, "height": 4, "format_codes": [2]}}
+    }}))
+    (root / "config/users.json").write_text(json.dumps({"users": {
+        "owner@example.com": {"password_hash": config.hash_password("secret"), "frames": ["test"]}
+    }}))
+    source = io.BytesIO()
+    Image.new("RGB", (16, 8), (120, 80, 40)).save(source, format="JPEG")
+
+    application.DATA_ROOT = root
+    with TestClient(application.app) as client:
+        client.post("/login", data={"email": "owner@example.com", "password": "secret"})
+        client.post(
+            "/upload",
+            data={"device_id": "test", "permanent": "on", "caption": "Before"},
+            files={"file": ("source.jpg", source.getvalue(), "image/jpeg")},
+        )
+        image_root = next((root / "devices/test/images").iterdir())
+        original = json.loads((image_root / "sidecar.json").read_text())
+        preserved = {key: original[key] for key in ("source_name", "knobs", "crop", "resampler", "variants")}
+
+        temporary = client.post(
+            "/photos/edit",
+            data={"device_id": "test", "image_id": original["id"],
+                  "caption": "After", "lifetime": "24"},
+            follow_redirects=False,
+        )
+        assert temporary.status_code == 303
+        edited = json.loads((image_root / "sidecar.json").read_text())
+        assert edited["caption"] == "After"
+        assert edited["permanent"] is True
+        assert datetime.fromisoformat(edited["expires_at"]) > datetime.now(timezone.utc)
+        assert {key: edited[key] for key in preserved} == preserved
+
+        client.post("/photos/edit", data={
+            "device_id": "test", "image_id": original["id"],
+            "caption": "After", "lifetime": "once",
+        })
+        one_shot = json.loads((image_root / "sidecar.json").read_text())
+        assert one_shot["permanent"] is False
+        assert one_shot["expires_at"] is None
+
+        client.post("/photos/edit", data={
+            "device_id": "test", "image_id": original["id"],
+            "caption": "After", "lifetime": "always",
+        })
+        permanent = json.loads((image_root / "sidecar.json").read_text())
+        assert permanent["permanent"] is True
+        assert permanent["expires_at"] is None
 
 
 def test_upload_to_next_exact_crc():

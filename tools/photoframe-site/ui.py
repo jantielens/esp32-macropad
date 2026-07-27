@@ -728,6 +728,52 @@ def photos_delete(request: Request, device_id: str = Form(...), image_id: str = 
     return RedirectResponse(f"/photos?device_id={device_id}", status_code=303)
 
 
+@router.post("/photos/edit")
+def photos_edit(
+    request: Request,
+    device_id: str = Form(...),
+    image_id: str = Form(...),
+    caption: str = Form(""),
+    lifetime: str = Form("unchanged"),
+) -> Response:
+    user = _require_user(request)
+    if isinstance(user, Response):
+        return user
+    if _frame_for_user(request, user, device_id) is None:
+        return Response("Forbidden", status_code=403)
+    if not store.is_valid_id(image_id):
+        return Response("Invalid image", status_code=400)
+    if len(caption) > 200:
+        return Response("Caption is too long", status_code=400)
+
+    meta = request.app.state.index.get(device_id, image_id)
+    if meta is None:
+        return Response("Image not found", status_code=404)
+
+    updated = dict(meta)
+    updated["caption"] = caption.strip()
+    if lifetime == "once":
+        updated["permanent"] = False
+        updated["expires_at"] = None
+    elif lifetime == "always":
+        updated["permanent"] = True
+        updated["expires_at"] = None
+    elif lifetime != "unchanged":
+        try:
+            ttl_hours = int(lifetime)
+        except ValueError:
+            return Response("Invalid lifetime", status_code=400)
+        if ttl_hours not in (1, 6, 12, 24, 48, 168, 720):
+            return Response("Invalid lifetime", status_code=400)
+        updated["permanent"] = True
+        updated["expires_at"] = (
+            datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+        ).isoformat()
+
+    request.app.state.index.put(device_id, updated)
+    return RedirectResponse(f"/photos?device_id={device_id}", status_code=303)
+
+
 @router.post("/photos/show-next")
 def photos_show_next(request: Request, device_id: str = Form(...), image_id: str = Form(...)) -> Response:
     user = _require_user(request)
