@@ -263,6 +263,76 @@ Container replacement does not modify the bind-mounted data directory, so the
 administrator account, frame token, session secret, settings, and photos remain
 available. The setup page does not run again.
 
+## Optional public access with Tailscale Funnel
+
+Tailscale Funnel can publish the site at a stable HTTPS `*.ts.net` address
+without port forwarding or a custom domain. Run Tailscale directly in the LXC,
+outside the Docker container, so the application image remains independent of
+the deployment network.
+
+First check whether the LXC already exposes the kernel TUN device:
+
+```bash
+ls -l /dev/net/tun
+```
+
+If the device is missing, stop the LXC and add these lines to
+`/etc/pve/lxc/<CTID>.conf` on the Proxmox host:
+
+```ini
+lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+```
+
+Start the LXC again, then install and authenticate Tailscale inside it:
+
+```bash
+apt-get update
+apt-get install -y curl ca-certificates
+curl -fsSL https://tailscale.com/install.sh | sh
+systemctl enable --now tailscaled
+tailscale up
+```
+
+Complete site setup on the trusted LAN before publishing it. Then recreate the
+container with its HTTP port bound only to the LXC loopback interface and mark
+browser session cookies as HTTPS-only:
+
+```bash
+docker rm -f epaper-photoframe
+docker run -d \
+  --name epaper-photoframe \
+  --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 \
+  -e COOKIE_SECURE=1 \
+  -v /opt/epaper-photoframe/data:/app/data \
+  ghcr.io/jantielens/epaper-photoframe-site:dev
+curl http://127.0.0.1:8080/healthz
+```
+
+Publish the loopback service and display its public URL:
+
+```bash
+tailscale funnel --bg 8080
+tailscale funnel status
+```
+
+The Funnel configuration persists in Tailscale state. Docker restarts the
+container because it uses `unless-stopped`, and `systemd` starts both Docker
+and Tailscale when the LXC boots. Enable **Start at boot** for the LXC in
+Proxmox, or run `pct set <CTID> --onboot 1` on the Proxmox host. Verify the
+complete boot configuration inside the LXC:
+
+```bash
+systemctl is-enabled docker tailscaled
+docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' epaper-photoframe
+```
+
+Expected output is `enabled` for both services and `unless-stopped` for the
+container. Preserve `-p 127.0.0.1:8080:8080` and `-e COOKIE_SECURE=1` whenever
+the container is replaced. Use `tailscale funnel reset` to remove public
+access.
+
 ## Network trust
 
 > [!WARNING]
@@ -296,7 +366,7 @@ reported pair is excluded from that selection.
 Responses are:
 
 | Status | Meaning |
-|--------|---------|
+| ------ | ------- |
 | `200` | Exact transport bytes are in the response body |
 | `204` | Keep the current display unchanged |
 | `401` | Bearer authentication failed |
@@ -320,9 +390,8 @@ for test in tests/test_*.py; do .venv/bin/python "$test"; done
 Verify the normative e1003 binary vectors:
 
 ```bash
-.venv/bin/python \
-  ../../docs/dev/photoframe-next-image/conformance/photoframe-next-image-v1/verify_vectors.py \
-  e1003-landscape
+VECTOR_DIR=../../docs/dev/photoframe-next-image/conformance/photoframe-next-image-v1
+.venv/bin/python "$VECTOR_DIR/verify_vectors.py" e1003-landscape
 ```
 
 Run the behavioral adapter:
