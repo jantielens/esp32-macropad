@@ -121,6 +121,53 @@ def test_upload_to_next_exact_crc():
         assert unchanged["last_shown_at"] == sidecar["last_shown_at"]
 
 
+def test_bulk_upload_reuses_defaults_and_shared_lifetime():
+    root = Path(tempfile.mkdtemp())
+    (root / "config").mkdir()
+    (root / "config/frames.json").write_text(json.dumps({"frames": {
+        "test": {"token": "0123456789abcdef0123456789abcdef",
+                 "profile": {"width": 8, "height": 4, "format_codes": [2]}}
+    }}))
+    (root / "config/users.json").write_text(json.dumps({"users": {
+        "owner@example.com": {"password_hash": config.hash_password("secret"), "frames": ["test"]}
+    }}))
+
+    def source_bytes(color: tuple[int, int, int]) -> bytes:
+        output = io.BytesIO()
+        Image.new("RGB", (16, 8), color).save(output, format="JPEG")
+        return output.getvalue()
+
+    application.DATA_ROOT = root
+    with TestClient(application.app) as client:
+        client.post("/login", data={"email": "owner@example.com", "password": "secret"})
+        page = client.get("/upload/bulk?device_id=test")
+        assert page.status_code == 200
+        assert "multiple required" in page.text
+        assert 'fetch("/upload"' in page.text
+
+        for name, color in (("first.jpg", (180, 20, 20)), ("second.jpg", (20, 20, 180))):
+            response = client.post(
+                "/upload",
+                data={"device_id": "test", "bulk": "1", "permanent": "1", "ttl_hours": "24"},
+                files={"file": (name, source_bytes(color), "image/jpeg")},
+                follow_redirects=False,
+            )
+            assert response.status_code == 204
+
+        image_roots = sorted((root / "devices/test/images").iterdir())
+        assert len(image_roots) == 2
+        for image_root in image_roots:
+            sidecar = json.loads((image_root / "sidecar.json").read_text())
+            assert sidecar["permanent"] is True
+            expires_at = datetime.fromisoformat(sidecar["expires_at"])
+            hours_left = (expires_at - datetime.now(timezone.utc)).total_seconds() / 3600
+            assert 23.9 < hours_left <= 24
+            assert sidecar["knobs"]
+            assert sidecar["crop"] == {}
+            assert sidecar["resampler"] == ""
+            assert len(sidecar["variants"]) == 1
+
+
 def test_same_profile_devices_are_isolated_both_directions():
     root = Path(tempfile.mkdtemp())
     (root / "config").mkdir()

@@ -120,6 +120,14 @@ fingerprint until re-authentication succeeds. Revealed-token responses use
 > On a plain-HTTP LAN, the administrator password and any revealed token cross
 > the wire in cleartext. Enable TLS before using the token-reveal feature.
 
+## Manage photos
+
+Use **Upload image** in a device gallery to preview, frame, and adjust one image.
+Use **Bulk upload** to select several images and apply one shared lifetime. Bulk
+uploads use the device's default image-processing settings and process one image
+at a time, which bounds memory use and reports failures per image. Successful
+images remain saved when another image fails, and failed images can be retried.
+
 ## Export and import
 
 The device settings page can export a self-contained device bundle after you

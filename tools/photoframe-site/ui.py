@@ -614,6 +614,20 @@ def upload_form(request: Request, device_id: str) -> Response:
     return templates.TemplateResponse(request, "upload.html", _upload_context(user, frame))
 
 
+@router.get("/upload/bulk", response_class=HTMLResponse)
+def bulk_upload_form(request: Request, device_id: str) -> Response:
+    user = _require_user(request)
+    if isinstance(user, Response):
+        return user
+    frame = _frame_for_user(request, user, device_id)
+    if frame is None:
+        return Response("Forbidden", status_code=403)
+    return templates.TemplateResponse(request, "bulk_upload.html", {
+        "user": user,
+        "device_id": frame.frame_id,
+    })
+
+
 @router.post("/preview-base")
 def preview_base(request: Request, device_id: str = Form(...), file: UploadFile = File(...)) -> Response:
     user = _require_user(request)
@@ -639,6 +653,7 @@ def upload_submit(
     request: Request,
     device_id: str = Form(...),
     file: UploadFile = File(...),
+    bulk: Optional[str] = Form(None),
     permanent: Optional[str] = Form(None),
     ttl_hours: Optional[str] = Form(None),
     caption: str = Form(""),
@@ -677,6 +692,8 @@ def upload_submit(
                                             transform=frame.image_transform, crop=crop,
                                             resampler=resampler, quality=frame.jpeg_quality)
     except Exception as exc:
+        if bulk:
+            return Response(f"Could not process image: {exc}", status_code=400)
         return templates.TemplateResponse(request, "upload.html", {
             **_upload_context(user, frame), "error": f"Could not process image: {exc}"
         }, status_code=400)
@@ -715,6 +732,8 @@ def upload_submit(
             "variants": encoded_variants,
         })
         store.queue_unshift(device_id, image_id)
+    if bulk:
+        return Response(status_code=204)
     return RedirectResponse(f"/photos?device_id={device_id}", status_code=303)
 
 
