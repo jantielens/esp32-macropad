@@ -95,8 +95,8 @@ bool epaper_driver_draw_url(const char* url) {
 		// InkplateLibrary HTTPS downloader, which crashes on https:// hosts — see
 		// device_classes/epaper/epaper_http.h), then sniff the format from the magic
 		// bytes. We cannot use InkplateLibrary's `image.draw(url, ...)` because it
-		// picks the decoder from the URL's file extension, which a photoframe
-		// "/api/next?device_id=...&key=..." endpoint lacks.
+		// picks the decoder from the URL's file extension, which extensionless
+		// static image endpoints may not provide.
 		uint8_t* buf = nullptr;
 		size_t len = 0;
 		if (!epaper_http_download(url, &buf, &len)) {

@@ -7,9 +7,15 @@
 
 #include <stdint.h>
 
+#include "epaper_next_client_logic.h"
+
 // E-Paper image URL (full HTTP/HTTPS). Sized to fit a realistic dashboard URL.
 #ifndef CONFIG_EPAPER_URL_MAX_LEN
 #define CONFIG_EPAPER_URL_MAX_LEN 256
+#endif
+
+#ifndef CONFIG_EPAPER_TOKEN_MAX_LEN
+#define CONFIG_EPAPER_TOKEN_MAX_LEN 192
 #endif
 
 // Carousel entry: URL, per-entry refresh interval, and stay flag (pause rotation when CRC unchanged).
@@ -23,7 +29,11 @@ struct EpaperCarouselEntry {
 // DeviceConfig, so the core firmware does not need to know about e-paper.
 // The DeviceClass registry owns lifecycle (defaults / load / save / API).
 struct EpaperConfig {
+		EpaperSourceMode source_mode;                  // explicit slot-carousel/service discriminator
 		char epaper_url[CONFIG_EPAPER_URL_MAX_LEN];   // resolved runtime URL for current carousel slot (not user-configured)
+		char service_url[CONFIG_EPAPER_URL_MAX_LEN];  // service base URL; /api/v1/next is appended at request time
+		char service_token[CONFIG_EPAPER_TOKEN_MAX_LEN]; // write-only bearer credential
+		uint32_t service_interval_seconds;             // single wake interval for Service mode
 		uint8_t epaper_rotation;                      // 0..3, default 0
 		uint32_t epaper_last_crc32;                   // CRC32 of last successfully rendered image (0 = none)
 		bool epaper_crc32_enabled;                    // fetch "<url>.crc32" sidecar to skip unchanged refreshes (default false)

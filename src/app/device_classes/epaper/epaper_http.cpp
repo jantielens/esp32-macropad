@@ -27,6 +27,68 @@ constexpr uint32_t kDownloadIdleTimeoutMs = 15000;
 
 }  // namespace
 
+bool epaper_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* out_len,
+		size_t* body_bytes_read, bool honor_content_length) {
+		*out_buf = nullptr;
+		*out_len = 0;
+		if (body_bytes_read) *body_bytes_read = 0;
+
+		const int length_hint = honor_content_length ? http.getSize() : -1;
+		WiFiClient* stream = http.getStreamPtr();
+		size_t capacity = length_hint > 0 ? (size_t)length_hint : (size_t)(256 * 1024);
+		uint8_t* buffer = (uint8_t*)heap_caps_malloc(
+				capacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+		if (!buffer) {
+				LOGW("Epaper", "image buffer alloc failed (%u bytes)", (unsigned)capacity);
+				return false;
+		}
+
+		size_t total = 0;
+		uint32_t last_progress_ms = millis();
+		while ((http.connected() || stream->available()) &&
+				(length_hint < 0 || total < (size_t)length_hint)) {
+				size_t available = stream->available();
+				if (available) {
+						if (length_hint > 0) {
+								const size_t remaining = (size_t)length_hint - total;
+								if (available > remaining) available = remaining;
+						}
+						if (total + available > capacity) {
+								size_t new_capacity = capacity * 2;
+								while (total + available > new_capacity) new_capacity *= 2;
+								uint8_t* grown = (uint8_t*)heap_caps_realloc(buffer, new_capacity,
+										MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+								if (!grown) {
+										heap_caps_free(buffer);
+										return false;
+								}
+								buffer = grown;
+								capacity = new_capacity;
+						}
+						const int count = stream->read(buffer + total, available);
+						if (count <= 0) break;
+						total += (size_t)count;
+						if (body_bytes_read) *body_bytes_read += (size_t)count;
+						last_progress_ms = millis();
+				} else {
+						if (length_hint > 0 && total >= (size_t)length_hint) break;
+						if (millis() - last_progress_ms > kDownloadIdleTimeoutMs) {
+								LOGW("Epaper", "image download stalled after %u bytes", (unsigned)total);
+								heap_caps_free(buffer);
+								return false;
+						}
+						delay(1);
+				}
+		}
+		if (total < 4) {
+				heap_caps_free(buffer);
+				return false;
+		}
+		*out_buf = buffer;
+		*out_len = total;
+		return true;
+}
+
 bool epaper_http_download(const char* url, uint8_t** out_buf, size_t* out_len) {
 	*out_buf = nullptr;
 	*out_len = 0;
@@ -83,75 +145,27 @@ bool epaper_http_download(const char* url, uint8_t** out_buf, size_t* out_len) {
 			return false;
 		}
 
-		const int len = http.getSize();  // -1 when chunked / unknown
-		WiFiClient* stream = http.getStreamPtr();
-
-		size_t cap = (len > 0) ? (size_t)len : (size_t)(256 * 1024);
-		uint8_t* buf = (uint8_t*)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-		if (!buf) {
-			LOGW("Epaper", "image buffer alloc failed (%u bytes)", (unsigned)cap);
-			http.end();
-			return false;
-		}
-
-		size_t total = 0;
-		bool stalled = false;
 		const uint32_t t0 = millis();
-		uint32_t last_progress_ms = t0;
-		while (http.connected() && (len < 0 || total < (size_t)len)) {
-			size_t avail = stream->available();
-			if (avail) {
-				if (len > 0) {
-						const size_t remaining = (size_t)len - total;
-						if (avail > remaining) avail = remaining;
-				}
-				if (total + avail > cap) {
-					// Chunked stream outgrew the estimate — grow the buffer.
-					size_t new_cap = cap * 2;
-					while (total + avail > new_cap) new_cap *= 2;
-					uint8_t* grown = (uint8_t*)heap_caps_realloc(buf, new_cap,
-						MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-					if (!grown) {
-						LOGW("Epaper", "image buffer realloc failed (%u bytes)", (unsigned)new_cap);
-						heap_caps_free(buf);
-						http.end();
-						return false;
-					}
-					buf = grown;
-					cap = new_cap;
-				}
-				const int n = stream->read(buf + total, avail);
-				if (n <= 0) break;
-				total += (size_t)n;
-				last_progress_ms = millis();
-			} else {
-				if (len > 0 && total >= (size_t)len) break;
-				if (millis() - last_progress_ms > kDownloadIdleTimeoutMs) {
-					LOGW("Epaper", "image download stalled after %u/%d bytes",
-						(unsigned)total, len);
-					stalled = true;
-					break;
-				}
-				delay(1);
-			}
-		}
+		const int expected_length = http.getSize();
+		size_t body_bytes_read = 0;
+		const bool read_ok = epaper_http_read_body(http, out_buf, out_len, &body_bytes_read);
 
 		// Protect the WiFi MAC DMA: brief pause after closing the TCP connection
 		// (project convention, see image_fetch.cpp).
 		http.end();
 		delay(100);
 
-		const bool truncated = len > 0 && total != (size_t)len;
-		if (stalled || truncated || total < 4) {
-			LOGW("Epaper", "image download incomplete (%u/%d bytes)",
-				(unsigned)total, len);
-			heap_caps_free(buf);
-			return false;
+		if (!read_ok) return false;
+		if (expected_length > 0 && *out_len != (size_t)expected_length) {
+				LOGW("Epaper", "image download incomplete (%u/%d bytes)",
+						(unsigned)*out_len, expected_length);
+				heap_caps_free(*out_buf);
+				*out_buf = nullptr;
+				*out_len = 0;
+				return false;
 		}
 		LOGI("Epaper", "image downloaded %u bytes in %lu ms",
-			 (unsigned)total, (unsigned long)(millis() - t0));
-		*out_buf = buf;
-		*out_len = total;
+			 (unsigned)body_bytes_read, (unsigned long)(millis() - t0));
 		return true;
 	}
 

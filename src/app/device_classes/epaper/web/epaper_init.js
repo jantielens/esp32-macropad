@@ -8,6 +8,9 @@
 // /api/config without editing the shared file.
 if (typeof window.registerConfigFields === 'function') {
     window.registerConfigFields([
+        'epaper_source_mode',
+        'epaper_service_url', 'epaper_service_token',
+        'epaper_service_interval_seconds',
         'epaper_rotation',
         'epaper_crc32_enabled',
         'epaper_sd_cache_enabled',
@@ -154,6 +157,20 @@ window.init_epaper_image_fragment = function () {
     var grid = document.getElementById('epaper-schedule-grid');
     var saveBtn = document.getElementById('epaper-image-save-btn');
     var showNowStatus = document.getElementById('epaper-show-now-status');
+    var sourceMode = document.getElementById('epaper_source_mode');
+    var sourceModeRow = document.getElementById('epaper-source-mode-row');
+    var carouselSettings = document.getElementById('epaper-carousel-settings');
+    var serviceSettings = document.getElementById('epaper-service-settings');
+    var serviceToken = document.getElementById('epaper_service_token');
+    var serviceTokenStatus = document.getElementById('epaper-service-token-status');
+    var serviceSupported = false;
+    var serviceTokenSet = false;
+
+    function updateSourceSections() {
+        var service = serviceSupported && sourceMode && sourceMode.value === 'service';
+        if (carouselSettings) carouselSettings.hidden = service;
+        if (serviceSettings) serviceSettings.hidden = !service;
+    }
 
     function setShowNowStatus(text, isErr) {
         if (!showNowStatus) return;
@@ -228,6 +245,27 @@ window.init_epaper_image_fragment = function () {
             .then(function (cfg) {
                 if (!cfg) return;
 
+                serviceSupported = cfg.epaper_service_supported === true;
+                serviceTokenSet = cfg.epaper_service_token_set === true;
+                if (sourceModeRow) sourceModeRow.hidden = !serviceSupported;
+                if (sourceMode) {
+                    sourceMode.value = serviceSupported && cfg.epaper_source_mode === 'service'
+                        ? 'service' : 'slot-carousel';
+                }
+                setNamedValue('epaper_service_url', cfg.epaper_service_url || '');
+                setNamedValue('epaper_service_interval_seconds', cfg.epaper_service_interval_seconds || 900);
+                if (serviceToken) {
+                    serviceToken.value = '';
+                    serviceToken.placeholder = serviceTokenSet
+                        ? '(saved - leave blank to keep)' : '';
+                }
+                if (serviceTokenStatus) {
+                    serviceTokenStatus.textContent = serviceTokenSet
+                        ? 'A token is stored. Leave blank to keep it.'
+                        : 'No token stored.';
+                }
+                updateSourceSections();
+
                 var scheduleMask = (cfg.epaper_schedule_hours == null)
                     ? 0x00FFFFFF
                     : (parseInt(cfg.epaper_schedule_hours, 10) & 0x00FFFFFF);
@@ -280,6 +318,7 @@ window.init_epaper_image_fragment = function () {
     if (workBtn) workBtn.addEventListener('click', function () {
         setQuickHours(8, 17);
     });
+    if (sourceMode) sourceMode.addEventListener('change', updateSourceSections);
 
     var clearSdBtn = document.getElementById('epaper_clear_sd_cache');
     if (clearSdBtn) clearSdBtn.addEventListener('click', function () {
@@ -317,6 +356,9 @@ window.init_epaper_image_fragment = function () {
         var config = {};
         var fields = [
             'operating_mode',
+            'epaper_source_mode',
+            'epaper_service_url', 'epaper_service_token',
+            'epaper_service_interval_seconds',
             'epaper_rotation',
             'epaper_crc32_enabled',
             'epaper_sd_cache_enabled',
@@ -333,12 +375,30 @@ window.init_epaper_image_fragment = function () {
         config.epaper_schedule_hours = readHoursMask();
         config.epaper_schedule_tz_offset = tzSelect ? parseInt(tzSelect.value || '0', 10) : 0;
         if (isNaN(config.epaper_schedule_tz_offset)) config.epaper_schedule_tz_offset = 0;
-        var carouselPayload = buildCarouselPayload();
-        if (!carouselPayload.ok) {
-            showMessage(carouselPayload.message, 'error');
-            return;
+        var usingService = config.epaper_source_mode === 'service';
+        if (usingService) {
+            if (!config.epaper_service_url || !String(config.epaper_service_url).trim()) {
+                showMessage('Service URL is required.', 'error');
+                return;
+            }
+            if (!serviceTokenSet && (!config.epaper_service_token || !String(config.epaper_service_token).trim())) {
+                showMessage('Bearer token is required.', 'error');
+                return;
+            }
+            var serviceInterval = parseInt(config.epaper_service_interval_seconds || '0', 10);
+            if (isNaN(serviceInterval) || serviceInterval <= 0) {
+                showMessage('Service refresh interval must be greater than 0 seconds.', 'error');
+                return;
+            }
+            config.epaper_service_interval_seconds = serviceInterval;
+        } else {
+            var carouselPayload = buildCarouselPayload();
+            if (!carouselPayload.ok) {
+                showMessage(carouselPayload.message, 'error');
+                return;
+            }
+            config.epaper_carousel = carouselPayload.value;
         }
-        config.epaper_carousel = carouselPayload.value;
 
         var validation = validateConfig(config);
         if (!validation.valid) {
@@ -355,6 +415,12 @@ window.init_epaper_image_fragment = function () {
             if (!response.ok) throw new Error('Failed to save configuration');
             var result = await response.json();
             if (result && result.success) {
+                if (usingService && config.epaper_service_token) {
+                    serviceTokenSet = true;
+                    serviceToken.value = '';
+                    serviceToken.placeholder = '(saved - leave blank to keep)';
+                    if (serviceTokenStatus) serviceTokenStatus.textContent = 'A token is stored. Leave blank to keep it.';
+                }
                 showMessage('Configuration saved', 'success');
             } else {
                 showMessage('Failed to save configuration', 'error');

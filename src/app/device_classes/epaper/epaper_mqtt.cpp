@@ -52,10 +52,13 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		doc["refresh_result"]  = result_to_str(outcome.result);
 		doc["refresh_count"]   = epaper_refresh_get_count();
 		doc["sidecar_http_status"] = outcome.sidecar_http_status;
+		doc["source_mode"] = epaper_source_uses_service(g_epaper_config.source_mode)
+				? "service" : "slot-carousel";
 
 		// Carousel telemetry
 		doc["carousel_count"] = g_epaper_config.carousel_count;
-		if (g_epaper_config.carousel_count > 0) {
+		if (!epaper_source_uses_service(g_epaper_config.source_mode) &&
+				g_epaper_config.carousel_count > 0) {
 				doc["carousel_index"] = g_epaper_carousel_index;
 				doc["carousel_url"] = g_epaper_config.carousel[g_epaper_carousel_index].url;
 		}

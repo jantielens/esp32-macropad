@@ -15,8 +15,8 @@
 // A downloaded-blob cache for e-paper boards that expose a microSD slot on the
 // *same* SPI bus as the panel controller (e.g. the reTerminal E1003's IT8951
 // HSPI bus). It is NOT a generic image cache: it stores the exact blob the
-// firmware downloads for a refresh (a G16P payload on the E1003) keyed by the
-// content-stable image id parsed from the publisher's redirect URL.
+// firmware downloads for a Service refresh, keyed by the exact transport
+// content CRC32 advertised by the next-image contract.
 //
 // On a cache hit, epaper_driver_draw_url() reads the blob straight from SD and
 // skips the multi-second HTTP body download. A freshly downloaded blob is
@@ -62,21 +62,17 @@ void epaper_sd_cache_set_enabled(bool enabled);
 // Whether SD caching is currently enabled (runtime toggle).
 bool epaper_sd_cache_is_enabled();
 
-// Resolve a publisher URL (e.g. /api/next) to its blob URL + a content-stable
-// image id WITHOUT downloading the body, so the caller can decide hit/miss
-// before paying for the slow body GET. Returns false on any non-redirect or
-// when the redirect target is not an images/<id>.g16p blob.
-bool epaper_sd_cache_resolve(const char* url, String& out_blob_url,
-                             char* out_id, size_t id_sz);
-
-// Read /cache/<id>.g16z fully into a fresh PSRAM buffer (caller frees with
+// Read /cache/<crc32>.blob fully into a fresh PSRAM buffer (caller frees with
 // heap_caps_free). Returns false (and leaves *out_buf null) on miss/read error.
-bool epaper_sd_cache_read(const char* id, uint8_t** out_buf, size_t* out_len);
+bool epaper_sd_cache_read(uint32_t content_crc32, uint8_t** out_buf, size_t* out_len);
+
+// Remove one corrupt or stale cache entry.
+bool epaper_sd_cache_remove(uint32_t content_crc32);
 
 // Take ownership of a freshly downloaded PSRAM blob and stage it for write-back
 // on the next flush. Any previously staged blob is freed first. `buf` must be a
 // heap_caps_malloc allocation; the cache frees it on flush/discard.
-void epaper_sd_cache_stage_pending(const char* id, uint8_t* buf, size_t len);
+void epaper_sd_cache_stage_pending(uint32_t content_crc32, uint8_t* buf, size_t len);
 
 // Write the staged blob to SD (call after epaper_driver_display()). Always
 // clears the staging slot, whether or not the write succeeded. No-op when

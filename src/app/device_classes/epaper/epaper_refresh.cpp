@@ -6,6 +6,10 @@
 #include "epaper_config.h"
 #include "epaper_crc32.h"
 #include "epaper_driver.h"
+#if defined(BOARD_RETERMINAL_E1003)
+#include "epaper_next_client.h"
+#include "epaper_sd_cache.h"
+#endif
 #include "epaper_overlay.h"
 #include "epaper_screens.h"
 #include "log_manager.h"
@@ -21,6 +25,9 @@
 // on cold boot / power loss.
 RTC_DATA_ATTR static uint32_t g_last_refresh_unix = 0;
 RTC_DATA_ATTR static uint32_t g_refresh_count = 0;
+#if defined(BOARD_RETERMINAL_E1003)
+RTC_DATA_ATTR static EpaperCurrentFingerprint g_service_fingerprint = {};
+#endif
 
 static EpaperRefreshOutcome s_last_outcome = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 
@@ -189,7 +196,106 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 		return out;
 }
 
+#if defined(BOARD_RETERMINAL_E1003)
+static EpaperRefreshOutcome epaper_refresh_run_service(DeviceConfig* config) {
+		EpaperRefreshOutcome out = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
+		const uint32_t started = millis();
+		EpaperNextPayload payload = epaper_next_client_fetch(
+				g_epaper_config.service_url, g_epaper_config.service_token,
+				g_service_fingerprint, g_epaper_config.epaper_sd_cache_enabled);
+		out.crc_used = payload.content_crc32;
+		if (payload.result == EpaperNextResult::Keep) {
+				out.result = EpaperRefreshResult::Skipped;
+				out.elapsed_ms = millis() - started;
+				s_last_outcome = out;
+				LOGI("Epaper", "Service returned 204 keep");
+				return out;
+		}
+		if (payload.result != EpaperNextResult::Show) {
+				out.result = payload.result == EpaperNextResult::FailedContent
+						? EpaperRefreshResult::FailedDraw : EpaperRefreshResult::FailedFetch;
+				out.elapsed_ms = millis() - started;
+				s_last_outcome = out;
+				LOGW("Epaper", "Service refresh failed (result=%u)", (unsigned)payload.result);
+				return out;
+		}
+
+		if (!epaper_driver_begin()) {
+				epaper_next_payload_release(&payload);
+				out.result = EpaperRefreshResult::FailedDraw;
+				out.elapsed_ms = millis() - started;
+				s_last_outcome = out;
+				return out;
+		}
+		epaper_driver_set_rotation(0);
+		epaper_driver_clear();
+		out.battery_mv = epaper_driver_battery_mv();
+		const bool wdt_was_attached = esp_task_wdt_status(nullptr) == ESP_OK;
+		if (wdt_was_attached) esp_task_wdt_delete(nullptr);
+
+		epaper_driver_set_sd_cache_enabled(g_epaper_config.epaper_sd_cache_enabled);
+		bool drew = epaper_driver_draw_service_blob(
+				payload.data, payload.len, payload.media_type[0] ? payload.media_type : nullptr,
+				payload.prepared_data, payload.prepared_len);
+		if (!drew && payload.from_cache) {
+				epaper_sd_cache_remove(payload.content_crc32);
+				epaper_next_payload_release(&payload);
+				LOGW("Epaper", "Cached service image failed decode; retrying without cache");
+				payload = epaper_next_client_fetch(
+						g_epaper_config.service_url, g_epaper_config.service_token,
+						g_service_fingerprint, false /*cache_enabled*/, 1 /*max_cycles*/);
+				out.crc_used = payload.content_crc32;
+				if (payload.result == EpaperNextResult::Show) {
+						drew = epaper_driver_draw_service_blob(
+								payload.data, payload.len,
+								payload.media_type[0] ? payload.media_type : nullptr,
+								payload.prepared_data, payload.prepared_len);
+				}
+		}
+		if (drew) {
+			epaper_driver_set_rotation(g_epaper_config.epaper_rotation);
+			epaper_overlay_render(out.battery_mv, millis() - started);
+			if (!payload.from_cache && g_epaper_config.epaper_sd_cache_enabled) {
+					epaper_sd_cache_stage_pending(payload.content_crc32, payload.data, payload.len);
+					payload.data = nullptr;
+					payload.len = 0;
+			}
+			epaper_driver_display();
+			epaper_driver_cache_flush();
+			g_service_fingerprint.valid = true;
+			strlcpy(g_service_fingerprint.image_key, payload.image_key,
+					sizeof(g_service_fingerprint.image_key));
+			g_service_fingerprint.content_crc32 = payload.content_crc32;
+		}
+		epaper_next_payload_release(&payload);
+		if (wdt_was_attached) esp_task_wdt_add(nullptr);
+		epaper_driver_sleep();
+
+		out.result = drew ? EpaperRefreshResult::Updated : EpaperRefreshResult::FailedDraw;
+		out.elapsed_ms = millis() - started;
+		if (drew) {
+				const time_t now = time(nullptr);
+				if (now >= (time_t)kEpaperMinValidEpoch) g_last_refresh_unix = (uint32_t)now;
+				++g_refresh_count;
+				LOGI("Epaper", "Service refresh complete: %ums, CRC=%08x",
+						(unsigned)out.elapsed_ms, (unsigned)out.crc_used);
+		}
+		s_last_outcome = out;
+		return out;
+}
+#endif
+
 EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
+		if (epaper_source_uses_service(g_epaper_config.source_mode)) {
+#if defined(BOARD_RETERMINAL_E1003)
+				(void)force;
+				return epaper_refresh_run_service(config);
+#else
+				EpaperRefreshOutcome unsupported = {
+						EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
+				return unsupported;
+#endif
+		}
 		return epaper_refresh_run_url(config, g_epaper_config.epaper_url,
 				force, true /*allow_crc*/, true /*persist_crc*/);
 }

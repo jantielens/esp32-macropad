@@ -1462,6 +1462,14 @@ DNS server redirects all requests to device IP in AP mode:
      - `portal_*.js` - JS feature modules and fragments
      - `portal.js` - Entry point (must be last in bundle)
 
+    The e-paper Image Sources fragment uses an explicit source-mode discriminator.
+    Register its field names in `epaper_init.js` and include them in the
+    page-specific `saveImageConfig()` field list. The Service token is
+    write-oriented: the config GET hook returns `epaper_service_token_set`, never
+    the token value. Service controls are exposed only when
+    `epaper_service_supported` is true; current firmware sets that capability only
+    for the reTerminal E1003.
+
 2. Rebuild to embed assets:
    ```bash
    ./build.sh

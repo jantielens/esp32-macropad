@@ -31,7 +31,14 @@ static void epaper_status_refresh_post(AsyncWebServerRequest* request) {
         return;
     }
 
-    if (!epaper_resolve_current_url()) {
+    if (epaper_source_uses_service(g_epaper_config.source_mode)) {
+        if (g_epaper_config.service_url[0] == '\0' ||
+            g_epaper_config.service_token[0] == '\0') {
+            request->send(400, "application/json",
+                          "{\"success\":false,\"message\":\"Service URL or token not configured\"}");
+            return;
+        }
+    } else if (!epaper_resolve_current_url()) {
         request->send(400, "application/json",
                       "{\"success\":false,\"message\":\"No carousel image configured\"}");
         return;
@@ -97,6 +104,8 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     }
     resp["last_refresh_unix"] = last_unix;
     resp["refresh_count"]   = epaper_refresh_get_count();
+    resp["source_mode"] = epaper_source_uses_service(g_epaper_config.source_mode)
+        ? "service" : "slot-carousel";
     switch (last.result) {
         case EpaperRefreshResult::Updated:     resp["last_result"] = "updated"; break;
         case EpaperRefreshResult::Skipped:     resp["last_result"] = "skipped"; break;

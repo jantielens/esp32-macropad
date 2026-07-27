@@ -21,6 +21,7 @@
 
 #include "device_classes/epaper/epaper_driver.h"
 #include "device_classes/epaper/epaper_http.h"
+#include "device_classes/epaper/epaper_media_validation.h"
 #include "device_classes/epaper/epaper_sd_cache.h"
 #include "device_classes/epaper/epaper_timing.h"
 #include "log_manager.h"
@@ -118,17 +119,6 @@
 // on the panel. A board_overrides.h can override per board.
 #ifndef EPAPER_SPI_HZ
 #define EPAPER_SPI_HZ 14000000
-#endif
-
-// G16P payload integrity check. The server stamps a CRC32 over the packed
-// nibble payload at upload time; the firmware can re-verify it before pushing
-// the frame to the panel. The image is delivered over HTTPS, whose AEAD
-// already authenticates every byte end-to-end, so this CRC is largely
-// redundant for transport corruption and costs a full ~1.3 MB pass (~290 ms)
-// on the wake hot path. Disabled by default for faster wakes; flip to 1 to
-// re-enable (e.g. when serving over plain HTTP or chasing a PSRAM bit-rot bug).
-#ifndef EPAPER_VERIFY_CRC32
-#define EPAPER_VERIFY_CRC32 0
 #endif
 
 namespace {
@@ -427,20 +417,7 @@ static inline uint32_t read_le32(const uint8_t* p) {
 				((uint32_t)p[3] << 24);
 }
 
-#if EPAPER_VERIFY_CRC32
-uint32_t crc32_update(uint32_t crc, const uint8_t* data, size_t len) {
-		crc = ~crc;
-		for (size_t i = 0; i < len; i++) {
-				crc ^= data[i];
-				for (uint8_t bit = 0; bit < 8; bit++) {
-						crc = (crc >> 1) ^ (0xEDB88320UL & (uint32_t)-(int32_t)(crc & 1));
-				}
-		}
-		return ~crc;
-}
-#endif
-
-bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
+bool load_g16p_to_canvas(const uint8_t* data, size_t len, bool strict) {
 		if (!data || len < G16P_HEADER_SIZE) return false;
 		if (memcmp(data, G16P_MAGIC, sizeof(G16P_MAGIC)) != 0) return false;
 		if (!s_canvas || !s_canvas->buffer()) return false;
@@ -462,19 +439,14 @@ bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
 		}
 
 		const uint8_t* payload = data + G16P_HEADER_SIZE;
-#if EPAPER_VERIFY_CRC32
 		const uint32_t t_crc = millis();
-		const uint32_t actual_crc = crc32_update(0, payload, G16P_PAYLOAD_SIZE);
-		if (actual_crc != expected_crc) {
-				LOGW("Epaper", "G16P CRC mismatch expected=0x%08lX actual=0x%08lX",
-						 (unsigned long)expected_crc, (unsigned long)actual_crc);
+		if (strict && epaper_validate_g16p(data, len, EPAPER_PANEL_W, EPAPER_PANEL_H) !=
+				EpaperMediaValidation::Valid) {
+				LOGW("Epaper", "G16P strict validation failed (expected payload CRC=0x%08lX)",
+						(unsigned long)expected_crc);
 				return false;
 		}
-		const uint32_t crc_ms = millis() - t_crc;
-#else
-		(void)expected_crc;
-		const uint32_t crc_ms = 0;  // CRC verification disabled (see EPAPER_VERIFY_CRC32)
-#endif
+		const uint32_t crc_ms = strict ? millis() - t_crc : 0;
 
 		const uint32_t t_cpy = millis();
 		memcpy(s_canvas->buffer(), payload, G16P_PAYLOAD_SIZE);
@@ -493,7 +465,8 @@ bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
 // too large for the loop task stack, so it is heap-allocated rather than using
 // the stack-based tinfl_decompress_mem_to_mem() helper. On success fills
 // *out_buf/*out_len (caller frees with heap_caps_free).
-bool inflate_g16z(const uint8_t* data, size_t len, uint8_t** out_buf, size_t* out_len) {
+bool inflate_g16z(const uint8_t* data, size_t len, uint8_t** out_buf, size_t* out_len,
+		bool strict) {
 		*out_buf = nullptr;
 		*out_len = 0;
 		if (!data || len <= sizeof(G16Z_MAGIC)) return false;
@@ -524,9 +497,14 @@ bool inflate_g16z(const uint8_t* data, size_t len, uint8_t** out_buf, size_t* ou
 				TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
 		heap_caps_free(decomp);
 
-		if (st != TINFL_STATUS_DONE || out_bytes != G16P_TOTAL_SIZE) {
-				LOGW("Epaper", "G16Z inflate failed (status=%d produced=%u expected=%u)",
-						 (int)st, (unsigned)out_bytes, (unsigned)G16P_TOTAL_SIZE);
+		const EpaperMediaValidation completion = epaper_validate_g16z_completion(
+				(int)st, (int)TINFL_STATUS_DONE, in_bytes, len - sizeof(G16Z_MAGIC),
+				out_bytes, G16P_TOTAL_SIZE);
+		if (completion == EpaperMediaValidation::Malformed ||
+				(strict && completion != EpaperMediaValidation::Valid)) {
+				LOGW("Epaper", "G16Z inflate failed (status=%d consumed=%u/%u produced=%u/%u)",
+						 (int)st, (unsigned)in_bytes, (unsigned)(len - sizeof(G16Z_MAGIC)),
+						 (unsigned)out_bytes, (unsigned)G16P_TOTAL_SIZE);
 				heap_caps_free(dst);
 				return false;
 		}
@@ -891,83 +869,8 @@ void epaper_driver_set_rotation(uint8_t rotation) {
 		s_canvas->setRotation(rotation & 0x3);
 }
 
-bool epaper_driver_draw_url(const char* url) {
-		if (!s_began || !s_canvas || !url || !*url) return false;
-
-		uint8_t* data = nullptr;
-		size_t len = 0;
-		bool from_cache = false;
-#ifdef EPAPER_SD_CS_PIN
-		// Clear any image staged by a previous draw that was never flushed.
-		epaper_sd_cache_discard_pending();
-		String blob_url;
-		char img_id[64] = {0};
-		if (epaper_sd_cache_is_enabled()) {
-				// Hide the ~1.6s panel power-on under the network resolve: power_on
-				// drives the HSPI panel bus while the resolve waits on WiFi -- two
-				// independent buses, so they run concurrently. Join before any HSPI
-				// access (the SD read below) so the bus is free. On a cache hit this
-				// removes power_on from the critical path entirely; on a miss the panel
-				// is simply hot before the body download starts (no regression, since
-				// the resolve already runs before the download either way).
-				Prewarm pw = {};
-				prewarm_start(&pw);
-				const uint32_t t_resolve = millis();
-				const bool resolved =
-						epaper_sd_cache_resolve(url, blob_url, img_id, sizeof(img_id)) &&
-						img_id[0];
-				const uint32_t resolve_ms = millis() - t_resolve;
-				epaper_timing_set_resolve_ms(resolve_ms);
-				const uint32_t t_join = millis();
-				prewarm_join(&pw);  // power_on done; HSPI now free for the SD read
-				LOGI("Epaper", "URL resolve %lums (%s), panel power-on wait %lums",
-						 (unsigned long)resolve_ms, resolved ? "ok" : "unresolved",
-						 (unsigned long)(millis() - t_join));
-
-				// Resolve the /api/next redirect to a blob URL + content-stable id
-				// WITHOUT downloading the body, then try the SD cache. A hit skips the
-				// slow HTTP body GET entirely; the SD read uses the panel's HSPI bus,
-				// so the pre-warm worker (which also drives HSPI) must NOT run here.
-				if (resolved) {
-						const uint32_t t_fetch = millis();
-						if (epaper_sd_cache_read(img_id, &data, &len)) {
-								from_cache = true;
-								epaper_timing_set_fetch(millis() - t_fetch, true /*from_cache*/);
-								LOGI("Epaper", "SD cache hit: %s", img_id);
-						} else {
-								LOGI("Epaper", "SD cache miss: %s", img_id);
-						}
-				}
-		}
-#endif
-
-		if (!from_cache) {
-				// Pre-warm the IT8951 (power_on ~1.6s of rail boot + HRDY wait) on a
-				// background task that runs concurrently with the HTTP download, so the
-				// panel is ready when bytes arrive and epaper_driver_display()'s
-				// power_on() collapses to a guarded no-op. SPI and WiFi don't share a
-				// bus. Skipped when the panel is already warm (the SD-cache resolve
-				// above prewarmed it); prewarm_join is then a no-op.
-				Prewarm pw = {};
-				if (!s_power_on) prewarm_start(&pw);
-
-				// On a cache miss we may already have resolved the blob URL; download it
-				// directly to skip the redirect hop. Otherwise download the original URL.
-				const char* dl_url = url;
-#ifdef EPAPER_SD_CS_PIN
-				if (blob_url.length() > 0) dl_url = blob_url.c_str();
-#endif
-				const uint32_t t_fetch = millis();
-				const bool dl_ok = epaper_http_download(dl_url, &data, &len);
-
-				// Join the pre-warm worker (notifies after power_on completes), then
-				// reap its TCB/stack. Done regardless of download result so the HSPI
-				// bus is free and the task is always cleaned up.
-				prewarm_join(&pw);
-
-				if (!dl_ok) return false;
-				epaper_timing_set_fetch(millis() - t_fetch, false /*downloaded*/);
-		}
+static bool draw_blob(const char* source, uint8_t* data, size_t len, bool strict) {
+		if (!s_began || !s_canvas || !data || len < 4) return false;
 
 		// `data`/`len` now holds the transport bytes -- either a compressed G16Z
 		// wrapper or a raw G16P frame, from a fresh download or the SD cache. The
@@ -987,26 +890,21 @@ bool epaper_driver_draw_url(const char* url) {
 				uint8_t* inflated = nullptr;
 				if (is_g16z) {
 						size_t inflated_len = 0;
-						if (!inflate_g16z(data, len, &inflated, &inflated_len)) {
-								heap_caps_free(data);
+						if (!inflate_g16z(data, len, &inflated, &inflated_len, strict)) {
 								return false;
 						}
 						frame = inflated;
 						frame_len = inflated_len;
 				}
-				const bool ok = load_g16p_to_canvas(frame, frame_len);
+				const bool ok = load_g16p_to_canvas(frame, frame_len, strict);
 				if (inflated) heap_caps_free(inflated);
-#ifdef EPAPER_SD_CS_PIN
-				// Stage the original transport bytes (compressed G16Z when the server
-				// sent it) for write-back to SD after display. Transfer buffer
-				// ownership to the pending slot (don't free below).
-				if (ok && !from_cache && epaper_sd_cache_is_enabled() && img_id[0]) {
-						epaper_sd_cache_stage_pending(img_id, data, len);
-						data = nullptr;
-				}
-#endif
-				if (data) heap_caps_free(data);
 				return ok;
+		}
+
+		if (strict && epaper_validate_jpeg(data, len, EPAPER_PANEL_W, EPAPER_PANEL_H) !=
+				EpaperMediaValidation::Valid) {
+				LOGW("Epaper", "Service JPEG validation failed");
+				return false;
 		}
 
 		// JPEGDEC's progressive decoder faults on some images (the duty-cycle
@@ -1014,8 +912,7 @@ bool epaper_driver_draw_url(const char* url) {
 		// crash the device or brick the panel mid-upload. The image endpoint
 		// must emit baseline JPEGs.
 		if (jpeg_is_progressive(data, len)) {
-				LOGW("Epaper", "progressive JPEG not supported; serve baseline: %s", url);
-				heap_caps_free(data);
+				LOGW("Epaper", "progressive JPEG not supported; serve baseline: %s", source);
 				return false;
 		}
 
@@ -1047,7 +944,7 @@ bool epaper_driver_draw_url(const char* url) {
 				if (alloc.stack) heap_caps_free(alloc.stack);
 				if (alloc.tcb) heap_caps_free(alloc.tcb);
 		} else {
-				LOGW("Epaper", "JPEG decode task spawn failed; skipping %s", url);
+				LOGW("Epaper", "JPEG decode task spawn failed; skipping %s", source);
 		}
 
 		// Quantize + dither the decoded frame into the canvas. When no dither
@@ -1063,8 +960,66 @@ bool epaper_driver_draw_url(const char* url) {
 				s_gray16 = nullptr;
 		}
 
-		heap_caps_free(data);
 		return ok;
+}
+
+bool epaper_driver_draw_url(const char* url) {
+		if (!s_began || !s_canvas || !url || !*url) return false;
+		uint8_t* data = nullptr;
+		size_t len = 0;
+		Prewarm prewarm = {};
+		if (!s_power_on) prewarm_start(&prewarm);
+		const uint32_t started = millis();
+		const bool downloaded = epaper_http_download(url, &data, &len);
+		prewarm_join(&prewarm);
+		if (!downloaded) return false;
+		epaper_timing_set_fetch(millis() - started, false);
+		const bool drew = draw_blob(url, data, len, false);
+		heap_caps_free(data);
+		return drew;
+}
+
+bool epaper_driver_prepare_service_blob(const uint8_t* data, size_t len, const char* media_type,
+		uint8_t** prepared_data, size_t* prepared_len) {
+		*prepared_data = nullptr;
+		*prepared_len = 0;
+		if (!data || len < 4) return false;
+		if (media_type && strcmp(media_type, "application/vnd.photoframe.g16p") == 0) {
+				return epaper_validate_g16p(data, len, EPAPER_PANEL_W, EPAPER_PANEL_H) ==
+						EpaperMediaValidation::Valid;
+		}
+		if (media_type && strcmp(media_type, "image/jpeg") == 0) {
+				return epaper_validate_jpeg(data, len, EPAPER_PANEL_W, EPAPER_PANEL_H) ==
+						EpaperMediaValidation::Valid;
+		}
+		if ((media_type && strcmp(media_type, "application/vnd.photoframe.g16z") == 0) ||
+				memcmp(data, G16Z_MAGIC, sizeof(G16Z_MAGIC)) == 0) {
+				uint8_t* inflated = nullptr;
+				size_t inflated_len = 0;
+				const bool ok = inflate_g16z(data, len, &inflated, &inflated_len, true) &&
+						epaper_validate_g16p(inflated, inflated_len, EPAPER_PANEL_W, EPAPER_PANEL_H) ==
+						EpaperMediaValidation::Valid;
+				if (!ok) {
+						if (inflated) heap_caps_free(inflated);
+						return false;
+				}
+				*prepared_data = inflated;
+				*prepared_len = inflated_len;
+				return true;
+		}
+		return false;
+}
+
+bool epaper_driver_draw_service_blob(const uint8_t* data, size_t len, const char* media_type,
+		const uint8_t* prepared_data, size_t prepared_len) {
+		const bool is_g16z = (media_type &&
+				strcmp(media_type, "application/vnd.photoframe.g16z") == 0) ||
+				(len >= sizeof(G16Z_MAGIC) && memcmp(data, G16Z_MAGIC, sizeof(G16Z_MAGIC)) == 0);
+		if (is_g16z) {
+				if (!prepared_data || prepared_len == 0) return false;
+				return draw_blob("service", const_cast<uint8_t*>(prepared_data), prepared_len, false);
+		}
+		return draw_blob("service", const_cast<uint8_t*>(data), len, false);
 }
 
 void epaper_driver_display() {

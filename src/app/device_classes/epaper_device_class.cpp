@@ -56,6 +56,10 @@ EpaperConfig g_epaper_config = {};
 // stored values across the upgrade.
 // ---------------------------------------------------------------------------
 static const char *kNvsNamespace      = "device_cfg";
+static const char *kKeySourceMode     = "ep_src_mode";
+static const char *kKeyServiceUrl     = "ep_svc_url";
+static const char *kKeyServiceToken   = "ep_token";
+static const char *kKeyServiceInt     = "ep_svc_int";
 static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
 static const char *kKeyCrcEnabled     = "ep_crc_en";
@@ -71,6 +75,18 @@ static const char *kKeyCarouselCount  = "ep_c_cnt";
 static const char *kKeyScheduleHours  = "ep_sch_hrs";
 static const char *kKeyScheduleTzOff  = "ep_sch_tz";
 static const uint32_t kDefaultCarouselDurationS = 900;
+static_assert(sizeof("ep_src_mode") - 1 <= 14, "NVS key too long");
+static_assert(sizeof("ep_svc_url") - 1 <= 14, "NVS key too long");
+static_assert(sizeof("ep_token") - 1 <= 14, "NVS key too long");
+static_assert(sizeof("ep_svc_int") - 1 <= 14, "NVS key too long");
+
+static bool epaper_service_supported() {
+#if defined(BOARD_RETERMINAL_E1003)
+		return true;
+#else
+		return false;
+#endif
+}
 
 bool epaper_resolve_current_url() {
 		if (g_epaper_config.carousel_count == 0) {
@@ -102,6 +118,12 @@ static uint32_t epaper_current_slot_duration_seconds() {
 		}
 		const uint32_t duration = g_epaper_config.carousel[g_epaper_carousel_index].interval_seconds;
 		return (duration > 0) ? duration : kDefaultCarouselDurationS;
+}
+
+static uint32_t epaper_current_refresh_duration_seconds() {
+		return epaper_source_refresh_interval(g_epaper_config.source_mode,
+				g_epaper_config.service_interval_seconds,
+				epaper_current_slot_duration_seconds());
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +196,11 @@ void epaper_config_persist_crc(uint32_t crc) {
 // Config hooks (defaults / load / save / API).
 // ---------------------------------------------------------------------------
 static void config_defaults_hook(DeviceConfig * /*cfg*/) {
+		g_epaper_config.source_mode = EpaperSourceMode::SlotCarousel;
 		g_epaper_config.epaper_url[0] = '\0';
+		g_epaper_config.service_url[0] = '\0';
+		g_epaper_config.service_token[0] = '\0';
+		g_epaper_config.service_interval_seconds = kDefaultCarouselDurationS;
 		g_epaper_config.epaper_rotation = 0;
 		g_epaper_config.epaper_last_crc32 = 0;
 		g_epaper_config.epaper_crc32_enabled = false;
@@ -202,6 +228,18 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		// Defaults so missing keys land on sane values.
 		config_defaults_hook(nullptr);
+		const uint8_t source_mode = prefs.getUChar(kKeySourceMode, 0);
+		g_epaper_config.source_mode = source_mode == 1 && epaper_service_supported()
+				? EpaperSourceMode::Service : EpaperSourceMode::SlotCarousel;
+		String service_url = prefs.getString(kKeyServiceUrl, "");
+		strlcpy(g_epaper_config.service_url, service_url.c_str(), sizeof(g_epaper_config.service_url));
+		String service_token = prefs.getString(kKeyServiceToken, "");
+		strlcpy(g_epaper_config.service_token, service_token.c_str(), sizeof(g_epaper_config.service_token));
+		g_epaper_config.service_interval_seconds = prefs.getUInt(
+				kKeyServiceInt, kDefaultCarouselDurationS);
+		if (g_epaper_config.service_interval_seconds == 0) {
+				g_epaper_config.service_interval_seconds = kDefaultCarouselDurationS;
+		}
 
 		g_epaper_config.epaper_rotation = prefs.getUChar(kKeyRotation, 0);
 		if (g_epaper_config.epaper_rotation > 3) g_epaper_config.epaper_rotation = 0;
@@ -242,6 +280,10 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 }
 
 static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
+		prefs.putUChar(kKeySourceMode, (uint8_t)g_epaper_config.source_mode);
+		prefs.putString(kKeyServiceUrl, g_epaper_config.service_url);
+		prefs.putString(kKeyServiceToken, g_epaper_config.service_token);
+		prefs.putUInt(kKeyServiceInt, g_epaper_config.service_interval_seconds);
 		prefs.putUChar(kKeyRotation, g_epaper_config.epaper_rotation);
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_last_crc32);
 		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_crc32_enabled);
@@ -275,6 +317,12 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 
 static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) {
 		root["caps"]["epaper"] = true;
+		root["epaper_service_supported"] = epaper_service_supported();
+		root["epaper_source_mode"] = epaper_source_uses_service(g_epaper_config.source_mode)
+				? "service" : "slot-carousel";
+		root["epaper_service_url"] = g_epaper_config.service_url;
+		root["epaper_service_interval_seconds"] = g_epaper_config.service_interval_seconds;
+		root["epaper_service_token_set"] = g_epaper_config.service_token[0] != '\0';
 		root["epaper_rotation"] = g_epaper_config.epaper_rotation;
 		root["epaper_crc32_enabled"] = g_epaper_config.epaper_crc32_enabled;
 		root["epaper_sd_cache_enabled"] = g_epaper_config.epaper_sd_cache_enabled;
@@ -309,6 +357,28 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 }
 
 static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
+		if (body.containsKey("epaper_source_mode")) {
+				const char* mode = body["epaper_source_mode"] | "slot-carousel";
+				g_epaper_config.source_mode = strcmp(mode, "service") == 0 && epaper_service_supported()
+						? EpaperSourceMode::Service : EpaperSourceMode::SlotCarousel;
+		}
+		if (body.containsKey("epaper_service_url")) {
+				strlcpy(g_epaper_config.service_url,
+						body["epaper_service_url"] | "", sizeof(g_epaper_config.service_url));
+		}
+		if (body.containsKey("epaper_service_token")) {
+				const char* token = body["epaper_service_token"] | "";
+				if (token[0] != '\0') {
+						strlcpy(g_epaper_config.service_token, token, sizeof(g_epaper_config.service_token));
+				}
+		}
+		if (body.containsKey("epaper_service_interval_seconds")) {
+				uint32_t interval = body["epaper_service_interval_seconds"].is<const char*>()
+						? (uint32_t)strtoul(body["epaper_service_interval_seconds"].as<const char*>(), nullptr, 10)
+						: (uint32_t)(body["epaper_service_interval_seconds"] | kDefaultCarouselDurationS);
+				g_epaper_config.service_interval_seconds = interval > 0
+						? interval : kDefaultCarouselDurationS;
+		}
 		if (body.containsKey("epaper_rotation")) {
 				uint8_t v = body["epaper_rotation"].is<const char*>()
 						? (uint8_t)atoi(body["epaper_rotation"].as<const char*>())
@@ -617,7 +687,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 
 		if (!connected) {
 				const uint32_t backoff = power_manager_note_wifi_failure(
-						epaper_current_slot_duration_seconds(),
+						epaper_current_refresh_duration_seconds(),
 						config->wifi_backoff_max_seconds);
 				epaper_timing_last.boot_to_wifi_ms = millis();
 				epaper_timing_last.total_active_ms = millis();
@@ -714,13 +784,24 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 #endif
 
 
-		if (!epaper_resolve_current_url()) {
-				LOGW("Epaper", "Refresh skipped: no carousel URL configured");
-				power_manager_sleep_for(kDefaultCarouselDurationS);
-				return true;
+		if (epaper_source_uses_service(g_epaper_config.source_mode)) {
+				if (g_epaper_config.service_url[0] == '\0' ||
+						g_epaper_config.service_token[0] == '\0') {
+						LOGW("Epaper", "Refresh skipped: Service URL or token not configured");
+						power_manager_sleep_for(g_epaper_config.service_interval_seconds);
+						return true;
+				}
+				LOGI("Epaper", "Service: requesting next image");
+		} else {
+				if (!epaper_resolve_current_url()) {
+						LOGW("Epaper", "Refresh skipped: no carousel URL configured");
+						power_manager_sleep_for(kDefaultCarouselDurationS);
+						return true;
+				}
+				LOGI("Epaper", "Carousel: using slot %u URL: %s",
+						g_epaper_carousel_index, g_epaper_config.epaper_url);
 		}
 		const uint8_t active_slot_index = g_epaper_carousel_index;
-		LOGI("Epaper", "Carousel: using slot %u URL: %s", g_epaper_carousel_index, g_epaper_config.epaper_url);
 
 		// Clear the per-draw sub-step timings so a CRC-skip wake (no fetch/draw)
 		// reports zeros rather than the previous cycle's resolve/fetch/draw.
@@ -730,7 +811,8 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		epaper_timing_last.crc_retry_count = outcome.crc_retry_count;
 
 		// Carousel: advance index after refresh (on success or skip)
-		if (g_epaper_config.carousel_count > 0) {
+		if (epaper_source_advances_carousel(
+				g_epaper_config.source_mode, g_epaper_config.carousel_count)) {
 				uint8_t next_idx = epaper_carousel_next_index(
 						g_epaper_carousel_index,
 						g_epaper_config.carousel_count,
@@ -766,8 +848,9 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// cadence approximates duty_cycle_wake_seconds. Skip when target is 0
 		// (button-only mode) so we don't accidentally re-arm the timer.
 		// Per-entry interval: if carousel active, use current entry's interval (if > 0)
-		uint32_t target_s = kDefaultCarouselDurationS;
-		if (g_epaper_config.carousel_count > 0) {
+		uint32_t target_s = epaper_current_refresh_duration_seconds();
+		if (!epaper_source_uses_service(g_epaper_config.source_mode) &&
+				g_epaper_config.carousel_count > 0) {
 				target_s = g_epaper_config.carousel[active_slot_index].interval_seconds;
 				if (target_s == 0) target_s = kDefaultCarouselDurationS;
 				LOGI("Epaper", "Using carousel slot %u duration: %u seconds", active_slot_index, target_s);
@@ -869,6 +952,10 @@ void epaper_device_class_register() {
 #include "epaper/epaper_crc32.cpp"
 #include "epaper/epaper_carousel.cpp"
 #include "epaper/epaper_http.cpp"
+#include "epaper/epaper_media_validation.cpp"
+#include "epaper/epaper_next_client.cpp"
+#include "epaper/epaper_next_client_logic.cpp"
+#include "epaper/epaper_transport_crc32.cpp"
 #include "epaper/epaper_drivers.cpp"
 #include "epaper/epaper_mqtt.cpp"
 #include "epaper/epaper_overlay.cpp"

@@ -1,4 +1,6 @@
 #pragma once
+
+#include <stddef.h>
 #ifndef EPAPER_DRIVER_H
 #define EPAPER_DRIVER_H
 
@@ -29,6 +31,12 @@
 bool epaper_driver_begin();
 void epaper_driver_set_rotation(uint8_t rotation);
 bool epaper_driver_draw_url(const char* url);
+#if defined(BOARD_RETERMINAL_E1003)
+bool epaper_driver_prepare_service_blob(const uint8_t* data, size_t len, const char* media_type,
+        uint8_t** prepared_data, size_t* prepared_len);
+bool epaper_driver_draw_service_blob(const uint8_t* data, size_t len, const char* media_type,
+        const uint8_t* prepared_data, size_t prepared_len);
+#endif
 void epaper_driver_display();
 void epaper_driver_sleep();
 

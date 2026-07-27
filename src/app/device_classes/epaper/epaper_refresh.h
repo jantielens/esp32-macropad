@@ -15,7 +15,7 @@ static constexpr uint32_t kEpaperMinValidEpoch = 1704067200U;
 
 // Result of a refresh attempt. Used by the portal "manual refresh" endpoint.
 enum class EpaperRefreshResult : uint8_t {
-		Skipped = 0,     // Sidecar CRC matched stored value; no redraw performed.
+		Skipped = 0,     // Carousel sidecar matched or Service returned keep; no redraw.
 		Updated = 1,     // Image was drawn and pushed to the panel.
 		FailedFetch = 2, // Sidecar transport failure AND subsequent draw also failed.
 		FailedDraw = 3,  // Draw / display step failed (panel or image decode).

@@ -1,7 +1,7 @@
 ---
 title: E-Paper Guide
 description: Detailed guide for the ESP32 Macropad e-paper device class, including hardware model, wake behavior, image refresh flow, portal configuration, and current limitations.
-ms.date: 2026-06-05
+ms.date: 2026-07-26
 ms.topic: concept
 ---
 
@@ -24,12 +24,12 @@ The current implementation targets three boards and one usage model:
 | Seeed reTerminal E1003 | ESP32-S3 | 1404 × 1872 16-level grayscale (IT8951) | G16P fast path, or JPEGDEC + dither, at native resolution |
 
 * Interaction model: non-touch, battery-oriented dashboard
-* Render model: fetch the current remote image slot, draw it, sleep
+* Render model: fetch from the configured slot carousel or next-image service, draw when needed, sleep
 
 The reTerminal E1003 driver assumes the server delivers an image already at the panel's native resolution — there is no on-device scaling, by design, to keep the battery-powered refresh path fast. It accepts three transport formats:
 
-* **G16P** (preferred) — a small magic-stamped header (`G16P`, version, width, height, payload length, CRC32) followed by the panel's 4&nbsp;bpp packed-nibble framebuffer. Because the server has already done the tone mapping and Floyd–Steinberg dithering, the firmware copies the nibbles straight into the framebuffer with no JPEG decode and no large working buffer — the fastest, lowest-power wake path. The optional `EPAPER_VERIFY_CRC32` compile flag (default off) checks the payload CRC before drawing.
-* **G16Z** (compressed G16P) — a `G16Z` magic followed by a header-less (raw) DEFLATE stream of the complete G16P bytes. The server emits this when compression shrinks the payload, so the device pulls ~0.3–0.5× the bytes off WiFi and inflates it into a PSRAM buffer with the ROM's malloc-free tinfl before rendering the reconstructed G16P. On boards with the SD image cache, the **compressed** transport blob is what gets written back, so a later cache hit skips the re-download and reads only ~0.4 MB off the shared HSPI bus (vs ~1.3 MB for a full G16P) before re-inflating in PSRAM.
+* **G16P** (preferred) — a small magic-stamped header (`G16P`, version, width, height, payload length, CRC32) followed by the panel's 4&nbsp;bpp packed-nibble framebuffer. Because the server has already done the tone mapping and Floyd–Steinberg dithering, the firmware copies the nibbles straight into the framebuffer with no JPEG decode and no large working buffer. Service mode always verifies the internal payload CRC before drawing.
+* **G16Z** (compressed G16P) — a `G16Z` magic followed by a header-less (raw) DEFLATE stream of the complete G16P bytes. Service mode requires the stream to consume every transport byte and inflate to one valid G16P object. Wrapped or trailing data is rejected.
 * **Baseline JPEG** — when the blob is neither G16P nor G16Z, the firmware decodes it with JPEGDEC straight into a 16-level grayscale framebuffer and applies Floyd–Steinberg dithering on-device. Progressive JPEGs are rejected up front, so the image endpoint must emit baseline JPEGs.
 
 The shared web portal is still used for setup and configuration, but the runtime behavior is intentionally much simpler than the interactive display class.
@@ -46,12 +46,18 @@ flowchart TD
 
     Force --> Wifi[Connect WiFi]
     Normal --> Wifi
-    Wifi --> CrcEn{CRC change\ndetection on?}
+    Wifi --> Source{Source mode}
+    Source -->|Slot carousel| CrcEn{CRC change\ndetection on?}
+    Source -->|Service| Next[GET /api/v1/next]
     CrcEn -->|No| Draw[Draw remote image]
     CrcEn -->|Yes| Sidecar[Fetch image sidecar CRC]
     Sidecar --> Compare{CRC changed?}
     Compare -->|No| Sleep[Deep sleep]
     Compare -->|Yes| Draw
+    Next -->|204| Sleep
+    Next -->|200 or 302| Verify[Verify transport and media]
+    Verify -->|Valid| Draw
+    Verify -->|Invalid| Sleep
     Draw --> Panel[Refresh panel]
     Panel --> Sleep
     Config --> Portal[Run web portal until idle timeout]
@@ -73,7 +79,9 @@ That split is intentional. The e-paper board does not participate in the LVGL di
 
 ## Image Refresh Pipeline
 
-Each refresh cycle uses the same high-level sequence:
+The configured source mode selects the refresh sequence explicitly. The mode is never inferred from populated fields.
+
+Slot-carousel mode uses this sequence:
 
 1. Connect to WiFi.
 2. On cold boot only, kick SNTP and wait up to 2 s for the first time sync so the status overlay timestamp is meaningful on the very first refresh. The ESP32 RTC keeps wall-clock through deep sleep, so subsequent wakes skip the wait.
@@ -81,13 +89,15 @@ Each refresh cycle uses the same high-level sequence:
 4. Compare the sidecar value to the last successfully displayed CRC.
 5. Skip the panel refresh when the CRC is unchanged, unless the refresh was explicitly forced. With change detection disabled, every scheduled wake redraws the panel.
 6. Clear the framebuffer so the boot splash or low-battery screen does not bleed through at the configured rotation.
-7. Draw the image with the board driver (Inkplate library on the 5V2; G16P direct copy or JPEGDEC → IT8951 framebuffer on the reTerminal E1003).
+7. Draw the image with the board driver (Inkplate library on the 5V2; G16P direct copy or JPEGDEC to IT8951 framebuffer on the reTerminal E1003).
 8. Composite the status overlay on top of the image.
 9. Trigger the panel refresh.
 10. Read battery voltage.
 11. Store the new CRC after a successful update.
 12. Put the panel to sleep.
 13. Enter ESP32 deep sleep until the next wake.
+
+Service mode is available only on the reTerminal E1003. Each wake sends one bounded request cycle to `/api/v1/next`, validates the response before display, and then sleeps. A `204 No Content` response keeps the retained panel image without a redraw. A failed response can trigger at most one additional retrieval cycle during that wake.
 
 On the Inkplate 5V2 and Inkplate 6FLICK, the image is fetched and decoded by the Inkplate library. On the reTerminal E1003, the firmware fetches the blob over HTTP(S): a G16P payload is copied straight into the 16-level grayscale framebuffer (no decode), while a baseline JPEG is decoded with JPEGDEC and Floyd–Steinberg dithered into the framebuffer. Either way the image is drawn at the panel's native resolution with no scaling.
 
@@ -97,9 +107,9 @@ A refresh is always forced (CRC skip is bypassed) when any of these is true:
 * Short press of the WAKE button — the user is actively looking at the panel.
 * The portal `Refresh e-paper now` action.
 
-## Image and Sidecar Contract
+## Slot Carousel and Sidecar Contract
 
-The current implementation expects public HTTP or HTTPS image URLs.
+Slot-carousel mode expects public HTTP or HTTPS image URLs. It remains a best-effort path and does not require bearer authentication or a transport CRC header.
 
 Supported image formats:
 
@@ -137,6 +147,29 @@ The portal can configure up to five image slots. Each slot has:
 Slots are filled top-to-bottom. Empty slots are skipped. A slot's Duration is the amount of time the device stays on that image before the next wake.
 
 There is no separate global "wake every" control in the current UI. The wake-to-wake cadence is driven by the active slot's Duration. When only the first slot is populated, the board behaves like a single-image setup.
+
+## Next-Image Service
+
+Service mode is available only on the reTerminal E1003. Configure these fields on the Image Sources page:
+
+* Service base URL, without `/api/v1/next`
+* Bearer token issued for the frame
+* One refresh interval for all service wakes
+
+The token identifies the frame and binds its supported formats and exact `1872 x 1404` driven geometry. The portal stores the token in NVS but never returns it through the configuration API. Leaving the token input empty preserves an existing token.
+
+The client sends `GET <base>/api/v1/next` with one `Authorization: Bearer` header. After a successful display, it retains the image key and transport CRC in RTC slow memory and sends both advisory fingerprint headers on later wakes. The fingerprint survives deep sleep but is cleared by a full power cycle.
+
+Service responses use these outcomes:
+
+* `200` supplies inline image bytes
+* `204` keeps the current panel image without a redraw
+* `302` is followed manually without forwarding the bearer token
+* `401` keeps the current image and waits for the normal schedule
+* `404` reports an unsupported contract major
+* `405` and `5xx` keep the current image and use bounded recovery
+
+For every image response, the client verifies `Photoframe-Content-CRC32` over the exact transport bytes. It then enforces the media format, panel geometry, baseline JPEG requirement, G16P payload CRC, and strict G16Z framing before cache admission or display. This strict contract applies only to Service mode.
 
 ## Wake Button Behavior
 
@@ -210,7 +243,7 @@ E-paper component endpoints are split across two components: `epaper-status` and
 On e-paper boards, the web portal uses a dedicated **E-Paper** category as the primary landing area. The category contains five pages:
 
 * **Status** &mdash; read-only refresh counters, timing, battery, and last outcome, plus a `Refresh e-paper now` action. Auto-refreshes every 5 seconds.
-* **Image Sources** &mdash; up to 5 image slots with per-slot Duration and Stay flags, plus the hourly refresh window and timezone offset.
+* **Image Sources** &mdash; an explicit Slot carousel or Service selector, the active mode's fields, and the shared hourly refresh window and timezone offset. Service controls appear only on the reTerminal E1003.
 * **WiFi Failure Backoff** &mdash; WiFi retry sleep cap after repeated failures.
 * **Status Overlay** &mdash; overlay enable, corner position, color, and per-field bitmask (battery, percentage, time, duration).
 * **VCOM** &mdash; one-time TPS65186 EEPROM calibration controls.
@@ -263,7 +296,7 @@ The portal currently renders `0` as `N/A`.
 
 ### Last Image CRC
 
-The CRC shown in the portal is the last successfully committed image CRC from NVS. It represents the last known displayed image identity, not necessarily the most recent sidecar body when a refresh failed.
+In slot-carousel mode, the CRC shown in the portal is the last successfully committed sidecar value from NVS. In Service mode, telemetry reports the contract transport CRC from the most recent result. The Service fingerprint itself is RTC-retained and is updated after the synchronous panel display call returns.
 
 ## Power and Telemetry
 
@@ -271,9 +304,10 @@ The e-paper duty cycle measures and retains a per-wake timing budget in RTC memo
 
 ### Wake Modes
 
-The e-paper device wakes from either the RTC timer or the WAKE button. The current UI no longer exposes a separate global "wake every" control; the wake cadence is driven by the active slot's Duration.
+The e-paper device wakes from either the RTC timer or the WAKE button. The current UI no longer exposes a separate global "wake every" control. Slot-carousel mode uses the active slot's Duration, while Service mode uses its single refresh interval.
 
-* Slot Duration controls how long the device sleeps after showing that slot.
+* Slot Duration controls how long the device sleeps after showing that slot
+* Service refresh interval controls the cadence in Service mode
 * The schedule can still disable refreshes for selected local hours. A WAKE-button press overrides the schedule and refreshes anyway; only timer wakes honor the disabled hours.
 * Button-only operation remains possible when the timer wake is intentionally disabled in firmware behavior.
 
@@ -344,13 +378,14 @@ On the Inkplate board, the default portal idle timeout is 300 seconds. That give
 
 The SD image cache is a **device-class capability** for e-paper boards that expose a microSD slot on the *same* SPI bus as the panel controller. It is gated by the `EPAPER_SD_CS_PIN` compile-time flag and lives in the shared `epaper/epaper_sd_cache` module, so any future e-paper board can opt in from its `board_overrides.h` without touching a driver. Among the current targets only the reTerminal E1003 qualifies; the Inkplate 5V2 has no shared-bus SD slot, so the entire cache is compiled out there.
 
-It is a downloaded-blob cache, not a generic image store. It caches the original transport blob the publisher served — a compressed **G16Z** wrapper when the server sent one, or a raw **G16P** framebuffer otherwise. A cache hit skips the re-download and reads the small blob off the card (~0.4 MB for G16Z vs ~1.3 MB for G16P), then re-inflates in PSRAM if needed, which is far cheaper than the extra SD read a full-size frame would cost. The entry is keyed by the content-stable image id parsed from the publisher's redirect URL and stored on the card as `/cache/<id>.g16z`.
+It is a Service-mode transport cache, not a generic image store or an offline carousel. It stores the exact transport bytes under the lowercase transport CRC as `/cache/<content_crc32>.blob`. Two logical images with the same transport CRC have identical cached bytes for admission purposes.
 
 How a cached refresh works:
 
-1. The firmware resolves the image redirect to a blob URL and content id **without** downloading the ~1.3&nbsp;MB body.
-2. On a cache **hit**, the blob is read straight from SD and the slow HTTP body download is skipped entirely &mdash; the main battery win.
-3. On a cache **miss**, the blob is downloaded over HTTP(S), drawn, and then staged in PSRAM. The write-back to SD happens on the awake tail (after the panel is already showing the image), so the ~1&ndash;2&nbsp;s card write does not sit in the wake-to-visible path.
+1. The client reads the `200` or `302` metadata headers before consuming image bytes.
+2. When the advertised transport CRC exists on SD, the client closes the HTTP response without calling the body reader.
+3. The cached byte length, transport CRC, format, and geometry are revalidated. Invalid entries are evicted.
+4. On a miss, the client downloads and validates the exact transport bytes before drawing. Valid fresh bytes are written after the panel refresh so the card write does not extend wake-to-visible time.
 
 Because the microSD card and the IT8951 panel share one SPI bus, the cache never calls `SPI.begin()` itself &mdash; the driver owns the bus. After every `SD.end()` the cache module invokes a driver-supplied `restore_panel_bus()` callback that re-initializes the panel's SPI bus and chip-select, so an SD-cache hit followed by a panel refresh draws a clean image rather than garbage.
 
@@ -365,11 +400,11 @@ The e-paper device class is intentionally narrow in this first version.
 
 Current limitations include:
 
-* Public image URLs only
+* Slot carousel requires public image URLs; Service mode uses one bearer-authenticated endpoint
 * Full refresh only, no partial-update pipeline
 * No offline image fallback when the network is unreachable (the SD blob cache speeds up repeated images on boards with a shared-bus microSD slot, but is not an offline carousel)
 * No touch UI runtime
-* Carousel slots all point to remote URLs; the SD cache stores only previously fetched blobs, not user-managed local images
+* Carousel slots all point to remote URLs; the Service cache stores only previously validated contract payloads, not user-managed local images
 * Hourly schedule uses a fixed UTC offset rather than full timezone rules (DST must be adjusted manually)
 
 Those constraints keep the runtime predictable and power efficient while the device class matures.
