@@ -123,9 +123,10 @@ bool epaper_driver_draw_url(const char* url) {
 		return ok;
 }
 
-void epaper_driver_display() {
-		if (!s_began || !s_display) return;
+bool epaper_driver_display() {
+		if (!s_began || !s_display) return false;
 		s_display->display();
+		return true;
 }
 
 void epaper_driver_sleep() {

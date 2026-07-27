@@ -22,7 +22,7 @@
 //   1. epaper_driver_begin()           — power up the panel
 //   2. epaper_driver_set_rotation(r)
 //   3. epaper_driver_draw_url(url)     — fetch over HTTP(S) + decode + draw
-//   4. epaper_driver_display()         — push framebuffer to the panel
+//   4. epaper_driver_display()         — push framebuffer; false if not confirmed
 //   5. epaper_driver_sleep()           — power down the panel before deep sleep
 //
 // Returns true on success. Implementations log details with LOGI/LOGW.
@@ -37,7 +37,7 @@ bool epaper_driver_prepare_service_blob(const uint8_t* data, size_t len, const c
 bool epaper_driver_draw_service_blob(const uint8_t* data, size_t len, const char* media_type,
         const uint8_t* prepared_data, size_t prepared_len);
 #endif
-void epaper_driver_display();
+bool epaper_driver_display();
 void epaper_driver_sleep();
 
 // Battery voltage in millivolts (0 if not supported).

@@ -120,7 +120,8 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 		// cache hit this lets draw_url() skip the multi-second HTTP body download.
 		epaper_driver_set_sd_cache_enabled(g_epaper_config.epaper_sd_cache_enabled);
 
-		const bool drew = epaper_driver_draw_url(image_url);
+		const bool image_ready = epaper_driver_draw_url(image_url);
+		bool drew = image_ready;
 
 		if (drew) {
 				// Switch to the user's configured rotation so the overlay lands in
@@ -129,11 +130,12 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 				// Composite the status overlay on top of the dashboard image before
 				// pushing the frame. Pure framebuffer draws — no panel waveform yet.
 				epaper_overlay_render(out.battery_mv, (uint32_t)(millis() - t0));
-				epaper_driver_display();
+				drew = epaper_driver_display();
 				// Write a freshly downloaded image back to the SD cache now that the
 				// frame is on screen, keeping the slow write off the wake-to-visible
 				// path. No-op on a cache hit or when SD caching is unsupported/off.
-				epaper_driver_cache_flush();
+				if (drew) epaper_driver_cache_flush();
+				else epaper_sd_cache_discard_pending();
 		}
 
 		if (wdt_was_attached) {
@@ -147,7 +149,7 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 				// likely root cause is network/server unreachability rather than a
 				// panel-side problem; surface that to the portal so users can tell
 				// "server unreachable" apart from "server returned garbage image".
-				out.result = sidecar_transport_failed
+				out.result = !image_ready && sidecar_transport_failed
 					? EpaperRefreshResult::FailedFetch
 					: EpaperRefreshResult::FailedDraw;
 				// On a silent timer wake, keep whatever image is already on the
@@ -260,12 +262,16 @@ static EpaperRefreshOutcome epaper_refresh_run_service(DeviceConfig* config) {
 					payload.data = nullptr;
 					payload.len = 0;
 			}
-			epaper_driver_display();
-			epaper_driver_cache_flush();
-			g_service_fingerprint.valid = true;
-			strlcpy(g_service_fingerprint.image_key, payload.image_key,
-					sizeof(g_service_fingerprint.image_key));
-			g_service_fingerprint.content_crc32 = payload.content_crc32;
+			drew = epaper_driver_display();
+			if (drew) {
+				epaper_driver_cache_flush();
+				g_service_fingerprint.valid = true;
+				strlcpy(g_service_fingerprint.image_key, payload.image_key,
+						sizeof(g_service_fingerprint.image_key));
+				g_service_fingerprint.content_crc32 = payload.content_crc32;
+			} else {
+				epaper_sd_cache_discard_pending();
+			}
 		}
 		epaper_next_payload_release(&payload);
 		if (wdt_was_attached) esp_task_wdt_add(nullptr);

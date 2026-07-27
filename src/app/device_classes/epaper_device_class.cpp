@@ -590,17 +590,54 @@ static void on_loop_hook() {
 }
 #endif
 
-// Set by the SNTP service (from the lwIP task) when a fresh time response is
-// applied. Polled by the resync below so we can block until an actual sync
-// lands instead of racing the image download on the WiFi stack.
-static volatile bool s_epaper_ntp_synced = false;
-static void epaper_ntp_sync_cb(struct timeval * /*tv*/) {
-		s_epaper_ntp_synced = true;
-}
-
 // UTC epoch of the last successful NTP fetch, retained across deep sleep so we
 // can throttle real resyncs to once per interval instead of every wake.
 RTC_DATA_ATTR static time_t s_epaper_last_ntp_epoch = 0;
+
+static portMUX_TYPE s_epaper_ntp_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool s_epaper_ntp_synced = false;
+static bool s_epaper_ntp_active = false;
+
+static const uint32_t kEpaperNtpDeferredMaxWaitMs = 5000;
+static const time_t kEpaperNtpResyncIntervalS = 2 * 60 * 60;
+
+static void epaper_ntp_sync_cb(struct timeval *tv) {
+		portENTER_CRITICAL(&s_epaper_ntp_mux);
+		s_epaper_last_ntp_epoch = tv->tv_sec;
+		s_epaper_ntp_synced = true;
+		portEXIT_CRITICAL(&s_epaper_ntp_mux);
+}
+
+static time_t epaper_ntp_last_sync_epoch() {
+		portENTER_CRITICAL(&s_epaper_ntp_mux);
+		const time_t epoch = s_epaper_last_ntp_epoch;
+		portEXIT_CRITICAL(&s_epaper_ntp_mux);
+		return epoch;
+}
+
+static bool epaper_ntp_is_synced() {
+		portENTER_CRITICAL(&s_epaper_ntp_mux);
+		const bool synced = s_epaper_ntp_synced;
+		portEXIT_CRITICAL(&s_epaper_ntp_mux);
+		return synced;
+}
+
+static void epaper_ntp_start() {
+		portENTER_CRITICAL(&s_epaper_ntp_mux);
+		s_epaper_ntp_synced = false;
+		portEXIT_CRITICAL(&s_epaper_ntp_mux);
+		sntp_set_time_sync_notification_cb(epaper_ntp_sync_cb);
+		configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+		s_epaper_ntp_active = true;
+}
+
+static bool epaper_ntp_stop() {
+		if (!s_epaper_ntp_active) return epaper_ntp_is_synced();
+		esp_sntp_stop();
+		sntp_set_time_sync_notification_cb(nullptr);
+		s_epaper_ntp_active = false;
+		return epaper_ntp_is_synced();
+}
 
 // ---------------------------------------------------------------------------
 // Duty cycle: full pipeline (was duty_cycle.cpp's `if (mode == DutyCycleEpaper)`
@@ -696,54 +733,24 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		}
 		power_manager_note_wifi_success();
 
-		// NTP policy: the RTC clock survives deep sleep, so on a normal wake the
-		// time is already valid and we skip the network sync entirely -- the
-		// common path costs ~0 ms and starts no SNTP traffic that could collide
-		// with the time-critical HTTPS image download. We only pay for a real
-		// fetch when the clock is stale (cold boot) or the last successful sync
-		// is older than the resync interval, matching ESP-IDF's default 1 h SNTP
-		// update cadence. This bounds RTC drift (the internal RC oscillator
-		// drifts seconds per day) without taxing every wake.
-		//
-		// When a fetch is due we block until an actual SNTP response lands (or
-		// the ceiling elapses) BEFORE starting the download. A fire-and-forget
-		// configTime() leaves the SNTP service doing DNS lookups + UDP traffic
-		// concurrently with the download, which inflated crc_to_draw_ms by ~10s
-		// on some wakes. Waiting synchronously keeps the download contention-free
-		// and makes ntp_sync_ms reflect the true cost. Fail-open: if no response
-		// arrives within the ceiling, proceed with the current clock.
+		// The schedule is fail-open when the clock is invalid, so NTP never needs
+		// to block the image path. If no successful sync is recent, defer one
+		// bounded attempt until after the panel draw to avoid DNS/UDP contention
+		// with the image fetch.
+		bool defer_ntp_resync = false;
+		uint32_t deferred_ntp_start_ms = 0;
 		{
-				static const uint32_t kEpaperNtpMaxWaitMs    = 5000;  // ceiling for an unreachable server
-				static const time_t   kEpaperNtpResyncIntervalS = 3600;  // 1 h, matches ESP-IDF SNTP default
-
 				const time_t now = time(nullptr);
+				const time_t last_sync = epaper_ntp_last_sync_epoch();
 				const bool clock_valid = (now >= (time_t)EPAPER_SCHEDULE_MIN_VALID_EPOCH);
-				const bool due_for_resync =
-						!clock_valid ||
-						s_epaper_last_ntp_epoch == 0 ||
-						(now - s_epaper_last_ntp_epoch) >= kEpaperNtpResyncIntervalS;
-
-				if (!due_for_resync) {
-						epaper_timing_last.ntp_sync_ms = 0;
-						LOGI("Epaper", "NTP resync skipped (last sync %lds ago)",
-								 (long)(now - s_epaper_last_ntp_epoch));
+				defer_ntp_resync = !clock_valid || last_sync == 0 || now < last_sync ||
+						(now - last_sync) >= kEpaperNtpResyncIntervalS;
+				epaper_timing_last.ntp_sync_ms = 0;
+				if (defer_ntp_resync) {
+						LOGI("Epaper", "NTP resync due; deferring until after panel draw");
 				} else {
-						const uint32_t ntp_start = millis();
-						s_epaper_ntp_synced = false;
-						sntp_set_time_sync_notification_cb(epaper_ntp_sync_cb);
-						configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-						for (uint32_t waited = 0; waited < kEpaperNtpMaxWaitMs && !s_epaper_ntp_synced; waited += 50) {
-								delay(50);
-						}
-						esp_sntp_stop();
-						sntp_set_time_sync_notification_cb(nullptr);
-						epaper_timing_last.ntp_sync_ms = millis() - ntp_start;
-						if (s_epaper_ntp_synced) {
-								s_epaper_last_ntp_epoch = time(nullptr);
-								LOGI("Epaper", "NTP resync done in %ums", epaper_timing_last.ntp_sync_ms);
-						} else {
-								LOGW("Epaper", "NTP sync incomplete after %ums; proceeding with current clock", epaper_timing_last.ntp_sync_ms);
-						}
+						LOGI("Epaper", "NTP resync skipped (last sync %lds ago)",
+								 (long)(now - last_sync));
 				}
 		}
 
@@ -809,6 +816,11 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		const EpaperRefreshOutcome outcome = epaper_refresh_run(config, force_refresh);
 		const uint32_t t_draw_done = millis();
 		epaper_timing_last.crc_retry_count = outcome.crc_retry_count;
+		if (defer_ntp_resync) {
+			deferred_ntp_start_ms = millis();
+			epaper_ntp_start();
+			LOGI("Epaper", "NTP deferred resync started after panel draw");
+		}
 
 		// Carousel: advance index after refresh (on success or skip)
 		if (epaper_source_advances_carousel(
@@ -843,6 +855,20 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 #else
 		epaper_timing_last.draw_to_mqtt_ms = 0;
 #endif
+
+		if (defer_ntp_resync) {
+			while (millis() - deferred_ntp_start_ms < kEpaperNtpDeferredMaxWaitMs &&
+					!epaper_ntp_is_synced()) {
+				delay(50);
+			}
+			const bool synced = epaper_ntp_stop();
+			const uint32_t elapsed_ms = millis() - deferred_ntp_start_ms;
+			if (synced) {
+				LOGI("Epaper", "NTP deferred resync completed in %ums", elapsed_ms);
+			} else {
+				LOGW("Epaper", "NTP deferred resync incomplete after %ums", elapsed_ms);
+			}
+		}
 
 		// Sleep-time compensation: subtract active loop duration so wake-to-wake
 		// cadence approximates duty_cycle_wake_seconds. Skip when target is 0

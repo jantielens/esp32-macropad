@@ -94,6 +94,7 @@ bool epaper_sd_cache_clear();
 // not (and must not) define their own stubs.
 inline void epaper_driver_set_sd_cache_enabled(bool /*enabled*/) {}
 inline void epaper_driver_cache_flush() {}
+inline void epaper_sd_cache_discard_pending() {}
 inline bool epaper_driver_sd_cache_clear() { return false; }
 
 #endif // defined(EPAPER_SD_CS_PIN)

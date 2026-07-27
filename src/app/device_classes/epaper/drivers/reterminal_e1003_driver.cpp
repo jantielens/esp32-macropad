@@ -217,6 +217,7 @@ SPIClass s_spi(HSPI);
 SPISettings s_spi_set(EPAPER_SPI_HZ, MSBFIRST, SPI_MODE0);
 bool s_began = false;
 bool s_power_on = false;  // IT8951 power state (SYS_RUN vs sleep); mirrors Seeed's _power_is_on guard
+bool s_recovery_attempted = false;
 uint32_t s_img_buf_addr = 0;
 
 const GFXfont* const s_font_table[3] = {
@@ -226,103 +227,170 @@ const GFXfont* const s_font_table[3] = {
 };
 
 // --- IT8951 low-level SPI helpers ------------------------------------------
-inline void wait_hrdy() {
+constexpr uint32_t HRDY_COMMAND_TIMEOUT_MS = 250;
+constexpr uint32_t HRDY_STARTUP_TIMEOUT_MS = 3000;
+
+bool wait_hrdy(uint32_t timeout_ms = HRDY_COMMAND_TIMEOUT_MS) {
 		// Bounded HRDY wait. The IT8951 normally raises HRDY within a few ms; an
 		// unbounded spin here can deadlock the whole device if BUSY is stuck LOW
 		// -- e.g. the controller is already asleep (a second CMD_SLEEP never gets
 		// acked) or an inserted MicroSD shares the SPI bus and holds the line.
 		const uint32_t start = millis();
-		const uint32_t timeout_ms = 3000;
 		while (digitalRead(EPAPER_PIN_BUSY) == LOW) {
 				if (millis() - start >= timeout_ms) {
 						LOGW("Epaper", "wait_hrdy timeout (%lums); BUSY stuck LOW", (unsigned long)timeout_ms);
-						return;
+						return false;
 				}
 				delay(1);
 		}
+		return true;
 }
 
-void write_cmd16(uint16_t cmd) {
-		wait_hrdy();
+bool write_cmd16(uint16_t cmd) {
+		if (!wait_hrdy()) return false;
 		s_spi.beginTransaction(s_spi_set);
 		digitalWrite(EPAPER_PIN_CS, LOW);
 		s_spi.transfer16(0x6000);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 		s_spi.transfer16(cmd);
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		s_spi.endTransaction();
+		return true;
 }
 
-void write_data16(uint16_t data) {
-		wait_hrdy();
+bool write_data16(uint16_t data) {
+		if (!wait_hrdy()) return false;
 		s_spi.beginTransaction(s_spi_set);
 		digitalWrite(EPAPER_PIN_CS, LOW);
 		s_spi.transfer16(0x0000);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 		s_spi.transfer16(data);
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		s_spi.endTransaction();
+		return true;
 }
 
-void write_reg(uint16_t reg, uint16_t val) {
-		write_cmd16(CMD_REG_WR);
-		write_data16(reg);
-		write_data16(val);
+bool write_reg(uint16_t reg, uint16_t val) {
+		return write_cmd16(CMD_REG_WR) && write_data16(reg) && write_data16(val);
 }
 
-void read_dev_info() {
-		write_cmd16(0x0302);
+bool read_dev_info() {
+		if (!write_cmd16(0x0302) || !wait_hrdy()) return false;
 		uint16_t buf[20];
-		wait_hrdy();
 		s_spi.beginTransaction(s_spi_set);
 		digitalWrite(EPAPER_PIN_CS, LOW);
 		s_spi.transfer16(0x1000);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 		s_spi.transfer16(0);
 		for (int i = 0; i < 20; i++) buf[i] = s_spi.transfer16(0);
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		s_spi.endTransaction();
 		s_img_buf_addr = ((uint32_t)buf[3] << 16) | buf[2];
+		if (buf[0] != EPAPER_PANEL_W || buf[1] != EPAPER_PANEL_H ||
+				s_img_buf_addr == 0 || s_img_buf_addr == UINT32_MAX) {
+				LOGW("Epaper", "IT8951 invalid device info %ux%u, imgBuf=0x%08lX",
+						 (unsigned)buf[0], (unsigned)buf[1], (unsigned long)s_img_buf_addr);
+				return false;
+		}
 		LOGI("Epaper", "IT8951 panel %ux%u, imgBuf=0x%08lX",
 				 (unsigned)buf[0], (unsigned)buf[1], (unsigned long)s_img_buf_addr);
+		return true;
 }
 
-void set_vcom(uint16_t mv) {
-		write_cmd16(0x0039);
-		write_data16(0x0002);  // sub-command 0x0002 = SET VCOM (0x0001 = get); matches Seeed reference
-		write_data16(mv);
+bool set_vcom(uint16_t mv) {
+		return write_cmd16(0x0039) &&
+				write_data16(0x0002) &&  // sub-command 0x0002 = SET VCOM (0x0001 = get)
+				write_data16(mv);
 }
 
-void set_temperature(uint16_t t) {
-		write_cmd16(0x0040);
-		write_data16(0x0001);
-		write_data16(t);
+bool set_temperature(uint16_t t) {
+		return write_cmd16(0x0040) && write_data16(0x0001) && write_data16(t);
+}
+
+bool initialize_controller(bool power_cycle) {
+		digitalWrite(EPAPER_PIN_CS, HIGH);
+#ifdef EPAPER_SD_CS_PIN
+		pinMode(EPAPER_SD_CS_PIN, OUTPUT);
+		digitalWrite(EPAPER_SD_CS_PIN, HIGH);
+#endif
+		s_spi.end();
+		if (power_cycle) {
+			digitalWrite(EPAPER_PIN_ITE_ENABLE, LOW);
+			digitalWrite(EPAPER_PIN_TFT_ENABLE, LOW);
+			delay(100);
+		}
+		digitalWrite(EPAPER_PIN_TFT_ENABLE, HIGH);
+		digitalWrite(EPAPER_PIN_ITE_ENABLE, HIGH);
+		delay(10);
+		s_spi.begin(EPAPER_PIN_SCK, EPAPER_PIN_MISO, EPAPER_PIN_MOSI, -1);
+
+#if EPAPER_PIN_RES >= 0
+		pinMode(EPAPER_PIN_RES, OUTPUT);
+		digitalWrite(EPAPER_PIN_RES, HIGH);
+		delay(10);
+		digitalWrite(EPAPER_PIN_RES, LOW);
+		delay(10);
+		digitalWrite(EPAPER_PIN_RES, HIGH);
+		delay(10);
+#endif
+		if (!wait_hrdy(HRDY_STARTUP_TIMEOUT_MS)) return false;
+		delay(100);
+		if (!write_cmd16(CMD_SYS_RUN)) return false;
+		delay(100);
+		if (!read_dev_info() || !set_vcom(EPAPER_VCOM_MV) ||
+				!wait_hrdy(HRDY_STARTUP_TIMEOUT_MS)) return false;
+		s_power_on = true;
+		return true;
+}
+
+bool recover_controller() {
+		if (s_recovery_attempted) return false;
+		s_recovery_attempted = true;
+		LOGW("Epaper", "IT8951 not ready; attempting one panel recovery");
+		s_power_on = false;
+		s_img_buf_addr = 0;
+		const bool ok = initialize_controller(true);
+		LOGI("Epaper", "IT8951 panel recovery %s", ok ? "succeeded" : "failed");
+		return ok;
 }
 
 // Wake the IT8951 from sleep/standby before any draw. Guarded by s_power_on so
 // a redundant call is a cheap no-op -- mirrors Seeed's _powerOnIT8951(). Without
 // this, a draw after epaper_driver_sleep() would issue commands to a controller
 // that never raises HRDY, deadlocking wait_hrdy().
-void power_on() {
-		if (s_power_on) return;
+bool power_on() {
+		if (s_power_on) return true;
 		const uint32_t t0 = millis();
 		digitalWrite(EPAPER_PIN_TFT_ENABLE, HIGH);
 		digitalWrite(EPAPER_PIN_ITE_ENABLE, HIGH);
 		delay(10);
-		write_cmd16(CMD_SYS_RUN);
-		wait_hrdy();
+		if (!wait_hrdy(HRDY_STARTUP_TIMEOUT_MS) ||
+				!write_cmd16(CMD_SYS_RUN) || !wait_hrdy(HRDY_STARTUP_TIMEOUT_MS)) return false;
 		s_power_on = true;
 		LOGI("Epaper", "IT8951 power_on %lu ms", (unsigned long)(millis() - t0));
+		return true;
 }
 
 // Upload the 4 bpp framebuffer to the IT8951 in its native 4 BPP little-endian
 // format (IT8951_4BPP / L_ENDIAN), matching the Seeed reference's tconLoadImage.
 // The canvas already holds packed 4 bpp pixels, so this pushes half the bytes of
 // an 8 BPP upload. The row is X-mirrored to match the panel scan orientation.
-void upload_frame() {
-		write_reg(REG_LISAR,     (uint16_t)(s_img_buf_addr & 0xFFFF));
-		write_reg(REG_LISAR + 2, (uint16_t)(s_img_buf_addr >> 16));
-		set_temperature(16);
+bool upload_frame() {
+		if (!write_reg(REG_LISAR, (uint16_t)(s_img_buf_addr & 0xFFFF)) ||
+				!write_reg(REG_LISAR + 2, (uint16_t)(s_img_buf_addr >> 16)) ||
+				!set_temperature(16)) return false;
 
 		uint16_t args[5];
 		args[0] = (IT8951_L_ENDIAN << 8) | (IT8951_4BPP << 4) | IT8951_ROTATE_0;
@@ -330,15 +398,25 @@ void upload_frame() {
 		args[2] = 0;
 		args[3] = EPAPER_PANEL_W;
 		args[4] = EPAPER_PANEL_H;
-		write_cmd16(CMD_LD_IMG_AREA);
-		for (int i = 0; i < 5; i++) write_data16(args[i]);
+		if (!write_cmd16(CMD_LD_IMG_AREA)) return false;
+		for (int i = 0; i < 5; i++) {
+				if (!write_data16(args[i])) return false;
+		}
 
 		const uint32_t t0 = millis();
 		s_spi.beginTransaction(s_spi_set);
 		digitalWrite(EPAPER_PIN_CS, LOW);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 		s_spi.transfer16(0x0000);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 
 		const uint16_t WB = EPAPER_PANEL_W / 2;  // packed 4 bpp bytes per row
 		const uint16_t NW = WB / 2;              // 16-bit words per row (4 px/word)
@@ -363,24 +441,26 @@ void upload_frame() {
 
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		s_spi.endTransaction();
-		write_cmd16(CMD_LD_IMG_END);
-		wait_hrdy();
+		if (!write_cmd16(CMD_LD_IMG_END) || !wait_hrdy()) return false;
 		LOGI("Epaper", "Gray16 upload %lu ms", (unsigned long)(millis() - t0));
+		return true;
 }
 
-void refresh_gc16() {
+bool refresh_gc16() {
 		const uint32_t t0 = millis();
-		write_cmd16(CMD_DPY_AREA);
-		wait_hrdy(); write_data16(0);
-		wait_hrdy(); write_data16(0);
-		wait_hrdy(); write_data16(EPAPER_PANEL_W);
-		wait_hrdy(); write_data16(EPAPER_PANEL_H);
-		wait_hrdy(); write_data16(2);  // mode 2 = GC16
+		if (!write_cmd16(CMD_DPY_AREA) ||
+				!write_data16(0) || !write_data16(0) ||
+				!write_data16(EPAPER_PANEL_W) || !write_data16(EPAPER_PANEL_H) ||
+				!write_data16(2)) return false;  // mode 2 = GC16
 		while (digitalRead(EPAPER_PIN_BUSY) == LOW) {
-				if (millis() - t0 > 15000) break;
+				if (millis() - t0 > 15000) {
+						LOGW("Epaper", "Gray16 GC16 refresh timeout (15000ms)");
+						return false;
+				}
 				delay(100);
 		}
 		LOGI("Epaper", "Gray16 GC16 refresh %lu ms", (unsigned long)(millis() - t0));
+		return true;
 }
 
 // --- JPEG decode → framebuffer ---------------------------------------------
@@ -747,28 +827,10 @@ bool epaper_driver_begin() {
 #endif
 #endif
 
-		s_spi.begin(EPAPER_PIN_SCK, EPAPER_PIN_MISO, EPAPER_PIN_MOSI, -1);
-
-#if EPAPER_PIN_RES >= 0
-		// Hardware reset pulse (Seeed sequence): LOW 10 ms, HIGH 10 ms. This
-		// recovers the IT8951 from a stuck/bad state after a crash or brownout
-		// reboot, where BUSY/HRDY would otherwise remain LOW indefinitely.
-		pinMode(EPAPER_PIN_RES, OUTPUT);
-		digitalWrite(EPAPER_PIN_RES, HIGH);
-		delay(10);
-		digitalWrite(EPAPER_PIN_RES, LOW);
-		delay(10);
-		digitalWrite(EPAPER_PIN_RES, HIGH);
-		delay(10);
-		wait_hrdy();  // wait for the controller to come back up after reset
-#endif
-
-		delay(100);
-		write_cmd16(CMD_SYS_RUN);
-		delay(100);
-		s_power_on = true;
-		read_dev_info();
-		set_vcom(EPAPER_VCOM_MV);
+		if (!initialize_controller(false) && !recover_controller()) {
+				LOGE("Epaper", "IT8951 initialization failed after recovery");
+				return false;
+		}
 
 		s_canvas->fillScreen(15);  // white
 		s_began = true;
@@ -1022,13 +1084,16 @@ bool epaper_driver_draw_service_blob(const uint8_t* data, size_t len, const char
 		return draw_blob("service", const_cast<uint8_t*>(data), len, false);
 }
 
-void epaper_driver_display() {
-		if (!s_began || !s_canvas) return;
+bool epaper_driver_display() {
+		if (!s_began || !s_canvas) return false;
 		const uint32_t t_draw = millis();
-		power_on();  // re-wake the IT8951 if a prior epaper_driver_sleep() put it down
-		upload_frame();
-		refresh_gc16();
+		bool ok = power_on() && upload_frame() && refresh_gc16();
+		if (!ok && recover_controller()) {
+				ok = upload_frame() && refresh_gc16();
+		}
 		epaper_timing_set_draw_ms(millis() - t_draw);
+		if (!ok) LOGE("Epaper", "IT8951 display failed after recovery");
+		return ok;
 }
 
 void epaper_driver_sleep() {
