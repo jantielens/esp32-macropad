@@ -255,6 +255,7 @@ bool epaper_sd_cache_clear() {
 								String full = nm.startsWith("/") ? nm : (String("/cache/") + nm);
 								if (!SD.remove(full)) ok = false;
 						}
+						delay(1);
 						entry = dir.openNextFile();
 				}
 				dir.close();

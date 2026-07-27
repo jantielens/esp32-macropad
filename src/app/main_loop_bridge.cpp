@@ -32,6 +32,29 @@ void loop_bridge_init() {
     }
 }
 
+LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec exec,
+                                     const void* ctx, size_t ctx_len) {
+    if (!exec || !s_ctrl_done_sem) return LOOP_BRIDGE_TIMEOUT;
+    if (ctx_len > sizeof(s_ctrl_ctx)) ctx_len = sizeof(s_ctrl_ctx);
+
+    portENTER_CRITICAL(&s_ctrl_mux);
+    if (s_ctrl_busy) {
+        portEXIT_CRITICAL(&s_ctrl_mux);
+        return LOOP_BRIDGE_BUSY;
+    }
+    s_ctrl_busy    = true;
+    s_ctrl_pending = true;
+    s_ctrl_done    = false;
+    s_ctrl_waiter  = false;
+    s_ctrl_exec    = exec;
+    s_ctrl_ctx_len = ctx_len;
+    if (ctx && ctx_len) memcpy(s_ctrl_ctx, ctx, ctx_len);
+    s_ctrl_ok      = false;
+    s_ctrl_msg[0]  = '\0';
+    portEXIT_CRITICAL(&s_ctrl_mux);
+    return LOOP_BRIDGE_OK;
+}
+
 LoopBridgeResult loop_bridge_dispatch(LoopBridgeExec exec,
                                       const void* ctx, size_t ctx_len,
                                       uint32_t timeout_ms,

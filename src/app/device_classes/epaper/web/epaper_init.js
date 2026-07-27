@@ -327,7 +327,7 @@ window.init_epaper_image_fragment = function () {
         fetch('/api/component/epaper-image/clear-sd-cache', { method: 'POST' })
             .then(function (r) { return r.json().catch(function () { return null; }); })
             .then(function (res) {
-                showMessage(res && res.success ? 'SD cache cleared' : 'Failed to clear SD cache',
+                showMessage(res && res.message ? res.message : 'Failed to clear SD cache',
                             res && res.success ? 'success' : 'error');
             })
             .catch(function () { showMessage('Failed to clear SD cache', 'error'); })
