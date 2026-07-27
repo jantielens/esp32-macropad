@@ -30,6 +30,7 @@ def test_first_boot_setup_persists() -> None:
         setup_page = client.get("/setup")
         assert setup_page.status_code == 200
         assert setup_page.headers["cache-control"] == "no-store"
+        assert 'pattern="[a-z0-9][a-z0-9\\-]{0,63}"' in setup_page.text
         nonce_match = re.search(r'name="setup_nonce" value="([^"]+)"', setup_page.text)
         assert nonce_match
 
@@ -56,6 +57,30 @@ def test_first_boot_setup_persists() -> None:
         assert token in response.text
         assert "a-secure-password" not in password_hash
         assert config.verify_password("a-secure-password", password_hash)
+
+
+def test_configured_site_with_no_devices_does_not_return_to_setup() -> None:
+    root = Path(tempfile.mkdtemp())
+    (root / "config").mkdir()
+    (root / "config" / "frames.json").write_text('{"frames":{}}', encoding="utf-8")
+    (root / "config" / "users.json").write_text(json.dumps({"users": {
+        "owner@example.com": {
+            "password_hash": config.hash_password("a-secure-password"),
+            "frames": [],
+        },
+    }}), encoding="utf-8")
+    application.DATA_ROOT = root
+
+    with TestClient(application.app) as client:
+        login = client.post("/login", data={
+            "email": "owner@example.com",
+            "password": "a-secure-password",
+        }, follow_redirects=False)
+        assert login.status_code == 303
+        index = client.get("/", follow_redirects=False)
+        assert index.status_code == 200
+        assert "Add device" in index.text
+        assert client.get("/setup").status_code == 404
 
         duplicate = client.post("/setup", data={
             "email": "other@example.com",

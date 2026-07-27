@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Site export & import · Photoframe{% endblock %}
+{% block content %}
+<a href="/" class="ghost-link small d-inline-block mb-2">&larr; Devices</a>
+<h1 class="h3 page-title mb-4">Site export & import</h1>
+<div class="alert alert-warning" role="alert">
+  Site archives are unencrypted and contain device credentials, the administrator password hash, and the session secret. On plain HTTP, a network observer can capture them.
+</div>
+<div class="row g-4">
+  <div class="col-12 col-lg-6">
+    <section class="section-card p-4 h-100">
+      <h2 class="h5">Export site</h2>
+      <p class="small text-body-secondary">Download every device, gallery, setting, credential, and administrator account. Use this archive for backup or transfer to another installation.</p>
+      {% if export_error %}<div class="alert alert-danger" role="alert">{{ export_error }}</div>{% endif %}
+      <form method="post" action="/site/export"
+        onsubmit="return confirm('Download an unencrypted archive containing all site secrets?');">
+        <input type="hidden" name="site_export_nonce" value="{{ site_export_nonce }}">
+        <label class="form-label small" for="site-export-password">Current password</label>
+        <input class="form-control mb-3" type="password" id="site-export-password"
+           name="password" autocomplete="current-password" required>
+        <button class="btn btn-outline-warning" type="submit">Download site archive</button>
+      </form>
+    </section>
+  </div>
+  <div class="col-12 col-lg-6">
+    <section class="section-card border-danger p-4 h-100">
+      <h2 class="h5 text-danger">Import site</h2>
+      <p class="small">Replace every device, gallery, setting, credential, the administrator login, and the session secret. There is no undo. You must know the imported administrator password and restart the service afterward.</p>
+      {% if import_error %}<div class="alert alert-danger" role="alert">{{ import_error }}</div>{% endif %}
+      <form method="post" action="/site/import" enctype="multipart/form-data">
+        <input type="hidden" name="site_import_nonce" value="{{ site_import_nonce }}">
+        <label class="form-label small" for="site-import-file">Site archive</label>
+        <input class="form-control mb-3" id="site-import-file" type="file" name="file" accept=".zip,application/zip" required>
+        <label class="form-label small" for="site-import-password">Current password</label>
+        <input class="form-control mb-3" type="password" id="site-import-password" name="password" autocomplete="current-password" required>
+        <label class="form-label small" for="site-import-confirm">Enter <code>REPLACE SITE</code></label>
+        <input class="form-control mb-3" id="site-import-confirm" name="confirm" required>
+        <button class="btn btn-danger" type="submit">Import and replace site</button>
+      </form>
+    </section>
+  </div>
+</div>
+{% endblock %}

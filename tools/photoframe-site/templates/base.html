@@ -96,6 +96,9 @@
       <a class="navbar-brand" href="/">📷 Photoframe</a>
       {% if user %}
       <div class="d-flex align-items-center gap-3">
+        {% if request.app.state.config.users|length == 1 %}
+        <a class="navbar-text small text-decoration-none" href="/site-admin">Site export &amp; import</a>
+        {% endif %}
         <span class="navbar-text small">{{ user.email }}</span>
         <form method="post" action="/logout" class="m-0">
           <button class="btn btn-sm btn-outline-light" type="submit">Log out</button>

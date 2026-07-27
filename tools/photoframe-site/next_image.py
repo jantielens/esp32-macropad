@@ -15,8 +15,10 @@ class NextImageService:
         frame: Frame,
         fingerprint: tuple[str, str] | None,
     ) -> TransportDescriptor | None:
-        settings = read_settings()
+        # Device scoping is selection policy only; the HTTP contract never constrained the pool.
+        settings = read_settings(frame.device_id)
         return self.index.select(
+            device_id=frame.device_id,
             width=frame.width,
             height=frame.height,
             format_codes=frame.format_codes,

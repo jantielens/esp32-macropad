@@ -37,7 +37,7 @@ def _sidecar(image_id: str, payload: bytes) -> dict:
             "height": 1404,
             "format_code": 3,
             "profile_key": PROFILE_KEY,
-            "blob_name": f"{image_id}/transport-1872x1404-3.g16z",
+            "blob_name": "transport-1872x1404-3.g16z",
             "content_length": len(payload),
             "content_crc32": f"{zlib.crc32(payload) & 0xffffffff:08x}",
         }],
@@ -56,7 +56,7 @@ def service(image_ids: tuple[str, ...] = ("image_a",)):
     (root / "config/frames.json").write_text(json.dumps({"frames": frames}))
     payload = VALID_G16Z.read_bytes()
     for image_id in image_ids:
-        folder = root / "photos" / image_id
+        folder = root / "devices" / "active" / "images" / image_id
         folder.mkdir(parents=True)
         (folder / "transport-1872x1404-3.g16z").write_bytes(payload)
         (folder / "sidecar.json").write_text(json.dumps(_sidecar(image_id, payload)))

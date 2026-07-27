@@ -1,7 +1,7 @@
 ---
 title: Local E-paper Photoframe Site
 description: Run and deploy the local FastAPI image service for e-paper photoframes
-ms.date: 2026-07-26
+ms.date: 2026-07-27
 ms.topic: how-to
 keywords:
   - photoframe
@@ -41,18 +41,21 @@ data/
   config/session-secret
   config/setup.lock
   config/users.json
-  photos/<image-key>/source.<ext>
-  photos/<image-key>/transport-<width>x<height>-<code>-<profile-key>.<ext>
-  photos/<image-key>/thumb.png
-  photos/<image-key>/sidecar.json
-  state/queue.json
-  state/schedule.json
-  state/settings.json
+  devices/<device-id>/images/<image-key>/source.<ext>
+  devices/<device-id>/images/<image-key>/transport-<width>x<height>-<code>-<profile-key>.<ext>
+  devices/<device-id>/images/<image-key>/thumb.png
+  devices/<device-id>/images/<image-key>/sidecar.json
+  devices/<device-id>/state/queue.json
+  devices/<device-id>/state/schedule.json
+  devices/<device-id>/state/settings.json
+  devices/<device-id>/state/telemetry.json
 ```
 
-Photo sidecars are durable truth. The application rebuilds its in-memory index
-from them at startup. Queue, cadence, and UI settings are small atomic JSON
-files. Container replacement does not alter this directory.
+Photo sidecars are durable truth. Each device owns an isolated gallery, and the
+application rebuilds its per-device in-memory index from sidecars at startup.
+Queue, cadence, settings, and last-seen telemetry are small atomic JSON files
+inside the owning device namespace. Restoring the complete `data/` directory
+restores the site without a database.
 
 ## First boot
 
@@ -69,11 +72,25 @@ exist.
 > Complete setup immediately on a trusted network. Before setup finishes, the
 > first browser that submits the form claims the instance.
 
-## Configure additional frames
+## Manage devices
 
-The setup page creates `data/config/frames.json`. To add frames later, edit that
-file. Each opaque token identifies one frame and binds its exact geometry and
-ordered format preference:
+Use **Add device** on the device list to create another device. The form starts
+with the E1003 profile (`1872` x `1404`, format preference `3,2`) and also accepts
+other geometry and format combinations. A device ID is minted from its display
+name and remains unchanged when you rename the device or edit its profile.
+
+Each opaque token identifies one device and binds its exact geometry and ordered
+format preference. Device settings provide password-gated controls to reveal or
+rotate the token. Rotation invalidates the old token immediately without
+changing the gallery or last-seen history.
+
+Changing a profile rebuilds that device's pre-encoded variants from its stored
+source images before replacing the active namespace. Removing a device requires
+the current administrator password and typed confirmation. Removal immediately
+deletes its configuration, bearer token, gallery, queue, settings, and telemetry,
+with no retention or undo.
+
+The underlying record remains in `data/config/frames.json`:
 
 ```json
 {
@@ -90,21 +107,11 @@ ordered format preference:
 }
 ```
 
-Generate additional tokens with a cryptographically secure source:
+Format codes are `1` for baseline JPEG, `2` for G16P, and `3` for G16Z. Uploads
+generate only the variants required by the selected device and store them in
+that device's namespace.
 
-```bash
-python3 -c 'import secrets; print(secrets.token_hex(32))'
-```
-
-Format codes are `1` for baseline JPEG, `2` for G16P, and `3` for G16Z. The
-service selects the first available format in the configured list. Uploads
-generate the union of all active frame capabilities, so one source can serve
-frames with different geometry or format preferences.
-
-Set `"revoked": true` to disable a token without deleting its frame profile.
-Restart the process after changing either configuration file.
-
-An authenticated owner can recover a frame token from that frame's **Config**
+An authenticated owner can recover a frame token from that frame's **Settings**
 page by entering their current password. The page shows only a SHA-256
 fingerprint until re-authentication succeeds. Revealed-token responses use
 `Cache-Control: no-store` and return to the masked view on reload.
@@ -112,6 +119,34 @@ fingerprint until re-authentication succeeds. Revealed-token responses use
 > [!WARNING]
 > On a plain-HTTP LAN, the administrator password and any revealed token cross
 > the wire in cleartext. Enable TLS before using the token-reveal feature.
+
+## Export and import
+
+The device settings page can export a self-contained device bundle after you
+enter your current password. The bundle contains its profile, bearer token,
+source images, pre-encoded transports, thumbnails, settings, queue, and
+telemetry. On **Add device**, **Import existing device** adds or replaces the
+device with the bundle's immutable ID and installs transport bytes as-is. It
+does not re-encode images or change other devices or administrator credentials.
+Adding a missing device requires `IMPORT`; replacing an existing device
+requires its exact immutable device ID.
+
+The **Site export & import** page is available only when the site has exactly one
+user. Site export requires the current password and downloads the complete
+`data/` tree. Site import requires exactly one administrator account and exactly
+one owner for every device, then fully replaces all devices, administrator
+credentials, and the session secret. Restart the service after a successful
+site import; the imported administrator password applies after restart. The
+service rejects other requests until it restarts.
+
+Both bundle types include a versioned manifest, exact file checksums, and image
+transport CRCs. Imports reject missing, corrupt, mismatched, or path-unsafe
+entries before changing live data.
+
+> [!WARNING]
+> Exports are unencrypted. Device bundles contain bearer tokens. Site bundles
+> also contain the administrator password hash and session secret. Store them
+> securely. On plain HTTP, a network observer can capture a downloaded archive.
 
 ## Configure additional users
 

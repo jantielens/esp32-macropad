@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -14,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 import api_v1
+import archive as archive_ops
 import blobstore
 import config
 import ui
@@ -26,6 +28,7 @@ DATA_ROOT = Path(os.environ.get("PHOTOFRAME_DATA_DIR", Path(__file__).with_name(
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    archive_ops.recover_site_import(DATA_ROOT)
     config.initialize_data_root(DATA_ROOT)
     blobstore.configure_local(DATA_ROOT)
     application.state.data_root = DATA_ROOT
@@ -33,12 +36,16 @@ async def lifespan(application: FastAPI):
     application.state.index = PhotoIndex()
     application.state.index.rebuild()
     application.state.next_images = NextImageService(application.state.index)
+    application.state.restart_required = False
+    application.state.request_lock = asyncio.Lock()
     yield
 
 
 app = FastAPI(title="E-paper Photoframe", lifespan=lifespan)
+app.state.request_lock = asyncio.Lock()
 
 _cookie_secure = os.environ.get("COOKIE_SECURE", "").lower() in ("1", "true", "yes")
+archive_ops.recover_site_import(DATA_ROOT)
 _secret_key = config.session_secret(DATA_ROOT)
 
 app.add_middleware(
@@ -51,7 +58,11 @@ app.add_middleware(
 
 @app.middleware("http")
 async def response_headers(request: Request, call_next):
-    response = await call_next(request)
+    async with request.app.state.request_lock:
+        if getattr(request.app.state, "restart_required", False) and request.url.path != "/healthz":
+            return Response("Restart required", status_code=503, media_type="text/plain",
+                            headers={"Cache-Control": "no-store"})
+        response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")

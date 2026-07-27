@@ -9,6 +9,9 @@ import json
 import os
 import re
 import secrets
+import shutil
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -30,6 +33,9 @@ MIN_MAX_TEMP_SHARE_PCT = 1
 MAX_MAX_TEMP_SHARE_PCT = 100
 DEFAULT_MAX_TEMP_SHARE_PCT = 50
 DEFAULT_JPEG_QUALITY = 90
+DEVICE_ID_PATTERN = r"[a-z0-9][a-z0-9-]{0,63}"
+_CONFIG_MUTEX = threading.RLock()
+_DATA_MUTEX = threading.RLock()
 
 
 class ConfigError(RuntimeError):
@@ -69,6 +75,20 @@ def initialize_data_root(data_root: str | Path) -> None:
     _write_once(config_root / "users.json", '{"users":{}}\n')
 
 
+def _validate_device_id(device_id: str) -> None:
+    if not re.fullmatch(DEVICE_ID_PATTERN, device_id):
+        raise ConfigError("Device ID must use lowercase letters, numbers, and hyphens.")
+
+
+def _validate_profile(width: int, height: int, format_codes: tuple[int, ...]) -> None:
+    if not 1 <= width <= 10_000 or not 1 <= height <= 10_000:
+        raise ConfigError("Device dimensions must be between 1 and 10000 pixels.")
+    if not format_codes or any(code not in SUPPORTED_FORMAT_CODES for code in format_codes):
+        raise ConfigError("Select a supported output format.")
+    if (FORMAT_G16P in format_codes or FORMAT_G16Z in format_codes) and width % 2:
+        raise ConfigError("Gray16 output requires an even device width.")
+
+
 def session_secret(data_root: str | Path) -> str:
     override = os.environ.get("SECRET_KEY")
     if override:
@@ -82,7 +102,7 @@ def session_secret(data_root: str | Path) -> str:
 
 
 def is_configured(value: Config) -> bool:
-    return bool(value.frames and value.users)
+    return bool(value.users)
 
 
 def setup_pending(data_root: str | Path) -> bool:
@@ -104,6 +124,95 @@ def _atomic_write_json(path: Path, value: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _transaction_path(root: Path, value: str) -> Path:
+    path = (root / value).resolve()
+    resolved_root = root.resolve()
+    if path == resolved_root or resolved_root not in path.parents:
+        raise ConfigError("transaction path escapes the data root")
+    return path
+
+
+def _apply_config_transaction(config_root: Path, transaction: dict) -> None:
+    namespace = transaction.get("namespace")
+    if isinstance(namespace, dict):
+        root = config_root.parent
+        target = _transaction_path(root, str(namespace["target"]))
+        backup = _transaction_path(root, str(namespace["backup"]))
+        operation = str(namespace.get("operation", "replace"))
+        if operation == "remove":
+            if target.exists() and not backup.exists():
+                os.replace(target, backup)
+        elif operation == "replace":
+            staged = _transaction_path(root, str(namespace["staged"]))
+            if staged.exists():
+                if target.exists() and not backup.exists():
+                    os.replace(target, backup)
+                os.replace(staged, target)
+        else:
+            raise ConfigError("invalid namespace transaction operation")
+    _atomic_write_json(config_root / "frames.json", transaction["frame_data"])
+    _atomic_write_json(config_root / "users.json", transaction["user_data"])
+
+
+def _finish_config_transaction(config_root: Path, transaction: dict) -> None:
+    namespace = transaction.get("namespace")
+    if isinstance(namespace, dict):
+        backup = _transaction_path(config_root.parent, str(namespace["backup"]))
+        if backup.exists():
+            shutil.rmtree(backup)
+
+
+def _recover_config_transaction(root: Path) -> None:
+    config_root = root / "config"
+    pending_path = config_root / "config.pending.json"
+    if not pending_path.exists():
+        return
+    with (config_root / "config.lock").open("a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if pending_path.exists():
+            transaction = _read_object(pending_path)
+            _apply_config_transaction(config_root, transaction)
+            pending_path.unlink()
+            _fsync_directory(config_root)
+            _finish_config_transaction(config_root, transaction)
+
+
+@contextmanager
+def data_transaction_lock():
+    with _DATA_MUTEX:
+        yield
+
+
+@contextmanager
+def _config_transaction_lock(root: Path):
+    config_root = root / "config"
+    with data_transaction_lock():
+        with _CONFIG_MUTEX:
+            with (config_root / "config.lock").open("a", encoding="utf-8") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                yield
+
+
+def _commit_config_transaction(root: Path, frame_data: dict, user_data: dict,
+                               namespace: dict | None = None, *, lock_held: bool = False) -> None:
+    config_root = root / "config"
+    pending_path = config_root / "config.pending.json"
+    def apply() -> None:
+        transaction = {"frame_data": frame_data, "user_data": user_data}
+        if namespace is not None:
+            transaction["namespace"] = namespace
+        _atomic_write_json(pending_path, transaction)
+        _apply_config_transaction(config_root, transaction)
+        pending_path.unlink()
+        _fsync_directory(config_root)
+        _finish_config_transaction(config_root, transaction)
+    if lock_held:
+        apply()
+    else:
+        with _config_transaction_lock(root):
+            apply()
+
+
 def initialize_site(
     data_root: str | Path,
     *,
@@ -122,14 +231,8 @@ def initialize_site(
         raise ConfigError("Enter a valid email address.")
     if len(password) < 12:
         raise ConfigError("Password must be at least 12 characters.")
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", normalized_frame_id):
-        raise ConfigError("Frame ID must use lowercase letters, numbers, and hyphens.")
-    if not 1 <= width <= 10_000 or not 1 <= height <= 10_000:
-        raise ConfigError("Frame dimensions must be between 1 and 10000 pixels.")
-    if not format_codes or any(code not in SUPPORTED_FORMAT_CODES for code in format_codes):
-        raise ConfigError("Select a supported output format.")
-    if (FORMAT_G16P in format_codes or FORMAT_G16Z in format_codes) and width % 2:
-        raise ConfigError("Gray16 output requires an even frame width.")
+    _validate_device_id(normalized_frame_id)
+    _validate_profile(width, height, format_codes)
 
     config_root = root / "config"
     with (config_root / "setup.lock").open("a", encoding="utf-8") as lock:
@@ -154,6 +257,7 @@ def initialize_site(
                     "height": height,
                     "format_codes": list(format_codes),
                 },
+                "display_name": normalized_frame_id,
                 "image_transform": {"rotate_deg": 0, "mirror_x": False, "mirror_y": False},
             }
         }}
@@ -188,6 +292,7 @@ class Frame:
     temp_min_spacing: int = DEFAULT_TEMP_MIN_SPACING
     fresh_window_days: int = DEFAULT_FRESH_WINDOW_DAYS
     max_temp_share_pct: int = DEFAULT_MAX_TEMP_SHARE_PCT
+    display_name: str = ""
 
     @property
     def device_id(self) -> str:
@@ -207,6 +312,12 @@ class Frame:
         }
         encoded = json.dumps(profile, separators=(",", ":"), sort_keys=True).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()[:16]
+
+    def variant_requirements(self) -> tuple[tuple[int, int, int, str], ...]:
+        return tuple(
+            (self.width, self.height, code, self.variant_key(code))
+            for code in self.format_codes
+        )
 
 
 Device = Frame
@@ -275,6 +386,7 @@ def _read_object(path: Path, *, optional: bool = False) -> dict:
 
 def load_config(data_root: str | Path | None = None) -> Config:
     root = Path(data_root or os.environ.get("PHOTOFRAME_DATA_DIR", "data"))
+    _recover_config_transaction(root)
     frame_data = _read_object(root / "config" / "frames.json")
     user_data = _read_object(root / "config" / "users.json", optional=True)
 
@@ -284,6 +396,7 @@ def load_config(data_root: str | Path | None = None) -> Config:
     for frame_id, entry in entries.items():
         if not isinstance(entry, dict):
             raise ConfigError(f"frame '{frame_id}' must be an object")
+        _validate_device_id(frame_id)
         token = str(entry.get("token", ""))
         profile = entry.get("profile") or {}
         try:
@@ -315,6 +428,7 @@ def load_config(data_root: str | Path | None = None) -> Config:
             temp_min_spacing=max(MIN_TEMP_MIN_SPACING, int(entry.get("temp_min_spacing", DEFAULT_TEMP_MIN_SPACING))),
             fresh_window_days=max(0, int(entry.get("fresh_window_days", DEFAULT_FRESH_WINDOW_DAYS))),
             max_temp_share_pct=min(100, max(1, int(entry.get("max_temp_share_pct", DEFAULT_MAX_TEMP_SHARE_PCT)))),
+            display_name=str(entry.get("display_name") or frame_id),
         )
 
     users = {}
@@ -329,6 +443,128 @@ def load_config(data_root: str | Path | None = None) -> Config:
     return Config(frames=frames, users=users)
 
 
+def _config_documents(root: Path) -> tuple[dict, dict]:
+    frame_data = _read_object(root / "config" / "frames.json")
+    user_data = _read_object(root / "config" / "users.json", optional=True)
+    frame_data.setdefault("frames", {})
+    user_data.setdefault("users", {})
+    return frame_data, user_data
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-") or "device"
+    return slug[:54].rstrip("-") or "device"
+
+
+def add_frame(
+    data_root: str | Path,
+    *,
+    owner_email: str,
+    display_name: str,
+    width: int,
+    height: int,
+    format_codes: tuple[int, ...],
+) -> tuple[Config, str, str]:
+    root = Path(data_root)
+    _validate_profile(width, height, format_codes)
+    with _config_transaction_lock(root):
+        frame_data, user_data = _config_documents(root)
+        owner_key = owner_email.strip().lower()
+        owner = user_data["users"].get(owner_key)
+        if not isinstance(owner, dict):
+            raise ConfigError("Owner account not found.")
+        base = _slug(display_name)
+        for _ in range(16):
+            device_id = f"{base}-{secrets.token_hex(3)}"
+            if device_id not in frame_data["frames"]:
+                break
+        else:
+            raise ConfigError("Could not mint a unique device ID.")
+        _validate_device_id(device_id)
+        token = secrets.token_hex(32)
+        frame_data["frames"][device_id] = {
+            "display_name": display_name.strip() or device_id,
+            "token": token,
+            "profile": {"width": width, "height": height, "format_codes": list(format_codes)},
+            "image_transform": {"rotate_deg": 0, "mirror_x": False, "mirror_y": False},
+        }
+        devices = [str(item) for item in owner.get("frames", owner.get("devices", []))]
+        owner["frames"] = devices + [device_id]
+        owner.pop("devices", None)
+        _commit_config_transaction(root, frame_data, user_data, lock_held=True)
+    (root / "devices" / device_id / "images").mkdir(parents=True, exist_ok=True)
+    (root / "devices" / device_id / "state").mkdir(parents=True, exist_ok=True)
+    return load_config(root), device_id, token
+
+
+def update_frame(
+    data_root: str | Path,
+    *,
+    device_id: str,
+    display_name: str,
+    width: int,
+    height: int,
+    format_codes: tuple[int, ...],
+    namespace: dict | None = None,
+) -> Config:
+    root = Path(data_root)
+    _validate_device_id(device_id)
+    _validate_profile(width, height, format_codes)
+    with _config_transaction_lock(root):
+        frame_data, user_data = _config_documents(root)
+        entry = frame_data["frames"].get(device_id)
+        if not isinstance(entry, dict):
+            raise ConfigError("Device not found.")
+        entry["display_name"] = display_name.strip() or device_id
+        entry["profile"] = {"width": width, "height": height, "format_codes": list(format_codes)}
+        _commit_config_transaction(root, frame_data, user_data, namespace=namespace, lock_held=True)
+    return load_config(root)
+
+
+def rotate_frame_token(data_root: str | Path, device_id: str) -> tuple[Config, str]:
+    root = Path(data_root)
+    _validate_device_id(device_id)
+    with _config_transaction_lock(root):
+        frame_data, user_data = _config_documents(root)
+        entry = frame_data["frames"].get(device_id)
+        if not isinstance(entry, dict):
+            raise ConfigError("Device not found.")
+        existing = {str(item.get("token", "")) for item in frame_data["frames"].values()
+                    if isinstance(item, dict)}
+        token = secrets.token_hex(32)
+        while token in existing:
+            token = secrets.token_hex(32)
+        entry["token"] = token
+        entry["revoked"] = False
+        _commit_config_transaction(root, frame_data, user_data, lock_held=True)
+    return load_config(root), token
+
+
+def remove_frame(data_root: str | Path, device_id: str, *, remove_namespace: bool = False) -> Config:
+    root = Path(data_root)
+    _validate_device_id(device_id)
+    with _config_transaction_lock(root):
+        frame_data, user_data = _config_documents(root)
+        if frame_data["frames"].pop(device_id, None) is None:
+            raise ConfigError("Device not found.")
+        for entry in user_data["users"].values():
+            if not isinstance(entry, dict):
+                continue
+            devices = [str(item) for item in entry.get("frames", entry.get("devices", []))]
+            entry["frames"] = [item for item in devices if item != device_id]
+            entry.pop("devices", None)
+        namespace = None
+        if remove_namespace:
+            suffix = secrets.token_hex(4)
+            namespace = {
+                "operation": "remove",
+                "target": f"devices/{device_id}",
+                "backup": f"devices/.{device_id}.remove-{suffix}",
+            }
+        _commit_config_transaction(root, frame_data, user_data, namespace=namespace, lock_held=True)
+    return load_config(root)
+
+
 def hash_password(password: str, *, iterations: int = PBKDF2_ITERATIONS) -> str:
     salt = os.urandom(16)
     digest = hashlib.pbkdf2_hmac(PBKDF2_ALGO, password.encode(), salt, iterations)
@@ -336,15 +572,28 @@ def hash_password(password: str, *, iterations: int = PBKDF2_ITERATIONS) -> str:
 
 
 def verify_password(password: str, stored: str) -> bool:
+    if not valid_password_hash(stored):
+        return False
     try:
         prefix, iterations, salt_hex, digest_hex = stored.split("$")
-        if prefix != _HASH_PREFIX:
-            return False
         expected = bytes.fromhex(digest_hex)
         candidate = hashlib.pbkdf2_hmac(
             PBKDF2_ALGO, password.encode(), bytes.fromhex(salt_hex), int(iterations)
         )
         return hmac.compare_digest(candidate, expected)
+    except (AttributeError, ValueError):
+        return False
+
+
+def valid_password_hash(stored: str) -> bool:
+    try:
+        prefix, iterations, salt_hex, digest_hex = stored.split("$")
+        iteration_count = int(iterations)
+        return (prefix == _HASH_PREFIX
+                and str(iteration_count) == iterations
+                and PBKDF2_ITERATIONS <= iteration_count <= 1_000_000
+                and re.fullmatch(r"[0-9a-f]{32}", salt_hex) is not None
+                and re.fullmatch(r"[0-9a-f]{64}", digest_hex) is not None)
     except (AttributeError, ValueError):
         return False
 

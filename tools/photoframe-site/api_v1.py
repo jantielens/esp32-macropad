@@ -7,8 +7,10 @@ import zlib
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
+from starlette.background import BackgroundTask
 
 import blobstore as bs
+import store
 
 router = APIRouter(prefix="/api/v1")
 
@@ -53,13 +55,19 @@ def get_next(request: Request) -> Response:
 
     descriptor = request.app.state.next_images.select(frame, _fingerprint(request))
     if descriptor is None:
-        return Response(status_code=204, headers=PROTOCOL_HEADERS)
+        return Response(status_code=204, headers=PROTOCOL_HEADERS,
+                        background=BackgroundTask(store.record_telemetry, frame.device_id))
 
-    payload = bs.download_blob("photos", descriptor.blob_name)
+    payload = bs.download_blob(
+        "devices", f"{frame.device_id}/images/{descriptor.image_key}/{descriptor.blob_name}"
+    )
     actual_crc = f"{zlib.crc32(payload) & 0xffffffff:08x}" if payload is not None else ""
     if payload is None or len(payload) != descriptor.content_length or actual_crc != descriptor.content_crc32:
-        return Response("Internal Server Error", status_code=500, media_type="text/plain", headers=PROTOCOL_HEADERS)
-    request.app.state.index.commit_selection(descriptor)
+        return Response(
+            "Internal Server Error", status_code=500, media_type="text/plain", headers=PROTOCOL_HEADERS,
+            background=BackgroundTask(store.record_telemetry, frame.device_id),
+        )
+    request.app.state.index.commit_selection(frame.device_id, descriptor)
     return Response(
         payload,
         media_type=descriptor.media_type,
@@ -68,4 +76,7 @@ def get_next(request: Request) -> Response:
             "Photoframe-Image-Key": descriptor.image_key,
             "Photoframe-Content-CRC32": descriptor.content_crc32,
         },
+        background=BackgroundTask(
+            store.record_telemetry, frame.device_id, descriptor.image_key
+        ),
     )
