@@ -101,6 +101,7 @@
         {% endif %}
         <span class="navbar-text small">{{ user.email }}</span>
         <form method="post" action="/logout" class="m-0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button class="btn btn-sm btn-outline-light" type="submit">Log out</button>
         </form>
       </div>

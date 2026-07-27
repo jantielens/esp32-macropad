@@ -10,7 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from starlette.testclient import TestClient
+from site_client import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -43,7 +43,7 @@ def _nonce(html: str) -> str:
 
 
 def test_token_reveal_requires_password_and_nonce() -> None:
-    ui._login_throttle = ui._LoginThrottle()
+    ui._reset_authentication_throttles()
     root, token = _site()
     application.DATA_ROOT = root
     with TestClient(application.app) as client:
@@ -85,7 +85,7 @@ def test_token_reveal_requires_password_and_nonce() -> None:
 
 
 def test_forwarded_headers_cannot_bypass_reveal_throttle() -> None:
-    ui._login_throttle = ui._LoginThrottle()
+    ui._reset_authentication_throttles()
     root, _token = _site()
     application.DATA_ROOT = root
     with TestClient(application.app) as client:

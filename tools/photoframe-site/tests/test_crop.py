@@ -51,6 +51,20 @@ def test_window_larger_than_image_letterboxes_all_sides() -> None:
     assert out.getpixel((145, 145)) == (255, 255, 255)
 
 
+def test_extreme_crop_geometry_is_rejected_before_allocation() -> None:
+    img = _solid(100, 100)
+    for crop in (
+        {"x": -1000000, "y": 0, "w": 1, "h": 1},
+        {"x": 0, "y": 0, "w": 1000000, "h": 1},
+    ):
+        try:
+            gray16.apply_crop(img, crop)
+        except ValueError as exc:
+            assert "Crop" in str(exc)
+        else:
+            raise AssertionError(f"unsafe crop was accepted: {crop}")
+
+
 def test_invalid_falls_back_to_noop() -> None:
     img = _solid(80, 60)
     for crop in ({"x": "nan"}, {"w": None}, {"x": 2.0, "y": 2.0, "w": 0.0, "h": 0.0}):

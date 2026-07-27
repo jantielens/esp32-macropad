@@ -8,11 +8,13 @@ import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Awaitable, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import Message, Receive, Scope, Send
 
 import api_v1
 import archive as archive_ops
@@ -24,6 +26,102 @@ from store import PhotoIndex
 
 logger = logging.getLogger("epaper-photoframe")
 DATA_ROOT = Path(os.environ.get("PHOTOFRAME_DATA_DIR", Path(__file__).with_name("data")))
+_FORM_BODY_LIMIT = 1024 * 1024
+_IMAGE_BODY_LIMIT = 32 * 1024 * 1024
+_ARCHIVE_BODY_LIMIT = archive_ops.MAX_ARCHIVE_BYTES + 2 * 1024 * 1024
+_BODY_TIMEOUT_SECONDS = 30.0
+
+
+class _BodyLimitExceeded(Exception):
+    pass
+
+
+class _BodyReceiveTimedOut(Exception):
+    pass
+
+
+def _request_body_limit(path: str) -> int:
+    if path in ("/devices/import", "/site/import"):
+        return _ARCHIVE_BODY_LIMIT
+    if path in ("/preview-base", "/upload"):
+        return _IMAGE_BODY_LIMIT
+    return _FORM_BODY_LIMIT
+
+
+class RequestBodyGuardMiddleware:
+    def __init__(self, application: Callable[[Scope, Receive, Send], Awaitable[None]]) -> None:
+        self.application = application
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("method") not in ("POST", "PUT", "PATCH"):
+            await self.application(scope, receive, send)
+            return
+
+        limit = _request_body_limit(str(scope.get("path", "")))
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        try:
+            content_length = int(headers.get(b"content-length", b"0"))
+        except ValueError:
+            await self._reject(scope, receive, send, 400, "Invalid Content-Length")
+            return
+        if content_length < 0:
+            await self._reject(scope, receive, send, 400, "Invalid Content-Length")
+            return
+        if content_length > limit:
+            await self._reject(scope, receive, send, 413, "Request body too large")
+            return
+
+        received = 0
+        deadline = time.monotonic() + _BODY_TIMEOUT_SECONDS
+        response_started = False
+
+        async def guarded_receive() -> Message:
+            nonlocal received
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise _BodyReceiveTimedOut
+            try:
+                message = await asyncio.wait_for(receive(), timeout=remaining)
+            except TimeoutError as exc:
+                raise _BodyReceiveTimedOut from exc
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    raise _BodyLimitExceeded
+            return message
+
+        async def guarded_send(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.application(scope, guarded_receive, guarded_send)
+        except _BodyLimitExceeded:
+            if response_started:
+                raise
+            await self._reject(scope, receive, send, 413, "Request body too large")
+        except _BodyReceiveTimedOut:
+            if response_started:
+                raise
+            await self._reject(scope, receive, send, 408, "Request body timed out")
+
+    @staticmethod
+    async def _reject(scope: Scope, receive: Receive, send: Send,
+                      status_code: int, message: str) -> None:
+        response = Response(
+            message,
+            status_code=status_code,
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+            },
+        )
+        await response(scope, receive, send)
 
 
 @asynccontextmanager
@@ -37,12 +135,10 @@ async def lifespan(application: FastAPI):
     application.state.index.rebuild()
     application.state.next_images = NextImageService(application.state.index)
     application.state.restart_required = False
-    application.state.request_lock = asyncio.Lock()
     yield
 
 
 app = FastAPI(title="E-paper Photoframe", lifespan=lifespan)
-app.state.request_lock = asyncio.Lock()
 
 _cookie_secure = os.environ.get("COOKIE_SECURE", "").lower() in ("1", "true", "yes")
 archive_ops.recover_site_import(DATA_ROOT)
@@ -54,15 +150,15 @@ app.add_middleware(
     https_only=_cookie_secure,
     same_site="lax",
 )
+app.add_middleware(RequestBodyGuardMiddleware)
 
 
 @app.middleware("http")
 async def response_headers(request: Request, call_next):
-    async with request.app.state.request_lock:
-        if getattr(request.app.state, "restart_required", False) and request.url.path != "/healthz":
-            return Response("Restart required", status_code=503, media_type="text/plain",
-                            headers={"Cache-Control": "no-store"})
-        response = await call_next(request)
+    if getattr(request.app.state, "restart_required", False) and request.url.path != "/healthz":
+        return Response("Restart required", status_code=503, media_type="text/plain",
+                        headers={"Cache-Control": "no-store"})
+    response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")

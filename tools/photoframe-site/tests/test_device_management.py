@@ -12,7 +12,7 @@ import threading
 from pathlib import Path
 
 from PIL import Image
-from starlette.testclient import TestClient
+from site_client import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 

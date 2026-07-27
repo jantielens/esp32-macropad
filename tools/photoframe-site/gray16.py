@@ -359,6 +359,8 @@ def apply_crop(img: Image.Image, crop: dict | None) -> Image.Image:
         return img
     if w <= 0.0 or h <= 0.0:
         return img
+    if max(abs(x), abs(y), w, h) > 4.0:
+        raise ValueError("Crop geometry exceeds the supported range.")
     src_w, src_h = img.size
     left = round(x * src_w)
     top = round(y * src_h)
@@ -374,6 +376,8 @@ def apply_crop(img: Image.Image, crop: dict | None) -> Image.Image:
     # canvas so the uncovered margins become letterbox/pillarbox bars.
     win_w = right - left
     win_h = bottom - top
+    if win_w > 20_000 or win_h > 20_000 or win_w * win_h > 40_000_000:
+        raise ValueError("Crop canvas exceeds the pixel limit.")
     canvas = Image.new("RGB", (win_w, win_h), (255, 255, 255))
     canvas.paste(_flatten_to_rgb(img), (-left, -top))
     return canvas

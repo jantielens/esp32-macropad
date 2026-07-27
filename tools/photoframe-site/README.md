@@ -333,6 +333,24 @@ container. Preserve `-p 127.0.0.1:8080:8080` and `-e COOKIE_SECURE=1` whenever
 the container is replaced. Use `tailscale funnel reset` to remove public
 access.
 
+## Internet exposure safeguards
+
+The application rejects ordinary form bodies larger than 1 MiB, image upload
+bodies larger than 32 MiB, and archive import bodies larger than 130 MiB. A
+request must finish delivering its complete body within 30 seconds. Decoded
+images are limited to 40 million pixels, and crop geometry is bounded before
+Pillow allocates a crop canvas.
+
+Every browser POST requires a session-bound CSRF token. Login failures are
+throttled independently by peer address, account, and a global budget. The
+application ignores `X-Forwarded-For` by default because an internet client can
+spoof that header unless a trusted proxy removes and replaces it.
+
+Set `TRUSTED_PROXY_IPS` to a comma-separated list only when each listed proxy
+sanitizes `X-Forwarded-For` before forwarding requests. Do not enable this for
+an address merely because it is a Docker bridge or loopback peer. Tailscale
+Funnel does not require this setting.
+
 ## Network trust
 
 > [!WARNING]

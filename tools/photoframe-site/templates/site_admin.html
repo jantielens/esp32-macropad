@@ -14,6 +14,7 @@
       {% if export_error %}<div class="alert alert-danger" role="alert">{{ export_error }}</div>{% endif %}
       <form method="post" action="/site/export"
         onsubmit="return confirm('Download an unencrypted archive containing all site secrets?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="site_export_nonce" value="{{ site_export_nonce }}">
         <label class="form-label small" for="site-export-password">Current password</label>
         <input class="form-control mb-3" type="password" id="site-export-password"
@@ -28,6 +29,7 @@
       <p class="small">Replace every device, gallery, setting, credential, the administrator login, and the session secret. There is no undo. You must know the imported administrator password and restart the service afterward.</p>
       {% if import_error %}<div class="alert alert-danger" role="alert">{{ import_error }}</div>{% endif %}
       <form method="post" action="/site/import" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="site_import_nonce" value="{{ site_import_nonce }}">
         <label class="form-label small" for="site-import-file">Site archive</label>
         <input class="form-control mb-3" id="site-import-file" type="file" name="file" accept=".zip,application/zip" required>

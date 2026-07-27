@@ -10,7 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from starlette.testclient import TestClient
+from site_client import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 

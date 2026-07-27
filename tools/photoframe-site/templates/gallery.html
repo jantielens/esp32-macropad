@@ -33,6 +33,7 @@
       <h2 class="h6 text-body-secondary text-uppercase fw-semibold mb-0">What&rsquo;s next</h2>
       <form method="post" action="/photos/queue-clear" class="m-0"
             onsubmit="return confirm('Clear the queue? Images are kept.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="device_id" value="{{ device_id }}">
         <button type="submit" class="btn btn-sm btn-outline-secondary py-0">Clear queue</button>
       </form>
@@ -47,6 +48,7 @@
         <span class="badge text-bg-primary position-absolute top-0 start-0 m-1">Next</span>
         {% endif %}
         <form method="post" action="/photos/queue-remove" class="m-0 position-absolute bottom-0 end-0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="device_id" value="{{ device_id }}">
           <input type="hidden" name="image_id" value="{{ q.id }}">
           <button type="submit" class="btn btn-sm btn-dark rounded-circle queue-x m-1 p-0"
@@ -104,12 +106,14 @@
       </div>
       <div class="card-footer bg-transparent d-flex gap-2">
         <form method="post" action="/photos/show-next" class="m-0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="device_id" value="{{ device_id }}">
           <input type="hidden" name="image_id" value="{{ item.id }}">
           <button class="btn btn-sm btn-accent-soft" type="submit">Show next</button>
         </form>
         <form method="post" action="/photos/delete" class="m-0"
               onsubmit="return confirm('Delete this image?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="device_id" value="{{ device_id }}">
           <input type="hidden" name="image_id" value="{{ item.id }}">
           <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>

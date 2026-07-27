@@ -10,7 +10,7 @@ import zlib
 from pathlib import Path
 
 from PIL import Image
-from starlette.testclient import TestClient
+from site_client import TestClient
 
 import sys
 

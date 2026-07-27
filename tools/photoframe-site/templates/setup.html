@@ -9,6 +9,7 @@
         <p class="text-body-secondary mb-4">Create the administrator account and connect your first frame.</p>
         {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
         <form method="post" action="/setup">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="setup_nonce" value="{{ setup_nonce }}">
           <h2 class="h5 mb-3">Administrator</h2>
           <div class="mb-3">

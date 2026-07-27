@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import os
+import ipaddress
 import secrets
 import shutil
 import threading
@@ -16,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from PIL import Image
@@ -29,9 +30,8 @@ import knobs
 import store
 import transport
 
-router = APIRouter()
-templates = Jinja2Templates(directory=Path(__file__).with_name("templates"))
 THUMB_MAX = 360
+MAX_DECODED_IMAGE_PIXELS = 40_000_000
 ONLINE_WINDOW = timedelta(hours=2)
 logger = logging.getLogger("epaper-photoframe.ui")
 
@@ -39,12 +39,56 @@ _LOGIN_FREE_ATTEMPTS = 5
 _LOGIN_BASE_LOCK_S = 5.0
 _LOGIN_MAX_LOCK_S = 15 * 60.0
 _LOGIN_RESET_S = 15 * 60.0
+_TRUSTED_PROXY_IPS = {
+    value.strip() for value in os.environ.get("TRUSTED_PROXY_IPS", "").split(",")
+    if value.strip()
+}
+
+
+def _csrf_token(request: Request) -> str:
+    token = request.session.get("csrf_token")
+    if not isinstance(token, str) or len(token) < 32:
+        token = secrets.token_urlsafe(32)
+        request.session["csrf_token"] = token
+    return token
+
+
+def _csrf_template_context(request: Request) -> dict[str, str]:
+    return {"csrf_token": _csrf_token(request)}
+
+
+async def _require_csrf(request: Request) -> None:
+    if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+        return
+    provided = request.headers.get("x-csrf-token")
+    if not provided:
+        form = await request.form()
+        value = form.get("csrf_token")
+        provided = str(value) if value is not None else ""
+    expected = request.session.get("csrf_token")
+    if (not isinstance(expected, str) or not provided
+            or not secrets.compare_digest(expected, provided)):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
+
+router = APIRouter(dependencies=[Depends(_require_csrf)])
+templates = Jinja2Templates(
+    directory=Path(__file__).with_name("templates"),
+    context_processors=[_csrf_template_context],
+)
 
 
 class _LoginThrottle:
-    def __init__(self) -> None:
+    def __init__(self, *, free_attempts: int = _LOGIN_FREE_ATTEMPTS,
+                 base_lock_s: float = _LOGIN_BASE_LOCK_S,
+                 max_lock_s: float = _LOGIN_MAX_LOCK_S,
+                 reset_s: float = _LOGIN_RESET_S) -> None:
         self._lock = threading.Lock()
         self._state: dict[str, list[float]] = {}
+        self._free_attempts = free_attempts
+        self._base_lock_s = base_lock_s
+        self._max_lock_s = max_lock_s
+        self._reset_s = reset_s
 
     def retry_after(self, key: str) -> int:
         now = time.monotonic()
@@ -60,11 +104,14 @@ class _LoginThrottle:
         with self._lock:
             self._state = {
                 item: value for item, value in self._state.items()
-                if now - value[2] <= _LOGIN_RESET_S
+                if now - value[2] <= self._reset_s
             }
             count = self._state.get(key, [0.0, 0.0, now])[0] + 1
-            over = int(count) - _LOGIN_FREE_ATTEMPTS
-            lock_seconds = min(_LOGIN_MAX_LOCK_S, _LOGIN_BASE_LOCK_S * (2 ** (over - 1))) if over > 0 else 0
+            over = int(count) - self._free_attempts
+            lock_seconds = min(
+                self._max_lock_s,
+                self._base_lock_s * (2 ** (over - 1)),
+            ) if over > 0 else 0
             self._state[key] = [count, now + lock_seconds, now]
 
     def record_success(self, key: str) -> None:
@@ -72,14 +119,71 @@ class _LoginThrottle:
             self._state.pop(key, None)
 
 
-_login_throttle = _LoginThrottle()
+_login_ip_throttle = _LoginThrottle()
+_login_account_throttle = _LoginThrottle(free_attempts=10)
+_login_global_throttle = _LoginThrottle(
+    free_attempts=100,
+    base_lock_s=1.0,
+    max_lock_s=60.0,
+    reset_s=5 * 60.0,
+)
+_login_throttle = _login_ip_throttle
+
+
+def _reset_authentication_throttles() -> None:
+    global _login_ip_throttle, _login_account_throttle, _login_global_throttle, _login_throttle
+    _login_ip_throttle = _LoginThrottle()
+    _login_account_throttle = _LoginThrottle(free_attempts=10)
+    _login_global_throttle = _LoginThrottle(
+        free_attempts=100,
+        base_lock_s=1.0,
+        max_lock_s=60.0,
+        reset_s=5 * 60.0,
+    )
+    _login_throttle = _login_ip_throttle
 
 
 def _client_key(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",", 1)[0].strip()
-    return request.client.host if request.client else "unknown"
+    peer = request.client.host if request.client else "unknown"
+    if peer not in _TRUSTED_PROXY_IPS:
+        return peer
+    forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    try:
+        return str(ipaddress.ip_address(forwarded)) if forwarded else peer
+    except ValueError:
+        return peer
+
+
+def _authentication_keys(request: Request, account: str, purpose: str) -> tuple[str, str, str]:
+    normalized = account.strip().lower()
+    account_digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return (
+        f"{purpose}:ip:{_client_key(request)}",
+        f"{purpose}:account:{account_digest}",
+        f"{purpose}:global",
+    )
+
+
+def _authentication_retry_after(request: Request, account: str, purpose: str) -> int:
+    keys = _authentication_keys(request, account, purpose)
+    return max(
+        _login_ip_throttle.retry_after(keys[0]),
+        _login_account_throttle.retry_after(keys[1]),
+        _login_global_throttle.retry_after(keys[2]),
+    )
+
+
+def _record_authentication_failure(request: Request, account: str, purpose: str) -> None:
+    keys = _authentication_keys(request, account, purpose)
+    _login_ip_throttle.record_failure(keys[0])
+    _login_account_throttle.record_failure(keys[1])
+    _login_global_throttle.record_failure(keys[2])
+
+
+def _record_authentication_success(request: Request, account: str, purpose: str) -> None:
+    keys = _authentication_keys(request, account, purpose)
+    _login_ip_throttle.record_success(keys[0])
+    _login_account_throttle.record_success(keys[1])
 
 
 def _current_user(request: Request) -> Optional[cfg.User]:
@@ -145,13 +249,12 @@ def _format_codes(raw: str) -> tuple[int, ...]:
 
 
 def _reauthenticate(request: Request, user: cfg.User, password: str, purpose: str) -> str | None:
-    throttle_key = f"{purpose}:{user.email}:{_client_key(request)}"
-    if _login_throttle.retry_after(throttle_key):
+    if _authentication_retry_after(request, user.email, purpose):
         return "Too many attempts. Please wait and try again."
     if not cfg.verify_password(password, user.password_hash):
-        _login_throttle.record_failure(throttle_key)
+        _record_authentication_failure(request, user.email, purpose)
         return "Invalid password."
-    _login_throttle.record_success(throttle_key)
+    _record_authentication_success(request, user.email, purpose)
     return None
 
 
@@ -166,6 +269,14 @@ def _read_archive_upload(file: UploadFile) -> bytes:
         if total > archive_ops.MAX_ARCHIVE_BYTES:
             raise archive_ops.ArchiveError("Archive exceeds the size limit.")
         chunks.append(chunk)
+
+
+def _validate_decoded_image(image: Image.Image) -> None:
+    width, height = image.size
+    if width <= 0 or height <= 0 or width > 20_000 or height > 20_000:
+        raise ValueError("Image dimensions exceed the supported range.")
+    if width * height > MAX_DECODED_IMAGE_PIXELS:
+        raise ValueError("Image exceeds the decoded pixel limit.")
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -334,14 +445,14 @@ def login_submit(request: Request, email: str = Form(...), password: str = Form(
     setup_redirect = _setup_redirect(request)
     if setup_redirect:
         return setup_redirect
-    key = _client_key(request)
-    if _login_throttle.retry_after(key):
+    normalized_email = email.strip().lower()
+    if _authentication_retry_after(request, normalized_email, "login"):
         return RedirectResponse("/login?error=Too+many+attempts.+Please+wait+and+try+again.", status_code=303)
-    user = request.app.state.config.user(email.strip())
+    user = request.app.state.config.user(normalized_email)
     if user is None or not cfg.verify_password(password, user.password_hash):
-        _login_throttle.record_failure(key)
+        _record_authentication_failure(request, normalized_email, "login")
         return RedirectResponse("/login?error=Invalid+credentials", status_code=303)
-    _login_throttle.record_success(key)
+    _record_authentication_success(request, normalized_email, "login")
     request.session["user"] = user.email
     return RedirectResponse("/", status_code=303)
 
@@ -513,6 +624,7 @@ def preview_base(request: Request, device_id: str = Form(...), file: UploadFile 
         return Response("Forbidden", status_code=403)
     try:
         with Image.open(io.BytesIO(file.file.read())) as image:
+            _validate_decoded_image(image)
             image.load()
             preview = gray16.full_base(image, transform=frame.image_transform or {})
         output = io.BytesIO()
@@ -547,6 +659,7 @@ def upload_submit(
         knob_values_clean = knobs.parse_values(parsed_knobs if isinstance(parsed_knobs, dict) else {})
         crop = parsed_crop if isinstance(parsed_crop, dict) else {}
         with Image.open(io.BytesIO(raw)) as source:
+            _validate_decoded_image(source)
             source.load()
             source_image = source.copy()
             variants = []
@@ -919,16 +1032,14 @@ def settings_token_reveal(
     expected_nonce = request.session.get("token_nonce")
     if not expected_nonce or not token_nonce or not secrets.compare_digest(str(expected_nonce), token_nonce):
         return Response("Invalid token reveal session", status_code=403)
-    peer = request.client.host if request.client else "unknown"
-    throttle_key = f"token:{user.email}:{peer}"
-    if _login_throttle.retry_after(throttle_key):
+    if _authentication_retry_after(request, user.email, "token-reveal"):
         return _render_settings(
             request, user, frame, token_error="Too many attempts. Please wait and try again.", status_code=429
         )
     if not cfg.verify_password(password, user.password_hash):
-        _login_throttle.record_failure(throttle_key)
+        _record_authentication_failure(request, user.email, "token-reveal")
         return _render_settings(request, user, frame, token_error="Invalid password.", status_code=403)
-    _login_throttle.record_success(throttle_key)
+    _record_authentication_success(request, user.email, "token-reveal")
     request.session.pop("token_nonce", None)
     return _render_settings(request, user, frame, frame_token=frame.token)
 
@@ -1031,6 +1142,7 @@ def _apply_device_edit_locked(
                 image_dir = staged / "images" / str(meta["id"])
                 source_path = image_dir / str(meta["source_name"])
                 with Image.open(source_path) as source:
+                    _validate_decoded_image(source)
                     source.load()
                     source_image = source.copy()
                 variants = []
