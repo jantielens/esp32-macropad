@@ -37,8 +37,9 @@
 
 #define MAX_REF_LINES 3
 
-// Longest supported time window (24 h). Matches the portal input's max.
-#define SPARKLINE_WINDOW_MAX_SECS 86400UL
+// Sampling limits shared with the portal controls and MCP schema.
+#define SPARKLINE_WINDOW_MAX_SECS 604800UL
+#define SPARKLINE_SLOT_COUNT_MAX  1024U
 
 struct SparklineConfig {
     char     min_val[CONFIG_BINDABLE_SHORT_LEN];  // Y-axis minimum (empty = auto-scale, or binding)
@@ -57,7 +58,7 @@ struct SparklineConfig {
     uint8_t  ha_stat[MAX_REF_LINES];   // HA_STAT_*
 #endif
     uint32_t window_secs;          // Time window in seconds (e.g. 300 = 5 min)
-    uint8_t  slot_count;           // Number of sample slots (default 60)
+    uint16_t slot_count;           // Number of sample slots (default 60)
     uint8_t  line_width;           // Line thickness in pixels (default 2)
     uint8_t  line_offset;          // Per-line vertical separation in px (0 = off; lines fanned symmetrically)
     uint8_t  marker_size_min;      // Min marker dot size (0 = off, default 5)
@@ -109,6 +110,9 @@ static inline uint8_t sparkline_ha_stat(const SparklineConfig* cfg, uint8_t line
 struct SparklineState {
     lv_obj_t*            lines[MAX_SPARKLINE_LINES];   // LVGL line objects
     lv_point_precise_t*  points[MAX_SPARKLINE_LINES];  // Heap-allocated point arrays
+    float*               scratch_vals;                 // Reusable render values
+    float*               scratch_smooth;               // Reusable smoothing copy
+    uint16_t*            scratch_slot_map;              // Value-to-slot mapping
     uint8_t  line_count;             // 1–3 (auto-detected from bindings)
 #if HAS_MQTT
     data_stream_handle_t ds_handles[MAX_SPARKLINE_LINES]; // Data stream handles
@@ -145,8 +149,8 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     if (cfg->window_secs < 10) cfg->window_secs = 10;
     if (cfg->window_secs > SPARKLINE_WINDOW_MAX_SECS) cfg->window_secs = SPARKLINE_WINDOW_MAX_SECS;
 
-    uint8_t sc = btn["widget_sparkline_slots"] | (uint8_t)60;
-    cfg->slot_count = (sc < 2) ? 2 : sc;  // minimum 2 points for a line
+    uint32_t sc = btn["widget_sparkline_slots"] | (uint32_t)60;
+    cfg->slot_count = (sc < 2) ? 2 : (sc > SPARKLINE_SLOT_COUNT_MAX) ? SPARKLINE_SLOT_COUNT_MAX : (uint16_t)sc;
 
     uint8_t lw = btn["widget_sparkline_line_width"] | (uint8_t)2;
     cfg->line_width = (lw < 1) ? 1 : lw;
@@ -291,6 +295,16 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // Allocate point arrays for each line
     uint16_t max_pts = cfg->slot_count;
+    st->scratch_vals = (float*)lv_malloc(sizeof(float) * max_pts);
+    st->scratch_smooth = cfg->smooth_factor > 0
+        ? (float*)lv_malloc(sizeof(float) * max_pts)
+        : nullptr;
+    st->scratch_slot_map = (uint16_t*)lv_malloc(sizeof(uint16_t) * max_pts);
+    if (!st->scratch_vals || !st->scratch_slot_map ||
+        (cfg->smooth_factor > 0 && !st->scratch_smooth)) {
+        LOGE(TAG, "Failed to allocate render scratch (%u pts)", max_pts);
+        return;
+    }
     for (uint8_t i = 0; i < st->line_count; i++) {
         st->points[i] = (lv_point_precise_t*)lv_malloc(
             sizeof(lv_point_precise_t) * max_pts);
@@ -505,20 +519,19 @@ struct SmoothLineInfo {
     int16_t  max_py;           // Max point pixel Y (chart-area relative)
     uint8_t  min_line;         // Which line owns the min (for multi-line scans)
     uint8_t  max_line;         // Which line owns the max (for multi-line scans)
-    uint8_t  valid_count;      // Number of valid rendered points
+    uint16_t valid_count;      // Number of valid rendered points
 };
 
 // ---- Gaussian kernel smoothing ----
 // Smooths a contiguous float array in-place using a weighted Gaussian window.
 // radius = number of neighbors on each side; sigma = radius.
 
-static void gaussian_smooth(float* vals, uint8_t n, uint8_t radius) {
+static void gaussian_smooth(float* vals, float* tmp, uint16_t n, uint8_t radius) {
     if (radius == 0 || n < 2) return;
-    float* tmp = (float*)alloca(sizeof(float) * n);
     memcpy(tmp, vals, sizeof(float) * n);
     float sigma = (float)radius;
     float inv_2s2 = -0.5f / (sigma * sigma);
-    for (uint8_t i = 0; i < n; i++) {
+    for (uint16_t i = 0; i < n; i++) {
         float sum = 0.0f, wsum = 0.0f;
         int lo = (int)i - (int)radius;
         int hi = (int)i + (int)radius;
@@ -540,6 +553,9 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
                                      lv_point_precise_t* points,
                                      lv_obj_t* line_obj,
                                      const DataStreamSnapshot* snap,
+                                     float* vals,
+                                     float* smooth_tmp,
+                                     uint16_t* slot_map,
                                      int16_t chart_w, int16_t chart_h,
                                      float resolved_min, float resolved_max,
                                      float shared_auto_min, float shared_auto_max,
@@ -571,17 +587,15 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
     if (!isfinite(y_min) || !isfinite(y_max)) { y_min = 0.0f; y_max = 1.0f; }
     float y_range = y_max - y_min;
 
-    uint8_t n = snap->slot_count;
+    uint16_t n = snap->slot_count;
 
     // Step 1: Extract valid float values and their original slot indices
-    float* vals = (float*)alloca(sizeof(float) * snap->count);
-    uint8_t* slot_map = (uint8_t*)alloca(sizeof(uint8_t) * snap->count);
-    uint8_t valid = 0;
-    for (uint8_t i = 0; i < snap->count; i++) {
+    uint16_t valid = 0;
+    for (uint16_t i = 0; i < snap->count; i++) {
         // Valid samples are the `count` slots ending at head-1. History merging
         // fills slots behind the live region, so the ring can wrap even while
         // count < slot_count — always use the general form.
-        uint8_t idx = (uint8_t)((snap->head + n - snap->count + i) % n);
+        uint16_t idx = (uint16_t)((snap->head + n - snap->count + i) % n);
         float val = snap->samples[idx];
         if (!isfinite(val)) continue;
         vals[valid] = val;
@@ -591,18 +605,18 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
 
     // Step 2: Apply Gaussian kernel smoothing on the float values
     if (cfg->smooth_factor > 0 && valid >= 2) {
-        gaussian_smooth(vals, valid, cfg->smooth_factor);
+        gaussian_smooth(vals, smooth_tmp, valid, cfg->smooth_factor);
     }
 
     // Step 3: Convert smoothed values to pixel coordinates
     // Use (chart_w - 1) so the rightmost slot lands on the last pixel
     // inside the clipped chart area (avoids line/dot disconnect at edge).
     float x_step = (n > 1) ? (float)(chart_w - 1) / (float)(n - 1) : 0.0f;
-    uint8_t x_offset = (snap->count < n) ? (n - snap->count) : 0;
+    uint16_t x_offset = (snap->count < n) ? (n - snap->count) : 0;
 
-    for (uint8_t vi = 0; vi < valid; vi++) {
+    for (uint16_t vi = 0; vi < valid; vi++) {
         float val = vals[vi];
-        uint8_t si = slot_map[vi];
+        uint16_t si = slot_map[vi];
 
         float ratio = (val - y_min) / y_range;
         if (ratio < 0.0f) ratio = 0.0f;
@@ -719,8 +733,9 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
             y_off = (int16_t)lroundf(((float)i - center) * (float)cfg->line_offset);
         }
 
-        sparkline_rebuild_points(cfg, st->points[i], st->lines[i],
-                                 &snap, chart_w, chart_h,
+        sparkline_rebuild_points(cfg, st->points[i], st->lines[i], &snap,
+                     st->scratch_vals, st->scratch_smooth, st->scratch_slot_map,
+                     chart_w, chart_h,
                                  resolved_min, resolved_max,
                                  shared_auto_min, shared_auto_max,
                                  ref_expand_min, ref_expand_max,
@@ -1098,6 +1113,9 @@ static void sparkline_destroy(WidgetState* state) {
     for (uint8_t i = 0; i < MAX_SPARKLINE_LINES; i++) {
         if (st->points[i]) { lv_free(st->points[i]); st->points[i] = nullptr; }
     }
+    if (st->scratch_vals) { lv_free(st->scratch_vals); st->scratch_vals = nullptr; }
+    if (st->scratch_smooth) { lv_free(st->scratch_smooth); st->scratch_smooth = nullptr; }
+    if (st->scratch_slot_map) { lv_free(st->scratch_slot_map); st->scratch_slot_map = nullptr; }
     if (st->ref_pts) { lv_free(st->ref_pts); st->ref_pts = nullptr; }
     // LVGL line + chart_area are tile children — deleted automatically
     // Ring buffers are owned by data_stream registry — not freed here
@@ -1108,7 +1126,7 @@ static void sparkline_destroy(WidgetState* state) {
 static bool sparkline_get_stream_params(const WidgetConfig* wcfg,
                                         uint8_t stream_index,
                                         uint32_t* window_secs,
-                                        uint8_t* slot_count,
+                                        uint16_t* slot_count,
                                         const char** out_binding,
                                         const char** out_ha_entity,
                                         uint8_t* out_ha_stat) {
@@ -1129,7 +1147,9 @@ static void sparkline_describe(JsonObject& out) {
     JsonArray f = out.createNestedArray("config_fields");
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
     auto addmax = [&](const char* n, const char* t, const char* d, int m){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; o["max"]=m; };
-    add("widget_sparkline_window","number","time window seconds"); add("widget_sparkline_slots","number","sample count");
+    auto addrange = [&](const char* n, const char* d, int lo, int hi){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]="number"; o["desc"]=d; o["min"]=lo; o["max"]=hi; };
+    addrange("widget_sparkline_window","time window seconds",10,SPARKLINE_WINDOW_MAX_SECS);
+    addrange("widget_sparkline_slots","sample count",2,SPARKLINE_SLOT_COUNT_MAX);
     add("widget_sparkline_min","number","y min ('' auto)"); add("widget_sparkline_max","number","y max ('' auto)");
     add("widget_sparkline_min_fmt","string","min label fmt"); add("widget_sparkline_max_fmt","string","max label fmt");
     add("widget_sparkline_min_label_color","color",""); add("widget_sparkline_max_label_color","color","");

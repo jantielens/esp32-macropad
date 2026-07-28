@@ -30,12 +30,12 @@ struct DataStream {
     bool     in_use;
     char     binding[CONFIG_LABEL_MAX_LEN];   // Full binding template string
     uint32_t window_secs;                      // Time window
-    uint8_t  slot_count;                       // Ring buffer size
+    uint16_t slot_count;                       // Ring buffer size
     uint32_t uid;            // Monotonic identity (survives handle reuse, never 0)
 
     float*   samples;        // PSRAM ring buffer [slot_count]
-    uint8_t  head;           // Next write position
-    uint8_t  count;          // Valid entries (0..slot_count)
+    uint16_t head;           // Next write position
+    uint16_t count;          // Valid entries (0..slot_count)
     uint32_t rev;            // Bumped on every ring mutation. History merges
                              // write behind the head without moving it, so
                              // head alone is not a sufficient change signal.
@@ -86,19 +86,19 @@ static uint64_t current_bucket(const DataStream* s) {
 }
 
 // Physical index of the newest written slot. Only valid when count > 0.
-static uint8_t newest_index(const DataStream* s) {
-    return (s->head == 0) ? (uint8_t)(s->slot_count - 1) : (uint8_t)(s->head - 1);
+static uint16_t newest_index(const DataStream* s) {
+    return (s->head == 0) ? (uint16_t)(s->slot_count - 1) : (uint16_t)(s->head - 1);
 }
 
 // Physical index of logical position `i`, where 0 is the oldest valid sample.
 // History merging fills slots *behind* the live region, so the ring can wrap
 // even while count < slot_count — the general form below handles both cases.
-static uint8_t ring_index(const DataStream* s, uint8_t i) {
-    return (uint8_t)((s->head + s->slot_count - s->count + i) % s->slot_count);
+static uint16_t ring_index(const DataStream* s, uint16_t i) {
+    return (uint16_t)((s->head + s->slot_count - s->count + i) % s->slot_count);
 }
 
 // Allocate a float ring buffer in PSRAM (fallback to regular heap)
-static float* alloc_ring(uint8_t slot_count) {
+static float* alloc_ring(uint16_t slot_count) {
     size_t sz = sizeof(float) * slot_count;
     float* buf = (float*)heap_caps_malloc(sz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!buf) buf = (float*)malloc(sz);
@@ -126,7 +126,7 @@ static void reset_ring(DataStream* s) {
 // O(slot_count) per call, but slot_count is small (typically 60-120).
 static void recompute_auto_range(DataStream* s) {
     float a_min = INFINITY, a_max = -INFINITY;
-    for (uint8_t i = 0; i < s->count; i++) {
+    for (uint16_t i = 0; i < s->count; i++) {
         float v = s->samples[ring_index(s, i)];
         if (!isfinite(v)) continue;
         if (v < a_min) a_min = v;
@@ -143,7 +143,7 @@ static void fill_locf(DataStream* s, uint32_t slots) {
     float fill = s->last_value;
     for (uint32_t i = 0; i < slots; i++) {
         s->samples[s->head] = fill;
-        s->head = (uint8_t)((s->head + 1) % s->slot_count);
+        s->head = (uint16_t)((s->head + 1) % s->slot_count);
         if (s->count < s->slot_count) s->count++;
     }
     s->rev++;
@@ -178,7 +178,7 @@ static void ingest_value(DataStream* s, float value) {
     if (s->count == 0) {
         // First ever sample — anchor the grid here.
         s->samples[s->head] = value;
-        s->head = (uint8_t)((s->head + 1) % s->slot_count);
+        s->head = (uint16_t)((s->head + 1) % s->slot_count);
         s->count = 1;
         s->last_slot_ms = millis();
         if (s->wallclock) s->newest_bucket = current_bucket(s);
@@ -197,7 +197,7 @@ static void ingest_value(DataStream* s, float value) {
     // Polling resolves the same binding every LVGL cycle, so most calls land on
     // the slot that already holds this value. Only signal a change when the
     // stored sample really moves, otherwise every consumer redraws every frame.
-    const uint8_t idx = newest_index(s);
+    const uint16_t idx = newest_index(s);
     if (s->samples[idx] == value) return;
 
     s->samples[idx] = value;
@@ -317,7 +317,7 @@ void data_stream_rebuild() {
             // Iterate over stream indices (0 = primary, 1/2 = extra lines)
             for (uint8_t si = 0; si < 3; si++) {
                 uint32_t window_secs = 300;
-                uint8_t slot_count = 60;
+                uint16_t slot_count = 60;
                 const char* binding = nullptr;
                 const char* ha_entity = nullptr;
                 uint8_t ha_stat = 0;
@@ -452,7 +452,7 @@ void data_stream_poll() {
 
 data_stream_handle_t data_stream_find(const char* binding,
                                       uint32_t window_secs,
-                                      uint8_t slot_count,
+                                      uint16_t slot_count,
                                       const char* ha_entity,
                                       uint8_t ha_stat) {
     if (!binding || !binding[0]) return DATA_STREAM_INVALID;
@@ -502,7 +502,7 @@ uint32_t data_stream_uid(data_stream_handle_t handle) {
 
 bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
                                uint64_t end_bucket, const float* values,
-                               uint8_t count) {
+                               uint16_t count) {
     if (handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
     DataStream* s = &g_streams[handle];
     if (!s->in_use || !s->samples) return false;
@@ -515,10 +515,10 @@ bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
     if (s->count > 0) advance_time(s);
     else s->newest_bucket = current_bucket(s);
 
-    const uint8_t before = s->count;
-    s->count = (uint8_t)ha_stats_merge(s->samples, s->slot_count, s->head,
-                                       s->count, s->newest_bucket,
-                                       values, count, end_bucket);
+    const uint16_t before = s->count;
+    s->count = (uint16_t)ha_stats_merge(s->samples, s->slot_count, s->head,
+                                        s->count, s->newest_bucket,
+                                        values, count, end_bucket);
     s->hydrate_done = true;                   // Response consumed, don't re-ask
     if (s->count == before) return true;      // Nothing usable in the response
 

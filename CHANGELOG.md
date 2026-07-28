@@ -20,9 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-* **Sparkline time windows above 18 hours now work** — the stream window was stored as a 16-bit value while the pad editor accepted up to 86400 seconds, so anything past 65535 silently wrapped (a 24-hour window became roughly 5.8 hours). Windows are now 32-bit end to end and the editor clamps to the real 24-hour maximum.
+* **Sparkline time windows above 18 hours now work**: the stream window was stored as a 16-bit value while the pad editor accepted up to 86400 seconds, so anything past 65535 silently wrapped (a 24-hour window became roughly 5.8 hours). Windows are now 32-bit end to end, with a maximum range of seven days.
 * **Sparkline sample slots are aligned to wall-clock time** once NTP is available, rather than to the time since boot. This is what lets history from Home Assistant line up with locally sampled data; the ring is reset once when the clock first becomes valid.
-* **Sparkline sampling controls now use human time units** for both the chart range and the desired interval per point. The editor calculates the required point count and explains the 255-point limit. Home Assistant history settings now sit beside the live binding they backfill, with clearer historical-value names and an explicit enable control.
+* **Sparkline sampling controls now use human time units** for both the chart range and the desired interval per point. The editor calculates the required point count and explains the 1024-point limit. Home Assistant history settings now sit beside the live binding they backfill, with clearer historical-value names and an explicit enable control.
 
 ### Fixed
 

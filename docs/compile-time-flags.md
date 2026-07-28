@@ -587,6 +587,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/data_stream.cpp
   - src/app/data_stream.h
+  - src/app/ha_stats.cpp
+  - src/app/ha_stats.h
   - src/app/pad_config.h
   - src/app/widgets/sparkline_widget.cpp
 - **HAS_IMAGE_FETCH**

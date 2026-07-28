@@ -31,7 +31,7 @@ void ha_stats_init();
 // The stream's `uid` is carried through so a stale response can be dropped.
 bool ha_stats_request(data_stream_handle_t handle, uint32_t uid,
                       const char* entity_id, uint8_t statistic,
-                      uint32_t slot_ms, uint8_t slot_count,
+                      uint32_t slot_ms, uint16_t slot_count,
                       uint64_t end_bucket);
 
 // True while a request is queued or being fetched.

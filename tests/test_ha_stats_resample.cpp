@@ -92,7 +92,7 @@ TEST(parse_rejects_garbage) {
 
 TEST(request_window_preserves_fractional_second_slots) {
     const uint32_t slot_ms = 338823;  // 24 hours / 255 points
-    const uint8_t slot_count = 255;
+    const uint16_t slot_count = 255;
     const uint64_t end_bucket = 5000000;
     uint64_t start_sec = 0, end_sec = 0;
 
@@ -108,6 +108,19 @@ TEST(request_window_preserves_fractional_second_slots) {
     // 47 days backwards, which is the regression this test guards against.
     const uint64_t truncated_end = (end_bucket + 1) * (slot_ms / 1000ULL);
     assert(end_sec - truncated_end > 47ULL * 86400ULL);
+}
+
+TEST(request_window_supports_1024_slots) {
+    const uint32_t slot_ms = 590625;  // 7 days / 1024 points
+    const uint16_t slot_count = 1024;
+    const uint64_t end_bucket = 3000000;
+    uint64_t start_sec = 0;
+    uint64_t end_sec = 0;
+
+    ha_stats_request_window(slot_ms, slot_count, end_bucket,
+                            &start_sec, &end_sec);
+
+    ASSERT_EQ(end_sec - start_sec, 604800u);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +143,16 @@ TEST(resample_aligns_points_to_buckets) {
     ASSERT_NEAR(out[1], 10.0f);
     ASSERT_NEAR(out[2], 20.0f);
     ASSERT_NEAR(out[3], 30.0f);
+}
+
+TEST(resample_supports_slot_index_above_255) {
+    HaStatPoint point = { 1800 * 600, 42.0f };
+    float out[1024];
+
+    size_t filled = ha_stats_resample(&point, 1, 600000, 2000, out, 1024);
+
+    ASSERT_EQ(filled, 1u);
+    ASSERT_NEAR(out[823], 42.0f);
 }
 
 TEST(resample_leaves_missing_periods_as_gaps) {
@@ -325,9 +348,11 @@ int main() {
 
     printf("\nRequest window:\n");
     RUN(request_window_preserves_fractional_second_slots);
+    RUN(request_window_supports_1024_slots);
 
     printf("\nResampling:\n");
     RUN(resample_aligns_points_to_buckets);
+    RUN(resample_supports_slot_index_above_255);
     RUN(resample_leaves_missing_periods_as_gaps);
     RUN(resample_ignores_points_outside_window);
     RUN(resample_last_point_in_bucket_wins);

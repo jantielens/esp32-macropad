@@ -51,9 +51,9 @@ typedef int8_t data_stream_handle_t;
 // data_stream_poll() or data_stream_rebuild() call.
 struct DataStreamSnapshot {
     const float* samples;    // Ring buffer (slot_count entries)
-    uint8_t  slot_count;     // Total slots in ring buffer
-    uint8_t  head;           // Next write position
-    uint8_t  count;          // Valid sample count (0..slot_count)
+    uint16_t slot_count;     // Total slots in ring buffer
+    uint16_t head;           // Next write position
+    uint16_t count;          // Valid sample count (0..slot_count)
     uint32_t rev;            // Bumped on every mutation (change detection)
     float    auto_min;       // Tracked minimum across buffer
     float    auto_max;       // Tracked maximum across buffer
@@ -80,7 +80,7 @@ void data_stream_poll();
 // Returns DATA_STREAM_INVALID if not found.
 data_stream_handle_t data_stream_find(const char* binding,
                                       uint32_t window_secs,
-                                      uint8_t slot_count,
+                                      uint16_t slot_count,
                                       const char* ha_entity,
                                       uint8_t ha_stat);
 
@@ -106,7 +106,7 @@ uint32_t data_stream_uid(data_stream_handle_t handle);
 // or slot configuration no longer matches the request.
 bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
                                uint64_t end_bucket, const float* values,
-                               uint8_t count);
+                               uint16_t count);
 #endif // HAS_HA_HISTORY
 
 #endif // HAS_DISPLAY && HAS_MQTT

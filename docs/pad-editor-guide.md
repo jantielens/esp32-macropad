@@ -837,8 +837,8 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Live data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream, color, and optional history source. Leave empty for a single line |
 | **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data. Accepts a number or a binding expression (e.g. `[health:heap_total]`) for dynamic scaling |
 | **Same scale for all lines** | When enabled (default), all lines in a multi-line sparkline share the same auto-scaled Y-axis range, so values are visually comparable. Disable to let each line auto-scale independently — useful when lines have very different magnitudes and you want to compare trends/shapes rather than absolute values. Has no effect when explicit min/max are configured or with single-line sparklines |
-| **Time range** | How much history to display, entered in seconds, minutes, hours, or days (default: 5 minutes, maximum: 1 day) |
-| **One point every** | Desired time represented by each point, entered in seconds, minutes, or hours. The editor calculates the required point count and stores it within the 2–255 point limit |
+| **Time range** | How much history to display, entered in seconds, minutes, hours, or days (default: 5 minutes, maximum: 7 days) |
+| **One point every** | Desired time represented by each point, entered in seconds, minutes, or hours. The editor calculates the required point count and stores it within the 2–1024 point limit |
 | **Backfill from Home Assistant** | Fills the line from long-term statistics after a restart. A live data binding is required because history fills that same stream; it does not create a separate line |
 | **History entity (line 1/2/3)** | Home Assistant entity ID (e.g. `sensor.living_room_temperature`) used when backfill is enabled |
 | **Historical value (line 1/2/3)** | **Average reading** (mean) for measurements, **Latest state** for the most recently recorded value in each period, or **Accumulated total** (sum) for energy, water, and other total sensors |

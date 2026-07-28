@@ -2,6 +2,9 @@
 // Part of the ESP32 Macropad configuration portal.
 // Bundled into portal_pad_editor.js during minification.
 
+var PAD_SPARKLINE_MAX_WINDOW_SECONDS = 7 * 86400;
+var PAD_SPARKLINE_MAX_POINTS = 1024;
+
 function padConfirmChanged() {
     var enabled = document.getElementById('pad-edit-confirm').checked;
     document.getElementById('pad-edit-confirm-text-group').style.display = enabled ? '' : 'none';
@@ -53,7 +56,7 @@ function padSetSparklineIntervalSeconds(seconds) {
 function padGetSparklineSlotCount() {
     var requested = Math.ceil(padGetSparklineWindowSeconds() / padGetSparklineIntervalSeconds());
     if (!isFinite(requested)) requested = 60;
-    return Math.max(2, Math.min(255, requested));
+    return Math.max(2, Math.min(PAD_SPARKLINE_MAX_POINTS, requested));
 }
 
 function padFormatSparklineDuration(seconds) {
@@ -100,8 +103,8 @@ function padUpdateSparklineEditor() {
 
     var windowSeconds = padGetSparklineWindowSeconds();
     var windowUnit = parseInt(document.getElementById('pad-edit-sparkline-window-unit').value);
-    document.getElementById('pad-edit-sparkline-window').max = String(86400 / windowUnit);
-    document.getElementById('pad-edit-sparkline-window-warn').style.display = windowSeconds > 86400 ? '' : 'none';
+    document.getElementById('pad-edit-sparkline-window').max = String(PAD_SPARKLINE_MAX_WINDOW_SECONDS / windowUnit);
+    document.getElementById('pad-edit-sparkline-window-warn').style.display = windowSeconds > PAD_SPARKLINE_MAX_WINDOW_SECONDS ? '' : 'none';
     var requestedSlots = Math.ceil(windowSeconds / padGetSparklineIntervalSeconds());
     if (!isFinite(requestedSlots)) requestedSlots = 60;
     var slots = padGetSparklineSlotCount();
@@ -111,9 +114,9 @@ function padUpdateSparklineEditor() {
         slots + ' data points, actual interval ' + padFormatSparklineDuration(Math.round(intervalSeconds)) + '.';
 
     var pointsWarn = document.getElementById('pad-edit-sparkline-points-warn');
-    if (requestedSlots > 255) {
-        pointsWarn.textContent = 'This interval needs ' + requestedSlots + ' points. Maximum is 255; use at least ' +
-            padFormatSparklineDuration(Math.ceil(windowSeconds / 255)) + ' per point.';
+    if (requestedSlots > PAD_SPARKLINE_MAX_POINTS) {
+        pointsWarn.textContent = 'This interval needs ' + requestedSlots + ' points. Maximum is ' + PAD_SPARKLINE_MAX_POINTS + '; use at least ' +
+            padFormatSparklineDuration(Math.ceil(windowSeconds / PAD_SPARKLINE_MAX_POINTS)) + ' per point.';
         pointsWarn.style.display = '';
     } else if (requestedSlots < 2) {
         pointsWarn.textContent = 'A chart needs at least 2 points; use at most ' +
@@ -647,7 +650,7 @@ function padDialogOk(keepOpen) {
             if (sMin !== undefined) btn.widget_sparkline_min = sMin;
             if (sMax !== undefined) btn.widget_sparkline_max = sMax;
             const sWindow = padGetSparklineWindowSeconds();
-            btn.widget_sparkline_window = (isNaN(sWindow) || sWindow < 10) ? 300 : (sWindow > 86400) ? 86400 : sWindow;
+            btn.widget_sparkline_window = (isNaN(sWindow) || sWindow < 10) ? 300 : Math.min(PAD_SPARKLINE_MAX_WINDOW_SECONDS, sWindow);
             btn.widget_sparkline_slots = padGetSparklineSlotCount();
             for (const suffix of ['', '_2', '_3']) {
                 const dom = suffix.replace('_', '-');

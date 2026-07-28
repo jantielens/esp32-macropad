@@ -31,10 +31,13 @@
 
 // Recorder keeps 5-minute statistics for a limited retention window and rolls
 // everything older up to hourly, so long windows must switch period.
-#define HA_STATS_HOURLY_THRESHOLD_SECS 3600
+#define HA_STATS_HOURLY_SLOT_THRESHOLD_SECS 3600
+#define HA_STATS_HOURLY_WINDOW_THRESHOLD_SECS 86400
 
-// Upper bound on periods in one response (24 h at 5-minute resolution).
+// Upper bound on periods in one response: 24 h at 5-minute resolution is 288;
+// longer supported windows use hourly statistics and need at most 168 periods.
 #define HA_STATS_MAX_POINTS 288
+#define HA_STATS_RESULT_MAX_SLOTS 1024
 
 // PSRAM pool for the filtered response. Only the two fields we keep survive
 // the filter, so this comfortably covers HA_STATS_MAX_POINTS periods.
@@ -60,7 +63,7 @@ struct HaStatsJob {
     char     entity_id[DATA_STREAM_HA_ENTITY_MAX_LEN];
     uint8_t  statistic;
     uint32_t slot_ms;
-    uint8_t  slot_count;
+    uint16_t slot_count;
     uint64_t end_bucket;
     uint32_t queued_ms;   // millis() when the job was accepted (timing only)
 };
@@ -69,7 +72,7 @@ static portMUX_TYPE   g_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint8_t g_state = ST_IDLE;
 static HaStatsJob     g_job;
 static float*         g_values = nullptr;   // [slot_count] resampled result
-static uint8_t        g_value_count = 0;
+static uint16_t       g_value_count = 0;
 static SemaphoreHandle_t g_wake = nullptr;
 static TaskHandle_t   g_task = nullptr;
 static uint32_t       g_blocked_until_ms = 0;
@@ -124,7 +127,9 @@ static int fetch_job(const HaStatsJob& job, float* out) {
     uint64_t start_sec, end_sec;
     ha_stats_request_window(job.slot_ms, job.slot_count, job.end_bucket,
                             &start_sec, &end_sec);
-    const bool     hourly    = job.slot_ms >= HA_STATS_HOURLY_THRESHOLD_SECS * 1000ULL;
+    const uint64_t window_ms = (uint64_t)job.slot_ms * job.slot_count;
+    const bool hourly = job.slot_ms >= HA_STATS_HOURLY_SLOT_THRESHOLD_SECS * 1000ULL ||
+                        window_ms > HA_STATS_HOURLY_WINDOW_THRESHOLD_SECS * 1000ULL;
 
     char start_iso[32], end_iso[32];
     format_utc(start_sec, start_iso, sizeof(start_iso));
@@ -298,9 +303,9 @@ static void ha_stats_task(void*) {
 void ha_stats_init() {
     if (g_task) return;
 
-    g_values = (float*)heap_caps_malloc(sizeof(float) * 255,
+    g_values = (float*)heap_caps_malloc(sizeof(float) * HA_STATS_RESULT_MAX_SLOTS,
                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!g_values) g_values = (float*)malloc(sizeof(float) * 255);
+    if (!g_values) g_values = (float*)malloc(sizeof(float) * HA_STATS_RESULT_MAX_SLOTS);
     if (!g_values) {
         LOGE(TAG, "OOM for result buffer — history hydration disabled");
         return;
@@ -339,7 +344,7 @@ uint32_t ha_stats_backoff_remaining_ms() {
 
 bool ha_stats_request(data_stream_handle_t handle, uint32_t uid,
                       const char* entity_id, uint8_t statistic,
-                      uint32_t slot_ms, uint8_t slot_count,
+                      uint32_t slot_ms, uint16_t slot_count,
                       uint64_t end_bucket) {
     if (!g_task || !g_values) return false;
     if (!entity_id || !entity_id[0] || slot_count == 0 || slot_ms == 0) return false;

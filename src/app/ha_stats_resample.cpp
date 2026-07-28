@@ -70,7 +70,7 @@ uint64_t ha_stats_parse_iso8601(const char* s) {
     return (secs < 0) ? 0 : (uint64_t)secs;
 }
 
-void ha_stats_request_window(uint32_t slot_ms, uint8_t slot_count,
+void ha_stats_request_window(uint32_t slot_ms, uint16_t slot_count,
                              uint64_t end_bucket,
                              uint64_t* start_sec, uint64_t* end_sec) {
     if (!start_sec || !end_sec || slot_ms == 0 || slot_count == 0) return;

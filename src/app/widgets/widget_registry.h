@@ -35,7 +35,7 @@ struct WidgetType {
     // `out_ha_entity` / `out_ha_stat` name the optional Home Assistant history
     // source; widgets without one report "" / 0.
     bool (*getStreamParams)(const WidgetConfig* cfg, uint8_t stream_index,
-                            uint32_t* window_secs, uint8_t* slot_count,
+                            uint32_t* window_secs, uint16_t* slot_count,
                             const char** out_binding,
                             const char** out_ha_entity, uint8_t* out_ha_stat);
     bool resolveInTick;

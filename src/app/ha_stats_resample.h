@@ -30,7 +30,7 @@ uint64_t ha_stats_parse_iso8601(const char* s);
 // required by Home Assistant's Recorder service. Multiplication stays in
 // milliseconds so non-integral slot durations do not accumulate epoch-scale
 // drift before the final conversion.
-void ha_stats_request_window(uint32_t slot_ms, uint8_t slot_count,
+void ha_stats_request_window(uint32_t slot_ms, uint16_t slot_count,
                              uint64_t end_bucket,
                              uint64_t* start_sec, uint64_t* end_sec);
 
