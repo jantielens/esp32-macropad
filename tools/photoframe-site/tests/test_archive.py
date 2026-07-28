@@ -12,6 +12,7 @@ import tempfile
 import zipfile
 import zlib
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -121,6 +122,49 @@ def test_site_export_import_round_trip_replaces_all_data() -> None:
     assert (target / "devices/device-one/images/image-one/transport-8x4-2.g16p").read_bytes() == TRANSPORT
     assert json.loads((target / "config/frames.json").read_text())["frames"]["device-one"]["token"] == TOKEN
     assert (target / "config/session-secret").read_text() == "s" * 64 + "\n"
+
+
+def test_archive_schema_policy_is_explicit() -> None:
+    assert archive.SCHEMA_VERSION == 1
+    assert archive.SUPPORTED_IMPORT_SCHEMA_VERSIONS == (1,)
+
+
+def test_different_site_version_warns_and_imports() -> None:
+    source = _site(with_device=True)
+    manifest, entries = _entries(archive.export_device(source, "device-one", OWNER))
+    manifest["site_version"] = "1.22.0"
+    target = _site(with_device=False)
+    with mock.patch.object(archive.logger, "warning") as warning:
+        configured, device_id = archive.import_device(target, _bundle(manifest, entries), OWNER)
+    assert device_id == "device-one"
+    assert configured.device(device_id).token == TOKEN
+    warning.assert_called_once()
+
+
+def test_newer_and_older_archive_schemas_are_rejected_clearly() -> None:
+    source = _site(with_device=True)
+    manifest, entries = _entries(archive.export_device(source, "device-one", OWNER))
+    target = _site(with_device=False)
+
+    manifest["schema_version"] = 2
+    try:
+        archive.import_device(target, _bundle(manifest, entries), OWNER)
+        raise AssertionError("newer archive schema accepted")
+    except archive.ArchiveError as exc:
+        assert str(exc) == (
+            "This archive was created by a newer version of the site; "
+            "upgrade before importing."
+        )
+
+    manifest["schema_version"] = 0
+    try:
+        archive.import_device(target, _bundle(manifest, entries), OWNER)
+        raise AssertionError("older archive schema accepted")
+    except archive.ArchiveError as exc:
+        assert str(exc) == (
+            "This archive uses an older unsupported schema; export it from a "
+            "compatible site before importing."
+        )
 
 
 def test_corrupt_checksum_and_crc_leave_target_unchanged() -> None:

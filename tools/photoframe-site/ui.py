@@ -598,6 +598,8 @@ def thumb(request: Request, device_id: str, image_id: str) -> Response:
     user = _require_user(request)
     if isinstance(user, Response) or _frame_for_user(request, user, device_id) is None:
         return user if isinstance(user, Response) else Response("Forbidden", status_code=403)
+    if not store.is_valid_id(image_id):
+        return Response(status_code=404)
     data = bs.download_blob(store.DEVICE_CONTAINER,
                             f"{store.image_prefix(device_id)}/{image_id}/thumb.png")
     return Response(data, media_type="image/png") if data is not None else Response(status_code=404)

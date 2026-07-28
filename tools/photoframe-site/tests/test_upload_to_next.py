@@ -277,6 +277,65 @@ def test_same_profile_devices_are_isolated_both_directions():
         assert "A</p>" not in client.get("/photos?device_id=device-b").text
 
 
+def test_thumbnails_reject_cross_device_path_traversal_both_directions():
+    root = Path(tempfile.mkdtemp())
+    (root / "config").mkdir()
+    profile = {"width": 8, "height": 4, "format_codes": [2]}
+    (root / "config/frames.json").write_text(json.dumps({"frames": {
+        "device-a": {"token": "a" * 32, "profile": profile},
+        "device-b": {"token": "b" * 32, "profile": profile},
+    }}))
+    (root / "config/users.json").write_text(json.dumps({"users": {
+        "owner-a@example.com": {
+            "password_hash": config.hash_password("secret"),
+            "frames": ["device-a"],
+        },
+        "owner-b@example.com": {
+            "password_hash": config.hash_password("secret"),
+            "frames": ["device-b"],
+        },
+    }}))
+
+    def source_bytes(color: tuple[int, int, int]) -> bytes:
+        output = io.BytesIO()
+        Image.new("RGB", (16, 8), color).save(output, format="JPEG")
+        return output.getvalue()
+
+    application.DATA_ROOT = root
+    for owner, device_id, color in (
+        ("owner-a@example.com", "device-a", (0, 0, 0)),
+        ("owner-b@example.com", "device-b", (255, 255, 255)),
+    ):
+        with TestClient(application.app) as client:
+            client.post("/login", data={"email": owner, "password": "secret"})
+            response = client.post(
+                "/upload",
+                data={"device_id": device_id, "permanent": "on"},
+                files={"file": (f"{device_id}.jpg", source_bytes(color), "image/jpeg")},
+                follow_redirects=False,
+            )
+            assert response.status_code == 303
+
+    image_a = next((root / "devices/device-a/images").iterdir()).name
+    image_b = next((root / "devices/device-b/images").iterdir()).name
+    for owner, own_device, own_image, other_device, other_image in (
+        ("owner-a@example.com", "device-a", image_a, "device-b", image_b),
+        ("owner-b@example.com", "device-b", image_b, "device-a", image_a),
+    ):
+        with TestClient(application.app) as client:
+            client.post("/login", data={"email": owner, "password": "secret"})
+            assert client.get(
+                "/thumb", params={"device_id": own_device, "image_id": own_image}
+            ).status_code == 200
+            assert client.get(
+                "/thumb", params={"device_id": other_device, "image_id": other_image}
+            ).status_code == 403
+            traversal = f"../../{other_device}/images/{other_image}"
+            assert client.get(
+                "/thumb", params={"device_id": own_device, "image_id": traversal}
+            ).status_code == 404
+
+
 if __name__ == "__main__":
     tests = [value for name, value in sorted(globals().items())
              if name.startswith("test_") and callable(value)]

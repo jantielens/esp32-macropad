@@ -171,7 +171,7 @@
 <section class="mb-4" style="max-width: 44rem;">
   <div class="section-card p-3 p-md-4">
     <h2 class="eyebrow text-body-secondary mb-3">Rotate credential</h2>
-    <p class="small text-body-secondary">Rotation invalidates the old token immediately. The new token is shown once.</p>
+    <p class="small text-body-secondary">Rotation invalidates the old token immediately. You can reveal the new token later after confirming your current password.</p>
     <form method="post" action="/settings/token/rotate" class="m-0"
           onsubmit="return confirm('Rotate this device token now?');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

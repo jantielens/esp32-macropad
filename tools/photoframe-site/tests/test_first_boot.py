@@ -46,7 +46,7 @@ def test_first_boot_setup_persists() -> None:
         })
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
-        assert "shown only once" in response.text
+        assert "reveal it later from device settings" in response.text
         assert client.get("/setup").status_code == 404
 
         frame_data = json.loads((root / "config" / "frames.json").read_text(encoding="utf-8"))

@@ -54,6 +54,7 @@ def test_token_reveal_requires_password_and_nonce() -> None:
         settings = client.get("/settings?device_id=living-room")
         assert settings.status_code == 200
         assert token not in settings.text
+        assert "reveal the new token later" in settings.text
         nonce = _nonce(settings.text)
         assert client.get("/settings?device_id=private-frame").status_code == 403
 

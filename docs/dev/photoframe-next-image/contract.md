@@ -150,6 +150,14 @@ trust the network MUST use a confidential transport such as TLS. A deployment
 using plain HTTP on a trusted LAN explicitly accepts that any observer on that
 network can steal and replay the token.
 
+The reference firmware does not verify TLS certificates. It configures
+`WiFiClientSecure` with `setInsecure()`. HTTPS therefore encrypts the token and
+image bytes against passive eavesdropping, but it does not authenticate the
+service and does not protect against an active man-in-the-middle attacker. Keep
+the reference site and frames on a trusted LAN. Using the reference client on
+an untrusted network requires certificate verification before TLS can provide
+server authentication.
+
 Authentication failure returns only an authentication error. It MUST NOT reveal
 whether a token once existed or why it is invalid.
 

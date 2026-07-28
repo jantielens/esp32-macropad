@@ -61,7 +61,9 @@ restores the site without a database.
 
 Start the service, then open it in a browser. An empty data directory redirects
 to `/setup`, where you create the administrator account and first frame. The
-service generates the frame bearer token and shows it once after setup.
+service generates the frame bearer token and displays it after setup. An
+authorized owner can reveal it later from device settings after confirming
+their current password.
 
 The first startup creates configuration files and a 256-bit session secret
 under `data/config/`. Later startups load those files without changing them.
@@ -150,6 +152,20 @@ service rejects other requests until it restarts.
 Both bundle types include a versioned manifest, exact file checksums, and image
 transport CRCs. Imports reject missing, corrupt, mismatched, or path-unsafe
 entries before changing live data.
+
+### Archive format and compatibility
+
+Archive compatibility is determined by the manifest `schema_version`, not the
+site release number. This release writes schema version `1` and imports schema
+version `1`. The manifest `site_version` records which release created the
+archive for diagnostics; a different site version produces a warning but does
+not block import.
+
+An archive with a newer schema requires upgrading the destination site before
+import. An archive with an older unsupported schema must first be exported from
+a site release that can read it and write a supported schema. Checksums,
+transport CRCs, path validation, ownership validation, and atomic replacement
+still apply to every supported archive.
 
 > [!WARNING]
 > Exports are unencrypted. Device bundles contain bearer tokens. Site bundles
@@ -277,6 +293,19 @@ Tailscale Funnel can publish the site at a stable HTTPS `*.ts.net` address
 without port forwarding or a custom domain. Run Tailscale directly in the LXC,
 outside the Docker container, so the application image remains independent of
 the deployment network.
+
+Prefer Tailscale Serve when every administrator and frame can join the same
+tailnet. Serve keeps the site private to authenticated tailnet members:
+
+```bash
+tailscale serve --bg 8080
+tailscale serve status
+```
+
+Use Funnel only when a frame cannot reach the tailnet. Funnel makes the site,
+including its login and upload endpoints, reachable from the public Internet.
+The application authentication and request limits still apply, but Internet
+clients can probe those surfaces.
 
 First check whether the LXC already exposes the kernel TUN device:
 

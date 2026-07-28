@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import secrets
@@ -18,6 +19,7 @@ from pathlib import Path, PurePosixPath
 import config as cfg
 
 SCHEMA_VERSION = 1
+SUPPORTED_IMPORT_SCHEMA_VERSIONS = (1,)
 SITE_VERSION = "1.23.0"
 MAX_ARCHIVE_BYTES = 128 * 1024 * 1024
 MAX_FILE_BYTES = 64 * 1024 * 1024
@@ -26,6 +28,7 @@ MAX_FILES = 10_000
 MANIFEST_NAME = "manifest.json"
 _DEVICE_ID_RE = re.compile(rf"^{cfg.DEVICE_ID_PATTERN}$")
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
+logger = logging.getLogger("epaper-photoframe.archive")
 
 
 class ArchiveError(ValueError):
@@ -161,10 +164,27 @@ def _validated_entries(payload: bytes, expected_type: str) -> tuple[dict, dict[s
             manifest = json.loads(bundle.read(manifest_info).decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as exc:
             raise ArchiveError("Archive manifest is invalid.") from exc
-        if not isinstance(manifest, dict) or manifest.get("schema_version") != SCHEMA_VERSION:
+        if not isinstance(manifest, dict):
+            raise ArchiveError("Archive manifest is invalid.")
+        schema_version = manifest.get("schema_version")
+        if schema_version not in SUPPORTED_IMPORT_SCHEMA_VERSIONS:
+            if isinstance(schema_version, int) and schema_version > max(SUPPORTED_IMPORT_SCHEMA_VERSIONS):
+                raise ArchiveError(
+                    "This archive was created by a newer version of the site; "
+                    "upgrade before importing."
+                )
+            if isinstance(schema_version, int) and schema_version < min(SUPPORTED_IMPORT_SCHEMA_VERSIONS):
+                raise ArchiveError(
+                    "This archive uses an older unsupported schema; export it from a "
+                    "compatible site before importing."
+                )
             raise ArchiveError("Archive schema version is unsupported.")
-        if manifest.get("site_version") != SITE_VERSION:
-            raise ArchiveError("Archive site version is unsupported.")
+        archive_site_version = manifest.get("site_version")
+        if archive_site_version != SITE_VERSION:
+            logger.warning(
+                "Importing archive from site version %r into site version %s.",
+                archive_site_version, SITE_VERSION,
+            )
         if manifest.get("type") != expected_type:
             raise ArchiveError(f"Expected a {expected_type} bundle.")
         checksums = manifest.get("files")
