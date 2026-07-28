@@ -49,6 +49,7 @@ struct DataStream {
 #if HAS_HA_HISTORY
     char     ha_entity[DATA_STREAM_HA_ENTITY_MAX_LEN];  // "" = no history source
     uint8_t  ha_stat;                                    // HA_STAT_*
+    uint8_t  hydrate_attempts;
     bool     hydrate_done;   // History already merged (or nothing left to fill)
 #endif
 };
@@ -213,6 +214,7 @@ static void ingest_value(DataStream* s, float value) {
 // Emit at most one deferral reason every HYDRATE_DEFER_LOG_MS. hydrate_streams()
 // runs on every LVGL cycle, so an unthrottled log would flood the console.
 #define HYDRATE_DEFER_LOG_MS 10000
+#define HYDRATE_MAX_ATTEMPTS 3
 
 static void log_hydrate_deferred(uint8_t stream, const char* reason) {
     static uint32_t last_ms = 0;
@@ -243,6 +245,12 @@ static void hydrate_streams() {
             s->hydrate_done = true;
             continue;
         }
+        if (s->hydrate_attempts >= HYDRATE_MAX_ATTEMPTS) {
+            LOGW(TAG, "Stream[%d] history unavailable after %u attempts", i,
+                 s->hydrate_attempts);
+            s->hydrate_done = true;
+            continue;
+        }
 
         // Recorder only publishes on 5-minute boundaries, so a finer grid would
         // leave most slots empty — not worth a request.
@@ -256,6 +264,7 @@ static void hydrate_streams() {
 
         if (ha_stats_request((data_stream_handle_t)i, s->uid, s->ha_entity,
                              s->ha_stat, slot_ms, s->slot_count, current_bucket(s))) {
+            s->hydrate_attempts++;
             g_hydrate_cursor = (uint8_t)((i + 1) % DATA_STREAM_MAX_STREAMS);
         } else {
             const uint32_t backoff = ha_stats_backoff_remaining_ms();
@@ -361,6 +370,7 @@ void data_stream_rebuild() {
 #if HAS_HA_HISTORY
                 strlcpy(s->ha_entity, ha_entity ? ha_entity : "", sizeof(s->ha_entity));
                 s->ha_stat = ha_stat;
+                s->hydrate_attempts = 0;
                 s->hydrate_done = false;
 #endif
 
@@ -418,6 +428,7 @@ void data_stream_poll() {
             s->uid = g_next_uid++;
             reset_ring(s);
 #if HAS_HA_HISTORY
+            s->hydrate_attempts = 0;
             s->hydrate_done = false;  // Only now can history be aligned
 #endif
             LOGD(TAG, "Stream[%d] switched to wall-clock buckets", i);
@@ -526,6 +537,14 @@ bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
     recompute_auto_range(s);
     LOGD(TAG, "Stream[%d] hydrated %u slots from history", handle,
          (unsigned)(s->count - before));
+    return true;
+}
+
+bool data_stream_finish_history(data_stream_handle_t handle, uint32_t uid) {
+    if (handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
+    DataStream* s = &g_streams[handle];
+    if (!s->in_use || s->uid != uid) return false;
+    s->hydrate_done = true;
     return true;
 }
 

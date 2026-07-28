@@ -104,6 +104,10 @@ async function loadConfig() {
         window.deviceConfig = config;
         // Cache compile-time capability map for fragments that gate UI on it.
         window.__device_caps = config.caps || {};
+        if (typeof window.padUpdateSparklineEditor === 'function' &&
+            document.getElementById('pad-edit-sparkline-data-binding')) {
+            window.padUpdateSparklineEditor();
+        }
         const hasConfig = config.wifi_ssid && config.wifi_ssid !== '';
         
         // Helper to safely set element value

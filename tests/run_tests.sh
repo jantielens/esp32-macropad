@@ -10,6 +10,19 @@ cd "$(dirname "$0")/.."
 
 mkdir -p tests/bin
 
+echo "=== Building compile check: sparkline without HA history ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable \
+    -Wno-format-truncation \
+    -DHAS_HA_HISTORY=0 -DHAS_MCP=0 \
+    -include tests/Arduino.h -include tests/log_manager.h -include tests/board_config.h \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    -I ~/Arduino/libraries/lvgl/src \
+    -c src/app/widgets/sparkline_widget.cpp \
+    -o tests/bin/sparkline_no_ha.o
+echo
+
 echo "=== Building unit tests: expr_eval ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     tests/test_expr_eval.cpp \

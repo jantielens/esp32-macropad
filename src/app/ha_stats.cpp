@@ -17,6 +17,7 @@
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <math.h>
+#include <new>
 #include <string.h>
 #include <time.h>
 
@@ -36,7 +37,10 @@
 
 // Upper bound on periods in one response: 24 h at 5-minute resolution is 288;
 // longer supported windows use hourly statistics and need at most 168 periods.
-#define HA_STATS_MAX_POINTS 288
+// Leave headroom for Recorder responses with inclusive boundary periods.
+#define HA_STATS_MAX_POINTS 320
+// Must stay at least as large as every caller's per-widget slot cap. Requests
+// are rejected at this module boundary before they can reach g_values.
 #define HA_STATS_RESULT_MAX_SLOTS 1024
 
 // PSRAM pool for the filtered response. Only the two fields we keep survive
@@ -55,6 +59,7 @@ enum : uint8_t {
     ST_QUEUED,        // Request handed to the task
     ST_FETCHING,      // HTTP in progress
     ST_READY,         // Result waiting for the LVGL task
+    ST_DELIVERING,    // LVGL task owns the snapshotted result
 };
 
 struct HaStatsJob {
@@ -72,6 +77,8 @@ static portMUX_TYPE   g_mux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint8_t g_state = ST_IDLE;
 static HaStatsJob     g_job;
 static float*         g_values = nullptr;   // [slot_count] resampled result
+static HaStatPoint*   g_points = nullptr;   // [HA_STATS_MAX_POINTS]
+static BasicJsonDocument<PsramJsonAllocator>* g_doc = nullptr;
 static uint16_t       g_value_count = 0;
 static SemaphoreHandle_t g_wake = nullptr;
 static TaskHandle_t   g_task = nullptr;
@@ -130,6 +137,11 @@ static int fetch_job(const HaStatsJob& job, float* out) {
     const uint64_t window_ms = (uint64_t)job.slot_ms * job.slot_count;
     const bool hourly = job.slot_ms >= HA_STATS_HOURLY_SLOT_THRESHOLD_SECS * 1000ULL ||
                         window_ms > HA_STATS_HOURLY_WINDOW_THRESHOLD_SECS * 1000ULL;
+    if (hourly && job.slot_ms < HA_STATS_HOURLY_SLOT_THRESHOLD_SECS * 1000ULL) {
+        LOGI(TAG, "%s: hourly statistics are coarser than %lums slots; skipping history",
+             job.entity_id, (unsigned long)job.slot_ms);
+        return 0;
+    }
 
     char start_iso[32], end_iso[32];
     format_utc(start_sec, start_iso, sizeof(start_iso));
@@ -197,8 +209,8 @@ static int fetch_job(const HaStatsJob& job, float* out) {
         return -1;
     }
 
-    BasicJsonDocument<PsramJsonAllocator> doc(HA_STATS_JSON_CAPACITY);
-    DeserializationError err = deserializeJson(doc, http.getStream(),
+    g_doc->clear();
+    DeserializationError err = deserializeJson(*g_doc, http.getStream(),
                                                DeserializationOption::Filter(filter));
     http.end();
     const uint32_t t_parse = millis();
@@ -208,18 +220,10 @@ static int fetch_job(const HaStatsJob& job, float* out) {
     }
 
     JsonArrayConst periods =
-        doc["service_response"]["statistics"][job.entity_id].as<JsonArrayConst>();
+        (*g_doc)["service_response"]["statistics"][job.entity_id].as<JsonArrayConst>();
     if (periods.isNull() || periods.size() == 0) {
         LOGI(TAG, "%s: no statistics in window", job.entity_id);
-        return -1;
-    }
-
-    HaStatPoint* points = (HaStatPoint*)heap_caps_malloc(
-        sizeof(HaStatPoint) * HA_STATS_MAX_POINTS, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!points) points = (HaStatPoint*)malloc(sizeof(HaStatPoint) * HA_STATS_MAX_POINTS);
-    if (!points) {
-        LOGE(TAG, "OOM for %d statistic points", HA_STATS_MAX_POINTS);
-        return -1;
+        return 0;
     }
 
     size_t n = 0;
@@ -229,14 +233,13 @@ static int fetch_job(const HaStatsJob& job, float* out) {
         if (start == 0) continue;
         JsonVariantConst val = p[field];
         if (!val.is<double>()) continue;
-        points[n].start_sec = start;
-        points[n].value = (float)val.as<double>();
+        g_points[n].start_sec = start;
+        g_points[n].value = (float)val.as<double>();
         n++;
     }
 
-    const size_t filled = ha_stats_resample(points, n, job.slot_ms, job.end_bucket,
+    const size_t filled = ha_stats_resample(g_points, n, job.slot_ms, job.end_bucket,
                                             out, job.slot_count);
-    free(points);
     const uint32_t t_done = millis();
 
     LOGI(TAG, "%s: %u periods -> %u/%u slots (%s)", job.entity_id,
@@ -272,8 +275,8 @@ static void ha_stats_task(void*) {
 
         portENTER_CRITICAL(&g_mux);
         uint32_t paused_ms = 0;
-        if (filled > 0) {
-            g_value_count = job.slot_count;
+        if (filled >= 0) {
+            g_value_count = (filled > 0) ? job.slot_count : 0;
             g_retry_delay_ms = HA_STATS_RETRY_BASE_MS;
             g_state = ST_READY;
         } else {
@@ -287,7 +290,7 @@ static void ha_stats_task(void*) {
         }
         portEXIT_CRITICAL(&g_mux);
 
-        if (filled <= 0) {
+        if (filled < 0) {
             // One global backoff: a failing HA install would otherwise have
             // every stream retry in a tight loop.
             LOGW(TAG, "%s: fetch failed — all hydration paused for %lums",
@@ -311,11 +314,30 @@ void ha_stats_init() {
         return;
     }
 
+    g_points = (HaStatPoint*)heap_caps_malloc(
+        sizeof(HaStatPoint) * HA_STATS_MAX_POINTS, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!g_points) g_points = (HaStatPoint*)malloc(sizeof(HaStatPoint) * HA_STATS_MAX_POINTS);
+    g_doc = new (std::nothrow) BasicJsonDocument<PsramJsonAllocator>(HA_STATS_JSON_CAPACITY);
+    if (!g_points || !g_doc) {
+        LOGE(TAG, "OOM for history workspace — history hydration disabled");
+        free(g_points);
+        g_points = nullptr;
+        delete g_doc;
+        g_doc = nullptr;
+        free(g_values);
+        g_values = nullptr;
+        return;
+    }
+
     g_wake = xSemaphoreCreateBinary();
     if (!g_wake) {
         LOGE(TAG, "semaphore creation failed — history hydration disabled");
         free(g_values);
         g_values = nullptr;
+        free(g_points);
+        g_points = nullptr;
+        delete g_doc;
+        g_doc = nullptr;
         return;
     }
 
@@ -328,6 +350,10 @@ void ha_stats_init() {
         g_wake = nullptr;
         free(g_values);
         g_values = nullptr;
+        free(g_points);
+        g_points = nullptr;
+        delete g_doc;
+        g_doc = nullptr;
         return;
     }
     LOGI(TAG, "History hydration ready");
@@ -347,7 +373,8 @@ bool ha_stats_request(data_stream_handle_t handle, uint32_t uid,
                       uint32_t slot_ms, uint16_t slot_count,
                       uint64_t end_bucket) {
     if (!g_task || !g_values) return false;
-    if (!entity_id || !entity_id[0] || slot_count == 0 || slot_ms == 0) return false;
+    if (!entity_id || !entity_id[0] || slot_count == 0 ||
+        slot_count > HA_STATS_RESULT_MAX_SLOTS || slot_ms == 0) return false;
     if (WiFi.status() != WL_CONNECTED) return false;
 
     // The portal owns the live DeviceConfig and publishes it only once
@@ -382,11 +409,24 @@ bool ha_stats_request(data_stream_handle_t handle, uint32_t uid,
 }
 
 bool ha_stats_deliver() {
-    if (g_state != ST_READY) return false;
+    HaStatsJob job;
+    uint16_t value_count = 0;
+    portENTER_CRITICAL(&g_mux);
+    const bool ready = (g_state == ST_READY);
+    if (ready) {
+        job = g_job;
+        value_count = g_value_count;
+        g_state = ST_DELIVERING;
+    }
+    portEXIT_CRITICAL(&g_mux);
+    if (!ready) return false;
 
-    // The task is idle while ST_READY, so g_job / g_values are stable here.
-    data_stream_apply_history(g_job.handle, g_job.uid, g_job.end_bucket,
-                              g_values, g_value_count);
+    if (value_count > 0) {
+        data_stream_apply_history(job.handle, job.uid, job.end_bucket,
+                                  g_values, value_count);
+    } else {
+        data_stream_finish_history(job.handle, job.uid);
+    }
 
     portENTER_CRITICAL(&g_mux);
     g_value_count = 0;

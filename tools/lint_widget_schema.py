@@ -35,8 +35,9 @@ ALLOWLIST = {
     "widget_data_binding_3", "widget_data_binding_4",
 }
 
-# describe names: add("name", ...), addmax("name", ...), and o["name"] = "name"
-RE_ADD = re.compile(r'add(?:max)?\(\s*"([^"]+)"')
+# describe names: add("name", ...), addmax/addrange("name", ...), and
+# o["name"] = "name"
+RE_ADD = re.compile(r'add(?:max|range)?\(\s*"([^"]+)"')
 RE_ONAME = re.compile(r'o\["name"\]\s*=\s*"([^"]+)"')
 # parse keys: btn["key"] — the button config object. Widgets read button config
 # via `btn[...]`; other `obj[...]` accesses (e.g. table row/column payloads) are

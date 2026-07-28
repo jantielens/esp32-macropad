@@ -107,6 +107,10 @@ uint32_t data_stream_uid(data_stream_handle_t handle);
 bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
                                uint64_t end_bucket, const float* values,
                                uint16_t count);
+
+// Mark a stream's hydration complete without merging values. Used when
+// Recorder successfully reports no usable statistics for the requested source.
+bool data_stream_finish_history(data_stream_handle_t handle, uint32_t uid);
 #endif // HAS_HA_HISTORY
 
 #endif // HAS_DISPLAY && HAS_MQTT

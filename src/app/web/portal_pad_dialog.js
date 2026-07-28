@@ -4,6 +4,7 @@
 
 var PAD_SPARKLINE_MAX_WINDOW_SECONDS = 7 * 86400;
 var PAD_SPARKLINE_MAX_POINTS = 1024;
+var PAD_SPARKLINE_MIN_INTERVAL_SECONDS = 0.1;
 
 function padConfirmChanged() {
     var enabled = document.getElementById('pad-edit-confirm').checked;
@@ -56,10 +57,12 @@ function padSetSparklineIntervalSeconds(seconds) {
 function padGetSparklineSlotCount() {
     var requested = Math.ceil(padGetSparklineWindowSeconds() / padGetSparklineIntervalSeconds());
     if (!isFinite(requested)) requested = 60;
-    return Math.max(2, Math.min(PAD_SPARKLINE_MAX_POINTS, requested));
+    var intervalLimit = Math.floor(padGetSparklineWindowSeconds() / PAD_SPARKLINE_MIN_INTERVAL_SECONDS);
+    return Math.max(2, Math.min(PAD_SPARKLINE_MAX_POINTS, intervalLimit, requested));
 }
 
 function padFormatSparklineDuration(seconds) {
+    if (seconds < 1) return Math.round(seconds * 1000) + ' milliseconds';
     if (seconds >= 86400 && seconds % 86400 === 0) return (seconds / 86400) + ' day' + (seconds === 86400 ? '' : 's');
     if (seconds >= 3600 && seconds % 3600 === 0) return (seconds / 3600) + ' hour' + (seconds === 3600 ? '' : 's');
     if (seconds >= 60 && seconds % 60 === 0) return (seconds / 60) + ' minute' + (seconds === 60 ? '' : 's');
@@ -73,7 +76,7 @@ function padSparklineStatHelp(stat) {
 }
 
 function padUpdateSparklineEditor() {
-    var historyAvailable = (window.__device_caps || {}).ha_history !== false;
+    var historyAvailable = (window.__device_caps || {}).ha_history === true;
     document.querySelectorAll('.sparkline-ha-source').forEach(function (el) {
         el.style.display = historyAvailable ? '' : 'none';
     });
@@ -114,7 +117,12 @@ function padUpdateSparklineEditor() {
         slots + ' data points, actual interval ' + padFormatSparklineDuration(Math.round(intervalSeconds)) + '.';
 
     var pointsWarn = document.getElementById('pad-edit-sparkline-points-warn');
-    if (requestedSlots > PAD_SPARKLINE_MAX_POINTS) {
+    var intervalLimit = Math.floor(windowSeconds / PAD_SPARKLINE_MIN_INTERVAL_SECONDS);
+    if (requestedSlots > intervalLimit && intervalLimit < PAD_SPARKLINE_MAX_POINTS) {
+        pointsWarn.textContent = 'The minimum interval is 100 milliseconds. This range is limited to ' +
+            intervalLimit + ' data points.';
+        pointsWarn.style.display = '';
+    } else if (requestedSlots > PAD_SPARKLINE_MAX_POINTS) {
         pointsWarn.textContent = 'This interval needs ' + requestedSlots + ' points. Maximum is ' + PAD_SPARKLINE_MAX_POINTS + '; use at least ' +
             padFormatSparklineDuration(Math.ceil(windowSeconds / PAD_SPARKLINE_MAX_POINTS)) + ' per point.';
         pointsWarn.style.display = '';
@@ -127,7 +135,16 @@ function padUpdateSparklineEditor() {
     }
 
     var warn = document.getElementById('pad-edit-sparkline-ha-warn');
-    warn.style.display = (anyHistoryEnabled && intervalSeconds < 300) ? '' : 'none';
+    var needsHourlyHistory = windowSeconds > 86400 && intervalSeconds < 3600;
+    if (anyHistoryEnabled && needsHourlyHistory) {
+        warn.textContent = 'Home Assistant uses hourly history beyond 24 hours, so backfill needs at least 1 hour per point at this range. Live data still uses the finer interval.';
+        warn.style.display = '';
+    } else if (anyHistoryEnabled && intervalSeconds < 300) {
+        warn.textContent = 'Home Assistant history is stored in 5-minute periods, so backfill is skipped at this resolution. Live data still uses the finer interval.';
+        warn.style.display = '';
+    } else {
+        warn.style.display = 'none';
+    }
 }
 
 function padDialogOpen(col, row) {
