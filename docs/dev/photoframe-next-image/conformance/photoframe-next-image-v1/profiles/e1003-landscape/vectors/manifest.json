@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "profile": "e1003-landscape",
+  "generator": "tools/photoframe-site/gray16.py",
+  "vectors": [
+    {
+      "path": "valid/transport-crc32-zero.bin",
+      "kind": "crc32-only",
+      "valid": true,
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "contentCrc32": "00000000"
+    },
+    {
+      "path": "valid/baseline.jpg",
+      "kind": "jpeg",
+      "valid": true,
+      "size": 23614,
+      "sha256": "f096de48aa44cd01f1fca9680d685d5113a82b17d1af408563e4028059e2a38f",
+      "contentCrc32": "b03e5882",
+      "formatCode": 1,
+      "mediaType": "image/jpeg"
+    },
+    {
+      "path": "invalid/progressive.jpg",
+      "kind": "jpeg",
+      "valid": false,
+      "size": 23192,
+      "sha256": "e5ccca09a51316e7a3e1e05ae5426e572c51b942bd9b794ef3a79b36afa0f1c2",
+      "contentCrc32": "a6801062",
+      "formatCode": 1,
+      "mediaType": "image/jpeg",
+      "expectedError": "jpeg-progressive"
+    },
+    {
+      "path": "invalid/wrong-dimensions.jpg",
+      "kind": "jpeg",
+      "valid": false,
+      "size": 23614,
+      "sha256": "051b7eef647b24c6a92f1451979348a8425fb787c9631a21981ba9e0e91626bf",
+      "contentCrc32": "c8a3be7f",
+      "formatCode": 1,
+      "mediaType": "image/jpeg",
+      "expectedError": "jpeg-geometry"
+    },
+    {
+      "path": "valid/frame.g16p",
+      "kind": "g16p",
+      "valid": true,
+      "size": 1314162,
+      "sha256": "857d8a6222dc82443c89da5abe7931e3895c9e1e5c557c79e8140702170834ed",
+      "contentCrc32": "ad68c191",
+      "formatCode": 2,
+      "mediaType": "application/vnd.photoframe.g16p"
+    },
+    {
+      "path": "invalid/bad-magic.g16p",
+      "kind": "g16p",
+      "valid": false,
+      "size": 1314162,
+      "sha256": "c135a81c26faca6891537ad10d0c767cdc5d726e90b3d4e9546c6ada4c0eaf22",
+      "contentCrc32": "eddb303e",
+      "formatCode": 2,
+      "mediaType": "application/vnd.photoframe.g16p",
+      "expectedError": "g16p-magic"
+    },
+    {
+      "path": "invalid/odd-width.g16p",
+      "kind": "g16p",
+      "valid": false,
+      "size": 1314162,
+      "sha256": "ff37afaab92fa071cd8ce398ce23352e4c1a8c912228df43659e1683ae3aae26",
+      "contentCrc32": "2d41a21c",
+      "formatCode": 2,
+      "mediaType": "application/vnd.photoframe.g16p",
+      "expectedError": "g16p-even-width"
+    },
+    {
+      "path": "invalid/wrong-dimensions.g16p",
+      "kind": "g16p",
+      "valid": false,
+      "size": 1314162,
+      "sha256": "12faf6a4965ca92a0a1834ff3b3f1a928bd1e00e5abd51a895f0df0455fc8cd0",
+      "contentCrc32": "81bc769a",
+      "formatCode": 2,
+      "mediaType": "application/vnd.photoframe.g16p",
+      "expectedError": "g16p-geometry"
+    },
+    {
+      "path": "invalid/wrong-payload-length.g16p",
+      "kind": "g16p",
+      "valid": false,
+      "size": 1314162,
+      "sha256": "b20aeeb8e93dedd459d08c24b9263ceaba6350ccaf601fe6d311c78d4e8de67e",
+      "contentCrc32": "fca4e190",
+      "formatCode": 2,
+      "mediaType": "application/vnd.photoframe.g16p",
+      "expectedError": "g16p-payload-length-field"
+    },
+    {
+      "path": "invalid/bad-payload-crc.g16p",
+      "kind": "g16p",
+      "valid": false,
+      "size": 1314162,
+      "sha256": "d235e7ade874b71477df149068db8ed98574f3a041fd74e6aadd90a001f76fec",
+      "contentCrc32": "15b9ca91",
+      "formatCode": 2,
+      "mediaType": "application/vnd.photoframe.g16p",
+      "expectedError": "g16p-payload-crc32"
+    },
+    {
+      "path": "valid/frame.g16z",
+      "kind": "g16z",
+      "valid": true,
+      "size": 3902,
+      "sha256": "ea0e703f11ba97b41d858f403aab9363e5742e812e3988e4e524c8cbbda7cd36",
+      "contentCrc32": "43b9849b",
+      "formatCode": 3,
+      "mediaType": "application/vnd.photoframe.g16z"
+    },
+    {
+      "path": "invalid/zlib-wrapper.g16z",
+      "kind": "g16z",
+      "valid": false,
+      "size": 5100,
+      "sha256": "18dbfcf725b4cbc2a289534cdc70c3d8d955d0ea2d6b642898025d018e89d626",
+      "contentCrc32": "a25c2a89",
+      "formatCode": 3,
+      "mediaType": "application/vnd.photoframe.g16z",
+      "expectedError": "g16z-raw-deflate"
+    },
+    {
+      "path": "invalid/gzip-wrapper.g16z",
+      "kind": "g16z",
+      "valid": false,
+      "size": 3920,
+      "sha256": "2b78dd27b38f1d677c59cfbdf88dd2792bae366436bde931e8c21fde0b08fb51",
+      "contentCrc32": "916468e2",
+      "formatCode": 3,
+      "mediaType": "application/vnd.photoframe.g16z",
+      "expectedError": "g16z-raw-deflate"
+    },
+    {
+      "path": "invalid/trailing-bytes.g16z",
+      "kind": "g16z",
+      "valid": false,
+      "size": 3903,
+      "sha256": "303e695d6a1bc40da6764d1a84f495149a7bfa7c4a842644fcdaa23f084c4d33",
+      "contentCrc32": "b59c1cc5",
+      "formatCode": 3,
+      "mediaType": "application/vnd.photoframe.g16z",
+      "expectedError": "g16z-trailing-bytes"
+    }
+  ]
+}

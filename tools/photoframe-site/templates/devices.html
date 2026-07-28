@@ -1,14 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Devices · Photoframe{% endblock %}
 {% block content %}
-<h1 class="h3 page-title mb-4">Your devices</h1>
+<div class="d-flex justify-content-between align-items-center mb-4 gap-2">
+  <h1 class="h3 page-title mb-0">Your devices</h1>
+  <a class="btn btn-accent" href="/devices/add">Add device</a>
+</div>
 {% if devices %}
 <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
   {% for device in devices %}
   <div class="col">
     <div class="card app-card h-100">
       <div class="card-body">
-        <h2 class="h5 card-title mb-2">{{ device.id }}</h2>
+        <h2 class="h5 card-title mb-1">{{ device.name }}</h2>
+        <p class="small text-body-secondary mb-2"><code>{{ device.id }}</code></p>
         {% if device.missing %}
         <span class="badge rounded-pill text-bg-danger">Not configured</span>
         {% else %}
@@ -19,7 +23,19 @@
           {% if device.jpeg_quality %}
           <span class="badge rounded-pill text-bg-light border" title="JPEG quality">Q{{ device.jpeg_quality }}</span>
           {% endif %}
+          <span class="badge {{ 'text-bg-success' if device.token_status == 'active' else 'text-bg-danger' }}"
+                title="Token status">Token {{ device.token_status }}</span>
+          <span class="badge {{ 'text-bg-success' if device.presence == 'online' else 'text-bg-warning' if device.presence == 'stale' else 'text-bg-secondary' }}"
+                title="Online means seen within the last two hours">{{ device.presence|replace('-', ' ')|title }}</span>
         </div>
+        {% if device.current_image %}
+        <div class="mt-3">
+          <img src="/thumb?device_id={{ device.id }}&image_id={{ device.current_image.id }}"
+               class="rounded bg-dark w-100" style="aspect-ratio:4/3; object-fit:contain;"
+               alt="Current image">
+          <p class="small text-body-secondary mt-1 mb-0">Current: {{ device.current_image.caption or device.current_image.id }}</p>
+        </div>
+        {% endif %}
         <dl class="row small text-body-secondary mb-0 mt-3 g-0">
           <dt class="col-7 fw-normal">Featured spacing</dt>
           <dd class="col-5 text-end mb-1">
@@ -40,7 +56,7 @@
         <a class="btn btn-sm btn-accent" href="/photos?device_id={{ device.id }}">Gallery</a>
         <a class="btn btn-sm btn-accent-soft" href="/upload?device_id={{ device.id }}">Upload</a>
         {% if not device.missing %}
-        <a class="btn btn-sm btn-outline-secondary ms-auto" href="/settings?device_id={{ device.id }}">Config</a>
+        <a class="btn btn-sm btn-outline-secondary ms-auto" href="/settings?device_id={{ device.id }}">Settings</a>
         {% endif %}
       </div>
     </div>

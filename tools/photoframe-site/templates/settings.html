@@ -1,18 +1,56 @@
 {% extends "base.html" %}
-{% block title %}Config · {{ device_id }}{% endblock %}
+{% block title %}Settings · {{ device_id }}{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
   <div>
     <a href="/" class="ghost-link small">&larr; Devices</a>
-    <h1 class="h3 page-title mb-0">{{ device_id }} · Config</h1>
+    <h1 class="h3 page-title mb-0">{{ display_name }} · Settings</h1>
+    <p class="small text-body-secondary mb-0"><code>{{ device_id }}</code></p>
   </div>
   <a class="btn btn-accent-soft" href="/photos?device_id={{ device_id }}">Gallery</a>
 </div>
 
 <section class="mb-4" style="max-width: 44rem;">
   <div class="section-card p-3 p-md-4">
+    <h2 class="eyebrow text-body-secondary mb-3">Device details</h2>
+    {% if profile_error %}<div class="alert alert-danger" role="alert">{{ profile_error }}</div>{% endif %}
+    <form method="post" action="/devices/{{ device_id }}/edit" class="m-0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="control_nonce" value="{{ edit_nonce }}">
+      <div class="mb-3">
+        <label class="form-label" for="display-name">Device name</label>
+        <input class="form-control" id="display-name" name="display_name"
+               value="{{ profile_values.display_name }}" maxlength="100" required>
+        <div class="form-text">Immutable device ID: <code>{{ device_id }}</code></div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-sm-6">
+          <label class="form-label" for="width">Width</label>
+          <input class="form-control" type="number" id="width" name="width"
+                 value="{{ profile_values.width }}" min="1" max="10000" required>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label" for="height">Height</label>
+          <input class="form-control" type="number" id="height" name="height"
+                 value="{{ profile_values.height }}" min="1" max="10000" required>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="format-codes">Format codes</label>
+        <input class="form-control" id="format-codes" name="format_codes"
+               value="{{ profile_values.format_codes }}" pattern="[123](,[123])*" required>
+        <div class="form-text">Ordered preference: 1 = JPEG, 2 = G16P, 3 = G16Z. E1003 uses 3,2.</div>
+      </div>
+      <button class="btn btn-sm btn-accent" type="submit">Save device details</button>
+    </form>
+  </div>
+</section>
+
+<section class="mb-4" style="max-width: 44rem;">
+  <div class="section-card p-3 p-md-4">
     <h2 class="eyebrow text-body-secondary mb-3">Rotation cadence</h2>
     <form method="post" action="/settings" class="m-0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="device_id" value="{{ device_id }}">
 
       <div class="mb-3">
@@ -74,4 +112,122 @@
     </form>
   </div>
 </section>
+
+<section class="mb-4" style="max-width: 44rem;">
+  <div class="section-card p-3 p-md-4">
+    <h2 class="eyebrow text-body-secondary mb-3">Device credential</h2>
+    <div class="mb-3">
+      <label class="form-label small mb-1 fw-semibold" for="token-fingerprint">Token fingerprint</label>
+      <input class="form-control form-control-sm font-monospace" id="token-fingerprint"
+             value="{{ token_fingerprint }}" readonly style="max-width: 18rem;">
+    </div>
+    {% if token_error %}
+    <div class="alert alert-danger py-2" role="alert">{{ token_error }}</div>
+    {% endif %}
+    {% if frame_token %}
+    <div class="mb-3">
+      <label class="form-label small mb-1 fw-semibold" for="frame-token">Device token</label>
+      <div class="input-group">
+        <input class="form-control form-control-sm font-monospace" id="frame-token"
+               value="{{ frame_token }}" readonly>
+        <button class="btn btn-sm btn-outline-secondary" id="copy-frame-token" type="button">Copy</button>
+      </div>
+    </div>
+    {% else %}
+    <form method="post" action="/settings/token/reveal" class="m-0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="device_id" value="{{ device_id }}">
+      <input type="hidden" name="token_nonce" value="{{ token_nonce }}">
+      <div class="mb-3">
+        <label class="form-label small mb-1 fw-semibold" for="token-password">Current password</label>
+        <input type="password" class="form-control form-control-sm" id="token-password"
+               name="password" autocomplete="current-password" required style="max-width: 22rem;">
+      </div>
+      <button class="btn btn-sm btn-accent-soft" type="submit">Reveal token</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+<section class="mb-4" style="max-width: 44rem;">
+  <div class="section-card p-3 p-md-4">
+    <h2 class="eyebrow text-body-secondary mb-3">Export device</h2>
+    <div class="alert alert-warning py-2 small">
+      Device archives are unencrypted and contain this device's bearer token. Store the download securely.
+    </div>
+    {% if export_error %}<div class="alert alert-danger py-2" role="alert">{{ export_error }}</div>{% endif %}
+    <p class="small">Download this device's profile, credential, gallery, and state. The archive can restore or transfer the device through <strong>Add device</strong>.</p>
+    <form method="post" action="/devices/export" class="m-0"
+          onsubmit="return confirm('Download an unencrypted archive containing this device token?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="device_id" value="{{ device_id }}">
+      <input type="hidden" name="export_nonce" value="{{ export_nonce }}">
+      <label class="form-label small" for="device-export-password">Current password</label>
+      <input class="form-control form-control-sm mb-3" type="password" id="device-export-password"
+             name="password" autocomplete="current-password" required style="max-width:22rem;">
+      <button class="btn btn-sm btn-outline-warning" type="submit">Download device archive</button>
+    </form>
+  </div>
+</section>
+<section class="mb-4" style="max-width: 44rem;">
+  <div class="section-card p-3 p-md-4">
+    <h2 class="eyebrow text-body-secondary mb-3">Rotate credential</h2>
+    <p class="small text-body-secondary">Rotation invalidates the old token immediately. You can reveal the new token later after confirming your current password.</p>
+    <form method="post" action="/settings/token/rotate" class="m-0"
+          onsubmit="return confirm('Rotate this device token now?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="device_id" value="{{ device_id }}">
+      <input type="hidden" name="management_nonce" value="{{ management_nonce }}">
+      <label class="form-label small" for="rotate-password">Current password</label>
+      <input type="password" class="form-control form-control-sm mb-3" id="rotate-password"
+             name="password" autocomplete="current-password" required style="max-width:22rem;">
+      <button class="btn btn-sm btn-outline-warning" type="submit">Rotate token</button>
+    </form>
+  </div>
+</section>
+
+<section class="mb-4" style="max-width: 44rem;">
+  <div class="section-card border-danger p-3 p-md-4">
+    <h2 class="eyebrow text-danger mb-3">Remove device</h2>
+    <p class="small">This immediately deletes the device, token, settings, queue, and complete gallery. There is no undo.</p>
+    {% if remove_error %}<div class="alert alert-danger py-2" role="alert">{{ remove_error }}</div>{% endif %}
+    <form method="post" action="/devices/remove" class="m-0"
+          onsubmit="return confirm('Permanently remove this device and gallery?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="device_id" value="{{ device_id }}">
+      <input type="hidden" name="management_nonce" value="{{ management_nonce }}">
+      <div class="mb-2">
+        <label class="form-label small" for="remove-confirm">Enter <code>{{ device_id }}</code></label>
+        <input class="form-control form-control-sm" id="remove-confirm" name="confirm" required style="max-width:22rem;">
+      </div>
+      <div class="mb-3">
+        <label class="form-label small" for="remove-password">Current password</label>
+        <input type="password" class="form-control form-control-sm" id="remove-password"
+               name="password" autocomplete="current-password" required style="max-width:22rem;">
+      </div>
+      <button class="btn btn-sm btn-danger" type="submit">Remove permanently</button>
+    </form>
+  </div>
+</section>
+{% if frame_token %}
+<script>
+  document.getElementById('copy-frame-token').addEventListener('click', async function () {
+    const input = document.getElementById('frame-token');
+    try {
+      let copied = true;
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(input.value);
+      } else {
+        input.select();
+        input.setSelectionRange(0, input.value.length);
+        copied = document.execCommand('copy');
+      }
+      this.textContent = copied ? 'Copied' : 'Copy failed';
+    } catch (_error) {
+      this.textContent = 'Copy failed';
+    }
+  });
+  const deviceId = document.querySelector('input[name="device_id"]').value;
+  history.replaceState(null, '', '/settings?device_id=' + encodeURIComponent(deviceId));
+</script>
+{% endif %}
 {% endblock %}

@@ -3,7 +3,7 @@
 
 Standalone (no pytest needed): run `python3 tests/test_selection.py`. Exercises
 temp_slot_spacing, _lru_id, and bucket_schedule_pick -- the pure functions that
-decide what /api/next serves -- without any Azure/blob I/O.
+decide what /api/v1/next serves without filesystem I/O.
 """
 
 from __future__ import annotations

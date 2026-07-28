@@ -1,0 +1,232 @@
+openapi: 3.1.0
+info:
+  title: Photoframe Next Image HTTP Binding
+  version: 1.0.0
+  license:
+    name: MIT
+    identifier: MIT
+  description: >-
+    This document describes the HTTP binding of the photoframe next-image
+    contract. The normative contract, including all behavioral requirements and
+    the G16P/G16Z byte formats, is
+    docs/dev/photoframe-next-image/contract.md, which is authoritative wherever
+    this document is silent or ambiguous.
+servers:
+  - url: "{scheme}://{host}/api/v1"
+    description: Photoframe next-image service
+    variables:
+      scheme:
+        default: https
+        enum:
+          - http
+          - https
+      host:
+        default: photoframe.local
+paths:
+  /next:
+    get:
+      operationId: getNextImage
+      summary: Get the desired display state
+      description: >-
+        Returns exact transport bytes inline, redirects to exact transport
+        bytes, or tells the frame to keep its current display. Request handling,
+        selection, redirects, validation, caching, and retry behavior are
+        normative only in contract.md.
+      parameters:
+        - $ref: "#/components/parameters/CurrentImageKey"
+        - $ref: "#/components/parameters/CurrentContentCrc32"
+      responses:
+        "200":
+          $ref: "#/components/responses/InlineImage"
+        "204":
+          $ref: "#/components/responses/KeepDisplay"
+        "302":
+          $ref: "#/components/responses/RedirectImage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UnsupportedMajor"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        5XX:
+          $ref: "#/components/responses/TemporaryFailure"
+      security:
+        - frameToken: []
+components:
+  securitySchemes:
+    frameToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: >-
+        Opaque frame credential. The token identifies one frame and binds its
+        supported formats and exact panel geometry.
+  schemas:
+    ImageKey:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "^[A-Za-z0-9_-]+$"
+      description: Stable opaque logical-image identifier.
+    ContentCrc32:
+      type: string
+      pattern: "^[0-9a-f]{8}$"
+      description: >-
+        CRC-32 of the exact transport bytes, encoded as eight lowercase
+        hexadecimal digits. The value 00000000 is valid.
+    BinaryImage:
+      type: string
+      format: binary
+      description: >-
+        Exact transport bytes. Binary layouts and validation requirements are
+        defined only in contract.md.
+  parameters:
+    CurrentImageKey:
+      name: Photoframe-Current-Image-Key
+      in: header
+      required: false
+      description: >-
+        Advisory key of the last image successfully displayed. The key and CRC
+        headers form one optional pair; contract.md defines malformed and partial
+        pair handling.
+      schema:
+        $ref: "#/components/schemas/ImageKey"
+    CurrentContentCrc32:
+      name: Photoframe-Current-Content-CRC32
+      in: header
+      required: false
+      description: >-
+        Advisory transport CRC of the last image successfully displayed. The key
+        and CRC headers form one optional pair.
+      schema:
+        $ref: "#/components/schemas/ContentCrc32"
+  headers:
+    ImageKey:
+      required: true
+      description: Stable opaque logical-image identifier.
+      schema:
+        $ref: "#/components/schemas/ImageKey"
+    ContentCrc32:
+      required: true
+      description: CRC-32 of the exact transport bytes.
+      schema:
+        $ref: "#/components/schemas/ContentCrc32"
+    CacheControl:
+      required: true
+      description: Prevents shared-cache reuse and requires revalidation.
+      schema:
+        type: string
+        const: private, no-cache
+    VaryAuthorization:
+      required: true
+      description: Separates cached responses by Authorization.
+      schema:
+        type: string
+        const: Authorization
+    IdentityContentEncoding:
+      required: false
+      description: If present, the only permitted HTTP content coding is identity.
+      schema:
+        type: string
+        const: identity
+    Location:
+      required: true
+      description: Delivery reference for the exact transport content.
+      schema:
+        type: string
+        format: uri-reference
+    WwwAuthenticate:
+      required: true
+      description: Bearer authentication challenge.
+      schema:
+        type: string
+        const: Bearer
+    AllowGet:
+      required: true
+      description: The only method supported by this operation.
+      schema:
+        type: string
+        const: GET
+  responses:
+    InlineImage:
+      description: Exact desired image transport bytes.
+      headers:
+        Photoframe-Image-Key:
+          $ref: "#/components/headers/ImageKey"
+        Photoframe-Content-CRC32:
+          $ref: "#/components/headers/ContentCrc32"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"
+        Content-Encoding:
+          $ref: "#/components/headers/IdentityContentEncoding"
+      content:
+        image/jpeg:
+          schema:
+            $ref: "#/components/schemas/BinaryImage"
+        application/vnd.photoframe.g16p:
+          schema:
+            $ref: "#/components/schemas/BinaryImage"
+        application/vnd.photoframe.g16z:
+          schema:
+            $ref: "#/components/schemas/BinaryImage"
+    RedirectImage:
+      description: >-
+        Manual redirect to exact transport content. The frame captures image
+        metadata from this response and fetches Location without its bearer
+        token. Automatic redirect following is non-conforming.
+      headers:
+        Location:
+          $ref: "#/components/headers/Location"
+        Photoframe-Image-Key:
+          $ref: "#/components/headers/ImageKey"
+        Photoframe-Content-CRC32:
+          $ref: "#/components/headers/ContentCrc32"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"
+    KeepDisplay:
+      description: >-
+        Keep the current display exactly as it is. This response has no body,
+        image metadata, or retry hint.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"
+    Unauthorized:
+      description: >-
+        Bearer token is missing or invalid. Missing, unknown, and revoked tokens
+        produce identical responses and do not contain image metadata.
+      headers:
+        WWW-Authenticate:
+          $ref: "#/components/headers/WwwAuthenticate"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"
+    UnsupportedMajor:
+      description: The requested endpoint major is unsupported.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"
+    MethodNotAllowed:
+      description: The request method is not GET.
+      headers:
+        Allow:
+          $ref: "#/components/headers/AllowGet"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"
+    TemporaryFailure:
+      description: Temporary service failure. The response has no image metadata.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"

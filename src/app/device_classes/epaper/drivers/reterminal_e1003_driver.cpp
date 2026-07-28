@@ -21,6 +21,7 @@
 
 #include "device_classes/epaper/epaper_driver.h"
 #include "device_classes/epaper/epaper_http.h"
+#include "device_classes/epaper/epaper_media_validation.h"
 #include "device_classes/epaper/epaper_sd_cache.h"
 #include "device_classes/epaper/epaper_timing.h"
 #include "log_manager.h"
@@ -120,17 +121,6 @@
 #define EPAPER_SPI_HZ 14000000
 #endif
 
-// G16P payload integrity check. The server stamps a CRC32 over the packed
-// nibble payload at upload time; the firmware can re-verify it before pushing
-// the frame to the panel. The image is delivered over HTTPS, whose AEAD
-// already authenticates every byte end-to-end, so this CRC is largely
-// redundant for transport corruption and costs a full ~1.3 MB pass (~290 ms)
-// on the wake hot path. Disabled by default for faster wakes; flip to 1 to
-// re-enable (e.g. when serving over plain HTTP or chasing a PSRAM bit-rot bug).
-#ifndef EPAPER_VERIFY_CRC32
-#define EPAPER_VERIFY_CRC32 0
-#endif
-
 namespace {
 
 // IT8951 command set (subset used by this driver).
@@ -227,7 +217,19 @@ SPIClass s_spi(HSPI);
 SPISettings s_spi_set(EPAPER_SPI_HZ, MSBFIRST, SPI_MODE0);
 bool s_began = false;
 bool s_power_on = false;  // IT8951 power state (SYS_RUN vs sleep); mirrors Seeed's _power_is_on guard
+bool s_recovery_attempted = false;
 uint32_t s_img_buf_addr = 0;
+
+// Without retained counters, a 100-cycle soak cannot distinguish 100 clean
+// wakes from 100 wakes where six controller recoveries succeeded silently.
+RTC_DATA_ATTR EpaperDriverDiagnostics s_diagnostics = {};
+EpaperHrdyPhase s_hrdy_phase = EpaperHrdyPhase::None;
+uint32_t s_wake_hrdy_timeout_count = 0;
+uint32_t s_wake_hrdy_wait_ms = 0;
+uint32_t s_wake_recovery_count = 0;
+uint32_t s_wake_recovery_success_count = 0;
+uint32_t s_wake_recovery_failure_count = 0;
+bool s_wake_diagnostics_logged = false;
 
 const GFXfont* const s_font_table[3] = {
 		EPAPER_FONT_SMALL_PTR,   // EPAPER_FONT_SMALL
@@ -236,103 +238,204 @@ const GFXfont* const s_font_table[3] = {
 };
 
 // --- IT8951 low-level SPI helpers ------------------------------------------
-inline void wait_hrdy() {
+constexpr uint32_t HRDY_COMMAND_TIMEOUT_MS = 250;
+constexpr uint32_t HRDY_STARTUP_TIMEOUT_MS = 3000;
+
+bool wait_hrdy(uint32_t timeout_ms = HRDY_COMMAND_TIMEOUT_MS) {
 		// Bounded HRDY wait. The IT8951 normally raises HRDY within a few ms; an
 		// unbounded spin here can deadlock the whole device if BUSY is stuck LOW
 		// -- e.g. the controller is already asleep (a second CMD_SLEEP never gets
 		// acked) or an inserted MicroSD shares the SPI bus and holds the line.
 		const uint32_t start = millis();
-		const uint32_t timeout_ms = 3000;
 		while (digitalRead(EPAPER_PIN_BUSY) == LOW) {
 				if (millis() - start >= timeout_ms) {
+						const uint32_t waited = millis() - start;
+						++s_diagnostics.hrdy_timeout_count;
+						s_diagnostics.hrdy_wait_ms += waited;
+						s_diagnostics.last_hrdy_timeout_phase = s_hrdy_phase;
+						++s_wake_hrdy_timeout_count;
+						s_wake_hrdy_wait_ms += waited;
 						LOGW("Epaper", "wait_hrdy timeout (%lums); BUSY stuck LOW", (unsigned long)timeout_ms);
-						return;
+						return false;
 				}
 				delay(1);
 		}
+		const uint32_t waited = millis() - start;
+		s_diagnostics.hrdy_wait_ms += waited;
+		s_wake_hrdy_wait_ms += waited;
+		return true;
 }
 
-void write_cmd16(uint16_t cmd) {
-		wait_hrdy();
+bool write_cmd16(uint16_t cmd) {
+		if (!wait_hrdy()) return false;
 		s_spi.beginTransaction(s_spi_set);
 		digitalWrite(EPAPER_PIN_CS, LOW);
 		s_spi.transfer16(0x6000);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 		s_spi.transfer16(cmd);
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		s_spi.endTransaction();
+		return true;
 }
 
-void write_data16(uint16_t data) {
-		wait_hrdy();
+bool write_data16(uint16_t data) {
+		if (!wait_hrdy()) return false;
 		s_spi.beginTransaction(s_spi_set);
 		digitalWrite(EPAPER_PIN_CS, LOW);
 		s_spi.transfer16(0x0000);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 		s_spi.transfer16(data);
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		s_spi.endTransaction();
+		return true;
 }
 
-void write_reg(uint16_t reg, uint16_t val) {
-		write_cmd16(CMD_REG_WR);
-		write_data16(reg);
-		write_data16(val);
+bool write_reg(uint16_t reg, uint16_t val) {
+		return write_cmd16(CMD_REG_WR) && write_data16(reg) && write_data16(val);
 }
 
-void read_dev_info() {
-		write_cmd16(0x0302);
+bool read_dev_info() {
+		if (!write_cmd16(0x0302) || !wait_hrdy()) return false;
 		uint16_t buf[20];
-		wait_hrdy();
 		s_spi.beginTransaction(s_spi_set);
 		digitalWrite(EPAPER_PIN_CS, LOW);
 		s_spi.transfer16(0x1000);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 		s_spi.transfer16(0);
 		for (int i = 0; i < 20; i++) buf[i] = s_spi.transfer16(0);
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		s_spi.endTransaction();
 		s_img_buf_addr = ((uint32_t)buf[3] << 16) | buf[2];
+		if (buf[0] != EPAPER_PANEL_W || buf[1] != EPAPER_PANEL_H ||
+				s_img_buf_addr == 0 || s_img_buf_addr == UINT32_MAX) {
+				LOGW("Epaper", "IT8951 invalid device info %ux%u, imgBuf=0x%08lX",
+						 (unsigned)buf[0], (unsigned)buf[1], (unsigned long)s_img_buf_addr);
+				return false;
+		}
 		LOGI("Epaper", "IT8951 panel %ux%u, imgBuf=0x%08lX",
 				 (unsigned)buf[0], (unsigned)buf[1], (unsigned long)s_img_buf_addr);
+		return true;
 }
 
-void set_vcom(uint16_t mv) {
-		write_cmd16(0x0039);
-		write_data16(0x0002);  // sub-command 0x0002 = SET VCOM (0x0001 = get); matches Seeed reference
-		write_data16(mv);
+bool set_vcom(uint16_t mv) {
+		return write_cmd16(0x0039) &&
+				write_data16(0x0002) &&  // sub-command 0x0002 = SET VCOM (0x0001 = get)
+				write_data16(mv);
 }
 
-void set_temperature(uint16_t t) {
-		write_cmd16(0x0040);
-		write_data16(0x0001);
-		write_data16(t);
+bool set_temperature(uint16_t t) {
+		return write_cmd16(0x0040) && write_data16(0x0001) && write_data16(t);
+}
+
+bool initialize_controller(bool power_cycle) {
+		s_hrdy_phase = power_cycle ? EpaperHrdyPhase::Recovery : EpaperHrdyPhase::Initialization;
+		digitalWrite(EPAPER_PIN_CS, HIGH);
+#ifdef EPAPER_SD_CS_PIN
+		pinMode(EPAPER_SD_CS_PIN, OUTPUT);
+		digitalWrite(EPAPER_SD_CS_PIN, HIGH);
+#endif
+		s_spi.end();
+		if (power_cycle) {
+			digitalWrite(EPAPER_PIN_ITE_ENABLE, LOW);
+			digitalWrite(EPAPER_PIN_TFT_ENABLE, LOW);
+			delay(100);
+		}
+		digitalWrite(EPAPER_PIN_TFT_ENABLE, HIGH);
+		digitalWrite(EPAPER_PIN_ITE_ENABLE, HIGH);
+		delay(10);
+		s_spi.begin(EPAPER_PIN_SCK, EPAPER_PIN_MISO, EPAPER_PIN_MOSI, -1);
+
+#if EPAPER_PIN_RES >= 0
+		pinMode(EPAPER_PIN_RES, OUTPUT);
+		digitalWrite(EPAPER_PIN_RES, HIGH);
+		delay(10);
+		digitalWrite(EPAPER_PIN_RES, LOW);
+		delay(10);
+		digitalWrite(EPAPER_PIN_RES, HIGH);
+		delay(10);
+#endif
+		if (!wait_hrdy(HRDY_STARTUP_TIMEOUT_MS)) return false;
+		delay(100);
+		if (!write_cmd16(CMD_SYS_RUN)) return false;
+		delay(100);
+		if (!read_dev_info() || !set_vcom(EPAPER_VCOM_MV) ||
+				!wait_hrdy(HRDY_STARTUP_TIMEOUT_MS)) return false;
+		s_power_on = true;
+		return true;
+}
+
+bool recover_controller() {
+		if (s_recovery_attempted) return false;
+		s_recovery_attempted = true;
+		++s_diagnostics.recovery_count;
+		++s_wake_recovery_count;
+		LOGW("Epaper", "IT8951 not ready; attempting one panel recovery");
+		s_power_on = false;
+		s_img_buf_addr = 0;
+		const bool ok = initialize_controller(true);
+		if (ok) {
+				++s_diagnostics.recovery_success_count;
+				++s_wake_recovery_success_count;
+		} else {
+				++s_diagnostics.recovery_failure_count;
+				++s_wake_recovery_failure_count;
+		}
+		LOGI("Epaper", "IT8951 panel recovery %s", ok ? "succeeded" : "failed");
+		return ok;
+}
+
+void log_wake_diagnostics() {
+		if (s_wake_diagnostics_logged ||
+				(s_wake_hrdy_timeout_count == 0 && s_wake_recovery_count == 0)) return;
+		s_wake_diagnostics_logged = true;
+		LOGW("Epaper", "HRDY wake summary: timeouts=%lu phase=%s wait=%lums recovery=%lu/%lu/%lu",
+				(unsigned long)s_wake_hrdy_timeout_count,
+				epaper_driver_hrdy_phase_name(s_diagnostics.last_hrdy_timeout_phase),
+				(unsigned long)s_wake_hrdy_wait_ms,
+				(unsigned long)s_wake_recovery_count,
+				(unsigned long)s_wake_recovery_success_count,
+				(unsigned long)s_wake_recovery_failure_count);
 }
 
 // Wake the IT8951 from sleep/standby before any draw. Guarded by s_power_on so
 // a redundant call is a cheap no-op -- mirrors Seeed's _powerOnIT8951(). Without
 // this, a draw after epaper_driver_sleep() would issue commands to a controller
 // that never raises HRDY, deadlocking wait_hrdy().
-void power_on() {
-		if (s_power_on) return;
+bool power_on() {
+		if (s_power_on) return true;
+		s_hrdy_phase = EpaperHrdyPhase::PowerOn;
 		const uint32_t t0 = millis();
 		digitalWrite(EPAPER_PIN_TFT_ENABLE, HIGH);
 		digitalWrite(EPAPER_PIN_ITE_ENABLE, HIGH);
 		delay(10);
-		write_cmd16(CMD_SYS_RUN);
-		wait_hrdy();
+		if (!wait_hrdy(HRDY_STARTUP_TIMEOUT_MS) ||
+				!write_cmd16(CMD_SYS_RUN) || !wait_hrdy(HRDY_STARTUP_TIMEOUT_MS)) return false;
 		s_power_on = true;
 		LOGI("Epaper", "IT8951 power_on %lu ms", (unsigned long)(millis() - t0));
+		return true;
 }
 
 // Upload the 4 bpp framebuffer to the IT8951 in its native 4 BPP little-endian
 // format (IT8951_4BPP / L_ENDIAN), matching the Seeed reference's tconLoadImage.
 // The canvas already holds packed 4 bpp pixels, so this pushes half the bytes of
 // an 8 BPP upload. The row is X-mirrored to match the panel scan orientation.
-void upload_frame() {
-		write_reg(REG_LISAR,     (uint16_t)(s_img_buf_addr & 0xFFFF));
-		write_reg(REG_LISAR + 2, (uint16_t)(s_img_buf_addr >> 16));
-		set_temperature(16);
+bool upload_frame() {
+		s_hrdy_phase = EpaperHrdyPhase::Upload;
+		if (!write_reg(REG_LISAR, (uint16_t)(s_img_buf_addr & 0xFFFF)) ||
+				!write_reg(REG_LISAR + 2, (uint16_t)(s_img_buf_addr >> 16)) ||
+				!set_temperature(16)) return false;
 
 		uint16_t args[5];
 		args[0] = (IT8951_L_ENDIAN << 8) | (IT8951_4BPP << 4) | IT8951_ROTATE_0;
@@ -340,15 +443,25 @@ void upload_frame() {
 		args[2] = 0;
 		args[3] = EPAPER_PANEL_W;
 		args[4] = EPAPER_PANEL_H;
-		write_cmd16(CMD_LD_IMG_AREA);
-		for (int i = 0; i < 5; i++) write_data16(args[i]);
+		if (!write_cmd16(CMD_LD_IMG_AREA)) return false;
+		for (int i = 0; i < 5; i++) {
+				if (!write_data16(args[i])) return false;
+		}
 
 		const uint32_t t0 = millis();
 		s_spi.beginTransaction(s_spi_set);
 		digitalWrite(EPAPER_PIN_CS, LOW);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 		s_spi.transfer16(0x0000);
-		wait_hrdy();
+		if (!wait_hrdy()) {
+				digitalWrite(EPAPER_PIN_CS, HIGH);
+				s_spi.endTransaction();
+				return false;
+		}
 
 		const uint16_t WB = EPAPER_PANEL_W / 2;  // packed 4 bpp bytes per row
 		const uint16_t NW = WB / 2;              // 16-bit words per row (4 px/word)
@@ -373,24 +486,27 @@ void upload_frame() {
 
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		s_spi.endTransaction();
-		write_cmd16(CMD_LD_IMG_END);
-		wait_hrdy();
+		if (!write_cmd16(CMD_LD_IMG_END) || !wait_hrdy()) return false;
 		LOGI("Epaper", "Gray16 upload %lu ms", (unsigned long)(millis() - t0));
+		return true;
 }
 
-void refresh_gc16() {
+bool refresh_gc16() {
+		s_hrdy_phase = EpaperHrdyPhase::Refresh;
 		const uint32_t t0 = millis();
-		write_cmd16(CMD_DPY_AREA);
-		wait_hrdy(); write_data16(0);
-		wait_hrdy(); write_data16(0);
-		wait_hrdy(); write_data16(EPAPER_PANEL_W);
-		wait_hrdy(); write_data16(EPAPER_PANEL_H);
-		wait_hrdy(); write_data16(2);  // mode 2 = GC16
+		if (!write_cmd16(CMD_DPY_AREA) ||
+				!write_data16(0) || !write_data16(0) ||
+				!write_data16(EPAPER_PANEL_W) || !write_data16(EPAPER_PANEL_H) ||
+				!write_data16(2)) return false;  // mode 2 = GC16
 		while (digitalRead(EPAPER_PIN_BUSY) == LOW) {
-				if (millis() - t0 > 15000) break;
+				if (millis() - t0 > 15000) {
+						LOGW("Epaper", "Gray16 GC16 refresh timeout (15000ms)");
+						return false;
+				}
 				delay(100);
 		}
 		LOGI("Epaper", "Gray16 GC16 refresh %lu ms", (unsigned long)(millis() - t0));
+		return true;
 }
 
 // --- JPEG decode → framebuffer ---------------------------------------------
@@ -427,20 +543,7 @@ static inline uint32_t read_le32(const uint8_t* p) {
 				((uint32_t)p[3] << 24);
 }
 
-#if EPAPER_VERIFY_CRC32
-uint32_t crc32_update(uint32_t crc, const uint8_t* data, size_t len) {
-		crc = ~crc;
-		for (size_t i = 0; i < len; i++) {
-				crc ^= data[i];
-				for (uint8_t bit = 0; bit < 8; bit++) {
-						crc = (crc >> 1) ^ (0xEDB88320UL & (uint32_t)-(int32_t)(crc & 1));
-				}
-		}
-		return ~crc;
-}
-#endif
-
-bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
+bool load_g16p_to_canvas(const uint8_t* data, size_t len, bool strict) {
 		if (!data || len < G16P_HEADER_SIZE) return false;
 		if (memcmp(data, G16P_MAGIC, sizeof(G16P_MAGIC)) != 0) return false;
 		if (!s_canvas || !s_canvas->buffer()) return false;
@@ -462,19 +565,14 @@ bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
 		}
 
 		const uint8_t* payload = data + G16P_HEADER_SIZE;
-#if EPAPER_VERIFY_CRC32
 		const uint32_t t_crc = millis();
-		const uint32_t actual_crc = crc32_update(0, payload, G16P_PAYLOAD_SIZE);
-		if (actual_crc != expected_crc) {
-				LOGW("Epaper", "G16P CRC mismatch expected=0x%08lX actual=0x%08lX",
-						 (unsigned long)expected_crc, (unsigned long)actual_crc);
+		if (strict && epaper_validate_g16p(data, len, EPAPER_PANEL_W, EPAPER_PANEL_H) !=
+				EpaperMediaValidation::Valid) {
+				LOGW("Epaper", "G16P strict validation failed (expected payload CRC=0x%08lX)",
+						(unsigned long)expected_crc);
 				return false;
 		}
-		const uint32_t crc_ms = millis() - t_crc;
-#else
-		(void)expected_crc;
-		const uint32_t crc_ms = 0;  // CRC verification disabled (see EPAPER_VERIFY_CRC32)
-#endif
+		const uint32_t crc_ms = strict ? millis() - t_crc : 0;
 
 		const uint32_t t_cpy = millis();
 		memcpy(s_canvas->buffer(), payload, G16P_PAYLOAD_SIZE);
@@ -493,7 +591,8 @@ bool load_g16p_to_canvas(const uint8_t* data, size_t len) {
 // too large for the loop task stack, so it is heap-allocated rather than using
 // the stack-based tinfl_decompress_mem_to_mem() helper. On success fills
 // *out_buf/*out_len (caller frees with heap_caps_free).
-bool inflate_g16z(const uint8_t* data, size_t len, uint8_t** out_buf, size_t* out_len) {
+bool inflate_g16z(const uint8_t* data, size_t len, uint8_t** out_buf, size_t* out_len,
+		bool strict) {
 		*out_buf = nullptr;
 		*out_len = 0;
 		if (!data || len <= sizeof(G16Z_MAGIC)) return false;
@@ -524,9 +623,14 @@ bool inflate_g16z(const uint8_t* data, size_t len, uint8_t** out_buf, size_t* ou
 				TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
 		heap_caps_free(decomp);
 
-		if (st != TINFL_STATUS_DONE || out_bytes != G16P_TOTAL_SIZE) {
-				LOGW("Epaper", "G16Z inflate failed (status=%d produced=%u expected=%u)",
-						 (int)st, (unsigned)out_bytes, (unsigned)G16P_TOTAL_SIZE);
+		const EpaperMediaValidation completion = epaper_validate_g16z_completion(
+				(int)st, (int)TINFL_STATUS_DONE, in_bytes, len - sizeof(G16Z_MAGIC),
+				out_bytes, G16P_TOTAL_SIZE);
+		if (completion == EpaperMediaValidation::Malformed ||
+				(strict && completion != EpaperMediaValidation::Valid)) {
+				LOGW("Epaper", "G16Z inflate failed (status=%d consumed=%u/%u produced=%u/%u)",
+						 (int)st, (unsigned)in_bytes, (unsigned)(len - sizeof(G16Z_MAGIC)),
+						 (unsigned)out_bytes, (unsigned)G16P_TOTAL_SIZE);
 				heap_caps_free(dst);
 				return false;
 		}
@@ -751,6 +855,8 @@ bool epaper_driver_begin() {
 		pinMode(EPAPER_PIN_CS, OUTPUT);
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		pinMode(EPAPER_PIN_BUSY, INPUT);
+		s_diagnostics.initial_hrdy_pin_state = digitalRead(EPAPER_PIN_BUSY) == HIGH ? 1 : 0;
+		s_diagnostics.initial_hrdy_pin_state_valid = true;
 		pinMode(EPAPER_PIN_TFT_ENABLE, OUTPUT);
 		digitalWrite(EPAPER_PIN_TFT_ENABLE, HIGH);
 		pinMode(EPAPER_PIN_ITE_ENABLE, OUTPUT);
@@ -769,28 +875,11 @@ bool epaper_driver_begin() {
 #endif
 #endif
 
-		s_spi.begin(EPAPER_PIN_SCK, EPAPER_PIN_MISO, EPAPER_PIN_MOSI, -1);
-
-#if EPAPER_PIN_RES >= 0
-		// Hardware reset pulse (Seeed sequence): LOW 10 ms, HIGH 10 ms. This
-		// recovers the IT8951 from a stuck/bad state after a crash or brownout
-		// reboot, where BUSY/HRDY would otherwise remain LOW indefinitely.
-		pinMode(EPAPER_PIN_RES, OUTPUT);
-		digitalWrite(EPAPER_PIN_RES, HIGH);
-		delay(10);
-		digitalWrite(EPAPER_PIN_RES, LOW);
-		delay(10);
-		digitalWrite(EPAPER_PIN_RES, HIGH);
-		delay(10);
-		wait_hrdy();  // wait for the controller to come back up after reset
-#endif
-
-		delay(100);
-		write_cmd16(CMD_SYS_RUN);
-		delay(100);
-		s_power_on = true;
-		read_dev_info();
-		set_vcom(EPAPER_VCOM_MV);
+		if (!initialize_controller(false) && !recover_controller()) {
+				LOGE("Epaper", "IT8951 initialization failed after recovery");
+				log_wake_diagnostics();
+				return false;
+		}
 
 		s_canvas->fillScreen(15);  // white
 		s_began = true;
@@ -891,83 +980,8 @@ void epaper_driver_set_rotation(uint8_t rotation) {
 		s_canvas->setRotation(rotation & 0x3);
 }
 
-bool epaper_driver_draw_url(const char* url) {
-		if (!s_began || !s_canvas || !url || !*url) return false;
-
-		uint8_t* data = nullptr;
-		size_t len = 0;
-		bool from_cache = false;
-#ifdef EPAPER_SD_CS_PIN
-		// Clear any image staged by a previous draw that was never flushed.
-		epaper_sd_cache_discard_pending();
-		String blob_url;
-		char img_id[64] = {0};
-		if (epaper_sd_cache_is_enabled()) {
-				// Hide the ~1.6s panel power-on under the network resolve: power_on
-				// drives the HSPI panel bus while the resolve waits on WiFi -- two
-				// independent buses, so they run concurrently. Join before any HSPI
-				// access (the SD read below) so the bus is free. On a cache hit this
-				// removes power_on from the critical path entirely; on a miss the panel
-				// is simply hot before the body download starts (no regression, since
-				// the resolve already runs before the download either way).
-				Prewarm pw = {};
-				prewarm_start(&pw);
-				const uint32_t t_resolve = millis();
-				const bool resolved =
-						epaper_sd_cache_resolve(url, blob_url, img_id, sizeof(img_id)) &&
-						img_id[0];
-				const uint32_t resolve_ms = millis() - t_resolve;
-				epaper_timing_set_resolve_ms(resolve_ms);
-				const uint32_t t_join = millis();
-				prewarm_join(&pw);  // power_on done; HSPI now free for the SD read
-				LOGI("Epaper", "URL resolve %lums (%s), panel power-on wait %lums",
-						 (unsigned long)resolve_ms, resolved ? "ok" : "unresolved",
-						 (unsigned long)(millis() - t_join));
-
-				// Resolve the /api/next redirect to a blob URL + content-stable id
-				// WITHOUT downloading the body, then try the SD cache. A hit skips the
-				// slow HTTP body GET entirely; the SD read uses the panel's HSPI bus,
-				// so the pre-warm worker (which also drives HSPI) must NOT run here.
-				if (resolved) {
-						const uint32_t t_fetch = millis();
-						if (epaper_sd_cache_read(img_id, &data, &len)) {
-								from_cache = true;
-								epaper_timing_set_fetch(millis() - t_fetch, true /*from_cache*/);
-								LOGI("Epaper", "SD cache hit: %s", img_id);
-						} else {
-								LOGI("Epaper", "SD cache miss: %s", img_id);
-						}
-				}
-		}
-#endif
-
-		if (!from_cache) {
-				// Pre-warm the IT8951 (power_on ~1.6s of rail boot + HRDY wait) on a
-				// background task that runs concurrently with the HTTP download, so the
-				// panel is ready when bytes arrive and epaper_driver_display()'s
-				// power_on() collapses to a guarded no-op. SPI and WiFi don't share a
-				// bus. Skipped when the panel is already warm (the SD-cache resolve
-				// above prewarmed it); prewarm_join is then a no-op.
-				Prewarm pw = {};
-				if (!s_power_on) prewarm_start(&pw);
-
-				// On a cache miss we may already have resolved the blob URL; download it
-				// directly to skip the redirect hop. Otherwise download the original URL.
-				const char* dl_url = url;
-#ifdef EPAPER_SD_CS_PIN
-				if (blob_url.length() > 0) dl_url = blob_url.c_str();
-#endif
-				const uint32_t t_fetch = millis();
-				const bool dl_ok = epaper_http_download(dl_url, &data, &len);
-
-				// Join the pre-warm worker (notifies after power_on completes), then
-				// reap its TCB/stack. Done regardless of download result so the HSPI
-				// bus is free and the task is always cleaned up.
-				prewarm_join(&pw);
-
-				if (!dl_ok) return false;
-				epaper_timing_set_fetch(millis() - t_fetch, false /*downloaded*/);
-		}
+static bool draw_blob(const char* source, uint8_t* data, size_t len, bool strict) {
+		if (!s_began || !s_canvas || !data || len < 4) return false;
 
 		// `data`/`len` now holds the transport bytes -- either a compressed G16Z
 		// wrapper or a raw G16P frame, from a fresh download or the SD cache. The
@@ -987,26 +1001,21 @@ bool epaper_driver_draw_url(const char* url) {
 				uint8_t* inflated = nullptr;
 				if (is_g16z) {
 						size_t inflated_len = 0;
-						if (!inflate_g16z(data, len, &inflated, &inflated_len)) {
-								heap_caps_free(data);
+						if (!inflate_g16z(data, len, &inflated, &inflated_len, strict)) {
 								return false;
 						}
 						frame = inflated;
 						frame_len = inflated_len;
 				}
-				const bool ok = load_g16p_to_canvas(frame, frame_len);
+				const bool ok = load_g16p_to_canvas(frame, frame_len, strict);
 				if (inflated) heap_caps_free(inflated);
-#ifdef EPAPER_SD_CS_PIN
-				// Stage the original transport bytes (compressed G16Z when the server
-				// sent it) for write-back to SD after display. Transfer buffer
-				// ownership to the pending slot (don't free below).
-				if (ok && !from_cache && epaper_sd_cache_is_enabled() && img_id[0]) {
-						epaper_sd_cache_stage_pending(img_id, data, len);
-						data = nullptr;
-				}
-#endif
-				if (data) heap_caps_free(data);
 				return ok;
+		}
+
+		if (strict && epaper_validate_jpeg(data, len, EPAPER_PANEL_W, EPAPER_PANEL_H) !=
+				EpaperMediaValidation::Valid) {
+				LOGW("Epaper", "Service JPEG validation failed");
+				return false;
 		}
 
 		// JPEGDEC's progressive decoder faults on some images (the duty-cycle
@@ -1014,8 +1023,7 @@ bool epaper_driver_draw_url(const char* url) {
 		// crash the device or brick the panel mid-upload. The image endpoint
 		// must emit baseline JPEGs.
 		if (jpeg_is_progressive(data, len)) {
-				LOGW("Epaper", "progressive JPEG not supported; serve baseline: %s", url);
-				heap_caps_free(data);
+				LOGW("Epaper", "progressive JPEG not supported; serve baseline: %s", source);
 				return false;
 		}
 
@@ -1047,7 +1055,7 @@ bool epaper_driver_draw_url(const char* url) {
 				if (alloc.stack) heap_caps_free(alloc.stack);
 				if (alloc.tcb) heap_caps_free(alloc.tcb);
 		} else {
-				LOGW("Epaper", "JPEG decode task spawn failed; skipping %s", url);
+				LOGW("Epaper", "JPEG decode task spawn failed; skipping %s", source);
 		}
 
 		// Quantize + dither the decoded frame into the canvas. When no dither
@@ -1063,25 +1071,105 @@ bool epaper_driver_draw_url(const char* url) {
 				s_gray16 = nullptr;
 		}
 
-		heap_caps_free(data);
 		return ok;
 }
 
-void epaper_driver_display() {
-		if (!s_began || !s_canvas) return;
+bool epaper_driver_draw_url(const char* url) {
+		if (!s_began || !s_canvas || !url || !*url) return false;
+		uint8_t* data = nullptr;
+		size_t len = 0;
+		Prewarm prewarm = {};
+		if (!s_power_on) prewarm_start(&prewarm);
+		const uint32_t started = millis();
+		const bool downloaded = epaper_http_download(url, &data, &len);
+		prewarm_join(&prewarm);
+		if (!downloaded) return false;
+		epaper_timing_set_fetch(millis() - started, false);
+		const bool drew = draw_blob(url, data, len, false);
+		heap_caps_free(data);
+		return drew;
+}
+
+bool epaper_driver_prepare_service_blob(const uint8_t* data, size_t len, const char* media_type,
+		uint8_t** prepared_data, size_t* prepared_len) {
+		*prepared_data = nullptr;
+		*prepared_len = 0;
+		if (!data || len < 4) return false;
+		if (media_type && strcmp(media_type, "application/vnd.photoframe.g16p") == 0) {
+				return epaper_validate_g16p(data, len, EPAPER_PANEL_W, EPAPER_PANEL_H) ==
+						EpaperMediaValidation::Valid;
+		}
+		if (media_type && strcmp(media_type, "image/jpeg") == 0) {
+				return epaper_validate_jpeg(data, len, EPAPER_PANEL_W, EPAPER_PANEL_H) ==
+						EpaperMediaValidation::Valid;
+		}
+		if ((media_type && strcmp(media_type, "application/vnd.photoframe.g16z") == 0) ||
+				memcmp(data, G16Z_MAGIC, sizeof(G16Z_MAGIC)) == 0) {
+				uint8_t* inflated = nullptr;
+				size_t inflated_len = 0;
+				const bool ok = inflate_g16z(data, len, &inflated, &inflated_len, true) &&
+						epaper_validate_g16p(inflated, inflated_len, EPAPER_PANEL_W, EPAPER_PANEL_H) ==
+						EpaperMediaValidation::Valid;
+				if (!ok) {
+						if (inflated) heap_caps_free(inflated);
+						return false;
+				}
+				*prepared_data = inflated;
+				*prepared_len = inflated_len;
+				return true;
+		}
+		return false;
+}
+
+bool epaper_driver_draw_service_blob(const uint8_t* data, size_t len, const char* media_type,
+		const uint8_t* prepared_data, size_t prepared_len) {
+		const bool is_g16z = (media_type &&
+				strcmp(media_type, "application/vnd.photoframe.g16z") == 0) ||
+				(len >= sizeof(G16Z_MAGIC) && memcmp(data, G16Z_MAGIC, sizeof(G16Z_MAGIC)) == 0);
+		if (is_g16z) {
+				if (!prepared_data || prepared_len == 0) return false;
+				return draw_blob("service", const_cast<uint8_t*>(prepared_data), prepared_len, false);
+		}
+		return draw_blob("service", const_cast<uint8_t*>(data), len, false);
+}
+
+bool epaper_driver_display() {
+		if (!s_began || !s_canvas) return false;
 		const uint32_t t_draw = millis();
-		power_on();  // re-wake the IT8951 if a prior epaper_driver_sleep() put it down
-		upload_frame();
-		refresh_gc16();
+		bool ok = power_on() && upload_frame() && refresh_gc16();
+		if (!ok && recover_controller()) {
+				ok = upload_frame() && refresh_gc16();
+		}
 		epaper_timing_set_draw_ms(millis() - t_draw);
+		if (ok) s_recovery_attempted = false;
+		else LOGE("Epaper", "IT8951 display failed after recovery");
+		return ok;
 }
 
 void epaper_driver_sleep() {
+		log_wake_diagnostics();
 		if (!s_began || !s_power_on) return;  // guard: redundant sleep is a no-op (Seeed _power_is_on)
+		s_hrdy_phase = EpaperHrdyPhase::Sleep;
 		write_cmd16(CMD_SLEEP);
 		digitalWrite(EPAPER_PIN_TFT_ENABLE, LOW);
 		digitalWrite(EPAPER_PIN_ITE_ENABLE, LOW);
 		s_power_on = false;
+}
+
+const EpaperDriverDiagnostics& epaper_driver_diagnostics() {
+		return s_diagnostics;
+}
+
+const char* epaper_driver_hrdy_phase_name(EpaperHrdyPhase phase) {
+		switch (phase) {
+				case EpaperHrdyPhase::Initialization: return "initialization";
+				case EpaperHrdyPhase::Recovery: return "recovery";
+				case EpaperHrdyPhase::PowerOn: return "power_on";
+				case EpaperHrdyPhase::Upload: return "upload";
+				case EpaperHrdyPhase::Refresh: return "refresh";
+				case EpaperHrdyPhase::Sleep: return "sleep";
+				default: return "none";
+		}
 }
 
 uint16_t epaper_driver_battery_mv() {

@@ -10,6 +10,7 @@
 #include "config_manager.h"
 #include "device_classes/epaper/epaper_battery.h"
 #include "device_classes/epaper/epaper_config.h"
+#include "device_classes/epaper/epaper_driver.h"
 #include "device_classes/epaper/epaper_refresh.h"
 #include "device_classes/epaper/epaper_timing.h"
 #include "log_manager.h"
@@ -31,7 +32,14 @@ static void epaper_status_refresh_post(AsyncWebServerRequest* request) {
         return;
     }
 
-    if (!epaper_resolve_current_url()) {
+    if (epaper_source_uses_service(g_epaper_config.source_mode)) {
+        if (g_epaper_config.service_url[0] == '\0' ||
+            g_epaper_config.service_token[0] == '\0') {
+            request->send(400, "application/json",
+                          "{\"success\":false,\"message\":\"Service URL or token not configured\"}");
+            return;
+        }
+    } else if (!epaper_resolve_current_url()) {
         request->send(400, "application/json",
                       "{\"success\":false,\"message\":\"No carousel image configured\"}");
         return;
@@ -75,7 +83,7 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     const time_t now = time(nullptr);
     const bool clock_synced = (now >= (time_t)kEpaperMinValidEpoch);
 
-    StaticJsonDocument<768> resp;
+    StaticJsonDocument<1024> resp;
     if (last_unix == 0) {
         // No refresh recorded since cold boot (RTC memory was cleared by
         // power loss or this is the first ever boot).
@@ -97,6 +105,8 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     }
     resp["last_refresh_unix"] = last_unix;
     resp["refresh_count"]   = epaper_refresh_get_count();
+    resp["source_mode"] = epaper_source_uses_service(g_epaper_config.source_mode)
+        ? "service" : "slot-carousel";
     switch (last.result) {
         case EpaperRefreshResult::Updated:     resp["last_result"] = "updated"; break;
         case EpaperRefreshResult::Skipped:     resp["last_result"] = "skipped"; break;
@@ -124,6 +134,20 @@ static void epaper_status_get(AsyncWebServerRequest* request) {
     t["fetch_ms"]        = epaper_timing_last.fetch_ms;
     t["draw_ms"]         = epaper_timing_last.draw_ms;
     t["image_source"]    = epaper_timing_last.image_from_cache ? "cache" : "download";
+
+#if defined(BOARD_RETERMINAL_E1003)
+    const EpaperDriverDiagnostics& diagnostics = epaper_driver_diagnostics();
+    JsonObject hrdy = resp.createNestedObject("hrdy");
+    hrdy["timeout_count"] = diagnostics.hrdy_timeout_count;
+    hrdy["last_timeout_phase"] = epaper_driver_hrdy_phase_name(
+        diagnostics.last_hrdy_timeout_phase);
+    hrdy["initial_pin_state"] = diagnostics.initial_hrdy_pin_state_valid
+        ? (diagnostics.initial_hrdy_pin_state ? "high" : "low") : "unknown";
+    hrdy["recovery_count"] = diagnostics.recovery_count;
+    hrdy["recovery_success_count"] = diagnostics.recovery_success_count;
+    hrdy["recovery_failure_count"] = diagnostics.recovery_failure_count;
+    hrdy["wait_ms"] = diagnostics.hrdy_wait_ms;
+#endif
 
     String body;
     serializeJson(resp, body);

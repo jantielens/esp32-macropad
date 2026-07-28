@@ -12,6 +12,7 @@
 #include "device_classes/epaper/epaper_driver.h"
 #include "device_classes/epaper/epaper_refresh.h"
 #include "log_manager.h"
+#include "main_loop_bridge.h"
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
 
@@ -70,13 +71,27 @@ static void epaper_image_show_url_post(AsyncWebServerRequest* request) {
     epaper_image_result_json(request, out);
 }
 
+static void epaper_image_clear_cache_exec(const void*, bool* ok, char*, size_t) {
+    *ok = epaper_driver_sd_cache_clear();
+    LOGI("Epaper", "SD cache clear %s", *ok ? "complete" : "failed");
+}
+
 static void epaper_image_clear_cache_post(AsyncWebServerRequest* request) {
     if (!portal_auth_gate(request)) return;
     LOGI("API", "POST /api/component/epaper-image/clear-sd-cache");
-    const bool ok = epaper_driver_sd_cache_clear();
-    request->send(ok ? 200 : 500, "application/json",
-                  ok ? "{\"success\":true,\"message\":\"SD cache cleared\"}"
-                     : "{\"success\":false,\"message\":\"SD cache unavailable\"}");
+    const LoopBridgeResult result = loop_bridge_enqueue(epaper_image_clear_cache_exec, nullptr, 0);
+    if (result == LOOP_BRIDGE_BUSY) {
+        request->send(409, "application/json",
+                      "{\"success\":false,\"message\":\"Device is busy\"}");
+        return;
+    }
+    if (result != LOOP_BRIDGE_OK) {
+        request->send(503, "application/json",
+                      "{\"success\":false,\"message\":\"Cache clear unavailable\"}");
+        return;
+    }
+    request->send(202, "application/json",
+                  "{\"success\":true,\"message\":\"SD cache clear started\"}");
 }
 
 static const ComponentAction epaper_image_actions[] = {

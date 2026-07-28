@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "protocolMajor": 1,
+  "description": "Profile-agnostic observable behavior required by the locked Version 1 contract.",
+  "scenarios": [
+    {
+      "id": "http.inline-show",
+      "role": "service",
+      "setup": ["valid token", "one eligible profile-compatible image"],
+      "action": "GET /api/v1/next without an advisory fingerprint",
+      "assert": ["status is 200", "media type is profile-supported", "image key and exact-byte CRC headers are valid", "Cache-Control is private, no-cache", "Vary includes Authorization"]
+    },
+    {
+      "id": "http.redirect-show-token-stripping",
+      "role": "client",
+      "setup": ["valid token", "302 show result whose Location has the service origin"],
+      "action": "perform one retrieval cycle",
+      "assert": ["302 is handled manually", "redirect metadata is retained", "content GET contains no frame bearer token", "final bytes are checked against the redirect CRC"]
+    },
+    {
+      "id": "http.non-302-redirect-invalid",
+      "role": "client",
+      "setup": ["valid token", "show response with redirect status other than 302"],
+      "action": "perform one retrieval cycle",
+      "assert": ["Location is not followed", "result is a failed show", "prior display is unchanged"]
+    },
+    {
+      "id": "http.keep-display",
+      "role": "client",
+      "setup": ["204 response", "existing displayed image and cache"],
+      "action": "perform one retrieval cycle",
+      "assert": ["display is unchanged", "display is not redrawn", "no fallback image is invented"]
+    },
+    {
+      "id": "http.authentication-equivalence",
+      "role": "service",
+      "setup": ["missing token", "unknown token", "revoked token"],
+      "action": "request /api/v1/next once for each token state",
+      "assert": ["all responses are observably identical 401 responses", "WWW-Authenticate is Bearer", "no response contains image metadata"]
+    },
+    {
+      "id": "http.request-precedence",
+      "role": "service",
+      "setup": ["unsupported major", "wrong method", "invalid token", "malformed advisory fingerprint"],
+      "action": "combine failures to probe processing order",
+      "assert": ["unsupported major wins with 404", "wrong method on supported path wins with 405", "authentication is checked before advisory parsing"]
+    },
+    {
+      "id": "http.method-not-allowed",
+      "role": "service",
+      "setup": ["supported major path", "method other than GET"],
+      "action": "request /api/v1/next",
+      "assert": ["status is 405", "Allow is GET"]
+    },
+    {
+      "id": "versioning.ignore-unknown-request-header",
+      "role": "service",
+      "setup": ["valid token", "one eligible profile-compatible image"],
+      "action": "request GET /api/v1/next with an unknown extra request header, then observe the response",
+      "assert": ["request is served normally", "unknown request header does not alter image selection or response semantics"]
+    },
+    {
+      "id": "versioning.ignore-unknown-response-header",
+      "role": "client",
+      "setup": ["configured client", "otherwise valid show response carrying an unknown extra response header"],
+      "action": "wake the client, then observe its display and cache state",
+      "assert": ["response is handled normally", "image is validated, displayed, and cached as if the unknown response header were absent"]
+    },
+    {
+      "id": "fingerprint.malformed-fails-open",
+      "role": "service",
+      "setup": ["valid token", "malformed or partial advisory pair", "eligible image"],
+      "action": "GET /api/v1/next",
+      "assert": ["fingerprint is treated as absent", "malformed advisory data does not block image delivery"]
+    },
+    {
+      "id": "fingerprint.avoid-reported-pair",
+      "role": "service",
+      "setup": ["valid advisory pair", "another eligible image pair exists"],
+      "action": "GET /api/v1/next",
+      "assert": ["reported image key and CRC pair is not returned"]
+    },
+    {
+      "id": "fingerprint.best-effort-repeat",
+      "role": "service",
+      "setup": ["valid advisory pair", "no other eligible image pair exists"],
+      "action": "GET /api/v1/next",
+      "assert": ["service may return the reported pair or 204", "no acknowledgement state is inferred"]
+    },
+    {
+      "id": "cache.identity-pair",
+      "role": "client",
+      "setup": ["cache entry with matching image key and different CRC"],
+      "action": "handle a show result",
+      "assert": ["cache entry is not reused", "delivery URL is not used as cache identity"]
+    },
+    {
+      "id": "cache.revalidate-before-reuse",
+      "role": "client",
+      "setup": ["cache entry whose key and CRC match but whose bytes are invalid"],
+      "action": "handle a show result",
+      "assert": ["length, CRC, format, and geometry are revalidated", "invalid entry is evicted", "fresh content is attempted within the recovery cycle"]
+    },
+    {
+      "id": "integrity.crc-zero",
+      "role": "client",
+      "setup": ["exact transport bytes whose CRC is 00000000"],
+      "action": "validate transport integrity",
+      "assert": ["00000000 is accepted as an unambiguous CRC value"]
+    },
+    {
+      "id": "integrity.no-content-coding",
+      "role": "client",
+      "setup": ["show result with non-identity Content-Encoding"],
+      "action": "validate the show result",
+      "assert": ["result is rejected before cache admission or display"]
+    },
+    {
+      "id": "format.reserved-code",
+      "role": "bridge",
+      "setup": ["format code 0 or any code from 4 through 255"],
+      "action": "decode transport-neutral show metadata",
+      "assert": ["format is unsupported in Version 1"]
+    },
+    {
+      "id": "recovery.one-additional-cycle",
+      "role": "client",
+      "setup": ["first logical retrieval cycle returns invalid content", "recovery cycle also fails"],
+      "action": "wake the client",
+      "assert": ["at most one additional logical retrieval cycle occurs", "prior display remains unchanged", "failed wake is recorded"]
+    },
+    {
+      "id": "capability.enforce-profile",
+      "role": "client",
+      "setup": ["validly encoded image with unsupported media type or wrong profile geometry"],
+      "action": "validate the show result",
+      "assert": ["content is rejected", "content is not cached or displayed"]
+    }
+  ]
+}

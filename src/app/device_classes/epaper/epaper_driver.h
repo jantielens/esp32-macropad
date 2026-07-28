@@ -1,4 +1,6 @@
 #pragma once
+
+#include <stddef.h>
 #ifndef EPAPER_DRIVER_H
 #define EPAPER_DRIVER_H
 
@@ -20,7 +22,7 @@
 //   1. epaper_driver_begin()           — power up the panel
 //   2. epaper_driver_set_rotation(r)
 //   3. epaper_driver_draw_url(url)     — fetch over HTTP(S) + decode + draw
-//   4. epaper_driver_display()         — push framebuffer to the panel
+//   4. epaper_driver_display()         — push framebuffer; false if not confirmed
 //   5. epaper_driver_sleep()           — power down the panel before deep sleep
 //
 // Returns true on success. Implementations log details with LOGI/LOGW.
@@ -29,8 +31,40 @@
 bool epaper_driver_begin();
 void epaper_driver_set_rotation(uint8_t rotation);
 bool epaper_driver_draw_url(const char* url);
-void epaper_driver_display();
+#if defined(BOARD_RETERMINAL_E1003)
+bool epaper_driver_prepare_service_blob(const uint8_t* data, size_t len, const char* media_type,
+        uint8_t** prepared_data, size_t* prepared_len);
+bool epaper_driver_draw_service_blob(const uint8_t* data, size_t len, const char* media_type,
+        const uint8_t* prepared_data, size_t prepared_len);
+#endif
+bool epaper_driver_display();
 void epaper_driver_sleep();
+
+#if defined(BOARD_RETERMINAL_E1003)
+enum class EpaperHrdyPhase : uint8_t {
+        None = 0,
+        Initialization,
+        Recovery,
+        PowerOn,
+        Upload,
+        Refresh,
+        Sleep,
+};
+
+struct EpaperDriverDiagnostics {
+        uint32_t hrdy_timeout_count;
+        uint64_t hrdy_wait_ms;
+        uint32_t recovery_count;
+        uint32_t recovery_success_count;
+        uint32_t recovery_failure_count;
+        EpaperHrdyPhase last_hrdy_timeout_phase;
+        uint8_t initial_hrdy_pin_state;
+        bool initial_hrdy_pin_state_valid;
+};
+
+const EpaperDriverDiagnostics& epaper_driver_diagnostics();
+const char* epaper_driver_hrdy_phase_name(EpaperHrdyPhase phase);
+#endif
 
 // Battery voltage in millivolts (0 if not supported).
 uint16_t epaper_driver_battery_mv();

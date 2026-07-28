@@ -1,0 +1,17 @@
+{
+  "frames": {
+    "e1003-living-room": {
+      "token": "replace-with-at-least-32-random-hex-characters",
+      "profile": {
+        "width": 1872,
+        "height": 1404,
+        "format_codes": [3, 2]
+      },
+      "image_transform": {
+        "rotate_deg": 0,
+        "mirror_x": false,
+        "mirror_y": false
+      }
+    }
+  }
+}

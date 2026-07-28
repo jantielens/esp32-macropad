@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Photoframe is ready{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-7">
+    <div class="card section-card border-0">
+      <div class="card-body p-4 p-md-5">
+        <h1 class="h3 page-title mb-2">Photoframe is ready</h1>
+        <p class="text-body-secondary">Use this token to connect <strong>{{ frame_id }}</strong>. You can reveal it later from device settings after confirming your current password.</p>
+        <label for="frame-token" class="form-label">Frame token</label>
+        <input id="frame-token" class="form-control font-monospace mb-4" value="{{ frame_token }}" readonly>
+        <a class="btn btn-accent w-100" href="/">Open Photoframe</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

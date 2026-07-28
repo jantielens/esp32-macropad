@@ -1,350 +1,464 @@
-# Photoframe site — sample image server
+---
+title: Local E-paper Photoframe Site
+description: Run and deploy the local FastAPI image service for e-paper photoframes
+ms.date: 2026-07-27
+ms.topic: how-to
+keywords:
+  - photoframe
+  - FastAPI
+  - Docker
+  - LXC
+---
 
-> **Sample reference implementation, not a hosted production service.** This
-> small FastAPI app exists so you can stand up an end-to-end image source for an
-> e-paper board (notably the Seeed reTerminal E1003) on your own infrastructure.
-> It is deliberately minimal: single process, blob-authoritative storage, a
-> couple of accounts in a JSON file. It is **not** operated as a shared hosted
-> service, and the [production hardening](#what-you-would-change-for-production)
-> below is intentionally left to you.
+## Overview
 
-It does two jobs from one process:
+The site stores source photos, pre-encodes frame-specific transport variants,
+and serves the selected bytes inline through `GET /api/v1/next`. It has one
+local filesystem backend and no external storage dependency.
 
-- A **human web UI** (login, gallery, upload) for managing the images a device
-  rotates through.
-- A **device API** (`/api/next`) that hands the board the next image to draw.
-
-Images are converted to the panel's calibrated **G16P** format at upload time
-and served verbatim. The board never scales or re-tones; it draws what it is
-handed.
-
-## How it fits the firmware
+The frame API implements the locked
+[Photoframe Next Image Version 1 contract](../../docs/dev/photoframe-next-image/contract.md).
+There is no unversioned endpoint and no redirect delivery mode.
 
 ```mermaid
 flowchart LR
-    User[Browser] -->|login + upload JPEG| App[Photoframe FastAPI app]
-    App -->|encode G16P at native res| Blob[(Azure Blob Storage)]
-    Device[reTerminal E1003] -->|GET /api/next| App
-    App -->|302 redirect to blob SAS| Device
-    Device -->|pull G16P payload| Blob
+    Browser[Owner browser] -->|Upload and manage| App[FastAPI site]
+    App -->|Atomic files and sidecars| Data[(Persistent data directory)]
+    Frame[E-paper frame] -->|Bearer token and optional fingerprint| API[GET /api/v1/next]
+    API --> Selector[Selection service]
+    Selector --> Data
+    API -->|Inline exact transport bytes| Frame
 ```
 
-The board's e-paper refresh path is documented in
-[`../../docs/epaper-guide.md`](../../docs/epaper-guide.md). The only contract the
-firmware depends on is the [`/api/next` response](#device-api-apinext) and the
-[image-format requirements](#image-format-g16p-and-jpeg).
+## Data layout
 
-## Requirements
+The entire persistent state lives below `PHOTOFRAME_DATA_DIR`, which defaults
+to `data/`:
 
-- Python 3.10+
-- An Azure Blob Storage container per device, reachable through a **container
-  SAS URL** with read/write/list/delete rights. The app stores one copy of each
-  image and treats the blob container as the source of truth.
-- Dependencies in [`requirements.txt`](requirements.txt) (FastAPI, Uvicorn,
-  Pillow, Jinja2). Install into a virtualenv.
-
-## Minimum configuration
-
-Copy the example and edit it:
-
-```bash
-cp config.example.json config.local.json
-python3 hash_password.py   # mint a password_hash to paste into a user account
+```text
+data/
+  config/frames.json
+  config/session-secret
+  config/setup.lock
+  config/users.json
+  devices/<device-id>/images/<image-key>/source.<ext>
+  devices/<device-id>/images/<image-key>/transport-<width>x<height>-<code>-<profile-key>.<ext>
+  devices/<device-id>/images/<image-key>/thumb.png
+  devices/<device-id>/images/<image-key>/sidecar.json
+  devices/<device-id>/state/queue.json
+  devices/<device-id>/state/schedule.json
+  devices/<device-id>/state/settings.json
+  devices/<device-id>/state/telemetry.json
 ```
 
-`config.local.json` has two maps — `devices` and `users`:
+Photo sidecars are durable truth. Each device owns an isolated gallery, and the
+application rebuilds its per-device in-memory index from sidecars at startup.
+Queue, cadence, settings, and last-seen telemetry are small atomic JSON files
+inside the owning device namespace. Restoring the complete `data/` directory
+restores the site without a database.
+
+## First boot
+
+Start the service, then open it in a browser. An empty data directory redirects
+to `/setup`, where you create the administrator account and first frame. The
+service generates the frame bearer token and displays it after setup. An
+authorized owner can reveal it later from device settings after confirming
+their current password.
+
+The first startup creates configuration files and a 256-bit session secret
+under `data/config/`. Later startups load those files without changing them.
+The `/setup` route returns `404 Not Found` after an administrator and frame
+exist.
+
+> [!IMPORTANT]
+> Complete setup immediately on a trusted network. Before setup finishes, the
+> first browser that submits the form claims the instance.
+
+## Manage devices
+
+Use **Add device** on the device list to create another device. The form starts
+with the E1003 profile (`1872` x `1404`, format preference `3,2`) and also accepts
+other geometry and format combinations. A device ID is minted from its display
+name and remains unchanged when you rename the device or edit its profile.
+
+Each opaque token identifies one device and binds its exact geometry and ordered
+format preference. Device settings provide password-gated controls to reveal or
+rotate the token. Rotation invalidates the old token immediately without
+changing the gallery or last-seen history.
+
+Changing a profile rebuilds that device's pre-encoded variants from its stored
+source images before replacing the active namespace. Removing a device requires
+the current administrator password and typed confirmation. Removal immediately
+deletes its configuration, bearer token, gallery, queue, settings, and telemetry,
+with no retention or undo.
+
+The underlying record remains in `data/config/frames.json`:
 
 ```json
 {
-  "devices": {
-    "E1003-1": {
-      "container_sas_url": "https://YOURACCOUNT.blob.core.windows.net/e1003-1?sv=...&sig=...",
-      "api_key": "replace-with-a-long-random-device-pull-key",
-      "resolution": { "width": 1872, "height": 1404 },
-      "image_transform": { "rotate_deg": 0, "mirror_x": false, "mirror_y": false }
-    }
-  },
-  "users": {
-    "owner@example.com": {
-      "password_hash": "pbkdf2_sha256$200000$<salt_hex>$<hash_hex>",
-      "devices": ["E1003-1"]
+  "frames": {
+    "e1003-living-room": {
+      "token": "replace-with-at-least-32-random-hex-characters",
+      "profile": {
+        "width": 1872,
+        "height": 1404,
+        "format_codes": [3, 2]
+      }
     }
   }
 }
 ```
 
-- **`container_sas_url`** — the per-device blob container. Keep these secret;
-  each is scoped to a single device's container so one device can never read
-  another's images.
-- **`api_key`** — the per-device pull key the firmware sends on every
-  `/api/next` request. Use a long random value.
-- **`resolution`** — the panel's native pixel dimensions. Uploaded images are
-  encoded to exactly this size; the matching `image_transform` rotation/mirror
-  orients the source to the panel.
-- **`output`** _(optional)_ — output profile. `{ "format": "g16z" }` (default)
-  is the calibrated/dithered E1003 transport. `{ "format": "jpeg",
-  "jpeg_quality": 90 }` is a resize + tone-only grayscale JPEG for panels whose
-  firmware library does its own dithering (e.g. Inkplate).
-- **`serve_mode`** _(optional)_ — how `/api/next` delivers the payload.
-  `"redirect"` (default) 302s the device straight to the blob SAS URL (zero-copy,
-  fastest; suits clients that follow HTTP redirects, like the E1003 firmware).
-  `"inline"` streams the bytes through the app, for clients that **cannot** follow
-  redirects — e.g. the InkplateLibrary image loader, which defaults to no-follow.
-- **`temp_min_spacing`** _(optional, default `4`)_ — cadence knob for **featured**
-  photos (temporary/expiring photos plus newly uploaded "fresh" ones). A featured
-  photo is shown at most once every this many displays, so its share of screen
-  time is the same whether the gallery has 20 photos or 1000. `4` means a single
-  featured photo takes ~1 in every 4 displays. Minimum `2` (one permanent always
-  separates featured photos). Owners can override it per device from the device
-  **Config** page (reached via the Config button on the devices page), saved to
-  `state/settings.json` with no redeploy. See
-  [How the next image is chosen](#how-the-next-image-is-chosen).
-- **`fresh_window_days`** _(optional, default `7`)_ — how long a newly uploaded
-  permanent photo is **featured** after upload. For this many days the photo joins
-  the featured bucket and is shown often (instead of being lost at 1/pool odds),
-  then graduates into normal permanent rotation automatically once `uploaded_at`
-  ages past the window — no extra state, no graduation event. `0` disables the
-  fresh boost. Per-device override on the **Config** page.
-- **`max_temp_share_pct`** _(optional, default `50`)_ — caps the **combined** share
-  of the featured bucket (temporary + fresh), so a bulk upload of fresh photos
-  cannot take over the screen. `50` means at least every other display is a
-  permanent photo; `25` caps featured at a quarter of displays. Mapped to a
-  spacing floor of `ceil(100 / pct)` and only binds during large bursts. Per-device
-  override on the **Config** page.
-- **`users`** — web-UI accounts. `password_hash` is a `pbkdf2_sha256` string
-  produced by `hash_password.py`. Each user lists the device IDs it may manage.
+Format codes are `1` for baseline JPEG, `2` for G16P, and `3` for G16Z. Uploads
+generate only the variants required by the selected device and store them in
+that device's namespace.
 
-## Running locally
+An authenticated owner can recover a frame token from that frame's **Settings**
+page by entering their current password. The page shows only a SHA-256
+fingerprint until re-authentication succeeds. Revealed-token responses use
+`Cache-Control: no-store` and return to the masked view on reload.
 
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-./run_local.sh           # auto-loads ./config.local.json, serves on 127.0.0.1:8080
-```
+> [!WARNING]
+> On a plain-HTTP LAN, the administrator password and any revealed token cross
+> the wire in cleartext. Enable TLS before using the token-reveal feature.
 
-`run_local.sh` persists a dev `SECRET_KEY` to `./.secret_key` so login sessions
-survive restarts. Override `CONFIG_JSON` or `SECRET_KEY` by exporting them before
-running.
+## Manage photos
 
-## Device API: `/api/next`
+Use **Upload image** in a device gallery to preview, frame, and adjust one image.
+Use **Bulk upload** to select several images and apply one shared lifetime. Bulk
+uploads use the device's default image-processing settings and process one image
+at a time, which bounds memory use and reports failures per image. Successful
+images remain saved when another image fails, and failed images can be retried.
 
-```text
-GET /api/next?device_id=<id>&key=<api_key>&proxy=0
-```
+## Export and import
 
-| Response | Meaning |
-|---|---|
-| `302 Found` (default) | Redirect (`Location:`) to the blob's own SAS URL. The device pulls the ~1.3&nbsp;MB G16P payload **straight from blob storage**, not through this app. Sent when the device's `serve_mode` is `redirect` (the default) and `proxy=0`. |
-| `200 OK` (inline) | Inline body: the raw image bytes, with `X-Image-Format` (`g16p` or `jpeg`) and the matching `Content-Type`. Sent when the device's `serve_mode` is `inline`, or when `proxy=1` is passed. Use for clients that cannot follow redirects (e.g. Inkplate). |
-| `204 No Content` | No image is queued for this device, and the gallery is empty. The firmware keeps the current panel contents and sleeps. |
-| `401 Unauthorized` | Unknown `device_id` or `key` mismatch. |
+The device settings page can export a self-contained device bundle after you
+enter your current password. The bundle contains its profile, bearer token,
+source images, pre-encoded transports, thumbnails, settings, queue, and
+telemetry. On **Add device**, **Import existing device** adds or replaces the
+device with the bundle's immutable ID and installs transport bytes as-is. It
+does not re-encode images or change other devices or administrator credentials.
+Adding a missing device requires `IMPORT`; replacing an existing device
+requires its exact immutable device ID.
 
-The default 302 path keeps the single-process app off the bulk transfer path.
-The firmware resolves the redirect to a content-stable image id (used by the
-on-device [SD blob cache](../../docs/epaper-guide.md#sd-image-cache)) **before**
-downloading the body, so a cache hit skips the blob pull entirely.
+The **Site export & import** page is available only when the site has exactly one
+user. Site export requires the current password and downloads the complete
+`data/` tree. Site import requires exactly one administrator account and exactly
+one owner for every device, then fully replaces all devices, administrator
+credentials, and the session secret. Restart the service after a successful
+site import; the imported administrator password applies after restart. The
+service rejects other requests until it restarts.
 
-A separate `<image-url>.crc32` change-detection sidecar is part of the firmware
-contract; see the e-paper guide. The device skips a panel refresh when the CRC
-is unchanged.
+Both bundle types include a versioned manifest, exact file checksums, and image
+transport CRCs. Imports reject missing, corrupt, mismatched, or path-unsafe
+entries before changing live data.
 
-## How the next image is chosen
+### Archive format and compatibility
 
-Each `/api/next` poll returns exactly one image. Selection is **blob-authoritative**:
-every photo's lifecycle state (`permanent`, `expires_at`, `last_shown_at`,
-`served_at`, `uploaded_at`, `format`) is stamped as metadata on the image blob
-itself, so a single List Blobs call decides the next image — and resolves its
-format — regardless of gallery size, with no per-image `.json` read on the hot
-path. The only soft-state is the disposable `state/queue.json` (explicit "show
-next" order) and `state/schedule.json` (the featured-slot countdown) — losing
-either just restarts cadence, never loses a photo.
+Archive compatibility is determined by the manifest `schema_version`, not the
+site release number. This release writes schema version `1` and imports schema
+version `1`. The manifest `site_version` records which release created the
+archive for diagnostics; a different site version produces a warning but does
+not block import.
 
-Selection runs in two tiers:
+An archive with a newer schema requires upgrading the destination site before
+import. An archive with an older unsupported schema must first be exported from
+a site release that can read it and write a supported schema. Checksums,
+transport CRCs, path validation, ownership validation, and atomic replacement
+still apply to every supported archive.
 
-1. **Queue (explicit).** A freshly uploaded or "Show next" photo jumps to the
-   front of the queue and is served once, next.
-2. **Two-bucket rotation.** Everything else splits into two buckets by lifecycle:
+> [!WARNING]
+> Exports are unencrypted. Device bundles contain bearer tokens. Site bundles
+> also contain the administrator password hash and session secret. Store them
+> securely. On plain HTTP, a network observer can capture a downloaded archive.
 
-   | Bucket | Photos | Behaviour |
-   |---|---|---|
-   | **Permanent** | `permanent`, no expiry, uploaded longer ago than the fresh window | The everyday pool; least-recently-shown rotates evenly. |
-   | **Featured** | photos with an `expires_at` **or** permanent photos uploaded within `fresh_window_days` | Short-lived or brand-new photos to spotlight; least-recently-shown rotates within the bucket. |
+## Configure additional users
 
-   The two buckets interleave round-robin, but featured slots are **spaced** so
-   any single featured photo appears at most once every `temp_min_spacing` (`n`)
-   displays. The featured slot fires every `max(floor, ceil(n / k))` displays for
-   `k` featured photos, which they share fairly (least-recently-shown within the
-   bucket). The `floor` comes from `max_temp_share_pct` (`ceil(100 / pct)`) and
-   caps the whole featured bucket — `50%` → floor `2`, `25%` → floor `4` — so a
-   burst of fresh photos can never crowd out the permanent pool.
-
-**Fresh photos** are a *derived* membership in the featured bucket, not a third
-bucket: `is_fresh()` is simply "permanent, no expiry, and `uploaded_at` is within
-`fresh_window_days`". A newly uploaded photo is therefore spotlighted immediately
-and, once it ages past the window, drops back into permanent rotation on its own —
-no new persisted field and no graduation event. Because it accumulates
-`last_shown_at` while featured, it lands at the back of the permanent LRU on
-graduation (no second burst). Set `fresh_window_days = 0` to disable the boost.
-
-The key property: a featured photo's share of screen time depends on `n` and the
-cap, **not on the size of the permanent pool**. With `n = 4`, one featured photo
-holds ~25% of displays whether there are 20 permanent photos or 1000 — a guarantee
-a simple "boost weight" cannot make (its share dilutes as `boost / pool`). The
-`max_temp_share_pct` floor bounds the bucket even when many featured photos exist
-at once (`50%` at the default).
-
-The knobs default from the device's `temp_min_spacing`, `fresh_window_days`, and
-`max_temp_share_pct` config and can be retuned per device from the device
-**Config** page; the overrides are stored as disposable soft-state in
-`state/settings.json` and fall back to the config defaults if absent. The devices
-page shows each device's effective knobs (flagged when an override is in effect),
-and the gallery badges each temporary photo with its remaining lifetime and each
-**fresh** photo with the time left in its window, so owners can see what is in the
-featured bucket.
-
-Each gallery card also shows a best-effort **exposure hint** badge (e.g. "~6×/day",
-"~once every 8 weeks") so an owner can see how often a photo is expected to
-appear given the whole gallery and the device's settings. The *share* is
-closed-form (`store.expected_share`, the same arithmetic the scheduler implies);
-turning it into a per-hour/day/week rate uses a **displays-per-day estimate
-inferred from recent `last_shown_at` history** (`store.estimate_displays_per_day`
-takes the median gap between recent serves), since the server never sees the
-device's poll cadence directly. The hint is approximate and self-calibrates as
-the device serves more images. Per-photo tone adjustments stay off the card face
-(too technical): the full values live in a hover tooltip behind a single
-**Adjusted** badge that appears only when a photo was tweaked from the defaults.
-
-```text
-n=4, 1 featured photo:    T P P P  T P P P  T P P P   (featured = 25%)
-n=3, 2 featured photos:   T1 P  T2 P  T1 P  T2 P      (each = 25%, bucket = 50%)
-```
-
-Two offline tools model this exact logic (the same pure `bucket_schedule_pick`
-the server uses, no Azure needed):
+The setup page also creates `data/config/users.json`. Human sessions and frame
+credentials are separate. To add another user, generate a password hash:
 
 ```bash
-python3 simulate_selection.py --perm 20 --temp 1 --n 4               # watch the interleave + shares
-python3 simulate_selection.py --perm 20 --temp 4 --n 4 --max-share 25 # cap the featured bucket at 25%
-python3 simulate_selection.py --fresh --perm 1000 --fresh-count 1     # fresh photo featured 7d, then graduates
-python3 simulate_selection.py --fresh --perm 1000 --fresh-count 50 --max-share 25  # bulk upload, capped
-python3 sweep_selection.py --temp 1 --n 4                            # prove featured share is pool-independent
-python3 tests/test_selection.py                                     # unit tests for the pure core
-python3 tests/test_security.py                                      # login throttle, SECRET_KEY fail-fast, headers
+cd tools/photoframe-site
+./hash_password.py
 ```
 
-The `--fresh` mode advances wall-clock so newly uploaded photos enter the featured
-bucket via `store.is_fresh` and then age out on their own. It prints a per-day
-share curve: a single new photo in a 1000-photo pool holds ~25% of displays for
-the 7-day window (vs ~0.1% without the boost), then drops to 0 as it graduates;
-with `--fresh-count 50 --max-share 25` the whole bucket stays capped at 25% so a
-bulk upload cannot crowd out the permanent pool.
+Place the result in `password_hash` and list the frame IDs that the user can
+manage. Keep `frames.json`, `users.json`, and `session-secret` out of source
+control.
 
-## Measuring `/api/next` latency
+## Run locally
 
-Every board polls `/api/next` on a cadence, so its latency multiplies across the
-fleet. The endpoint is instrumented two ways so you can see exactly where the
-time goes:
-
-- **`Server-Timing` response header** (always on, negligible cost). Each response
-  carries a per-phase breakdown — `config`, `fetch` (the four independent
-  selection reads run in parallel: settings, image list, queue, schedule),
-  `select`, `served`, `deliver`, plus `blob` (summed Azure Blob round-trips with
-  their count in `desc="n=.."`) and `total`. Because the reads overlap, `total`
-  is typically *less* than the summed `blob` time. Inspect it directly:
-
-  ```bash
-  curl -sD - -o /dev/null \
-    "$BASE/api/next?device_id=E1003-1&key=$KEY" | grep -i server-timing
-  ```
-
-- **`NEXT_PROFILE=1`** env flag — additionally logs the same breakdown for each
-  request (handy for `./run_local.sh` profiling). Off by default.
-
-The [`bench_next.py`](bench_next.py) harness drives the endpoint repeatedly and
-reports percentiles for both the client-side wall clock (connect / TTFB / total)
-and the server's `Server-Timing` phases. Credentials are read from
-`config.local.json`, never the command line, and the key is masked in output:
+Python 3.11 or newer is required.
 
 ```bash
-# Local app (./run_local.sh), decision-only (does not follow the 302 redirect,
-# so it times just the selection logic + serve-time writes):
-python3 bench_next.py --config config.local.json \
-    --base-url http://127.0.0.1:8080 --n 20
-
-# Deployed Azure app, full delivery path (proxy=1 streams the image inline):
-python3 bench_next.py --config config.local.json \
-    --base-url https://<app>.azurewebsites.net --mode full --n 20
-
-# Keep-alive vs fresh-per-request, to isolate connection-handshake cost:
-python3 bench_next.py --config config.local.json \
-    --base-url http://127.0.0.1:8080 --reuse
+cd tools/photoframe-site
+./run_local.sh
 ```
 
-A normal poll makes ~6 Azure Blob REST round-trips, but the handler keeps them
-cheap two ways. [`blobstore.py`](blobstore.py) reuses a **keep-alive connection
-per host** (a burst of calls pays the TCP+TLS handshake once, not per call), and
-the handler **fans the four independent selection reads out in parallel** so
-their long-haul latency overlaps instead of serializing. Selection reuses the
-metadata the list call already returned (no per-image `read_meta` GET), and
-`served_at`/`format` are stamped on the blob so the serve path needs no extra
-reads. Running the bench both locally (dev machine → Azure Blob, long-haul
-handshakes) and on Azure (app co-located with Blob) separates algorithmic cost
-(round-trip *count*) from network distance.
+The launcher creates `.venv`, installs dependencies on first use, and listens
+on <http://127.0.0.1:8080>. Open that address to complete first-boot setup.
 
-## Image format: G16P (and JPEG)
+For a local container:
 
-The board draws at the panel's **native resolution with no on-device scaling**,
-so every image this server emits is already sized to the configured
-`resolution`. Two transport formats are relevant:
+```bash
+cd tools/photoframe-site
+docker build --platform linux/amd64 -t epaper-photoframe-site:local .
+docker run --rm -p 8080:8080 \
+  -v "$PWD/data:/app/data" \
+  epaper-photoframe-site:local
+```
 
-- **G16P (the uncompressed framebuffer).** At upload time `gray16.encode_g16p()`
-  tone-maps the source through the panel's measured response curve, applies
-  Floyd–Steinberg dithering to 16 grey levels, and packs the result into the
-  G16P container: an 18-byte header (`G16P` magic, version, width, height,
-  payload length, CRC32) followed by the 4&nbsp;bpp packed-nibble framebuffer.
-  The firmware copies these nibbles straight into the panel buffer — no JPEG
-  decode, no large working buffer. This is the fast, low-power path.
-- **Baseline JPEG (firmware fallback).** The firmware can still decode a
-  baseline (non-progressive) JPEG at native resolution and dither it on-device.
-  This server does not emit JPEG, but a custom image source may. Progressive
-  JPEGs are rejected by the firmware.
+The container bind-mounts `./data` at `/app/data`. Configuration, photos, and
+the session secret persist there.
 
-### G16Z — the compressed transport wrapper
+## Publish a development image
 
-When compression shrinks the payload, this server wraps the G16P bytes in a
-raw-DEFLATE `G16Z` container (`gray16.wrap_g16z()`): the 4-byte `G16Z` magic
-followed by a header-less DEFLATE stream of the complete G16P bytes. The device
-pulls ~0.3–0.5× the bytes off WiFi and inflates straight into a fixed-size G16P
-buffer with the ROM's malloc-free tinfl, then renders the reconstructed G16P. If
-compression does not actually shrink a frame, the server stores raw G16P
-instead, so the wire never grows. The firmware also still accepts raw G16P, so
-uncompressed blobs keep rendering. On firmware builds with the SD image cache,
-the device writes back the original **compressed** G16Z blob, so a later cache
-hit skips the re-download and reads only ~0.4 MB off the card (vs ~1.3 MB for a
-full G16P) before re-inflating in PSRAM.
+The public GHCR package is the transfer path between the devbox and Proxmox.
+GitHub Actions is not involved in development publishes.
 
-The panel response curve (`PANEL_RESPONSE_*` in `gray16.py`) is produced once
-per panel during bring-up by the
-[`../panel-calibration`](../panel-calibration/README.md) toolkit.
+Authenticate once using a GitHub personal access token with `write:packages`:
 
-## What you would change for production
+```bash
+docker login ghcr.io -u jantielens
+```
 
-This sample is sufficient for one owner and a handful of devices. Before relying
-on it more broadly, consider:
+Enter the token at Docker's password prompt. Then build and publish the `dev`
+tag:
 
-- **Authentication & secrets** — accounts live in a JSON file and device keys
-  are plaintext config. Move to a real identity provider / secrets manager,
-  rotate device keys, and serve only over HTTPS (set `secure` session cookies
-  behind your TLS terminator).
-- **Persistence & concurrency** — the app is single-process and treats one blob
-  container per device as the source of truth. A multi-instance deployment needs
-  a shared, locked metadata store (the in-blob queue is not designed for
-  concurrent writers) and a managed identity for blob access instead of
-  long-lived SAS URLs.
-- **Delivery / CDN** — `/api/next` already redirects devices to blob storage to
-  stay off the bulk path; for fleets, front the blobs with a CDN and shorten SAS
-  lifetimes, or issue per-request SAS tokens.
-- **Observability & limits** — add request logging, rate limiting on
-  `/api/next`, upload size/type validation beyond the current checks, and
-  health/metrics endpoints suitable for your platform (`/healthz` is provided as
-  a starting point).
+```bash
+cd tools/photoframe-site
+./publish-dev.sh
+```
+
+If the VS Code process still has stale Docker group membership, run:
+
+```bash
+sg docker -c './publish-dev.sh'
+```
+
+After the first push, open the package on GitHub, select **Package settings**,
+then change its visibility to **Public**. The LXC can then pull it without a
+GitHub login.
+
+## Deploy to a fresh Proxmox LXC
+
+Create an unprivileged Debian LXC in Proxmox with 2 CPU cores, 1 GB memory, and
+8 GB storage. Enable the `Nesting` and `Keyctl` features, then start it and open
+its console.
+
+Install Docker, prepare persistent storage, and start the site:
+
+```bash
+apt-get update
+apt-get install -y docker.io
+mkdir -p /opt/epaper-photoframe/data
+docker pull ghcr.io/jantielens/epaper-photoframe-site:dev
+docker run -d \
+  --name epaper-photoframe \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -v /opt/epaper-photoframe/data:/app/data \
+  ghcr.io/jantielens/epaper-photoframe-site:dev
+```
+
+Browse to `http://<LXC-IP>:8080` and complete setup. You can also verify the
+process from the LXC console:
+
+```bash
+curl http://127.0.0.1:8080/healthz
+docker logs epaper-photoframe
+```
+
+For each later development update, run `./publish-dev.sh` on the devbox. Then
+run these commands in the LXC console:
+
+```bash
+docker pull ghcr.io/jantielens/epaper-photoframe-site:dev
+docker rm -f epaper-photoframe
+docker run -d \
+  --name epaper-photoframe \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -v /opt/epaper-photoframe/data:/app/data \
+  ghcr.io/jantielens/epaper-photoframe-site:dev
+```
+
+Container replacement does not modify the bind-mounted data directory, so the
+administrator account, frame token, session secret, settings, and photos remain
+available. The setup page does not run again.
+
+## Optional public access with Tailscale Funnel
+
+Tailscale Funnel can publish the site at a stable HTTPS `*.ts.net` address
+without port forwarding or a custom domain. Run Tailscale directly in the LXC,
+outside the Docker container, so the application image remains independent of
+the deployment network.
+
+Prefer Tailscale Serve when every administrator and frame can join the same
+tailnet. Serve keeps the site private to authenticated tailnet members:
+
+```bash
+tailscale serve --bg 8080
+tailscale serve status
+```
+
+Use Funnel only when a frame cannot reach the tailnet. Funnel makes the site,
+including its login and upload endpoints, reachable from the public Internet.
+The application authentication and request limits still apply, but Internet
+clients can probe those surfaces. Site export and import are also reachable:
+they can download or replace the full site, including every device token and
+the administrator credential hash, and are protected by the authenticated
+administrator session plus current-password re-authentication.
+
+First check whether the LXC already exposes the kernel TUN device:
+
+```bash
+ls -l /dev/net/tun
+```
+
+If the device is missing, stop the LXC and add these lines to
+`/etc/pve/lxc/<CTID>.conf` on the Proxmox host:
+
+```ini
+lxc.cgroup2.devices.allow: c 10:200 rwm
+lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+```
+
+Start the LXC again, then install and authenticate Tailscale inside it:
+
+```bash
+apt-get update
+apt-get install -y curl ca-certificates
+curl -fsSL https://tailscale.com/install.sh | sh
+systemctl enable --now tailscaled
+tailscale up
+```
+
+Complete site setup on the trusted LAN before publishing it. Then recreate the
+container with its HTTP port bound only to the LXC loopback interface and mark
+browser session cookies as HTTPS-only:
+
+```bash
+docker rm -f epaper-photoframe
+docker run -d \
+  --name epaper-photoframe \
+  --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 \
+  -e COOKIE_SECURE=1 \
+  -v /opt/epaper-photoframe/data:/app/data \
+  ghcr.io/jantielens/epaper-photoframe-site:dev
+curl http://127.0.0.1:8080/healthz
+```
+
+Publish the loopback service and display its public URL:
+
+```bash
+tailscale funnel --bg 8080
+tailscale funnel status
+```
+
+The Funnel configuration persists in Tailscale state. Docker restarts the
+container because it uses `unless-stopped`, and `systemd` starts both Docker
+and Tailscale when the LXC boots. Enable **Start at boot** for the LXC in
+Proxmox, or run `pct set <CTID> --onboot 1` on the Proxmox host. Verify the
+complete boot configuration inside the LXC:
+
+```bash
+systemctl is-enabled docker tailscaled
+docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' epaper-photoframe
+```
+
+Expected output is `enabled` for both services and `unless-stopped` for the
+container. Preserve `-p 127.0.0.1:8080:8080` and `-e COOKIE_SECURE=1` whenever
+the container is replaced. Use `tailscale funnel reset` to remove public
+access.
+
+## Internet exposure safeguards
+
+The application rejects ordinary form bodies larger than 1 MiB, image upload
+bodies larger than 32 MiB, and archive import bodies larger than 130 MiB. A
+request must finish delivering its complete body within 30 seconds. Decoded
+images are limited to 40 million pixels, and crop geometry is bounded before
+Pillow allocates a crop canvas.
+
+Every browser POST requires a session-bound CSRF token. Login failures are
+throttled independently by peer address, account, and a global budget. The
+application ignores `X-Forwarded-For` by default because an internet client can
+spoof that header unless a trusted proxy removes and replaces it.
+
+Set `TRUSTED_PROXY_IPS` to a comma-separated list only when each listed proxy
+sanitizes `X-Forwarded-For` before forwarding requests. Do not enable this for
+an address merely because it is a Docker bridge or loopback peer. Tailscale
+Funnel does not require this setting.
+
+## Network trust
+
+> [!WARNING]
+> Plain HTTP is appropriate only on a trusted LAN. Anyone who can observe that
+> traffic can steal and replay a frame bearer token. Use TLS when Wi-Fi clients,
+> network infrastructure, or any routed segment are not fully trusted.
+
+`COOKIE_SECURE=1` marks human session cookies as HTTPS-only. The service uses
+the persistent session secret unless `SECRET_KEY` explicitly overrides it. This
+setting does not encrypt frame API traffic; terminate TLS at the service or a
+trusted reverse proxy.
+
+Frame tokens are never accepted in query strings or written to application
+logs. The setup completion page displays the generated token once. Frame API
+responses never return it. Missing, unknown, and revoked tokens produce the
+same `401 Unauthorized` response.
+
+## Frame API
+
+```http
+GET /api/v1/next HTTP/1.1
+Authorization: Bearer <frame-token>
+Photoframe-Current-Image-Key: M7x4qQ2V0A
+Photoframe-Current-Content-CRC32: 89abcdef
+```
+
+The advisory fingerprint headers must form a valid pair. A partial or malformed
+pair is ignored after authentication. When another eligible pair exists, the
+reported pair is excluded from that selection.
+
+Responses are:
+
+| Status | Meaning |
+| ------ | ------- |
+| `200` | Exact transport bytes are in the response body |
+| `204` | Keep the current display unchanged |
+| `401` | Bearer authentication failed |
+| `404` | The requested major-version path is unsupported |
+| `405` | The method is not `GET`; `Allow: GET` is present |
+
+Every API response prevents shared-cache reuse with
+`Cache-Control: private, no-cache` and `Vary: Authorization`. A `200` response
+also carries `Photoframe-Image-Key` and the lowercase CRC-32 of the exact body
+in `Photoframe-Content-CRC32`.
+
+## Verify
+
+Run all standalone site tests:
+
+```bash
+cd tools/photoframe-site
+for test in tests/test_*.py; do .venv/bin/python "$test"; done
+```
+
+Verify the normative e1003 binary vectors:
+
+```bash
+VECTOR_DIR=../../docs/dev/photoframe-next-image/conformance/photoframe-next-image-v1
+.venv/bin/python "$VECTOR_DIR/verify_vectors.py" e1003-landscape
+```
+
+Run the behavioral adapter:
+
+```bash
+SECRET_KEY=test .venv/bin/python conformance_adapter.py
+```
+
+The adapter executes every service-role assertion. It reports client and bridge
+assertions as `SKIP` because this site does not implement those roles. Binary
+vector success or service assertions alone do not claim full protocol
+conformance.

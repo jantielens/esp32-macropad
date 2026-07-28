@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Offline simulator for the photoframe two-bucket selection.
 
-Runs the *same* pure scheduler that /api/next uses (store.bucket_schedule_pick)
+Runs the *same* pure scheduler that /api/v1/next uses (store.bucket_schedule_pick)
 over a synthetic gallery, advancing each photo's last_shown_at and the temp-slot
 countdown in memory between draws. Lets you watch how permanent and temporary
 photos interleave -- and confirm a temporary photo's share is pool-independent --
-without deploying or touching Azure.
+without deploying or touching persistent site data.
 
 The scheduler is deterministic (least-recently-shown within each bucket + a
 countdown), so runs are reproducible without a random seed.
@@ -165,7 +165,7 @@ def simulate_fresh(
         perm: list = []
         temp: list = []
         for pid, meta in photos.items():
-            shown = store._parse_iso(meta["last_shown_at"])
+            shown = store.parse_iso(meta["last_shown_at"])
             if meta.get("expires_at") or store.is_fresh(meta, now=now, window_days=window_days):
                 temp.append((pid, shown))
             else:

@@ -7,6 +7,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+class HTTPClient;
+
+// Read the current successful HTTP response body into PSRAM. The caller owns
+// the HTTPClient lifecycle and can choose not to call this after inspecting
+// headers (the Service cache-hit abort). body_bytes_read counts only bytes
+// returned by stream->read().
+bool epaper_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* out_len,
+		size_t* body_bytes_read, bool honor_content_length = true);
+
 // Download the full body of an HTTP(S) URL into a freshly-allocated PSRAM
 // buffer, following up to 3 cross-host 3xx redirects (the image endpoint
 // 302-redirects to a storage blob on a different host with a fresh TLS

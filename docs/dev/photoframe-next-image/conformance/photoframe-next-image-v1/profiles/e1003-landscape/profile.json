@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "e1003-landscape",
+  "description": "reTerminal E1003 driven in landscape orientation",
+  "geometry": {
+    "width": 1872,
+    "height": 1404
+  },
+  "formats": [
+    {
+      "code": 1,
+      "mediaType": "image/jpeg"
+    },
+    {
+      "code": 2,
+      "mediaType": "application/vnd.photoframe.g16p"
+    },
+    {
+      "code": 3,
+      "mediaType": "application/vnd.photoframe.g16z"
+    }
+  ]
+}

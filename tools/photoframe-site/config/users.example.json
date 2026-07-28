@@ -1,0 +1,8 @@
+{
+  "users": {
+    "owner@example.com": {
+      "password_hash": "pbkdf2_sha256$200000$replace_salt$replace_hash",
+      "frames": ["e1003-living-room"]
+    }
+  }
+}

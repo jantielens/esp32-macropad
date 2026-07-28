@@ -47,6 +47,11 @@ LoopBridgeResult loop_bridge_dispatch(LoopBridgeExec exec,
                                       bool* out_ok,
                                       char* out_msg, size_t out_msg_len);
 
+// Web task: queue a fire-and-forget job and return immediately. The main loop
+// reclaims the slot after execution; callers only learn whether it was queued.
+LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec exec,
+                                     const void* ctx, size_t ctx_len);
+
 // Main loop: run a pending job if one is queued (call every loop iteration).
 // No-op when nothing is pending.
 void loop_bridge_drain();

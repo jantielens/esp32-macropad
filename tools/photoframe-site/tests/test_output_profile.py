@@ -1,199 +1,175 @@
-"""Tests for the per-device output profile (config) and the resize-only JPEG
-encoder (gray16.encode_jpeg), plus the format-aware blob naming in store.
+"""File configuration and exact transport encoder regressions."""
 
-Run standalone (no pytest needed):
+from __future__ import annotations
 
-    python3 tests/test_output_profile.py
-"""
-
+import hashlib
 import io
 import json
 import os
+import tempfile
+import zlib
+from pathlib import Path
+
+from PIL import Image
+
 import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from PIL import Image  # noqa: E402
-
 import config as cfg  # noqa: E402
 import gray16  # noqa: E402
-import store  # noqa: E402
+import transport  # noqa: E402
 
 
-def _load(devices: dict):
-    os.environ["CONFIG_JSON"] = json.dumps({"devices": devices, "users": {}})
-    return cfg.load_config()
+def _load(frames: dict, users: dict | None = None) -> cfg.Config:
+    root = Path(tempfile.mkdtemp())
+    (root / "config").mkdir()
+    (root / "config" / "frames.json").write_text(json.dumps({"frames": frames}))
+    (root / "config" / "users.json").write_text(json.dumps({"users": users or {}}))
+    return cfg.load_config(root)
 
 
-_BASE_DEVICE = {
-    "container_sas_url": "https://example.blob.core.windows.net/c?sig=x",
-    "api_key": "k",
-}
+def _frame(token: str = "0123456789abcdef", **overrides) -> dict:
+    value = {"token": token, "profile": {"width": 8, "height": 4, "format_codes": [3, 2]}}
+    value.update(overrides)
+    return value
 
 
-# --- config: output profile ---------------------------------------------------
-
-
-def test_default_profile_is_g16z():
-    config = _load({"E1003-1": dict(_BASE_DEVICE)})
-    device = config.device("E1003-1")
-    assert device.image_format == cfg.FORMAT_G16Z == "g16z"
-    assert device.jpeg_quality == cfg.DEFAULT_JPEG_QUALITY == 90
-
-
-def test_jpeg_profile_parsed():
+def test_capability_preference_and_union():
     config = _load({
-        "ink-1": dict(_BASE_DEVICE, output={"format": "jpeg", "jpeg_quality": 75}),
+        "first": _frame(),
+        "second": _frame("fedcba9876543210", profile={"width": 6, "height": 4, "format_codes": [1]}),
+        "revoked": _frame("0011223344556677", revoked=True),
     })
-    device = config.device("ink-1")
-    assert device.image_format == "jpeg"
-    assert device.jpeg_quality == 75
+    assert config.device("first").format_codes == (3, 2)
+    assert config.required_variants() == {(8, 4, 2), (8, 4, 3), (6, 4, 1)}
+    assert config.authenticate_frame("0011223344556677") is None
 
 
-def test_format_is_case_insensitive():
-    config = _load({"ink-1": dict(_BASE_DEVICE, output={"format": "JPEG"})})
-    assert config.device("ink-1").image_format == "jpeg"
+def test_distinct_processing_profiles_get_distinct_variants():
+    config = _load({
+        "normal": _frame(),
+        "rotated": _frame("fedcba9876543210", image_transform={"rotate_deg": 180}),
+    })
+    assert len(config.required_variants()) == 2
+    assert len(config.variant_requirements()) == 4
 
 
-def test_unknown_format_rejected():
+def test_duplicate_token_rejected():
     try:
-        _load({"x": dict(_BASE_DEVICE, output={"format": "png"})})
+        _load({"one": _frame(), "two": _frame()})
     except cfg.ConfigError:
         return
-    raise AssertionError("expected ConfigError for unknown format")
+    raise AssertionError("duplicate frame token accepted")
 
 
-def test_bad_quality_rejected():
-    for bad in (0, 101, "abc"):
+def test_multiple_users_keep_independent_device_assignments():
+    users = {
+        "first@example.com": {"password_hash": "hash-one", "frames": ["one"]},
+        "second@example.com": {"password_hash": "hash-two", "frames": ["two"]},
+    }
+    config = _load({
+        "one": _frame(),
+        "two": _frame("fedcba9876543210"),
+    }, users)
+    assert config.user("first@example.com").devices == ("one",)
+    assert config.user("second@example.com").devices == ("two",)
+    assert cfg.user_can_access(config.user("first@example.com"), "one")
+    assert not cfg.user_can_access(config.user("first@example.com"), "two")
+
+
+def test_invalid_profile_values_rejected():
+    invalid = (
+        _frame(profile={"width": 7, "height": 4, "format_codes": [2]}),
+        _frame(profile={"width": 8, "height": 4, "format_codes": [0]}),
+        _frame(profile={"width": 8, "height": 4, "format_codes": [2, 2]}),
+        _frame(jpeg_quality=101),
+    )
+    for entry in invalid:
         try:
-            _load({"x": dict(_BASE_DEVICE, output={"format": "jpeg", "jpeg_quality": bad})})
+            _load({"bad": entry})
         except cfg.ConfigError:
             continue
-        raise AssertionError(f"expected ConfigError for jpeg_quality={bad!r}")
+        raise AssertionError(f"invalid frame accepted: {entry}")
 
 
-# --- config: serve_mode -------------------------------------------------------
+def test_encode_jpeg_is_baseline_at_exact_size():
+    source = Image.new("RGB", (20, 10), (180, 90, 40))
+    payload = transport.encode_variant(source, width=8, height=4, format_code=1, jpeg_quality=80)
+    with Image.open(io.BytesIO(payload)) as encoded:
+        assert encoded.format == "JPEG"
+        assert encoded.size == (8, 4)
+        assert encoded.mode == "RGB"
+        assert "progression" not in encoded.info
 
 
-def test_default_serve_mode_is_redirect():
-    config = _load({"E1003-1": dict(_BASE_DEVICE)})
-    assert config.device("E1003-1").serve_mode == cfg.SERVE_REDIRECT == "redirect"
+def test_encode_g16_variants_are_exact_formats():
+    source = Image.linear_gradient("L").convert("RGB")
+    g16p = transport.encode_variant(source, width=8, height=4, format_code=2)
+    g16z = transport.encode_variant(source, width=8, height=4, format_code=3)
+    assert g16p.startswith(b"G16P")
+    assert g16z.startswith(gray16.G16Z_MAGIC)
+    assert zlib.decompress(g16z[4:], wbits=-15) == g16p
 
 
-def test_serve_mode_inline_parsed():
-    config = _load({"ink-1": dict(_BASE_DEVICE, serve_mode="inline")})
-    assert config.device("ink-1").serve_mode == cfg.SERVE_INLINE == "inline"
+def test_image_pipeline_output_hashes():
+    source = Image.new("RGB", (47, 31))
+    pixels = source.load()
+    for y in range(source.height):
+        for x in range(source.width):
+            pixels[x, y] = (
+                (x * 17 + y * 3) % 256,
+                (x * 5 + y * 19) % 256,
+                (x * 11 + y * 7) % 256,
+            )
+    transform = {"rotate_deg": 90, "mirror_x": True}
+    crop = {"x": -0.1, "y": 0.05, "w": 1.2, "h": 0.9}
+    knob_values = {
+        "panel_calibration": 1.0,
+        "brightness": 0.04,
+        "contrast": 1.15,
+        "midtone": 2.0,
+        "highlights": -0.1,
+        "gamma": 0.85,
+    }
+    common = {
+        "width": 32,
+        "height": 24,
+        "transform": transform,
+        "crop": crop,
+        "knobs": knob_values,
+        "resampler": "lanczos",
+        "jpeg_quality": 87,
+    }
+    expected_hashes = {
+        2: "04096ce23c0d1ad745a4ad9bc5ed92120e4134f36f2b1ad31fdb5da412b4db1e",
+        3: "d209755bf08fc9c5564d39e9ba91747d79486c4483e4d0bb5dd57ba51c67a76c",
+    }
+    for code, expected in expected_hashes.items():
+        payload = transport.encode_variant(source, format_code=code, **common)
+        assert hashlib.sha256(payload).hexdigest() == expected
 
-
-def test_serve_mode_is_case_insensitive():
-    config = _load({"ink-1": dict(_BASE_DEVICE, serve_mode="INLINE")})
-    assert config.device("ink-1").serve_mode == "inline"
-
-
-def test_unknown_serve_mode_rejected():
-    try:
-        _load({"x": dict(_BASE_DEVICE, serve_mode="proxy")})
-    except cfg.ConfigError:
-        return
-    raise AssertionError("expected ConfigError for unknown serve_mode")
-
-
-# --- gray16.encode_jpeg -------------------------------------------------------
-
-
-def test_encode_jpeg_is_baseline_3component_at_device_size():
-    src = Image.new("RGB", (200, 150), (180, 90, 40))
-    data, preview = gray16.encode_jpeg(src, width=320, height=240, quality=80)
-    assert preview.mode == "L"  # gallery thumbnail stays grayscale
-    out = Image.open(io.BytesIO(data))
-    assert out.format == "JPEG"
-    assert out.size == (320, 240)
-    # Encoded as 3-component RGB (YCbCr) so Inkplate's TJpgDec can decode it; a
-    # single-component grayscale JPEG is rejected by that decoder.
-    assert out.mode == "RGB"
-    # Baseline, not progressive (E1003 firmware and simple loaders need baseline).
-    assert "progression" not in out.info
-
-
-def test_encode_jpeg_colour_when_grayscale_false():
-    src = Image.new("RGB", (64, 64), (10, 200, 60))
-    data, _ = gray16.encode_jpeg(src, width=64, height=64, grayscale=False)
-    out = Image.open(io.BytesIO(data))
-    assert out.mode == "RGB"
-
-
-def test_encode_jpeg_quality_affects_size():
-    src = Image.effect_noise((256, 256), 80).convert("RGB")
-    small, _ = gray16.encode_jpeg(src, width=256, height=256, quality=20)
-    large, _ = gray16.encode_jpeg(src, width=256, height=256, quality=95)
-    assert len(small) < len(large)
-
-
-def _mean(img: Image.Image) -> float:
-    data = img.convert("L").getdata()
-    return sum(data) / len(data)
-
-
-def test_encode_jpeg_applies_tone_curve():
-    # A midtone-grey gradient so auto-stretch + brightness have something to act on.
-    src = Image.linear_gradient("L").convert("RGB")
-    _, dark = gray16.encode_jpeg(src, width=128, height=128, brightness=-0.2)
-    _, bright = gray16.encode_jpeg(src, width=128, height=128, brightness=0.2)
-    # Brightness knob is reused on the jpeg path: +0.2 must lift the mean level.
-    assert _mean(bright) > _mean(dark)
-
-
-def test_encode_jpeg_no_panel_calibration():
-    # The jpeg path must NOT apply the E1003 panel inverse LUT: its identity-tone
-    # output should match calibrated_gray_levels with panel_calibration=0.
-    src = Image.linear_gradient("L").convert("RGB")
-    _, preview = gray16.encode_jpeg(src, width=64, height=64)
-    rgb = gray16.fit_rgb_to_panel(src, 64, 64, resample=gray16.resolve_resampler(None))
-    expected = gray16.gray_levels_to_preview(
-        gray16.calibrated_gray_levels(rgb, width=64, height=64, panel_calibration=0.0),
-        64, 64,
+    g16p, g16z, preview = transport.encode_g16_pair(
+        source,
+        width=32,
+        height=24,
+        transform=transform,
+        crop=crop,
+        knobs=knob_values,
+        resampler="lanczos",
     )
-    assert list(preview.getdata()) == list(expected.getdata())
-
-
-# --- store: format-aware blob naming ------------------------------------------
-
-
-def test_format_ext_mapping():
-    assert store.format_ext("g16z") == ".g16p"
-    assert store.format_ext("jpeg") == ".jpg"
-    assert store.format_ext(None) == ".g16p"      # legacy default
-    assert store.format_ext("bogus") == ".g16p"   # safe fallback
-
-
-def test_meta_image_ext():
-    assert store.meta_image_ext({"format": "jpeg"}) == ".jpg"
-    assert store.meta_image_ext({}) == ".g16p"     # pre-format meta -> legacy
-
-
-def test_image_name_and_split_roundtrip():
-    assert store.image_name("abc", ".jpg") == "images/abc.jpg"
-    assert store.image_name("abc") == "images/abc.g16p"
-    assert store._split_image_name("images/abc.g16p") == ("abc", ".g16p")
-    assert store._split_image_name("images/abc.jpg") == ("abc", ".jpg")
-    # Non-image blobs are ignored.
-    assert store._split_image_name("images/abc__thumb.png") is None
-    assert store._split_image_name("images/abc.json") is None
-    assert store._split_image_name("state/queue.json") is None
+    assert hashlib.sha256(g16p).hexdigest() == expected_hashes[2]
+    assert hashlib.sha256(g16z).hexdigest() == expected_hashes[3]
+    output = io.BytesIO()
+    preview.save(output, format="PNG")
+    assert hashlib.sha256(output.getvalue()).hexdigest() == (
+        "6ad55b57a8156a18f2bf465ee2d26f547550e77171d0ec462b17032cef3b361f"
+    )
 
 
 if __name__ == "__main__":
-    test_default_profile_is_g16z()
-    test_jpeg_profile_parsed()
-    test_format_is_case_insensitive()
-    test_unknown_format_rejected()
-    test_bad_quality_rejected()
-    test_encode_jpeg_is_baseline_3component_at_device_size()
-    test_encode_jpeg_colour_when_grayscale_false()
-    test_encode_jpeg_quality_affects_size()
-    test_encode_jpeg_applies_tone_curve()
-    test_encode_jpeg_no_panel_calibration()
-    test_format_ext_mapping()
-    test_meta_image_ext()
-    test_image_name_and_split_roundtrip()
-    print("ok")
+    tests = sorted((name, value) for name, value in globals().items() if name.startswith("test_") and callable(value))
+    for name, test in tests:
+        test()
+        print(f"PASS {name}")
+    print(f"\n{len(tests)}/{len(tests)} passed")

@@ -14,10 +14,8 @@
 #include "log_manager.h"
 
 #include <Arduino.h>
-#include <HTTPClient.h>
 #include <SD.h>
 #include <SPI.h>
-#include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <string.h>
 
@@ -33,7 +31,8 @@ bool s_mounted = false;
 // the frame is on screen. Owned here; freed by flush/discard.
 uint8_t* s_pending_buf = nullptr;
 size_t   s_pending_len = 0;
-char     s_pending_id[64] = {0};
+uint32_t s_pending_crc32 = 0;
+bool     s_pending_valid = false;
 
 void restore_panel_bus() {
 		if (s_cfg.restore_panel_bus) s_cfg.restore_panel_bus();
@@ -106,39 +105,19 @@ void sd_cache_unmount() {
 		// SD.begin() falls back to cardType=0.
 }
 
-// Local cache file holds the original transport blob as downloaded -- normally
-// G16Z (raw-DEFLATE compressed) but a plain G16P frame when the server found it
-// incompressible. Both are self-describing via their 4-byte magic and feed back
-// through the same decode on read, so the file uses a neutral .g16z extension.
-void sd_cache_path(const char* id, char* out, size_t out_sz) {
-		snprintf(out, out_sz, "/cache/%s.g16z", id);
+void sd_cache_path(uint32_t content_crc32, char* out, size_t out_sz) {
+		snprintf(out, out_sz, "/cache/%08lx.blob", (unsigned long)content_crc32);
 }
 
-// Parse the blob id out of a redirect Location like
-// "https://.../<container>/images/<id>.g16p?<sas>". Returns false when the
-// URL is not an images/<id>.g16p target (e.g. a non-blob redirect).
-bool parse_image_id(const char* loc, char* out, size_t out_sz) {
-		const char* p = strstr(loc, "images/");
-		if (!p) return false;
-		p += 7;  // strlen("images/")
-		const char* end = strstr(p, ".g16p");
-		if (!end || end <= p) return false;
-		const size_t n = (size_t)(end - p);
-		if (n + 1 > out_sz) return false;
-		memcpy(out, p, n);
-		out[n] = '\0';
-		return true;
-}
-
-// Atomic write to /cache/<id>.g16z (tmp file + rename).
-bool sd_cache_write(const char* id, const uint8_t* data, size_t len) {
+// Atomic write to /cache/<crc32>.blob (tmp file + rename).
+bool sd_cache_write(uint32_t content_crc32, const uint8_t* data, size_t len) {
 		if (!data || len == 0) return false;
 		if (!sd_cache_mount()) return false;
 		bool ok = false;
 		SD.mkdir("/cache");
 		char path[96], tmp[96];
-		sd_cache_path(id, path, sizeof(path));
-		snprintf(tmp, sizeof(tmp), "/cache/%s.tmp", id);
+		sd_cache_path(content_crc32, path, sizeof(path));
+		snprintf(tmp, sizeof(tmp), "/cache/%08lx.tmp", (unsigned long)content_crc32);
 		SD.remove(tmp);
 		File f = SD.open(tmp, FILE_WRITE);
 		if (f) {
@@ -191,62 +170,14 @@ bool epaper_sd_cache_is_enabled() {
 		return s_enabled;
 }
 
-// Issue the GET and resolve its 302 to the blob URL + image id WITHOUT
-// downloading the 1.3 MB body. Follows up to kMaxRedirects hops. Redirected
-// URLs are never logged because the Location carries a storage SAS token.
-bool epaper_sd_cache_resolve(const char* url, String& out_blob_url,
-                             char* out_id, size_t id_sz) {
-		String current = url;
-		const int kMaxRedirects = 3;
-		for (int hop = 0; hop <= kMaxRedirects; ++hop) {
-				const bool is_https = current.startsWith("https://");
-				HTTPClient http;
-				WiFiClientSecure secure;
-				WiFiClient plain;
-				bool begin_ok = false;
-				if (is_https) {
-						secure.setInsecure();
-						begin_ok = http.begin(secure, current);
-				} else {
-						begin_ok = http.begin(plain, current);
-				}
-				if (!begin_ok) return false;
-				http.setTimeout(8000);
-				const char* collect[] = {"Location"};
-				http.collectHeaders(collect, 1);
-				const uint32_t t_get = millis();
-				const int code = http.GET();
-				LOGI("Epaper", "Resolve hop %d: GET %lums (TCP+TLS+req) code=%d", hop,
-						 (unsigned long)(millis() - t_get), code);
-				if (code == HTTP_CODE_MOVED_PERMANENTLY || code == HTTP_CODE_FOUND ||
-						code == HTTP_CODE_SEE_OTHER || code == HTTP_CODE_TEMPORARY_REDIRECT ||
-						code == HTTP_CODE_PERMANENT_REDIRECT) {
-						String loc = http.header("Location");
-						http.end();
-						if (loc.length() == 0) return false;
-						if (parse_image_id(loc.c_str(), out_id, id_sz)) {
-								out_blob_url = loc;
-								return true;
-						}
-						if (hop == kMaxRedirects) return false;
-						current = loc;
-						delay(50);
-						continue;
-				}
-				http.end();
-				return false;  // 200/4xx/5xx: not a redirect we can resolve a blob id from
-		}
-		return false;
-}
-
-// Read /cache/<id>.g16z fully into a fresh PSRAM buffer. Returns false (and
+// Read /cache/<crc32>.blob fully into a fresh PSRAM buffer. Returns false (and
 // leaves *out_buf null) on miss or any read error.
-bool epaper_sd_cache_read(const char* id, uint8_t** out_buf, size_t* out_len) {
+bool epaper_sd_cache_read(uint32_t content_crc32, uint8_t** out_buf, size_t* out_len) {
 		*out_buf = nullptr;
 		*out_len = 0;
 		if (!sd_cache_mount()) return false;
 		char path[96];
-		sd_cache_path(id, path, sizeof(path));
+		sd_cache_path(content_crc32, path, sizeof(path));
 		bool ok = false;
 		File f = SD.open(path, FILE_READ);
 		if (f) {
@@ -276,17 +207,27 @@ bool epaper_sd_cache_read(const char* id, uint8_t** out_buf, size_t* out_len) {
 		return ok;
 }
 
-void epaper_sd_cache_stage_pending(const char* id, uint8_t* buf, size_t len) {
+bool epaper_sd_cache_remove(uint32_t content_crc32) {
+		if (!sd_cache_mount()) return false;
+		char path[96];
+		sd_cache_path(content_crc32, path, sizeof(path));
+		const bool ok = !SD.exists(path) || SD.remove(path);
+		sd_cache_unmount();
+		return ok;
+}
+
+void epaper_sd_cache_stage_pending(uint32_t content_crc32, uint8_t* buf, size_t len) {
 		// Free any blob staged by a previous draw that was never flushed.
 		epaper_sd_cache_discard_pending();
 		s_pending_buf = buf;
 		s_pending_len = len;
-		strlcpy(s_pending_id, id, sizeof(s_pending_id));
+		s_pending_crc32 = content_crc32;
+		s_pending_valid = true;
 }
 
 void epaper_sd_cache_flush() {
-		if (s_pending_buf && s_pending_id[0]) {
-				sd_cache_write(s_pending_id, s_pending_buf, s_pending_len);
+		if (s_pending_buf && s_pending_valid) {
+				sd_cache_write(s_pending_crc32, s_pending_buf, s_pending_len);
 		}
 		epaper_sd_cache_discard_pending();
 }
@@ -295,7 +236,8 @@ void epaper_sd_cache_discard_pending() {
 		if (s_pending_buf) heap_caps_free(s_pending_buf);
 		s_pending_buf = nullptr;
 		s_pending_len = 0;
-		s_pending_id[0] = '\0';
+		s_pending_crc32 = 0;
+		s_pending_valid = false;
 }
 
 // Delete every file under /cache and remove the directory.
@@ -313,6 +255,7 @@ bool epaper_sd_cache_clear() {
 								String full = nm.startsWith("/") ? nm : (String("/cache/") + nm);
 								if (!SD.remove(full)) ok = false;
 						}
+						delay(1);
 						entry = dir.openNextFile();
 				}
 				dir.close();

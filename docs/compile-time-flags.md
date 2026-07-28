@@ -553,6 +553,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_http.h
   - src/app/device_classes/epaper/epaper_mqtt.cpp
   - src/app/device_classes/epaper/epaper_mqtt.h
+  - src/app/device_classes/epaper/epaper_next_client.cpp
+  - src/app/device_classes/epaper/epaper_next_client.h
   - src/app/device_classes/epaper/epaper_overlay.cpp
   - src/app/device_classes/epaper/epaper_overlay.h
   - src/app/device_classes/epaper/epaper_refresh.cpp

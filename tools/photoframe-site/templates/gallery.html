@@ -21,7 +21,8 @@
     <h1 class="h3 page-title mb-0">{{ device_id }}</h1>
   </div>
   <div class="d-flex gap-2">
-    <a class="btn btn-accent-soft" href="/settings?device_id={{ device_id }}">Config</a>
+    <a class="btn btn-accent-soft" href="/settings?device_id={{ device_id }}">Settings</a>
+    <a class="btn btn-accent-soft" href="/upload/bulk?device_id={{ device_id }}">Bulk upload</a>
     <a class="btn btn-accent" href="/upload?device_id={{ device_id }}">Upload image</a>
   </div>
 </div>
@@ -33,6 +34,7 @@
       <h2 class="h6 text-body-secondary text-uppercase fw-semibold mb-0">What&rsquo;s next</h2>
       <form method="post" action="/photos/queue-clear" class="m-0"
             onsubmit="return confirm('Clear the queue? Images are kept.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="device_id" value="{{ device_id }}">
         <button type="submit" class="btn btn-sm btn-outline-secondary py-0">Clear queue</button>
       </form>
@@ -47,6 +49,7 @@
         <span class="badge text-bg-primary position-absolute top-0 start-0 m-1">Next</span>
         {% endif %}
         <form method="post" action="/photos/queue-remove" class="m-0 position-absolute bottom-0 end-0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="device_id" value="{{ device_id }}">
           <input type="hidden" name="image_id" value="{{ q.id }}">
           <button type="submit" class="btn btn-sm btn-dark rounded-circle queue-x m-1 p-0"
@@ -102,18 +105,47 @@
           {% if item.last_shown_at %}Shown {{ item.last_shown_at[:16] }}{% else %}Never shown{% endif %}
         </p>
       </div>
-      <div class="card-footer bg-transparent d-flex gap-2">
+      <div class="card-footer bg-transparent">
+        <details class="mb-2">
+          <summary class="small fw-semibold">Edit photo</summary>
+          <form method="post" action="/photos/edit" class="mt-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="device_id" value="{{ device_id }}">
+            <input type="hidden" name="image_id" value="{{ item.id }}">
+            <label class="form-label small mb-1" for="caption-{{ item.id }}">Caption</label>
+            <input class="form-control form-control-sm mb-2" id="caption-{{ item.id }}" name="caption"
+                   maxlength="200" value="{{ item.caption }}">
+            <label class="form-label small mb-1" for="lifetime-{{ item.id }}">Lifetime</label>
+            <select class="form-select form-select-sm mb-2" id="lifetime-{{ item.id }}" name="lifetime">
+              <option value="unchanged" selected>Keep current</option>
+              <option value="once">Show once</option>
+              <option value="1">1 hour from now</option>
+              <option value="6">6 hours from now</option>
+              <option value="12">12 hours from now</option>
+              <option value="24">24 hours from now</option>
+              <option value="48">48 hours from now</option>
+              <option value="168">1 week from now</option>
+              <option value="720">1 month from now</option>
+              <option value="always">Keep always</option>
+            </select>
+            <button class="btn btn-sm btn-accent" type="submit">Save</button>
+          </form>
+        </details>
+        <div class="d-flex gap-2">
         <form method="post" action="/photos/show-next" class="m-0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="device_id" value="{{ device_id }}">
           <input type="hidden" name="image_id" value="{{ item.id }}">
           <button class="btn btn-sm btn-accent-soft" type="submit">Show next</button>
         </form>
         <form method="post" action="/photos/delete" class="m-0"
               onsubmit="return confirm('Delete this image?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="device_id" value="{{ device_id }}">
           <input type="hidden" name="image_id" value="{{ item.id }}">
           <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
         </form>
+        </div>
       </div>
     </div>
   </div>

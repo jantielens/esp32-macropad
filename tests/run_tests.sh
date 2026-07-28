@@ -348,6 +348,30 @@ echo "=== Running unit tests: epaper_battery ==="
 ./tests/bin/test_epaper_battery
 echo
 
+echo "=== Building unit tests: epaper_next_client_logic ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_epaper_next_client_logic.cpp \
+    src/app/device_classes/epaper/epaper_next_client_logic.cpp \
+    src/app/device_classes/epaper/epaper_transport_crc32.cpp \
+    -o tests/bin/test_epaper_next_client_logic
+
+echo "=== Running unit tests: epaper_next_client_logic ==="
+./tests/bin/test_epaper_next_client_logic
+echo
+
+echo "=== Building conformance tests: epaper_media ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_epaper_media_conformance.cpp \
+    src/app/device_classes/epaper/epaper_media_validation.cpp \
+    src/app/device_classes/epaper/epaper_transport_crc32.cpp \
+    -o tests/bin/test_epaper_media_conformance -lz
+
+echo "=== Running conformance tests: epaper_media ==="
+./tests/bin/test_epaper_media_conformance
+echo
+
 echo "=== Building guard: coffee_scale command length ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -DIS_COFFEE_SCALE=true \
@@ -419,6 +443,10 @@ echo
 
 echo "=== Running guard: MCP binding-scheme parity (register <-> describe) ==="
 ./tests/test_mcp_scheme_parity.sh
+echo
+
+echo "=== Running guard: photoframe conformance-vector producer drift ==="
+./tests/test_photoframe_vector_drift.sh
 echo
 
 echo "=== All tests passed ==="

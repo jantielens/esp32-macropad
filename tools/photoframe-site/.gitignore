@@ -4,3 +4,5 @@ config.local.json
 .venv/
 __pycache__/
 *.pyc
+data/
+dist/

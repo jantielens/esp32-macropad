@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Bulk upload · {{ device_id }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+    <a href="/photos?device_id={{ device_id }}" class="ghost-link small d-inline-block mb-2">&larr; Gallery</a>
+    <h1 class="h3 page-title mb-1">Bulk upload to {{ device_id }}</h1>
+    <p class="text-body-secondary mb-4">Images are processed one at a time using the device defaults.</p>
+
+    <form id="bulk-upload-form" class="d-flex flex-column gap-3">
+      <input type="hidden" id="csrf-token" value="{{ csrf_token }}">
+
+      <section class="section-card p-4">
+        <label for="files" class="form-label fw-bold">Images</label>
+        <input class="form-control" type="file" id="files" accept="image/*" multiple required>
+        <div class="form-text">Select images in the order they should appear in the device queue.</div>
+      </section>
+
+      <section class="section-card p-4">
+        <label for="lifetime" class="form-label fw-bold">Keep all images</label>
+        <select class="form-select" id="lifetime">
+          <option value="once">Until shown once</option>
+          <option value="1">For 1 hour</option>
+          <option value="6">For 6 hours</option>
+          <option value="12">For 12 hours</option>
+          <option value="24" selected>For 24 hours</option>
+          <option value="48">For 48 hours</option>
+          <option value="168">For 1 week</option>
+          <option value="720">For 1 month</option>
+          <option value="always">Permanently</option>
+        </select>
+      </section>
+
+      <section class="section-card p-4 d-none" id="progress-panel" aria-live="polite">
+        <div class="d-flex justify-content-between gap-3 mb-2">
+          <span class="fw-bold" id="progress-label">Ready</span>
+          <span class="text-body-secondary" id="progress-count"></span>
+        </div>
+        <div class="progress mb-3" role="progressbar" aria-label="Bulk upload progress">
+          <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+        </div>
+        <div class="list-group" id="file-list"></div>
+      </section>
+
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <button class="btn btn-accent" id="upload-button" type="submit" disabled>Upload images</button>
+        <a class="btn btn-accent-soft d-none" id="gallery-button"
+           href="/photos?device_id={{ device_id }}">Open gallery</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var form = document.getElementById("bulk-upload-form");
+  var fileInput = document.getElementById("files");
+  var lifetime = document.getElementById("lifetime");
+  var uploadButton = document.getElementById("upload-button");
+  var galleryButton = document.getElementById("gallery-button");
+  var progressPanel = document.getElementById("progress-panel");
+  var progressLabel = document.getElementById("progress-label");
+  var progressCount = document.getElementById("progress-count");
+  var progressBar = document.getElementById("progress-bar");
+  var fileList = document.getElementById("file-list");
+  var csrfToken = document.getElementById("csrf-token").value;
+  var deviceId = {{ device_id|tojson }};
+  var files = [];
+  var states = [];
+
+  function renderFiles() {
+    fileList.replaceChildren();
+    files.forEach(function (file, index) {
+      var item = document.createElement("div");
+      item.className = "list-group-item d-flex justify-content-between gap-3";
+      var name = document.createElement("span");
+      name.className = "text-truncate";
+      name.textContent = file.name;
+      var status = document.createElement("span");
+      status.className = "text-body-secondary flex-shrink-0";
+      status.id = "file-status-" + index;
+      status.textContent = states[index] === "success" ? "Uploaded" : "Waiting";
+      item.append(name, status);
+      fileList.append(item);
+    });
+  }
+
+  function setStatus(index, state, message) {
+    states[index] = state;
+    var status = document.getElementById("file-status-" + index);
+    status.textContent = message;
+    status.className = "flex-shrink-0 " + (
+      state === "success" ? "text-success" : state === "failed" ? "text-danger" : "text-body-secondary"
+    );
+  }
+
+  function addLifetime(formData) {
+    var value = lifetime.value;
+    if (value === "once") return;
+    formData.append("permanent", "1");
+    if (value !== "always") formData.append("ttl_hours", value);
+  }
+
+  async function uploadOne(index) {
+    var formData = new FormData();
+    formData.append("csrf_token", csrfToken);
+    formData.append("device_id", deviceId);
+    formData.append("bulk", "1");
+    formData.append("file", files[index], files[index].name);
+    addLifetime(formData);
+    setStatus(index, "processing", "Processing");
+    var response = await fetch("/upload", { method: "POST", body: formData });
+    if (!response.ok) throw new Error((await response.text()) || "Upload failed");
+    setStatus(index, "success", "Uploaded");
+  }
+
+  fileInput.addEventListener("change", function () {
+    files = Array.from(fileInput.files || []);
+    states = files.map(function () { return "waiting"; });
+    uploadButton.disabled = files.length === 0;
+    galleryButton.classList.add("d-none");
+    progressPanel.classList.toggle("d-none", files.length === 0);
+    progressLabel.textContent = "Ready";
+    progressCount.textContent = files.length ? files.length + " selected" : "";
+    progressBar.style.width = "0%";
+    renderFiles();
+  });
+
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    var pending = states.map(function (state, index) {
+      return state === "success" ? -1 : index;
+    }).filter(function (index) { return index >= 0; }).reverse();
+    if (!pending.length) return;
+
+    fileInput.disabled = true;
+    lifetime.disabled = true;
+    uploadButton.disabled = true;
+    galleryButton.classList.add("d-none");
+    var failed = 0;
+    var completed = states.filter(function (state) { return state === "success"; }).length;
+
+    for (var position = 0; position < pending.length; position++) {
+      var index = pending[position];
+      progressLabel.textContent = "Processing " + files[index].name;
+      progressCount.textContent = (position + 1) + " of " + pending.length;
+      try {
+        await uploadOne(index);
+      } catch (error) {
+        failed++;
+        setStatus(index, "failed", "Failed");
+      }
+      completed++;
+      progressBar.style.width = Math.round((completed / files.length) * 100) + "%";
+    }
+
+    fileInput.disabled = false;
+    lifetime.disabled = false;
+    progressLabel.textContent = failed ? failed + " failed" : "Upload complete";
+    progressCount.textContent = files.length - failed + " of " + files.length + " uploaded";
+    uploadButton.textContent = failed ? "Retry failed" : "Upload images";
+    uploadButton.disabled = failed === 0;
+    galleryButton.classList.remove("d-none");
+  });
+})();
+</script>
+{% endblock %}

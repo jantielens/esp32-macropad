@@ -294,6 +294,7 @@
     {% endif %}
 
     <form method="post" action="/upload" enctype="multipart/form-data" id="upload-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="device_id" value="{{ device_id }}">
       <input type="hidden" name="knob_values" id="knob_values" value="">
       <input type="hidden" name="crop_values" id="crop_values" value="">
@@ -767,6 +768,7 @@
   function loadBase(file) {
     setStatus("Rendering preview\u2026");
     var fd = new FormData();
+    fd.append("csrf_token", document.getElementById("upload-form").elements.csrf_token.value);
     fd.append("device_id", DEVICE_ID);
     fd.append("file", file);
     fetch("/preview-base", { method: "POST", body: fd })
