@@ -63,6 +63,21 @@ def test_duplicate_token_rejected():
     raise AssertionError("duplicate frame token accepted")
 
 
+def test_multiple_users_keep_independent_device_assignments():
+    users = {
+        "first@example.com": {"password_hash": "hash-one", "frames": ["one"]},
+        "second@example.com": {"password_hash": "hash-two", "frames": ["two"]},
+    }
+    config = _load({
+        "one": _frame(),
+        "two": _frame("fedcba9876543210"),
+    }, users)
+    assert config.user("first@example.com").devices == ("one",)
+    assert config.user("second@example.com").devices == ("two",)
+    assert cfg.user_can_access(config.user("first@example.com"), "one")
+    assert not cfg.user_can_access(config.user("first@example.com"), "two")
+
+
 def test_invalid_profile_values_rejected():
     invalid = (
         _frame(profile={"width": 7, "height": 4, "format_codes": [2]}),

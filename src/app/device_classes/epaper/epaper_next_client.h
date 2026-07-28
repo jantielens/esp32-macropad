@@ -7,6 +7,8 @@
 
 #if HAS_EPAPER && defined(BOARD_RETERMINAL_E1003)
 
+#include "device_classes/epaper/epaper_next_client_logic.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -14,15 +16,6 @@ struct EpaperCurrentFingerprint {
 		bool valid;
 		char image_key[65];
 		uint32_t content_crc32;
-};
-
-enum class EpaperNextResult : uint8_t {
-		Show,
-		Keep,
-		AuthFailed,
-		UnsupportedMajor,
-		FailedFetch,
-		FailedContent,
 };
 
 struct EpaperNextPayload {

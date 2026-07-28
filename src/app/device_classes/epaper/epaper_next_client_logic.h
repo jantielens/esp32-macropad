@@ -21,7 +21,23 @@ enum class EpaperNextAction : uint8_t {
 		InvalidResponse,
 };
 
+enum class EpaperNextResult : uint8_t {
+		Show,
+		Keep,
+		AuthFailed,
+		UnsupportedMajor,
+		FailedFetch,
+		FailedContent,
+};
+
+enum class EpaperRetryDecision : uint8_t {
+		Draw,
+		Skip,
+		Fail,
+};
+
 EpaperNextAction epaper_next_action_for_status(int status);
+EpaperRetryDecision epaper_next_retry_decision(EpaperNextResult result);
 bool epaper_source_uses_service(EpaperSourceMode mode);
 bool epaper_source_advances_carousel(EpaperSourceMode mode, uint8_t carousel_count);
 uint32_t epaper_source_refresh_interval(EpaperSourceMode mode,

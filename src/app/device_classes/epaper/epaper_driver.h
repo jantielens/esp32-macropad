@@ -40,6 +40,32 @@ bool epaper_driver_draw_service_blob(const uint8_t* data, size_t len, const char
 bool epaper_driver_display();
 void epaper_driver_sleep();
 
+#if defined(BOARD_RETERMINAL_E1003)
+enum class EpaperHrdyPhase : uint8_t {
+        None = 0,
+        Initialization,
+        Recovery,
+        PowerOn,
+        Upload,
+        Refresh,
+        Sleep,
+};
+
+struct EpaperDriverDiagnostics {
+        uint32_t hrdy_timeout_count;
+        uint64_t hrdy_wait_ms;
+        uint32_t recovery_count;
+        uint32_t recovery_success_count;
+        uint32_t recovery_failure_count;
+        EpaperHrdyPhase last_hrdy_timeout_phase;
+        uint8_t initial_hrdy_pin_state;
+        bool initial_hrdy_pin_state_valid;
+};
+
+const EpaperDriverDiagnostics& epaper_driver_diagnostics();
+const char* epaper_driver_hrdy_phase_name(EpaperHrdyPhase phase);
+#endif
+
 // Battery voltage in millivolts (0 if not supported).
 uint16_t epaper_driver_battery_mv();
 

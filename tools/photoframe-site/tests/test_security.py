@@ -24,6 +24,7 @@ os.environ["COOKIE_SECURE"] = "0"
 os.environ.pop("SECRET_KEY", None)
 
 import app  # noqa: E402
+import ui  # noqa: E402
 
 
 class _FakeClock:
@@ -39,50 +40,50 @@ class _FakeClock:
         self.t += seconds
 
 
-def _throttle_with_clock() -> tuple[app._LoginThrottle, _FakeClock]:
-    """A fresh throttle wired to a fake clock (patches app.time.monotonic)."""
+def _throttle_with_clock() -> tuple[ui._LoginThrottle, _FakeClock]:
+    """A fresh throttle wired to a fake clock."""
     clock = _FakeClock()
-    app.time.monotonic = clock  # module-global patch; restored per-test by caller
-    return app._LoginThrottle(), clock
+    ui.time.monotonic = clock
+    return ui._LoginThrottle(), clock
 
 
 # --- Login throttle: allowance + lockout --------------------------------------
 
 def test_free_attempts_are_not_locked():
-    real = app.time.monotonic
+    real = ui.time.monotonic
     try:
         t, _clock = _throttle_with_clock()
         key = "1.1.1.1"
-        for _ in range(app._LOGIN_FREE_ATTEMPTS):
+        for _ in range(ui._LOGIN_FREE_ATTEMPTS):
             assert t.retry_after(key) == 0
             t.record_failure(key)
         # Still at the allowance boundary: not yet locked.
         assert t.retry_after(key) == 0
     finally:
-        app.time.monotonic = real
+        ui.time.monotonic = real
 
 
 def test_lockout_engages_after_free_attempts():
-    real = app.time.monotonic
+    real = ui.time.monotonic
     try:
         t, _clock = _throttle_with_clock()
         key = "2.2.2.2"
-        for _ in range(app._LOGIN_FREE_ATTEMPTS + 1):
+        for _ in range(ui._LOGIN_FREE_ATTEMPTS + 1):
             t.record_failure(key)
         # First lockout is the base duration (retry_after rounds up by 1s).
         wait = t.retry_after(key)
         assert wait > 0
-        assert wait <= int(app._LOGIN_BASE_LOCK_S) + 1
+        assert wait <= int(ui._LOGIN_BASE_LOCK_S) + 1
     finally:
-        app.time.monotonic = real
+        ui.time.monotonic = real
 
 
 def test_lockout_backoff_is_exponential():
-    real = app.time.monotonic
+    real = ui.time.monotonic
     try:
         t, clock = _throttle_with_clock()
         key = "3.3.3.3"
-        for _ in range(app._LOGIN_FREE_ATTEMPTS):
+        for _ in range(ui._LOGIN_FREE_ATTEMPTS):
             t.record_failure(key)
         # 1st lockout
         t.record_failure(key)
@@ -92,65 +93,65 @@ def test_lockout_backoff_is_exponential():
         t.record_failure(key)
         second = t.retry_after(key)
         assert second >= first
-        assert second <= int(app._LOGIN_MAX_LOCK_S) + 1
+        assert second <= int(ui._LOGIN_MAX_LOCK_S) + 1
     finally:
-        app.time.monotonic = real
+        ui.time.monotonic = real
 
 
 def test_lockout_expires_after_waiting():
-    real = app.time.monotonic
+    real = ui.time.monotonic
     try:
         t, clock = _throttle_with_clock()
         key = "4.4.4.4"
-        for _ in range(app._LOGIN_FREE_ATTEMPTS + 1):
+        for _ in range(ui._LOGIN_FREE_ATTEMPTS + 1):
             t.record_failure(key)
         assert t.retry_after(key) > 0
-        clock.advance(app._LOGIN_MAX_LOCK_S + 1)  # wait past any lockout
+        clock.advance(ui._LOGIN_MAX_LOCK_S + 1)  # wait past any lockout
         assert t.retry_after(key) == 0
     finally:
-        app.time.monotonic = real
+        ui.time.monotonic = real
 
 
 def test_success_clears_record():
-    real = app.time.monotonic
+    real = ui.time.monotonic
     try:
         t, _clock = _throttle_with_clock()
         key = "5.5.5.5"
-        for _ in range(app._LOGIN_FREE_ATTEMPTS + 1):
+        for _ in range(ui._LOGIN_FREE_ATTEMPTS + 1):
             t.record_failure(key)
         assert t.retry_after(key) > 0
         t.record_success(key)
         assert t.retry_after(key) == 0
     finally:
-        app.time.monotonic = real
+        ui.time.monotonic = real
 
 
 def test_clients_are_tracked_independently():
-    real = app.time.monotonic
+    real = ui.time.monotonic
     try:
         t, _clock = _throttle_with_clock()
         attacker, victim = "6.6.6.6", "7.7.7.7"
-        for _ in range(app._LOGIN_FREE_ATTEMPTS + 1):
+        for _ in range(ui._LOGIN_FREE_ATTEMPTS + 1):
             t.record_failure(attacker)
         assert t.retry_after(attacker) > 0
         assert t.retry_after(victim) == 0  # an unrelated client is unaffected
     finally:
-        app.time.monotonic = real
+        ui.time.monotonic = real
 
 
 def test_idle_record_is_pruned():
-    real = app.time.monotonic
+    real = ui.time.monotonic
     try:
         t, clock = _throttle_with_clock()
         key = "8.8.8.8"
         t.record_failure(key)
-        clock.advance(app._LOGIN_RESET_S + 1)
+        clock.advance(ui._LOGIN_RESET_S + 1)
         # A later failure from any client prunes stale records; the old count is
         # forgotten, so this client starts fresh (still within the allowance).
         t.record_failure("9.9.9.9")
         assert t.retry_after(key) == 0
     finally:
-        app.time.monotonic = real
+        ui.time.monotonic = real
 
 
 # --- _client_key: trusted X-Forwarded-For handling ----------------------------
@@ -164,13 +165,13 @@ def test_client_key_uses_first_forwarded_hop_from_trusted_proxy():
     class _Client:
         host = "127.0.0.1"
 
-    previous = app.ui._TRUSTED_PROXY_IPS
+    previous = ui._TRUSTED_PROXY_IPS
     try:
-        app.ui._TRUSTED_PROXY_IPS = {"127.0.0.1"}
+        ui._TRUSTED_PROXY_IPS = {"127.0.0.1"}
         req = _Req({"x-forwarded-for": "203.0.113.7, 10.0.0.1"}, _Client())
-        assert app._client_key(req) == "203.0.113.7"
+        assert ui._client_key(req) == "203.0.113.7"
     finally:
-        app.ui._TRUSTED_PROXY_IPS = previous
+        ui._TRUSTED_PROXY_IPS = previous
 
 
 def test_client_key_ignores_forwarded_hop_from_untrusted_peer():
@@ -181,7 +182,7 @@ def test_client_key_ignores_forwarded_hop_from_untrusted_peer():
         headers = {"x-forwarded-for": "203.0.113.7"}
         client = _Client()
 
-    assert app._client_key(_Req()) == "198.51.100.4"
+    assert ui._client_key(_Req()) == "198.51.100.4"
 
 
 def test_client_key_falls_back_to_peer():
@@ -192,7 +193,7 @@ def test_client_key_falls_back_to_peer():
         headers: dict = {}
         client = _Client()
 
-    assert app._client_key(_Req()) == "198.51.100.4"
+    assert ui._client_key(_Req()) == "198.51.100.4"
 
 
 def test_account_throttle_survives_client_address_rotation():
@@ -203,13 +204,13 @@ def test_account_throttle_survives_client_address_rotation():
         headers: dict = {}
         client = _Client()
 
-    app.ui._reset_authentication_throttles()
+    ui._reset_authentication_throttles()
     request = _Req()
     for attempt in range(11):
         request.client.host = f"198.51.100.{attempt + 1}"
-        app.ui._record_authentication_failure(request, "owner@example.com", "login")
-    assert app.ui._authentication_retry_after(request, "owner@example.com", "login") > 0
-    assert app.ui._authentication_retry_after(request, "other@example.com", "login") == 0
+        ui._record_authentication_failure(request, "owner@example.com", "login")
+    assert ui._authentication_retry_after(request, "owner@example.com", "login") > 0
+    assert ui._authentication_retry_after(request, "other@example.com", "login") == 0
 
 
 # --- Session secret persistence ------------------------------------------------
@@ -383,7 +384,7 @@ def test_account_throttle_keys_have_fixed_size():
         headers: dict = {}
         client = _Client()
 
-    _ip_key, account_key, _global_key = app.ui._authentication_keys(
+    _ip_key, account_key, _global_key = ui._authentication_keys(
         _Req(), "x" * 100_000, "login"
     )
     assert len(account_key) < 100
@@ -394,7 +395,7 @@ def test_decoded_image_pixel_limit_is_enforced():
         size = (10_000, 5_000)
 
     try:
-        app.ui._validate_decoded_image(_Image())
+        ui._validate_decoded_image(_Image())
     except ValueError as exc:
         assert "pixel limit" in str(exc)
     else:

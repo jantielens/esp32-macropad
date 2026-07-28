@@ -43,6 +43,11 @@ window.init_epaper_status_fragment = function () {
         tDraw:   document.getElementById('epaper-status-t-draw'),
         tMqtt:   document.getElementById('epaper-status-t-mqtt'),
         crcAttempts: document.getElementById('epaper-status-crc-attempts'),
+        hrdyInitial: document.getElementById('epaper-status-hrdy-initial'),
+        hrdyTimeouts: document.getElementById('epaper-status-hrdy-timeouts'),
+        hrdyPhase: document.getElementById('epaper-status-hrdy-phase'),
+        hrdyWait: document.getElementById('epaper-status-hrdy-wait'),
+        recoveries: document.getElementById('epaper-status-recoveries'),
     };
     function fmtDrawResult(r) {
         if (r === 'updated') return 'Updated';
@@ -111,6 +116,20 @@ window.init_epaper_status_fragment = function () {
                     statusFields.crcAttempts.textContent = (j.crc_retry_count && j.crc_retry_count > 0)
                         ? String(j.crc_retry_count)
                         : 'N/A';
+                }
+                var hrdy = j.hrdy || {};
+                if (statusFields.hrdyInitial) {
+                    statusFields.hrdyInitial.textContent = hrdy.initial_pin_state === 'high'
+                        ? 'HIGH (ready)'
+                        : hrdy.initial_pin_state === 'low' ? 'LOW (busy)' : 'N/A';
+                }
+                if (statusFields.hrdyTimeouts) statusFields.hrdyTimeouts.textContent = String(hrdy.timeout_count || 0);
+                if (statusFields.hrdyPhase) statusFields.hrdyPhase.textContent = hrdy.last_timeout_phase || 'none';
+                if (statusFields.hrdyWait) statusFields.hrdyWait.textContent = fmtMs(hrdy.wait_ms);
+                if (statusFields.recoveries) {
+                    statusFields.recoveries.textContent = (hrdy.recovery_count || 0) + ' (' +
+                        (hrdy.recovery_success_count || 0) + ' succeeded, ' +
+                        (hrdy.recovery_failure_count || 0) + ' failed)';
                 }
             })
             .catch(function () { /* silent */ });

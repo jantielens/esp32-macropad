@@ -17,6 +17,10 @@ path maps tone-curved luma straight to nibble value with Floyd-Steinberg error
 diffusion. ``--gamma`` and ``--highlights`` tune the ``.pre`` and ``.cal``
 outputs; ``--bars`` emits a 16-level gradient for calibration. When a container
 SAS URL is provided, all generated files are uploaded.
+
+The Azure Blob SAS upload path is legacy tooling. It is unrelated to the local
+photoframe site introduced in release 1.23 and is no longer supported. Local
+image delivery should use the photoframe site's upload interface.
 """
 
 from __future__ import annotations
@@ -85,7 +89,10 @@ def _usage() -> int:
         f"                   >1.0 brightens midtones, <1.0 darkens. Default {CAL_GAMMA}.\n"
         f"  --highlights N   Shift the lights (-1.0..1.0) while keeping black and pure\n"
         f"                   white pinned. Negative darkens the highlights, positive\n"
-        f"                   brightens. Default {CAL_HIGHLIGHTS}.",
+        f"                   brightens. Default {CAL_HIGHLIGHTS}.\n"
+        f"\n"
+        f"  container-sas-url is a legacy, unsupported Azure Blob upload path.\n"
+        f"  It is unrelated to the local photoframe site.",
         file=sys.stderr,
     )
     return 2

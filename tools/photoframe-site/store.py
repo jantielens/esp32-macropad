@@ -45,7 +45,7 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _parse_iso(value: Optional[str]) -> Optional[datetime]:
+def parse_iso(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
     try:
@@ -56,7 +56,7 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime]:
 
 
 def is_expired(meta: dict, *, at: Optional[datetime] = None) -> bool:
-    expires = _parse_iso(meta.get("expires_at"))
+    expires = parse_iso(meta.get("expires_at"))
     return expires is not None and (at or datetime.now(timezone.utc)) >= expires
 
 
@@ -184,7 +184,7 @@ class PhotoIndex:
                     meta = eligible[image_id][0]
                     if not meta.get("permanent", False):
                         continue
-                    shown = _parse_iso(meta.get("last_shown_at"))
+                    shown = parse_iso(meta.get("last_shown_at"))
                     if meta.get("expires_at") or is_fresh(meta, now=now, window_days=fresh_window_days):
                         featured.append((image_id, shown))
                     else:
@@ -308,7 +308,7 @@ def is_fresh(sel: dict, *, now: datetime, window_days: int) -> bool:
         return False
     if not sel.get("permanent") or sel.get("expires_at"):
         return False
-    uploaded = _parse_iso(sel.get("uploaded_at"))
+    uploaded = parse_iso(sel.get("uploaded_at"))
     if uploaded is None:
         return False
     return (now - uploaded) < timedelta(days=window_days)
@@ -350,7 +350,7 @@ def estimate_displays_per_day(last_shown: list, *, now: Optional[datetime] = Non
     cutoff = now - timedelta(days=lookback_days)
     times = []
     for value in last_shown:
-        parsed = value if isinstance(value, datetime) else _parse_iso(value)
+        parsed = value if isinstance(value, datetime) else parse_iso(value)
         if parsed is not None and parsed >= cutoff:
             times.append(parsed)
     times = sorted(set(times))

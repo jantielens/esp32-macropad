@@ -141,6 +141,20 @@ def test_different_site_version_warns_and_imports() -> None:
     warning.assert_called_once()
 
 
+def test_device_import_skips_unreferenced_namespace_files() -> None:
+    source = _site(with_device=True)
+    manifest, entries = _entries(archive.export_device(source, "device-one", OWNER))
+    entries["device/namespace/images/image-one/unreferenced.bin"] = b"not referenced"
+    manifest["counts"]["files"] = len(entries)
+    target = _site(with_device=False)
+    with mock.patch.object(archive.logger, "warning") as warning:
+        archive.import_device(target, _bundle(manifest, entries), OWNER)
+    imported = target / "devices/device-one/images/image-one"
+    assert (imported / "sidecar.json").exists()
+    assert not (imported / "unreferenced.bin").exists()
+    warning.assert_called_once_with("Skipped %u unreferenced device archive file(s).", 1)
+
+
 def test_newer_and_older_archive_schemas_are_rejected_clearly() -> None:
     source = _site(with_device=True)
     manifest, entries = _entries(archive.export_device(source, "device-one", OWNER))

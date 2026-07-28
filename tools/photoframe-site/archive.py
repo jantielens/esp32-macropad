@@ -295,11 +295,40 @@ def inspect_device_archive(payload: bytes) -> str:
     return device_id
 
 
+def _device_import_entries(entries: dict[str, bytes]) -> dict[str, bytes]:
+    referenced = {
+        "device/frame.json",
+        "device/ownership.json",
+        "device/namespace/state/queue.json",
+        "device/namespace/state/schedule.json",
+        "device/namespace/state/settings.json",
+        "device/namespace/state/telemetry.json",
+    }
+    for name, payload in entries.items():
+        if not name.startswith("device/namespace/images/") or not name.endswith("/sidecar.json"):
+            continue
+        sidecar = json.loads(payload.decode("utf-8"))
+        parent = name.rsplit("/", 1)[0]
+        referenced.add(name)
+        referenced.add(f"{parent}/thumb.png")
+        source_name = str(sidecar.get("source_name", ""))
+        if source_name and PurePosixPath(source_name).name == source_name:
+            referenced.add(f"{parent}/{source_name}")
+        for variant in sidecar.get("variants", []):
+            referenced.add(f"{parent}/{variant['blob_name']}")
+    retained = {name: payload for name, payload in entries.items() if name in referenced}
+    skipped = len(entries) - len(retained)
+    if skipped:
+        logger.warning("Skipped %u unreferenced device archive file(s).", skipped)
+    return retained
+
+
 def import_device(data_root: str | Path, payload: bytes, owner_email: str,
                   expected_device_id: str | None = None) -> tuple[cfg.Config, str]:
     root = Path(data_root)
     manifest, entries = _validated_entries(payload, "device")
     device_id, frame = _device_record(manifest, entries)
+    entries = _device_import_entries(entries)
     if expected_device_id is not None and device_id != expected_device_id:
         raise ArchiveError("Bundle device ID does not match the selected device.")
     current_frames, current_users = _raw_config(root)

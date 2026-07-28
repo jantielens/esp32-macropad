@@ -220,6 +220,17 @@ bool s_power_on = false;  // IT8951 power state (SYS_RUN vs sleep); mirrors Seee
 bool s_recovery_attempted = false;
 uint32_t s_img_buf_addr = 0;
 
+// Without retained counters, a 100-cycle soak cannot distinguish 100 clean
+// wakes from 100 wakes where six controller recoveries succeeded silently.
+RTC_DATA_ATTR EpaperDriverDiagnostics s_diagnostics = {};
+EpaperHrdyPhase s_hrdy_phase = EpaperHrdyPhase::None;
+uint32_t s_wake_hrdy_timeout_count = 0;
+uint32_t s_wake_hrdy_wait_ms = 0;
+uint32_t s_wake_recovery_count = 0;
+uint32_t s_wake_recovery_success_count = 0;
+uint32_t s_wake_recovery_failure_count = 0;
+bool s_wake_diagnostics_logged = false;
+
 const GFXfont* const s_font_table[3] = {
 		EPAPER_FONT_SMALL_PTR,   // EPAPER_FONT_SMALL
 		EPAPER_FONT_MEDIUM_PTR,  // EPAPER_FONT_MEDIUM
@@ -238,11 +249,20 @@ bool wait_hrdy(uint32_t timeout_ms = HRDY_COMMAND_TIMEOUT_MS) {
 		const uint32_t start = millis();
 		while (digitalRead(EPAPER_PIN_BUSY) == LOW) {
 				if (millis() - start >= timeout_ms) {
+						const uint32_t waited = millis() - start;
+						++s_diagnostics.hrdy_timeout_count;
+						s_diagnostics.hrdy_wait_ms += waited;
+						s_diagnostics.last_hrdy_timeout_phase = s_hrdy_phase;
+						++s_wake_hrdy_timeout_count;
+						s_wake_hrdy_wait_ms += waited;
 						LOGW("Epaper", "wait_hrdy timeout (%lums); BUSY stuck LOW", (unsigned long)timeout_ms);
 						return false;
 				}
 				delay(1);
 		}
+		const uint32_t waited = millis() - start;
+		s_diagnostics.hrdy_wait_ms += waited;
+		s_wake_hrdy_wait_ms += waited;
 		return true;
 }
 
@@ -320,6 +340,7 @@ bool set_temperature(uint16_t t) {
 }
 
 bool initialize_controller(bool power_cycle) {
+		s_hrdy_phase = power_cycle ? EpaperHrdyPhase::Recovery : EpaperHrdyPhase::Initialization;
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 #ifdef EPAPER_SD_CS_PIN
 		pinMode(EPAPER_SD_CS_PIN, OUTPUT);
@@ -358,12 +379,34 @@ bool initialize_controller(bool power_cycle) {
 bool recover_controller() {
 		if (s_recovery_attempted) return false;
 		s_recovery_attempted = true;
+		++s_diagnostics.recovery_count;
+		++s_wake_recovery_count;
 		LOGW("Epaper", "IT8951 not ready; attempting one panel recovery");
 		s_power_on = false;
 		s_img_buf_addr = 0;
 		const bool ok = initialize_controller(true);
+		if (ok) {
+				++s_diagnostics.recovery_success_count;
+				++s_wake_recovery_success_count;
+		} else {
+				++s_diagnostics.recovery_failure_count;
+				++s_wake_recovery_failure_count;
+		}
 		LOGI("Epaper", "IT8951 panel recovery %s", ok ? "succeeded" : "failed");
 		return ok;
+}
+
+void log_wake_diagnostics() {
+		if (s_wake_diagnostics_logged ||
+				(s_wake_hrdy_timeout_count == 0 && s_wake_recovery_count == 0)) return;
+		s_wake_diagnostics_logged = true;
+		LOGW("Epaper", "HRDY wake summary: timeouts=%lu phase=%s wait=%lums recovery=%lu/%lu/%lu",
+				(unsigned long)s_wake_hrdy_timeout_count,
+				epaper_driver_hrdy_phase_name(s_diagnostics.last_hrdy_timeout_phase),
+				(unsigned long)s_wake_hrdy_wait_ms,
+				(unsigned long)s_wake_recovery_count,
+				(unsigned long)s_wake_recovery_success_count,
+				(unsigned long)s_wake_recovery_failure_count);
 }
 
 // Wake the IT8951 from sleep/standby before any draw. Guarded by s_power_on so
@@ -372,6 +415,7 @@ bool recover_controller() {
 // that never raises HRDY, deadlocking wait_hrdy().
 bool power_on() {
 		if (s_power_on) return true;
+		s_hrdy_phase = EpaperHrdyPhase::PowerOn;
 		const uint32_t t0 = millis();
 		digitalWrite(EPAPER_PIN_TFT_ENABLE, HIGH);
 		digitalWrite(EPAPER_PIN_ITE_ENABLE, HIGH);
@@ -388,6 +432,7 @@ bool power_on() {
 // The canvas already holds packed 4 bpp pixels, so this pushes half the bytes of
 // an 8 BPP upload. The row is X-mirrored to match the panel scan orientation.
 bool upload_frame() {
+		s_hrdy_phase = EpaperHrdyPhase::Upload;
 		if (!write_reg(REG_LISAR, (uint16_t)(s_img_buf_addr & 0xFFFF)) ||
 				!write_reg(REG_LISAR + 2, (uint16_t)(s_img_buf_addr >> 16)) ||
 				!set_temperature(16)) return false;
@@ -447,6 +492,7 @@ bool upload_frame() {
 }
 
 bool refresh_gc16() {
+		s_hrdy_phase = EpaperHrdyPhase::Refresh;
 		const uint32_t t0 = millis();
 		if (!write_cmd16(CMD_DPY_AREA) ||
 				!write_data16(0) || !write_data16(0) ||
@@ -809,6 +855,8 @@ bool epaper_driver_begin() {
 		pinMode(EPAPER_PIN_CS, OUTPUT);
 		digitalWrite(EPAPER_PIN_CS, HIGH);
 		pinMode(EPAPER_PIN_BUSY, INPUT);
+		s_diagnostics.initial_hrdy_pin_state = digitalRead(EPAPER_PIN_BUSY) == HIGH ? 1 : 0;
+		s_diagnostics.initial_hrdy_pin_state_valid = true;
 		pinMode(EPAPER_PIN_TFT_ENABLE, OUTPUT);
 		digitalWrite(EPAPER_PIN_TFT_ENABLE, HIGH);
 		pinMode(EPAPER_PIN_ITE_ENABLE, OUTPUT);
@@ -829,6 +877,7 @@ bool epaper_driver_begin() {
 
 		if (!initialize_controller(false) && !recover_controller()) {
 				LOGE("Epaper", "IT8951 initialization failed after recovery");
+				log_wake_diagnostics();
 				return false;
 		}
 
@@ -1092,16 +1141,35 @@ bool epaper_driver_display() {
 				ok = upload_frame() && refresh_gc16();
 		}
 		epaper_timing_set_draw_ms(millis() - t_draw);
-		if (!ok) LOGE("Epaper", "IT8951 display failed after recovery");
+		if (ok) s_recovery_attempted = false;
+		else LOGE("Epaper", "IT8951 display failed after recovery");
 		return ok;
 }
 
 void epaper_driver_sleep() {
+		log_wake_diagnostics();
 		if (!s_began || !s_power_on) return;  // guard: redundant sleep is a no-op (Seeed _power_is_on)
+		s_hrdy_phase = EpaperHrdyPhase::Sleep;
 		write_cmd16(CMD_SLEEP);
 		digitalWrite(EPAPER_PIN_TFT_ENABLE, LOW);
 		digitalWrite(EPAPER_PIN_ITE_ENABLE, LOW);
 		s_power_on = false;
+}
+
+const EpaperDriverDiagnostics& epaper_driver_diagnostics() {
+		return s_diagnostics;
+}
+
+const char* epaper_driver_hrdy_phase_name(EpaperHrdyPhase phase) {
+		switch (phase) {
+				case EpaperHrdyPhase::Initialization: return "initialization";
+				case EpaperHrdyPhase::Recovery: return "recovery";
+				case EpaperHrdyPhase::PowerOn: return "power_on";
+				case EpaperHrdyPhase::Upload: return "upload";
+				case EpaperHrdyPhase::Refresh: return "refresh";
+				case EpaperHrdyPhase::Sleep: return "sleep";
+				default: return "none";
+		}
 }
 
 uint16_t epaper_driver_battery_mv() {

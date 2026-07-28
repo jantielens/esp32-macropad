@@ -19,6 +19,9 @@ int main() {
 		assert(epaper_next_action_for_status(404) == EpaperNextAction::UnsupportedMajor);
 		assert(epaper_next_action_for_status(503) == EpaperNextAction::TransientFailure);
 		assert(epaper_next_action_for_status(301) == EpaperNextAction::InvalidResponse);
+		assert(epaper_next_retry_decision(EpaperNextResult::Show) == EpaperRetryDecision::Draw);
+		assert(epaper_next_retry_decision(EpaperNextResult::Keep) == EpaperRetryDecision::Skip);
+		assert(epaper_next_retry_decision(EpaperNextResult::FailedFetch) == EpaperRetryDecision::Fail);
 		assert(epaper_next_use_cached_blob(true, true));
 		assert(!epaper_next_use_cached_blob(false, true));
 

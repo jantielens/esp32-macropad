@@ -24,6 +24,57 @@ import knobs  # noqa: E402
 import transport  # noqa: E402
 
 
+def _single_device_site() -> Path:
+    root = Path(tempfile.mkdtemp())
+    (root / "config").mkdir()
+    (root / "config/frames.json").write_text(json.dumps({"frames": {
+        "test": {"token": "0123456789abcdef0123456789abcdef",
+                 "profile": {"width": 8, "height": 4, "format_codes": [2]}}
+    }}))
+    (root / "config/users.json").write_text(json.dumps({"users": {
+        "owner@example.com": {"password_hash": config.hash_password("secret"), "frames": ["test"]}
+    }}))
+    return root
+
+
+def test_upload_rejects_invalid_lifetime_without_creating_photo():
+    root = _single_device_site()
+    source = io.BytesIO()
+    Image.new("RGB", (16, 8), (120, 80, 40)).save(source, format="JPEG")
+    application.DATA_ROOT = root
+    with TestClient(application.app) as client:
+        client.post("/login", data={"email": "owner@example.com", "password": "secret"})
+        response = client.post(
+            "/upload",
+            data={"device_id": "test", "permanent": "1", "ttl_hours": "tomorrow"},
+            files={"file": ("source.jpg", source.getvalue(), "image/jpeg")},
+        )
+        assert response.status_code == 400
+        assert response.text == "Invalid lifetime"
+        assert not (root / "devices/test/images").exists()
+
+
+def test_image_processing_errors_do_not_expose_exception_details():
+    root = _single_device_site()
+    application.DATA_ROOT = root
+    with TestClient(application.app) as client:
+        client.post("/login", data={"email": "owner@example.com", "password": "secret"})
+        preview = client.post(
+            "/preview-base",
+            data={"device_id": "test"},
+            files={"file": ("bad.bin", b"not-an-image", "application/octet-stream")},
+        )
+        assert preview.status_code == 400
+        assert preview.text == "Could not process image"
+        bulk = client.post(
+            "/upload",
+            data={"device_id": "test", "bulk": "1"},
+            files={"file": ("bad.bin", b"not-an-image", "application/octet-stream")},
+        )
+        assert bulk.status_code == 400
+        assert bulk.text == "Could not process image"
+
+
 def test_edit_photo_caption_and_lifecycle_preserves_image_metadata():
     root = Path(tempfile.mkdtemp())
     (root / "config").mkdir()

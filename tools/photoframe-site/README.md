@@ -305,7 +305,10 @@ tailscale serve status
 Use Funnel only when a frame cannot reach the tailnet. Funnel makes the site,
 including its login and upload endpoints, reachable from the public Internet.
 The application authentication and request limits still apply, but Internet
-clients can probe those surfaces.
+clients can probe those surfaces. Site export and import are also reachable:
+they can download or replace the full site, including every device token and
+the administrator credential hash, and are protected by the authenticated
+administrator session plus current-password re-authentication.
 
 First check whether the LXC already exposes the kernel TUN device:
 

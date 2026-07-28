@@ -198,12 +198,3 @@ app.include_router(ui.router)
 @app.get("/healthz")
 def healthz() -> Response:
     return Response("ok", media_type="text/plain")
-
-
-# Compatibility exports for the existing login-security regression tests.
-_LoginThrottle = ui._LoginThrottle
-_LOGIN_FREE_ATTEMPTS = ui._LOGIN_FREE_ATTEMPTS
-_LOGIN_BASE_LOCK_S = ui._LOGIN_BASE_LOCK_S
-_LOGIN_MAX_LOCK_S = ui._LOGIN_MAX_LOCK_S
-_LOGIN_RESET_S = ui._LOGIN_RESET_S
-_client_key = ui._client_key

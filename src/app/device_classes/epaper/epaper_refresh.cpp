@@ -239,6 +239,7 @@ static EpaperRefreshOutcome epaper_refresh_run_service(DeviceConfig* config) {
 		bool drew = epaper_driver_draw_service_blob(
 				payload.data, payload.len, payload.media_type[0] ? payload.media_type : nullptr,
 				payload.prepared_data, payload.prepared_len);
+		bool skipped = false;
 		if (!drew && payload.from_cache) {
 				epaper_sd_cache_remove(payload.content_crc32);
 				epaper_next_payload_release(&payload);
@@ -247,11 +248,15 @@ static EpaperRefreshOutcome epaper_refresh_run_service(DeviceConfig* config) {
 						g_epaper_config.service_url, g_epaper_config.service_token,
 						g_service_fingerprint, false /*cache_enabled*/, 1 /*max_cycles*/);
 				out.crc_used = payload.content_crc32;
-				if (payload.result == EpaperNextResult::Show) {
+				const EpaperRetryDecision retry = epaper_next_retry_decision(payload.result);
+				if (retry == EpaperRetryDecision::Draw) {
 						drew = epaper_driver_draw_service_blob(
 								payload.data, payload.len,
 								payload.media_type[0] ? payload.media_type : nullptr,
 								payload.prepared_data, payload.prepared_len);
+				} else if (retry == EpaperRetryDecision::Skip) {
+						skipped = true;
+						LOGI("Epaper", "Service cache retry returned 204 keep");
 				}
 		}
 		if (drew) {
@@ -277,7 +282,8 @@ static EpaperRefreshOutcome epaper_refresh_run_service(DeviceConfig* config) {
 		if (wdt_was_attached) esp_task_wdt_add(nullptr);
 		epaper_driver_sleep();
 
-		out.result = drew ? EpaperRefreshResult::Updated : EpaperRefreshResult::FailedDraw;
+		out.result = skipped ? EpaperRefreshResult::Skipped
+				: drew ? EpaperRefreshResult::Updated : EpaperRefreshResult::FailedDraw;
 		out.elapsed_ms = millis() - started;
 		if (drew) {
 				const time_t now = time(nullptr);

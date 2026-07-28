@@ -165,7 +165,7 @@ def simulate_fresh(
         perm: list = []
         temp: list = []
         for pid, meta in photos.items():
-            shown = store._parse_iso(meta["last_shown_at"])
+            shown = store.parse_iso(meta["last_shown_at"])
             if meta.get("expires_at") or store.is_fresh(meta, now=now, window_days=window_days):
                 temp.append((pid, shown))
             else:

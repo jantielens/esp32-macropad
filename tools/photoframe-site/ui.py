@@ -211,6 +211,21 @@ def _is_site_admin(request: Request, user: cfg.User) -> bool:
     return len(users) == 1 and user.email in users
 
 
+_LIFETIME_HOURS = frozenset((1, 6, 12, 24, 48, 168, 720))
+
+
+def _parse_lifetime_hours(value: str | None) -> int | None:
+    if not value:
+        return None
+    try:
+        hours = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid lifetime") from exc
+    if hours not in _LIFETIME_HOURS:
+        raise ValueError("Invalid lifetime")
+    return hours
+
+
 def _new_control_nonce(request: Request, purpose: str) -> str:
     nonce = secrets.token_urlsafe(32)
     key = f"{purpose}_nonces"
@@ -295,7 +310,7 @@ def index(request: Request) -> Response:
             continue
         settings = store.read_settings(frame_id)
         telemetry = store.read_telemetry(frame_id)
-        last_request = store._parse_iso(telemetry.get("last_request_at"))
+        last_request = store.parse_iso(telemetry.get("last_request_at"))
         if last_request is None:
             presence = "never-seen"
         elif datetime.now(timezone.utc) - last_request <= ONLINE_WINDOW:
@@ -565,8 +580,8 @@ def gallery(request: Request, device_id: str) -> Response:
         if not meta.get("permanent", False) and meta.get("served_at"):
             continue
         fresh = store.is_fresh(meta, now=now, window_days=frame.fresh_window_days)
-        uploaded_at = store._parse_iso(meta.get("uploaded_at"))
-        expires_at = store._parse_iso(meta.get("expires_at"))
+        uploaded_at = store.parse_iso(meta.get("uploaded_at"))
+        expires_at = store.parse_iso(meta.get("expires_at"))
         fresh_until = (
             uploaded_at + timedelta(days=frame.fresh_window_days)
             if fresh and uploaded_at is not None else None
@@ -646,8 +661,9 @@ def preview_base(request: Request, device_id: str = Form(...), file: UploadFile 
         output = io.BytesIO()
         preview.save(output, format="PNG")
         return Response(output.getvalue(), media_type="image/png", headers={"Cache-Control": "no-store"})
-    except Exception as exc:
-        return Response(f"Could not process image: {exc}", status_code=400)
+    except Exception:
+        logger.warning("Image preview processing failed", exc_info=True)
+        return Response("Could not process image", status_code=400)
 
 
 @router.post("/upload")
@@ -669,6 +685,10 @@ def upload_submit(
     frame = _frame_for_user(request, user, device_id)
     if frame is None:
         return Response("Forbidden", status_code=403)
+    try:
+        lifetime_hours = _parse_lifetime_hours(ttl_hours)
+    except ValueError:
+        return Response("Invalid lifetime", status_code=400)
     raw = file.file.read()
     try:
         parsed_knobs = json.loads(knob_values) if knob_values else {}
@@ -681,25 +701,24 @@ def upload_submit(
             source_image = source.copy()
             variants = []
             preview = None
-            g16_payloads = None
+            g16_payloads = {}
             for width, height, code, profile_key in frame.variant_requirements():
                 if code in (cfg.FORMAT_G16P, cfg.FORMAT_G16Z):
-                    if g16_payloads is None:
+                    payload_key = (width, height, code)
+                    if payload_key not in g16_payloads:
                         g16p, g16z, preview = transport.encode_g16_pair(
                             source_image, width=width, height=height,
                             transform=frame.image_transform, crop=crop,
                             knobs=knob_values_clean, resampler=resampler,
                         )
-                        g16_payloads = {
-                            cfg.FORMAT_G16P: g16p,
-                            cfg.FORMAT_G16Z: g16z,
-                        }
+                        g16_payloads[(width, height, cfg.FORMAT_G16P)] = g16p
+                        g16_payloads[(width, height, cfg.FORMAT_G16Z)] = g16z
                         if any(
                             knob_values_clean.get(setting.id) != setting.default
                             for setting in knobs.KNOBS if not setting.panel_only
                         ):
                             preview = None
-                    payload = g16_payloads[code]
+                    payload = g16_payloads[payload_key]
                 else:
                     payload = transport.encode_variant(
                         source_image, width=width, height=height, format_code=code,
@@ -715,11 +734,12 @@ def upload_submit(
                     transform=frame.image_transform, crop=crop,
                     resampler=resampler, quality=frame.jpeg_quality,
                 )
-    except Exception as exc:
+    except Exception:
+        logger.warning("Image upload processing failed", exc_info=True)
         if bulk:
-            return Response(f"Could not process image: {exc}", status_code=400)
+            return Response("Could not process image", status_code=400)
         return templates.TemplateResponse(request, "upload.html", {
-            **_upload_context(user, frame), "error": f"Could not process image: {exc}"
+            **_upload_context(user, frame), "error": "Could not process image"
         }, status_code=400)
 
     image_id = _mint_id()
@@ -743,11 +763,8 @@ def upload_submit(
         thumb = _make_thumbnail(preview)
         bs.upload_blob(store.DEVICE_CONTAINER, f"{image_folder}/thumb.png", thumb, "image/png")
         expires_at = None
-        try:
-            if ttl_hours and float(ttl_hours) > 0:
-                expires_at = (datetime.now(timezone.utc) + timedelta(hours=float(ttl_hours))).isoformat()
-        except ValueError:
-            pass
+        if lifetime_hours is not None:
+            expires_at = (datetime.now(timezone.utc) + timedelta(hours=lifetime_hours)).isoformat()
         request.app.state.index.put(device_id, {
             "id": image_id, "source_name": f"source{source_suffix}", "caption": caption.strip(),
             "permanent": bool(permanent), "expires_at": expires_at, "last_shown_at": None,
@@ -803,14 +820,12 @@ def photos_edit(
         updated["expires_at"] = None
     elif lifetime != "unchanged":
         try:
-            ttl_hours = int(lifetime)
+            lifetime_hours = _parse_lifetime_hours(lifetime)
         except ValueError:
-            return Response("Invalid lifetime", status_code=400)
-        if ttl_hours not in (1, 6, 12, 24, 48, 168, 720):
             return Response("Invalid lifetime", status_code=400)
         updated["permanent"] = True
         updated["expires_at"] = (
-            datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+            datetime.now(timezone.utc) + timedelta(hours=lifetime_hours)
         ).isoformat()
 
     request.app.state.index.put(device_id, updated)
