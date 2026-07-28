@@ -833,12 +833,15 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 
 | Setting | Description |
 |---------|-------------|
-| **Data binding (main line)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`). Each line has a color swatch below the binding input |
-| **Data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream and color. Leave empty for single line |
+| **Live data binding (line 1)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`). The line color and optional Home Assistant history source are configured alongside it |
+| **Live data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream, color, and optional history source. Leave empty for a single line |
 | **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data. Accepts a number or a binding expression (e.g. `[health:heap_total]`) for dynamic scaling |
 | **Same scale for all lines** | When enabled (default), all lines in a multi-line sparkline share the same auto-scaled Y-axis range, so values are visually comparable. Disable to let each line auto-scale independently — useful when lines have very different magnitudes and you want to compare trends/shapes rather than absolute values. Has no effect when explicit min/max are configured or with single-line sparklines |
-| **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
-| **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
+| **Time range** | How much history to display, entered in seconds, minutes, hours, or days (default: 5 minutes, maximum: 1 day) |
+| **One point every** | Desired time represented by each point, entered in seconds, minutes, or hours. The editor calculates the required point count and stores it within the 2–255 point limit |
+| **Backfill from Home Assistant** | Fills the line from long-term statistics after a restart. A live data binding is required because history fills that same stream; it does not create a separate line |
+| **History entity (line 1/2/3)** | Home Assistant entity ID (e.g. `sensor.living_room_temperature`) used when backfill is enabled |
+| **Historical value (line 1/2/3)** | **Average reading** (mean) for measurements, **Latest state** for the most recently recorded value in each period, or **Accumulated total** (sum) for energy, water, and other total sensors |
 | **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
 | **Line separation** | Per-line vertical offset in pixels (0 = off, 1–6). When non-zero and the widget has more than one line, each line is nudged by a small symmetric offset (e.g. two lines fan out by ±offset, three lines by −offset / 0 / +offset) so lines with near-identical values stay visually distinct instead of drawing on top of each other. The current-value dot and min/max markers move with their line. Note: this shifts lines a couple of pixels off their exact value, so leave it at 0 when precise pixel-accurate readout matters |
 | **Max marker size** | Dot radius for the maximum-value marker (0 = off, 1–20 px). When non-zero, a dot and optional label are drawn at the highest point in the visible data |
@@ -859,6 +862,16 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 **Auto-scaling** — when min and max are left empty, the sparkline automatically scales the Y-axis to fit the observed data range. This is the recommended default for most use cases. With multiple lines and **Same scale for all lines** enabled (default), all lines share the same Y-axis range computed from the global min/max across all streams — so a value of 50 on line 1 and 50 on line 2 appear at the same height. Disable it if your lines have very different magnitudes (e.g., watts 0–5000 vs efficiency 0–100) and you want each to fill the chart independently.
 
 **Data gaps** — if data stops arriving (e.g., MQTT sensor goes offline), the sparkline uses Last Observation Carried Forward (LOCF) to fill gaps, keeping the graph smooth instead of showing holes.
+
+**History backfill from Home Assistant** — a freshly booted device has no history, so a 24-hour sparkline would take a full day to fill up. Enable **Backfill from Home Assistant** beside a line's live binding and set its **History entity**. The device fetches that entity's long-term statistics once the clock is synchronized, then fills the empty part of the chart. Live data always wins: backfilled values are only written to slots the device has not sampled itself.
+
+Requirements and limits:
+
+- The Home Assistant URL and a long-lived access token must be configured on the portal's Integrations page.
+- Home Assistant records statistics on 5-minute boundaries, so a line whose point interval is under 5 minutes is not backfilled. The pad editor calculates the interval and warns when this is the case.
+- Windows longer than an hour per slot use Home Assistant's hourly statistics; shorter ones use the 5-minute statistics.
+- Only boards with PSRAM include this feature.
+- Backfill runs once per stream, one stream at a time, in the background — it does not block the UI.
 
 Labels, icons, and colors still work alongside the widget. A typical sparkline button uses the top label for a title ("Temperature") and the bottom label for the current value (`[mqtt:sensor/temp;temperature;%.1f°C]`).
 

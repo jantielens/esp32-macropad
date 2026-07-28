@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 233
+Total flags: 235
 
 ### Features (HAS_*)
 
@@ -37,6 +37,7 @@ Total flags: 233
 - **HAS_EPAPER_FRONTLIGHT** default: `false` — Enable e-paper frontlight control on boards with frontlight hardware.
 - **HAS_EPAPER_VCOM** default: `false` — Enable the portal VCOM calibration page (TPS65186/Inkplate panels only).
 - **HAS_EPAPER_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext1 wake plus short/long press).
+- **HAS_HA_HISTORY** default: `(HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)` — Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_MCP** default: `true` — the feature out entirely (saves flash on constrained or locked-down builds).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
@@ -124,6 +125,7 @@ Total flags: 233
 - **AUDIO_TASK_STACK_SIZE** default: `24576` — Audio worker stack size in bytes.
 - **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
+- **HA_HISTORY_MIN_SLOT_SECS** default: `300` — Shortest sparkline slot duration (seconds) that Home Assistant history can fill.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
 - **HTTP_STREAM_CHUNK_SIZE** default: `(no default)` — failures (size ~2.3 KB requested vs ~1.6 KB largest free).
@@ -280,22 +282,22 @@ Total flags: 233
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
-| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
-| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ✅ | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
-| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
-| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
+| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -581,6 +583,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/device_classes/epaper/epaper_config.h
   - src/app/device_classes/epaper_device_class.cpp
+- **HAS_HA_HISTORY**
+  - src/app/board_config.h
+  - src/app/data_stream.cpp
+  - src/app/data_stream.h
+  - src/app/pad_config.h
+  - src/app/widgets/sparkline_widget.cpp
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino
   - src/app/board_config.h
@@ -867,6 +875,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_SD_EN_PIN**
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+- **HA_HISTORY_MIN_SLOT_SECS**
+  - src/app/board_config.h
 - **HEALTH_HISTORY_ENABLED**
   - src/app/app.ino
   - src/app/board_config.h

@@ -20,6 +20,17 @@ echo "=== Running unit tests: expr_eval ==="
 ./tests/bin/test_expr_eval
 echo
 
+echo "=== Building unit tests: ha_stats_resample ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_ha_stats_resample.cpp \
+    src/app/ha_stats_resample.cpp \
+    -o tests/bin/test_ha_stats_resample -lm
+
+echo "=== Running unit tests: ha_stats_resample ==="
+./tests/bin/test_ha_stats_resample
+echo
+
 echo "=== Building integration tests: expr_binding ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \

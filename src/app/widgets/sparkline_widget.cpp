@@ -37,6 +37,9 @@
 
 #define MAX_REF_LINES 3
 
+// Longest supported time window (24 h). Matches the portal input's max.
+#define SPARKLINE_WINDOW_MAX_SECS 86400UL
+
 struct SparklineConfig {
     char     min_val[CONFIG_BINDABLE_SHORT_LEN];  // Y-axis minimum (empty = auto-scale, or binding)
     char     max_val[CONFIG_BINDABLE_SHORT_LEN];  // Y-axis maximum (empty = auto-scale, or binding)
@@ -47,7 +50,13 @@ struct SparklineConfig {
     char     min_label_color[CONFIG_BINDABLE_SHORT_LEN];  // Empty = follow line color
     char     max_label_color[CONFIG_BINDABLE_SHORT_LEN];  // Empty = follow line color
     char     ref_line_color[MAX_REF_LINES][CONFIG_BINDABLE_SHORT_LEN]; // Reference line colors
-    uint16_t window_secs;          // Time window in seconds (e.g. 300 = 5 min)
+#if HAS_HA_HISTORY
+    // Optional Home Assistant Recorder history source per line. An empty
+    // entity_id means "no history" and the line simply starts empty.
+    char     ha_entity[MAX_REF_LINES][DATA_STREAM_HA_ENTITY_MAX_LEN];
+    uint8_t  ha_stat[MAX_REF_LINES];   // HA_STAT_*
+#endif
+    uint32_t window_secs;          // Time window in seconds (e.g. 300 = 5 min)
     uint8_t  slot_count;           // Number of sample slots (default 60)
     uint8_t  line_width;           // Line thickness in pixels (default 2)
     uint8_t  line_offset;          // Per-line vertical separation in px (0 = off; lines fanned symmetrically)
@@ -69,6 +78,26 @@ struct SparklineConfig {
 static_assert(sizeof(SparklineConfig) <= WIDGET_CONFIG_MAX_BYTES,
               "SparklineConfig exceeds WIDGET_CONFIG_MAX_BYTES");
 
+// History source accessors. They collapse to "no source" on boards that build
+// without HA history, so callers never need their own #if.
+static inline const char* sparkline_ha_entity(const SparklineConfig* cfg, uint8_t line) {
+#if HAS_HA_HISTORY
+    return (line < MAX_REF_LINES) ? cfg->ha_entity[line] : "";
+#else
+    (void)cfg; (void)line;
+    return "";
+#endif
+}
+
+static inline uint8_t sparkline_ha_stat(const SparklineConfig* cfg, uint8_t line) {
+#if HAS_HA_HISTORY
+    return (line < MAX_REF_LINES) ? cfg->ha_stat[line] : 0;
+#else
+    (void)cfg; (void)line;
+    return 0;
+#endif
+}
+
 // ---- Runtime state (packed into WidgetState.data[]) ----
 // The sparkline no longer owns its ring buffer — data collection is
 // handled by the DataStream registry (data_stream.cpp) which runs
@@ -83,7 +112,7 @@ struct SparklineState {
     uint8_t  line_count;             // 1–3 (auto-detected from bindings)
 #if HAS_MQTT
     data_stream_handle_t ds_handles[MAX_SPARKLINE_LINES]; // Data stream handles
-    uint8_t  cached_heads[MAX_SPARKLINE_LINES]; // Change-detection: last seen head per stream
+    uint32_t cached_revs[MAX_SPARKLINE_LINES]; // Change-detection: last drawn stream revision
 #endif
     int16_t  cached_chart_w;         // Cached chart area width (set once in create)
     int16_t  cached_chart_h;         // Cached chart area height (set once in create)
@@ -112,8 +141,9 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     widget_parse_field(btn["widget_sparkline_min"], cfg->min_val, sizeof(cfg->min_val), "", false);
     widget_parse_field(btn["widget_sparkline_max"], cfg->max_val, sizeof(cfg->max_val), "", false);
 
-    cfg->window_secs = btn["widget_sparkline_window"] | (uint16_t)300;
+    cfg->window_secs = btn["widget_sparkline_window"] | (uint32_t)300;
     if (cfg->window_secs < 10) cfg->window_secs = 10;
+    if (cfg->window_secs > SPARKLINE_WINDOW_MAX_SECS) cfg->window_secs = SPARKLINE_WINDOW_MAX_SECS;
 
     uint8_t sc = btn["widget_sparkline_slots"] | (uint8_t)60;
     cfg->slot_count = (sc < 2) ? 2 : sc;  // minimum 2 points for a line
@@ -131,6 +161,23 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     widget_parse_field(btn["widget_sparkline_line_color_2"], cfg->line_color_2, sizeof(cfg->line_color_2), "#2196F3");
     widget_parse_field(btn["widget_sparkline_line_color_3"], cfg->line_color_3, sizeof(cfg->line_color_3), "#9C27B0");
     cfg->unified_autoscale = btn["widget_sparkline_unified_scale"] | true;  // default on
+
+#if HAS_HA_HISTORY
+    // Per-line Home Assistant Recorder history source (empty = no hydration).
+    // Keys are spelled out literally so the describe/parse parity guard sees them.
+    widget_parse_field(btn["widget_sparkline_ha_entity"],   cfg->ha_entity[0], sizeof(cfg->ha_entity[0]), "", false);
+    widget_parse_field(btn["widget_sparkline_ha_entity_2"], cfg->ha_entity[1], sizeof(cfg->ha_entity[1]), "", false);
+    widget_parse_field(btn["widget_sparkline_ha_entity_3"], cfg->ha_entity[2], sizeof(cfg->ha_entity[2]), "", false);
+
+    auto parse_stat = [](const char* stat) -> uint8_t {
+        if (strcmp(stat, "state") == 0) return HA_STAT_STATE;
+        if (strcmp(stat, "sum")   == 0) return HA_STAT_SUM;
+        return HA_STAT_MEAN;
+    };
+    cfg->ha_stat[0] = parse_stat(btn["widget_sparkline_ha_stat"]   | "mean");
+    cfg->ha_stat[1] = parse_stat(btn["widget_sparkline_ha_stat_2"] | "mean");
+    cfg->ha_stat[2] = parse_stat(btn["widget_sparkline_ha_stat_3"] | "mean");
+#endif
 
     // Min/max markers
     cfg->marker_size_min = btn["widget_sparkline_marker_size_min"] | (uint8_t)0;
@@ -231,13 +278,15 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         st->ds_handles[i] = DATA_STREAM_INVALID;
         if (wcfg->data_binding[i][0]) {
             st->ds_handles[i] = data_stream_find(wcfg->data_binding[i],
-                                                  cfg->window_secs, cfg->slot_count);
+                                                  cfg->window_secs, cfg->slot_count,
+                                                  sparkline_ha_entity(cfg, i),
+                                                  sparkline_ha_stat(cfg, i));
             if (st->ds_handles[i] == DATA_STREAM_INVALID) {
                 LOGW(TAG, "No data stream for binding[%d]: %s", i, wcfg->data_binding[i]);
             }
         }
     }
-    memset(st->cached_heads, 0xFF, sizeof(st->cached_heads));
+    memset(st->cached_revs, 0xFF, sizeof(st->cached_revs));
 #endif
 
     // Allocate point arrays for each line
@@ -325,9 +374,9 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->cached_chart_w = chart_w;
     st->cached_chart_h = chart_h;
 
-    LOGD(TAG, "Layout: rect=%dx%d content=%dx%d chart_top=%d chart=%dx%d slots=%d window=%ds lines=%d",
+    LOGD(TAG, "Layout: rect=%dx%d content=%dx%d chart_top=%d chart=%dx%d slots=%d window=%lus lines=%d",
          rect->w, rect->h, content_w, content_h, chart_top, chart_w, chart_h,
-         cfg->slot_count, cfg->window_secs, st->line_count);
+         cfg->slot_count, (unsigned long)cfg->window_secs, st->line_count);
 
     // Create a container for the sparkline area (clips the lines)
     lv_obj_t* chart_area = lv_obj_create(tile);
@@ -529,9 +578,10 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
     uint8_t* slot_map = (uint8_t*)alloca(sizeof(uint8_t) * snap->count);
     uint8_t valid = 0;
     for (uint8_t i = 0; i < snap->count; i++) {
-        uint8_t idx = (snap->count < n)
-            ? i
-            : (uint8_t)((snap->head + i) % n);
+        // Valid samples are the `count` slots ending at head-1. History merging
+        // fills slots behind the live region, so the ring can wrap even while
+        // count < slot_count — always use the general form.
+        uint8_t idx = (uint8_t)((snap->head + n - snap->count + i) % n);
         float val = snap->samples[idx];
         if (!isfinite(val)) continue;
         vals[valid] = val;
@@ -657,7 +707,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
 
         DataStreamSnapshot snap;
         if (!data_stream_get(st->ds_handles[i], &snap)) continue;
-        st->cached_heads[i] = snap.head;
+        st->cached_revs[i] = snap.rev;
         if (snap.count == 0) continue;
 
         // Symmetric per-line vertical separation: lines fan out around their
@@ -1020,7 +1070,9 @@ static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (!st->lines[0] || !st->points[0]) return;
 
 #if HAS_MQTT
-    // PERF01: skip full redraw if no data stream head has advanced.
+    // PERF01: skip full redraw if no data stream has changed. The revision
+    // counter covers every ring mutation — new samples, LOCF fills, and history
+    // merges that write behind the head without moving it.
     // When current-value labels are present, also allow a throttled redraw
     // every ~1 s so binding text stays up-to-date without burning CPU.
     bool data_changed = false;
@@ -1028,7 +1080,7 @@ static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (st->ds_handles[i] == DATA_STREAM_INVALID) continue;
         DataStreamSnapshot snap;
         if (!data_stream_get(st->ds_handles[i], &snap)) continue;
-        if (snap.head != st->cached_heads[i]) { data_changed = true; break; }
+        if (snap.rev != st->cached_revs[i]) { data_changed = true; break; }
     }
     if (!data_changed) {
         if (st->label_margin_r == 0) return;  // no labels → nothing else to do
@@ -1055,16 +1107,20 @@ static void sparkline_destroy(WidgetState* state) {
 
 static bool sparkline_get_stream_params(const WidgetConfig* wcfg,
                                         uint8_t stream_index,
-                                        uint16_t* window_secs,
+                                        uint32_t* window_secs,
                                         uint8_t* slot_count,
-                                        const char** out_binding) {
+                                        const char** out_binding,
+                                        const char** out_ha_entity,
+                                        uint8_t* out_ha_stat) {
     auto* cfg = reinterpret_cast<const SparklineConfig*>(wcfg->data);
     if (stream_index >= MAX_SPARKLINE_LINES) return false;
     const char* binding = wcfg->data_binding[stream_index];
     if (!binding || !binding[0]) return false;
-    if (window_secs) *window_secs = cfg->window_secs;
-    if (slot_count)  *slot_count  = cfg->slot_count;
-    if (out_binding) *out_binding = binding;
+    if (window_secs)   *window_secs   = cfg->window_secs;
+    if (slot_count)    *slot_count    = cfg->slot_count;
+    if (out_binding)   *out_binding   = binding;
+    if (out_ha_entity) *out_ha_entity = sparkline_ha_entity(cfg, stream_index);
+    if (out_ha_stat)   *out_ha_stat   = sparkline_ha_stat(cfg, stream_index);
     return true;
 }
 
@@ -1083,6 +1139,17 @@ static void sparkline_describe(JsonObject& out) {
     add("widget_sparkline_current_dot","number","dot size px at latest sample, 0=off"); addmax("widget_sparkline_current_label","string","latest-value caption",63);
     addmax("widget_sparkline_current_label_2","string","line 2 caption",63); addmax("widget_sparkline_current_label_3","string","line 3 caption",63);
     add("widget_sparkline_marker_size_min","number",""); add("widget_sparkline_marker_size_max","number","");
+#if HAS_HA_HISTORY
+    addmax("widget_sparkline_ha_entity","string","HA entity to hydrate line 1 history from, '' = off",
+           DATA_STREAM_HA_ENTITY_MAX_LEN - 1);
+    addmax("widget_sparkline_ha_entity_2","string","HA history entity for line 2",
+           DATA_STREAM_HA_ENTITY_MAX_LEN - 1);
+    addmax("widget_sparkline_ha_entity_3","string","HA history entity for line 3",
+           DATA_STREAM_HA_ENTITY_MAX_LEN - 1);
+    add("widget_sparkline_ha_stat","string","recorder statistic: mean|state|sum");
+    add("widget_sparkline_ha_stat_2","string","recorder statistic for line 2");
+    add("widget_sparkline_ha_stat_3","string","recorder statistic for line 3");
+#endif
 }
 #endif
 REGISTER_WIDGET_SCHEMA(sparkline, sparkline_get_stream_params, false);

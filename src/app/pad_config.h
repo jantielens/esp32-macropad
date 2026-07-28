@@ -71,7 +71,19 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define CONFIG_BINDABLE_SHORT_LEN       64
 #define CONFIG_WIDGET_TYPE_MAX_LEN     16
 #define MAX_WIDGET_BINDINGS             4
-#define WIDGET_CONFIG_MAX_BYTES      1600
+
+// Per-button widget config blob. This is multiplied by MAX_PAD_BUTTONS inside
+// every PadConfig, so the cap is only widened on boards that actually compile
+// the HA history fields into SparklineConfig. PadConfig size already varies per
+// board (see MAX_PAD_BUTTONS overrides) and pads persist as raw JSON, so a
+// narrower cap simply ignores the extra fields — no migration is involved.
+#ifndef WIDGET_CONFIG_MAX_BYTES
+#  if HAS_HA_HISTORY
+#    define WIDGET_CONFIG_MAX_BYTES  2048
+#  else
+#    define WIDGET_CONFIG_MAX_BYTES  1600
+#  endif
+#endif
 
 // Icon position relative to center label
 #define ICON_POS_ABOVE   0   // Default: icon above center label

@@ -31,9 +31,13 @@ struct WidgetType {
                    WidgetState* state, const char* raw_value);
     void (*destroyUI)(WidgetState* state);
     void (*tick)(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* state);
+    // Describe stream `stream_index` (false = widget has no further streams).
+    // `out_ha_entity` / `out_ha_stat` name the optional Home Assistant history
+    // source; widgets without one report "" / 0.
     bool (*getStreamParams)(const WidgetConfig* cfg, uint8_t stream_index,
-                            uint16_t* window_secs, uint8_t* slot_count,
-                            const char** out_binding);
+                            uint32_t* window_secs, uint8_t* slot_count,
+                            const char** out_binding,
+                            const char** out_ha_entity, uint8_t* out_ha_stat);
     bool resolveInTick;
     void (*describeSchema)(JsonObject& out);
 };

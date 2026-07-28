@@ -1634,6 +1634,29 @@ body {
 /* Sparkline: binding + color on same row */
 .sparkline-binding-color-row { display: flex; align-items: center; gap: 8px; }
 .sparkline-binding-color-row .bindable-color .bc-input { display: none; }
+.sparkline-source { margin-top: 12px; padding-left: 10px; border-left: 2px solid var(--portal-border-light); }
+.sparkline-source-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
+.portal-form .sparkline-source-heading small { display: inline; font-weight: 400; }
+.sparkline-source-heading .bindable-color .bc-input { display: none; }
+.sparkline-history-toggle { display: block; margin: 4px 0; }
+.sparkline-history-dependency { display: block; }
+.sparkline-history-fields { margin-top: 6px; }
+.sparkline-history-row { display: block; }
+.sparkline-history-row > .form-group { width: 100%; }
+.sparkline-sampling-row { display: flex; gap: 8px; }
+.sparkline-sampling-row > .form-group { flex: 1; min-width: 0; }
+.sparkline-time-range { display: flex; gap: 6px; }
+.portal-form .sparkline-sampling-row input,
+.portal-form .sparkline-sampling-row select {
+  box-sizing: border-box; height: 48px; padding: 8px 12px;
+}
+.portal-form .sparkline-time-range input { flex: 1 1 100px; width: auto; min-width: 90px; }
+.portal-form .sparkline-time-range select { flex: 0 0 120px; width: 120px; }
+.sparkline-resolution-summary { display: block; font-weight: 600; }
+
+@media (max-width: 520px) {
+  .sparkline-sampling-row { display: block; }
+}
 
 /* Widget sub-group headings */
 .widget-sub-heading {
@@ -1643,6 +1666,10 @@ body {
   border-top: 1px solid var(--portal-border-light);
 }
 .widget-sub-heading:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+/* Inline warning note inside the pad editor */
+.portal-form small.editor-warn { color: #b26a00; font-weight: 500; }
+:root[data-bs-theme="dark"] .portal-form small.editor-warn { color: #f0b429; }
 
 /* Widget threshold / status color row */
 .bar-chart-colors { display: flex; gap: 8px; align-items: end; }

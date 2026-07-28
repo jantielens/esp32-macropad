@@ -256,6 +256,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
   - **Pad selection & naming**: Dropdown for Pad 1–16 with optional custom names (max 31 chars)
   - **Grid preview**: Click any cell to open the button editor dialog
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
+  - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges and the desired interval per point accept human units; the editor calculates the required point count and reports the effective interval
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, content padding, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)

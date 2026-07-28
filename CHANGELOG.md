@@ -14,6 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **Sparkline history backfill from Home Assistant** — a sparkline used to start empty after every reboot, which made long time windows close to useless: a 24-hour chart needed a full day of uptime before it said anything. Each sparkline line can now name a Home Assistant entity, and once the device clock is synchronized it fetches that entity's long-term statistics through the Recorder `get_statistics` service and fills in the part of the chart it has not sampled itself. Live data always takes precedence — backfilled values are only written into slots the device has no reading for — so the chart converges on locally sampled data as it runs. The fetch happens on a background PSRAM-stacked task, one stream at a time, and never blocks the UI. Configure it beside each line's live binding with **Backfill from Home Assistant** and choose Average reading, Latest state, or Accumulated total. Requires the Home Assistant URL and token on the Integrations page. Gated by the new `HAS_HA_HISTORY` compile-time flag, which is on for boards with PSRAM, MQTT, and a display.
+
+### Changed
+
+* **Sparkline time windows above 18 hours now work** — the stream window was stored as a 16-bit value while the pad editor accepted up to 86400 seconds, so anything past 65535 silently wrapped (a 24-hour window became roughly 5.8 hours). Windows are now 32-bit end to end and the editor clamps to the real 24-hour maximum.
+* **Sparkline sample slots are aligned to wall-clock time** once NTP is available, rather than to the time since boot. This is what lets history from Home Assistant line up with locally sampled data; the ring is reset once when the clock first becomes valid.
+* **Sparkline sampling controls now use human time units** for both the chart range and the desired interval per point. The editor calculates the required point count and explains the 255-point limit. Home Assistant history settings now sit beside the live binding they backfill, with clearer historical-value names and an explicit enable control.
+
+### Fixed
+
+* **Home Assistant history requests now stay aligned for arbitrary sparkline intervals** — point intervals that were not an exact number of seconds (for example, 24 hours divided across 255 points) were truncated before reconstructing the Recorder request timestamps. The tiny per-point error accumulated across the Unix epoch and could shift the requested window by weeks, producing repeated "no statistics in window" responses.
+* **Sparkline auto-scaling no longer breaks on gaps** — empty slots were included in the min/max computation, which could collapse or distort the Y-axis range. Non-finite slots are now skipped.
+* **The first sample in a sparkline stream is no longer written to the wrong slot**, which caused a spurious point at the right edge of a freshly created chart.
+
 ## [1.23.0] - 2026-07-28
 
 This release rebuilds the e-paper photoframe as a **local, battery-first system**, delivered as a matched pair: a self-hosted **photo management site** that runs on your own network, and a new **firmware client** that talks to it over a small versioned HTTP API. The cloud storage backend is gone.

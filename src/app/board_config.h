@@ -1036,5 +1036,23 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DATA_STREAM_MAX_STREAMS 64
 #endif
 
+// Requires PSRAM: hydration widens WIDGET_CONFIG_MAX_BYTES (which is multiplied
+// by MAX_PAD_BUTTONS inside every PadConfig) and runs a PSRAM-stacked background
+// fetch task. Boards without PSRAM compile the feature — and the wider config
+// blob — out entirely, so they pay nothing.
+//
+// Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
+#ifndef HAS_HA_HISTORY
+#define HAS_HA_HISTORY (HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)
+#endif
+
+// Recorder statistics are only published on 5-minute boundaries, so hydration is
+// skipped for streams whose per-slot duration is finer than one Recorder period.
+//
+// Shortest sparkline slot duration (seconds) that Home Assistant history can fill.
+#ifndef HA_HISTORY_MIN_SLOT_SECS
+#define HA_HISTORY_MIN_SLOT_SECS 300
+#endif
+
 #endif // BOARD_CONFIG_H
 

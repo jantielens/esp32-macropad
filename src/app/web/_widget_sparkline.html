@@ -4,42 +4,84 @@
                     <div class="editor-group-body">
                         <div class="widget-sub-heading">Data Sources</div>
 
-                        <div class="form-group">
-                            <label for="pad-edit-sparkline-data-binding">Data Binding (main line) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                        <small>Each line needs a live data binding. Home Assistant history can optionally fill that same line after a restart.</small>
+
+                        <div class="sparkline-source">
+                            <div class="sparkline-source-heading">
+                                <span>Line 1</span>
+                                <div class="bindable-color" title="Line color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color" class="bc-input" aria-label="Line 1 color" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
+                            </div>
+                            <div class="form-group">
+                            <label for="pad-edit-sparkline-data-binding">Live Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="sparkline-binding-color-row">
                                 <div class="binding-input-wrap" style="flex:1;min-width:0;">
-                                    <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
+                                    <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]" oninput="padUpdateSparklineEditor()">
                                 </div>
-                                <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:start;">
-                                    <label for="pad-edit-sparkline-line-color" style="margin:0;"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
+                            </div>
+                            </div>
+                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
+                            <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency"></small>
+                            <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields">
+                                <div class="sparkline-history-row">
+                                    <div class="form-group">
+                                        <label for="pad-edit-sparkline-ha-entity">History Entity</label>
+                                        <input type="text" id="pad-edit-sparkline-ha-entity" maxlength="63" placeholder="e.g. sensor.living_room_temperature">
+                                    </div>
+                                    <div class="form-group sparkline-stat-field">
+                                        <label for="pad-edit-sparkline-ha-stat">Historical Value</label>
+                                        <select id="pad-edit-sparkline-ha-stat" onchange="padUpdateSparklineEditor()">
+                                            <option value="mean">Average reading</option>
+                                            <option value="state">Latest state</option>
+                                            <option value="sum">Accumulated total</option>
+                                        </select>
+                                    </div>
                                 </div>
+                                <small id="pad-edit-sparkline-ha-stat-help"></small>
+                                <small>Uses the Home Assistant URL and token configured on the Integrations page.</small>
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="pad-edit-sparkline-data-binding-2">Data Binding (line 2) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <div class="sparkline-binding-color-row">
-                                <div class="binding-input-wrap" style="flex:1;min-width:0;">
-                                    <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-2" maxlength="191" placeholder="Optional — leave empty for single line">
+                        <div class="sparkline-source">
+                            <div class="sparkline-source-heading">
+                                <span>Line 2 <small>(optional)</small></span>
+                                <div class="bindable-color" title="Line color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-2" class="bc-input" aria-label="Line 2 color" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
+                            </div>
+                            <div class="form-group">
+                            <label for="pad-edit-sparkline-data-binding-2">Live Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-2" maxlength="191" placeholder="Leave empty for a single line" oninput="padUpdateSparklineEditor()">
+                            </div>
+                            </div>
+                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled-2" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
+                            <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency-2"></small>
+                            <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-2">
+                                <div class="sparkline-history-row">
+                                    <div class="form-group"><label for="pad-edit-sparkline-ha-entity-2">History Entity</label><input type="text" id="pad-edit-sparkline-ha-entity-2" maxlength="63" placeholder="e.g. sensor.living_room_humidity"></div>
+                                    <div class="form-group sparkline-stat-field"><label for="pad-edit-sparkline-ha-stat-2">Historical Value</label><select id="pad-edit-sparkline-ha-stat-2" onchange="padUpdateSparklineEditor()"><option value="mean">Average reading</option><option value="state">Latest state</option><option value="sum">Accumulated total</option></select></div>
                                 </div>
-                                <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:start;">
-                                    <label for="pad-edit-sparkline-line-color-2" style="margin:0;"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-2" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
-                                </div>
+                                <small id="pad-edit-sparkline-ha-stat-help-2"></small>
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="pad-edit-sparkline-data-binding-3">Data Binding (line 3) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <div class="sparkline-binding-color-row">
-                                <div class="binding-input-wrap" style="flex:1;min-width:0;">
-                                    <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-3" maxlength="191" placeholder="Optional — leave empty for single or double line">
+                        <div class="sparkline-source">
+                            <div class="sparkline-source-heading">
+                                <span>Line 3 <small>(optional)</small></span>
+                                <div class="bindable-color" title="Line color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-3" class="bc-input" aria-label="Line 3 color" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
+                            </div>
+                            <div class="form-group">
+                            <label for="pad-edit-sparkline-data-binding-3">Live Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-3" maxlength="191" placeholder="Leave empty for one or two lines" oninput="padUpdateSparklineEditor()">
+                            </div>
+                            </div>
+                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled-3" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
+                            <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency-3"></small>
+                            <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-3">
+                                <div class="sparkline-history-row">
+                                    <div class="form-group"><label for="pad-edit-sparkline-ha-entity-3">History Entity</label><input type="text" id="pad-edit-sparkline-ha-entity-3" maxlength="63" placeholder="e.g. sensor.outdoor_temperature"></div>
+                                    <div class="form-group sparkline-stat-field"><label for="pad-edit-sparkline-ha-stat-3">Historical Value</label><select id="pad-edit-sparkline-ha-stat-3" onchange="padUpdateSparklineEditor()"><option value="mean">Average reading</option><option value="state">Latest state</option><option value="sum">Accumulated total</option></select></div>
                                 </div>
-                                <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:start;">
-                                    <label for="pad-edit-sparkline-line-color-3" style="margin:0;"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                    <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-3" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
-                                </div>
+                                <small id="pad-edit-sparkline-ha-stat-help-3"></small>
                             </div>
                         </div>
 
@@ -65,18 +107,38 @@
 
                         <div class="widget-sub-heading">Sampling</div>
 
-                        <div style="display:flex; gap:8px;">
+                        <div class="sparkline-sampling-row">
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-window">Time Window</label>
-                                <input type="number" id="pad-edit-sparkline-window" min="10" max="86400" value="300" placeholder="300">
-                                <small>How much history to show (e.g. 300 = 5 min)</small>
+                                <label for="pad-edit-sparkline-window">Time Range</label>
+                                <div class="sparkline-time-range">
+                                    <input type="number" id="pad-edit-sparkline-window" min="1" value="5" step="any" oninput="padUpdateSparklineEditor()">
+                                    <select id="pad-edit-sparkline-window-unit" onchange="padUpdateSparklineEditor()">
+                                        <option value="1">seconds</option>
+                                        <option value="60" selected>minutes</option>
+                                        <option value="3600">hours</option>
+                                        <option value="86400">days</option>
+                                    </select>
+                                </div>
+                                <small>How much history the chart displays.</small>
                             </div>
                             <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-sparkline-slots">Data Points</label>
-                                <input type="number" id="pad-edit-sparkline-slots" min="2" max="255" value="60" placeholder="60">
-                                <small>Number of samples in the line</small>
+                                <label for="pad-edit-sparkline-interval">One Point Every</label>
+                                <div class="sparkline-time-range">
+                                    <input type="number" id="pad-edit-sparkline-interval" min="0.001" value="5" step="any" oninput="padUpdateSparklineEditor()">
+                                    <select id="pad-edit-sparkline-interval-unit" onchange="padUpdateSparklineEditor()">
+                                        <option value="1">seconds</option>
+                                        <option value="60" selected>minutes</option>
+                                        <option value="3600">hours</option>
+                                    </select>
+                                </div>
+                                <small>How much time each point should cover.</small>
+                                <input type="hidden" id="pad-edit-sparkline-slots" value="60">
                             </div>
                         </div>
+                        <small class="sparkline-resolution-summary" id="pad-edit-sparkline-resolution"></small>
+                        <small class="editor-warn" id="pad-edit-sparkline-window-warn" style="display:none;">Maximum time range is 1 day. The saved value will be limited to 1 day.</small>
+                        <small class="editor-warn" id="pad-edit-sparkline-points-warn" style="display:none;"></small>
+                        <small class="editor-warn" id="pad-edit-sparkline-ha-warn" style="display:none;">Home Assistant history is stored in 5-minute periods, so backfill is skipped at this resolution. Live data still uses the finer interval.</small>
 
                         <div class="widget-sub-heading">Minimum Marker</div>
 
