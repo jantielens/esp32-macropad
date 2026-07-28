@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import gzip
 import hashlib
 import importlib
 import io
@@ -24,6 +23,21 @@ MEDIA_TYPES = {
     2: "application/vnd.photoframe.g16p",
     3: "application/vnd.photoframe.g16z",
 }
+
+
+def gzip_wrap(data: bytes) -> bytes:
+    """Wrap data in a gzip container with byte-reproducible framing.
+
+    ``gzip.compress`` is not stable across Python versions: releases up to 3.12
+    emit the zlib OS byte (0x03 on Unix) while 3.13 and later normalise it to
+    0xff (unknown). Committed goldens must regenerate identically everywhere, so
+    the 10-byte header is written explicitly with a pinned OS byte.
+    """
+    header = b"\x1f\x8b\x08\x00" + b"\x00\x00\x00\x00" + b"\x02\xff"
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -zlib.MAX_WBITS)
+    body = compressor.compress(data) + compressor.flush()
+    trailer = struct.pack("<II", zlib.crc32(data) & 0xFFFFFFFF, len(data) & 0xFFFFFFFF)
+    return header + body + trailer
 
 
 def load_json(path: Path) -> dict:
@@ -286,7 +300,7 @@ def generate_vectors(profile_dir: Path, profile: dict) -> None:
             [
                 ("valid/frame.g16z", g16z, "g16z", True, None, 3),
                 ("invalid/zlib-wrapper.g16z", b"G16Z" + zlib.compress(g16p), "g16z", False, "g16z-raw-deflate", 3),
-                ("invalid/gzip-wrapper.g16z", b"G16Z" + gzip.compress(g16p, mtime=0), "g16z", False, "g16z-raw-deflate", 3),
+                ("invalid/gzip-wrapper.g16z", b"G16Z" + gzip_wrap(g16p), "g16z", False, "g16z-raw-deflate", 3),
                 ("invalid/trailing-bytes.g16z", b"G16Z" + raw_deflate + b"\x00", "g16z", False, "g16z-trailing-bytes", 3),
             ]
         )
