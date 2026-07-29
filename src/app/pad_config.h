@@ -205,7 +205,7 @@ struct SystemPayload {
 };
 struct HaServicePayload {
     char entity_id[48];   // e.g. "light.living_room" (domain = text before first '.')
-    char service[20];     // e.g. "toggle", "turn_on", "set_cover_position"
+    char service[64];     // bare service, e.g. "toggle", "media_previous_track"
     char data_json[64];   // optional extra JSON object, e.g. {"brightness_pct":80}
 };
 struct VisualAlertPayload {

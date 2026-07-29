@@ -73,7 +73,7 @@ static void emit_builtin_action_fields(JsonObject acts) {
     add("sound",      "sound_file, sound_volume");
     add("notify",     "notify_text, notify_duration_ms, notify_text_color, notify_bg_color, notify_border_color, notify_opacity, notify_font_size, notify_location");
     add("system",     "system_command (reboot|wifi_reconnect|screensaver)");
-    add("ha_service", "entity_id, service, data_json");
+    add("ha_service", "entity_id (required domain-qualified string with nonempty domain and object portions); service (required bare string, never domain.service); data_json (optional JSON object encoded as a string). Example: {\"type\":\"ha_service\",\"entity_id\":\"media_player.keuken\",\"service\":\"media_play_pause\",\"data_json\":\"{}\"}");
     add("back",       "(no fields)");
     add("ble_pair",   "(no fields)");
 }

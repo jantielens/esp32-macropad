@@ -15,6 +15,7 @@
 #include "widgets/widget_registry.h"
 #include "binding_template.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -96,11 +97,65 @@ static const char* validate_exact_binding_token(const char* value) {
     return validate_binding_tokens(value);
 }
 
+// Validate action-specific authoring contracts. Other action types are a no-op.
+static const char* validate_action(JsonObjectConst action) {
+    const char* type = action["type"] | "";
+    if (strcmp(type, ACTION_TYPE_HA_SERVICE) != 0) return nullptr;
+
+    if (!action.containsKey("entity_id")) return "ha_service missing entity_id";
+    if (!action["entity_id"].is<const char*>()) return "ha_service entity_id must be a string";
+    const char* entity_id = action["entity_id"].as<const char*>();
+    if (!entity_id[0]) return "ha_service entity_id must not be empty";
+    if (strlen(entity_id) >= sizeof(((HaServicePayload*)nullptr)->entity_id)) {
+        return "ha_service entity_id too long";
+    }
+    const char* separator = strchr(entity_id, '.');
+    if (!separator || separator == entity_id || !separator[1] || strchr(separator + 1, '.')) {
+        return "ha_service entity_id must have nonempty domain and object portions";
+    }
+    for (const char* cursor = entity_id; *cursor; ++cursor) {
+        if (isspace((unsigned char)*cursor)) return "ha_service entity_id must not contain whitespace";
+    }
+
+    if (!action.containsKey("service")) return "ha_service missing service";
+    if (!action["service"].is<const char*>()) return "ha_service service must be a string";
+    const char* service = action["service"].as<const char*>();
+    if (!service[0]) return "ha_service service must not be empty";
+    const char* service_separator = strrchr(service, '.');
+    if (service_separator) {
+        snprintf(s_len_err, sizeof(s_len_err), "service must be bare; use '%s'", service_separator + 1);
+        return s_len_err;
+    }
+    if (strlen(service) >= sizeof(((HaServicePayload*)nullptr)->service)) {
+        return "ha_service service too long";
+    }
+    for (const char* cursor = service; *cursor; ++cursor) {
+        unsigned char character = (unsigned char)*cursor;
+        if (!islower(character) && !isdigit(character) && character != '_') {
+            return "ha_service service must contain only lowercase letters, digits, and '_'";
+        }
+    }
+
+    if (!action.containsKey("data_json")) return nullptr;
+    if (!action["data_json"].is<const char*>()) return "ha_service data_json must be a string";
+    const char* data_json = action["data_json"].as<const char*>();
+    if (!data_json[0]) return nullptr;
+    if (strlen(data_json) >= sizeof(((HaServicePayload*)nullptr)->data_json)) {
+        return "ha_service data_json too long";
+    }
+    JsonDocument data;
+    if (deserializeJson(data, data_json)) return "ha_service data_json must contain valid JSON";
+    if (!data.is<JsonObjectConst>()) return "ha_service data_json root must be an object";
+    return nullptr;
+}
+
 static const char* validate_action_array(JsonArrayConst arr) {
     if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
     for (JsonObjectConst a : arr) {
         const char* t = a["type"] | "";
         if (!t[0]) return "action missing type";
+        const char* action_error = validate_action(a);
+        if (action_error) return action_error;
         // visual_alert.color is bindable and stored in a CONFIG_BINDABLE_SHORT_LEN
         // buffer; reject unknown schemes / non-color values and over-long tokens
         // up front (they would otherwise truncate on save and fall back to red).
@@ -181,6 +236,8 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
                                  "widget field '%s' action is missing 'type'", fname);
                         return s_len_err;
                     }
+                    const char* action_error = validate_action(av.as<JsonObjectConst>());
+                    if (action_error) return action_error;
                 }
                 continue;  // action fields carry no length cap
             }
