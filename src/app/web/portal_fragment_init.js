@@ -738,6 +738,7 @@ window.init_version_info_fragment = function () {
 // ============================================================================
 
 window.init_pad_editor_fragment = function () {
+    if (typeof loadConfig === 'function') loadConfig();
     if (typeof padInit === 'function') padInit();
     if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 };
