@@ -9,6 +9,7 @@
 
 #include "mcp_tool_registry.h"
 #include "mcp_tool_util.h"
+#include "mcp_press_button.h"
 #include "web_mcp.h"
 
 #include "board_config.h"
@@ -30,6 +31,7 @@
 
 #if HAS_DISPLAY
 #include "display_manager.h"
+#include "ha_service.h"
 #include "screen_saver_manager.h"
 #include "pad_config.h"
 #endif
@@ -51,6 +53,7 @@ static constexpr int TOOL_ERR_PARAMS   = MCP_RPC_ERR_PARAMS;
 static constexpr int TOOL_ERR_INTERNAL = MCP_RPC_ERR_INTERNAL;
 
 static constexpr uint32_t TOOL_CONTROL_TIMEOUT_MS = 2000;
+static constexpr uint32_t PRESS_CONTROL_TIMEOUT_MS = 5000;
 
 // Thin adapter over the shared mcp_tool_fail (mcp_tool_util.h): keeps the local
 // call sites readable while the fail logic lives in one place.
@@ -276,6 +279,58 @@ struct PressCtx {
     char label[CONFIG_LABEL_MAX_LEN];
 };
 
+static constexpr const char* PRESS_HA_BUSY = "ha execution busy";
+static constexpr const char* PRESS_HA_PREFIX = "ha_execution:";
+
+static bool press_reserve(uint8_t action_count, uint32_t* execution_id,
+                          void* context) {
+    (void)context;
+    return ha_service_execution_reserve(action_count, execution_id);
+}
+
+static void press_dispatch_list(const ButtonAction* actions, uint8_t count,
+                                void* context) {
+    (void)context;
+    action_list_dispatch(actions, count, "MCP");
+}
+
+static void press_dispatch_action(const ButtonAction& action, void* context) {
+    (void)context;
+    action_dispatch(action, "MCP");
+}
+
+static void press_set_action(uint32_t execution_id, uint8_t result_index,
+                             uint8_t action_index,
+                             const HaServicePayload& payload, void* context) {
+    (void)context;
+    ha_service_execution_set_action(execution_id, result_index,
+                                    action_index, payload);
+}
+
+static HaServiceEnqueueResult press_enqueue(const HaServicePayload& payload,
+                                            uint32_t execution_id,
+                                            uint8_t action_index,
+                                            void* context) {
+    (void)context;
+    return ha_service_enqueue(payload, execution_id, action_index);
+}
+
+static void press_record(const HaServiceResult& result, void* context) {
+    (void)context;
+    ha_service_execution_record(result);
+    LOGW("MCP", "HA queue full: entity='%s' service='%s'",
+         result.entity_id, result.service);
+}
+
+static const McpPressDispatchOps PRESS_DISPATCH_OPS = {
+    press_reserve,
+    press_dispatch_list,
+    press_dispatch_action,
+    press_set_action,
+    press_enqueue,
+    press_record,
+};
+
 static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const PressCtx* c = (const PressCtx*)ctx;
     *ok = false;
@@ -315,11 +370,29 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
 
     // Programmatic activation intentionally bypasses the on-device confirmation
     // dialog; MCP clients must inspect protected buttons before dispatch.
-    action_list_dispatch(btn.actions, btn.action_count, "MCP");
+    uint32_t execution_id = 0;
+    const McpPressDispatchResult dispatch = mcp_press_button_dispatch(
+        btn.actions, btn.action_count, PRESS_DISPATCH_OPS, nullptr,
+        &execution_id);
+    if (dispatch == MCP_PRESS_DISPATCH_BUSY) {
+        free(cfg);
+        strlcpy(msg, PRESS_HA_BUSY, msg_len);
+        return;
+    }
+    if (dispatch == MCP_PRESS_DISPATCH_INVALID) {
+        free(cfg);
+        strlcpy(msg, "invalid button action count", msg_len);
+        return;
+    }
     screen_saver_manager_notify_activity(true);
     free(cfg);
     *ok = true;
-    strlcpy(msg, "pressed", msg_len);
+    if (dispatch == MCP_PRESS_DISPATCH_COMPLETED) {
+        strlcpy(msg, "pressed", msg_len);
+        return;
+    }
+    snprintf(msg, msg_len, "%s%lu", PRESS_HA_PREFIX,
+             (unsigned long)execution_id);
 }
 
 static bool tool_press_button(const JsonObject& args, JsonObject& result, String& err) {
@@ -344,8 +417,56 @@ static bool tool_press_button(const JsonObject& args, JsonObject& result, String
     ctx.position = has_pos ? (int16_t)(args["position"] | 0) : -1;
     if (label) strlcpy(ctx.label, label, sizeof(ctx.label));
 
-    return mcp_run_control(exec_press_button, &ctx, sizeof(ctx),
-                           TOOL_CONTROL_TIMEOUT_MS, result, err);
+    bool ok = false;
+    char msg[MCP_TOOL_MSG_LEN] = {};
+    const McpControlResult dispatch = mcp_control_dispatch(
+        exec_press_button, &ctx, sizeof(ctx), PRESS_CONTROL_TIMEOUT_MS,
+        &ok, msg, sizeof(msg));
+    if (dispatch != MCP_CONTROL_OK) {
+        return mcp_finish_control(dispatch, ok, msg, result, err);
+    }
+    if (!ok && strcmp(msg, PRESS_HA_BUSY) == 0) {
+        return tool_fail(result, err, MCP_RPC_ERR_CONTROL_BUSY,
+                         "HA execution results busy, retry after retention expires");
+    }
+    if (!ok || strncmp(msg, PRESS_HA_PREFIX, strlen(PRESS_HA_PREFIX)) != 0) {
+        return mcp_finish_control(dispatch, ok, msg, result, err);
+    }
+
+    const uint32_t execution_id = (uint32_t)strtoul(
+        msg + strlen(PRESS_HA_PREFIX), nullptr, 10);
+    HaExecutionSnapshot snapshot = {};
+    if (!execution_id ||
+        ha_service_execution_snapshot(execution_id, snapshot) != HA_EXECUTION_FOUND) {
+        return tool_fail(result, err, TOOL_ERR_INTERNAL,
+                         "HA execution result unavailable");
+    }
+
+    result["ok"] = true;
+    result["execution_id"] = execution_id;
+    result["state"] = snapshot.state == HA_EXECUTION_PENDING
+        ? "accepted" : "completed_with_errors";
+    result["result_tool"] = "get_ha_execution_result";
+    return true;
+}
+
+static bool tool_get_ha_execution_result(const JsonObject& args,
+                                         JsonObject& result, String& err) {
+    const uint32_t execution_id = args["execution_id"] | 0U;
+    if (!execution_id) {
+        return tool_fail(result, err, TOOL_ERR_PARAMS,
+                         "execution_id must be a nonzero integer");
+    }
+
+    HaExecutionSnapshot snapshot = {};
+    const HaExecutionLookupResult lookup =
+        ha_service_execution_snapshot(execution_id, snapshot);
+    if (lookup == HA_EXECUTION_NOT_FOUND) {
+        return tool_fail(result, err, TOOL_ERR_PARAMS,
+                         "HA execution not found or no longer retained");
+    }
+    ha_service_serialize_snapshot(snapshot, result);
+    return true;
 }
 
 // --- set_screen ------------------------------------------------------------
@@ -548,6 +669,14 @@ static const McpTool s_tool_press_button = {
     tool_press_button, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_press_button);
+
+static const McpTool s_tool_get_ha_execution_result = {
+    "get_ha_execution_result",
+    "Look up asynchronous Home Assistant results from press_button by execution_id. Returns pending, completed, or expired with one result per Home Assistant action.",
+    "{\"type\":\"object\",\"properties\":{\"execution_id\":{\"type\":\"integer\",\"minimum\":1}},\"required\":[\"execution_id\"]}",
+    tool_get_ha_execution_result, true, false, false
+};
+REGISTER_MCP_TOOL(s_tool_get_ha_execution_result);
 
 static const McpTool s_tool_set_screen = {
     "set_screen",

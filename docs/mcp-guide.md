@@ -138,7 +138,7 @@ graph LR
     CLIENT["AI assistant"] -->|"POST /mcp (Bearer token)"| GATE["Enabled · station mode<br/>Origin · token"]
     GATE --> READ["Read tools<br/>(always available)"]
     GATE --> CONTROL["Control tools<br/>(control toggle on)"]
-    READ --> INFO["status · health · screens<br/>pads · sensors · config"]
+    READ --> INFO["status · health · screens<br/>pads · sensors · config<br/>HA execution results"]
     CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system<br/>notify · visual_alert · volume · timers · config"]
 ```
 
@@ -155,6 +155,8 @@ graph LR
   booleans — passwords and tokens are never returned.
 - `get_component_config` — normalized expiry-only JSON for `timers`, or the saved JSON for
   `swipe`, `boot`, `button-defaults`, `hw-buttons`, or `mqtt-triggers`.
+- `get_ha_execution_result` — look up the pending or completed Home Assistant
+  action results returned by `press_button`.
 
 **Control tools** (require the control toggle):
 
@@ -188,6 +190,71 @@ to later runs. The component's `exists` result reports whether
 Display-related tools are present only on boards that have a display; `set_volume`
 requires audio hardware; `get_component_config` lists only the components compiled
 into the board.
+
+### Home Assistant execution results
+
+Buttons without Home Assistant actions keep the synchronous `press_button`
+response. When a button includes one or more Home Assistant service actions,
+`press_button` returns an execution ID and `state: "accepted"` while any accepted
+request remains pending:
+
+```json
+{
+  "ok": true,
+  "execution_id": 42,
+  "state": "accepted",
+  "result_tool": "get_ha_execution_result"
+}
+```
+
+Pass the ID to `get_ha_execution_result`:
+
+```json
+{
+  "execution_id": 42
+}
+```
+
+The lookup returns `pending` until every Home Assistant action has a terminal
+result. It then returns `completed` with results matched to the original action
+indices:
+
+```json
+{
+  "execution_id": 42,
+  "state": "completed",
+  "actions": [
+    {
+      "action_index": 0,
+      "entity_id": "light.studio",
+      "service": "turn_off",
+      "status": "success",
+      "http_status": 200,
+      "duration_ms": 83
+    },
+    {
+      "action_index": 2,
+      "entity_id": "media_player.studio",
+      "service": "media_play",
+      "status": "http_error",
+      "http_status": 500,
+      "duration_ms": 112
+    }
+  ]
+}
+```
+
+Terminal statuses include `success`, `not_configured`, `wifi_disconnected`,
+`invalid_request`, `http_begin_failed`, `timeout`, `transport_error`,
+`http_error`, and `queue_full`. The response omits `http_status` when no HTTP
+response was received. If all actions are rejected because the delivery queue
+is full, `press_button` returns `completed_with_errors` and the lookup reports
+each rejection as `queue_full`.
+
+The device retains four execution records. Completed records remain available
+for 60 seconds and then return `expired` on their first subsequent lookup.
+Active records are never evicted. When all four records are active or retained,
+`press_button` returns a busy error before running any button action.
 
 **Authoring tools** (require the pad authoring toggle; display boards only):
 

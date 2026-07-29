@@ -387,7 +387,10 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
         const auto& h = act.payload.ha_service;
         if (h.entity_id[0] && h.service[0]) {
             LOGI(TAG, "%s ha_service: %s.%s", label, h.entity_id, h.service);
-            ha_service_enqueue(h);
+            if (ha_service_enqueue(h) == HA_SERVICE_QUEUE_FULL) {
+                LOGW(TAG, "%s ha_service queue full: entity='%s' service='%s'",
+                     label, h.entity_id, h.service);
+            }
         } else {
             LOGW(TAG, "%s ha_service: missing entity_id/service", label);
         }

@@ -20,6 +20,9 @@
 #include "duty_cycle.h"
 #include "hw_buttons.h"
 #include "hw_button_config.h"
+#if HAS_DISPLAY || HAS_BUTTON
+#include "action_dispatch.h"
+#endif
 #if HAS_BLE
 #include "ble_telemetry.h"
 #endif
@@ -45,7 +48,6 @@
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
-#include "action_dispatch.h"
 #include "message_bubble.h"
 #include "visual_alert.h"
 #include "swipe_config.h"
@@ -552,7 +554,13 @@ void loop()
 
 	#if HAS_DISPLAY
 	screen_saver_manager_loop();
+	#endif
+
+	#if HAS_DISPLAY || HAS_BUTTON
 	action_dispatch_loop();
+	#endif
+
+	#if HAS_DISPLAY
 	message_bubble_loop();
 	visual_alert_loop();
 	#endif

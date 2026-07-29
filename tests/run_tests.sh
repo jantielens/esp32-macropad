@@ -44,6 +44,49 @@ echo "=== Running unit tests: ha_stats_resample ==="
 ./tests/bin/test_ha_stats_resample
 echo
 
+echo "=== Building unit tests: ha_service_delivery ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -DHAS_MCP=1 \
+    -include tests/board_config.h \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_ha_service_delivery.cpp \
+    src/app/ha_service_delivery.cpp \
+    -o tests/bin/test_ha_service_delivery
+
+echo "=== Running unit tests: ha_service_delivery ==="
+./tests/bin/test_ha_service_delivery
+echo
+
+echo "=== Building compile check: ha_service_delivery without MCP ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_MCP=0 \
+    -include tests/board_config.h \
+    -I tests -I src/app \
+    -c src/app/ha_service_delivery.cpp \
+    -o tests/bin/ha_service_delivery_no_mcp.o
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_MCP=0 \
+    -include tests/board_config.h \
+    -I tests -I src/app \
+    -c src/app/mcp_press_button.cpp \
+    -o tests/bin/mcp_press_button_no_mcp.o
+echo
+
+echo "=== Building unit tests: MCP press-button orchestration ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_MCP=1 \
+    -include tests/board_config.h \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_mcp_press_button.cpp \
+    src/app/mcp_press_button.cpp \
+    -o tests/bin/test_mcp_press_button
+
+echo "=== Running unit tests: MCP press-button orchestration ==="
+./tests/bin/test_mcp_press_button
+echo
+
 echo "=== Building integration tests: expr_binding ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \
