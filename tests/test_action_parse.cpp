@@ -268,10 +268,33 @@ TEST(brightness_empty_value_not_serialized) {
 
 TEST(timer_action_parse) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"toggle\"}");
+        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"toggle\",\"timer_mode\":\"up\"}");
     ASSERT_STR(act.type, "timer");
     ASSERT_EQ(act.payload.timer.timer_id, 1);
     ASSERT_STR(act.payload.timer.timer_command, "toggle");
+    ASSERT_STR(act.payload.timer.timer_mode, "up");
+}
+
+TEST(timer_countdown_start_action_round_trip) {
+    ButtonAction act = round_trip(
+        "{\"type\":\"timer\",\"timer_id\":3,\"timer_command\":\"start\",\"timer_mode\":\"down\",\"timer_value\":\"300\"}");
+    ASSERT_STR(act.type, "timer");
+    ASSERT_EQ(act.payload.timer.timer_id, 3);
+    ASSERT_STR(act.payload.timer.timer_command, "start");
+    ASSERT_STR(act.payload.timer.timer_mode, "down");
+    ASSERT_STR(act.payload.timer.timer_value, "300");
+}
+
+TEST(timer_oversized_wire_fields_rejected_before_copy) {
+    ButtonAction value = parse_from_string(
+        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"start\","
+        "\"timer_mode\":\"down\",\"timer_value\":\"1234567890123456\"}");
+    ASSERT_TRUE(value.type[0] == '\0');
+
+    ButtonAction mode = parse_from_string(
+        "{\"type\":\"timer\",\"timer_id\":1,\"timer_command\":\"start\","
+        "\"timer_mode\":\"downx\",\"timer_value\":\"1\"}");
+    ASSERT_TRUE(mode.type[0] == '\0');
 }
 
 TEST(timer_adjust_action_round_trip) {
@@ -294,14 +317,16 @@ TEST(timer_set_action_round_trip) {
 
 TEST(timer_fields_serialized_properly) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"timer\",\"timer_id\":3,\"timer_command\":\"start\"}");
+        "{\"type\":\"timer\",\"timer_id\":3,\"timer_command\":\"start\",\"timer_mode\":\"up\"}");
     StaticJsonDocument<256> doc;
     JsonObject obj = doc.to<JsonObject>();
     action_to_json(act, obj);
     ASSERT_TRUE(obj.containsKey("timer_id"));
     ASSERT_TRUE(obj.containsKey("timer_command"));
+    ASSERT_TRUE(obj.containsKey("timer_mode"));
     ASSERT_EQ(obj["timer_id"].as<int>(), 3);
     ASSERT_STR(obj["timer_command"].as<const char*>(), "start");
+    ASSERT_STR(obj["timer_mode"].as<const char*>(), "up");
 }
 
 TEST(mqtt_payload_serialized_as_payload_not_timer_command) {
@@ -598,6 +623,8 @@ int main() {
 
     printf("\n--- Timer action ---\n");
     RUN(timer_action_parse);
+    RUN(timer_countdown_start_action_round_trip);
+    RUN(timer_oversized_wire_fields_rejected_before_copy);
     RUN(timer_adjust_action_round_trip);
     RUN(timer_set_action_round_trip);
     RUN(timer_fields_serialized_properly);

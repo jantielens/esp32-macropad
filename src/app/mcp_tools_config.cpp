@@ -53,6 +53,7 @@
 #include "screen_saver_manager.h"
 #include "timer_engine.h"       // TIMER_COUNT, timer_* control
 #include "timer_config.h"       // timer_config_save_raw
+#include "timer_mcp_adapter.h"
 #include "swipe_config.h"       // swipe_config_save_raw
 #include "boot_actions.h"       // boot_actions_save_raw
 #include "button_defaults.h"    // button_defaults_save_raw
@@ -223,6 +224,16 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
 
     result["component"] = entry->name;
 
+#if HAS_DISPLAY
+    if (strcmp(entry->name, "timers") == 0) {
+        bool exists = timer_config_exists();
+        result["exists"] = exists;
+        if (!exists) result["note"] = "not configured — empty expiry lists are in effect";
+        timer_config_to_json(result.createNestedObject("config"));
+        return true;
+    }
+#endif
+
     if (!Storage.exists(entry->path)) {
         // Not an error: the feature simply uses its firmware defaults until saved.
         result["exists"] = false;
@@ -276,19 +287,7 @@ static const char* val_action_list(JsonVariantConst v) {
 static const char* validate_component(const char* name, JsonObjectConst cfg) {
 #if HAS_DISPLAY
     if (strcmp(name, "timers") == 0) {
-        for (JsonPairConst kv : cfg) {
-            char* endp = nullptr;
-            long id = strtol(kv.key().c_str(), &endp, 10);
-            if (endp == kv.key().c_str() || *endp || id < 1 || id > TIMER_COUNT) return "timer keys must be \"1\"..\"3\"";
-            if (!kv.value().is<JsonObjectConst>()) return "each timer must be an object";
-            JsonObjectConst t = kv.value().as<JsonObjectConst>();
-            const char* mode = t["mode"] | "";
-            if (mode[0] && strcmp(mode, "up") != 0 && strcmp(mode, "down") != 0) return "timer mode must be 'up' or 'down'";
-            if (t.containsKey("countdown") && (t["countdown"] | -1) < 0) return "timer countdown must be >= 0";
-            const char* ae = val_action_list(t["expire_actions"]);
-            if (ae) return ae;
-        }
-        return nullptr;
+        return nullptr;  // timer_config_save_raw owns strict validation
     }
     if (strcmp(name, "swipe") == 0) {
         for (JsonPairConst kv : cfg) {
@@ -566,63 +565,21 @@ static bool tool_set_volume(const JsonObject& args, JsonObject& result, String& 
 // ============================================================================
 #if HAS_DISPLAY
 
-struct TimerCtx {
-    uint8_t id;
-    char command[CONFIG_TIMER_CMD_MAX_LEN];
-    char value[CONFIG_VALUE_MAX_LEN];   // seconds for set/adjust
-};
-
 static void exec_timer_control(const void* ctx, bool* ok, char* msg, size_t msg_len) {
-    const TimerCtx* c = (const TimerCtx*)ctx;
-    ButtonAction act;
-    memset(&act, 0, sizeof(act));
-    strlcpy(act.type, ACTION_TYPE_TIMER, sizeof(act.type));
-    act.payload.timer.timer_id = c->id;
-    strlcpy(act.payload.timer.timer_command, c->command, sizeof(act.payload.timer.timer_command));
-    strlcpy(act.payload.timer.timer_value,   c->value,   sizeof(act.payload.timer.timer_value));
-    action_dispatch(act, "MCP");
-    *ok = true;
-    snprintf(msg, msg_len, "timer %u %s", (unsigned)c->id, c->command);
+    const TimerPayload* payload = (const TimerPayload*)ctx;
+    *ok = timer_command_run(*payload, msg, msg_len);
+    if (*ok) snprintf(msg, msg_len, "timer %u %s", (unsigned)payload->timer_id,
+                      payload->timer_command);
 }
 
 static bool tool_timer_control(const JsonObject& args, JsonObject& result, String& err) {
-    if (!args.containsKey("timer_id")) {
-        return cfg_fail(result, err, CFG_ERR_PARAMS, "missing 'timer_id' (1-3)");
+    TimerPayload payload = {};
+    char parse_message[96] = {};
+    if (!timer_mcp_parse_args(args, &payload, parse_message,
+                              sizeof(parse_message))) {
+        return cfg_fail(result, err, CFG_ERR_PARAMS, parse_message);
     }
-    int id = args["timer_id"] | 0;
-    if (id < 1 || id > TIMER_COUNT) {
-        return cfg_fail(result, err, CFG_ERR_PARAMS, "timer_id out of range (1-3)");
-    }
-    const char* cmd = args["command"] | (const char*)nullptr;
-    if (!cmd || !cmd[0]) {
-        return cfg_fail(result, err, CFG_ERR_PARAMS, "missing 'command'");
-    }
-    // Whitelist matches the shared timer action dispatch.
-    static const char* kCmds[] = { "start","stop","toggle","pause","resume","reset","lap","adjust","set" };
-    bool known = false;
-    for (const char* k : kCmds) if (strcmp(cmd, k) == 0) { known = true; break; }
-    if (!known) {
-        return cfg_fail(result, err, CFG_ERR_PARAMS,
-                        "command must be start|stop|toggle|pause|resume|reset|lap|adjust|set");
-    }
-    const bool needs_value = (strcmp(cmd, "set") == 0 || strcmp(cmd, "adjust") == 0);
-    if (needs_value && !args.containsKey("value")) {
-        return cfg_fail(result, err, CFG_ERR_PARAMS, "'set'/'adjust' require 'value' (seconds)");
-    }
-
-    TimerCtx ctx;
-    memset(&ctx, 0, sizeof(ctx));
-    ctx.id = (uint8_t)id;
-    strlcpy(ctx.command, cmd, sizeof(ctx.command));
-    if (args.containsKey("value")) {
-        if (args["value"].is<const char*>()) {
-            strlcpy(ctx.value, args["value"] | "0", sizeof(ctx.value));
-        } else {
-            snprintf(ctx.value, sizeof(ctx.value), "%ld", (long)(args["value"] | 0));
-        }
-    }
-
-    return mcp_run_control(exec_timer_control, &ctx, sizeof(ctx),
+    return mcp_run_control(exec_timer_control, &payload, sizeof(payload),
                            CFG_CONTROL_TIMEOUT_MS, result, err);
 }
 
@@ -832,7 +789,7 @@ REGISTER_MCP_TOOL(s_tool_get_config);
 static const McpTool s_tool_get_component_config = {
     "get_component_config",
     "Read the saved JSON for one auxiliary feature so you can inspect what a user configured before "
-    "suggesting or making changes: 'timers' (count-up/down timers + expire actions), 'swipe' (edge-swipe "
+    "suggesting or making changes: 'timers' (per-slot expiry actions), 'swipe' (edge-swipe "
     "gestures), 'boot' (actions run once at startup), 'button-defaults' (device-wide button appearance), "
     "'hw-buttons' (physical button bindings), 'mqtt-triggers' (inbound MQTT -> action rules). Returns "
     "'exists=false' with firmware defaults when the feature has never been saved. Only components compiled "
@@ -850,7 +807,7 @@ static const McpTool s_tool_set_component_config = {
     "edit the returned object, and send it back. The config is structurally validated before saving (correct "
     "shape, action lists capped at 3 entries each with a 'type', counts within the board's limits, MQTT "
     "trigger topics non-wildcard) and rejected with a reason if malformed. Expected shapes: timers = object "
-    "keyed \"1\"..\"3\" of {mode:up|down, countdown, expire_actions:[]}; swipe = {swipe_left|right|up|down: "
+    "keyed \"1\"..\"3\" of {expire_actions:[]}; swipe = {swipe_left|right|up|down: "
     "action}; boot = {actions:[]}; button-defaults = appearance fields; hw-buttons = {buttons:[{tap_actions:[], "
     "hold_actions:[]}]}; mqtt-triggers = {triggers:[{topic, value, actions:[]}]}. Only components compiled into "
     "this board are accepted; changes persist to flash and reload live.",
@@ -903,11 +860,11 @@ REGISTER_MCP_TOOL(s_tool_set_volume);
 static const McpTool s_tool_timer_control = {
     "timer_control",
     "Control one of the three on-screen timers (timer_id 1-3), just like the timer buttons in a pad. "
-    "command: start | stop | toggle | pause | resume | reset | lap | set | adjust. 'set' sets the countdown "
-    "target and 'adjust' changes it by a signed delta — both take 'value' in SECONDS. Real-world use: start a "
-    "brew/steep/exposure timer, reset it, or preset a countdown. A count-down timer fires its configured "
-    "expire actions when it reaches zero (see get_component_config 'timers').",
-    "{\"type\":\"object\",\"properties\":{\"timer_id\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3},\"command\":{\"type\":\"string\",\"enum\":[\"start\",\"stop\",\"toggle\",\"pause\",\"resume\",\"reset\",\"lap\",\"set\",\"adjust\"]},\"value\":{\"type\":\"integer\",\"description\":\"seconds; required for set/adjust\"}},\"required\":[\"timer_id\",\"command\"]}",
+    "command: start | stop | toggle | pause | resume | reset | set | adjust. Start and Toggle require mode "
+    "up or down; down also requires a positive whole-second value. Set uses non-negative whole seconds and "
+    "Adjust uses a signed whole-second delta on an active countdown. Countdown expiry actions come from the "
+    "device-level timers component and are snapshotted when a run starts.",
+    "{\"type\":\"object\",\"properties\":{\"timer_id\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3},\"command\":{\"type\":\"string\",\"enum\":[\"start\",\"stop\",\"toggle\",\"pause\",\"resume\",\"reset\",\"set\",\"adjust\"]},\"mode\":{\"type\":\"string\",\"enum\":[\"up\",\"down\"],\"description\":\"required for start/toggle\"},\"value\":{\"type\":\"integer\",\"minimum\":-2147483648,\"maximum\":2147483647,\"description\":\"whole seconds; countdown start/set max 4294967, adjust uses a signed 32-bit delta\"}},\"required\":[\"timer_id\",\"command\"]}",
     tool_timer_control, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_timer_control);

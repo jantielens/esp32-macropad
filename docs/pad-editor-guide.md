@@ -73,7 +73,7 @@ Building blocks are pre-configured groups of buttons that you can insert into a 
 
 **Availability checks** — a block only appears in the menu when the current pad meets its requirements:
 
-- Grid dimensions are at least as large as the block's minimum (e.g., 3 columns × 2 rows for the Countdown Timer).
+- Grid dimensions are at least as large as the block's minimum.
 - The pad has enough free (empty) cells for the block's buttons.
 - The total button count after insertion stays within the 64-button limit.
 
@@ -83,7 +83,7 @@ After placing a block, all its buttons become regular buttons — you can edit, 
 
 | Block | Size | Description |
 |-------|------|-------------|
-| **Countdown Timer** | 3×2 min | Three rocker buttons (1 min, 10 sec, 1 sec) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Uses Timer 1. |
+| **System Info** | 3×3 min | Device health and network information with live bindings. |
 
 > **Tip**: Building blocks and template pads serve different purposes. Use **template pads** to share common buttons (like navigation) across many pads. Use **building blocks** to quickly add a self-contained functional group (like a timer control panel) to a specific pad.
 
@@ -357,7 +357,7 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | **Adjust Volume** | Step the device audio volume up or down by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
 | **Set Brightness** | Set the display backlight brightness to an absolute value (5–100). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
 | **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
-| **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. Set and adjust countdown values support binding templates. See [Timer Actions](#timer-actions) below. |
+| **Timer** | Control one of 3 independent timers. Start and Toggle select stopwatch or countdown mode; countdown duration, Set, and Adjust values support binding templates. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
 | **Visual Alert** | Raise or clear a full-screen pulsing color overlay as an ambient alarm. Configure the color (bindable), pattern (breathe/blink/solid), period, intensity, and duration. ESP32-P4 boards only. See [Visual Alert Action](#visual-alert-action) below. |
 | **Home Assistant Service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
@@ -409,29 +409,34 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 The **Timer** action type controls one of 3 independent on-device timers. Timers support count-up (stopwatch) and countdown modes. Use `[timer:N]` bindings on labels to display the timer value (see [Timer Binding](#timer-binding)).
 
-Timer configuration (mode, countdown duration, expire actions) is set at the device level on the **Home** page under the **Timers** section. Button actions only control the timer at runtime.
+Start and Toggle actions contain the mode and, for countdowns, the duration. This makes a copied button preserve how it starts the timer. The **Timers** page stores only the expiry actions for each slot.
 
 When you select a Timer action, a dropdown groups all actions by timer:
 
 | Action | Description |
 |--------|-------------|
-| **Toggle** | Stopped → start, running → pause, paused → resume |
-| **Start** | Start the timer |
+| **Toggle** | When stopped, apply its Mode and Duration and start; when running, pause; when paused, resume |
+| **Start** | Apply its Mode and Duration, reset elapsed time, and start fresh in every state |
 | **Stop** | Stop and reset to 0 (count-up) or the countdown preset (countdown) |
 | **Pause** | Freeze the timer at its current value |
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
-| **Lap** | Reset the timer and start fresh (useful for step timing) |
 | **Set Countdown** | Set the countdown preset to an absolute number of seconds. Only affects countdown-mode timers |
 | **Adjust** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). Only affects countdown-mode timers |
 
+For Start and Toggle, select **Stopwatch (Count Up)** or **Countdown**. Countdown
+actions require a positive whole-second Duration and may use a binding. Stopwatch
+actions do not store a duration.
+
 #### Device-Level Timer Configuration
 
-On the **Home** page, the **Timers** section lets you configure each timer:
+On the **Timers** page, configure up to three expiry actions for each timer slot:
 
-- **Mode** — Count Up (stopwatch) or Countdown
-- **Countdown Duration** — the starting value in seconds (countdown mode only)
-- **Expire Actions** — up to 3 actions to execute when a countdown timer reaches zero. These use the same action editor as button actions, so you can play a sound, send an MQTT message, navigate to a screen, play a beep, or any combination:
+* Expire actions use the same action editor as buttons, so you can play a sound,
+  send an MQTT message, navigate to a screen, play a beep, or combine up to
+  three actions.
+* A countdown copies the slot's current expiry list when it starts. Editing
+  settings does not change an active run; the next countdown uses the new list.
 
 | Example expire action | What happens |
 |----------------------|-------------|
@@ -442,7 +447,7 @@ On the **Home** page, the **Timers** section lets you configure each timer:
 
 **Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
 
-> **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Configure Timer 1 as a 240-second countdown on the Home page, with an expire action that plays an alarm sound.
+> **Tip**: Create a V60 coffee timer pad with a Start action set to Countdown and a 240-second Duration, "+15s" and "-10s" Adjust actions, and a large display button showing `[timer:1;mm:ss]`. Configure Timer 1's expiry list to play an alarm sound.
 
 ### Notification Action
 
@@ -1275,7 +1280,7 @@ A precision timer with milliseconds:
 
 ### Timer Binding
 
-**Syntax:** `[timer:N]`, `[timer:N;format]`, `[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]`
+**Syntax:** `[timer:N]`, `[timer:N;format]`, `[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]`, `[timer:N_target]`
 
 Displays the value or state of one of the 3 on-device timers. Timer N is 1, 2, or 3.
 
@@ -1298,8 +1303,11 @@ The numeric default makes `[timer:N]` usable as a data source for gauge, bar cha
 | `N_state` | Timer state | `running`, `paused`, `stopped` |
 | `N_expired` | Countdown expired? | `ON`, `OFF` |
 | `N_mode` | Timer direction | `up`, `down` |
+| `N_target` | Active countdown preset in whole seconds | `0` or a positive integer |
 
 Countdown timers that run past zero show negative values (e.g., `-0:05`).
+The target updates after Start, Set, and Adjust actions. Normal ticking, Stop, and
+Reset leave it unchanged. Count-up and unconfigured timers return `0`.
 
 **Examples:**
 
@@ -1312,6 +1320,7 @@ Countdown timers that run past zero show negative values (e.g., `-0:05`).
 [timer:1_state]              → running
 [timer:1_expired]            → OFF
 [timer:1_mode]               → down
+[timer:1_target]             → 300
 ```
 
 Use `[timer:N_expired]` in expression bindings for conditional colors or text:

@@ -466,9 +466,6 @@ function padDialogOk(keepOpen) {
     const col = padState.editCol;
     const row = padState.editRow;
 
-    // Remove existing button at this position
-    padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
-
     // Build new button object — only include fields with values
     const btn = { col: col, row: row };
 
@@ -781,6 +778,7 @@ function padDialogOk(keepOpen) {
         }
     }
 
+    padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
     padState.buttons.push(btn);
     padMarkDirty();
     if (!keepOpen) padDialogClose();

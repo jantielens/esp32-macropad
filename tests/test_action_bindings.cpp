@@ -13,6 +13,7 @@
 #include <cstring>
 
 #include "binding_template.h"
+#include "action_dispatch.h"
 #include "pad_config.h"
 
 // ---------------------------------------------------------------------------
@@ -43,40 +44,34 @@ static void mock_collect(const char* params, void* user_data) {
 // ---------------------------------------------------------------------------
 // Type-dispatched resolver — mirrors action_dispatch.cpp::resolve_action_bindings
 // ---------------------------------------------------------------------------
-static void test_try_resolve(char* field, size_t len) {
-    if (field[0] && binding_template_has_bindings(field)) {
-        char tmp[BINDING_TEMPLATE_MAX_LEN];
-        binding_template_resolve(field, tmp, sizeof(tmp));
-        strlcpy(field, tmp, len);
-    }
-}
-
-static void resolve_action_bindings(ButtonAction& act) {
+static bool resolve_action_bindings(ButtonAction& act) {
     if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
-        test_try_resolve(act.payload.screen.screen_id, sizeof(act.payload.screen.screen_id));
+        action_resolve_binding_field(act.payload.screen.screen_id, sizeof(act.payload.screen.screen_id));
     } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
-        test_try_resolve(act.payload.mqtt.mqtt_topic,   sizeof(act.payload.mqtt.mqtt_topic));
-        test_try_resolve(act.payload.mqtt.mqtt_payload, sizeof(act.payload.mqtt.mqtt_payload));
+        action_resolve_binding_field(act.payload.mqtt.mqtt_topic,   sizeof(act.payload.mqtt.mqtt_topic));
+        action_resolve_binding_field(act.payload.mqtt.mqtt_payload, sizeof(act.payload.mqtt.mqtt_payload));
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
-        test_try_resolve(act.payload.key.key_sequence, sizeof(act.payload.key.key_sequence));
+        action_resolve_binding_field(act.payload.key.key_sequence, sizeof(act.payload.key.key_sequence));
     } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
-        test_try_resolve(act.payload.beep.beep_pattern, sizeof(act.payload.beep.beep_pattern));
+        action_resolve_binding_field(act.payload.beep.beep_pattern, sizeof(act.payload.beep.beep_pattern));
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
-        test_try_resolve(act.payload.volume.volume_value, sizeof(act.payload.volume.volume_value));
+        action_resolve_binding_field(act.payload.volume.volume_value, sizeof(act.payload.volume.volume_value));
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        test_try_resolve(act.payload.brightness.brightness_value, sizeof(act.payload.brightness.brightness_value));
+        action_resolve_binding_field(act.payload.brightness.brightness_value, sizeof(act.payload.brightness.brightness_value));
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
-        test_try_resolve(act.payload.timer.timer_value, sizeof(act.payload.timer.timer_value));
+        if (!action_resolve_binding_field(act.payload.timer.timer_value,
+                          sizeof(act.payload.timer.timer_value), true)) return false;
     } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
-        test_try_resolve(act.payload.notify.notify_text,         sizeof(act.payload.notify.notify_text));
-        test_try_resolve(act.payload.notify.notify_duration_ms,  sizeof(act.payload.notify.notify_duration_ms));
-        test_try_resolve(act.payload.notify.notify_text_color,   sizeof(act.payload.notify.notify_text_color));
-        test_try_resolve(act.payload.notify.notify_bg_color,     sizeof(act.payload.notify.notify_bg_color));
-        test_try_resolve(act.payload.notify.notify_border_color, sizeof(act.payload.notify.notify_border_color));
+        action_resolve_binding_field(act.payload.notify.notify_text,         sizeof(act.payload.notify.notify_text));
+        action_resolve_binding_field(act.payload.notify.notify_duration_ms,  sizeof(act.payload.notify.notify_duration_ms));
+        action_resolve_binding_field(act.payload.notify.notify_text_color,   sizeof(act.payload.notify.notify_text_color));
+        action_resolve_binding_field(act.payload.notify.notify_bg_color,     sizeof(act.payload.notify.notify_bg_color));
+        action_resolve_binding_field(act.payload.notify.notify_border_color, sizeof(act.payload.notify.notify_border_color));
     } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
-        test_try_resolve(act.payload.visual_alert.va_color, sizeof(act.payload.visual_alert.va_color));
+        action_resolve_binding_field(act.payload.visual_alert.va_color, sizeof(act.payload.visual_alert.va_color));
     }
     // sound, system, back, ble_pair: no bindable fields today.
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -205,8 +200,10 @@ static void test_structural_fields_excluded() {
     {
         ButtonAction act = make_action(ACTION_TYPE_TIMER);
         strlcpy(act.payload.timer.timer_command, "[mock:x]", sizeof(act.payload.timer.timer_command));
+        strlcpy(act.payload.timer.timer_mode, "[x]", sizeof(act.payload.timer.timer_mode));
         resolve_action_bindings(act);
         check_str(act.payload.timer.timer_command, "[mock:x]", "timer_command not resolved");
+        check_str(act.payload.timer.timer_mode, "[x]", "timer_mode not resolved");
     }
     {
         ButtonAction act = make_action(ACTION_TYPE_SYSTEM);
@@ -302,6 +299,17 @@ static void test_small_field_truncation() {
     check_str(act.payload.volume.volume_value, "123456789012345", "truncated content correct");
 }
 
+static void test_oversized_timer_binding_rejected() {
+    printf("--- oversized timer binding is rejected ---\n");
+    ButtonAction act = make_action(ACTION_TYPE_TIMER);
+    strlcpy(act.payload.timer.timer_value, "[long:x]",
+        sizeof(act.payload.timer.timer_value));
+    check_true(!resolve_action_bindings(act),
+           "oversized timer binding rejected before copy");
+    check_str(act.payload.timer.timer_value, "[long:x]",
+          "oversized timer binding leaves source unchanged");
+}
+
 static void test_unregistered_scheme() {
     printf("--- unregistered scheme produces error marker ---\n");
     ButtonAction act = make_action(ACTION_TYPE_MQTT);
@@ -337,6 +345,7 @@ int main() {
     test_curly_brace_step_not_affected();
     test_mixed_static_and_binding();
     test_small_field_truncation();
+    test_oversized_timer_binding_rejected();
     test_unregistered_scheme();
     test_multiple_bindings_in_one_field();
 

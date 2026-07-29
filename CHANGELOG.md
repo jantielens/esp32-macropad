@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-07-28
+ms.date: 2026-07-29
 ms.topic: reference
 ---
 
@@ -16,10 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Timer starts now carry their mode and duration**: Start and Toggle actions explicitly select Stopwatch or Countdown, and countdown actions store their duration. Copying a button now preserves how its timer starts. Per-slot expiry-action lists remain in Timer Settings and are snapshotted when a countdown begins.
 * **Sparkline history backfill from Home Assistant** — a sparkline used to start empty after every reboot, which made long time windows close to useless: a 24-hour chart needed a full day of uptime before it said anything. Each sparkline line can now name a Home Assistant entity, and once the device clock is synchronized it fetches that entity's long-term statistics through the Recorder `get_statistics` service and fills in the part of the chart it has not sampled itself. Live data always takes precedence — backfilled values are only written into slots the device has no reading for — so the chart converges on locally sampled data as it runs. The fetch happens on a background PSRAM-stacked task, one stream at a time, and never blocks the UI. Configure it beside each line's live binding with **Backfill from Home Assistant** and choose Average reading, Latest state, or Accumulated total. Requires the Home Assistant URL and token on the Integrations page. Gated by the new `HAS_HA_HISTORY` compile-time flag, which is on for boards with PSRAM, MQTT, and a display.
 
 ### Changed
 
+* **Timer configuration is intentionally incompatible with earlier Timer JSON**: mode and countdown duration moved from global Timer Settings into Start and Toggle actions. Timer Settings and the `timers` component now accept expiry actions only. The built-in Countdown Timer block and the Lap command were removed.
 * **Sparkline time windows above 18 hours now work**: the stream window was stored as a 16-bit value while the pad editor accepted up to 86400 seconds, so anything past 65535 silently wrapped (a 24-hour window became roughly 5.8 hours). Windows are now 32-bit end to end, with a maximum range of seven days.
 * **Sparkline sample slots are aligned to wall-clock time** once NTP is available, rather than to the time since boot. This is what lets history from Home Assistant line up with locally sampled data; the ring is reset once when the clock first becomes valid.
 * **Sparkline sampling controls now use human time units** for both the chart range and the desired interval per point. The editor calculates the required point count and explains the 1024-point limit. Home Assistant history settings now sit beside the live binding they backfill, with clearer historical-value names and an explicit enable control.

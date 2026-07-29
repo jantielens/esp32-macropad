@@ -564,8 +564,9 @@
                     <div><dt>N_state</dt><dd><code>running</code>, <code>paused</code>, or <code>stopped</code></dd></div>
                     <div><dt>N_expired</dt><dd><code>ON</code> or <code>OFF</code> (countdown only)</dd></div>
                     <div><dt>N_mode</dt><dd><code>up</code> or <code>down</code></dd></div>
+                    <div><dt>N_target</dt><dd>Active countdown preset in whole seconds; <code>0</code> for count-up or unconfigured timers</dd></div>
                 </dl>
-                <p class="binding-docs-note">Countdown timers that run past zero display negative values (e.g., <code>-0:05</code>). Assign timer actions to buttons to control timers from the touch screen.</p>
+                <p class="binding-docs-note">Countdown timers that run past zero display negative values (e.g., <code>-0:05</code>). The target updates after Start, Set, and Adjust, and remains unchanged during ticking, Stop, and Reset.</p>
                 <div class="binding-example-grid">
                     <article class="binding-example">
                         <div class="binding-example-head">
@@ -573,15 +574,15 @@
                             <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
                         </div>
                         <pre class="binding-example-code"><code>[timer:1]</code></pre>
-                        <p>Show timer 1 in mm:ss format.</p>
+                        <p>Show timer 1 as raw seconds with decisecond precision.</p>
                     </article>
                     <article class="binding-example">
                         <div class="binding-example-head">
-                            <span class="binding-example-title">Decisecond precision</span>
+                            <span class="binding-example-title">Countdown gauge maximum</span>
                             <button type="button" class="binding-copy-btn" onclick="copyBindingExample(this)">Copy</button>
                         </div>
-                        <pre class="binding-example-code"><code>[timer:1;mm:ss.d]</code></pre>
-                        <p>Timer with tenth-of-a-second precision.</p>
+                        <pre class="binding-example-code"><code>[timer:1_target]</code></pre>
+                        <p>Use the active countdown preset as a stable numeric maximum.</p>
                     </article>
                     <article class="binding-example">
                         <div class="binding-example-head">

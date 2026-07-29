@@ -9,10 +9,18 @@
 #include <cstdint>
 #include <cstddef>
 #include <functional>
+#include <string>
 
 class AsyncWebServerRequest {
 public:
-    void send(int, const char* = nullptr, const char* = nullptr) {}
+    void* _tempObject = nullptr;
+    int response_code = 0;
+    std::string response_body;
+
+    void send(int code, const char* = nullptr, const char* body = nullptr) {
+        response_code = code;
+        response_body = body ? body : "";
+    }
 };
 class AsyncWebServerResponse {};
 

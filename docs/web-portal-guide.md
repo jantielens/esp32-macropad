@@ -211,11 +211,11 @@ The number of available trigger slots depends on the board (8 by default, fewer 
 
 *Shown only on boards with a display.*
 
-Configure up to 3 independent on-device timers. Each timer can run in **Count Up** (stopwatch) or **Countdown** mode. For countdown timers, set the starting duration in seconds and configure **expire actions** — up to 3 actions that execute when the countdown reaches zero.
+Configure up to three expiry actions for each on-device timer slot. The Timer action editor sets the mode on every Start and Toggle action and shows Duration when Countdown is selected.
 
 Expire actions use the same action editor as buttons, so you can play a sound, send an MQTT message, navigate to a screen, play a beep pattern, or any combination. This replaces the previous beep-only expiry with full action parity.
 
-Timer configuration is applied at boot and updated immediately when saved. Button actions on pads only control timers at runtime (toggle, start, stop, pause, adjust). Use `[timer:N]` bindings on pad button labels to display timer values.
+When a countdown starts, it copies the slot's saved expiry list. Changes apply to the next run and do not alter a countdown already in progress. Runtime state, mode, and duration are not persisted across reboot. Use `[timer:N]` bindings on pad button labels to display timer values. Use `[timer:N_target]` for the active countdown preset in whole seconds, such as a gauge maximum. The target changes after Start, Set, and Adjust, but normal ticking, Stop, and Reset leave it unchanged. Count-up and unconfigured timers return `0`.
 
 ## E-Paper Page
 

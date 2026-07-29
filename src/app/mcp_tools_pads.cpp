@@ -69,7 +69,7 @@ static void emit_builtin_action_fields(JsonObject acts) {
     add("beep",       "beep_pattern, beep_volume");
     add("volume",     "volume_mode (set|adjust), volume_value");
     add("brightness", "brightness_mode (set|adjust), brightness_value");
-    add("timer",      "timer_id (1-3), timer_command, timer_value");
+    add("timer",      "timer_id (1-3), timer_command (start|toggle|stop|pause|resume|reset|set|adjust), timer_mode (up|down; required only for start/toggle), timer_value (countdown start positive whole seconds; set non-negative; adjust signed; max start/set 4294967; bindable; no per-action expire_actions)");
     add("sound",      "sound_file, sound_volume");
     add("notify",     "notify_text, notify_duration_ms, notify_text_color, notify_bg_color, notify_border_color, notify_opacity, notify_font_size, notify_location");
     add("system",     "system_command (reboot|wifi_reconnect|screensaver)");

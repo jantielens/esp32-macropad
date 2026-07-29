@@ -153,7 +153,7 @@ graph LR
 - `get_config` — current device settings (device name, network, MQTT/HA,
   power, display/screen saver, audio). Secrets are redacted to `<field>_set`
   booleans — passwords and tokens are never returned.
-- `get_component_config` — the saved JSON for one auxiliary feature: `timers`,
+- `get_component_config` — normalized expiry-only JSON for `timers`, or the saved JSON for
   `swipe`, `boot`, `button-defaults`, `hw-buttons`, or `mqtt-triggers`.
 
 **Control tools** (require the control toggle):
@@ -167,8 +167,9 @@ graph LR
   (`breathe`/`blink`/`solid`), `period_ms`, `intensity` (1-100), and `duration_ms`
   (0 = until stopped/tapped). Wakes the screen; pairs well with `beep`.
 - `set_volume` — set (0-100) or adjust (signed delta) the speaker volume.
-- `timer_control` — start/stop/toggle/pause/resume/reset/lap/set/adjust one of
-  the three on-screen timers.
+- `timer_control` — start, stop, toggle, pause, resume, reset, set, or adjust one
+  of the three on-screen timers. Start and Toggle require `mode` (`up` or
+  `down`); countdown starts also require a positive whole-second `value`.
 - `set_config` — write a safe subset of device settings that apply live without a
   reboot: device name, backlight brightness, the screen-saver group, MQTT publish
   interval/scope, and audio volume. WiFi/MQTT/HA credentials, operating mode, and
@@ -177,6 +178,11 @@ graph LR
   `swipe`, `boot`, `button-defaults`, `hw-buttons`, `mqtt-triggers`) with a
   validated full-replacement object (read it first with `get_component_config`,
   edit, send back).
+
+The `timers` component contains only per-slot `expire_actions` arrays. A
+countdown snapshots those settings when it starts, so configuration edits apply
+to later runs. The component's `exists` result reports whether
+`/config/timers.json` physically exists, even when normalized content is empty.
 - `system_command` — `reboot`, `wifi_reconnect`, or `screensaver`.
 
 Display-related tools are present only on boards that have a display; `set_volume`

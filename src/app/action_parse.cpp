@@ -37,9 +37,19 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         strlcpy(act.payload.brightness.brightness_mode,  a["brightness_mode"]  | "", sizeof(act.payload.brightness.brightness_mode));
         strlcpy(act.payload.brightness.brightness_value, a["brightness_value"] | "", sizeof(act.payload.brightness.brightness_value));
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
+        const char* command = a["timer_command"] | "";
+        const char* mode = a["timer_mode"] | "";
+        const char* value = a["timer_value"] | "";
+        if (strlen(command) >= sizeof(act.payload.timer.timer_command)
+                || strlen(mode) >= sizeof(act.payload.timer.timer_mode)
+                || strlen(value) >= sizeof(act.payload.timer.timer_value)) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
         act.payload.timer.timer_id = (uint8_t)(a["timer_id"] | 0);
-        strlcpy(act.payload.timer.timer_command, a["timer_command"] | "", sizeof(act.payload.timer.timer_command));
-        strlcpy(act.payload.timer.timer_value,   a["timer_value"]   | "", sizeof(act.payload.timer.timer_value));
+        strlcpy(act.payload.timer.timer_command, command, sizeof(act.payload.timer.timer_command));
+        strlcpy(act.payload.timer.timer_mode, mode, sizeof(act.payload.timer.timer_mode));
+        strlcpy(act.payload.timer.timer_value, value, sizeof(act.payload.timer.timer_value));
     } else if (strcmp(act.type, ACTION_TYPE_SOUND) == 0) {
         strlcpy(act.payload.sound.sound_file, a["sound_file"] | "", sizeof(act.payload.sound.sound_file));
         act.payload.sound.sound_volume = (uint8_t)(a["sound_volume"] | 0);
@@ -97,6 +107,7 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
         if (act.payload.timer.timer_id > 0)     obj["timer_id"]      = act.payload.timer.timer_id;
         if (act.payload.timer.timer_command[0]) obj["timer_command"] = act.payload.timer.timer_command;
+        if (act.payload.timer.timer_mode[0])    obj["timer_mode"]    = act.payload.timer.timer_mode;
         if (act.payload.timer.timer_value[0])   obj["timer_value"]   = act.payload.timer.timer_value;
     } else if (strcmp(act.type, ACTION_TYPE_SOUND) == 0) {
         if (act.payload.sound.sound_file[0])    obj["sound_file"]   = act.payload.sound.sound_file;

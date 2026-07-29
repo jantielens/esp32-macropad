@@ -76,6 +76,26 @@ static const char* validate_binding_tokens(const char* s) {
     return nullptr;
 }
 
+static const char* validate_exact_binding_token(const char* value) {
+    if (!value || value[0] != '[') return "timer value binding must use [scheme:params]";
+    const char* scheme = value + 1;
+    const char* colon = scheme;
+    while ((*colon >= 'a' && *colon <= 'z')
+            || (*colon >= 'A' && *colon <= 'Z')) colon++;
+    if (colon == scheme || *colon != ':') {
+        return "timer value binding must use [scheme:params]";
+    }
+    int depth = 1;
+    const char* cursor = colon + 1;
+    for (; *cursor && depth > 0; cursor++) {
+        if (*cursor == '[') depth++;
+        else if (*cursor == ']') depth--;
+    }
+    if (depth != 0) return "timer value binding has an unclosed bracket";
+    if (*cursor) return "timer value must be one complete binding token";
+    return validate_binding_tokens(value);
+}
+
 static const char* validate_action_array(JsonArrayConst arr) {
     if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
     for (JsonObjectConst a : arr) {
@@ -90,6 +110,23 @@ static const char* validate_action_array(JsonArrayConst arr) {
             if (!color_ok(color)) return "visual_alert color must be #RRGGBB or a binding";
             const char* e = validate_binding_tokens(color);
             if (e) return e;
+        }
+        if (strcmp(t, ACTION_TYPE_TIMER) == 0) {
+            if (strlen(a["timer_command"] | "") >= CONFIG_TIMER_CMD_MAX_LEN) {
+                return "timer command too long";
+            }
+                if (strlen(a["timer_mode"] | "")
+                    >= sizeof(((TimerPayload*)nullptr)->timer_mode)) {
+                return "timer mode too long";
+            }
+            if (strlen(a["timer_value"] | "") >= CONFIG_VALUE_MAX_LEN) {
+                return "timer value too long";
+            }
+            const char* value = a["timer_value"] | "";
+            if (strchr(value, '[')) {
+                const char* error = validate_exact_binding_token(value);
+                if (error) return error;
+            }
         }
     }
     return nullptr;

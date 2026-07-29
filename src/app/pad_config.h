@@ -183,6 +183,7 @@ struct BrightnessPayload {
 struct TimerPayload {
     uint8_t timer_id;                                 // 1-3
     char timer_command[CONFIG_TIMER_CMD_MAX_LEN];     // "toggle", "start", "stop", "adjust", "set", etc.
+    char timer_mode[5];                               // "up" or "down" for start/toggle
     char timer_value[CONFIG_VALUE_MAX_LEN];           // seconds for set/adjust (supports {step})
 };
 struct SoundPayload {

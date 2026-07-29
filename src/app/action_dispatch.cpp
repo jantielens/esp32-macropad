@@ -23,7 +23,6 @@
 #include "audio.h"
 #endif
 
-#include "timer_engine.h"
 #include "wifi_manager.h"
 #include "ha_service.h"
 
@@ -46,13 +45,9 @@ static uint8_t compute_clamped_percent(const char* value_str, uint8_t current, b
 // Structural fields (commands, modes, ids) are excluded — only fields that
 // users may template are visited. Type-dispatched so we only touch the
 // active arm of the discriminated union (writing a non-active arm is UB).
-static void resolve_action_bindings(ButtonAction& act) {
-    auto try_resolve = [](char* field, size_t len) {
-        if (field[0] && binding_template_has_bindings(field)) {
-            char tmp[BINDING_TEMPLATE_MAX_LEN];
-            binding_template_resolve(field, tmp, sizeof(tmp));
-            strlcpy(field, tmp, len);
-        }
+static bool resolve_action_bindings(ButtonAction& act) {
+    auto try_resolve = [](char* field, size_t len, bool reject_overflow = false) {
+        return action_resolve_binding_field(field, len, reject_overflow);
     };
 
     if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
@@ -69,7 +64,8 @@ static void resolve_action_bindings(ButtonAction& act) {
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
         try_resolve(act.payload.brightness.brightness_value, sizeof(act.payload.brightness.brightness_value));
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
-        try_resolve(act.payload.timer.timer_value, sizeof(act.payload.timer.timer_value));
+        if (!try_resolve(act.payload.timer.timer_value,
+                         sizeof(act.payload.timer.timer_value), true)) return false;
     } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
         try_resolve(act.payload.notify.notify_text,         sizeof(act.payload.notify.notify_text));
         try_resolve(act.payload.notify.notify_duration_ms,  sizeof(act.payload.notify.notify_duration_ms));
@@ -86,6 +82,7 @@ static void resolve_action_bindings(ButtonAction& act) {
         action_type_resolve_bindings(t, act);
     }
     // sound, system, back, ble_pair: no bindable fields today.
+    return true;
 }
 
 // Quick scan: return true if the active payload arm contains a binding token.
@@ -159,7 +156,6 @@ void action_collect_binding_topics(const ButtonAction& act, void* user_data) {
 
 static void action_dispatch_resolved(const ButtonAction& act, const char* label);
 
-
 void action_dispatch(const ButtonAction& act_in, const char* label) {
     if (!act_in.type[0]) return;
 
@@ -174,11 +170,15 @@ void action_dispatch(const ButtonAction& act_in, const char* label) {
 #if HAS_DISPLAY
         bool did_lock = false;
         display_manager_lock_if_needed(&did_lock);
-        resolve_action_bindings(act);
+    bool resolved = resolve_action_bindings(act);
         display_manager_unlock_if_needed(did_lock);
 #else
-        resolve_action_bindings(act);
+    bool resolved = resolve_action_bindings(act);
 #endif
+    if (!resolved) {
+        LOGW(TAG, "%s binding result exceeds action field capacity", label);
+        return;
+    }
         action_dispatch_resolved(act, label);
     } else {
         action_dispatch_resolved(act_in, label);
@@ -293,35 +293,11 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
 #if HAS_DISPLAY
         const auto& t = act.payload.timer;
-        uint8_t tid = t.timer_id;
-        const char* cmd = t.timer_command;
-        if (tid >= 1 && tid <= TIMER_COUNT && cmd[0]) {
-            if (strcmp(cmd, "start") == 0) {
-                timer_start(tid);
-            } else if (strcmp(cmd, "stop") == 0) {
-                timer_stop(tid);
-            } else if (strcmp(cmd, "toggle") == 0) {
-                timer_toggle(tid);
-            } else if (strcmp(cmd, "pause") == 0) {
-                timer_pause(tid);
-            } else if (strcmp(cmd, "resume") == 0) {
-                timer_resume(tid);
-            } else if (strcmp(cmd, "reset") == 0) {
-                timer_reset(tid);
-            } else if (strcmp(cmd, "lap") == 0) {
-                timer_lap(tid);
-            } else if (strcmp(cmd, "adjust") == 0) {
-                int32_t delta = lroundf(atof(t.timer_value));
-                timer_adjust(tid, delta);
-            } else if (strcmp(cmd, "set") == 0) {
-                uint32_t secs = (uint32_t)lroundf(atof(t.timer_value));
-                timer_set_countdown(tid, secs);
-            } else {
-                LOGW(TAG, "%s timer: unknown cmd '%s'", label, cmd);
-            }
-            LOGI(TAG, "%s timer: %u:%s", label, tid, cmd);
+        char error[96];
+        if (timer_command_run(t, error, sizeof(error))) {
+            LOGI(TAG, "%s timer: %u:%s", label, t.timer_id, t.timer_command);
         } else {
-            LOGW(TAG, "%s timer: bad id=%u cmd='%s'", label, tid, cmd);
+            LOGW(TAG, "%s timer: %s", label, error);
         }
 #else
         LOGW(TAG, "%s timer: no display", label);

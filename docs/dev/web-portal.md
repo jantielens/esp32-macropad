@@ -1050,7 +1050,7 @@ All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth whe
 
 Returns the current boot action configuration.
 
-- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, `volume_mode`, `volume_value`, `brightness_mode`, `brightness_value`, `timer_id`, `timer_command`, `timer_value`, etc.).
+- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, `volume_mode`, `volume_value`, `brightness_mode`, `brightness_value`, `timer_id`, `timer_command`, `timer_mode`, `timer_value`, etc.).
 - Default (no file saved): `{"actions": []}`.
 
 #### `POST /api/boot-actions`
@@ -1132,30 +1132,28 @@ Save device-level button defaults to LittleFS.
 
 Device-level timer configuration. Compile-time gated by `HAS_DISPLAY`.
 
-#### `GET /api/timers`
+#### `GET /api/component/timers/config`
 
 Returns the current timer configuration for all 3 timers.
 
-- **Response:** JSON object with keys `"1"`, `"2"`, `"3"`. Each timer object contains:
-  - `mode` — `"up"` or `"down"`
-  - `countdown` — seconds (countdown mode only, omitted if 0)
-  - `expire_actions` — array of ButtonAction objects (omitted if empty)
+- **Response:** JSON object with keys `"1"`, `"2"`, `"3"`. Each timer object contains an `expire_actions` array with zero through three ButtonAction objects.
 
 ```json
 {
-  "1": { "mode": "down", "countdown": 300, "expire_actions": [{ "type": "sound", "sound_file": "alarm" }] },
-  "2": { "mode": "up" },
-  "3": { "mode": "down", "countdown": 60, "expire_actions": [{ "type": "beep", "beep_pattern": "1000:500" }] }
+  "1": { "expire_actions": [{ "type": "sound", "sound_file": "alarm" }] },
+  "2": { "expire_actions": [] },
+  "3": { "expire_actions": [{ "type": "beep", "beep_pattern": "1000:500" }] }
 }
 ```
 
-#### `POST /api/timers`
+#### `POST /api/component/timers/config`
 
 Save timer configuration to LittleFS and apply immediately.
 
 - **Body:** Same JSON format as GET response.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
-- Timer engine is updated immediately (mode, countdown preset, expire actions).
+- Unknown timer keys, slot fields, malformed actions, and lists over three actions reject the complete write.
+- Saving replaces the persistent source for future countdown starts. Active runs keep their existing expiry snapshot.
 
 ---
 
@@ -1277,16 +1275,16 @@ Compute tile dimensions for a given grid layout. Used by the icon picker to rend
 
 #### `GET /api/pad/blocks`
 
-Return the building block catalog — pre-configured button groups that can be inserted into a pad. Each block contains positional button definitions (relative offsets), minimum grid requirements, and optional pad-level bindings.
+Return the building block catalog, currently including System Info. Each block contains positional button definitions (relative offsets), minimum grid requirements, and optional pad-level bindings.
 
 - **Response:**
 ```json
 [
   {
-    "id": "countdown_timer",
-    "name": "Countdown Timer",
-    "desc": "3 rockers (H/M/S) + timer display + start/pause/reset",
-    "icon": "⏱️",
+    "id": "system_info",
+    "name": "System Info",
+    "desc": "Device health and network status",
+    "icon": "info",
     "min_cols": 3,
     "min_rows": 2,
     "min_free": 6,

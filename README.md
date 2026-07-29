@@ -12,7 +12,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal, up to 4 bars with per-bar captions and gauge-style scale options), sparkline (multi-line with reference markers), table, list (scrollable item picker), **rocker** (split-button up/down or left/right), and **numeric rocker** (4-zone fine/coarse adjustment)
 - **Smooth animations** — gauges, bars, and needles ease into new values instead of jumping
 - **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
-- **Building blocks** — drop pre-built button groups (countdown timer, system info) into any pad with a single click
+- **Building blocks** — drop pre-built button groups such as System Info into any pad with a single click
 - **Custom fonts** — DSEG7 (7-segment), Bebas, and Doto pixel font, in addition to the default Montserrat
 - **Screen saver** with backlight fade, pixel-shift burn-in prevention, panel hardware sleep, LVGL throttle, and per-pad wake redirect
 
@@ -36,7 +36,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Hardware buttons** — map a board's physical GPIO buttons to tap and long-press action chains (works on headless boards too)
 - **Boot actions** — run a sequence of actions automatically when the device starts
 - **MQTT triggers** — dispatch action chains when a matching MQTT message arrives, no button or screen required (works on headless boards with a physical button too)
-- **On-device timers** — 3 independent count-up / countdown timers with expire actions and live `[timer:N]` bindings
+- **On-device timers** — 3 independent timers whose Start and Toggle actions carry their stopwatch or countdown mode and duration, with per-slot expire actions and live `[timer:N]` bindings
 - **Notification bubble** — display a floating message via a button action or remotely from Home Assistant
 
 ### Audio & feedback

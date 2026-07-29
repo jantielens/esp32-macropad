@@ -69,7 +69,7 @@ static bool timer_binding_resolve(const char* params, char* out, size_t out_len)
         return false;
     }
 
-    // Meta keys: state, expired, mode
+    // Meta keys: state, expired, mode, target
     if (suffix) {
         if (strcmp(suffix, "state") == 0) {
             TimerState st = timer_get_state(id);
@@ -84,6 +84,11 @@ static bool timer_binding_resolve(const char* params, char* out, size_t out_len)
         }
         if (strcmp(suffix, "mode") == 0) {
             snprintf(out, out_len, "%s", timer_get_mode(id) == TIMER_MODE_DOWN ? "down" : "up");
+            return true;
+        }
+        if (strcmp(suffix, "target") == 0) {
+            snprintf(out, out_len, "%lu",
+                     (unsigned long)timer_get_target_seconds(id));
             return true;
         }
         snprintf(out, out_len, "ERR:bad_key");
@@ -113,17 +118,27 @@ static void timer_binding_collect(const char* params, void* user_data) {
 #include <ArduinoJson.h>
 static void timer_scheme_describe(void* out) {
     JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[timer:N] or [timer:N_expired]";
+    o["syntax"]  = "[timer:N], [timer:N;format], [timer:N_state], [timer:N_mode], [timer:N_expired], or [timer:N_target]";
     o["example"] = "[timer:1]";
-    o["note"]    = "timers 1-3; N_expired resolves ON/OFF when the timer has fired";
+    o["keys"]    = "N=value, N_state=running|paused|stopped, N_mode=up|down, N_expired=ON|OFF, N_target=active countdown preset in whole seconds";
+    o["note"]    = "timers 1-3; N_target is 0 for count-up or unconfigured timers";
 }
 
-// Validate a [timer:N] / [timer:N_expired] token: N must be 1-3.
+// Validate Timer binding IDs and the complete supported suffix set.
 static const char* timer_scheme_validate(const char* params) {
     if (!params || !params[0]) return nullptr;
-    int n = atoi(params);
-    if (n >= 1 && n <= 3) return nullptr;
-    return "timer id must be 1-3 (e.g. [timer:1] or [timer:1_expired])";
+    const char* suffix = nullptr;
+    uint8_t id = parse_timer_params(params, &suffix);
+    if (id == 0) {
+        return "timer id must be 1-3 (e.g. [timer:1] or [timer:1_target])";
+    }
+    if (!suffix || strcmp(suffix, "state") == 0
+            || strcmp(suffix, "mode") == 0
+            || strcmp(suffix, "expired") == 0
+            || strcmp(suffix, "target") == 0) {
+        return nullptr;
+    }
+    return "timer key must be value, state, mode, expired, or target";
 }
 #endif
 

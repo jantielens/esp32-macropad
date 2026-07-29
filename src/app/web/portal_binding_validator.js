@@ -408,6 +408,7 @@ function bindingValidateToken(token, opts) {
     if (!def) {
         var suggestion = bindingFuzzyScheme(scheme);
         if (suggestion) return 'Unknown scheme "' + token.scheme + '" — did you mean "' + suggestion + '"?';
+        if (opts && opts.requireKnownScheme) return 'Unknown scheme "' + token.scheme + '"';
         return null; // unrecognised scheme — not validated
     }
 
@@ -833,19 +834,19 @@ bindingRegisterScheme('time', {
 });
 
 // ─── Scheme: timer ───────────────────────────────────────────────
-// [timer:N;format]  or  [timer:N_state]  [timer:N_expired]  [timer:N_mode]
+// [timer:N;format] or [timer:N_state|N_expired|N_mode|N_target]
 bindingRegisterScheme('timer', {
     validate: function(params, opts) {
         var parts = bindingSplitParams(params);
         var param = parts[0].trim();
         if (param === '') return 'Timer parameter is empty';
         var m = param.match(/^(\d+)(_.+)?$/);
-        if (!m) return 'Invalid timer parameter "' + param + '" — expected N or N_state/N_expired/N_mode';
+        if (!m) return 'Invalid timer parameter "' + param + '" — expected N or N_state/N_expired/N_mode/N_target';
         var num = parseInt(m[1]);
         if (num < 1 || num > 3) return 'Timer number must be 1–3, got ' + num;
         var suffix = m[2] || '';
-        if (suffix && ['_state', '_expired', '_mode'].indexOf(suffix) === -1) {
-            return 'Unknown timer suffix "' + suffix + '" — valid: _state, _expired, _mode';
+        if (suffix && ['_state', '_expired', '_mode', '_target'].indexOf(suffix) === -1) {
+            return 'Unknown timer suffix "' + suffix + '" — valid: _state, _expired, _mode, _target';
         }
         if (parts.length > 2) return 'Too many parameters for timer binding';
         if (opts && opts.isWidgetBinding && parts.length > 1) {

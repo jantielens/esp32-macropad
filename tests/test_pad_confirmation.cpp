@@ -26,9 +26,7 @@ const WidgetType* widget_find(const char* type_name) {
 }
 
 bool binding_template_scheme_known(const char* scheme, size_t name_len) {
-    (void)scheme;
-    (void)name_len;
-    return true;
+    return !(name_len == 7 && std::strncmp(scheme, "unknown", name_len) == 0);
 }
 
 const char* binding_template_validate_params(const char* scheme, size_t name_len,
@@ -111,6 +109,31 @@ int main() {
         button["confirm_text"] = too_long;
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
                           "confirm_text too long (max 127 chars)") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
+        action["type"] = "timer";
+        action["timer_id"] = 1;
+        action["timer_command"] = "start";
+        action["timer_mode"] = "down";
+        action["timer_value"] = "1234567890123456";
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "timer value too long") == 0);
+    }
+
+    const char* invalid_timer_bindings[] = {
+        "[junk]", "[unknown:value]", "[mqtt:value"
+    };
+    for (const char* value : invalid_timer_bindings) {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
+        action["type"] = "timer";
+        action["timer_value"] = value;
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
     if (g_failures) {

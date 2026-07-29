@@ -71,6 +71,23 @@ echo "=== Running unit tests: binding_template ==="
 ./tests/bin/test_binding_template
 echo
 
+echo "=== Building integration tests: timer binding target without MQTT ==="
+g++ -std=c++17 -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
+    -include tests/timer_test_overrides/board_config.h -include tests/log_manager.h \
+    -I tests/timer_test_overrides -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    -I ~/Arduino/libraries/lvgl/src \
+    tests/test_timer_binding_target.cpp \
+    src/app/timer_binding.cpp \
+    src/app/timer_engine.cpp \
+    src/app/binding_template.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_timer_binding_target -lm -pthread -Wl,--gc-sections
+
+echo "=== Running integration tests: timer binding target without MQTT ==="
+./tests/bin/test_timer_binding_target
+echo
+
 echo "=== Building unit tests: health_table_builder ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \
@@ -225,6 +242,55 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running unit tests: timer_format ==="
 ./tests/bin/test_timer_format
+echo
+
+echo "=== Building unit tests: timer_commands ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/timer_test_overrides/board_config.h \
+    -include tests/log_manager.h \
+    -I tests/timer_test_overrides -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_timer_commands.cpp \
+    src/app/timer_command.cpp \
+    src/app/timer_mcp_adapter.cpp \
+    src/app/timer_engine.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_timer_commands -lm -pthread
+
+echo "=== Running unit tests: timer_commands ==="
+./tests/bin/test_timer_commands mutex-failure
+./tests/bin/test_timer_commands
+echo
+
+echo "=== Building unit tests: timer_config ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -include tests/timer_test_overrides/board_config.h \
+    -include tests/log_manager.h -include tests/Arduino.h \
+    -I tests/timer_test_overrides -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_timer_config.cpp \
+    src/app/timer_config.cpp \
+    src/app/config_psram.cpp \
+    src/app/action_parse.cpp \
+    src/app/action_registry.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_timer_config -lm -pthread
+
+echo "=== Running unit tests: timer_config ==="
+./tests/bin/test_timer_config config-mutex-failure
+./tests/bin/test_timer_config save-mutex-failure
+./tests/bin/test_timer_config
+echo
+
+echo "=== Running unit tests: timer_action_editor ==="
+node tests/test_timer_action_editor.js
+node tests/test_portal_timer_binding.js
+node tests/test_portal_pad_dialog_transaction.js
+python3 tests/test_timer_mcp_integration.py
+node --check src/app/web/portal_action_editor.js
+node --check src/app/web/portal_binding_validator.js
+node --check src/app/web/portal_pad_dialog.js
+node --check src/app/web/portal_config_actions.js
 echo
 
 echo "=== Building unit tests: action_bindings ==="
