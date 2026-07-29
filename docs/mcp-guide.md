@@ -260,6 +260,9 @@ Active records are never evicted. When all four records are active or retained,
 
 - `get_capabilities` — manifest of widget types + fields, button schema, label-style
   DSL, binding schemes (incl. `[pad:name]` and `template_pad`), and grid limits.
+  Its `action_types` object includes `cycle_pad` with `direction`
+  (`next` or `previous`), `wrap` (boolean, default `true`), and optional
+  `excluded_pads` (comma-separated 1-based pad numbers).
   It also carries a `device_config` section advertising `set_config`'s writable
   fields and the read/write component list. Read-only, so it works with token alone.
 - `get_pad_blocks` — list pre-built button groups (building blocks) that can be

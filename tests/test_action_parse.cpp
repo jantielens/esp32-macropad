@@ -581,6 +581,61 @@ TEST(visual_alert_zero_fields_not_serialized) {
     ASSERT_TRUE(!obj.containsKey("duration_ms"));
 }
 
+// ============================================================================
+// Cycle pad action
+// ============================================================================
+
+TEST(cycle_pad_defaults) {
+    ButtonAction act = parse_from_string("{\"type\":\"cycle_pad\"}");
+    ASSERT_STR(act.type, "cycle_pad");
+    ASSERT_EQ(act.payload.cycle_pad.direction, 1);
+    ASSERT_TRUE(act.payload.cycle_pad.wrap);
+    ASSERT_TRUE(act.payload.cycle_pad.excluded_mask == 0u);
+}
+
+TEST(cycle_pad_previous_no_wrap) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"cycle_pad\",\"direction\":\"previous\",\"wrap\":false}");
+    ASSERT_EQ(act.payload.cycle_pad.direction, -1);
+    ASSERT_TRUE(!act.payload.cycle_pad.wrap);
+}
+
+TEST(cycle_pad_canonical_exclusions) {
+    ButtonAction act = parse_from_string(
+        "{\"type\":\"cycle_pad\",\"excluded_pads\":\"5, 1,5,bad,99,+2,-3\"}");
+    ASSERT_TRUE(act.payload.cycle_pad.excluded_mask == ((1u << 0) | (1u << 4)));
+
+    StaticJsonDocument<256> doc;
+    JsonObject obj = doc.to<JsonObject>();
+    action_to_json(act, obj);
+    ASSERT_STR(obj["direction"].as<const char*>(), "next");
+    ASSERT_TRUE(obj["wrap"].as<bool>());
+    ASSERT_STR(obj["excluded_pads"].as<const char*>(), "1,5");
+}
+
+TEST(cycle_pad_round_trip) {
+    ButtonAction act = round_trip(
+        "{\"type\":\"cycle_pad\",\"direction\":\"previous\",\"wrap\":false,"
+        "\"excluded_pads\":\"7,2,7\"}");
+    ASSERT_STR(act.type, "cycle_pad");
+    ASSERT_EQ(act.payload.cycle_pad.direction, -1);
+    ASSERT_TRUE(!act.payload.cycle_pad.wrap);
+    ASSERT_TRUE(act.payload.cycle_pad.excluded_mask == ((1u << 1) | (1u << 6)));
+}
+
+TEST(cycle_pad_invalid_explicit_fields_clear_action) {
+    const char* invalid[] = {
+        "{\"type\":\"cycle_pad\",\"direction\":\"sideways\"}",
+        "{\"type\":\"cycle_pad\",\"direction\":4}",
+        "{\"type\":\"cycle_pad\",\"wrap\":\"true\"}",
+        "{\"type\":\"cycle_pad\",\"excluded_pads\":[1,2]}"
+    };
+    for (const char* json : invalid) {
+        ButtonAction act = parse_from_string(json);
+        ASSERT_STR(act.type, "");
+    }
+}
+
 int main() {
     printf("=== ButtonAction Parse/Serialize Tests ===\n\n");
 
@@ -658,6 +713,13 @@ int main() {
     RUN(visual_alert_action_parse);
     RUN(visual_alert_action_round_trip);
     RUN(visual_alert_zero_fields_not_serialized);
+
+    printf("\n--- Cycle pad action ---\n");
+    RUN(cycle_pad_defaults);
+    RUN(cycle_pad_previous_no_wrap);
+    RUN(cycle_pad_canonical_exclusions);
+    RUN(cycle_pad_round_trip);
+    RUN(cycle_pad_invalid_explicit_fields_clear_action);
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

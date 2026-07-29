@@ -142,6 +142,36 @@ int main() {
         CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
     }
 
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
+        action["type"] = "cycle_pad";
+        action["direction"] = "previous";
+        action["wrap"] = false;
+        action["excluded_pads"] = "5, 1,5,bad,99";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
+
+    const char* cycle_field_errors[] = {
+        "cycle_pad direction must be a string",
+        "cycle_pad direction must be 'next' or 'previous'",
+        "cycle_pad wrap must be boolean",
+        "cycle_pad excluded_pads must be a string",
+    };
+    for (int field = 0; field < 4; ++field) {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
+        action["type"] = "cycle_pad";
+        if (field == 0) action["direction"] = 42;
+        if (field == 1) action["direction"] = "sideways";
+        if (field == 2) action["wrap"] = "true";
+        if (field == 3) action["excluded_pads"].to<JsonArray>().add(1);
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          cycle_field_errors[field]) == 0);
+    }
+
     const char* valid_services[] = {
         "media_stop",
         "volume_mute",

@@ -348,6 +348,7 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | **None** | No action (display-only button) |
 | **Navigate to screen** | Jump to another pad or screen (e.g., `pad_1`, `info_screen`) |
 | **Go back** | Return to the previous screen |
+| **Navigate Pad Sequence** | Move to the next or previous configured, non-empty pad. Optionally wrap at the boundary and exclude specific 1-based pad numbers. |
 | **Publish MQTT** | Send a message to an MQTT topic. Topic and payload fields support binding templates (e.g. `[health:cpu]`). |
 | **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). The sequence field supports binding templates. ESP32-P4 boards only. |
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
@@ -371,6 +372,24 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 **Example setup for navigation:**
 - **Tap action**: Navigate to screen → `pad_2` (cameras pad)
 - Button label: "Cameras" with a `videocam` Material Symbol icon
+
+### Navigate Pad Sequence Action
+
+The **Navigate Pad Sequence** action moves through eligible pads in numeric order. Choose
+**Next** for ascending pad numbers or **Previous** for descending numbers.
+Enable **Wrap** to continue from the opposite end when the action reaches the
+first or last eligible pad. With Wrap disabled, an action at the boundary does
+nothing.
+
+Only saved pads with at least one effective button participate. Buttons inherited
+from a template count, including buttons that are disabled or dynamically hidden.
+Empty pads are skipped. The optional **Excluded Pads** field accepts comma-separated,
+1-based pad numbers such as `2,5,8`; duplicates are removed and invalid or
+out-of-range entries are ignored.
+
+For directional navigation, assign **Navigate Pad Sequence → Previous** to the left swipe and
+**Navigate Pad Sequence → Next** to the right swipe, with Wrap enabled on both. Existing swipe
+defaults are unchanged until you configure these actions.
 
 ### BLE Key Sequences
 

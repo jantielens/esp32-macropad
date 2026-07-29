@@ -403,6 +403,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/hw_button_config.h
   - src/app/hw_buttons.cpp
   - src/app/hw_buttons.h
+  - src/app/mcp_press_button.cpp
+  - src/app/mcp_press_button.h
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
@@ -473,6 +475,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_provider_pads.cpp
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
+  - src/app/mcp_press_button.cpp
+  - src/app/mcp_press_button.h
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
@@ -505,9 +509,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/swipe_config.h
   - src/app/time_binding.cpp
   - src/app/timer_binding.cpp
+  - src/app/timer_command.cpp
+  - src/app/timer_command.h
   - src/app/timer_config.cpp
   - src/app/timer_config.h
   - src/app/timer_engine.cpp
+  - src/app/timer_mcp_adapter.cpp
+  - src/app/timer_mcp_adapter.h
   - src/app/touch_manager.cpp
   - src/app/visual_alert.cpp
   - src/app/visual_alert.h
@@ -624,9 +632,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/device_classes/shutter_tester/shutter_binding.cpp
   - src/app/expr_binding.cpp
+  - src/app/ha_service.cpp
+  - src/app/ha_service.h
+  - src/app/ha_service_delivery.cpp
+  - src/app/ha_service_delivery.h
   - src/app/health_binding.cpp
   - src/app/list_binding.cpp
   - src/app/mcp_components.cpp
+  - src/app/mcp_press_button.cpp
+  - src/app/mcp_press_button.h
   - src/app/mcp_tool_registry.cpp
   - src/app/mcp_tool_util.cpp
   - src/app/mcp_tool_util.h
@@ -639,6 +653,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/time_binding.cpp
   - src/app/timer_binding.cpp
+  - src/app/timer_mcp_adapter.cpp
+  - src/app/timer_mcp_adapter.h
   - src/app/web_mcp.cpp
   - src/app/web_portal_config.cpp
   - src/app/widgets/bar_chart_widget.cpp

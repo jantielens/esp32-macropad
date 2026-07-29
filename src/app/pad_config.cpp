@@ -8,6 +8,8 @@
 #include "fs_health.h"
 #include "icon_store.h"
 #include "log_manager.h"
+#include "pad_cache_transaction.h"
+#include "pad_cycle.h"
 #include "widgets/widget.h"
 
 #include <ArduinoJson.h>
@@ -18,6 +20,7 @@
 #include <esp_partition.h>
 
 #include <stdio.h>
+#include <atomic>
 #include <ctype.h>
 #include <string.h>
 
@@ -25,10 +28,20 @@
 
 static bool g_fs_mounted = false;
 static uint32_t g_generation = 0;
+static std::atomic<uint32_t> g_eligible_mask{0};
 
 // In-RAM cache so the LVGL render task (PSRAM stack) never touches flash.
 // Flash reads require disabling cache, which is incompatible with PSRAM stacks.
 static PadConfig* g_cache[MAX_PADS] = {};
+
+static void publish_eligibility(uint8_t page, bool eligible) {
+    uint32_t bit = (uint32_t)1U << page;
+    if (eligible) {
+        g_eligible_mask.fetch_or(bit, std::memory_order_release);
+    } else {
+        g_eligible_mask.fetch_and(~bit, std::memory_order_release);
+    }
+}
 
 // Forward declaration — defined after pad_config_init()
 static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
@@ -298,6 +311,7 @@ bool pad_config_init() {
         return false;
     }
     g_fs_mounted = true;
+    g_eligible_mask.store(0, std::memory_order_release);
 
     // Pre-load all existing page configs into RAM cache.
     // This runs on the main task (internal stack) so flash access is safe.
@@ -314,6 +328,7 @@ bool pad_config_init() {
                 memset(cfg, 0, sizeof(PadConfig));
                 if (pad_config_load_from_flash(i, cfg)) {
                     g_cache[i] = cfg;
+                    publish_eligibility(i, cfg->button_count > 0);
                     any_loaded = true;
                     LOGD(TAG, "Cached page %u", i);
                 } else {
@@ -547,31 +562,42 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
 
 // Update the in-RAM cache for a page (parse from flash).
 // Call from a task with internal-RAM stack (web server, main task).
-static void cache_update(uint8_t page) {
-    PadConfig* cfg = (PadConfig*)heap_caps_malloc(
+static PadConfig* allocate_cache_psram() {
+    return (PadConfig*)heap_caps_malloc(
         sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
-    if (!cfg) return;
+}
 
-    if (pad_config_load_from_flash(page, cfg)) {
-        PadConfig* old = g_cache[page];
-        g_cache[page] = cfg;
-        free(old);
-    } else {
-        free(cfg);
-        // Config no longer loadable — clear cache
-        free(g_cache[page]);
-        g_cache[page] = nullptr;
+static PadConfig* allocate_cache_fallback() {
+    return (PadConfig*)malloc(sizeof(PadConfig));
+}
+
+static bool load_cache_from_flash(uint8_t page, PadConfig* config) {
+    return pad_config_load_from_flash(page, config);
+}
+
+static bool cache_update(uint8_t page) {
+    PadCacheRefreshResult result = pad_cache_refresh(
+        &g_cache[page], page, allocate_cache_psram, allocate_cache_fallback,
+        load_cache_from_flash, publish_eligibility);
+    if (result == PadCacheRefreshResult::AllocationFailed) {
+        LOGE(TAG, "Pad %u: cache allocation failed", page);
+        return false;
     }
+    return true;
 }
 
 void pad_config_rebuild_all_caches() {
     if (!g_fs_mounted) return;
+    bool refresh_ok = true;
     for (uint8_t i = 0; i < MAX_PADS; i++) {
-        if (g_cache[i]) cache_update(i);
+        if (!cache_update(i)) refresh_ok = false;
     }
     g_generation++;
-    LOGI(TAG, "Rebuilt all pad caches");
+    if (refresh_ok) {
+        LOGI(TAG, "Rebuilt all pad caches");
+    } else {
+        LOGE(TAG, "Pad cache rebuild incomplete; retained previous entries");
+    }
 }
 
 bool pad_config_load(uint8_t page, PadConfig* out) {
@@ -619,7 +645,10 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
 
     // Update RAM cache BEFORE bumping generation so the LVGL task
     // always reads fresh data when it detects the new generation.
-    cache_update(page);
+    if (!cache_update(page)) {
+        LOGE(TAG, "Pad %u: saved file but cache refresh failed", page);
+        return false;
+    }
 
     // Preload icons for this pad (picks up template button icons that
     // aren't yet in the PSRAM icon cache, e.g. after template_pad change).
@@ -628,10 +657,14 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
 #endif
 
     // Also refresh any pad that references this page as its template_pad
+    bool refresh_ok = true;
     for (uint8_t i = 0; i < MAX_PADS; i++) {
         if (i == page) continue;
         if (g_cache[i] && g_cache[i]->template_pad == (int8_t)page) {
-            cache_update(i);
+            if (!cache_update(i)) {
+                refresh_ok = false;
+                continue;
+            }
 #if HAS_DISPLAY
             icon_store_preload_pad(i);
 #endif
@@ -644,7 +677,10 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
     storage_publish_usage(false);
 
     LOGI(TAG, "Page %u saved (%u bytes, gen=%u)", page, (unsigned)len, g_generation);
-    return true;
+    if (!refresh_ok) {
+        LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
+    }
+    return refresh_ok;
 }
 
 bool pad_config_delete(uint8_t page) {
@@ -654,12 +690,8 @@ bool pad_config_delete(uint8_t page) {
     char path[32];
     pad_config_path(page, path, sizeof(path));
 
-    if (!Storage.exists(path)) {
-        LOGD(TAG, "Page %u: nothing to delete", page);
-        return true;  // Already gone
-    }
-
-    if (!Storage.remove(path)) {
+    bool existed = Storage.exists(path);
+    if (existed && !Storage.remove(path)) {
         LOGE(TAG, "Page %u: delete failed", page);
         return false;
     }
@@ -667,12 +699,14 @@ bool pad_config_delete(uint8_t page) {
     // Clear RAM cache before bumping generation (same ordering rationale as save)
     free(g_cache[page]);
     g_cache[page] = nullptr;
+    publish_eligibility(page, false);
 
     // Refresh any pad that referenced this page as its template_pad
+    bool refresh_ok = true;
     for (uint8_t i = 0; i < MAX_PADS; i++) {
         if (i == page) continue;
         if (g_cache[i] && g_cache[i]->template_pad == (int8_t)page) {
-            cache_update(i);
+            if (!cache_update(i)) refresh_ok = false;
         }
     }
 
@@ -680,8 +714,12 @@ bool pad_config_delete(uint8_t page) {
 
     storage_publish_usage(false);
 
-    LOGI(TAG, "Page %u deleted (gen=%u)", page, g_generation);
-    return true;
+    LOGI(TAG, "Page %u %s (gen=%u)", page,
+         existed ? "deleted" : "cache reconciled", g_generation);
+    if (!refresh_ok) {
+        LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
+    }
+    return refresh_ok;
 }
 
 bool pad_config_exists(uint8_t page) {
@@ -732,6 +770,10 @@ char* pad_config_read_raw(uint8_t page, size_t* out_len) {
 
 uint32_t pad_config_get_generation() {
     return g_generation;
+}
+
+uint32_t pad_config_get_eligible_mask() {
+    return g_eligible_mask.load(std::memory_order_acquire);
 }
 
 bool pad_config_read_name(uint8_t page, char* out, size_t out_len) {

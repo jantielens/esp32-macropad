@@ -24,6 +24,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="">(none)</option>';
     h += '<option value="screen">Navigate to Screen</option>';
     h += '<option value="back">Navigate Back</option>';
+    h += '<option value="cycle_pad">Navigate Pad Sequence</option>';
     h += '<option value="mqtt">MQTT Publish</option>';
     h += '<option value="key">Send BLE Keys</option>';
     h += '<option value="ble_pair">Start BLE Pairing</option>';
@@ -44,6 +45,21 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div class="form-group">';
     h += '<label class="form-label" for="' + prefix + '-target">Target Screen</label>';
     h += '<select class="form-select form-select-sm" id="' + prefix + '-target"><option value="">(none)</option></select>';
+    h += '</div></div>';
+    // Pad sequence navigation
+    h += '<div id="' + prefix + '-cycle-pad-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-cycle-pad-direction">Direction</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-cycle-pad-direction">';
+    h += '<option value="next">Next</option><option value="previous">Previous</option>';
+    h += '</select></div>';
+    h += '<div class="form-group">';
+    h += '<label><input type="checkbox" id="' + prefix + '-cycle-pad-wrap" checked> Wrap at first or last pad</label>';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-cycle-pad-exclusions">Excluded Pads</label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-cycle-pad-exclusions" placeholder="e.g. 2, 5, 8">';
+    h += '<small>Optional comma-separated 1-based pad numbers.</small>';
     h += '</div></div>';
     // MQTT
     h += '<div id="' + prefix + '-mqtt-group" style="display:none;">';
@@ -285,6 +301,8 @@ function actionEditorTypeChanged(prefix) {
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
     if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
     if (soundGrp) soundGrp.style.display = (type === 'sound') ? '' : 'none';
+    var cyclePadGrp = document.getElementById(prefix + '-cycle-pad-group');
+    if (cyclePadGrp) cyclePadGrp.style.display = (type === 'cycle_pad') ? '' : 'none';
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     var notifyGrp = document.getElementById(prefix + '-notify-group');
@@ -304,6 +322,20 @@ function actionEditorTypeChanged(prefix) {
     if (type === 'system') actionEditorSystemChanged(prefix);
     // Extension-contributed type-change hooks (e.g. shutter group visibility)
     _actionEditorExtensions.forEach(function(ext) { if (ext.typeChanged) ext.typeChanged(prefix, type); });
+}
+
+function actionEditorNormalizeCyclePadExclusions(value) {
+    var configuredMax = (typeof deviceInfoCache !== 'undefined' && deviceInfoCache)
+        ? Number(deviceInfoCache.max_pads) : 0;
+    var maxPads = configuredMax > 0 ? Math.floor(configuredMax) : 16;
+    var unique = {};
+    String(value || '').split(',').forEach(function(token) {
+        token = token.trim();
+        if (!/^[0-9]+$/.test(token)) return;
+        var pad = Number(token);
+        if (pad >= 1 && pad <= maxPads) unique[pad] = true;
+    });
+    return Object.keys(unique).map(Number).sort(function(a, b) { return a - b; }).join(',');
 }
 
 // Show/hide system command sub-fields based on the command dropdown.
@@ -415,6 +447,12 @@ function actionEditorLoad(prefix, action) {
     }
     el = document.getElementById(prefix + '-sound-volume');
     if (el) el.value = (action.sound_volume > 0) ? action.sound_volume : '';
+    el = document.getElementById(prefix + '-cycle-pad-direction');
+    if (el) el.value = action.direction === 'previous' ? 'previous' : 'next';
+    el = document.getElementById(prefix + '-cycle-pad-wrap');
+    if (el) el.checked = action.wrap !== false;
+    el = document.getElementById(prefix + '-cycle-pad-exclusions');
+    if (el) el.value = actionEditorNormalizeCyclePadExclusions(action.excluded_pads || '');
 
     // Timer: load from proper fields
     if (action.timer_id && action.timer_command) {
@@ -526,6 +564,17 @@ function actionEditorBuild(prefix) {
         if (sf) act.sound_file = sf.value || '';
         var sv = document.getElementById(prefix + '-sound-volume');
         if (sv && sv.value !== '') act.sound_volume = parseInt(sv.value, 10);
+    }
+    if (type === 'cycle_pad') {
+        var cycleDirection = document.getElementById(prefix + '-cycle-pad-direction');
+        var cycleWrap = document.getElementById(prefix + '-cycle-pad-wrap');
+        var cycleExclusions = document.getElementById(prefix + '-cycle-pad-exclusions');
+        act.direction = cycleDirection && cycleDirection.value === 'previous' ? 'previous' : 'next';
+        act.wrap = cycleWrap ? cycleWrap.checked : true;
+        var normalizedExclusions = actionEditorNormalizeCyclePadExclusions(
+            cycleExclusions ? cycleExclusions.value : '');
+        if (cycleExclusions) cycleExclusions.value = normalizedExclusions;
+        if (normalizedExclusions) act.excluded_pads = normalizedExclusions;
     }
 
     if (type === 'timer') {

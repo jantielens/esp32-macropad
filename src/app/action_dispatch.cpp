@@ -211,6 +211,16 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
 #else
         LOGW(TAG, "%s back: no display", label);
 #endif
+    } else if (strcmp(act.type, ACTION_TYPE_CYCLE_PAD) == 0) {
+#if HAS_DISPLAY
+    const auto& cycle = act.payload.cycle_pad;
+    if (!display_manager_cycle_pad(cycle.direction, cycle.wrap,
+                       cycle.excluded_mask)) {
+        LOGD(TAG, "%s cycle_pad: no eligible destination", label);
+    }
+#else
+    LOGW(TAG, "%s cycle_pad: no display", label);
+#endif
     } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
 #if HAS_MQTT
         const auto& m = act.payload.mqtt;

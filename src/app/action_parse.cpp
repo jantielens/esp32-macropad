@@ -3,6 +3,7 @@
 #if HAS_DISPLAY || HAS_BUTTON
 
 #include "action_registry.h"
+#include "pad_cycle.h"
 #include <string.h>
 
 // ============================================================================
@@ -75,6 +76,22 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         act.payload.visual_alert.va_period_ms  = (uint16_t)(a["period_ms"]   | 0);
         act.payload.visual_alert.va_intensity  = (uint16_t)(a["intensity"]   | 0);
         act.payload.visual_alert.va_duration_ms = (uint32_t)(a["duration_ms"] | 0);
+    } else if (strcmp(act.type, ACTION_TYPE_CYCLE_PAD) == 0) {
+        if ((a.containsKey("direction") && !a["direction"].is<const char*>())
+                || (a.containsKey("wrap") && !a["wrap"].is<bool>())
+                || (a.containsKey("excluded_pads") && !a["excluded_pads"].is<const char*>())) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
+        const char* direction = a["direction"] | "next";
+        if (strcmp(direction, "next") != 0 && strcmp(direction, "previous") != 0) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
+        act.payload.cycle_pad.direction = strcmp(direction, "previous") == 0 ? -1 : 1;
+        act.payload.cycle_pad.wrap = a["wrap"] | true;
+        act.payload.cycle_pad.excluded_mask =
+            pad_cycle_parse_exclusions(a["excluded_pads"] | "");
     } else {
         // Device-class action types (e.g. shutter) self-register via
         // action_type_register(); fall through to the registry.
@@ -134,6 +151,13 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
         if (act.payload.visual_alert.va_period_ms > 0)   obj["period_ms"]   = act.payload.visual_alert.va_period_ms;
         if (act.payload.visual_alert.va_intensity > 0)   obj["intensity"]   = act.payload.visual_alert.va_intensity;
         if (act.payload.visual_alert.va_duration_ms > 0) obj["duration_ms"] = act.payload.visual_alert.va_duration_ms;
+    } else if (strcmp(act.type, ACTION_TYPE_CYCLE_PAD) == 0) {
+        obj["direction"] = act.payload.cycle_pad.direction < 0 ? "previous" : "next";
+        obj["wrap"] = act.payload.cycle_pad.wrap;
+        char exclusions[MAX_PADS * 3 + 1];
+        pad_cycle_format_exclusions(act.payload.cycle_pad.excluded_mask,
+                                    exclusions, sizeof(exclusions));
+        if (exclusions[0]) obj["excluded_pads"] = exclusions;
     } else {
         const ActionTypeDef* t = action_type_find(act.type);
         if (t && t->serialize) t->serialize(act, obj);

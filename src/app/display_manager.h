@@ -181,6 +181,9 @@ public:
 		
 		// Navigate back to previous screen (returns true if there was one)
 		bool goBack();
+
+		// Queue the next eligible pad relative to the queued or current screen.
+		bool cyclePad(int8_t direction, bool wrap, uint32_t excludedMask);
 		
 		// Get current screen ID (returns nullptr if splash or no screen)
 		const char* getCurrentScreenId();
@@ -240,6 +243,7 @@ void display_manager_show_info();
 void display_manager_show_test();
 void display_manager_show_screen(const char* screen_id, bool* success);  // success is optional output
 bool display_manager_go_back();  // Navigate to previous screen
+bool display_manager_cycle_pad(int8_t direction, bool wrap, uint32_t excluded_mask);
 const char* display_manager_get_current_screen_id();
 const ScreenInfo* display_manager_get_available_screens(size_t* count);
 void display_manager_set_splash_status(const char* text);

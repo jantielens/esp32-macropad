@@ -52,6 +52,12 @@ bool display_manager_go_back() {
 		return false;
 }
 
+bool display_manager_cycle_pad(int8_t direction, bool wrap, uint32_t excluded_mask) {
+		return displayManager
+				? displayManager->cyclePad(direction, wrap, excluded_mask)
+				: false;
+}
+
 const char* display_manager_get_current_screen_id() {
 		if (displayManager) {
 				return displayManager->getCurrentScreenId();

@@ -235,6 +235,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_parse.cpp \
     src/app/action_parse.cpp \
+    src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     src/app/binding_template.cpp \
     tests/stubs.cpp \
@@ -242,6 +243,30 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
 
 echo "=== Running unit tests: action_parse ==="
 ./tests/bin/test_action_parse
+echo
+
+echo "=== Building unit tests: pad_cycle ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/board_config.h \
+    -I src/app \
+    tests/test_pad_cycle.cpp \
+    src/app/pad_cycle.cpp \
+    -o tests/bin/test_pad_cycle
+
+echo "=== Running unit tests: pad_cycle ==="
+./tests/bin/test_pad_cycle
+echo
+
+echo "=== Building unit tests: pad_cache_transaction ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/Arduino.h -include tests/board_config.h \
+    -I tests -I src/app \
+    tests/test_pad_cache_transaction.cpp \
+    src/app/pad_cache_transaction.cpp \
+    -o tests/bin/test_pad_cache_transaction
+
+echo "=== Running unit tests: pad_cache_transaction ==="
+./tests/bin/test_pad_cache_transaction
 echo
 
 echo "=== Building size guard: action_sizes ==="
@@ -264,6 +289,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_shutter_session_actions.cpp \
     src/app/action_parse.cpp \
+    src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     src/app/binding_template.cpp \
     tests/stubs.cpp \
@@ -325,6 +351,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     src/app/timer_config.cpp \
     src/app/config_psram.cpp \
     src/app/action_parse.cpp \
+    src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_timer_config -lm -pthread
@@ -337,6 +364,7 @@ echo
 
 echo "=== Running unit tests: timer_action_editor ==="
 node tests/test_timer_action_editor.js
+node tests/test_portal_action_editor_cycle.js
 node tests/test_portal_timer_binding.js
 node tests/test_portal_pad_dialog_transaction.js
 python3 tests/test_timer_mcp_integration.py

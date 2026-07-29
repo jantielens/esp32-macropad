@@ -1040,6 +1040,34 @@ Save swipe action configuration to LittleFS.
 - **Response:** `{"success": true}` on success; JSON error on failure.
 - Actions are applied immediately without reboot.
 
+#### Navigate Pad Sequence action contract
+
+`cycle_pad` uses the same flat `ButtonAction` JSON shape as every other shared
+action surface:
+
+```json
+{
+  "type": "cycle_pad",
+  "direction": "next",
+  "wrap": true,
+  "excluded_pads": "1,5"
+}
+```
+
+`direction` defaults to `next` when omitted and accepts `next` or `previous`.
+`wrap` defaults to `true`. `excluded_pads` is an optional comma-separated list
+of 1-based pad numbers. The shared editor normalizes exclusions on load and save
+using the board's reported `max_pads`: valid values are deduplicated and sorted,
+while malformed and out-of-range tokens are ignored. Parsed firmware reads emit
+the same canonical form.
+
+Cycle eligibility comes from an atomic 32-bit snapshot owned by `pad_config`.
+Each bit reflects a successfully parsed cache entry whose post-template
+`button_count` is greater than zero. Cache replacement publishes that entry's
+bit before the configuration generation changes. Dispatch reads only this
+snapshot; it does not scan cache pointers, copy pad configurations, or access
+persistent storage from the display task.
+
 ---
 
 ### Boot Actions API

@@ -100,6 +100,25 @@ static const char* validate_exact_binding_token(const char* value) {
 // Validate action-specific authoring contracts. Other action types are a no-op.
 static const char* validate_action(JsonObjectConst action) {
     const char* type = action["type"] | "";
+    if (strcmp(type, ACTION_TYPE_CYCLE_PAD) == 0) {
+        if (action.containsKey("direction")) {
+            if (!action["direction"].is<const char*>()) {
+                return "cycle_pad direction must be a string";
+            }
+            const char* direction = action["direction"].as<const char*>();
+            if (strcmp(direction, "next") != 0 && strcmp(direction, "previous") != 0) {
+                return "cycle_pad direction must be 'next' or 'previous'";
+            }
+        }
+        if (action.containsKey("wrap") && !action["wrap"].is<bool>()) {
+            return "cycle_pad wrap must be boolean";
+        }
+        if (action.containsKey("excluded_pads")
+                && !action["excluded_pads"].is<const char*>()) {
+            return "cycle_pad excluded_pads must be a string";
+        }
+        return nullptr;
+    }
     if (strcmp(type, ACTION_TYPE_HA_SERVICE) != 0) return nullptr;
 
     if (!action.containsKey("entity_id")) return "ha_service missing entity_id";

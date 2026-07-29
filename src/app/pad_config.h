@@ -138,6 +138,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_SYSTEM   "system"
 #define ACTION_TYPE_HA_SERVICE "ha_service"
 #define ACTION_TYPE_VISUAL_ALERT "visual_alert"
+#define ACTION_TYPE_CYCLE_PAD "cycle_pad"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -216,6 +217,11 @@ struct VisualAlertPayload {
     uint16_t va_intensity;                        // max overlay opacity 0-100%, 0 = default 100
     uint32_t va_duration_ms;                       // 0 = persist until stopped
 };
+struct CyclePadPayload {
+    int8_t direction;                              // +1 = next, -1 = previous
+    bool wrap;                                     // wrap at the numeric boundary
+    uint32_t excluded_mask;                        // bit N excludes user-visible Pad N+1
+};
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -246,6 +252,7 @@ union ActionPayload {
     SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
     HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
     VisualAlertPayload visual_alert; // type == ACTION_TYPE_VISUAL_ALERT
+    CyclePadPayload   cycle_pad;    // type == ACTION_TYPE_CYCLE_PAD
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, "" (none) carry no payload data — only the type tag.
@@ -282,6 +289,7 @@ static_assert(sizeof(ButtonAction) <= 420,
     printf_fn("  SystemPayload     = %zu\n", sizeof(SystemPayload));     \
     printf_fn("  HaServicePayload  = %zu\n", sizeof(HaServicePayload));  \
     printf_fn("  VisualAlertPayload= %zu\n", sizeof(VisualAlertPayload)); \
+    printf_fn("  CyclePadPayload   = %zu\n", sizeof(CyclePadPayload));    \
 } while (0)
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
@@ -453,6 +461,9 @@ void pad_config_rebuild_all_caches();
 // Generation counter — incremented on every save/delete. PadScreen uses this
 // to detect config changes and rebuild tiles.
 uint32_t pad_config_get_generation();
+
+// Atomic snapshot of configured pads with at least one post-template button.
+uint32_t pad_config_get_eligible_mask();
 
 #ifdef __cplusplus
 }
