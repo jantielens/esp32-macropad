@@ -23,6 +23,7 @@ const padState = {
     btnClipboard: null,  // Copied button settings (position-independent)
     padClipboard: null,  // Copied pad settings { cols, rows, buttons, name }
     bindings: [],        // Page-level named bindings [{name, value}]
+    padActions: [],      // Full-screen pad tap actions
     colorCache: {},      // page → hex[] — colors from visited pads
     buttonDefaults: {},  // Device-level button defaults (loaded from /api/button-defaults)
     templatePad: -1,     // Template pad index (-1 = none)
@@ -75,6 +76,24 @@ function padInit() {
         aeContainer.innerHTML = tapHtml +
             '<hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">' +
             lpHtml;
+    }
+
+    const padActionContainer = document.getElementById('pad-level-action-editors');
+    if (padActionContainer) {
+        var padActionHtml = '';
+        for (var pai = 0; pai < MAX_ACTIONS; pai++) {
+            var padActionPfx = 'pad-level-action-' + pai;
+            var padActionLabel = pai === 0 ? 'Tap Action' : 'Tap Action ' + (pai + 1);
+            var padActionHidden = pai > 0 ? ' style="display:none"' : '';
+            padActionHtml += '<div id="' + padActionPfx + '-wrap"' + padActionHidden + '>';
+            if (pai > 0) padActionHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><span></span><a class="action-remove-link" onclick="padRemoveLevelAction(' + pai + ')">&times; Remove</a></div>';
+            padActionHtml += actionEditorHTML(padActionPfx, padActionLabel, { showBleHint: true, showKeyHelp: true });
+            padActionHtml += '</div>';
+        }
+        padActionHtml += '<a id="pad-add-level-action" class="action-add-link" onclick="padAddLevelAction()">+ Add tap action</a>';
+        padActionContainer.innerHTML = padActionHtml;
+        padActionContainer.addEventListener('input', padMarkDirty);
+        padActionContainer.addEventListener('change', padMarkDirty);
     }
 
     // Generate numeric rocker adjustment action editor
@@ -219,6 +238,62 @@ function padInit() {
     waitForInfo();
 }
 
+function padUpdateLevelActionAddLink() {
+    var visibleCount = 0;
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
+        if (wrap && wrap.style.display !== 'none') visibleCount++;
+    }
+    var link = document.getElementById('pad-add-level-action');
+    if (link) link.style.display = visibleCount >= MAX_ACTIONS ? 'none' : '';
+}
+
+function padAddLevelAction() {
+    for (var i = 1; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
+        if (wrap && wrap.style.display === 'none') {
+            wrap.style.display = '';
+            padMarkDirty();
+            break;
+        }
+    }
+    padUpdateLevelActionAddLink();
+}
+
+function padRemoveLevelAction(index) {
+    var wrap = document.getElementById('pad-level-action-' + index + '-wrap');
+    if (wrap) {
+        wrap.style.display = 'none';
+        actionEditorLoad('pad-level-action-' + index, null);
+    }
+    padMarkDirty();
+    padUpdateLevelActionAddLink();
+}
+
+function padLoadLevelActions(actions) {
+    padState.padActions = (actions || []).filter(function(action) {
+        return action && typeof action === 'object' && action.type && action.type !== 'none';
+    }).slice(0, MAX_ACTIONS);
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
+        if (wrap) wrap.style.display = i === 0 || i < padState.padActions.length ? '' : 'none';
+        actionEditorLoad('pad-level-action-' + i, padState.padActions[i] || null);
+    }
+    padUpdateLevelActionAddLink();
+}
+
+function padBuildLevelActions() {
+    var actions = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
+        if (!wrap || wrap.style.display === 'none') continue;
+        var action = actionEditorBuild('pad-level-action-' + i);
+        if (action && action.type && action.type !== 'none') actions.push(action);
+    }
+    padState.padActions = actions;
+    return actions;
+}
+
 function padPopulateGridDropdowns() {
     const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
     const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
@@ -297,6 +372,7 @@ function padPopulateScreenDropdown() {
     for (var i = 0; i < MAX_ACTIONS; i++) {
         prefixes.push('pad-edit-action-' + i);
         prefixes.push('pad-edit-lp-action-' + i);
+        prefixes.push('pad-level-action-' + i);
     }
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
@@ -334,6 +410,7 @@ function padPopulateSoundDropdown() {
     for (var i = 0; i < MAX_ACTIONS; i++) {
         prefixes.push('pad-edit-action-' + i);
         prefixes.push('pad-edit-lp-action-' + i);
+        prefixes.push('pad-level-action-' + i);
     }
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
@@ -457,6 +534,7 @@ async function padLoadPage(page) {
     padState.rawJson = null;
     padState.buttons = [];
     padState.bindings = [];
+    padState.padActions = [];
     padState.templatePad = -1;
     padState.templateButtons = [];
     padClearDirty();
@@ -474,6 +552,7 @@ async function padLoadPage(page) {
             padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
             padSetBindableColor('pad-edit-page-bg-color', '#000000');
             padState.bindings = [];
+            padLoadLevelActions([]);
             padState.templatePad = -1;
             padState.templateButtons = [];
             padRenderBindings();
@@ -501,6 +580,7 @@ async function padLoadPage(page) {
         // Load pad bindings
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
+        padLoadLevelActions(json.pad_actions);
 
         // Load template pad setting
         padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null) ? json.template_pad : -1;
@@ -564,6 +644,10 @@ async function padSavePage() {
     } else {
         delete payload.bindings;
     }
+
+    var padActions = padBuildLevelActions();
+    if (padActions.length > 0) payload.pad_actions = padActions;
+    else delete payload.pad_actions;
 
     // Validate pad-level binding values before save
     if (typeof bindingValidatePadBindings === 'function') {

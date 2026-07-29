@@ -14,6 +14,7 @@
 #include "psram_json_allocator.h"
 #include "widgets/widget_registry.h"
 #include "binding_template.h"
+#include "action_registry.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -168,11 +169,27 @@ static const char* validate_action(JsonObjectConst action) {
     return nullptr;
 }
 
-static const char* validate_action_array(JsonArrayConst arr) {
+static bool action_type_known(const char* type) {
+    if (!type || !type[0] || strcmp(type, "none") == 0) return true;
+    static const char* const builtins[] = {
+        ACTION_TYPE_SCREEN, ACTION_TYPE_MQTT, ACTION_TYPE_BACK,
+        ACTION_TYPE_KEY, ACTION_TYPE_BLE_PAIR, ACTION_TYPE_BEEP,
+        ACTION_TYPE_VOLUME, ACTION_TYPE_BRIGHTNESS, ACTION_TYPE_TIMER,
+        ACTION_TYPE_SOUND, ACTION_TYPE_NOTIFY, ACTION_TYPE_SYSTEM,
+        ACTION_TYPE_HA_SERVICE, ACTION_TYPE_VISUAL_ALERT, ACTION_TYPE_CYCLE_PAD,
+    };
+    for (const char* builtin : builtins) {
+        if (strcmp(type, builtin) == 0) return true;
+    }
+    return action_type_find(type) != nullptr;
+}
+
+static const char* validate_action_array(JsonArrayConst arr, bool require_known_type = false) {
     if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
     for (JsonObjectConst a : arr) {
         const char* t = a["type"] | "";
         if (!t[0]) return "action missing type";
+        if (require_known_type && !action_type_known(t)) return "unknown action type";
         const char* action_error = validate_action(a);
         if (action_error) return action_error;
         // visual_alert.color is bindable and stored in a CONFIG_BINDABLE_SHORT_LEN
@@ -319,6 +336,12 @@ const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid) {
     if (pad.containsKey("template_pad")) {
         int tp = pad["template_pad"] | -1;
         if (tp < -1 || tp >= MAX_PADS) return "template_pad out of range";
+    }
+    if (pad.containsKey("pad_actions")) {
+        if (!pad["pad_actions"].is<JsonArrayConst>()) return "pad_actions must be an array";
+        const char* action_error = validate_action_array(
+            pad["pad_actions"].as<JsonArrayConst>(), true);
+        if (action_error) return action_error;
     }
     if (pad["bindings"].size() > PAD_MAX_BINDINGS) return "too many bindings";
     // Pad-level binding name/value length limits.

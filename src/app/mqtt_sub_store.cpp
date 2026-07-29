@@ -245,6 +245,9 @@ void mqtt_sub_store_subscribe_all() {
         pad_binding_set_page(cfg);
         // Scan page-level background color for binding tokens
         binding_template_collect_topics(cfg->bg_color, &ctx);
+        for (uint8_t a = 0; a < cfg->pad_action_count; a++) {
+            action_collect_binding_topics(cfg->pad_actions[a], &ctx);
+        }
         for (uint8_t b = 0; b < cfg->button_count; b++) {
             const ScreenButtonConfig& btn = cfg->buttons[b];
             // Scan label text for [mqtt:...] binding tokens

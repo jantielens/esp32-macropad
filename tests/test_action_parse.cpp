@@ -10,7 +10,10 @@
 #include <cstdlib>
 #include <ArduinoJson.h>
 #include "pad_config.h"
+#include "action_list.h"
 #include "action_parse.h"
+
+void action_dispatch(const ButtonAction&, const char*) {}
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -85,6 +88,29 @@ TEST(empty_to_json_produces_empty_object) {
     JsonObject obj = doc.to<JsonObject>();
     action_to_json(act, obj);
     ASSERT_EQ(obj.size(), 0);  // empty action → no keys
+}
+
+TEST(action_list_filters_literal_none_for_pad_callers) {
+    StaticJsonDocument<512> doc;
+    deserializeJson(doc, "[{\"type\":\"none\"},{\"type\":\"back\"},{},null]");
+    ButtonAction actions[MAX_BUTTON_ACTIONS];
+
+    uint8_t count = action_list_parse(doc.as<JsonVariant>(), actions,
+                                      MAX_BUTTON_ACTIONS, true);
+    ASSERT_EQ(count, 1);
+    ASSERT_STR(actions[0].type, "back");
+    ASSERT_STR(actions[1].type, "");
+}
+
+TEST(action_list_retains_literal_none_for_existing_callers) {
+    StaticJsonDocument<256> doc;
+    deserializeJson(doc, "[{\"type\":\"none\"}]");
+    ButtonAction actions[MAX_BUTTON_ACTIONS];
+
+    uint8_t count = action_list_parse(doc.as<JsonVariant>(), actions,
+                                      MAX_BUTTON_ACTIONS);
+    ASSERT_EQ(count, 1);
+    ASSERT_STR(actions[0].type, "none");
 }
 
 TEST(type_only) {
@@ -642,6 +668,8 @@ int main() {
     printf("--- Empty / minimal ---\n");
     RUN(empty_json);
     RUN(empty_to_json_produces_empty_object);
+    RUN(action_list_filters_literal_none_for_pad_callers);
+    RUN(action_list_retains_literal_none_for_existing_callers);
     RUN(type_only);
 
     printf("\n--- Screen action ---\n");

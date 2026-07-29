@@ -7,7 +7,8 @@
 
 #include <string.h>
 
-uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max) {
+uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max,
+                          bool filter_literal_none) {
     if (!out || max == 0) return 0;
     memset(out, 0, sizeof(ButtonAction) * max);
     if (!v.is<JsonArray>()) return 0;
@@ -16,7 +17,8 @@ uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max) {
     for (size_t i = 0; i < arr.size() && count < max; i++) {
         if (!arr[i].is<JsonObject>()) continue;
         action_parse(arr[i].as<JsonObject>(), out[count]);
-        if (out[count].type[0]) {
+        if (out[count].type[0] &&
+            (!filter_literal_none || strcmp(out[count].type, "none") != 0)) {
             count++;
         } else {
             memset(&out[count], 0, sizeof(ButtonAction));

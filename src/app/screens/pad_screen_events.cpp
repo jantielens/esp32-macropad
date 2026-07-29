@@ -392,3 +392,65 @@ void PadScreen::onLongPress(lv_event_t* e) {
 #endif
 }
 
+void PadScreen::clearPadActionOverlay() {
+    if (padActionFlashTimer) {
+        lv_timer_delete(padActionFlashTimer);
+        padActionFlashTimer = nullptr;
+    }
+    if (padActionOverlay) {
+        lv_obj_delete(padActionOverlay);
+        padActionOverlay = nullptr;
+    }
+}
+
+void PadScreen::padActionFlashTimerCb(lv_timer_t* timer) {
+    auto* pad = (PadScreen*)lv_timer_get_user_data(timer);
+    if (pad) {
+        pad->padActionFlashTimer = nullptr;
+        if (pad->padActionOverlay) {
+            lv_obj_set_style_bg_opa(pad->padActionOverlay, LV_OPA_TRANSP, 0);
+        }
+    }
+    lv_timer_delete(timer);
+}
+
+void PadScreen::showPadActionFlash() {
+    if (!padActionOverlay) return;
+    if (padActionFlashTimer) {
+        lv_timer_delete(padActionFlashTimer);
+        padActionFlashTimer = nullptr;
+    }
+
+    bool is_light = perceived_luminance(pageBgDefault) > TAP_LUMINANCE_THRESH;
+    lv_obj_set_style_bg_color(padActionOverlay,
+                              is_light ? lv_color_black() : lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(padActionOverlay,
+                            is_light ? TAP_OVERLAY_DARK_OPA : TAP_OVERLAY_LIGHT_OPA, 0);
+    padActionFlashTimer = lv_timer_create(padActionFlashTimerCb,
+                                          TAP_FLASH_DURATION_MS, this);
+    if (!padActionFlashTimer) {
+        lv_obj_set_style_bg_opa(padActionOverlay, LV_OPA_TRANSP, 0);
+    }
+}
+
+void PadScreen::onPadActionTap(lv_event_t* e) {
+    auto* pad = (PadScreen*)lv_event_get_user_data(e);
+    if (!pad || !pad->padActions || pad->padActionCount == 0) return;
+    if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
+
+    ButtonAction local[MAX_BUTTON_ACTIONS];
+    const uint8_t count = pad->padActionCount;
+    memcpy(local, pad->padActions, count * sizeof(ButtonAction));
+
+    pad->showPadActionFlash();
+#if HAS_AUDIO
+    if (!has_audio_action(local, count)) {
+        const char* pattern = device_config.tap_beep;
+        if (pattern[0] && strcmp(pattern, "none") != 0) {
+            audio_beep(pattern, 0);
+        }
+    }
+#endif
+    for (uint8_t i = 0; i < count; i++) action_dispatch(local[i], "PadTap");
+}
+

@@ -235,6 +235,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_parse.cpp \
     src/app/action_parse.cpp \
+    src/app/action_list.cpp \
     src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     src/app/binding_template.cpp \

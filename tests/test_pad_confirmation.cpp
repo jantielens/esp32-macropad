@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "binding_template.h"
+#include "action_registry.h"
 #include "pad_validate.h"
 #include "widgets/widget_registry.h"
 
@@ -43,6 +44,14 @@ const char* binding_template_validate_params(const char* scheme, size_t name_len
     return nullptr;
 }
 
+const ActionTypeDef* action_type_find(const char* type) {
+    static const ActionTypeDef registered_type = {
+        "registered_test", nullptr, nullptr, nullptr, nullptr, nullptr
+    };
+    if (type && std::strcmp(type, registered_type.type_name) == 0) return &registered_type;
+    return nullptr;
+}
+
 static JsonObject make_button(JsonDocument& doc) {
     doc["cols"] = 1;
     doc["rows"] = 1;
@@ -59,6 +68,90 @@ int main() {
         JsonDocument doc;
         make_button(doc);
         CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        JsonArray actions = doc["pad_actions"].to<JsonArray>();
+        actions.add<JsonObject>()["type"] = "none";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        JsonArray actions = doc["pad_actions"].to<JsonArray>();
+        actions.add<JsonObject>()["type"] = "registered_test";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        doc["pad_actions"] = "screen";
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "pad_actions must be an array") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        JsonArray actions = doc["pad_actions"].to<JsonArray>();
+        for (int i = 0; i < 4; i++) actions.add<JsonObject>()["type"] = "beep";
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "too many actions (max 3)") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        doc["pad_actions"].to<JsonArray>().add<JsonObject>();
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "action missing type") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        doc["pad_actions"].to<JsonArray>().add("beep");
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "action missing type") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        doc["pad_actions"].to<JsonArray>().add<JsonArray>();
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "action missing type") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        doc["pad_actions"].to<JsonArray>().add(nullptr);
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "action missing type") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        doc["pad_actions"].to<JsonArray>().add<JsonObject>()["type"] = "unknown";
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "unknown action type") == 0);
+    }
+
+    {
+        JsonDocument doc;
+        make_button(doc);
+        JsonObject action = doc["pad_actions"].to<JsonArray>().add<JsonObject>();
+        action["type"] = "ha_service";
+        action["entity_id"] = "light.kitchen";
+        action["service"] = "light.toggle";
+        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
+                          "service must be bare; use 'toggle'") == 0);
     }
 
     {

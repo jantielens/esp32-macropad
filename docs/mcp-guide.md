@@ -280,7 +280,10 @@ Active records are never evicted. When all four records are active or retained,
 - `set_button` / `set_buttons` — create or replace a button (or many in one save)
   by position, using the same schema as the portal pad editor.
 - `set_pad` — set pad-level fields (layout, cols/rows, wake_screen, bg_color,
-  `template_pad`, and named `[pad:name]` bindings) without touching buttons.
+  `template_pad`, named `[pad:name]` bindings, and local `pad_actions`) without
+  touching buttons. `pad_actions` is an ordered array of up to three action
+  objects that runs for a normal tap anywhere on the pad before buttons or
+  widgets receive it. Omit the field to preserve it; send `[]` to clear it.
 - `remove_button` / `clear_pad` — delete one button or empty a pad.
 
 Writes are validated before saving and persisted on the main loop. Concurrent

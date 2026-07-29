@@ -117,6 +117,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     pf["bg_color"] = "pad background color #RRGGBB (default #000000)";
     pf["template_pad"] = "int pad index 0..MAX_PADS-1 to inherit buttons into EMPTY cells (-1 = none). Inherited buttons render but are not stored in this pad.";
     pf["bindings"] = "object of name->binding-template, referenced elsewhere as [pad:name]. Names: [a-zA-Z][a-zA-Z0-9_]*";
+    pf["pad_actions"] = "ordered array of up to grid.max_actions normal action objects. A non-empty effective list overrides all pad touch actions, including buttons and widgets, except swipes. [] clears it. Template pads never contribute pad_actions.";
     pad["bindings_example"] = "{\"power\":\"[mqtt:home/solar/power;watts;%.0f]\",\"hot\":\"[expr:[pad:power]>3000?1:0]\"}";
 
     JsonObject btn = result.createNestedObject("button");
@@ -439,7 +440,7 @@ static bool tool_clear_pad(const JsonObject& args, JsonObject& result, String& e
 }
 
 // set_pad — merge pad-level fields (layout/cols/rows/wake_screen/bg_color/
-// template_pad/bindings) into the pad, preserving existing buttons. Only keys
+// template_pad/bindings/pad_actions) into the pad, preserving existing buttons. Only keys
 // present in args are changed.
 static bool tool_set_pad(const JsonObject& args, JsonObject& result, String& err) {
     int pg = pad_index(args["screen"] | "");
@@ -459,6 +460,7 @@ static bool tool_set_pad(const JsonObject& args, JsonObject& result, String& err
     if (args.containsKey("bg_color"))     doc["bg_color"] = args["bg_color"];
     if (args.containsKey("template_pad")) doc["template_pad"] = (int)(args["template_pad"] | -1);
     if (args.containsKey("bindings"))     doc["bindings"] = args["bindings"];  // object copy
+    if (args.containsKey("pad_actions"))  doc["pad_actions"] = args["pad_actions"];
 
     return commit_pad((uint8_t)pg, doc, result, err);
 }
@@ -534,8 +536,8 @@ REGISTER_MCP_TOOL(s_tool_clear_pad);
 
 static const McpTool s_tool_set_pad = {
     "set_pad",
-    "Set pad-level fields (preserves buttons): pad_name (friendly label; arg is 'pad_name' not 'name'), layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), and bindings (object of [pad:name] templates). Only provided keys change. 'screen' may be a 'pad_N' id or friendly name. After setting 'bindings', verify each resolves with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
-    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"pad_name\":{\"type\":\"string\"},\"layout\":{\"type\":\"string\"},\"cols\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"wake_screen\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"template_pad\":{\"type\":\"integer\"},\"bindings\":{\"type\":\"object\"}},\"required\":[\"screen\"]}",
+    "Set pad-level fields (preserves buttons): pad_name (friendly label; arg is 'pad_name' not 'name'), layout, cols, rows, wake_screen, bg_color, template_pad (inherit buttons into empty cells), bindings (object of [pad:name] templates), and pad_actions (ordered full-screen tap actions; [] clears). Only provided keys change. 'screen' may be a 'pad_N' id or friendly name. After setting 'bindings', verify each resolves with resolve_bindings (a valid-syntax binding can still resolve to '---' or the wrong value). Requires authoring.",
+    "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"pad_name\":{\"type\":\"string\"},\"layout\":{\"type\":\"string\"},\"cols\":{\"type\":\"integer\"},\"rows\":{\"type\":\"integer\"},\"wake_screen\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"template_pad\":{\"type\":\"integer\"},\"bindings\":{\"type\":\"object\"},\"pad_actions\":{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"object\"}}},\"required\":[\"screen\"]}",
     tool_set_pad, false, true, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_pad);

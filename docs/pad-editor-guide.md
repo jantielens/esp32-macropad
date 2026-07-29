@@ -23,6 +23,33 @@ At the top of the pad editor, you configure the pad itself:
 - **Wake Screen** — when the screensaver wakes up, which screen should appear? Leave empty to return to the last active screen, or pick a specific pad.
 - **Background** — the color behind the grid. Accepts a `#hex` color or a binding expression for dynamic backgrounds.
 
+### Full-Screen Tap Actions
+
+Use **Full-Screen Tap Actions** to assign up to three ordered actions to a tap anywhere
+on the pad. The action list uses the same editor and action types as buttons. A configured
+full-screen action captures normal taps before buttons and widgets receive them, which is
+useful for a focused control screen or a simple whole-pad navigation surface.
+
+Swipes continue to use the pad's swipe actions. Long-presses do not trigger full-screen
+actions. Full-screen actions use the usual brief tap flash and device-level feedback beep;
+a **Play Beep** or **Play Sound** action suppresses that feedback beep.
+
+Full-screen actions belong only to the current pad. They are not inherited from a template
+pad, and clearing the list restores normal button and widget interaction. A saved pad with
+at least one full-screen action is included in **Navigate Pad Sequence**, even if it has no
+buttons.
+
+The stored JSON field is `pad_actions`, an array of up to three `ButtonAction` objects:
+
+```json
+{
+  "pad_actions": [
+    { "type": "screen", "screen_id": "pad_2" },
+    { "type": "beep", "pattern": "1000:100" }
+  ]
+}
+```
+
 > **Example**: A home energy dashboard might use a 4×2 grid named "Energy" with a dark background (`#111111`) — four columns for solar, grid, battery, and net power, with two rows for the bar chart and its label.
 
 ### Button Defaults
@@ -381,11 +408,11 @@ Enable **Wrap** to continue from the opposite end when the action reaches the
 first or last eligible pad. With Wrap disabled, an action at the boundary does
 nothing.
 
-Only saved pads with at least one effective button participate. Buttons inherited
-from a template count, including buttons that are disabled or dynamically hidden.
-Empty pads are skipped. The optional **Excluded Pads** field accepts comma-separated,
-1-based pad numbers such as `2,5,8`; duplicates are removed and invalid or
-out-of-range entries are ignored.
+Only saved pads with at least one effective button or a full-screen tap action participate.
+Buttons inherited from a template count, including buttons that are disabled or dynamically
+hidden. Full-screen actions remain local to their own pad. Empty pads are skipped. The
+optional **Excluded Pads** field accepts comma-separated, 1-based pad numbers such as
+`2,5,8`; duplicates are removed and invalid or out-of-range entries are ignored.
 
 For directional navigation, assign **Navigate Pad Sequence → Previous** to the left swipe and
 **Navigate Pad Sequence → Next** to the right swipe, with Wrap enabled on both. Existing swipe
@@ -554,6 +581,8 @@ Buttons use the device-level beep patterns configured on the Home page. To play 
 
 **Behavior notes:**
 - Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
+- A configured full-screen action list takes precedence over normal button and widget taps.
+  Clearing the list restores their normal interaction.
 - If any action in the sequence is a **Play Beep** or **Play Sound** action, the device-level feedback beep is automatically suppressed.
 - When multiple actions are configured and one of them navigates to a different screen, any subsequent actions in the sequence still execute safely. The last navigation wins (the user sees the final target screen).
 - Swipe gestures use the device-level tap beep with the same suppression logic.

@@ -3,6 +3,7 @@
 
 #if HAS_DISPLAY
 
+#include "action_list.h"
 #include "action_parse.h"
 #include "button_defaults.h"
 #include "fs_health.h"
@@ -328,7 +329,8 @@ bool pad_config_init() {
                 memset(cfg, 0, sizeof(PadConfig));
                 if (pad_config_load_from_flash(i, cfg)) {
                     g_cache[i] = cfg;
-                    publish_eligibility(i, cfg->button_count > 0);
+                    publish_eligibility(i, cfg->button_count > 0 ||
+                                           cfg->pad_action_count > 0);
                     any_loaded = true;
                     LOGD(TAG, "Cached page %u", i);
                 } else {
@@ -534,6 +536,11 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     if (out->cols > MAX_GRID_COLS) out->cols = MAX_GRID_COLS;
     if (out->rows < 1) out->rows = 1;
     if (out->rows > MAX_GRID_ROWS) out->rows = MAX_GRID_ROWS;
+
+    // Full-screen actions are deliberately parsed before template buttons are
+    // merged so template_pad contributes only buttons and named bindings.
+    out->pad_action_count = action_list_parse(doc["pad_actions"], out->pad_actions,
+                                              MAX_BUTTON_ACTIONS, true);
 
     // Use device-level button defaults for cascading to buttons
 #if HAS_DISPLAY

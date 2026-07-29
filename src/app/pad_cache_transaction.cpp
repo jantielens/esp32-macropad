@@ -16,7 +16,8 @@ PadCacheRefreshResult pad_cache_refresh(PadConfig** slot,
     if (load(page, replacement)) {
         PadConfig* old = *slot;
         *slot = replacement;
-        publish(page, replacement->button_count > 0);
+        publish(page, replacement->button_count > 0 ||
+                  replacement->pad_action_count > 0);
         free(old);
         return PadCacheRefreshResult::Replaced;
     }

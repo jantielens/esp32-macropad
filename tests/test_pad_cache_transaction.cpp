@@ -32,6 +32,12 @@ static bool load_nonempty(uint8_t, PadConfig* config) {
     return true;
 }
 
+static bool load_actions_only(uint8_t, PadConfig* config) {
+    load_count++;
+    config->pad_action_count = 1;
+    return true;
+}
+
 static void publish_eligibility(uint8_t page, bool eligible) {
     publish_count++;
     uint32_t bit = (uint32_t)1U << page;
@@ -85,9 +91,30 @@ static void test_successful_replacement_commits_pointer_and_eligibility() {
     free(slot);
 }
 
+static void test_actions_only_pad_is_eligible() {
+    PadConfig* slot = (PadConfig*)calloc(1, sizeof(PadConfig));
+    assert(slot);
+    eligibility_mask = 0;
+    publish_count = 0;
+    primary_allocation_count = 0;
+    fallback_allocation_count = 0;
+    load_count = 0;
+
+    PadCacheRefreshResult result = pad_cache_refresh(
+        &slot, 5, allocate_config, fail_fallback_allocation,
+        load_actions_only, publish_eligibility);
+
+    assert(result == PadCacheRefreshResult::Replaced);
+    assert((eligibility_mask & ((uint32_t)1U << 5)) != 0);
+    assert(publish_count == 1);
+    assert(load_count == 1);
+    free(slot);
+}
+
 int main() {
     test_failed_allocation_retains_existing_state();
     test_successful_replacement_commits_pointer_and_eligibility();
+    test_actions_only_pad_is_eligible();
     puts("pad_cache_transaction: PASS");
     return 0;
 }

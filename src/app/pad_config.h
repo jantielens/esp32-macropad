@@ -415,6 +415,11 @@ struct PadConfig {
     uint8_t binding_count;
     PadBinding bindings[PAD_MAX_BINDINGS];
 
+    // Full-screen pad actions. These remain local to this pad and are not
+    // inherited from template_pad.
+    ButtonAction pad_actions[MAX_BUTTON_ACTIONS];
+    uint8_t pad_action_count;
+
     uint8_t button_count;
     ScreenButtonConfig buttons[MAX_PAD_BUTTONS];
 };
@@ -462,7 +467,8 @@ void pad_config_rebuild_all_caches();
 // to detect config changes and rebuild tiles.
 uint32_t pad_config_get_generation();
 
-// Atomic snapshot of configured pads with at least one post-template button.
+// Atomic snapshot of configured pads with at least one post-template button or
+// an effective full-screen pad action.
 uint32_t pad_config_get_eligible_mask();
 
 #ifdef __cplusplus

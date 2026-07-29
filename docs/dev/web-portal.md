@@ -1062,11 +1062,26 @@ while malformed and out-of-range tokens are ignored. Parsed firmware reads emit
 the same canonical form.
 
 Cycle eligibility comes from an atomic 32-bit snapshot owned by `pad_config`.
-Each bit reflects a successfully parsed cache entry whose post-template
-`button_count` is greater than zero. Cache replacement publishes that entry's
-bit before the configuration generation changes. Dispatch reads only this
-snapshot; it does not scan cache pointers, copy pad configurations, or access
-persistent storage from the display task.
+Each bit reflects a successfully parsed cache entry with a post-template
+`button_count` greater than zero or one or more local `pad_actions`. Cache
+replacement publishes that entry's bit before the configuration generation
+changes. Dispatch reads only this snapshot; it does not scan cache pointers,
+copy pad configurations, or access persistent storage from the display task.
+
+#### Full-screen pad actions
+
+Pad JSON can include a local `pad_actions` array containing up to three flat
+`ButtonAction` objects. The portal exposes these below Pad Bindings as
+**Full-Screen Tap Actions**, using the shared action editor. A nonempty list
+creates a transparent full-pad input layer: normal taps dispatch the ordered
+list, swipes retain their configured behavior, and long-presses do not dispatch
+the list. The field is deliberately excluded from `template_pad` inheritance.
+
+The save API preserves an omitted `pad_actions` field. An empty array explicitly
+clears the list. Pad validation rejects non-array values, more than three
+entries, entries without `type`, unknown action types, and malformed
+action-specific payloads. The literal `"none"` type is accepted for compatibility
+but is removed during parsing and has no runtime effect.
 
 ---
 

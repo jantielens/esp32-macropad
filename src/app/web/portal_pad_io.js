@@ -127,6 +127,7 @@ function padCopyPad() {
         bg_color: padGetBindableColor('pad-edit-page-bg-color') || '#000000',
         buttons: padState.buttons.map(b => Object.assign({}, b)),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
+        padActions: padBuildLevelActions().map(a => Object.assign({}, a)),
         buttonDefaults: Object.assign({}, padState.buttonDefaults),
         templatePad: padState.templatePad,
     };
@@ -150,6 +151,7 @@ function padPastePad() {
 
     padState.bindings = padState.padClipboard.bindings ? padState.padClipboard.bindings.map(b => Object.assign({}, b)) : [];
     padRenderBindings();
+    padLoadLevelActions(padState.padClipboard.padActions);
 
     // Paste button defaults
     padLoadButtonDefaults(padState.padClipboard.buttonDefaults || {});
@@ -190,6 +192,8 @@ function padExportPad() {
         var bd = padBindingsToDict(padState.bindings);
         if (bd) payload.bindings = bd;
     }
+    const padActions = padBuildLevelActions();
+    if (padActions.length > 0) payload.pad_actions = padActions;
     if (padState.templatePad >= 0) {
         payload.template_pad = padState.templatePad;
     }
@@ -232,6 +236,7 @@ async function padImportPad(evt) {
 
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
+        padLoadLevelActions(json.pad_actions);
 
         // Load template pad (clear if it would reference self)
         padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null &&
@@ -366,6 +371,8 @@ async function deviceImportConfig(evt) {
                 padState.cols = padJson.cols || 3;
                 padState.rows = padJson.rows || 2;
                 padState.buttons = (padJson.buttons || []).map(b => Object.assign({}, b));
+                padState.bindings = padBindingsFromJson(padJson.bindings);
+                padLoadLevelActions(padJson.pad_actions);
                 document.getElementById('pad-page-select').value = i;
                 document.getElementById('pad-cols').value = padState.cols;
                 document.getElementById('pad-rows').value = padState.rows;
@@ -416,6 +423,7 @@ async function padDeletePage() {
         padSetBindableColor('pad-edit-page-bg-color', '#000000');
         padState.bindings = [];
         padRenderBindings();
+        padLoadLevelActions([]);
         padUpdateDropdownLabel(padState.page, '');
         padRenderGrid();
     } catch (err) {
