@@ -155,6 +155,16 @@ echo "=== Running unit tests: widget_common ==="
 ./tests/bin/test_widget_common
 echo
 
+echo "=== Building unit tests: image_rgba_source ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_image_rgba_source.cpp \
+    -o tests/bin/test_image_rgba_source
+
+echo "=== Running unit tests: image_rgba_source ==="
+./tests/bin/test_image_rgba_source
+echo
+
 echo "=== Building unit tests: minimp3_scratch ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \

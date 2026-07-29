@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **PNG button backgrounds render correctly on first load and refresh (#57)**: LVGL's bundled PNG decoder returns an owned draw buffer rather than a packed pixel pointer. The image-fetch decoder now reads RGBA pixels from that buffer using its validated row stride and releases it through LVGL on every success and error path, preventing garbage pixels, horizontal bands, out-of-bounds reads, and leaked pixel storage. Alpha remains intentionally discarded when converting backgrounds to RGB565.
 * **Home Assistant history requests now stay aligned for arbitrary sparkline intervals** — point intervals that were not an exact number of seconds (for example, 24 hours divided across 255 points) were truncated before reconstructing the Recorder request timestamps. The tiny per-point error accumulated across the Unix epoch and could shift the requested window by weeks, producing repeated "no statistics in window" responses.
 * **Sparkline auto-scaling no longer breaks on gaps** — empty slots were included in the min/max computation, which could collapse or distort the Y-axis range. Non-finite slots are now skipped.
 * **The first sample in a sparkline stream is no longer written to the wrong slot**, which caused a spurious point at the right edge of a freshly created chart.
