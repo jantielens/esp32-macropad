@@ -127,12 +127,12 @@ protected:
     virtual const char* getLogTag() const = 0;
     virtual MipiDsiTimingConfig getTimingConfig() const = 0;
 
-    // Fill both DPI framebuffers with a solid RGB565 color and flush the PSRAM
+    // Fill the DPI framebuffer with a solid RGB565 color and flush the PSRAM
     // cache so the ongoing DPI scanout reads the new content. memset-based, so
     // only byte-uniform colors are exact (0x0000 black, 0xFFFF white).
     void fillFramebuffers(uint16_t color);
 
-    // Zero both DPI framebuffers and flush PSRAM cache. Used by displaySleep()
+    // Zero the DPI framebuffer and flush PSRAM cache. Used by displaySleep()
     // so the scanout (if it ever resumes) reads black, not stale UI content.
     void blankFramebuffers();
 

@@ -640,6 +640,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/health_binding.cpp
   - src/app/list_binding.cpp
   - src/app/mcp_components.cpp
+  - src/app/mcp_device_identity.cpp
+  - src/app/mcp_device_identity.h
   - src/app/mcp_press_button.cpp
   - src/app/mcp_press_button.h
   - src/app/mcp_tool_registry.cpp

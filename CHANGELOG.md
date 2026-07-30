@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **MCP physical-device write assertions (#61)**: the new read-only `get_identity` tool returns the application SoC's immutable factory-MAC identifier together with the configured/fallback name, hostname, IP, board, and device class. MCP initialization identifies the connected device first. Authoring, destructive, and persistent configuration writes now require an exact `expected_device_id` assertion and reject missing, malformed, or mismatched values before dispatch. Tool schemas advertise the requirement centrally, successful protected writes return only the confirmed device ID, and the MCP guide documents identity-first aliases because client-generated outer namespaces are not physical identity.
 
+### Fixed
+
+* **jc1060p470c MIPI-DSI now uses continuous high-speed signaling**: the JD9165 driver left `disable_lp` at `false`, unlike the ST7703 panel where continuous HS mode measured faster and removed visible flashes. It is now `true` for consistency. Hardware A/B on jc1060p470c measured the two settings as FPS-neutral; this does not by itself resolve the intermittent full-screen cyan frames on that panel, which are still under investigation.
+* **Reclaimed a wasted DPI framebuffer on every ESP32-P4 MIPI-DSI board**: the panel was configured with `num_fbs = 2` on the assumption that ESP-IDF ping-pongs between the two buffers. It does not — it only advances the framebuffer index on the zero-copy path, which requires the caller to pass a pointer that is itself a framebuffer, and the flush always passes the LVGL or PPA-rotated staging buffer. The second framebuffer was allocated and never scanned out, and the tear protection it was believed to provide never existed. Dropping to a single framebuffer frees roughly 1.0 MB of PSRAM on esp32-p4-lcd4b, 0.77 MB on jc4880p433, and 1.2 MB on jc1060p470c, and halves the work done when the screen saver blanks the panel.
+
 ## [1.24.0] - 2026-07-30
 
 ### Added

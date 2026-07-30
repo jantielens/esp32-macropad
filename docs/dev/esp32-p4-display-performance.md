@@ -39,10 +39,11 @@ graph TD
 ```
 
 **Our driver** (`st7703_dsi_driver.cpp` — direct ESP-IDF, bypassing Arduino_GFX):
-- Calls `esp_lcd_new_panel_dpi()` with `num_fbs = 2` (double-buffered DPI framebuffer)
+- Calls `esp_lcd_new_panel_dpi()` with `num_fbs = 1` (single DPI framebuffer)
 - Sets `.flags.use_dma2d = true` and **`.flags.disable_lp = true`** (see §6)
-- Framebuffers allocated in PSRAM by ESP-IDF internally (~1 MB each for 720×720 RGB565; ~2 MB total)
-- IDF ping-pongs between the two FBs so `draw_bitmap` writes the back buffer while DSI scans the front — eliminates the tear/flicker window inherent to single-FB partial writes
+- Framebuffer allocated in PSRAM by ESP-IDF internally (~1 MB for 720×720 RGB565)
+- Partial flushes are DMA2D-copied into the framebuffer while the DSI scans it out, so a
+  narrow tear window exists by design (see §4 for why a second FB does not close it)
 
 **Pixel copy path** (current — DMA2D, since LVGL v9 upgrade):
 - `pushColors()` calls `esp_lcd_panel_draw_bitmap(panel_handle, x1, y1, x2, y2, data)`
@@ -219,14 +220,23 @@ Note: jc1060p470c uses the same `* 80` row count (was `* 120` historically) to k
 per-flush DMA bursts under ~96 KB and reduce PSRAM bandwidth contention with the
 DPI scanout and image-fetch task on the largest P4 panel (1024×600).
 
-### ✅ Dual DPI framebuffer (APPLIED — flicker mitigation)
+### ❌ Dual DPI framebuffer (REVERTED — never actually took effect)
 ```c
-.num_fbs = 2,  // in esp_lcd_dpi_panel_config_t
+.num_fbs = 1,  // in esp_lcd_dpi_panel_config_t (was 2)
 ```
-ESP-IDF allocates two PSRAM framebuffers and ping-pongs between them. `draw_bitmap`
-writes the back FB while DSI scans the front, eliminating the tear/flicker window
-that appeared when image-URL or MJPEG widgets updated mid-scanout. Memory cost
-+W×H×2 per board, easily absorbed by 32 MB PSRAM.
+`num_fbs = 2` was added as a tear/flicker mitigation on the assumption that ESP-IDF
+ping-pongs between the two framebuffers. Reading `esp_lcd_panel_dpi.c` shows it does
+not: `dpi_panel_draw_bitmap()` only advances `cur_fb_index` on its zero-copy path,
+which requires the caller to hand it a pointer that *is* one of the framebuffers.
+Our flush always passes the LVGL (or PPA-rotated) staging buffer, so DMA2D copies
+into the framebuffer the panel is currently scanning out and the index never moves.
+The second framebuffer was allocated and never read — W×H×2 bytes of PSRAM for no
+benefit (~1.0 MB on esp32-p4-lcd4b, ~0.77 MB on jc4880p433, ~1.2 MB on jc1060p470c).
+
+Real double buffering would require LVGL to render directly into the framebuffers
+(`LV_DISPLAY_RENDER_MODE_DIRECT` or `_FULL` with both FBs as draw buffers) so the
+flush can pass a framebuffer pointer and trigger the swap. That trades partial
+refresh for full-frame redraws, so it is a throughput decision, not a free win.
 
 ### ❌ Enable double buffering (REJECTED — v8 testing)
 ```cpp

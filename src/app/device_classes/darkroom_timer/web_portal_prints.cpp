@@ -61,7 +61,7 @@ static void restore_display(uint8_t saved) {
     if (displayManager && displayManager->getDriver()) {
         displayManager->lock();
         displayManager->getDriver()->displayWake();
-        // displaySleep() zeroes both DPI framebuffers, but LVGL's dirty-area
+        // displaySleep() zeroes the DPI framebuffer, but LVGL's dirty-area
         // tracking still believes the screen is painted, so it would only
         // redraw self-invalidating widgets — leaving the rest black until the
         // next navigation. Force a full-screen invalidate so the entire UI
