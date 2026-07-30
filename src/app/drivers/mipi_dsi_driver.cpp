@@ -42,7 +42,8 @@ MipiDsiDriver::MipiDsiDriver()
       currentBrightness(100),
       displayWidth(DISPLAY_WIDTH), displayHeight(DISPLAY_HEIGHT), displayRotation(DISPLAY_ROTATION),
       backlightOn(false), flushX(0), flushY(0), flushW(0), flushH(0), lvglDisplay(nullptr),
-      physX(0), physY(0), physW(0), physH(0)
+      physX(0), physY(0), physW(0), physH(0),
+      drawErr(ESP_OK), drawErrCount(0), lastReportedDrawErrCount(0)
 {
 }
 
@@ -306,11 +307,24 @@ bool onPpaDone(ppa_client_handle_t client,
     // Issue DMA2D copy of rotated buffer to framebuffer.
     // g_displayFlushBusy was already set at the top of pushColors() and
     // remains true until onColorTransDone clears it.
-    esp_lcd_panel_draw_bitmap(driver->panel_handle,
-                              driver->physX, driver->physY,
-                              driver->physX + driver->physW,
-                              driver->physY + driver->physH,
-                              driver->rotBuffer);
+    esp_err_t err = esp_lcd_panel_draw_bitmap(driver->panel_handle,
+                                              driver->physX, driver->physY,
+                                              driver->physX + driver->physW,
+                                              driver->physY + driver->physH,
+                                              driver->rotBuffer);
+    if (err != ESP_OK) {
+        // draw_bitmap returns ESP_ERR_INVALID_STATE when a previous DMA2D copy
+        // is still in flight. In that case no completion callback ever fires,
+        // so onColorTransDone would never run and LVGL would wait forever.
+        // Release it here instead. This runs in ISR context, so record the
+        // error for pushColors() to log from task context rather than
+        // formatting a message here.
+        driver->drawErr = err;
+        driver->drawErrCount++;
+        g_displayFlushBusy = false;
+        lv_display_flush_ready(driver->lvglDisplay);
+        return false;
+    }
     // Note: DMA2D completion is handled by onColorTransDone → flush_ready
     return false;
 }
@@ -320,6 +334,14 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
         return;
     }
 
+    // Report any draw_bitmap failure recorded by onPpaDone (ISR context can't
+    // log). Drained here so a persistent fault is visible in the serial log.
+    if (drawErrCount != lastReportedDrawErrCount) {
+        LOGE(getLogTag(), "draw_bitmap failed in PPA callback: 0x%x (%lu total)",
+             (int)drawErr, (unsigned long)drawErrCount);
+        lastReportedDrawErrCount = drawErrCount;
+    }
+
     // Mark flush in-flight for the entire duration of the push, covering both
     // the non-rotated direct DMA2D path and the rotated PPA→DMA2D chain.
     // Cleared by onColorTransDone ISR after the final DMA2D copy completes.
@@ -327,10 +349,18 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
 
     if (displayRotation == 0 || !rotBuffer || !ppaClient) {
         // No rotation — direct DMA2D async copy
-        esp_lcd_panel_draw_bitmap(panel_handle,
-                                  flushX, flushY,
-                                  flushX + flushW, flushY + flushH,
-                                  data);
+        esp_err_t err = esp_lcd_panel_draw_bitmap(panel_handle,
+                                                  flushX, flushY,
+                                                  flushX + flushW, flushY + flushH,
+                                                  data);
+        if (err != ESP_OK) {
+            // ESP_ERR_INVALID_STATE means a previous DMA2D copy is still in
+            // flight; no completion callback will fire, so release LVGL here
+            // or it waits on flush_ready forever.
+            LOGE(getLogTag(), "draw_bitmap failed: 0x%x", (int)err);
+            g_displayFlushBusy = false;
+            lv_display_flush_ready(lvglDisplay);
+        }
         return;
     }
 
@@ -406,7 +436,10 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
     esp_err_t err = ppa_do_scale_rotate_mirror(ppaClient, &srm);
     if (err != ESP_OK) {
         LOGE(getLogTag(), "PPA rotate failed: 0x%x", err);
-        // Signal flush_ready so LVGL doesn't stall
+        // Signal flush_ready so LVGL doesn't stall. onColorTransDone will never
+        // run for this flush, so clear the in-flight flag here too — otherwise
+        // displayDriverIsFlushBusy() stays true forever and stalls pad polling.
+        g_displayFlushBusy = false;
         lv_display_flush_ready(lvglDisplay);
         return;
     }

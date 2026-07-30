@@ -121,6 +121,12 @@ protected:
     int16_t physX, physY;
     uint16_t physW, physH;
 
+    // draw_bitmap failures detected inside onPpaDone(), which runs in ISR
+    // context and must not log. pushColors() drains these from task context.
+    volatile esp_err_t drawErr;
+    volatile uint32_t drawErrCount;
+    uint32_t lastReportedDrawErrCount;
+
     // Subclass must provide these
     virtual const mipi_dsi_init_cmd_t* getInitCommands() const = 0;
     virtual size_t getInitCommandCount() const = 0;
