@@ -223,6 +223,34 @@ static void test_countdown_target_lifecycle() {
     assert(timer_get_target_seconds(4) == 0);
 }
 
+static void test_basic_control_outcomes() {
+    timer_engine_init();
+    g_now = 0;
+
+    assert(!timer_stop(0));
+    assert(!timer_pause(4));
+    assert(!timer_resume(0));
+    assert(!timer_reset(4));
+
+    // Valid state no-ops are accepted by a ready engine.
+    assert(timer_stop(1));
+    assert(timer_pause(1));
+    assert(timer_resume(1));
+    assert(timer_reset(1));
+    assert(timer_get_state(1) == TIMER_STOPPED);
+
+    assert(timer_configure_and_start(1, TIMER_MODE_UP, 0, nullptr, 0));
+    g_now = 100;
+    assert(timer_pause(1));
+    assert(timer_get_state(1) == TIMER_PAUSED);
+    assert(timer_resume(1));
+    assert(timer_get_state(1) == TIMER_RUNNING);
+    assert(timer_reset(1));
+    assert(timer_get_ms(1) == 0);
+    assert(timer_stop(1));
+    assert(timer_get_state(1) == TIMER_STOPPED);
+}
+
 static void test_run_entry_point() {
     timer_engine_init();
     char error[96] = {};
@@ -306,12 +334,40 @@ static void test_mutex_allocation_failure() {
     timer_test_mutex_fail_on_call = 1;
     timer_engine_init();
     assert(!timer_configure_and_start(1, TIMER_MODE_UP, 0, nullptr, 0));
+    const char* controls[] = {"stop", "pause", "resume", "reset"};
+    for (const char* control : controls) {
+        char error[96] = {};
+        assert(!timer_command_run(payload(1, control), error, sizeof(error)));
+        assert(error[0] != '\0');
+    }
+    assert(!timer_stop(1));
+    assert(!timer_pause(1));
+    assert(!timer_resume(1));
+    assert(!timer_reset(1));
     assert(timer_get_state(1) == TIMER_STOPPED);
     assert(timer_get_ms(1) == 0);
     timer_engine_tick();
 }
 
+static void test_pre_initialization_controls() {
+    const char* controls[] = {"stop", "pause", "resume", "reset"};
+    for (const char* control : controls) {
+        char error[96] = {};
+        assert(!timer_command_run(payload(1, control), error, sizeof(error)));
+        assert(error[0] != '\0');
+    }
+    assert(!timer_stop(1));
+    assert(!timer_pause(1));
+    assert(!timer_resume(1));
+    assert(!timer_reset(1));
+}
+
 int main(int argc, char** argv) {
+    if (argc > 1 && strcmp(argv[1], "pre-init-controls") == 0) {
+        test_pre_initialization_controls();
+        std::puts("timer_commands pre-init-controls: PASS");
+        return 0;
+    }
     if (argc > 1 && strcmp(argv[1], "mutex-failure") == 0) {
         test_mutex_allocation_failure();
         std::puts("timer_commands mutex-failure: PASS");
@@ -321,6 +377,7 @@ int main(int argc, char** argv) {
     test_start_and_toggle_states();
     test_set_adjust_and_expiry();
     test_countdown_target_lifecycle();
+    test_basic_control_outcomes();
     test_run_entry_point();
     test_concurrent_engine_access();
     test_mcp_adapter_and_execution();

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-07-30
+
 ### Added
 
 * **Interactive Screen Preview controls**: touch-display boards can now queue a normal on-screen tap by clicking a captured portal screenshot. The preview maps only the displayed image area to native display pixels, refreshes automatically after selecting a screen or queuing a tap, and keeps its screen selector synchronized with navigation from the device, pads, MQTT, or MCP. The new control-gated MCP `tap_screen` tool supports the same workflow. A successful request means queued, not delivered; drag, swipe, long press, and multi-touch remain unsupported.
@@ -32,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Device configuration imports preserve each pad's template and actions**: full-device import now restores the imported pad's template selection and pad-level action list before saving it. Pad saves use an immutable snapshot while their asynchronous requests run, process sequentially, report the pad that failed, and reload the editor once only after every checked request completes. This prevents imports from saving a later pad's layout, template, actions, or icons into an earlier pad.
+* **Unavailable Timer controls now fail instead of reporting success**: Stop, Pause, Resume, and Reset propagate the Timer engine's result through shared action handling and MCP controls. A valid timer ID therefore returns a clear error before the engine is initialized or when its mutex cannot be created, rather than claiming that a control operation succeeded.
 * **Accepted Home Assistant service actions are delivered deterministically**: a fixed three-entry FIFO replaces the overwrite-prone single pending slot, so rapid button presses retain their order or fail explicitly when capacity is exhausted. Mixed Home Assistant and local actions preserve their configured order, every tracked execution reaches a terminal result, and both connection setup and response waits use a four-second timeout.
 * **Home Assistant service actions now reject invalid authoring before a pad is saved**: the shared MCP and web portal validator requires a domain-qualified entity ID, a bare service name, and an optional JSON object encoded as a string. Qualified services such as `media_player.media_play_pause` return a correction using the bare service segment. Service storage now accepts names up to 63 characters, including `media_previous_track`, without truncation. The MCP capability manifest documents the same contract and includes a valid media-player example.
 * **PNG button backgrounds render correctly on first load and refresh (#57)**: LVGL's bundled PNG decoder returns an owned draw buffer rather than a packed pixel pointer. The image-fetch decoder now reads RGBA pixels from that buffer using its validated row stride and releases it through LVGL on every success and error path, preventing garbage pixels, horizontal bands, out-of-bounds reads, and leaked pixel storage. Alpha remains intentionally discarded when converting backgrounds to RGB565.

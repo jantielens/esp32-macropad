@@ -156,10 +156,26 @@ bool timer_command_execute(const PreparedTimerCommand& command,
                 return timer_error(error, error_len, "timer state changed before toggle");
             }
             return true;
-        case PREPARED_TIMER_STOP:   timer_stop(command.timer_id); return true;
-        case PREPARED_TIMER_PAUSE:  timer_pause(command.timer_id); return true;
-        case PREPARED_TIMER_RESUME: timer_resume(command.timer_id); return true;
-        case PREPARED_TIMER_RESET:  timer_reset(command.timer_id); return true;
+        case PREPARED_TIMER_STOP:
+            if (!timer_stop(command.timer_id)) {
+                return timer_error(error, error_len, "timer control rejected");
+            }
+            return true;
+        case PREPARED_TIMER_PAUSE:
+            if (!timer_pause(command.timer_id)) {
+                return timer_error(error, error_len, "timer control rejected");
+            }
+            return true;
+        case PREPARED_TIMER_RESUME:
+            if (!timer_resume(command.timer_id)) {
+                return timer_error(error, error_len, "timer control rejected");
+            }
+            return true;
+        case PREPARED_TIMER_RESET:
+            if (!timer_reset(command.timer_id)) {
+                return timer_error(error, error_len, "timer control rejected");
+            }
+            return true;
         case PREPARED_TIMER_SET:
             if (!timer_set_countdown_ms(command.timer_id, command.value_ms)) {
                 return timer_error(error, error_len, "set requires countdown mode");

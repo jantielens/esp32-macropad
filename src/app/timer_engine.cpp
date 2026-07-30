@@ -146,18 +146,19 @@ bool timer_toggle_prepared(uint8_t id, TimerState expected_state, TimerMode mode
     return true;
 }
 
-void timer_stop(uint8_t id) {
-    if (!s_timer_ready || !valid_id(id)) return;
+bool timer_stop(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return false;
     timer_lock();
     auto& t = get(id);
     t.accumulated_ms = 0;
     t.state = TIMER_STOPPED;
     t.expire_fired = false;
     timer_unlock();
+    return true;
 }
 
-void timer_pause(uint8_t id) {
-    if (!s_timer_ready || !valid_id(id)) return;
+bool timer_pause(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return false;
     timer_lock();
     auto& t = get(id);
     if (t.state == TIMER_RUNNING) {
@@ -165,10 +166,11 @@ void timer_pause(uint8_t id) {
         t.state = TIMER_PAUSED;
     }
     timer_unlock();
+    return true;
 }
 
-void timer_resume(uint8_t id) {
-    if (!s_timer_ready || !valid_id(id)) return;
+bool timer_resume(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return false;
     timer_lock();
     auto& t = get(id);
     if (t.state == TIMER_PAUSED) {
@@ -176,10 +178,11 @@ void timer_resume(uint8_t id) {
         t.state = TIMER_RUNNING;
     }
     timer_unlock();
+    return true;
 }
 
-void timer_reset(uint8_t id) {
-    if (!s_timer_ready || !valid_id(id)) return;
+bool timer_reset(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return false;
     timer_lock();
     auto& t = get(id);
     t.accumulated_ms = 0;
@@ -188,6 +191,7 @@ void timer_reset(uint8_t id) {
         t.start_ms = millis();
     }
     timer_unlock();
+    return true;
 }
 
 bool timer_set_countdown_ms(uint8_t id, uint32_t countdown_ms) {

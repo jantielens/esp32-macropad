@@ -338,6 +338,7 @@ g++ -std=c++17 -Wall -Wextra -Werror \
     -o tests/bin/test_timer_commands -lm -pthread
 
 echo "=== Running unit tests: timer_commands ==="
+./tests/bin/test_timer_commands pre-init-controls
 ./tests/bin/test_timer_commands mutex-failure
 ./tests/bin/test_timer_commands
 echo
@@ -368,6 +369,7 @@ node tests/test_timer_action_editor.js
 node tests/test_portal_action_editor_cycle.js
 node tests/test_portal_timer_binding.js
 node tests/test_portal_pad_dialog_transaction.js
+node tests/test_portal_pad_import.js
 python3 tests/test_timer_mcp_integration.py
 node --check src/app/web/portal_action_editor.js
 node --check src/app/web/portal_binding_validator.js

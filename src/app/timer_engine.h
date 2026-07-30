@@ -34,10 +34,10 @@ bool timer_configure_and_start(uint8_t id, TimerMode mode, uint32_t countdown_ms
 bool timer_toggle_prepared(uint8_t id, TimerState expected_state, TimerMode mode,
                            uint32_t countdown_ms, const ButtonAction* expire_actions,
                            uint8_t expire_action_count);
-void timer_stop(uint8_t id);      // stop and reset to 0 (up) or preset (down)
-void timer_pause(uint8_t id);
-void timer_resume(uint8_t id);
-void timer_reset(uint8_t id);     // reset without changing running state
+bool timer_stop(uint8_t id);      // stop and reset to 0 (up) or preset (down)
+bool timer_pause(uint8_t id);
+bool timer_resume(uint8_t id);
+bool timer_reset(uint8_t id);     // reset without changing running state
 
 // Replace a countdown preset without changing state or elapsed time.
 // Returns false for invalid IDs or count-up timers.

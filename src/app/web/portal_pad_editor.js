@@ -608,12 +608,25 @@ async function padLoadPage(page) {
     }
 }
 
-async function padSavePage() {
+function padCloneJson(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function padBuildSaveContext() {
+    const snapshot = {
+        page: padState.page,
+        cols: padState.cols,
+        rows: padState.rows,
+        rawJson: padCloneJson(padState.rawJson || {}),
+        buttons: padCloneJson(padState.buttons || []),
+        bindings: padCloneJson(padState.bindings || []),
+    };
+
     // Merge-on-save: start with rawJson as base, overlay our changes
-    const payload = padState.rawJson ? Object.assign({}, padState.rawJson) : {};
+    const payload = snapshot.rawJson;
     payload.layout = payload.layout || 'grid';
-    payload.cols = padState.cols;
-    payload.rows = padState.rows;
+    payload.cols = snapshot.cols;
+    payload.rows = snapshot.rows;
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
     else delete payload.name;
@@ -632,20 +645,19 @@ async function padSavePage() {
     delete payload.button_defaults;
 
     // Pad bindings → dict (skip entries with invalid names)
-    if (padState.bindings && padState.bindings.length > 0) {
-        var badNames = padState.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
+    if (snapshot.bindings.length > 0) {
+        var badNames = snapshot.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
         if (badNames.length > 0) {
-            alert('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.');
-            return;
+            throw new Error('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.');
         }
-        var bd = padBindingsToDict(padState.bindings);
+        var bd = padBindingsToDict(snapshot.bindings);
         if (bd) payload.bindings = bd;
         else delete payload.bindings;
     } else {
         delete payload.bindings;
     }
 
-    var padActions = padBuildLevelActions();
+    var padActions = padCloneJson(padBuildLevelActions());
     if (padActions.length > 0) payload.pad_actions = padActions;
     else delete payload.pad_actions;
 
@@ -653,8 +665,7 @@ async function padSavePage() {
     if (typeof bindingValidatePadBindings === 'function') {
         var bvPad = bindingValidatePadBindings();
         if (!bvPad.valid) {
-            showMessage(bvPad.count + ' pad binding error' + (bvPad.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
-            return;
+            throw new Error(bvPad.count + ' pad binding error' + (bvPad.count > 1 ? 's' : '') + ' — check highlighted fields');
         }
     }
 
@@ -662,8 +673,7 @@ async function padSavePage() {
     if (typeof bindingValidateDefaults === 'function') {
         var bvDef = bindingValidateDefaults();
         if (!bvDef.valid) {
-            showMessage(bvDef.count + ' button defaults error' + (bvDef.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
-            return;
+            throw new Error(bvDef.count + ' button defaults error' + (bvDef.count > 1 ? 's' : '') + ' — check highlighted fields');
         }
     }
 
@@ -675,7 +685,7 @@ async function padSavePage() {
         delete payload.template_pad;
     }
 
-    payload.buttons = padState.buttons.map(b => Object.assign({}, b));
+    payload.buttons = snapshot.buttons;
 
     // Convert color ints to hex strings for JSON
     payload.buttons.forEach(b => padColorsToHex(b));
@@ -683,60 +693,85 @@ async function padSavePage() {
     // On boards with DISPLAY_BLANK_ON_SAVE, heavy PSRAM I/O during icon
     // upload causes DMA bus contention → cyan flashes on MIPI-DSI panels.
     // Blank the backlight for the entire save sequence and restore after.
-    const blankOnSave = deviceInfoCache && deviceInfoCache.display_blank_on_save;
+    return {
+        page: snapshot.page,
+        cols: snapshot.cols,
+        rows: snapshot.rows,
+        buttons: snapshot.buttons,
+        name: padName,
+        body: JSON.stringify(payload),
+        blankOnSave: Boolean(deviceInfoCache && deviceInfoCache.display_blank_on_save),
+    };
+}
+
+async function padSetSaveBrightness(brightness) {
+    const response = await fetch('/api/component/display/brightness', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brightness: brightness }),
+    });
+    if (!response.ok) throw new Error('Failed to set display brightness: HTTP ' + response.status);
+}
+
+async function padPersistPage(context) {
     let savedBrightness = 0;
+    let brightnessBlanked = false;
 
     try {
-        if (blankOnSave) {
+        if (context.blankOnSave) {
             const cfgResp = await fetch('/api/config');
-            if (cfgResp.ok) {
-                const cfg = await cfgResp.json();
-                savedBrightness = cfg.backlight_brightness ?? 80;
-            }
-            await fetch('/api/component/display/brightness', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ brightness: 0 }),
-            });
+            if (!cfgResp.ok) throw new Error('Failed to read display brightness: HTTP ' + cfgResp.status);
+            const cfg = await cfgResp.json();
+            savedBrightness = cfg.backlight_brightness ?? 80;
+            await padSetSaveBrightness(0);
+            brightnessBlanked = true;
         }
 
-        await padUploadPageIcons();
+        await padUploadPageIcons(context);
 
-        const resp = await fetch('/api/pad?page=' + padState.page, {
+        const resp = await fetch('/api/pad?page=' + context.page, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: context.body,
         });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
 
-        if (blankOnSave) {
+        if (context.blankOnSave) {
             // Wait for LVGL to rebuild tiles and render into the framebuffer
             await new Promise(r => setTimeout(r, 500));
         }
+    } finally {
+        if (brightnessBlanked) {
+            await padSetSaveBrightness(savedBrightness);
+        }
+    }
+}
 
-        showMessage('Pad ' + (padState.page + 1) + ' saved', 'success');
+async function padSavePage(options) {
+    const bulk = Boolean(options && options.bulk);
+    try {
+        const context = padBuildSaveContext();
+        await padPersistPage(context);
+
+        showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         padClearDirty();
-        padUpdateDropdownLabel(padState.page, document.getElementById('pad-name').value.trim());
+        padUpdateDropdownLabel(context.page, context.name);
 
-        // Refresh deviceInfoCache so target screen dropdowns pick up new pad names
-        await getDeviceInfo(true);
-
-        // Reload to get canonical version from device
-        padLoadPage(padState.page);
+        if (!bulk) {
+            // Refresh deviceInfoCache so target screen dropdowns pick up new pad names.
+            await getDeviceInfo(true);
+            // Reload to get canonical version from device.
+            await padLoadPage(context.page);
+        }
+        return context;
     } catch (err) {
         console.error('padSavePage error:', err);
+        if (bulk) throw err;
         showMessage('Save failed: ' + err.message, 'error');
-    } finally {
-        if (blankOnSave && savedBrightness > 0) {
-            fetch('/api/component/display/brightness', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ brightness: savedBrightness }),
-            }).catch(() => {});
-        }
+        return null;
     }
 }
 
