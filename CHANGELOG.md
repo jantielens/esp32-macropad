@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-07-29
+ms.date: 2026-07-30
 ms.topic: reference
 ---
 
@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+* **MCP physical-device write assertions (#61)**: the new read-only `get_identity` tool returns the application SoC's immutable factory-MAC identifier together with the configured/fallback name, hostname, IP, board, and device class. MCP initialization identifies the connected device first. Authoring, destructive, and persistent configuration writes now require an exact `expected_device_id` assertion and reject missing, malformed, or mismatched values before dispatch. Tool schemas advertise the requirement centrally, successful protected writes return only the confirmed device ID, and the MCP guide documents identity-first aliases because client-generated outer namespaces are not physical identity.
 
 ## [1.24.0] - 2026-07-30
 

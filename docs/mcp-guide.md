@@ -131,6 +131,34 @@ with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote). Pass the token wi
 The same `mcp-remote` bridge works for any stdio-only MCP client (Continue and
 others) — point it at the device URL and pass the `Authorization` header.
 
+## Target the physical device
+
+An MCP client may generate, shorten, or otherwise alter its outer tool namespace.
+That namespace is not a physical device identity and must not be used to select a
+write target. Use a short local alias that you can recognize, then confirm the
+hardware identity through MCP itself.
+
+Start each write-capable session with `get_identity`. Its `device_id` is the
+application SoC's immutable factory MAC, rendered as 12 lowercase hexadecimal
+characters. Before a protected write, copy that value into `expected_device_id`:
+
+```json
+{
+  "expected_device_id": "001122aabbcc",
+  "screen": "pad_0",
+  "position": 0,
+  "button": { "label_center": "Lights" }
+}
+```
+
+Protected tools reject a missing, malformed, or mismatched assertion before they
+run and report the actual `device_id`. This applies to destructive operations,
+pad and device-class authoring, `set_config`, and `set_component_config`.
+For Coffee Scale, `scale_control` requires the assertion only for `tare` and
+`calibrate`; runtime calibration-reference adjustments remain callable normally.
+Successful protected writes return only the confirmed `device_id`, so re-read the
+relevant status/configuration tool to verify the resulting state.
+
 ## What the assistant can do
 
 ```mermaid
@@ -144,6 +172,8 @@ graph LR
 
 **Read tools** (always available once enabled):
 
+- `get_identity` — immutable physical device ID, configured/fallback name,
+  hostname, IP, board, and device class. Call before protected writes.
 - `get_device_status` — firmware version, board, uptime, current screen, WiFi state.
 - `get_health` — heap (internal/PSRAM), CPU, WiFi signal.
 - `list_screens` / `get_current_screen` — available screens and the active one.

@@ -603,6 +603,29 @@ echo "=== Running unit tests: mcp_result_strings ==="
 ./tests/bin/test_mcp_result_strings
 echo
 
+echo "=== Building unit tests: mcp_device_identity ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_MCP=1 \
+    -include tests/Arduino.h -include tests/board_config.h \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_mcp_device_identity.cpp \
+    src/app/mcp_device_identity.cpp \
+    -o tests/bin/test_mcp_device_identity
+
+echo "=== Running unit tests: mcp_device_identity ==="
+./tests/bin/test_mcp_device_identity
+echo
+
+echo "=== Building compile check: mcp_device_identity without MCP ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_MCP=0 \
+    -include tests/board_config.h \
+    -I tests -I src/app \
+    -c src/app/mcp_device_identity.cpp \
+    -o tests/bin/mcp_device_identity_no_mcp.o
+echo
+
 echo "=== Running guard: branding mirror (C++ <-> bash) ==="
 ./tests/test_branding_mirror.sh
 echo

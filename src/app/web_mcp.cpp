@@ -4,6 +4,7 @@
 
 #if HAS_MCP
 
+#include "mcp_device_identity.h"
 #include "mcp_tool_registry.h"
 
 #include "config_manager.h"
@@ -18,6 +19,7 @@
 #include "version.h"
 
 #include <ArduinoJson.h>
+#include <WiFi.h>
 #include <string.h>
 
 #include <esp_random.h>
@@ -343,14 +345,32 @@ static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantCon
     JsonObject caps = result.createNestedObject("capabilities");
     caps.createNestedObject("tools");  // tools capability advertised
 
+    char device_id[13];
+    if (!mcp_device_identity_read(device_id)) {
+        mcp_send_error(request, id, MCP_ERR_INTERNAL, "device identity unavailable");
+        return;
+    }
+    DeviceConfig* cfg = web_portal_get_current_config();
+    const char* name = (cfg && cfg->device_name[0]) ? cfg->device_name
+                                                     : device_class_get_full_name();
+    const char* hostname = WiFi.getHostname() ? WiFi.getHostname() : "";
+    const String ip = WiFi.localIP().toString();
+
     // Server-level guidance surfaced to the model (MCP `instructions`). Gives a
     // board-agnostic orientation to the firmware and the core read -> control
     // tool-chaining so the model understands what the device is and how the
     // tools compose; on display boards it then appends the screenshot-via-browser
     // recipe for visual verification (also mirrored in
     // get_capabilities.visual_inspection).
-    String instructions =
-        "This is an ESP32 device running Macropad firmware (device class: ";
+    String instructions = "Connected to ";
+    instructions += name;
+    instructions += " (";
+    instructions += hostname;
+    instructions += ", ";
+    instructions += ip;
+    instructions += "). Device ID: ";
+    instructions += device_id;
+    instructions += ". This is an ESP32 device running Macropad firmware (device class: ";
     instructions += device_class_get_display_name();
     instructions += "). ";
     // Specialized classes (darkroom, coffee scale, shutter, ...) advertise their
@@ -402,12 +422,17 @@ static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantCon
     result["instructions"] = instructions;
 
     JsonObject info = result.createNestedObject("serverInfo");
-    DeviceConfig* cfg = web_portal_get_current_config();
-    const char* name = (cfg && cfg->device_name[0]) ? cfg->device_name
-                                                     : device_class_get_full_name();
     info["name"] = name;
     info["version"] = FIRMWARE_VERSION;
+    info["device_id"] = device_id;
     web_portal_send_json_sized(request, doc);
+}
+
+static McpIdentityRequirement mcp_identity_requirement(const McpTool* tool,
+                                                        const char* command) {
+    return mcp_device_identity_requirement(tool->read_only, tool->destructive,
+                                           tool->requires_authoring, tool->name,
+                                           command);
 }
 
 static void mcp_append_tool_def(JsonArray tools, const McpTool* t) {
@@ -435,6 +460,23 @@ static void mcp_append_tool_def(JsonArray tools, const McpTool* t) {
     if (!schema_set) {
         JsonObject schema = td.createNestedObject("inputSchema");
         schema["type"] = "object";
+    }
+    const McpIdentityRequirement identity_requirement = mcp_identity_requirement(t, nullptr);
+    if (identity_requirement != MCP_IDENTITY_EXEMPT) {
+        JsonObject schema = td["inputSchema"].as<JsonObject>();
+        JsonObject properties = schema["properties"].as<JsonObject>();
+        if (properties.isNull()) properties = schema.createNestedObject("properties");
+        JsonObject expected = properties.createNestedObject("expected_device_id");
+        expected["type"] = "string";
+        expected["pattern"] = "^[0-9A-Fa-f]{12}$";
+        expected["description"] = identity_requirement == MCP_IDENTITY_REQUIRED
+            ? "Required physical device ID from get_identity."
+            : "Required only when command is tare or calibrate; use get_identity.";
+        if (identity_requirement == MCP_IDENTITY_REQUIRED) {
+            JsonArray required = schema["required"].as<JsonArray>();
+            if (required.isNull()) required = schema.createNestedArray("required");
+            required.add("expected_device_id");
+        }
     }
     // Tool annotations.
     JsonObject ann = td.createNestedObject("annotations");
@@ -499,6 +541,30 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
         for (JsonPairConst kv : inArgs) args[kv.key()] = kv.value();
     }
 
+    const char* command = args["command"] | (const char*)nullptr;
+    const McpIdentityRequirement identity_requirement = mcp_identity_requirement(tool, command);
+    char device_id[13] = {};
+    if (identity_requirement == MCP_IDENTITY_REQUIRED) {
+        if (!mcp_device_identity_read(device_id)) {
+            mcp_send_error(request, id, MCP_ERR_INTERNAL, "device identity unavailable");
+            return;
+        }
+        const char* expected_device_id = args["expected_device_id"] | (const char*)nullptr;
+        const McpIdentityDecision identity_decision = mcp_device_identity_decide(
+            tool->read_only, tool->destructive, tool->requires_authoring, tool->name,
+            command, expected_device_id, device_id);
+        if (identity_decision != MCP_IDENTITY_ALLOW) {
+            String message = identity_decision == MCP_IDENTITY_REJECT_MISSING
+                ? "missing expected_device_id; actual device_id="
+                : identity_decision == MCP_IDENTITY_REJECT_MALFORMED
+                    ? "invalid expected_device_id; actual device_id="
+                    : "expected_device_id mismatch; actual device_id=";
+            message += device_id;
+            mcp_send_error(request, id, MCP_ERR_PARAMS, message.c_str());
+            return;
+        }
+    }
+
     // Result document the handler writes into.
     auto resultDoc = make_psram_json_doc(24576);
     if (!resultDoc || resultDoc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
@@ -524,6 +590,10 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
         mcp_send_error(request, id, MCP_ERR_INTERNAL,
                        "tool result too large; narrow the request");
         return;
+    }
+
+    if (identity_requirement == MCP_IDENTITY_REQUIRED) {
+        mcp_device_identity_normalize_success(toolResult, device_id);
     }
 
     // Wrap the tool result as a single text content item.

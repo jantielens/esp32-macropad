@@ -8,6 +8,7 @@
 // ============================================================================
 
 #include "mcp_tool_registry.h"
+#include "mcp_device_identity.h"
 #include "mcp_tool_util.h"
 #include "mcp_press_button.h"
 #include "web_mcp.h"
@@ -67,6 +68,27 @@ static bool tool_fail(JsonObject& result, String& err, int code, const char* msg
 // ============================================================================
 // Read tools (always available)
 // ============================================================================
+
+static bool tool_get_identity(const JsonObject& args, JsonObject& result, String& err) {
+    (void)args;
+    char device_id[13];
+    if (!mcp_device_identity_read(device_id)) {
+        return tool_fail(result, err, TOOL_ERR_INTERNAL, "device identity unavailable");
+    }
+    DeviceConfig* cfg = web_portal_get_current_config();
+    result["device_id"] = device_id;
+    result["device_name"] = (cfg && cfg->device_name[0])
+        ? String(cfg->device_name) : String(device_class_get_full_name());
+    result["hostname"] = String(WiFi.getHostname() ? WiFi.getHostname() : "");
+    result["ip"] = WiFi.localIP().toString();
+#ifdef BUILD_BOARD_NAME
+    result["board"] = BUILD_BOARD_NAME;
+#else
+    result["board"] = "unknown";
+#endif
+    result["device_class"] = device_class_get_display_name();
+    return true;
+}
 
 static bool tool_get_device_status(const JsonObject& args, JsonObject& result, String& err) {
     (void)args; (void)err;
@@ -645,11 +667,19 @@ static bool tool_system_command(const JsonObject& args, JsonObject& result, Stri
 
 static const McpTool s_tool_get_device_status = {
     "get_device_status",
-    "Get firmware version, board/device-class, uptime, current screen, and WiFi state. Good first call to orient yourself (identity + what kind of device this is) before using other tools.",
+    "Get firmware version, board/device-class, uptime, current screen, and WiFi state. Use get_identity first to confirm the physical write target.",
     "{\"type\":\"object\",\"properties\":{}}",
     tool_get_device_status, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_device_status);
+
+static const McpTool s_tool_get_identity = {
+    "get_identity",
+    "Get the immutable physical device ID plus name, network identity, board, and device class. Call this before protected writes and pass device_id as expected_device_id.",
+    "{\"type\":\"object\",\"properties\":{}}",
+    tool_get_identity, true, false, false
+};
+REGISTER_MCP_TOOL(s_tool_get_identity);
 
 static const McpTool s_tool_get_health = {
     "get_health",
