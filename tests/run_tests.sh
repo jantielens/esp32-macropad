@@ -33,6 +33,28 @@ echo "=== Running unit tests: expr_eval ==="
 ./tests/bin/test_expr_eval
 echo
 
+echo "=== Building unit tests: deferred dispatch slot ==="
+g++ -std=c++17 -Wall -Wextra -Werror -pthread \
+    -I tests -I src/app \
+    tests/test_deferred_dispatch_slot.cpp \
+    -o tests/bin/test_deferred_dispatch_slot
+
+echo "=== Running unit tests: deferred dispatch slot ==="
+./tests/bin/test_deferred_dispatch_slot
+echo
+
+echo "=== Building integration tests: pad resolve request lifetime ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -include tests/pad_resolve_overrides/Arduino.h -include tests/log_manager.h -include tests/board_config.h \
+    -I tests/pad_resolve_overrides -I tests -I src/app -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_pad_resolve_request_lifetime.cpp \
+    src/app/main_loop_bridge.cpp src/app/pad_resolve_request.cpp tests/stubs.cpp \
+    -o tests/bin/test_pad_resolve_request_lifetime
+
+echo "=== Running integration tests: pad resolve request lifetime ==="
+./tests/bin/test_pad_resolve_request_lifetime
+echo
+
 echo "=== Building unit tests: ha_stats_resample ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \

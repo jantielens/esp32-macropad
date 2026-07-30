@@ -40,6 +40,8 @@ bool g_perf_ready = false;
 uint32_t g_perf_window_start_ms = 0;
 uint16_t g_perf_frames_in_window = 0;
 
+DRAM_ATTR static DeferredDispatchSlot<DISPLAY_TASK_DISPATCH_CTX_BYTES> g_display_job;
+
 // Global instance
 DisplayManager* displayManager = nullptr;
 
@@ -52,14 +54,11 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 			#endif
 			padScreens(nullptr), padIds(nullptr), padNames(nullptr),
 			lruCache(nullptr), lruCount(0),
-							lvglTaskHandle(nullptr), lvglTaskAlloc{}, lvglMutex(nullptr),
-					displayJobDone(nullptr), displayJobBusy(false), displayJobPending(false),
-					displayJobDoneFlag(false), displayJobWaiter(false), displayJobExec(nullptr),
-					displayJobCleanup(nullptr),
-					displayJobCtx{}, displayJobCtxLen(0), displayJobOk(false), displayJobMessage{},
+							lvglTaskHandle(nullptr), lvglTaskAlloc{}, lvglMutex(nullptr), lvglStopRequested(false), lvglTaskStopped(false),
 						presentTaskHandle(nullptr), presentTaskAlloc{}, presentSem(nullptr), sharedLvTimerUs(0),
 						screenCount(0), buf(nullptr), buf2(nullptr), flushPending(false), pendingSplashStatusSet(false) {
 				pendingSplashStatus[0] = '\0';
+		displayJobSlot().init();
 		// Instantiate selected display driver
 		#if DISPLAY_DRIVER == DISPLAY_DRIVER_TFT_ESPI
 		driver = new TFT_eSPI_Driver();
@@ -81,7 +80,6 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		
 		// Create mutex for thread-safe LVGL access
 		lvglMutex = xSemaphoreCreateMutex();
-		displayJobDone = xSemaphoreCreateBinary();
 
 		// Allocate pad screens and their ID/name strings dynamically
 		padScreens = new PadScreen*[MAX_PADS];
@@ -115,6 +113,17 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 }
 
 DisplayManager::~DisplayManager() {
+		// Block producers, then leave the final pending completion and cleanup to
+		// the LVGL consumer before tearing down the objects it can access.
+		displayJobSlot().beginShutdown();
+		lvglStopRequested = true;
+		if (!lvglTaskHandle) {
+			lvglTaskStopped = true;
+		}
+		while (!displayJobSlot().shutdown() || !lvglTaskStopped) {
+			vTaskDelay(pdMS_TO_TICKS(1));
+		}
+
 		// Stop present task first (depends on driver, must be deleted before LVGL task)
 		if (presentTaskHandle) {
 				vTaskDelete(presentTaskHandle);
@@ -130,11 +139,6 @@ DisplayManager::~DisplayManager() {
 				vTaskDelete(lvglTaskHandle);
 				lvglTaskHandle = nullptr;
 		}
-		if (displayJobDone) {
-				vSemaphoreDelete(displayJobDone);
-				displayJobDone = nullptr;
-		}
-		
 		if (currentScreen) {
 				currentScreen->hide();
 		}
@@ -178,6 +182,10 @@ DisplayManager::~DisplayManager() {
 				heap_caps_free(buf2);
 				buf2 = nullptr;
 		}
+}
+
+DeferredDispatchSlot<DISPLAY_TASK_DISPATCH_CTX_BYTES>& DisplayManager::displayJobSlot() {
+		return g_display_job;
 }
 
 // ============================================================================
@@ -428,6 +436,7 @@ void DisplayManager::init() {
 		// On single-core: runs on Core 0 (time-sliced with Arduino loop)
 		// Stack allocated in PSRAM when available to save internal RAM.
 		static constexpr uint32_t kLvglStackBytes = 16384;
+		lvglTaskStopped = false;
 		#if CONFIG_FREERTOS_UNICORE
 	if (!rtos_create_task_psram_stack(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc)) {
 				xTaskCreate(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle);

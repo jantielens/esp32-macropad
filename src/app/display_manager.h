@@ -4,6 +4,7 @@
 #include "board_config.h"
 #include "config_manager.h"
 #include "display_driver.h"
+#include "deferred_dispatch_slot.h"
 #include "screens/screen.h"
 #include "screens/splash_screen.h"
 #include "screens/info_screen.h"
@@ -43,7 +44,9 @@ enum DisplayTaskDispatchResult {
 		DISPLAY_TASK_DISPATCH_OK = 0,
 		DISPLAY_TASK_DISPATCH_BUSY,
 		DISPLAY_TASK_DISPATCH_TIMEOUT,
+		DISPLAY_TASK_DISPATCH_INVALID,
 		DISPLAY_TASK_DISPATCH_UNAVAILABLE,
+		DISPLAY_TASK_DISPATCH_TOO_LARGE,
 };
 
 #define DISPLAY_TASK_DISPATCH_CTX_BYTES 64
@@ -76,18 +79,8 @@ private:
 		TaskHandle_t lvglTaskHandle;
 		RtosTaskPsramAlloc lvglTaskAlloc;  // PSRAM stack allocation (if used)
 		SemaphoreHandle_t lvglMutex;
-		SemaphoreHandle_t displayJobDone;
-		portMUX_TYPE displayJobMux = portMUX_INITIALIZER_UNLOCKED;
-		volatile bool displayJobBusy;
-		volatile bool displayJobPending;
-		volatile bool displayJobDoneFlag;
-		volatile bool displayJobWaiter;
-		DisplayTaskExec displayJobExec;
-		DisplayTaskCleanup displayJobCleanup;
-		uint8_t displayJobCtx[DISPLAY_TASK_DISPATCH_CTX_BYTES];
-		size_t displayJobCtxLen;
-		bool displayJobOk;
-		char displayJobMessage[160];
+		volatile bool lvglStopRequested;
+		volatile bool lvglTaskStopped;
 		
 		// Async present task (Buffered render mode only).
 		// Decouples the slow panel transfer from the LVGL timer loop
@@ -159,6 +152,7 @@ private:
 
 		// FreeRTOS task for LVGL rendering
 		static void lvglTask(void* pvParameter);
+		static DeferredDispatchSlot<DISPLAY_TASK_DISPATCH_CTX_BYTES>& displayJobSlot();
 		void processDisplayJob();
 		
 		// FreeRTOS task for async panel transfer (Buffered render mode only)

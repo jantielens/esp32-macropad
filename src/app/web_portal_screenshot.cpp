@@ -434,6 +434,16 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 				request->send(503, "text/plain", "Screenshot service unavailable");
 				return;
 		}
+		if (dispatchResult == DISPLAY_TASK_DISPATCH_INVALID) {
+				delete capture;
+				request->send(500, "text/plain", "Invalid screenshot capture request");
+				return;
+		}
+		if (dispatchResult == DISPLAY_TASK_DISPATCH_TOO_LARGE) {
+				delete capture;
+				request->send(500, "text/plain", "Screenshot capture request too large");
+				return;
+		}
 		if (dispatchResult != DISPLAY_TASK_DISPATCH_OK) {
 				request->send(504, "text/plain", "Screenshot capture timed out");
 				return;

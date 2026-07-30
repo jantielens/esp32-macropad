@@ -996,7 +996,7 @@ hardware-encoded JPEG; other boards retain the 24-bit BMP default.
 - **Response:** `image/jpeg` for JPEG or `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order).
 - **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV420 subsampling. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
 - **Memory:** Per-request snapshot, conversion, and JPEG buffers are released as soon as the final response chunk is produced. Interrupted responses release any remaining buffers when their response context is destroyed. On ESP32-P4, the lazily initialized JPEG encoder and its synchronization primitive remain allocated after first use.
-- **Thread safety:** Acquires the LVGL mutex with a 1-second timeout and serializes access to the hardware JPEG encoder. Returns `503 Display busy` if the LVGL mutex cannot be acquired.
+- **Thread safety:** The AsyncTCP handler synchronously dispatches capture work through a fixed 64-byte single slot to the LVGL task, which runs it under the existing LVGL mutex. A request that reaches its 3-second deadline keeps the slot occupied until the LVGL task finishes; its captured payload is then reclaimed on that task. Returns `503 Screenshot service busy` for a concurrent capture, `503 Screenshot service unavailable` before display dispatch is ready, and `504 Screenshot capture timed out` when the LVGL task has not completed by the deadline.
 - **Fallback:** If hardware JPEG encoding fails, the endpoint transparently returns BMP with `Content-Type: image/bmp`. Requesting `format=jpg` on a non-P4 board returns `400`.
 
 **Example:**
@@ -1397,7 +1397,7 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
   "button": { "label_center": "1240W", "fg_color": "#22c55e" }
 }
 ```
-  Errors: `400` (bad params / invalid JSON), `503` (busy — another resolve/control job is in flight, retry; or out of memory), `500` (internal).
+  Errors: `400` (bad params / invalid JSON), `503` (busy: another resolve/control job is in flight, retry; or out of memory), and `500` (the main-loop dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the main loop finishes and releases its owned data.
 
 > **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 

@@ -3,7 +3,9 @@
 // Provides portMUX_TYPE, portENTER_CRITICAL, and portEXIT_CRITICAL stubs
 // ============================================================================
 #pragma once
-typedef struct {} portMUX_TYPE;
+#include <mutex>
+
+typedef struct { std::recursive_mutex mutex; } portMUX_TYPE;
 #define portMUX_INITIALIZER_UNLOCKED {}
-static inline void portENTER_CRITICAL(portMUX_TYPE*) {}
-static inline void portEXIT_CRITICAL(portMUX_TYPE*) {}
+static inline void portENTER_CRITICAL(portMUX_TYPE* mux) { mux->mutex.lock(); }
+static inline void portEXIT_CRITICAL(portMUX_TYPE* mux) { mux->mutex.unlock(); }
