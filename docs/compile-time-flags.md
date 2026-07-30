@@ -517,6 +517,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/timer_mcp_adapter.cpp
   - src/app/timer_mcp_adapter.h
   - src/app/touch_manager.cpp
+  - src/app/touch_manager.h
   - src/app/visual_alert.cpp
   - src/app/visual_alert.h
   - src/app/web_mcp.cpp
@@ -792,6 +793,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_manager.cpp
   - src/app/display_manager.h
   - src/app/lv_conf.h
+  - src/app/mcp_tools_core.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screens.cpp
   - src/app/screens/touch_test_screen.cpp
@@ -799,6 +802,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_drivers.cpp
   - src/app/touch_manager.cpp
   - src/app/touch_manager.h
+  - src/app/web_mcp.cpp
+  - src/app/web_portal_routes.cpp
+  - src/app/web_portal_screenshot.cpp
+  - src/app/web_portal_screenshot.h
 - **DISPLAY_DRIVER**
   - src/app/board_config.h
   - src/app/display_drivers.cpp

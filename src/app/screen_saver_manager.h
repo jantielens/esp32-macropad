@@ -45,6 +45,7 @@ void screen_saver_manager_set_brightness(uint8_t brightness);
 
 bool screen_saver_manager_is_asleep();
 bool screen_saver_manager_is_fully_asleep();
+bool screen_saver_manager_input_ready();
 ScreenSaverStatus screen_saver_manager_get_status();
 void screen_saver_manager_get_pixel_shift(int* dx, int* dy);
 
@@ -75,6 +76,7 @@ inline void screen_saver_manager_wake() {}
 inline void screen_saver_manager_set_brightness(uint8_t) {}
 inline bool screen_saver_manager_is_asleep() { return false; }
 inline bool screen_saver_manager_is_fully_asleep() { return false; }
+inline bool screen_saver_manager_input_ready() { return true; }
 inline ScreenSaverStatus screen_saver_manager_get_status() { return {false, ScreenSaverState::Awake, 0, 0, 0}; }
 inline void screen_saver_manager_get_pixel_shift(int*, int*) {}
 

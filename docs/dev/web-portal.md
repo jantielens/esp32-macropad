@@ -1019,6 +1019,32 @@ curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=70' -o s
 - BMP is uncompressed, so BMP files range from ~253 KB (360×360) to ~1.2 MB (1024×600) depending on the board.
 - The portal exposes this endpoint under **Display > Screen Preview**. Opening the fragment does not capture an image; **Capture Preview** and **Refresh Preview** request a fresh framebuffer.
 
+#### `POST /api/screen/tap?x=<x>&y=<y>`
+
+Queues one normal LVGL pointer tap at zero-based active display coordinates. This
+development API requires both `HAS_DISPLAY` and `HAS_TOUCH`, and uses the same
+Basic Auth and CORS policy as the screenshot endpoint.
+
+- **Parameters:** `x` and `y` are strict base-10 integers. A single leading `-`
+  is accepted so shared range validation can reject negative coordinates; `+`,
+  whitespace, decimal values, exponents, and trailing characters are rejected.
+- **Response:** `202` with `{"success":true,"message":"Tap queued"}` when
+  accepted into the one-slot synthetic pointer queue. `400` means malformed or
+  out-of-bounds coordinates, `409` means a tap is already pending or owes LVGL a
+  release, and `503` means the runtime touch/display manager is unavailable.
+- **Semantics:** `202` means queued, not delivered. The active UI can change
+  before LVGL consumes the point, and delivery can wait for physical release or
+  the screen saver to finish waking. The API supports one normal tap only; drag,
+  swipe, long press, multi-touch, completion polling, and screen-bound
+  transactions are excluded.
+
+The portal makes a captured preview interactive only on touch-capable boards. A
+tap maps through the rendered image's contained rectangle, ignores letterboxed
+space, queues the request, then captures one refreshed preview after 500 ms.
+Changing **Current Screen** hides the existing preview until a new manual
+capture, because screenshots are best-effort snapshots rather than screen-bound
+objects.
+
 ---
 
 ### Swipe Actions API

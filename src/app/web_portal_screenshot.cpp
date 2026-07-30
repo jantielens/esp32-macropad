@@ -6,6 +6,10 @@
 #include "web_portal_auth.h"
 #include "web_portal_cors.h"
 #include "log_manager.h"
+#if HAS_TOUCH
+#include "touch_manager.h"
+#include "web_portal_json.h"
+#endif
 
 #include <lvgl.h>
 #include <esp_heap_caps.h>
@@ -450,5 +454,62 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 
 		sendBmp(request, capture);
 }
+
+#if HAS_TOUCH
+static bool parseTapCoordinate(const String& value, int32_t* coordinate) {
+		if (!coordinate || value.length() == 0) return false;
+		size_t index = 0;
+		bool negative = false;
+		if (value[0] == '-') {
+			negative = true;
+			index = 1;
+		}
+		if (index == value.length()) return false;
+
+		int64_t parsed = 0;
+		for (; index < value.length(); ++index) {
+			const char c = value[index];
+			if (c < '0' || c > '9') return false;
+			const int digit = c - '0';
+			if (parsed > (INT64_MAX - digit) / 10) return false;
+			parsed = parsed * 10 + digit;
+		}
+		if (negative) parsed = -parsed;
+		if (parsed < INT32_MIN || parsed > INT32_MAX) return false;
+		*coordinate = (int32_t)parsed;
+		return true;
+}
+
+void handlePostScreenTap(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+		if (!request->hasParam("x") || !request->hasParam("y")) {
+			web_portal_send_json_error(request, 400, "x and y are required integers");
+			return;
+		}
+
+		int32_t x = 0;
+		int32_t y = 0;
+		if (!parseTapCoordinate(request->getParam("x")->value(), &x) ||
+				!parseTapCoordinate(request->getParam("y")->value(), &y)) {
+			web_portal_send_json_error(request, 400, "x and y must be base-10 integers");
+			return;
+		}
+
+		switch (touch_manager_enqueue_tap(x, y)) {
+			case TOUCH_MANAGER_ENQUEUE_QUEUED:
+				request->send(202, "application/json", "{\"success\":true,\"message\":\"Tap queued\"}");
+				return;
+			case TOUCH_MANAGER_ENQUEUE_INVALID:
+				web_portal_send_json_error(request, 400, "Coordinates outside active display");
+				return;
+			case TOUCH_MANAGER_ENQUEUE_BUSY:
+				web_portal_send_json_error(request, 409, "Tap queue busy, retry");
+				return;
+			case TOUCH_MANAGER_ENQUEUE_UNAVAILABLE:
+				web_portal_send_json_error(request, 503, "Touch input unavailable");
+				return;
+		}
+}
+#endif // HAS_TOUCH
 
 #endif // HAS_DISPLAY

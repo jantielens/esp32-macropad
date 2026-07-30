@@ -711,6 +711,15 @@ body {
   object-fit: contain;
 }
 
+.screen-preview-frame.screen-preview-interactive img {
+  cursor: pointer;
+}
+
+.screen-preview-frame.screen-preview-busy img {
+  cursor: progress;
+  pointer-events: none;
+}
+
 .screen-preview-placeholder {
   position: absolute;
   inset: 0;

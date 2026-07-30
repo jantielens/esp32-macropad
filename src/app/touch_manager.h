@@ -40,6 +40,7 @@ public:
 		// Get touch state (for debugging)
 		bool isTouched();
 		bool getTouch(uint16_t* x, uint16_t* y);
+		bool isReady() const { return driver != nullptr; }
 };
 
 // C-style interface for app.ino
@@ -54,6 +55,21 @@ void touch_manager_suppress_lvgl_input(uint32_t duration_ms);
 // Force LVGL to always see RELEASED while active.
 // Screen saver uses this while dimming/asleep/fading in.
 void touch_manager_set_lvgl_force_released(bool force_released);
+
+#if HAS_DISPLAY
+
+enum TouchManagerEnqueueResult {
+		TOUCH_MANAGER_ENQUEUE_QUEUED = 0,
+		TOUCH_MANAGER_ENQUEUE_INVALID,
+		TOUCH_MANAGER_ENQUEUE_BUSY,
+		TOUCH_MANAGER_ENQUEUE_UNAVAILABLE,
+};
+
+// Queue one synthetic LVGL pointer tap at an active-display coordinate.
+// A queued result means LVGL has not necessarily consumed the tap yet.
+TouchManagerEnqueueResult touch_manager_enqueue_tap(int32_t x, int32_t y);
+
+#endif // HAS_DISPLAY
 
 #endif // HAS_TOUCH
 

@@ -34,6 +34,9 @@
 #include "ha_service.h"
 #include "screen_saver_manager.h"
 #include "pad_config.h"
+#if HAS_TOUCH
+#include "touch_manager.h"
+#endif
 #endif
 
 #if HAS_DISPLAY || HAS_BUTTON
@@ -79,8 +82,11 @@ static bool tool_get_device_status(const JsonObject& args, JsonObject& result, S
     result["device_name"] = (cfg && cfg->device_name[0]) ? cfg->device_name : "";
     result["uptime_seconds"] = (uint32_t)(millis() / 1000);
     result["has_display"] = (bool)HAS_DISPLAY;
+    result["has_touch"] = (bool)(HAS_DISPLAY && HAS_TOUCH);
 
 #if HAS_DISPLAY
+    result["display_width"] = displayManager ? displayManager->getActiveWidth() : 0;
+    result["display_height"] = displayManager ? displayManager->getActiveHeight() : 0;
     const char* cs = display_manager_get_current_screen_id();
     result["current_screen"] = cs ? cs : "";
 #endif
@@ -539,6 +545,39 @@ static bool tool_wake(const JsonObject& args, JsonObject& result, String& err) {
                            TOOL_CONTROL_TIMEOUT_MS, result, err);
 }
 
+#if HAS_TOUCH
+// --- tap_screen ------------------------------------------------------------
+struct TapScreenCtx { int32_t x; int32_t y; };
+
+static void exec_tap_screen(const void* ctx, bool* ok, char* msg, size_t msg_len) {
+    const TapScreenCtx* c = (const TapScreenCtx*)ctx;
+    switch (touch_manager_enqueue_tap(c->x, c->y)) {
+        case TOUCH_MANAGER_ENQUEUE_QUEUED:
+            *ok = true;
+            strlcpy(msg, "tap queued", msg_len);
+            return;
+        case TOUCH_MANAGER_ENQUEUE_INVALID:
+            strlcpy(msg, "coordinates outside active display", msg_len);
+            return;
+        case TOUCH_MANAGER_ENQUEUE_BUSY:
+            strlcpy(msg, "tap queue busy, retry", msg_len);
+            return;
+        case TOUCH_MANAGER_ENQUEUE_UNAVAILABLE:
+            strlcpy(msg, "touch input unavailable", msg_len);
+            return;
+    }
+}
+
+static bool tool_tap_screen(const JsonObject& args, JsonObject& result, String& err) {
+    if (!args["x"].is<int32_t>() || !args["y"].is<int32_t>()) {
+        return tool_fail(result, err, TOOL_ERR_PARAMS, "x and y must be integers");
+    }
+    TapScreenCtx ctx = {args["x"].as<int32_t>(), args["y"].as<int32_t>()};
+    return mcp_run_control(exec_tap_screen, &ctx, sizeof(ctx),
+                           TOOL_CONTROL_TIMEOUT_MS, result, err);
+}
+#endif // HAS_TOUCH
+
 #endif // HAS_DISPLAY
 
 // --- system_command --------------------------------------------------------
@@ -701,6 +740,16 @@ static const McpTool s_tool_wake = {
     tool_wake, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_wake);
+
+#if HAS_TOUCH
+static const McpTool s_tool_tap_screen = {
+    "tap_screen",
+    "Queue one normal LVGL tap at native display pixel coordinates. Inspect /api/screenshot in a browser first when choosing coordinates. Success means the tap was queued, not delivered; it can wait for physical release or screen-saver wake.",
+    "{\"type\":\"object\",\"properties\":{\"x\":{\"type\":\"integer\"},\"y\":{\"type\":\"integer\"}},\"required\":[\"x\",\"y\"]}",
+    tool_tap_screen, false, false, true
+};
+REGISTER_MCP_TOOL(s_tool_tap_screen);
+#endif // HAS_TOUCH
 
 #endif // HAS_DISPLAY
 

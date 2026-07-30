@@ -5,6 +5,8 @@
 #include "touch_manager.h"
 #include "log_manager.h"
 
+#include <atomic>
+
 // Touch init may run while the LVGL rendering task is active.
 // LVGL is not thread-safe, so guard LVGL API calls with the DisplayManager mutex when available.
 #if HAS_DISPLAY
@@ -28,13 +30,68 @@
 TouchManager* touchManager = nullptr;
 
 // When set, LVGL will see touch as released until this timestamp.
-static uint32_t g_lvgl_suppress_until_ms = 0;
-static bool g_lvgl_force_released = false;
+static std::atomic<uint32_t> g_lvgl_suppress_until_ms{0};
+static std::atomic<bool> g_lvgl_force_released{false};
 static bool g_prev_lvgl_pressed = false;
 // After suppression ends, require a genuine release before accepting new presses.
 // This prevents stale "touched" state in drivers (e.g., GT911 lastTouched flag)
 // from replaying as a phantom click.
 static bool g_require_release = false;
+
+#if HAS_DISPLAY
+enum class SyntheticTapState : uint8_t {
+		Idle,
+		PendingPress,
+		ReleaseOwed,
+};
+
+struct SyntheticTapSlot {
+		SyntheticTapState state;
+		uint16_t x;
+		uint16_t y;
+		uint32_t queued_at_ms;
+};
+
+static constexpr uint32_t SYNTHETIC_TAP_PENDING_TIMEOUT_MS = 5000;
+static portMUX_TYPE g_synthetic_tap_mux = portMUX_INITIALIZER_UNLOCKED;
+static SyntheticTapSlot g_synthetic_tap = {SyntheticTapState::Idle, 0, 0, 0};
+
+static bool synthetic_tap_take_release_owed() {
+		bool releaseOwed = false;
+		portENTER_CRITICAL(&g_synthetic_tap_mux);
+		if (g_synthetic_tap.state == SyntheticTapState::ReleaseOwed) {
+			g_synthetic_tap.state = SyntheticTapState::Idle;
+			releaseOwed = true;
+		}
+		portEXIT_CRITICAL(&g_synthetic_tap_mux);
+		return releaseOwed;
+}
+
+static bool synthetic_tap_expire_pending(uint32_t now) {
+		bool expired = false;
+		portENTER_CRITICAL(&g_synthetic_tap_mux);
+		if (g_synthetic_tap.state == SyntheticTapState::PendingPress &&
+				(uint32_t)(now - g_synthetic_tap.queued_at_ms) >= SYNTHETIC_TAP_PENDING_TIMEOUT_MS) {
+			g_synthetic_tap.state = SyntheticTapState::Idle;
+			expired = true;
+		}
+		portEXIT_CRITICAL(&g_synthetic_tap_mux);
+		return expired;
+}
+
+static bool synthetic_tap_take_pending_press(uint16_t* x, uint16_t* y) {
+		bool pressed = false;
+		portENTER_CRITICAL(&g_synthetic_tap_mux);
+		if (g_synthetic_tap.state == SyntheticTapState::PendingPress) {
+			*x = g_synthetic_tap.x;
+			*y = g_synthetic_tap.y;
+			g_synthetic_tap.state = SyntheticTapState::ReleaseOwed;
+			pressed = true;
+		}
+		portEXIT_CRITICAL(&g_synthetic_tap_mux);
+		return pressed;
+}
+#endif
 
 TouchManager::TouchManager() 
 		: driver(nullptr), indev(nullptr), lvglRegisterPending(false) {
@@ -51,9 +108,21 @@ TouchManager::~TouchManager() {
 void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		TouchManager* manager = (TouchManager*)lv_indev_get_user_data(indev);
 
-		// Suppress LVGL touch input for a short grace window (e.g., wake-tap swallow).
 		const uint32_t now = millis();
-		if (g_lvgl_force_released || ((int32_t)(g_lvgl_suppress_until_ms - now) > 0)) {
+		#if HAS_DISPLAY
+		// An emitted synthetic press always gets this next-callback release, before
+		// suppression or physical input can produce another pointer state.
+		if (synthetic_tap_take_release_owed()) {
+			data->state = LV_INDEV_STATE_RELEASED;
+			g_prev_lvgl_pressed = false;
+			return;
+		}
+		synthetic_tap_expire_pending(now);
+		#endif
+
+		const bool forceReleased = g_lvgl_force_released.load();
+		const uint32_t suppressUntil = g_lvgl_suppress_until_ms.load();
+		if (forceReleased || ((int32_t)(suppressUntil - now) > 0)) {
 				data->state = LV_INDEV_STATE_RELEASED;
 				g_prev_lvgl_pressed = false;
 				g_require_release = true;
@@ -73,6 +142,20 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 				g_prev_lvgl_pressed = false;
 				return;
 		}
+
+		#if HAS_DISPLAY
+		if (!touched && screen_saver_manager_input_ready()) {
+			uint16_t tapX = 0;
+			uint16_t tapY = 0;
+			if (synthetic_tap_take_pending_press(&tapX, &tapY)) {
+				data->state = LV_INDEV_STATE_PRESSED;
+				data->point.x = tapX;
+				data->point.y = tapY;
+				g_prev_lvgl_pressed = true;
+				return;
+			}
+		}
+		#endif
 
 		if (touched) {
 				data->state = LV_INDEV_STATE_PRESSED;
@@ -201,13 +284,41 @@ void touch_manager_suppress_lvgl_input(uint32_t duration_ms) {
 		const uint32_t now = millis();
 		const uint32_t until = now + duration_ms;
 		// Extend suppression window if already active.
-		if ((int32_t)(g_lvgl_suppress_until_ms - until) < 0) {
-				g_lvgl_suppress_until_ms = until;
-		}
+		uint32_t current = g_lvgl_suppress_until_ms.load();
+		while ((int32_t)(current - until) < 0 &&
+				!g_lvgl_suppress_until_ms.compare_exchange_weak(current, until)) {}
 }
 
 void touch_manager_set_lvgl_force_released(bool force_released) {
-		g_lvgl_force_released = force_released;
+		g_lvgl_force_released.store(force_released);
 }
+
+#if HAS_DISPLAY
+TouchManagerEnqueueResult touch_manager_enqueue_tap(int32_t x, int32_t y) {
+		if (!touchManager || !touchManager->isReady() || !displayManager) {
+			return TOUCH_MANAGER_ENQUEUE_UNAVAILABLE;
+		}
+
+		const int width = displayManager->getActiveWidth();
+		const int height = displayManager->getActiveHeight();
+		if (x < 0 || y < 0 || x >= width || y >= height) {
+			return TOUCH_MANAGER_ENQUEUE_INVALID;
+		}
+
+		portENTER_CRITICAL(&g_synthetic_tap_mux);
+		if (g_synthetic_tap.state != SyntheticTapState::Idle) {
+			portEXIT_CRITICAL(&g_synthetic_tap_mux);
+			return TOUCH_MANAGER_ENQUEUE_BUSY;
+		}
+		g_synthetic_tap.state = SyntheticTapState::PendingPress;
+		g_synthetic_tap.x = (uint16_t)x;
+		g_synthetic_tap.y = (uint16_t)y;
+		g_synthetic_tap.queued_at_ms = millis();
+		portEXIT_CRITICAL(&g_synthetic_tap_mux);
+
+		screen_saver_manager_notify_activity(true);
+		return TOUCH_MANAGER_ENQUEUE_QUEUED;
+}
+#endif // HAS_DISPLAY
 
 #endif // HAS_TOUCH

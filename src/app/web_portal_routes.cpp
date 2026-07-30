@@ -155,6 +155,10 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		registerOptions("/api/screenshot");
 		server->on("/api/screenshot", HTTP_GET, handleGetScreenshot);
+		#if HAS_TOUCH
+		registerOptions("/api/screen/tap");
+		server->on("/api/screen/tap", HTTP_POST, handlePostScreenTap);
+		#endif
 
 		registerOptions("/api/icons/install");
 		server->on(

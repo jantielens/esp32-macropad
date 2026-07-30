@@ -163,6 +163,10 @@ graph LR
 - `press_button` — press a pad button by position or label, exactly like a tap.
 - `set_screen` — navigate to a screen.
 - `set_backlight` / `wake` — adjust display brightness or cancel the screen saver.
+- `tap_screen` — queue one normal touch-display tap at native pixel `x` and `y`
+  coordinates. Inspect a fresh screenshot in a browser first. Success means the
+  tap was queued, not delivered; it can wait for physical touch release or
+  screen-saver wake.
 - `notify` — show a message bubble on the screen (empty text dismisses it).
 - `visual_alert` — raise (`op:start`) or clear (`op:stop`) a full-screen pulsing
   color overlay as an ambient alarm: bindable `color` (default red), `pattern`
@@ -501,6 +505,15 @@ If portal Basic Auth is enabled, embed credentials in the URL
 `/api/screenshot`. The MCP server also advertises this workflow to the model in
 its `initialize` instructions and in `get_capabilities` (`visual_inspection`), so
 a capable assistant can offer to verify UI work on its own.
+
+On touch-display builds with control tools enabled, a browser-assisted remote
+tap uses the same workflow: capture a fresh screenshot, choose native pixel
+coordinates from that image, then call `tap_screen({"x": 120, "y": 80})`.
+The screenshot is only a best-effort snapshot, so a successful result means the
+tap was accepted into the one-slot queue, not that LVGL has delivered it to the
+same screen. The MCP bearer token authorizes `/mcp`; portal Basic Auth, when
+enabled, separately protects `/api/screenshot`. Display-only builds keep
+screenshot inspection but do not expose `tap_screen`.
 
 The `initialize` response's `instructions` field additionally gives the model a
 board-agnostic orientation to the firmware and the core **discover → act →

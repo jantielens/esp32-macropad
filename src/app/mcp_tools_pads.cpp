@@ -225,6 +225,11 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     steps.add("screenshot_page with selector 'img'  // captures just the framebuffer, no browser chrome");
     vis["device_ip"] = "use get_device_status.wifi.ip for <device-ip>";
     vis["auth_note"] = "if portal Basic Auth is enabled, embed credentials in the URL (http://user:pass@host/api/screenshot); the MCP bearer token does not apply to /api/screenshot";
+#if HAS_TOUCH
+    vis["remote_tap"] = "This is a touch display. Inspect a fresh screenshot in a browser, then call tap_screen with native pixel x/y coordinates. A successful tap_screen result means queued, not delivered; the active UI can change before LVGL consumes it.";
+#else
+    vis["remote_tap"] = "This display has no touch input. Screenshot inspection is available, but remote screen taps are unavailable.";
+#endif
 
     // Device-settings surface (get_config/set_config + get/set_component_config),
     // defined in mcp_tools_config.cpp so the component list stays a single source

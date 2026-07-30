@@ -375,12 +375,22 @@ static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantCon
         "restarts the device and drops this connection.";
 #if HAS_DISPLAY
     instructions +=
-        " This device drives a touch display, so you can visually verify UI changes: GET /api/screenshot "
+        " This device has a display, so you can visually verify UI changes: GET /api/screenshot "
         "returns the live framebuffer as a large BMP image. Never fetch it as text/data \u2014 it is an "
         "image and is large. Instead point a Playwright browser at the URL and capture the rendered <img> "
         "element. Call get_capabilities for the exact recipe (visual_inspection) plus the full "
         "pad/widget/binding schema. Verifying a specific pad first needs set_screen (a control tool) to "
         "bring it on-screen.";
+#if HAS_TOUCH
+    instructions +=
+        " This display accepts touch input. After inspecting a fresh screenshot in a browser, call "
+        "tap_screen with native pixel coordinates to queue one normal LVGL tap. A successful response "
+        "means queued, not delivered: the active UI can change before LVGL consumes it.";
+#else
+    instructions +=
+        " This display has no touch input, so screenshot inspection is available but remote screen "
+        "taps are not.";
+#endif
     instructions +=
         " When authoring pads with [scheme:params] bindings, ALWAYS verify them as part of the workflow, "
         "not only when asked: a write rejects malformed binding SYNTAX, but a syntactically valid binding "

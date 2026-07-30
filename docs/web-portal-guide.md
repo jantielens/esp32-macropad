@@ -166,6 +166,17 @@ manual, so opening the fragment does not allocate a framebuffer or encode an
 image. Use **Refresh Preview** after changing screens or when the displayed
 content changes.
 
+On boards with a touch display, a captured preview is also interactive. Click or
+tap a point on the screenshot to queue one normal device tap at that pixel. The
+portal refreshes the preview once after the request is accepted. Clicks in the
+empty bars around a portrait or landscape image are ignored.
+
+The preview is a best-effort snapshot. A queued tap can wait for a physical
+touch to release or for the screen saver to wake, and the screen can change
+before the device consumes it. After changing **Current Screen**, the old image
+is hidden and cannot be tapped; capture a fresh preview first. Screen Preview
+does not support dragging, swiping, long presses, multi-touch, or live video.
+
 ### Screen Saver (Burn-in Prevention)
 
 Protects your LCD from burn-in by turning off the backlight after a period of inactivity. A built-in pixel-shift mechanism moves content slightly each sleep cycle to prevent ghosting.
