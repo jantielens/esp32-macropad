@@ -352,7 +352,7 @@ struct HwButtonDef {
 
 // Audio output sample rate in Hz.
 #ifndef AUDIO_SAMPLE_RATE
-#define AUDIO_SAMPLE_RATE 16000
+#define AUDIO_SAMPLE_RATE 48000
 #endif
 
 // I2S DMA descriptor count, pinned so starvation timing stays in sync with I2S.

@@ -45,16 +45,16 @@ bool audio_is_playing();
 class AudioOutputDriver;
 
 struct AudioStarvationStats {
-	int64_t previous_write_complete_us;  // 0 = no write yet this clip
-	int64_t worst_gap_us;
-	uint32_t event_count;
+    int64_t previous_write_complete_us;  // 0 = no write yet this clip
+    int64_t worst_gap_us;
+    uint32_t event_count;
 };
 
 // Writes one PCM block through `driver`, measuring the producer-side gap since
 // the previous write returned. Returns the driver's write result unchanged.
 // Zero-initialise at clip start: `AudioStarvationStats stats = {};`
 bool audio_write_with_stats(AudioOutputDriver* driver, const int16_t* frames,
-							size_t frame_count, AudioStarvationStats* stats);
+                            size_t frame_count, AudioStarvationStats* stats);
 
 // Emits the end-of-clip line: event count, worst gap, buffered duration.
 void audio_log_starvation(const AudioStarvationStats& stats);

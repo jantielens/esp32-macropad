@@ -168,7 +168,7 @@ Total flags: 240
 - **AUDIO_I2S_MCLK** default: `-1` — I2S master clock pin.
 - **AUDIO_MP3_SCRATCH_PSRAM** default: `false` — Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
 - **AUDIO_PA_ACTIVE_LOW** default: `false` — Some boards route the PA enable through an inverting transistor.
-- **AUDIO_SAMPLE_RATE** default: `16000` — Audio output sample rate in Hz.
+- **AUDIO_SAMPLE_RATE** default: `48000` — Audio output sample rate in Hz.
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS** default: `100` — BLE telemetry advertising interval (ms between adv packets within a burst).
 - **BLE_TELEMETRY_DEFAULT_BURST_COUNT** default: `3` — BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).

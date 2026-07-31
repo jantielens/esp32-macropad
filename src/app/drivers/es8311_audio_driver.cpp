@@ -55,7 +55,10 @@ struct ES8311Coeff {
 
 static const ES8311Coeff ES8311_COEFFS[] = {
     {6144000, 16000, 0x03, 0x02, 0x01, 0x01, 0x00, 0x00, 0xFF, 0x04, 0x10, 0x20},
+    {12288000, 48000, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0xFF, 0x04, 0x10, 0x10},
 };
+
+static constexpr i2s_mclk_multiple_t kEs8311MclkMultiple = I2S_MCLK_MULTIPLE_256;
 
 static const ES8311Coeff* es8311_find_coeff(uint32_t mclk_hz, uint32_t sample_rate) {
     for (const ES8311Coeff& coeff : ES8311_COEFFS) {
@@ -88,7 +91,7 @@ static uint8_t es8311_read(uint8_t reg) {
 }
 
 bool ES8311AudioDriver::initCodec(uint32_t sample_rate) {
-    const uint32_t mclk_hz = sample_rate * 384;
+    const uint32_t mclk_hz = sample_rate * static_cast<uint32_t>(kEs8311MclkMultiple);
     const ES8311Coeff* coeff = es8311_find_coeff(mclk_hz, sample_rate);
     if (!coeff) {
         LOGE(TAG, "No ES8311 coefficients for MCLK=%lu Hz, Fs=%lu Hz", mclk_hz, sample_rate);
@@ -216,7 +219,7 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
             },
         },
     };
-    std_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_384;
+    std_cfg.clk_cfg.mclk_multiple = kEs8311MclkMultiple;
 
     err = i2s_channel_init_std_mode(tx_handle, &std_cfg);
     if (err != ESP_OK) {
@@ -243,7 +246,9 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
         return false;
     }
 
-    LOGI(TAG, "I2S TX: %u Hz, 16-bit stereo, MCLK=%lu Hz (384x)", sample_rate, sample_rate * 384);
+    LOGI(TAG, "I2S TX: %u Hz, 16-bit stereo, MCLK=%lu Hz (%lux)",
+         sample_rate, sample_rate * static_cast<uint32_t>(kEs8311MclkMultiple),
+         static_cast<uint32_t>(kEs8311MclkMultiple));
     vTaskDelay(pdMS_TO_TICKS(50));
     if (!initCodec(sample_rate)) {
         LOGE(TAG, "ES8311 init failed");
