@@ -3,10 +3,10 @@
 #if HAS_SOUND_PLAYER
 
 #ifndef AUDIO_RESAMPLER_TEST
+#include "audio.h"
 #include "audio_output_driver.h"
 #include "storage.h"
 #include <esp_heap_caps.h>
-#include <esp_timer.h>
 #include <string.h>
 #include "log_manager.h"
 #include "sound_store.h"
@@ -23,6 +23,10 @@
 // Read buffer for MP3 file data (must hold at least one full MP3 frame)
 // MINIMP3 recommends minimum ~16KB for reliable frame detection
 #define MP3_READ_BUF_SIZE (16 * 1024)
+
+// An MPEG-2.5 Layer III frame has 576 samples. At 8 kHz, resampling to a
+// 48 kHz target produces exactly 3456 frames.
+const int SOUND_PLAYER_MAX_OUTPUT_FRAMES = 3456;
 
 // ---------------------------------------------------------------------------
 // Linear interpolation resampler: any source rate → AUDIO_SAMPLE_RATE.
@@ -149,10 +153,7 @@ bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
         return false;
     }
 
-    // One 1152-sample MP3 frame can expand to 3456 frames at 16 kHz from an
-    // 8 kHz source. Size for the maximum supported upsampling case.
-    const int max_out_frames = 3456;
-    int16_t* out_buf = (int16_t*)ps_alloc(max_out_frames * 2 * sizeof(int16_t));
+    int16_t* out_buf = (int16_t*)ps_alloc(SOUND_PLAYER_MAX_OUTPUT_FRAMES * 2 * sizeof(int16_t));
     if (!out_buf) {
         LOGE(TAG, "Failed to allocate output buffer");
         heap_caps_free(read_buf);
@@ -208,10 +209,7 @@ bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
     Resampler resampler;
     bool resampler_initialized = false;
     bool success = true;
-    int64_t previous_write_complete_us = 0;
-    uint32_t starvation_events = 0;
-    int64_t worst_gap_us = 0;
-    const int64_t buffered_us = (int64_t)6 * AUDIO_DMA_FRAME_NUM * 1000000 / AUDIO_SAMPLE_RATE;
+    AudioStarvationStats starvation = {};
 
     while (!(*stop_flag)) {
         // Ensure we have enough data in buffer
@@ -288,25 +286,16 @@ bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
         } else {
             // Resample and convert to stereo
             out_frames = resampler_process(&resampler, pcm, samples,
-                                           out_buf, max_out_frames);
+                                           out_buf, SOUND_PLAYER_MAX_OUTPUT_FRAMES);
         }
 
         // Write PCM through the selected output driver.
         if (out_frames > 0) {
-            const int64_t before_write_us = esp_timer_get_time();
-            if (previous_write_complete_us != 0) {
-                const int64_t gap_us = before_write_us - previous_write_complete_us;
-                if (gap_us > buffered_us) {
-                    starvation_events++;
-                    if (gap_us > worst_gap_us) worst_gap_us = gap_us;
-                }
-            }
-            if (!output_driver->write(out_buf, out_frames)) {
+            if (!audio_write_with_stats(output_driver, out_buf, out_frames, &starvation)) {
                 LOGE(TAG, "Audio output write error");
                 success = false;
                 break;
             }
-            previous_write_complete_us = esp_timer_get_time();
         }
     }
 
@@ -319,9 +308,8 @@ bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
     heap_caps_free(read_buf);
     file.close();
 
-        LOGI(TAG, "Output starvation: events=%u worst_gap_us=%lld buffered_us=%lld",
-            starvation_events, worst_gap_us, buffered_us);
-        LOGI(TAG, "Playback %s: %s", path, success ? "complete" : "error");
+    audio_log_starvation(starvation);
+    LOGI(TAG, "Playback %s: %s", path, success ? "complete" : "error");
     return success;
 }
 #endif // AUDIO_RESAMPLER_TEST

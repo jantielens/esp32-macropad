@@ -180,10 +180,6 @@ void setup()
 
 	// Baseline memory snapshot as early as possible.
 	device_telemetry_log_memory_snapshot("boot");
-	#if HAS_AUDIO
-	LOGI("Audio", "Free internal heap at boot: %u",
-			 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-	#endif
 
 	// Initialize device_config with sensible defaults
 	// (Important: must happen before display_manager_init uses the config)

@@ -355,6 +355,11 @@ struct HwButtonDef {
 #define AUDIO_SAMPLE_RATE 16000
 #endif
 
+// I2S DMA descriptor count, pinned so starvation timing stays in sync with I2S.
+#ifndef AUDIO_DMA_DESC_NUM
+#define AUDIO_DMA_DESC_NUM 6
+#endif
+
 // I2S DMA frames per descriptor. The current ESP-IDF default is 240.
 #ifndef AUDIO_DMA_FRAME_NUM
 #define AUDIO_DMA_FRAME_NUM 240

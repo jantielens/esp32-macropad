@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 239
+Total flags: 240
 
 ### Features (HAS_*)
 
@@ -54,7 +54,7 @@ Total flags: 239
 
 ### Selectors (*_DRIVER)
 
-- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
+- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
@@ -159,6 +159,7 @@ Total flags: 239
 
 - **AUDIO_CODEC_ADDR** default: `0x18` — I2C address of the audio codec (e.g. ES8311 = 0x18).
 - **AUDIO_DEFAULT_VOLUME** default: `50` — Default volume used when no NVS value has been stored.
+- **AUDIO_DMA_DESC_NUM** default: `6` — I2S DMA descriptor count, pinned so starvation timing stays in sync with I2S.
 - **AUDIO_DMA_FRAME_NUM** default: `240` — I2S DMA frames per descriptor. The current ESP-IDF default is 240.
 - **AUDIO_I2S_BCLK** default: `-1` — I2S bit clock pin.
 - **AUDIO_I2S_DIN** default: `-1` — I2S data in pin (ESP32 RX ← codec data output).
@@ -307,22 +308,22 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 ## Board Matrix: Selectors (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
-| board-name | DISPLAY_DRIVER | TOUCH_DRIVER |
-| --- | --- | --- |
-| esp32-4848S040 | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
-| jc3248w535 | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
-| jc3636w518 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
-| esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-shutter | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-hx711 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-nau7802 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-darkroom | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
-| esp32c3-withsensors | — | — |
-| inkplate5v2 | — | — |
-| inkplate6flick | — | — |
-| reterminal-e1003 | — | — |
+| board-name | AUDIO_OUTPUT_DRIVER | DISPLAY_DRIVER | TOUCH_DRIVER |
+| --- | --- | --- | --- |
+| esp32-4848S040 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
+| jc3248w535 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
+| jc3636w518 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
+| esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-shutter | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-hx711 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-nau7802 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-darkroom | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc1060p470c | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
+| esp32c3-withsensors | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
+| inkplate5v2 | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
+| inkplate6flick | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
+| reterminal-e1003 | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)
@@ -333,6 +334,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/audio.cpp
   - src/app/audio.h
+  - src/app/audio_output_drivers.cpp
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
@@ -349,7 +351,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
   - src/app/web_portal_config.cpp
-  - src/app/wifi_manager.cpp
 - **HAS_BACKLIGHT**
   - src/app/app.ino
   - src/app/board_config.h
@@ -813,6 +814,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_screenshot.cpp
   - src/app/web_portal_screenshot.h
+- **AUDIO_OUTPUT_DRIVER**
+  - src/app/audio_output_drivers.cpp
+  - src/app/board_config.h
 - **DISPLAY_DRIVER**
   - src/app/board_config.h
   - src/app/display_drivers.cpp
@@ -826,6 +830,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **AUDIO_CODEC_ADDR**
   - src/app/board_config.h
 - **AUDIO_DEFAULT_VOLUME**
+  - src/app/board_config.h
+- **AUDIO_DMA_DESC_NUM**
   - src/app/board_config.h
 - **AUDIO_DMA_FRAME_NUM**
   - src/app/board_config.h
@@ -842,8 +848,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **AUDIO_MP3_SCRATCH_PSRAM**
   - src/app/board_config.h
   - src/app/sound_player.cpp
-- **AUDIO_OUTPUT_DRIVER**
-  - src/app/board_config.h
 - **AUDIO_PA_ACTIVE_LOW**
   - src/app/board_config.h
 - **AUDIO_PA_PIN**

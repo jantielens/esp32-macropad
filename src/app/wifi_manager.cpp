@@ -10,7 +10,6 @@
 #include <atomic>
 #include <WiFi.h>
 #include <ESPmDNS.h>
-#include <esp_heap_caps.h>
 #include <lwip/netif.h>
 #include "ping/ping_sock.h"
 
@@ -31,13 +30,6 @@ static constexpr int          WIFI_PING_FAIL_THRESHOLD = 3;    // consecutive fa
 static constexpr unsigned long WIFI_TIER3_REINIT_TIMEOUT_MS = 60000; // Tier 3 reinit retry interval
 
 static unsigned long g_last_wifi_check_ms = 0;
-
-static void log_audio_heap_after_wifi() {
-#if HAS_AUDIO
-		LOGI("Audio", "Free internal heap after WiFi association: %u",
-				 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-#endif
-}
 
 // --- Event-driven reconnect state machine ---
 enum class WifiState : uint8_t {
@@ -387,7 +379,6 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 						LOGI("WiFi", "Access: http://%s", WiFi.localIP().toString().c_str());
 						LOGI("WiFi", "Access: http://%s.local", WiFi.getHostname());
 						LOGI("WiFi", "Connected");
-						log_audio_heap_after_wifi();
 						return true;
 				}
 
@@ -426,7 +417,6 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 								LOGI("WiFi", "Access: http://%s", WiFi.localIP().toString().c_str());
 								LOGI("WiFi", "Access: http://%s.local", WiFi.getHostname());
 								LOGI("WiFi", "Connected");
-								log_audio_heap_after_wifi();
 
 								if (has_best_ap && best_channel > 0) {
 										memcpy(g_cached_bssid, best_bssid, sizeof(g_cached_bssid));

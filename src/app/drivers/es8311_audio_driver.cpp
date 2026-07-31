@@ -192,6 +192,7 @@ bool ES8311AudioDriver::initCodec(uint32_t sample_rate) {
 bool ES8311AudioDriver::begin(uint32_t sample_rate) {
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.auto_clear = true;
+    chan_cfg.dma_desc_num = AUDIO_DMA_DESC_NUM;
     chan_cfg.dma_frame_num = AUDIO_DMA_FRAME_NUM;
     esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle, &rx_handle);
     if (err != ESP_OK) {

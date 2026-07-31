@@ -3,10 +3,10 @@
 #if HAS_AUDIO
 
 #include <math.h>
-#include "esp_heap_caps.h"
 #include "esp_memory_utils.h"
 #include <esp_timer.h>
 #include "audio_output_driver.h"
+#include "device_telemetry.h"
 #include "log_manager.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -50,40 +50,33 @@ static TaskHandle_t audio_task_handle = NULL;
 static volatile bool g_stop_requested = false;
 static volatile bool g_playing = false;
 
-struct OutputStarvationStats {
-    int64_t previous_write_complete_us;
-    uint32_t event_count;
-    int64_t worst_gap_us;
-};
+static constexpr int64_t kOutputBufferedUs =
+    (int64_t)AUDIO_DMA_DESC_NUM * AUDIO_DMA_FRAME_NUM * 1000000 / AUDIO_SAMPLE_RATE;
 
-static constexpr uint32_t AUDIO_DMA_DESC_NUM = 6;
-
-static bool audio_write_frames(const int16_t* frames, size_t frame_count,
-                               OutputStarvationStats* stats) {
+bool audio_write_with_stats(AudioOutputDriver* driver, const int16_t* frames,
+                            size_t frame_count, AudioStarvationStats* stats) {
     const int64_t before_write_us = esp_timer_get_time();
     if (stats->previous_write_complete_us != 0) {
         const int64_t gap_us = before_write_us - stats->previous_write_complete_us;
-        const int64_t buffered_us = (int64_t)AUDIO_DMA_DESC_NUM * AUDIO_DMA_FRAME_NUM * 1000000 / AUDIO_SAMPLE_RATE;
-        if (gap_us > buffered_us) {
+        if (gap_us > kOutputBufferedUs) {
             stats->event_count++;
             if (gap_us > stats->worst_gap_us) stats->worst_gap_us = gap_us;
         }
     }
-    const bool ok = output_driver->write(frames, frame_count);
+    const bool ok = driver->write(frames, frame_count);
     stats->previous_write_complete_us = esp_timer_get_time();
     return ok;
 }
 
-static void log_output_starvation(const OutputStarvationStats& stats) {
-    const uint32_t buffered_us = AUDIO_DMA_DESC_NUM * AUDIO_DMA_FRAME_NUM * 1000000UL / AUDIO_SAMPLE_RATE;
-    LOGI(TAG, "Output starvation: events=%u worst_gap_us=%lld buffered_us=%u",
-         stats.event_count, stats.worst_gap_us, buffered_us);
+void audio_log_starvation(const AudioStarvationStats& stats) {
+    LOGI(TAG, "Output starvation: events=%u worst_gap_us=%lld buffered_us=%lld",
+         stats.event_count, stats.worst_gap_us, kOutputBufferedUs);
 }
 
 // ---------------------------------------------------------------------------
 // Tone generation — play one segment (freq Hz for duration_ms)
 // ---------------------------------------------------------------------------
-static void play_tone(uint16_t freq_hz, uint16_t duration_ms, OutputStarvationStats* stats) {
+static void play_tone(uint16_t freq_hz, uint16_t duration_ms, AudioStarvationStats* stats) {
     if (!output_driver) return;
 
     uint32_t total_samples = (uint32_t)AUDIO_SAMPLE_RATE * duration_ms / 1000;
@@ -99,7 +92,7 @@ static void play_tone(uint16_t freq_hz, uint16_t duration_ms, OutputStarvationSt
         while (frames_done < total_samples) {
             size_t chunk = (total_samples - frames_done < FRAMES_PER_CHUNK)
                          ? (total_samples - frames_done) : FRAMES_PER_CHUNK;
-            if (!audio_write_frames(buf, chunk, stats)) return;
+            if (!audio_write_with_stats(output_driver, buf, chunk, stats)) return;
             frames_done += chunk;
         }
         return;
@@ -130,7 +123,7 @@ static void play_tone(uint16_t freq_hz, uint16_t duration_ms, OutputStarvationSt
             if (phase >= 2.0f * M_PI) phase -= 2.0f * M_PI;
         }
 
-        if (!audio_write_frames(buf, chunk, stats)) return;
+        if (!audio_write_with_stats(output_driver, buf, chunk, stats)) return;
         frames_done += chunk;
     }
 }
@@ -140,7 +133,7 @@ static void play_tone(uint16_t freq_hz, uint16_t duration_ms, OutputStarvationSt
 //   Space-delimited: "freq:dur" for tones, bare "dur" for silence gaps
 //   e.g. "1000:200 100 1000:200" = beep, 100ms gap, beep
 // ---------------------------------------------------------------------------
-static void play_pattern(const char* pattern, OutputStarvationStats* stats) {
+static void play_pattern(const char* pattern, AudioStarvationStats* stats) {
     if (!pattern || !pattern[0]) {
         play_tone(1000, 200, stats); // default beep
         return;
@@ -196,15 +189,15 @@ static void audio_task(void* param) {
             } else
 #endif
             if (cmd.loop) {
-                OutputStarvationStats stats = {};
+                AudioStarvationStats stats = {};
                 while (!g_stop_requested) {
                     play_pattern(cmd.pattern, &stats);
                 }
-                log_output_starvation(stats);
+                audio_log_starvation(stats);
             } else {
-                OutputStarvationStats stats = {};
+                AudioStarvationStats stats = {};
                 play_pattern(cmd.pattern, &stats);
-                log_output_starvation(stats);
+                audio_log_starvation(stats);
             }
 
             // Restore device volume if overridden
@@ -267,8 +260,7 @@ void audio_init(uint8_t initial_volume) {
     }
 
     audio_initialized = true;
-    LOGI(TAG, "Free internal heap after audio init: %u",
-         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    device_telemetry_log_memory_snapshot("audio");
     LOGI(TAG, "Audio ready (volume=%u%%, PA always-on)", current_volume);
 }
 

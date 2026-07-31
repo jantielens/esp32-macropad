@@ -14,16 +14,15 @@ static void check(bool condition, const char* message) {
 }
 
 static void verify_frame_count(uint32_t source_rate, int source_frames, uint32_t target_rate) {
-    constexpr int max_output_frames = 3456;
     std::vector<int16_t> source(source_frames * 2, 1000);
     const int expected_frames = (int)(((uint64_t)source_frames * target_rate + source_rate - 1) / source_rate);
-    check(expected_frames <= max_output_frames, "test case exceeds the production output cap");
-    std::vector<int16_t> output(max_output_frames * 2);
+    check(expected_frames <= SOUND_PLAYER_MAX_OUTPUT_FRAMES, "test case exceeds the production output cap");
+    std::vector<int16_t> output(SOUND_PLAYER_MAX_OUTPUT_FRAMES * 2);
 
     Resampler resampler;
     resampler_init(&resampler, source_rate, 2, target_rate);
     const int actual_frames = resampler_process(&resampler, source.data(), source_frames,
-                                                output.data(), max_output_frames);
+                                                output.data(), SOUND_PLAYER_MAX_OUTPUT_FRAMES);
     check(actual_frames == expected_frames, "resampler truncated or emitted an incorrect frame count");
 }
 
