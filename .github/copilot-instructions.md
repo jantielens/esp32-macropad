@@ -33,7 +33,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Button Defaults** (`HAS_DISPLAY`): Device-wide default button appearance (colors, border, radius, label styles).
 - **Action System** (`HAS_DISPLAY`): Shared `action_dispatch()` for buttons, swipe, boot, timer expire. `action_parse()` for DRY JSON serialization. `action_list_parse()` / `action_list_dispatch()` for array-of-N-actions consumers (boot, timer, future).
 - **BLE HID** (`HAS_BLE_HID`): NimBLE keyboard with key sequence DSL, single-owner pairing, auto-re-pair. Runtime-toggled.
-- **Audio** (`HAS_AUDIO`): ES8311 codec + I2S, beep pattern DSL, volume control, async FreeRTOS playback.
+- **Audio** (`HAS_AUDIO`): Board-selected ES8311 or PCM510xA I2S output, beep pattern DSL, volume control, and async FreeRTOS playback. See `docs/dev/audio-architecture.md` and `.github/instructions/audio.instructions.md`.
 - **Sound Player** (`HAS_SOUND_PLAYER`): MP3 decode (minimp3) + resample + I2S playback from LittleFS.
 - **MQTT Audio** (`HAS_AUDIO && HAS_MQTT`): HA siren, volume, beep buttons, custom tone entities.
 - **Power + Transport**: Power modes, BLE/MQTT transport selection, duty-cycle runtime, WiFi manager, portal idle timeout.
@@ -145,6 +145,7 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution — they work from an
 - `docs/dev/logging-guidelines.md` — Logging rules and format (LOGx macros, severity, modules)
 - `docs/dev/web-portal.md` — Web portal and REST API guide
 - `docs/dev/display-touch-architecture.md` — Display/touch HAL and screen architecture
+- `docs/dev/audio-architecture.md` — Audio output, I2S, memory, and MP3 playback architecture
 - `docs/dev/adding-a-device-class.md` — Device class extension contract (registry, aggregators, board overrides, optional subsystems)
 - `docs/pad-editor-guide.md` — Pad editor, binding templates, widgets, and real-world examples
 

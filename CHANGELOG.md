@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Audio output supports four boards at 48 kHz**: ES8311 output on esp32-p4-lcd4b, jc4880p433, and jc1060p470c now runs at 48 kHz; jc3636w518 adds PCM510xA output with stereo playback; MP3 files at every supported source rate play at the intended speed.
 * **MCP physical-device write assertions (#61)**: the new read-only `get_identity` tool returns the application SoC's immutable factory-MAC identifier together with the configured/fallback name, hostname, IP, board, and device class. MCP initialization identifies the connected device first. Authoring, destructive, and persistent configuration writes now require an exact `expected_device_id` assertion and reject missing, malformed, or mismatched values before dispatch. Tool schemas advertise the requirement centrally, successful protected writes return only the confirmed device ID, and the MCP guide documents identity-first aliases because client-generated outer namespaces are not physical identity.
 
 ### Fixed
