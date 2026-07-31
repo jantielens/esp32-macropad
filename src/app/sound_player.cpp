@@ -24,9 +24,14 @@
 // MINIMP3 recommends minimum ~16KB for reliable frame detection
 #define MP3_READ_BUF_SIZE (16 * 1024)
 
-// An MPEG-2.5 Layer III frame has 576 samples. At 8 kHz, resampling to a
-// 48 kHz target produces exactly 3456 frames.
-const int SOUND_PLAYER_MAX_OUTPUT_FRAMES = 3456;
+// The smallest supported MP3 source rate with the largest decoded frame.
+#define SOUND_PLAYER_MIN_SRC_RATE 8000
+#define SOUND_PLAYER_MAX_SRC_FRAME_SAMPLES 576
+const int SOUND_PLAYER_MAX_OUTPUT_FRAMES =
+    (SOUND_PLAYER_MAX_SRC_FRAME_SAMPLES * AUDIO_SAMPLE_RATE +
+     SOUND_PLAYER_MIN_SRC_RATE - 1) / SOUND_PLAYER_MIN_SRC_RATE;
+static_assert(SOUND_PLAYER_MAX_OUTPUT_FRAMES >= 1152,
+              "sound-player output buffer must hold a full MPEG-1 frame");
 
 // ---------------------------------------------------------------------------
 // Linear interpolation resampler: any source rate → AUDIO_SAMPLE_RATE.
@@ -63,25 +68,18 @@ static void resampler_init(Resampler* r, uint32_t src_rate, uint32_t src_channel
 // max_out_frames: maximum stereo frames to write
 // Returns number of stereo frames written.
 static int resampler_process(Resampler* r, const int16_t* src, int src_samples,
-                             int16_t* out, int max_out_frames) {
+                             int16_t* out, int max_out_frames, bool* truncated = nullptr) {
     int out_frames = 0;
     const int channels = r->src_channels;
 
     while (out_frames < max_out_frames) {
         uint32_t int_pos = r->position_numerator / r->target_rate;
-        uint32_t frac = (uint32_t)((r->position_numerator % r->target_rate) * 65536 / r->target_rate);
 
         if ((int)int_pos >= src_samples) {
-            // Consumed all source samples — update position for next buffer
-            r->position_numerator -= (uint64_t)src_samples * r->target_rate;
-            // Save last samples for interpolation across buffer boundaries
-            if (src_samples > 0) {
-                int last = src_samples - 1;
-                r->prev_l = src[last * channels];
-                r->prev_r = (channels > 1) ? src[last * channels + 1] : src[last * channels];
-            }
             break;
         }
+
+        uint32_t frac = (uint32_t)((r->position_numerator % r->target_rate) * 65536 / r->target_rate);
 
         // Get surrounding samples for linear interpolation
         int16_t s0_l, s0_r, s1_l, s1_r;
@@ -111,6 +109,18 @@ static int resampler_process(Resampler* r, const int16_t* src, int src_samples,
         r->position_numerator += r->src_rate;
     }
 
+    const uint64_t frame_numerator = (uint64_t)src_samples * r->target_rate;
+    const bool did_truncate = r->position_numerator < frame_numerator;
+    if (truncated) *truncated = did_truncate;
+    r->position_numerator = r->position_numerator >= frame_numerator
+                                ? r->position_numerator - frame_numerator
+                                : 0;
+    // Save the last samples for interpolation across buffer boundaries.
+    if (src_samples > 0) {
+        int last = src_samples - 1;
+        r->prev_l = src[last * channels];
+        r->prev_r = (channels > 1) ? src[last * channels + 1] : src[last * channels];
+    }
     return out_frames;
 }
 
@@ -285,8 +295,13 @@ bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
             }
         } else {
             // Resample and convert to stereo
+            bool truncated = false;
             out_frames = resampler_process(&resampler, pcm, samples,
-                                           out_buf, SOUND_PLAYER_MAX_OUTPUT_FRAMES);
+                                           out_buf, SOUND_PLAYER_MAX_OUTPUT_FRAMES, &truncated);
+            if (truncated) {
+                LOGW(TAG, "Resampler output cap reached: cap=%d source=%d Hz",
+                     SOUND_PLAYER_MAX_OUTPUT_FRAMES, frame_info.hz);
+            }
         }
 
         // Write PCM through the selected output driver.
