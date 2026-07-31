@@ -72,10 +72,11 @@ bool PCM510xADriver::write(const int16_t* frames, size_t frame_count) {
 
     int16_t scratch[512];
     const size_t total_samples = frame_count * 2;
+    const uint8_t vol = volume;  // One gain per call; volume may change from other tasks.
     for (size_t offset = 0; offset < total_samples;) {
         const size_t sample_count = min(total_samples - offset, sizeof(scratch) / sizeof(scratch[0]));
         for (size_t index = 0; index < sample_count; ++index) {
-            scratch[index] = audio_gain_apply(frames[offset + index], volume);
+            scratch[index] = audio_gain_apply(frames[offset + index], vol);
         }
 
         size_t written = 0;
@@ -94,6 +95,7 @@ void PCM510xADriver::setVolume(uint8_t vol_0_100) {
     volume = vol_0_100 > 100 ? 100 : vol_0_100;
 }
 
+// Intentionally not inherited: the base no-pin guard silently succeeds, which is unsafe for DAC soft-mute.
 void PCM510xADriver::setMuted(bool muted) {
     if (!initialized && !muted) return;
     pinMode(AUDIO_PA_PIN, OUTPUT);
@@ -103,7 +105,8 @@ void PCM510xADriver::setMuted(bool muted) {
 
 // A future teardown must mute and wait kMuteSettleMs with LRCK running.
 // It must then disable and delete the I2S channel before any DAC power is removed.
-// This firmware has no teardown path because the channel outlives the process.
+// This firmware has no teardown path: the channel is created once at boot and
+// lives for the rest of the firmware run.
 AudioOutputDriver* audio_output_driver_create() {
     static PCM510xADriver driver;
     return &driver;

@@ -1,6 +1,6 @@
-# Drivers (Display + Touch)
+# Drivers (Display, Touch + Audio)
 
-This folder contains reusable **display** and **touch** driver implementations used by multiple boards.
+This folder contains reusable **display**, **touch**, and **audio** driver implementations used by multiple boards.
 
 We intentionally keep this folder **flat** (no `display_*/touch_*` filename prefixes and no `display/` or `touch/` subfolders) to keep includes simple and minimize churn.
 

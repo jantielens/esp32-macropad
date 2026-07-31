@@ -6,9 +6,9 @@
 
 #if HAS_AUDIO
 
-// Initialize the ES8311 codec, I2S TX channel, and background audio task.
-// Must be called after Wire.begin() (e.g. after touch_manager_init on boards
-// that share the I2C bus).
+// Initialize the board-selected audio output driver, I2S TX channel, and background audio task.
+// I2C-attached codec boards must call this after Wire.begin() (e.g. after
+// touch_manager_init on boards that share the I2C bus).
 // initial_volume: 0-100 (from NVS config)
 void audio_init(uint8_t initial_volume);
 

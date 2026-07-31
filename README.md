@@ -43,7 +43,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Beeps & sound files** — pattern DSL (`500:40 60 800:40`) for short cues and MP3 file playback (≤512 KB) for longer sounds
 - **Audio feedback** for taps, long-press, and timer expiry, with per-button or per-action overrides
 - **Volume & brightness actions** — adjust device volume or backlight from any button
-- **Hardware-accelerated audio** on ESP32-P4 boards via the ES8311 codec
+- **Hardware-accelerated audio** on supported ESP32-P4 boards and jc3636w518
 
 ### Smart home & connectivity
 - **MQTT with Home Assistant auto-discovery** — registers as a full HA device with sensors, buttons, siren, volume, screen selector, and notification entities (no YAML needed)
