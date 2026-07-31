@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 235
+Total flags: 239
 
 ### Features (HAS_*)
 
@@ -54,6 +54,7 @@ Total flags: 235
 
 ### Selectors (*_DRIVER)
 
+- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
@@ -157,6 +158,8 @@ Total flags: 235
 ### Other
 
 - **AUDIO_CODEC_ADDR** default: `0x18` — I2C address of the audio codec (e.g. ES8311 = 0x18).
+- **AUDIO_DEFAULT_VOLUME** default: `50` — Default volume used when no NVS value has been stored.
+- **AUDIO_DMA_FRAME_NUM** default: `240` — I2S DMA frames per descriptor. The current ESP-IDF default is 240.
 - **AUDIO_I2S_BCLK** default: `-1` — I2S bit clock pin.
 - **AUDIO_I2S_DIN** default: `-1` — I2S data in pin (ESP32 RX ← codec data output).
 - **AUDIO_I2S_DOUT** default: `-1` — I2S data out pin (ESP32 TX → codec data input).
@@ -164,6 +167,7 @@ Total flags: 235
 - **AUDIO_I2S_MCLK** default: `-1` — I2S master clock pin.
 - **AUDIO_MP3_SCRATCH_PSRAM** default: `false` — Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
 - **AUDIO_PA_ACTIVE_LOW** default: `false` — Some boards route the PA enable through an inverting transistor.
+- **AUDIO_SAMPLE_RATE** default: `16000` — Audio output sample rate in Hz.
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS** default: `100` — BLE telemetry advertising interval (ms between adv packets within a burst).
 - **BLE_TELEMETRY_DEFAULT_BURST_COUNT** default: `3` — BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
@@ -345,6 +349,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
   - src/app/web_portal_config.cpp
+  - src/app/wifi_manager.cpp
 - **HAS_BACKLIGHT**
   - src/app/app.ino
   - src/app/board_config.h
@@ -820,6 +825,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_ap.cpp
 - **AUDIO_CODEC_ADDR**
   - src/app/board_config.h
+- **AUDIO_DEFAULT_VOLUME**
+  - src/app/board_config.h
+- **AUDIO_DMA_FRAME_NUM**
+  - src/app/board_config.h
 - **AUDIO_I2S_BCLK**
   - src/app/board_config.h
 - **AUDIO_I2S_DIN**
@@ -833,9 +842,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **AUDIO_MP3_SCRATCH_PSRAM**
   - src/app/board_config.h
   - src/app/sound_player.cpp
+- **AUDIO_OUTPUT_DRIVER**
+  - src/app/board_config.h
 - **AUDIO_PA_ACTIVE_LOW**
   - src/app/board_config.h
 - **AUDIO_PA_PIN**
+  - src/app/board_config.h
+- **AUDIO_SAMPLE_RATE**
   - src/app/board_config.h
 - **AUDIO_TASK_STACK_SIZE**
   - src/app/board_config.h

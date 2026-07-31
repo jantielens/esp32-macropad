@@ -287,7 +287,7 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_AUDIO
-		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, 50);
+		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, AUDIO_DEFAULT_VOLUME);
 		{
 			size_t n = preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 			if (n == 0) strlcpy(config->tap_beep, "500:40", CONFIG_BEEP_PATTERN_MAX_LEN);

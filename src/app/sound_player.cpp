@@ -2,10 +2,12 @@
 
 #if HAS_SOUND_PLAYER
 
+#ifndef AUDIO_RESAMPLER_TEST
+#include "audio_output_driver.h"
 #include "storage.h"
 #include <esp_heap_caps.h>
+#include <esp_timer.h>
 #include <string.h>
-#include "driver/i2s_std.h"
 #include "log_manager.h"
 #include "sound_store.h"
 
@@ -14,25 +16,23 @@
 #define MINIMP3_ONLY_MP3
 #define MINIMP3_IMPLEMENTATION
 #include "minimp3/minimp3.h"
+#endif
 
 #define TAG "SoundPlayer"
-
-// Target sample rate matches the I2S/ES8311 configuration
-static const uint32_t TARGET_RATE = 16000;
 
 // Read buffer for MP3 file data (must hold at least one full MP3 frame)
 // MINIMP3 recommends minimum ~16KB for reliable frame detection
 #define MP3_READ_BUF_SIZE (16 * 1024)
 
 // ---------------------------------------------------------------------------
-// Linear interpolation resampler: any source rate → TARGET_RATE (16 kHz)
+// Linear interpolation resampler: any source rate → AUDIO_SAMPLE_RATE.
 // ---------------------------------------------------------------------------
 struct Resampler {
     uint32_t src_rate;
     uint32_t src_channels;
-    // Fixed-point position in source samples (16.16 format)
-    uint32_t pos_frac;
-    uint32_t step_frac;  // how much to advance per output sample (16.16)
+    uint32_t target_rate;
+    // Source position numerator over target_rate.
+    uint64_t position_numerator;
     // Previous sample pair for interpolation (left, right)
     int16_t prev_l;
     int16_t prev_r;
@@ -40,19 +40,19 @@ struct Resampler {
     int16_t curr_r;
 };
 
-static void resampler_init(Resampler* r, uint32_t src_rate, uint32_t src_channels) {
+static void resampler_init(Resampler* r, uint32_t src_rate, uint32_t src_channels,
+                           uint32_t target_rate) {
     r->src_rate = src_rate;
     r->src_channels = src_channels;
-    // step = src_rate / target_rate in 16.16 fixed point
-    r->step_frac = (uint32_t)(((uint64_t)src_rate << 16) / TARGET_RATE);
-    r->pos_frac = 0;
+    r->target_rate = target_rate;
+    r->position_numerator = 0;
     r->prev_l = 0;
     r->prev_r = 0;
     r->curr_l = 0;
     r->curr_r = 0;
 }
 
-// Resample decoded PCM into stereo 16-bit output at TARGET_RATE.
+// Resample decoded PCM into stereo 16-bit output at AUDIO_SAMPLE_RATE.
 // src: decoded samples (interleaved if stereo)
 // src_samples: number of samples per channel
 // out: output buffer (stereo interleaved, must hold enough frames)
@@ -64,12 +64,12 @@ static int resampler_process(Resampler* r, const int16_t* src, int src_samples,
     const int channels = r->src_channels;
 
     while (out_frames < max_out_frames) {
-        uint32_t int_pos = r->pos_frac >> 16;
-        uint32_t frac = r->pos_frac & 0xFFFF;
+        uint32_t int_pos = r->position_numerator / r->target_rate;
+        uint32_t frac = (uint32_t)((r->position_numerator % r->target_rate) * 65536 / r->target_rate);
 
         if ((int)int_pos >= src_samples) {
             // Consumed all source samples — update position for next buffer
-            r->pos_frac -= (uint32_t)src_samples << 16;
+            r->position_numerator -= (uint64_t)src_samples * r->target_rate;
             // Save last samples for interpolation across buffer boundaries
             if (src_samples > 0) {
                 int last = src_samples - 1;
@@ -81,7 +81,7 @@ static int resampler_process(Resampler* r, const int16_t* src, int src_samples,
 
         // Get surrounding samples for linear interpolation
         int16_t s0_l, s0_r, s1_l, s1_r;
-        if ((int)int_pos == 0 && r->pos_frac < r->step_frac) {
+        if ((int)int_pos == 0 && r->position_numerator < r->src_rate) {
             // At start of buffer — use previous buffer's last sample
             s0_l = r->prev_l;
             s0_r = r->prev_r;
@@ -104,7 +104,7 @@ static int resampler_process(Resampler* r, const int16_t* src, int src_samples,
         out[out_frames * 2 + 1] = (int16_t)(s0_r + (int32_t)(s1_r - s0_r) * (int32_t)frac / 65536);
         out_frames++;
 
-        r->pos_frac += r->step_frac;
+        r->position_numerator += r->src_rate;
     }
 
     return out_frames;
@@ -113,9 +113,10 @@ static int resampler_process(Resampler* r, const int16_t* src, int src_samples,
 // ---------------------------------------------------------------------------
 // Play MP3 file — called from audio task
 // ---------------------------------------------------------------------------
-bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
+#ifndef AUDIO_RESAMPLER_TEST
+bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
                        volatile bool* stop_flag) {
-    if (!tx_handle || !filename || !filename[0]) return false;
+    if (!output_driver || !filename || !filename[0]) return false;
 
     // Build path
     char path[48];
@@ -148,10 +149,9 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
         return false;
     }
 
-    // I2S output buffer (stereo, 16-bit, 8 KB)
-    // At worst case (48kHz → 16kHz), one MP3 frame (1152 samples) produces
-    // 1152 * 16000/48000 = 384 output frames. Add margin.
-    const int max_out_frames = 2048;
+    // One 1152-sample MP3 frame can expand to 3456 frames at 16 kHz from an
+    // 8 kHz source. Size for the maximum supported upsampling case.
+    const int max_out_frames = 3456;
     int16_t* out_buf = (int16_t*)ps_alloc(max_out_frames * 2 * sizeof(int16_t));
     if (!out_buf) {
         LOGE(TAG, "Failed to allocate output buffer");
@@ -208,6 +208,10 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
     Resampler resampler;
     bool resampler_initialized = false;
     bool success = true;
+    int64_t previous_write_complete_us = 0;
+    uint32_t starvation_events = 0;
+    int64_t worst_gap_us = 0;
+    const int64_t buffered_us = (int64_t)6 * AUDIO_DMA_FRAME_NUM * 1000000 / AUDIO_SAMPLE_RATE;
 
     while (!(*stop_flag)) {
         // Ensure we have enough data in buffer
@@ -256,7 +260,7 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
         if (!resampler_initialized ||
             (uint32_t)frame_info.hz != resampler.src_rate ||
             (uint32_t)frame_info.channels != resampler.src_channels) {
-            resampler_init(&resampler, frame_info.hz, frame_info.channels);
+            resampler_init(&resampler, frame_info.hz, frame_info.channels, AUDIO_SAMPLE_RATE);
             if (!resampler_initialized) {
                 LOGD(TAG, "MP3: %d Hz, %d ch, layer %d, %d kbps",
                      frame_info.hz, frame_info.channels, frame_info.layer,
@@ -268,13 +272,13 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
             resampler_initialized = true;
         }
 
-        // Resample to TARGET_RATE if needed
+        // Resample to AUDIO_SAMPLE_RATE if needed
         int out_frames;
-        if ((uint32_t)frame_info.hz == TARGET_RATE && frame_info.channels == 2) {
+        if ((uint32_t)frame_info.hz == AUDIO_SAMPLE_RATE && frame_info.channels == 2) {
             // No resampling needed, already stereo at target rate
             out_frames = samples;
             memcpy(out_buf, pcm, samples * 2 * sizeof(int16_t));
-        } else if ((uint32_t)frame_info.hz == TARGET_RATE && frame_info.channels == 1) {
+        } else if ((uint32_t)frame_info.hz == AUDIO_SAMPLE_RATE && frame_info.channels == 1) {
             // Mono → stereo at target rate (no resampling, just dup channels)
             out_frames = samples;
             for (int i = 0; i < samples; i++) {
@@ -287,17 +291,22 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
                                            out_buf, max_out_frames);
         }
 
-        // Write to I2S
+        // Write PCM through the selected output driver.
         if (out_frames > 0) {
-            size_t bytes = out_frames * 2 * sizeof(int16_t);
-            size_t written;
-            esp_err_t err = i2s_channel_write(tx_handle, out_buf, bytes,
-                                              &written, portMAX_DELAY);
-            if (err != ESP_OK) {
-                LOGE(TAG, "I2S write error: %s", esp_err_to_name(err));
+            const int64_t before_write_us = esp_timer_get_time();
+            if (previous_write_complete_us != 0) {
+                const int64_t gap_us = before_write_us - previous_write_complete_us;
+                if (gap_us > buffered_us) {
+                    starvation_events++;
+                    if (gap_us > worst_gap_us) worst_gap_us = gap_us;
+                }
+            }
+            if (!output_driver->write(out_buf, out_frames)) {
+                LOGE(TAG, "Audio output write error");
                 success = false;
                 break;
             }
+            previous_write_complete_us = esp_timer_get_time();
         }
     }
 
@@ -310,8 +319,11 @@ bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
     heap_caps_free(read_buf);
     file.close();
 
-    LOGI(TAG, "Playback %s: %s", path, success ? "complete" : "error");
+        LOGI(TAG, "Output starvation: events=%u worst_gap_us=%lld buffered_us=%lld",
+            starvation_events, worst_gap_us, buffered_us);
+        LOGI(TAG, "Playback %s: %s", path, success ? "complete" : "error");
     return success;
 }
+#endif // AUDIO_RESAMPLER_TEST
 
 #endif // HAS_SOUND_PLAYER

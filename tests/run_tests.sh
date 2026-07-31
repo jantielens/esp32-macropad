@@ -240,6 +240,26 @@ echo "=== Running unit tests: minimp3_scratch ==="
 ./tests/bin/test_minimp3_scratch
 echo
 
+echo "=== Building unit tests: audio resampler ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I tests -I src/app \
+    tests/test_audio_resampler.cpp \
+    -o tests/bin/test_audio_resampler
+
+echo "=== Running unit tests: audio resampler ==="
+./tests/bin/test_audio_resampler
+echo
+
+echo "=== Building unit tests: audio gain ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_audio_gain.cpp \
+    -o tests/bin/test_audio_gain
+
+echo "=== Running unit tests: audio gain ==="
+./tests/bin/test_audio_gain
+echo
+
 echo "=== Building unit tests: key_sequence ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     tests/test_key_sequence.cpp \

@@ -6,20 +6,20 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "driver/i2s_types.h"
 
 #ifdef __cplusplus
+class AudioOutputDriver;
 extern "C" {
 #endif
 
 // Play an MP3 sound file from LittleFS.
 // Called from the audio task context — blocks until playback completes or
 // stop_flag is set.
-// tx_handle: I2S TX channel handle for writing PCM samples
+// output_driver: non-owning audio output driver for PCM samples
 // filename: sound name (without path/extension)
 // stop_flag: pointer to volatile bool checked between frames for early abort
 // Returns true on success.
-bool sound_player_play(i2s_chan_handle_t tx_handle, const char* filename,
+bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
                        volatile bool* stop_flag);
 
 #ifdef __cplusplus

@@ -96,6 +96,7 @@
 // Pin mapping from BSP: https://github.com/cheops/JC1060P470C_I_W
 // ============================================================================
 #define HAS_AUDIO true
+#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
 #define AUDIO_I2S_MCLK   13    // ES8311 MCLK (master clock)
 #define AUDIO_I2S_BCLK   12    // ES8311 SCLK (bit clock)
 #define AUDIO_I2S_LRCK   10    // ES8311 LRCK (word select)

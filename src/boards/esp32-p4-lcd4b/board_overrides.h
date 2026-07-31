@@ -117,6 +117,7 @@
 // Audio (ES8311 codec + NS4150B amplifier over I2S)
 // ============================================================================
 #define HAS_AUDIO true
+#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
 #define AUDIO_I2S_MCLK   13
 #define AUDIO_I2S_BCLK   12
 #define AUDIO_I2S_DOUT    9   // ESP32 TX → ES8311 DSDIN (codec data input)

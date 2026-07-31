@@ -350,6 +350,30 @@ struct HwButtonDef {
 #define AUDIO_TASK_STACK_SIZE 24576
 #endif
 
+// Audio output sample rate in Hz.
+#ifndef AUDIO_SAMPLE_RATE
+#define AUDIO_SAMPLE_RATE 16000
+#endif
+
+// I2S DMA frames per descriptor. The current ESP-IDF default is 240.
+#ifndef AUDIO_DMA_FRAME_NUM
+#define AUDIO_DMA_FRAME_NUM 240
+#endif
+
+// Default volume used when no NVS value has been stored.
+#ifndef AUDIO_DEFAULT_VOLUME
+#define AUDIO_DEFAULT_VOLUME 50
+#endif
+
+// Audio output driver selection.
+#define AUDIO_OUTPUT_DRIVER_ES8311   0
+#define AUDIO_OUTPUT_DRIVER_PCM510XA 1
+
+// Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
+#ifndef AUDIO_OUTPUT_DRIVER
+#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
+#endif
+
 // ============================================================================
 // SD Card Storage (optional)
 // ============================================================================
