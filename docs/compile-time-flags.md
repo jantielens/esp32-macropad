@@ -291,7 +291,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3636w518 | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
@@ -312,7 +312,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | --- | --- | --- | --- |
 | esp32-4848S040 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
 | jc3248w535 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
-| jc3636w518 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
+| jc3636w518 | AUDIO_OUTPUT_DRIVER_PCM510XA | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-shutter | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |

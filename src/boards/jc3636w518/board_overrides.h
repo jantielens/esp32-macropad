@@ -14,6 +14,25 @@
 // BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
 #define HAS_BLE_HID false
 
+// ---------------------------------------------------------------------------
+// Audio (PCM510xA, 3-wire I2S)
+// ---------------------------------------------------------------------------
+#define HAS_AUDIO true
+#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_PCM510XA
+#define AUDIO_I2S_LRCK 16
+#define AUDIO_I2S_DOUT 17
+#define AUDIO_I2S_BCLK 18
+#define AUDIO_I2S_MCLK 21
+#define AUDIO_I2S_DIN -1
+#define AUDIO_PA_PIN 48
+#define AUDIO_PA_ACTIVE_LOW false
+#define AUDIO_SAMPLE_RATE 48000
+// Keep this paired with AUDIO_MP3_SCRATCH_PSRAM: its PSRAM-only scratch buffer
+// would otherwise put 16 KB on this 12 KB task stack.
+#define AUDIO_TASK_STACK_SIZE 12288
+#define AUDIO_MP3_SCRATCH_PSRAM true
+#define AUDIO_DEFAULT_VOLUME 40
+
 // LVGL: place built-in CPU/FPS perf monitor at bottom-center (round display)
 // LVGL perf monitor alignment.
 #define LV_USE_PERF_MONITOR_POS LV_ALIGN_BOTTOM_MID
