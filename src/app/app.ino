@@ -73,6 +73,10 @@
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
 
+#ifdef LOOP_TASK_STACK_SIZE
+SET_LOOP_TASK_STACK_SIZE(LOOP_TASK_STACK_SIZE);
+#endif
+
 #if HAS_TOUCH
 #include "touch_manager.h"
 #endif
@@ -621,7 +625,6 @@ void loop()
 				(unsigned)int_free,
 				(unsigned)psram_free);
 		}
-
 		last_heartbeat_ms = current_ms;
 	}
 

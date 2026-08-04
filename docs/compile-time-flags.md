@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 242
+Total flags: 243
 
 ### Features (HAS_*)
 
@@ -131,6 +131,7 @@ Total flags: 242
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
 - **HTTP_STREAM_CHUNK_SIZE** default: `(no default)` — failures (size ~2.3 KB requested vs ~1.6 KB largest free).
 - **JD9165_DSI_DPI_CLK_HZ** default: `51200000L` — DPI pixel clock in Hz.
+- **LOOP_TASK_STACK_SIZE** default: `(no default)` — Measured under portal, MQTT, and pad load: 4704 bytes remained from 8192.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
@@ -1074,6 +1075,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LED_PIN**
   - src/app/board_config.h
+- **LOOP_TASK_STACK_SIZE**
+  - src/app/app.ino
 - **LVGL_BUFFER_PREFER_INTERNAL**
   - src/app/board_config.h
 - **LVGL_BUFFER_SIZE**

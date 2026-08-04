@@ -17,6 +17,10 @@
 #define HAS_BACKLIGHT true
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
+// Measured under portal, MQTT, and pad load: 4704 bytes remained from 8192.
+#define LOOP_TASK_STACK_SIZE 6144
+// Measured under portal load: 11680 bytes remained from the 16 KB default.
+#define CONFIG_ASYNC_TCP_STACK_SIZE 8192
 
 // ============================================================================
 // Driver Selection (HAL)
