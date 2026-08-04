@@ -1116,7 +1116,7 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `heap_total` | Total heap size (bytes) | `8390520` |
 | `heap_free` | Free heap memory (bytes) | `145320` |
 | `heap_min` | Heap low-water mark (bytes) | `98000` |
-| `heap_largest` | Largest free block (bytes) | `65536` |
+| `heap_largest` | Largest free block (bytes; up to 30 seconds stale on MIPI-DSI boards) | `65536` |
 | `heap_internal_total` | Total internal RAM (bytes) | `327680` |
 | `heap_internal` | Free internal RAM (bytes) | `82000` |
 | `heap_internal_used` | Used internal RAM (total − free) | `245680` |
@@ -1124,7 +1124,7 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `psram_free` | Free PSRAM (bytes) | `6291456` |
 | `psram_used` | Used PSRAM (total − free) | `2097152` |
 | `psram_min` | PSRAM low-water mark (bytes) | `4194304` |
-| `psram_largest` | Largest free PSRAM block (bytes) | `4194304` |
+| `psram_largest` | Largest free PSRAM block (bytes; unavailable on MIPI-DSI boards, use a pipe fallback) | `4194304` |
 | `wifi_connected` | WiFi connection status | `ON` / `OFF` |
 | `wifi_ssid` | Connected network name | `MyNetwork` |
 | `ip` | Device IP address | `192.168.1.42` |

@@ -688,6 +688,28 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DRIVER DISPLAY_DRIVER_TFT_ESPI  // Default to TFT_eSPI
 #endif
 
+// MIPI-DSI panels continuously DMA-scan a PSRAM framebuffer. A PSRAM heap
+// free-list walk can starve that scan and produce a visible blue frame.
+#ifndef TELEMETRY_ALLOW_PSRAM_POOL_WALK
+#if HAS_DISPLAY && (DISPLAY_DRIVER == DISPLAY_DRIVER_ST7703_DSI || \
+                    DISPLAY_DRIVER == DISPLAY_DRIVER_ST7701_DSI || \
+                    DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI)
+#define TELEMETRY_ALLOW_PSRAM_POOL_WALK 0
+#else
+#define TELEMETRY_ALLOW_PSRAM_POOL_WALK 1
+#endif
+#endif
+
+// DSI boards sample the internal largest-free-block metric off the LVGL task.
+#ifndef TELEMETRY_CACHE_INTERNAL_POOL_WALK
+#define TELEMETRY_CACHE_INTERNAL_POOL_WALK (!TELEMETRY_ALLOW_PSRAM_POOL_WALK)
+#endif
+
+// Sampling period for the cached internal largest-free-block metric (ms).
+#ifndef TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS
+#define TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS 30000
+#endif
+
 // Display shape constants (used by pad layout engine for grid/curated decisions)
 #define DISPLAY_SHAPE_RECT   0  // Rectangular (landscape or portrait)
 #define DISPLAY_SHAPE_SQUARE 1  // Square

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 240
+Total flags: 242
 
 ### Features (HAS_*)
 
@@ -146,6 +146,7 @@ Total flags: 240
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
+- **TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS** default: `30000` — Sampling period for the cached internal largest-free-block metric (ms).
 - **TFT_BACKLIGHT_PWM_FREQ** default: `1000` — Lower frequencies give wider dimming range but may cause audible coil whine.
 - **TFT_SPI_FREQ_HZ** default: `(no default)` — QSPI clock frequency (Hz).
 - **TOUCH_I2C_FREQ_HZ** default: `(no default)` — I2C frequency (Hz).
@@ -260,6 +261,7 @@ Total flags: 240
 - **ST7703_VSYNC_BACK_PORCH** default: `20` — VSYNC back porch in lines.
 - **ST7703_VSYNC_FRONT_PORCH** default: `20` — VSYNC front porch in lines.
 - **ST7703_VSYNC_PULSE_WIDTH** default: `4` — VSYNC pulse width in lines.
+- **TELEMETRY_CACHE_INTERNAL_POOL_WALK** default: `(!TELEMETRY_ALLOW_PSRAM_POOL_WALK)` — DSI boards sample the internal largest-free-block metric off the LVGL task.
 - **TFT_BACKLIGHT_DUTY_MAX** default: `255` — Duty cycle at full saturation (before constant DC).
 - **TFT_BACKLIGHT_DUTY_MIN** default: `0` — Duty cycle where backlight first turns on.
 - **TFT_BACKLIGHT_ON** default: `(no default)` — Backlight active level.
@@ -1214,6 +1216,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **ST7703_VSYNC_PULSE_WIDTH**
   - src/app/board_config.h
   - src/boards/esp32-p4-lcd4b/board_overrides.h
+- **TELEMETRY_CACHE_INTERNAL_POOL_WALK**
+  - src/app/board_config.h
+  - src/app/device_telemetry.cpp
+- **TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS**
+  - src/app/board_config.h
 - **TFT_BACKLIGHT_DUTY_MAX**
   - src/app/board_config.h
 - **TFT_BACKLIGHT_DUTY_MIN**

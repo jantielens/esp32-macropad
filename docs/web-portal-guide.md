@@ -35,8 +35,8 @@ The orange **CPU** badge in the header shows real-time CPU usage with a breathin
 - **Reset reason** — why the device last restarted
 - **CPU usage** — percentage (based on FreeRTOS IDLE task measurement)
 - **Core temperature** — internal chip temperature sensor
-- **Heap memory** — free, minimum, largest block, and fragmentation
-- **PSRAM** — same metrics for external RAM (when present)
+- **Heap memory** — free, minimum, largest block, and fragmentation. On MIPI-DSI boards, largest-block data can be up to 30 seconds old.
+- **PSRAM** — free and minimum values for external RAM (when present). MIPI-DSI boards do not report PSRAM largest-block data because measuring it can disrupt display scan-out.
 - **Flash usage** — firmware size
 - **Filesystem** — LittleFS partition usage (for icons)
 - **MQTT** — connection status and publish timing

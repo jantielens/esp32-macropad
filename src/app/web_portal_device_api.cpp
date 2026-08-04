@@ -299,8 +299,6 @@ void handleGetHealthHistory(AsyncWebServerRequest *request) {
 		PRINT_U32_ARRAY_FIELD("psram_free_min_window", s.psram_free_min_window);
 		PRINT_U32_ARRAY_FIELD("psram_free_max_window", s.psram_free_max_window);
 
-		PRINT_U32_ARRAY_FIELD("heap_internal_largest", s.heap_internal_largest);
-
 #undef PRINT_U32_ARRAY_FIELD
 
 		response->print("}");

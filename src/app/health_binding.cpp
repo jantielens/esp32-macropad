@@ -72,6 +72,7 @@ static void ensure_static_initialized() {
 #define HEALTH_BINDING_REFRESH_MS 2000
 
 static uint32_t s_last_refresh_ms = 0;
+static uint32_t s_last_mem_refresh_ms = 0;
 static int s_cpu = -1;
 static int16_t s_rssi = 0;
 static bool s_rssi_valid = false;
@@ -87,7 +88,6 @@ static void refresh_if_stale() {
 
     s_cpu = device_telemetry_get_cpu_usage();
     s_rssi = device_telemetry_get_cached_rssi(&s_rssi_valid);
-    s_mem = device_telemetry_get_memory_snapshot();
 
     s_wifi_connected = (WiFi.status() == WL_CONNECTED);
     if (s_wifi_connected) {
@@ -97,6 +97,13 @@ static void refresh_if_stale() {
         s_wifi_ssid[0] = '\0';
         s_ip[0] = '\0';
     }
+}
+
+static void refresh_memory_if_stale() {
+    uint32_t now = millis();
+    if (now - s_last_mem_refresh_ms < HEALTH_BINDING_REFRESH_MS && s_last_mem_refresh_ms != 0) return;
+    s_last_mem_refresh_ms = now;
+    s_mem = device_telemetry_get_memory_snapshot();
 }
 
 // ============================================================================
@@ -120,6 +127,22 @@ static void parse_health_params(const char* params,
     memcpy(key, params, klen);
     key[klen] = '\0';
     strlcpy(fmt, sep + 1, fmt_len);
+}
+
+static bool health_key_requires_memory_snapshot(const char* key) {
+    return strcmp(key, "heap_free") == 0 ||
+           strcmp(key, "heap_min") == 0 ||
+           strcmp(key, "heap_largest") == 0 ||
+           strcmp(key, "heap_internal") == 0 ||
+           strcmp(key, "heap_internal_used") == 0 ||
+           strcmp(key, "psram_free") == 0 ||
+           strcmp(key, "psram_min") == 0 ||
+#if TELEMETRY_ALLOW_PSRAM_POOL_WALK
+           strcmp(key, "psram_largest") == 0 ||
+#endif
+           strcmp(key, "psram_used") == 0 ||
+           strcmp(key, "table") == 0 ||
+           strcmp(key, "extended_table") == 0;
 }
 
 // ============================================================================
@@ -166,8 +189,12 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         return true;
     }
     if (strcmp(key, "psram_largest") == 0) {
+#if TELEMETRY_ALLOW_PSRAM_POOL_WALK
         snprintf(out, out_len, "%u", (unsigned)s_mem.psram_largest_free_block_bytes);
         return true;
+#else
+        return false;
+#endif
     }
     // --- Memory totals & used (static after boot) ---
     if (strcmp(key, "heap_total") == 0) {
@@ -337,6 +364,9 @@ static bool health_binding_resolve(const char* params, char* out, size_t out_len
 
     ensure_static_initialized();
     refresh_if_stale();
+    if (health_key_requires_memory_snapshot(key)) {
+        refresh_memory_if_stale();
+    }
 
     if (strcmp(key, "table") == 0 || strcmp(key, "extended_table") == 0) {
         bool extended = (strcmp(key, "extended_table") == 0);
@@ -408,7 +438,11 @@ static const HealthKeyDef HEALTH_KEYS[] = {
     {"psram_free",          "free PSRAM, bytes"},
     {"psram_used",          "used PSRAM, bytes"},
     {"psram_min",           "PSRAM low-water mark, bytes"},
+#if TELEMETRY_ALLOW_PSRAM_POOL_WALK
     {"psram_largest",       "largest free PSRAM block, bytes"},
+#else
+    {"psram_largest",       "unavailable on MIPI-DSI boards; use a pipe fallback"},
+#endif
     {"wifi_connected",      "ON/OFF WiFi connection state"},
     {"wifi_ssid",           "connected network name"},
     {"ip",                  "device IP address"},

@@ -184,8 +184,8 @@ Real-time device health monitoring integrated as a header badge with expandable 
 - **Reset Reason**: Why device last restarted
 - **CPU Usage**: Percentage based on IDLE task (nullable when runtime stats unavailable)
 - **Core Temp**: Internal temperature sensor (ESP32-C3/S2/S3/C2/C6/H2)
-- **Internal Heap**: Free/min/largest block + fragmentation
-- **PSRAM**: Free/min/largest block + fragmentation (when present)
+- **Internal Heap**: Free/min/largest block + fragmentation. On MIPI-DSI boards, the largest-block value is sampled at most every 30 seconds.
+- **PSRAM**: Free/minimum values (when present). MIPI-DSI boards intentionally omit the largest-block measurement because a PSRAM heap walk can interrupt framebuffer scan-out.
 - **Flash Usage**: Used firmware space
 - **Filesystem**: FFat presence/mounted/usage (nullable when no partition present)
 - **MQTT**: Enabled/connected/publish age
@@ -518,9 +518,6 @@ Returns real-time device health statistics.
   "cpu_usage": 15,
   "cpu_freq": 160,
   "cpu_temperature": 42,
-  "heap_free": 250000,
-  "heap_min": 240000,
-  "heap_largest": 120000,
   "heap_internal_free": 200000,
   "heap_internal_min": 190000,
   "heap_internal_largest": 110000,
@@ -530,8 +527,6 @@ Returns real-time device health statistics.
   "heap_fragmentation": 5,
   "psram_free": 8388608,
   "psram_min": 8350000,
-  "psram_largest": 8200000,
-  "psram_fragmentation": 2,
   "flash_used": 1048576,
   "flash_total": 3145728,
   "fs_mounted": true,
@@ -554,12 +549,9 @@ Returns real-time device health statistics.
 
   "heap_internal_free_min_window": 195000,
   "heap_internal_free_max_window": 205000,
-  "heap_internal_largest_min_window": 100000,
   "heap_fragmentation_max_window": 8,
   "psram_free_min_window": 8300000,
   "psram_free_max_window": 8388608,
-  "psram_largest_min_window": 8100000,
-  "psram_fragmentation_max_window": 4,
 
   "wifi_rssi": -45,
   "wifi_channel": 6,
@@ -567,6 +559,11 @@ Returns real-time device health statistics.
   "hostname": "esp32-1234"
 }
 ```
+
+On MIPI-DSI boards, `heap_internal_largest`,
+`heap_dma_internal_largest`, and `heap_fragmentation` use timer-cached
+internal-heap measurements that can be up to 30 seconds old. The endpoint does
+not report a PSRAM largest-block value on those boards.
 
 **Notes:**
 - `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
@@ -602,9 +599,16 @@ Returns device-side health history arrays for the portal sparklines.
   "cpu_usage": [12, 14, 18],
   "heap_internal_free": [190000, 189500, 189000],
   "heap_internal_free_min_window": [188000, 188000, 188500],
-  "heap_internal_free_max_window": [195000, 194500, 194000]
+  "heap_internal_free_max_window": [195000, 194500, 194000],
+  "psram_free": [8300000, 8299000, 8298000],
+  "psram_free_min_window": [8298000, 8297000, 8296000],
+  "psram_free_max_window": [8301000, 8300000, 8299000]
 }
 ```
+
+History intentionally excludes largest-free-block measurements. Those require
+an allocator pool walk, which can interrupt continuous MIPI-DSI scan-out.
+`GET /api/health` retains its cached internal largest-block values.
 
 ### Configuration Management
 

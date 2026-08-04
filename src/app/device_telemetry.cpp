@@ -90,6 +90,12 @@ static portMUX_TYPE g_health_window_mux = portMUX_INITIALIZER_UNLOCKED;
 static TimerHandle_t g_health_window_timer = nullptr;
 
 static constexpr uint32_t kHealthWindowSamplePeriodMs = HEALTH_WINDOW_SAMPLE_PERIOD_MS;
+static constexpr uint32_t kInternalPoolWalkPeriodMs = TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS;
+
+static size_t g_cached_internal_largest = 0;
+static size_t g_cached_dma_internal_largest = 0;
+static bool g_cached_internal_largest_valid = false;
+static uint32_t g_last_internal_pool_walk_ms = 0;
 
 struct HealthWindowStats {
 		bool initialized;
@@ -170,6 +176,55 @@ static void health_window_update_sample(size_t internal_free, size_t psram_free)
 		if (psram_free > g_health_window_current.psram_free_max) g_health_window_current.psram_free_max = psram_free;
 
 		portEXIT_CRITICAL(&g_health_window_mux);
+}
+
+static void sample_internal_largest_if_due(uint32_t now_ms) {
+#if TELEMETRY_CACHE_INTERNAL_POOL_WALK
+		if (g_last_internal_pool_walk_ms != 0 &&
+				(uint32_t)(now_ms - g_last_internal_pool_walk_ms) < kInternalPoolWalkPeriodMs) {
+				return;
+		}
+
+		// The timer daemon performs the walks; request handlers read only these copies.
+		const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const size_t dma_internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		portENTER_CRITICAL(&g_health_window_mux);
+		g_cached_internal_largest = internal_largest;
+		g_cached_dma_internal_largest = dma_internal_largest;
+		g_cached_internal_largest_valid = true;
+		g_last_internal_pool_walk_ms = now_ms;
+		portEXIT_CRITICAL(&g_health_window_mux);
+#else
+		(void)now_ms;
+#endif
+}
+
+static size_t get_internal_largest_free_block() {
+#if TELEMETRY_CACHE_INTERNAL_POOL_WALK
+		size_t largest = 0;
+		portENTER_CRITICAL(&g_health_window_mux);
+		if (g_cached_internal_largest_valid) {
+				largest = g_cached_internal_largest;
+		}
+		portEXIT_CRITICAL(&g_health_window_mux);
+		return largest;
+#else
+		return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+#endif
+}
+
+static size_t get_dma_internal_largest_free_block() {
+#if TELEMETRY_CACHE_INTERNAL_POOL_WALK
+		size_t largest = 0;
+		portENTER_CRITICAL(&g_health_window_mux);
+		if (g_cached_internal_largest_valid) {
+				largest = g_cached_dma_internal_largest;
+		}
+		portEXIT_CRITICAL(&g_health_window_mux);
+		return largest;
+#else
+		return heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+#endif
 }
 
 // Flash/sketch metadata caching (avoid re-entrant ESP-IDF image/mmap helpers)
@@ -260,10 +315,12 @@ static void cpu_timer_cb(void*) {
 }
 
 static void health_window_timer_cb(TimerHandle_t) {
-		// Pure counter reads only — no free-list walks.
+		// Counter reads every tick; internal largest-block is sampled separately
+		// at a slow cadence when this board caches allocator walks.
 		const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 		const size_t psram_free = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
+		sample_internal_largest_if_due((uint32_t)millis());
 		health_window_update_sample(internal_free, psram_free);
 }
 
@@ -612,8 +669,7 @@ static bool compute_health_window_computed(HealthWindowComputed* out) {
 		const size_t internal_free_now = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 		const size_t psram_free_now = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
-		// Fragmentation computed on-demand (single free-list walk at request time, not in the 200ms timer).
-		const size_t internal_largest_now = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const size_t internal_largest_now = get_internal_largest_free_block();
 		const int internal_frag_now = compute_fragmentation_percent(internal_free_now, internal_largest_now);
 
 		// Merge last-complete and current-in-progress windows.
@@ -722,7 +778,9 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 		// psram_largest/psram_fragmentation removed (expensive PSRAM free-list walk).
 		const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 		const size_t internal_min = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-		const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const size_t internal_largest_cached = get_internal_largest_free_block();
+		const size_t internal_largest = (internal_largest_cached < internal_free)
+				? internal_largest_cached : internal_free;
 
 		doc["heap_internal_free"] = internal_free;
 		doc["heap_internal_min"] = internal_min;
@@ -736,7 +794,9 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 		// is empty).
 		const size_t dma_internal_free = heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 		const size_t dma_internal_min = heap_caps_get_minimum_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-		const size_t dma_internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		const size_t dma_internal_largest_cached = get_dma_internal_largest_free_block();
+		const size_t dma_internal_largest = (dma_internal_largest_cached < dma_internal_free)
+				? dma_internal_largest_cached : dma_internal_free;
 		doc["heap_dma_internal_free"] = dma_internal_free;
 		doc["heap_dma_internal_min"] = dma_internal_min;
 		doc["heap_dma_internal_largest"] = dma_internal_largest;
@@ -875,7 +935,7 @@ static void get_memory_snapshot(
 
 		if (out_heap_largest) {
 				// Keep this consistent with ESP.getFreeHeap() (internal heap): use INTERNAL 8-bit largest block.
-				*out_heap_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+				*out_heap_largest = get_internal_largest_free_block();
 		}
 
 		if (out_internal_free) {
@@ -893,7 +953,11 @@ static void get_memory_snapshot(
 				*out_psram_min = heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM);
 		}
 		if (out_psram_largest) {
+				#if TELEMETRY_ALLOW_PSRAM_POOL_WALK
 				*out_psram_largest = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+				#else
+				*out_psram_largest = 0;
+				#endif
 		}
 #else
 		if (out_psram_free) *out_psram_free = 0;

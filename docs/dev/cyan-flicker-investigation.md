@@ -1,13 +1,23 @@
 ---
 title: Cyan Flicker Investigation (ESP32-P4 / JD9165)
 description: Running log of hypotheses, experiments, and results for the intermittent full-screen cyan flash on the jc1060p470c MIPI-DSI panel
-ms.date: 2026-08-03
+ms.date: 2026-08-04
 ms.topic: troubleshooting
 ---
 
 ## Status
 
 **Active: the round-robin data-stream scheduling fix failed hardware acceptance.** PSRAM bandwidth starvation remains the best-supported diagnosis. Later hardware isolation proved that resolving all active data-stream bindings is sufficient to sustain flickering even when LVGL rendering, display flushes, ring mutations, and HA hydration are excluded. Resolving one selected MQTT binding appeared stable, but rotating through all configured streams one at a time still flickered. A consecutive same-pass burst is therefore not required.
+
+**2026-08-04 production candidate:** a P0.1 diagnostic that replaced the two
+largest-free-block walks in the LVGL health-binding path with zero ran without a
+reported cyan flash after pad-cache population. The permanent P0.3 candidate
+removes PSRAM largest-block telemetry on MIPI-DSI boards, caches the internal
+largest-block value from the timer daemon at a 30-second cadence, and keeps
+safe memory counters live. P0.4 additionally removes the remaining five-second
+internal and DMA largest-block walks from health history; P0.5 adds a host-test
+guard against reintroducing unsafe telemetry pool walks. Hardware acceptance
+remains pending.
 
 This document exists so the eliminated ground is not re-covered. Every hypothesis below was tested on hardware, not reasoned away.
 
