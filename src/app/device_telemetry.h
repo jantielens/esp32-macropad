@@ -2,6 +2,7 @@
 #define DEVICE_TELEMETRY_H
 
 #include <ArduinoJson.h>
+#include "fs_health.h"
 #include "power_config.h"
 
 struct DeviceMemorySnapshot {
@@ -24,6 +25,31 @@ struct DeviceHealthWindowBands {
 	uint32_t psram_free_min_window;
 	uint32_t psram_free_max_window;
 };
+
+inline void device_telemetry_append_fs_health(JsonDocument &doc, const FSHealthStats &fs) {
+	const char* backend = fs.backend == FS_BACKEND_SDMMC ? "sdmmc" : "littlefs";
+	doc["fs_backend"] = backend;
+	doc["fs_mounted"] = fs.storage_mounted;
+	if (fs.storage_mounted && fs.storage_total_bytes > 0) {
+		doc["fs_used_bytes"] = fs.storage_used_bytes;
+		doc["fs_total_bytes"] = fs.storage_total_bytes;
+	} else {
+		doc["fs_used_bytes"] = nullptr;
+		doc["fs_total_bytes"] = nullptr;
+	}
+
+	if (fs.backend != FS_BACKEND_SDMMC) {
+		doc["fs_card_type"] = nullptr;
+		return;
+	}
+
+	switch (fs.card_type) {
+		case FS_CARD_TYPE_NONE: doc["fs_card_type"] = "none"; break;
+		case FS_CARD_TYPE_SD: doc["fs_card_type"] = "sd"; break;
+		case FS_CARD_TYPE_SDHC: doc["fs_card_type"] = "sdhc"; break;
+		default: doc["fs_card_type"] = "unknown"; break;
+	}
+}
 
 // Initializes cached values used by device telemetry (safe to call multiple times).
 // This exists to avoid re-entrant calls into ESP-IDF image helpers from different tasks.

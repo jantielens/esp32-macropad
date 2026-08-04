@@ -61,6 +61,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Browser-based setup** — Wi-Fi, MQTT, security, and all device settings, no tools needed
 - **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status
 - **Optional HTTP Basic Auth** for portal access
+- **SD primary storage variants** — use a FAT32 MicroSD card for pad configurations, icons, sounds, and indexed data on supported boards
 
 ## 💡 What Can You Build?
 
@@ -90,6 +91,19 @@ ESP32 Macropad runs on these ESP32 development boards:
 | **Seeed reTerminal E1003** | ESP32-S3 | 10.3" 16-level grayscale e-paper | 1404 × 1872 | Portrait |
 
 Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are the current non-touch e-paper targets.
+
+### SD Primary Storage Variants
+
+The `jc1060p470c-sd`, `jc3636w518-sd`, and `jc4880p433-sd` targets store
+persistent files on the board's MicroSD card rather than internal LittleFS.
+Format the card as FAT32 before first use. The device stops at boot when the
+card is absent or cannot be mounted, so it never falls back to internal flash.
+
+```bash
+./build.sh jc1060p470c-sd
+./build.sh jc3636w518-sd
+./build.sh jc4880p433-sd
+```
 
 ### Device Classes
 

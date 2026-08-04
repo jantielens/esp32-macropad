@@ -17,4 +17,7 @@
 //   3. On false: show "SD CARD MISSING" on splash and busy-loop.
 bool sd_storage_mount();
 
+// Returns true only after sd_storage_mount() has mounted a usable card.
+bool sd_storage_is_mounted();
+
 #endif

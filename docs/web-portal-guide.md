@@ -38,10 +38,20 @@ The orange **CPU** badge in the header shows real-time CPU usage with a breathin
 - **Heap memory** — free, minimum, largest block, and fragmentation. On MIPI-DSI boards, largest-block data can be up to 30 seconds old.
 - **PSRAM** — free and minimum values for external RAM (when present). MIPI-DSI boards do not report PSRAM largest-block data because measuring it can disrupt display scan-out.
 - **Flash usage** — firmware size
-- **Filesystem** — LittleFS partition usage (for icons)
+- **Filesystem** — active storage backend, mount state, and usage. SD primary-storage variants also report card type.
 - **MQTT** — connection status and publish timing
 - **Display** — FPS and render timing
 - **Wi-Fi signal** — RSSI and IP address
+
+---
+
+## SD Primary Storage
+
+The `jc1060p470c-sd`, `jc3636w518-sd`, and `jc4880p433-sd` firmware targets
+store pad configurations, icons, sounds, and indexed data on a FAT32 MicroSD
+card. They halt at startup when the card is missing or unreadable instead of
+falling back to internal flash. The Health overlay reports `SDMMC` as the
+filesystem backend after a successful mount.
 
 ---
 

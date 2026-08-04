@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 243
+Total flags: 252
 
 ### Features (HAS_*)
 
@@ -111,6 +111,10 @@ Total flags: 243
 - **LCD_VSYNC_PIN** default: `(no default)` — RGB VSYNC pin.
 - **LD2410_OUT_PIN** default: `-1` — LD2410 OUT pin (presence). Use -1 to disable.
 - **LED_PIN** default: `2` — GPIO for the built-in LED (only used when HAS_BUILTIN_LED is true).
+- **SDMMC_CLK_PIN** default: `-1` — Optional board-specific SDMMC clock pin; -1 uses the FQBN's default slot routing.
+- **SDMMC_CMD_PIN** default: `-1` — Optional board-specific SDMMC command pin; -1 uses the FQBN's default slot routing.
+- **SDMMC_D0_PIN** default: `-1` — Optional board-specific SDMMC data-0 pin; -1 uses the FQBN's default slot routing.
+- **SDMMC_POWER_PIN** default: `-1` — Optional application-managed SD card power-enable GPIO; -1 leaves it alone.
 - **SENSOR_I2C_SCL** default: `-1` — I2C SCL pin for sensors.
 - **SENSOR_I2C_SDA** default: `-1` — I2C pins for sensors. Use -1 to keep default Wire pins.
 - **TOUCH_I2C_SCL** default: `(no default)` — Touch I2C SCL pin.
@@ -144,6 +148,7 @@ Total flags: 243
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
 - **MIN_USER_BRIGHTNESS** default: `5` — The screen saver bypasses this floor to allow sleep (brightness 0).
+- **SDMMC_MAX_FREQUENCY_KHZ** default: `20000` — SDMMC maximum bus frequency in kHz.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
@@ -229,6 +234,10 @@ Total flags: 243
 - **SCREENSAVER_SLEEP_REFRESH_MS** default: `900000` — Interval in ms between periodic asleep-display refresh calls (0 = disabled).
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
+- **SDMMC_BUS_WIDTH** default: `4` — SDMMC bus width: 1 or 4 bits. Slot and IOMUX pins are owned by the FQBN.
+- **SDMMC_LDO_CHANNEL** default: `-1` — Optional ESP32 SDMMC LDO channel; -1 leaves the channel unchanged.
+- **SDMMC_POWER_ACTIVE_LOW** default: `false` — Whether SDMMC_POWER_PIN enables card power when driven low.
+- **SDMMC_POWER_SETTLE_MS** default: `0` — Delay after application-managed SD power is enabled.
 - **SD_PROBE_ON_BOOT** default: `false` — listing, write/read round-trip). Intended for new-board bring-up only.
 - **SHUTTER_ADC_PIN_S1** default: `-1` — ADC input pin for shutter sensor 1.
 - **SHUTTER_ADC_PIN_S2** default: `-1` — ADC input pin for shutter sensor 2.
@@ -295,13 +304,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | jc3636w518 | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc3636w518-sd | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
 | esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
 | jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc4880p433-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
 | jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
 | jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
 | jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
 | jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
 | jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
+| jc1060p470c-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
 | esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
 | inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
@@ -316,13 +328,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | esp32-4848S040 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
 | jc3248w535 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
 | jc3636w518 | AUDIO_OUTPUT_DRIVER_PCM510XA | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
+| jc3636w518-sd | AUDIO_OUTPUT_DRIVER_PCM510XA | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-sd | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-shutter | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-hx711 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-nau7802 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-darkroom | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc1060p470c | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
+| jc1060p470c-sd | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
 | inkplate5v2 | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
 | inkplate6flick | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
@@ -1130,6 +1145,28 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SCREEN_HISTORY_MAX**
   - src/app/board_config.h
+- **SDMMC_BUS_WIDTH**
+  - src/app/board_config.h
+- **SDMMC_CLK_PIN**
+  - src/app/board_config.h
+  - src/app/sd_storage.cpp
+- **SDMMC_CMD_PIN**
+  - src/app/board_config.h
+- **SDMMC_D0_PIN**
+  - src/app/board_config.h
+- **SDMMC_LDO_CHANNEL**
+  - src/app/board_config.h
+  - src/app/sd_storage.cpp
+- **SDMMC_MAX_FREQUENCY_KHZ**
+  - src/app/board_config.h
+- **SDMMC_POWER_ACTIVE_LOW**
+  - src/app/board_config.h
+- **SDMMC_POWER_PIN**
+  - src/app/board_config.h
+  - src/app/sd_storage.cpp
+- **SDMMC_POWER_SETTLE_MS**
+  - src/app/board_config.h
+  - src/app/sd_storage.cpp
 - **SD_PROBE_ON_BOOT**
   - src/app/app.ino
   - src/app/board_config.h
@@ -1283,6 +1320,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
+  - src/app/fs_health.cpp
   - src/app/sd_probe.cpp
   - src/app/sd_storage.cpp
   - src/app/sd_storage.h

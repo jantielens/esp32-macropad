@@ -659,6 +659,67 @@ echo "=== Running unit tests: mcp_device_identity ==="
 ./tests/bin/test_mcp_device_identity
 echo
 
+echo "=== Building unit tests: filesystem health ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DUSE_SD_STORAGE=0 \
+    -include tests/board_config.h \
+    -I tests -I src/app \
+    tests/test_fs_health.cpp src/app/fs_health.cpp \
+    -o tests/bin/test_fs_health_littlefs
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DUSE_SD_STORAGE=1 -DHAS_SD_CARD=1 \
+    -include tests/board_config.h \
+    -I tests -I src/app \
+    tests/test_fs_health.cpp src/app/fs_health.cpp \
+    -o tests/bin/test_fs_health_sdmmc
+
+echo "=== Running unit tests: filesystem health ==="
+./tests/bin/test_fs_health_littlefs
+./tests/bin/test_fs_health_sdmmc
+echo
+
+echo "=== Building unit tests: filesystem health telemetry ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/Arduino.h -include tests/board_config.h \
+    -I tests -I src/app -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_fs_health_telemetry.cpp \
+    -o tests/bin/test_fs_health_telemetry
+
+echo "=== Running unit tests: filesystem health telemetry ==="
+./tests/bin/test_fs_health_telemetry
+echo
+
+echo "=== Building unit tests: storage policy ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DUSE_SD_STORAGE=0 \
+    -I tests/storage_policy_overrides -I tests -I src/app \
+    tests/test_storage_policy.cpp \
+    -o tests/bin/test_storage_policy_littlefs
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DUSE_SD_STORAGE=1 -DHAS_SD_CARD=1 \
+    -I tests/storage_policy_overrides -I tests -I src/app \
+    tests/test_storage_policy.cpp \
+    -o tests/bin/test_storage_policy_sdmmc
+
+echo "=== Running unit tests: storage policy ==="
+./tests/bin/test_storage_policy_littlefs
+./tests/bin/test_storage_policy_sdmmc
+echo
+
+echo "=== Checking compile-time storage flag invariant ==="
+printf '\n' | g++ -std=c++17 -x c++ -fsyntax-only \
+    -DHAS_SD_CARD=0 -DUSE_SD_STORAGE=0 -I src/app -include board_config.h -
+printf '\n' | g++ -std=c++17 -x c++ -fsyntax-only \
+    -DHAS_SD_CARD=1 -DUSE_SD_STORAGE=0 -I src/app -include board_config.h -
+printf '\n' | g++ -std=c++17 -x c++ -fsyntax-only \
+    -DHAS_SD_CARD=1 -DUSE_SD_STORAGE=1 -I src/app -include board_config.h -
+if printf '\n' | g++ -std=c++17 -x c++ -fsyntax-only \
+    -DHAS_SD_CARD=0 -DUSE_SD_STORAGE=1 -I src/app -include board_config.h - 2>/dev/null; then
+    echo "Expected USE_SD_STORAGE without HAS_SD_CARD to fail compilation" >&2
+    exit 1
+fi
+echo
+
 echo "=== Building compile check: mcp_device_identity without MCP ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -DHAS_MCP=0 \

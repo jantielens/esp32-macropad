@@ -2,36 +2,24 @@
 
 #include <string.h>
 
-#if defined(ARDUINO_ARCH_ESP32)
-#include <esp_partition.h>
-#endif
-
 namespace {
 static bool g_inited = false;
 static FSHealthStats g_stats = {
-		.storage_partition_present = false,
+		.backend = FS_BACKEND_LITTLEFS,
+		.card_type = FS_CARD_TYPE_NOT_APPLICABLE,
 		.storage_mounted = false,
 		.storage_used_bytes = 0,
 		.storage_total_bytes = 0,
 };
-
-static void detect_partitions() {
-#if defined(ARDUINO_ARCH_ESP32)
-		const esp_partition_t* storage_part = esp_partition_find_first(
-				ESP_PARTITION_TYPE_DATA,
-				ESP_PARTITION_SUBTYPE_DATA_SPIFFS,
-				nullptr);
-		g_stats.storage_partition_present = (storage_part != nullptr);
-#else
-		g_stats.storage_partition_present = false;
-#endif
-}
 } // namespace
 
 void fs_health_init() {
 		if (g_inited) return;
 		g_inited = true;
-		detect_partitions();
+#if USE_SD_STORAGE
+		g_stats.backend = FS_BACKEND_SDMMC;
+		g_stats.card_type = FS_CARD_TYPE_NONE;
+#endif
 }
 
 void fs_health_set_storage_usage(uint64_t used_bytes, uint64_t total_bytes) {
@@ -39,6 +27,12 @@ void fs_health_set_storage_usage(uint64_t used_bytes, uint64_t total_bytes) {
 		g_stats.storage_mounted = true;
 		g_stats.storage_used_bytes = used_bytes;
 		g_stats.storage_total_bytes = total_bytes;
+}
+
+void fs_health_set_sd_card_type(FSCardType card_type) {
+		if (!g_inited) fs_health_init();
+		if (g_stats.backend != FS_BACKEND_SDMMC) return;
+		g_stats.card_type = card_type;
 }
 
 void fs_health_get(FSHealthStats* out) {

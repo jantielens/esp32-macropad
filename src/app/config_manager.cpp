@@ -505,10 +505,9 @@ bool config_manager_factory_reset() {
 #if USE_SD_STORAGE
 		// SD: cannot safely format from firmware. Selectively remove the
 		// directories the firmware owns; leave any user files at root alone.
-		fs_ok &= factory_reset_rmrf("/config");
-		fs_ok &= factory_reset_rmrf("/icons");
-		fs_ok &= factory_reset_rmrf("/sounds");
-		fs_ok &= factory_reset_rmrf("/storage");
+		fs_ok &= storage_remove_sd_owned_roots([](const char* root) {
+			return factory_reset_rmrf(root);
+		});
 #else
 		// LittleFS: format wipes everything in the data partition cleanly.
 		if (!LittleFS.format()) {

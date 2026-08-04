@@ -396,6 +396,64 @@ struct HwButtonDef {
 #define USE_SD_STORAGE false
 #endif
 
+// SDMMC bus width: 1 or 4 bits. Slot and IOMUX pins are owned by the FQBN.
+#ifndef SDMMC_BUS_WIDTH
+#define SDMMC_BUS_WIDTH 4
+#endif
+
+// SDMMC maximum bus frequency in kHz.
+#ifndef SDMMC_MAX_FREQUENCY_KHZ
+#define SDMMC_MAX_FREQUENCY_KHZ 20000
+#endif
+
+// Optional application-managed SD card power-enable GPIO; -1 leaves it alone.
+#ifndef SDMMC_POWER_PIN
+#define SDMMC_POWER_PIN -1
+#endif
+
+// Whether SDMMC_POWER_PIN enables card power when driven low.
+#ifndef SDMMC_POWER_ACTIVE_LOW
+#define SDMMC_POWER_ACTIVE_LOW false
+#endif
+
+// Delay after application-managed SD power is enabled.
+#ifndef SDMMC_POWER_SETTLE_MS
+#define SDMMC_POWER_SETTLE_MS 0
+#endif
+
+// Optional ESP32 SDMMC LDO channel; -1 leaves the channel unchanged.
+#ifndef SDMMC_LDO_CHANNEL
+#define SDMMC_LDO_CHANNEL -1
+#endif
+
+// Optional board-specific SDMMC clock pin; -1 uses the FQBN's default slot routing.
+#ifndef SDMMC_CLK_PIN
+#define SDMMC_CLK_PIN -1
+#endif
+
+// Optional board-specific SDMMC command pin; -1 uses the FQBN's default slot routing.
+#ifndef SDMMC_CMD_PIN
+#define SDMMC_CMD_PIN -1
+#endif
+
+// Optional board-specific SDMMC data-0 pin; -1 uses the FQBN's default slot routing.
+#ifndef SDMMC_D0_PIN
+#define SDMMC_D0_PIN -1
+#endif
+
+#if USE_SD_STORAGE && !HAS_SD_CARD
+#error "USE_SD_STORAGE requires HAS_SD_CARD=true"
+#endif
+
+#if SDMMC_BUS_WIDTH != 1 && SDMMC_BUS_WIDTH != 4
+#error "SDMMC_BUS_WIDTH must be 1 or 4"
+#endif
+
+#if (SDMMC_CLK_PIN >= 0 || SDMMC_CMD_PIN >= 0 || SDMMC_D0_PIN >= 0) && \
+    (SDMMC_CLK_PIN < 0 || SDMMC_CMD_PIN < 0 || SDMMC_D0_PIN < 0)
+#error "SDMMC_CLK_PIN, SDMMC_CMD_PIN, and SDMMC_D0_PIN must be set together"
+#endif
+
 // Run a diagnostic SD probe early in setup() (mount, card info, directory
 // listing, write/read round-trip). Intended for new-board bring-up only.
 #ifndef SD_PROBE_ON_BOOT

@@ -826,25 +826,11 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 		doc["flash_used"] = sketch_size;
 		doc["flash_total"] = sketch_size + free_sketch_space;
 
-		// Filesystem health (cached; may be absent or not mounted)
+		// Filesystem health is cached by the selected storage backend.
 		{
 				FSHealthStats fs;
 				fs_health_get(&fs);
-
-				if (!fs.storage_partition_present) {
-						doc["fs_mounted"] = nullptr;
-						doc["fs_used_bytes"] = nullptr;
-						doc["fs_total_bytes"] = nullptr;
-				} else {
-						doc["fs_mounted"] = fs.storage_mounted ? true : false;
-						if (fs.storage_mounted && fs.storage_total_bytes > 0) {
-								doc["fs_used_bytes"] = (uint64_t)fs.storage_used_bytes;
-								doc["fs_total_bytes"] = (uint64_t)fs.storage_total_bytes;
-						} else {
-								doc["fs_used_bytes"] = nullptr;
-								doc["fs_total_bytes"] = nullptr;
-						}
-				}
+				device_telemetry_append_fs_health(doc, fs);
 		}
 
 		// MQTT health (self-report)

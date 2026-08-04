@@ -5,16 +5,14 @@
 #include "../brew/brew_template_dsl.h"
 #include "../brew/brew_template_loader.h"
 #include "../brew/brew_templates.h"
-#include "fs_health.h"
 #include "log_manager.h"
+#include "storage.h"
 #include "web_portal_auth.h"
 #include "web_portal_cors.h"
 #include "web_portal_routes.h"
 #include "web_portal_json.h"
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
-
 #define TAG "WebBTpl"
 
 // ----------------------------------------------------------------------------
@@ -136,8 +134,8 @@ void handlePostBrewTemplate(AsyncWebServerRequest* request, uint8_t* data,
     }
 
     // Ensure directory exists
-    if (!LittleFS.exists(BREW_TEMPLATE_DIR)) {
-        LittleFS.mkdir(BREW_TEMPLATE_DIR);
+    if (!Storage.exists(BREW_TEMPLATE_DIR)) {
+        Storage.mkdir(BREW_TEMPLATE_DIR);
     }
 
     // Write file
@@ -148,7 +146,7 @@ void handlePostBrewTemplate(AsyncWebServerRequest* request, uint8_t* data,
     delete[] stages;
     delete tmpl;
 
-    File f = LittleFS.open(path, "w");
+    File f = Storage.open(path, "w");
     if (!f) {
         delete[] json;
         web_portal_send_json_error(request, 500, "Failed to write file");
@@ -160,7 +158,7 @@ void handlePostBrewTemplate(AsyncWebServerRequest* request, uint8_t* data,
 
     // Reload dynamic templates
     brew_template_loader_reload();
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage();
 
     LOGI(TAG, "Saved template to %s", path);
     request->send(200, "application/json", "{\"ok\":true}");
@@ -187,7 +185,7 @@ void handleDeleteBrewTemplate(AsyncWebServerRequest* request) {
     char path[64];
     snprintf(path, sizeof(path), BREW_TEMPLATE_DIR "/%s.json", name.c_str());
 
-    if (!LittleFS.exists(path)) {
+    if (!Storage.exists(path)) {
         // No FS file — check if it's a built-in
         const BrewTemplate* t = brew_template_find(name.c_str());
         if (t && !t->is_dynamic) {
@@ -198,9 +196,9 @@ void handleDeleteBrewTemplate(AsyncWebServerRequest* request) {
         return;
     }
 
-    LittleFS.remove(path);
+    Storage.remove(path);
     brew_template_loader_reload();
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage();
 
     // Check if a built-in re-emerged with this name
     const BrewTemplate* t = brew_template_find(name.c_str());

@@ -11,6 +11,7 @@ from typing import Dict, Optional, Tuple
 
 RE_DEFINE = re.compile(r"^\s*#define\s+(?P<key>[A-Z0-9_]+)\s+(?P<value>.+?)\s*(?://.*)?$")
 RE_DEFINE_FLAG = re.compile(r"^\s*#define\s+(?P<key>[A-Z0-9_]+)\s*(?://.*)?$")
+RE_LOCAL_INCLUDE = re.compile(r'^\s*#include\s+"(?P<path>[^"]+)"\s*(?://.*)?$')
 
 RE_SELECTOR_COND = re.compile(
     r"^\s*#(?P<kind>if|elif)\s+"
@@ -115,9 +116,23 @@ def _strip_parens(value: str) -> str:
     return value
 
 
-def _read_defines(path: Path) -> Dict[str, str]:
+def _read_defines(path: Path, visited: Optional[set[Path]] = None) -> Dict[str, str]:
+    if visited is None:
+        visited = set()
+    resolved_path = path.resolve()
+    if resolved_path in visited:
+        return {}
+    visited.add(resolved_path)
+
     defines: Dict[str, str] = {}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m_include = RE_LOCAL_INCLUDE.match(line)
+        if m_include:
+            included_path = (path.parent / m_include.group("path")).resolve()
+            if included_path.exists():
+                defines.update(_read_defines(included_path, visited))
+            continue
+
         m = RE_DEFINE.match(line)
         if m:
             key = m.group("key")

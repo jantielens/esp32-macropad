@@ -3,15 +3,14 @@
 #if IS_COFFEE_SCALE
 
 #include "../brew/brew_log.h"
-#include "fs_health.h"
 #include "log_manager.h"
+#include "storage.h"
 #include "web_portal_auth.h"
 #include "web_portal_cors.h"
 #include "web_portal_routes.h"
 #include "web_portal_json.h"
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
 #include <esp_heap_caps.h>
 
 #define TAG "BrewAPI"
@@ -28,7 +27,7 @@ void handleGetBrews(AsyncWebServerRequest* request) {
         return;
     }
 
-    File dir = LittleFS.open(BREW_LOG_DIR);
+    File dir = Storage.open(BREW_LOG_DIR);
     if (!dir || !dir.isDirectory()) {
         AsyncResponseStream* response = request->beginResponseStream("application/json");
         response->print("{\"brews\":[],\"count\":0,\"max\":");
@@ -74,7 +73,7 @@ void handleGetBrews(AsyncWebServerRequest* request) {
         char path[32];
         snprintf(path, sizeof(path), "%s/%04u.json", BREW_LOG_DIR, (unsigned)ids[i]);
 
-        File bf = LittleFS.open(path, "r");
+        File bf = Storage.open(path, "r");
         if (!bf) continue;
 
         // Read file and parse to extract fields only (skip series)
@@ -132,12 +131,12 @@ void handleGetBrew(AsyncWebServerRequest* request) {
     char path[32];
     snprintf(path, sizeof(path), "%s/%04u.json", BREW_LOG_DIR, id);
 
-    if (!LittleFS.exists(path)) {
+    if (!Storage.exists(path)) {
         web_portal_send_json_error(request, 404, "Brew not found");
         return;
     }
 
-    File f = LittleFS.open(path, "r");
+    File f = Storage.open(path, "r");
     if (!f) {
         web_portal_send_json_error(request, 500, "Failed to open brew file");
         return;
@@ -185,13 +184,13 @@ void handleDeleteBrew(AsyncWebServerRequest* request) {
     char path[32];
     snprintf(path, sizeof(path), "%s/%04u.json", BREW_LOG_DIR, id);
 
-    if (!LittleFS.exists(path)) {
+    if (!Storage.exists(path)) {
         web_portal_send_json_error(request, 404, "Brew not found");
         return;
     }
 
-    LittleFS.remove(path);
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    Storage.remove(path);
+    storage_publish_usage();
 
     LOGI(TAG, "Deleted brew %u", id);
 
@@ -205,7 +204,7 @@ void handleDeleteBrew(AsyncWebServerRequest* request) {
 // ============================================================================
 
 void handleDeleteAllBrews(AsyncWebServerRequest* request) {
-    File dir = LittleFS.open(BREW_LOG_DIR);
+    File dir = Storage.open(BREW_LOG_DIR);
     uint16_t removed = 0;
 
     if (dir && dir.isDirectory()) {
@@ -231,12 +230,12 @@ void handleDeleteAllBrews(AsyncWebServerRequest* request) {
         for (uint16_t i = 0; i < count; i++) {
             char path[32];
             snprintf(path, sizeof(path), "%s/%s", BREW_LOG_DIR, names[i]);
-            if (LittleFS.remove(path)) removed++;
+            if (Storage.remove(path)) removed++;
         }
         free(names);
     }
 
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage();
 
     LOGI(TAG, "Cleared all brews: %u removed", (unsigned)removed);
 
@@ -320,7 +319,7 @@ void handlePostBrewImport(AsyncWebServerRequest* request, uint8_t* data,
             importBrew(doc->as<JsonObject>());
         }
 
-        fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+        storage_publish_usage();
 
         LOGI(TAG, "Imported %u brews", (unsigned)imported);
 

@@ -6,13 +6,12 @@
 #include "brew_templates.h"
 #include "brew_manager.h"
 #include "log_manager.h"
-
-#include <LittleFS.h>
+#include "storage.h"
 
 #define TAG "BrewLoad"
 
 void brew_template_loader_load() {
-    File dir = LittleFS.open(BREW_TEMPLATE_DIR);
+    File dir = Storage.open(BREW_TEMPLATE_DIR);
     if (!dir || !dir.isDirectory()) {
         LOGD(TAG, "No template directory " BREW_TEMPLATE_DIR);
         return;

@@ -69,6 +69,7 @@
 #include "i2c_bus.h"
 #include "sd_probe.h"
 #include "sd_storage.h"
+#include "storage.h"
 
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
@@ -224,11 +225,11 @@ void setup()
 	#if USE_SD_STORAGE
 	// Mount SD card now that the splash screen is up — on failure the halt
 	// message below is visible to the user. There is no fallback storage.
-	if (!sd_storage_mount()) {
+	if (storage_boot_should_halt(sd_storage_mount())) {
 		#if HAS_DISPLAY
-		display_manager_set_splash_status("SD CARD MISSING");
+		display_manager_set_splash_status("SD card required. Correct or replace it, then reboot.");
 		#endif
-		LOGE("SYS", "SD card mount failed — halting boot");
+		LOGE("SYS", "SD card required; startup cannot continue. Check the card, filesystem, wiring, and power, then reboot.");
 		while (true) {
 			delay(1000);
 			yield();

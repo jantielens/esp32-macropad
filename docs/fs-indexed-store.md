@@ -1,6 +1,6 @@
 # FsIndexedStore — Manifest-Indexed JSON Collection
 
-`FsIndexedStore` is a reusable infrastructure module for storing and retrieving collections of JSON documents on LittleFS. It maintains a `_index.json` manifest so that list operations read a single file instead of iterating every document.
+`FsIndexedStore` is a reusable infrastructure module for storing and retrieving collections of JSON documents on the active persistent storage backend. It maintains a `_index.json` manifest so that list operations read a single file instead of iterating every document.
 
 ## Problem it Solves
 
@@ -47,7 +47,7 @@ Entries are sorted by `created_at` descending (most recent first). Additional me
 FsIndexedStore(const char* base_path)
 ```
 
-`base_path` is the LittleFS directory (no trailing slash), e.g. `"/storage/sessions"`.
+`base_path` is the storage directory (no trailing slash), e.g. `"/storage/sessions"`.
 
 ### `begin()`
 
@@ -55,7 +55,7 @@ FsIndexedStore(const char* base_path)
 bool begin();
 ```
 
-Call once after `LittleFS.begin()`. Creates the base directory if missing. Manifest loading is deferred to the first `list()` or `get()` call.
+Call once after `storage_mount()`. Creates the base directory if missing. Manifest loading is deferred to the first `list()` or `get()` call.
 
 ### `add(id, json_content, index_meta)`
 

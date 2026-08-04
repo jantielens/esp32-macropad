@@ -2,6 +2,9 @@
 
 #include "fs_health.h"
 #include "log_manager.h"
+#if USE_SD_STORAGE
+#include "sd_storage.h"
+#endif
 
 #include <Arduino.h>
 #include <esp_partition.h>
@@ -34,9 +37,11 @@ bool storage_mount() {
     if (s_mounted) return true;
 
 #if USE_SD_STORAGE
-    // SD card was already mounted in setup() via sd_storage_mount(). `Storage`
-    // resolves to SD_MMC and is ready to use.
-    LOGI(TAG, "Using SD card storage (mounted earlier in boot)");
+    if (!sd_storage_is_mounted()) {
+        LOGE(TAG, "SD card storage was not mounted");
+        return false;
+    }
+    LOGI(TAG, "Using SD card storage");
     s_mounted = true;
     storage_publish_usage(true);
     if (!Storage.exists("/config")) {
