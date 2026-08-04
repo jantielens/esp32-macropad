@@ -73,6 +73,7 @@ portal_firmware.js
 # Health monitoring (sparkline fragment before main health)
 portal_health_sparkline.js
 portal_health.js
+portal_storage.js
 
 # [chunk:pad HAS_DISPLAY]
 # Pad editor — only consumed by the pad editor fragment on display boards.

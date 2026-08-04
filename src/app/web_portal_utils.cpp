@@ -23,7 +23,7 @@ void sendFileThrottled(AsyncWebServerRequest *request,
 
 		const size_t file_size = ctx->file.size();
 
-		request->send(content_type, file_size,
+		AsyncWebServerResponse *response = request->beginResponse(content_type, file_size,
 				[ctx](uint8_t *buffer, size_t max_len, size_t index) -> size_t {
 						if (!ctx->file || !ctx->file.available()) return 0;
 
@@ -32,4 +32,6 @@ void sendFileThrottled(AsyncWebServerRequest *request,
 						return ctx->file.read(buffer, to_read);
 				}
 		);
+		response->addHeader("X-Content-Type-Options", "nosniff");
+		request->send(response);
 }

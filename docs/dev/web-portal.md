@@ -961,6 +961,64 @@ Switch the active runtime screen (no persistence).
 
 ---
 
+### Storage API
+
+The read-only Storage page uses the generic component API. Both endpoints
+require portal authentication when HTTP Basic Auth is enabled.
+
+#### `GET /api/component/storage/status`
+
+Returns the selected persistent-storage backend and cached usage information.
+
+```json
+{
+  "backend": "littlefs",
+  "mounted": true,
+  "card_type": "not_applicable",
+  "used_bytes": 4096,
+  "total_bytes": 1572864,
+  "free_bytes": 1568768
+}
+```
+
+`backend` is `littlefs` or `sdmmc`. SD card types are `none`, `sd`, `sdhc`, or
+`unknown`; LittleFS reports `not_applicable`.
+
+#### `GET /api/component/storage/list?path=/`
+
+Returns one directory level. `path` must be an absolute, traversal-free path
+no longer than 192 characters. Results contain at most 128 entries; a true
+`truncated` field means additional entries were omitted.
+
+```json
+{
+  "path": "/icons",
+  "entries": [
+    {
+      "name": "home.png",
+      "path": "/icons/home.png",
+      "type": "file",
+      "size": 1420,
+      "modified_at": 1785864960
+    }
+  ],
+  "truncated": false
+}
+```
+
+`type` is `directory` or `file`; `modified_at` is a Unix timestamp or `null`
+when the filesystem does not provide one.
+
+#### `GET /api/component/storage/file?path=/icons/home.png`
+
+Streams one regular file from the selected storage backend. The path uses the
+same absolute, traversal-free validation as the directory list endpoint.
+Directories and missing files return `404`. PNG, JPEG, GIF, WebP, MP3, WAV,
+and Ogg files use their browser-recognized media type; other files use
+`application/octet-stream` so browsers download them.
+
+---
+
 ### MCP Server API
 
 Requires `HAS_MCP` (default on). Off by default; enabled and tokened from the portal's **MCP** card. STA-mode only. See the user-facing [MCP Server Guide](../mcp-guide.md) for client setup.

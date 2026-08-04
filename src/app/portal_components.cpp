@@ -27,6 +27,7 @@
 #include "components/manual_upload_component.cpp"
 #include "components/version_info_component.cpp"
 #include "components/sensor_data_component.cpp"
+#include "components/storage_component.cpp"
 
 // --- Display-gated components ---
 #if HAS_DISPLAY

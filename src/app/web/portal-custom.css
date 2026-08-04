@@ -550,6 +550,16 @@ body {
   padding: 18px;
 }
 
+.storage-browser-card {
+  overflow: hidden;
+}
+
+.storage-toggle,
+.storage-toggle:hover,
+.storage-toggle:focus {
+  text-decoration: none;
+}
+
 /* Form controls.
    We style bare <input>, <select>, <textarea> the same as Bootstrap's
    .form-control / .form-select so JS-generated HTML and pad editor

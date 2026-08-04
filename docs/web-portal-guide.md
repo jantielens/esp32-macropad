@@ -53,6 +53,18 @@ card. They halt at startup when the card is missing or unreadable instead of
 falling back to internal flash. The Health overlay reports `SDMMC` as the
 filesystem backend after a successful mount.
 
+## Storage Page
+
+The **Storage** page in the **Device** category shows the active backend,
+mount status, card type when applicable, total capacity, and used/free space.
+It also provides a read-only folder browser. Folders appear before files and
+entries are alphabetical within each group. Expand a folder to view its direct
+contents, select **Open** beside a file to view supported media in your browser
+or download other file types, or use **Refresh** to reload the storage summary
+and root folder.
+
+The page does not support file uploads, deletion, or formatting.
+
 ---
 
 ## Home Page
