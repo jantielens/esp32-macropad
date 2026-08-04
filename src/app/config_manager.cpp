@@ -457,13 +457,19 @@ static bool factory_reset_rmrf(const char* path) {
 		bool ok = true;
 		File entry = root.openNextFile();
 		while (entry) {
-				// Build the child's full path. Some FS impls return absolute names
-				// from entry.name(); strip a leading slash so we don't get "//foo".
+				// Build the child's full path. Filesystem implementations can return
+				// either the complete child path or a root-relative name.
 				const char* name = entry.name();
-				if (name && name[0] == '/') name++;
-				String child(path);
-				if (!child.endsWith("/")) child += "/";
-				child += (name ? name : "");
+				String child;
+				const size_t path_len = strlen(path);
+				if (name && strncmp(name, path, path_len) == 0 && name[path_len] == '/') {
+						child = name;
+				} else {
+						while (name && name[0] == '/') name++;
+						child = String(path);
+						if (!child.endsWith("/")) child += "/";
+						child += (name ? name : "");
+				}
 
 				bool is_dir = entry.isDirectory();
 				entry.close();

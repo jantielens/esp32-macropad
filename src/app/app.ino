@@ -160,11 +160,6 @@ void setup()
 	WiFi.onEvent(onWiFiGotIP, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 	WiFi.onEvent(onWiFiDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
-	// Start WiFi hardware as early as possible.
-	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
-	// which can run in the background while display, config, and pads initialize.
-	wifi_manager_early_init();
-
 	LOGI("SYS", "Boot");
 	LOGI("SYS", "Firmware: v%s", FIRMWARE_VERSION);
 	LOGI("SYS", "Chip: %s (Rev %d)", ESP.getChipModel(), ESP.getChipRevision());
@@ -236,6 +231,11 @@ void setup()
 		}
 	}
 	#endif
+
+	// Start WiFi hardware after required storage is known to be available.
+	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
+	// which can run in the background while touch, config, and pads initialize.
+	wifi_manager_early_init();
 
 	#if HAS_TOUCH
 	// Initialize Wire bus mutex before touch and audio (both may share bus 0)

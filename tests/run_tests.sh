@@ -706,6 +706,16 @@ echo "=== Running unit tests: storage policy ==="
 ./tests/bin/test_storage_policy_sdmmc
 echo
 
+echo "=== Building unit tests: SD factory reset storage cleanup ==="
+g++ -std=c++17 -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
+    -I tests/factory_reset_overrides -I tests -I src/app \
+    tests/test_factory_reset_storage.cpp \
+    -o tests/bin/test_factory_reset_storage -Wl,--gc-sections
+
+echo "=== Running unit tests: SD factory reset storage cleanup ==="
+./tests/bin/test_factory_reset_storage
+echo
+
 echo "=== Checking compile-time storage flag invariant ==="
 printf '\n' | g++ -std=c++17 -x c++ -fsyntax-only \
     -DHAS_SD_CARD=0 -DUSE_SD_STORAGE=0 -I src/app -include board_config.h -
@@ -747,6 +757,10 @@ echo
 
 echo "=== Running guard: display-safe telemetry heap walks ==="
 ./tests/test_display_safe_telemetry.sh
+echo
+
+echo "=== Running guard: required SD validation before Wi-Fi initialization ==="
+./tests/test_sd_wifi_order.sh
 echo
 
 echo "=== Running guard: photoframe conformance-vector producer drift ==="
