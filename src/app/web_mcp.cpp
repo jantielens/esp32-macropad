@@ -566,7 +566,7 @@ static void mcp_method_tools_call(AsyncWebServerRequest* request, JsonVariantCon
     }
 
     // Result document the handler writes into.
-    auto resultDoc = make_psram_json_doc(24576);
+    auto resultDoc = make_psram_json_doc(tool->result_json_capacity);
     if (!resultDoc || resultDoc->capacity() == 0) { mcp_send_error(request, id, MCP_ERR_INTERNAL, "oom"); return; }
     JsonObject toolResult = resultDoc->to<JsonObject>();
     String err;

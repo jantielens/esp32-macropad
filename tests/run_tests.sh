@@ -755,6 +755,10 @@ echo "=== Running guard: MCP binding-scheme parity (register <-> describe) ==="
 ./tests/test_mcp_scheme_parity.sh
 echo
 
+echo "=== Running guard: MCP storage browser parity ==="
+./tests/test_mcp_storage_parity.sh
+echo
+
 echo "=== Running guard: display-safe telemetry heap walks ==="
 ./tests/test_display_safe_telemetry.sh
 echo

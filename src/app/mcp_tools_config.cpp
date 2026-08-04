@@ -31,11 +31,14 @@
 
 #include "config_manager.h"
 #include "log_manager.h"
+#include "storage_browser.h"
 #include "web_portal_json.h"    // make_psram_json_doc
 #include "web_portal_state.h"   // web_portal_get_current_config
 
 #include <ArduinoJson.h>
+#include <base64.h>
 #include <esp_heap_caps.h>
+#include <memory>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,6 +85,8 @@ static constexpr int CFG_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 
 static constexpr uint32_t CFG_CONTROL_TIMEOUT_MS = 2000;
 static constexpr uint32_t CFG_WRITE_TIMEOUT_MS   = 4000;
+static constexpr size_t MCP_STORAGE_FILE_MAX_BYTES = 64 * 1024;
+static constexpr size_t MCP_STORAGE_FILE_RESULT_CAPACITY = 96 * 1024;
 
 // Set a tool error code + message and return false (thin adapter over the shared
 // mcp_tool_fail in mcp_tool_util.h).
@@ -168,6 +173,60 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
         "the screen_saver_* group, mqtt_publish_interval_seconds, mqtt_publish_scope, "
         "audio_volume. Credentials, WiFi, operating mode, and security toggles are "
         "read-only here and must be changed in the web portal.";
+    return true;
+}
+
+// ============================================================================
+// Storage browser — read-only counterparts to the portal Storage page.
+// ============================================================================
+static bool tool_get_storage_status(const JsonObject& args, JsonObject& result, String& err) {
+    (void)args;
+    (void)err;
+    storage_browser_status_to_json(result);
+    return true;
+}
+
+static bool tool_list_storage(const JsonObject& args, JsonObject& result, String& err) {
+    const String path = args["path"] | "/";
+    const char* storage_error = nullptr;
+    if (storage_browser_list(path, result, storage_error)) return true;
+    return cfg_fail(result, err, CFG_ERR_PARAMS, storage_error);
+}
+
+static bool tool_read_storage_file(const JsonObject& args, JsonObject& result, String& err) {
+    const String path = args["path"] | "";
+    if (!storage_browser_path_is_safe(path)) {
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "invalid storage path");
+    }
+
+    File file = Storage.open(path, "r");
+    if (!file || file.isDirectory()) {
+        if (file) file.close();
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "file not found");
+    }
+    const size_t size = file.size();
+    if (size > MCP_STORAGE_FILE_MAX_BYTES) {
+        file.close();
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "file exceeds 65536-byte MCP read limit");
+    }
+
+    std::unique_ptr<uint8_t, decltype(&heap_caps_free)> bytes(
+        static_cast<uint8_t*>(heap_caps_malloc(size, MALLOC_CAP_SPIRAM)), heap_caps_free);
+    if (size > 0 && !bytes) {
+        file.close();
+        return cfg_fail(result, err, CFG_ERR_INTERNAL, "out of memory");
+    }
+    if (size > 0 && file.read(bytes.get(), size) != size) {
+        file.close();
+        return cfg_fail(result, err, CFG_ERR_INTERNAL, "failed to read file");
+    }
+    file.close();
+
+    result["path"] = path;
+    result["content_type"] = storage_browser_file_content_type(path);
+    result["size"] = size;
+    result["encoding"] = "base64";
+    result["content"] = base64::encode(bytes.get(), size);
     return true;
 }
 
@@ -774,6 +833,30 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
 // Tool descriptors + registration
 // ============================================================================
 
+static const McpTool s_tool_get_storage_status = {
+    "get_storage_status",
+    "Read the active persistent-storage backend and capacity status: LittleFS or SDMMC, mount state, card type, and used/free/total bytes. This is the same status shown by the web portal Storage page.",
+    "{\"type\":\"object\",\"properties\":{}}",
+    tool_get_storage_status, true, false, false
+};
+REGISTER_MCP_TOOL(s_tool_get_storage_status);
+
+static const McpTool s_tool_list_storage = {
+    "list_storage",
+    "List direct entries in a storage directory, like the web portal Storage browser. Path defaults to '/'; paths must be absolute and cannot contain '..' or '//'. Returns at most 128 entries with name, path, type, size, and modified_at. Use a returned directory path to list its contents.",
+    "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"default\":\"/\"}}}",
+    tool_list_storage, true, false, false
+};
+REGISTER_MCP_TOOL(s_tool_list_storage);
+
+static const McpTool s_tool_read_storage_file = {
+    "read_storage_file",
+    "Read one regular file from persistent storage and return its Base64 content, MIME type, and size. This is the MCP counterpart to opening a file from the web portal Storage page. Paths must be absolute and cannot contain '..' or '//'. Files larger than 65536 bytes are rejected; use the portal for larger streaming downloads.",
+    "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}",
+    tool_read_storage_file, true, false, false, false, MCP_STORAGE_FILE_RESULT_CAPACITY
+};
+REGISTER_MCP_TOOL(s_tool_read_storage_file);
+
 static const McpTool s_tool_get_config = {
     "get_config",
     "Read the device's current settings (the same knobs as the web portal Setup/Display/Audio pages): "
@@ -906,6 +989,13 @@ REGISTER_MCP_TOOL(s_tool_set_config);
 // fields and the read/write component list without probing each tool schema.
 // Board-accurate: the component list is the same s_comps table the tools use.
 void mcp_config_capabilities(JsonObject& out) {
+    JsonObject storage = out.createNestedObject("storage");
+    storage["status_tool"] = "get_storage_status";
+    storage["list_tool"] = "list_storage";
+    storage["read_file_tool"] = "read_storage_file";
+    storage["list_max_entries"] = STORAGE_BROWSER_LIST_MAX_ENTRIES;
+    storage["read_file_max_bytes"] = MCP_STORAGE_FILE_MAX_BYTES;
+    storage["read_file_encoding"] = "base64";
     JsonObject sc = out.createNestedObject("set_config_fields");
     sc["device_name"] = "string (mDNS/hostname refreshes on next reboot)";
     sc["backlight_brightness"] = "int 5-100 (persisted + applied live)";

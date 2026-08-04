@@ -2,6 +2,7 @@
 #define MCP_TOOL_REGISTRY_H
 
 #include <ArduinoJson.h>
+#include <stddef.h>
 
 // ============================================================================
 // MCP Tool Registry
@@ -65,6 +66,7 @@ struct McpTool {
     bool destructive;                // surfaced as destructiveHint
     bool requires_control;           // hidden/refused when mcp_control_enabled == false
     bool requires_authoring;         // hidden/refused when mcp_authoring_enabled == false
+    size_t result_json_capacity = 24 * 1024; // PSRAM capacity reserved by the dispatcher
 };
 
 // Register a tool. The McpTool must have static storage duration (the registry

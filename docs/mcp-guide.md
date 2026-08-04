@@ -166,7 +166,7 @@ graph LR
     CLIENT["AI assistant"] -->|"POST /mcp (Bearer token)"| GATE["Enabled · station mode<br/>Origin · token"]
     GATE --> READ["Read tools<br/>(always available)"]
     GATE --> CONTROL["Control tools<br/>(control toggle on)"]
-    READ --> INFO["status · health · screens<br/>pads · sensors · config<br/>HA execution results"]
+    READ --> INFO["status · health · screens<br/>pads · sensors · config · storage<br/>HA execution results"]
     CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system<br/>notify · visual_alert · volume · timers · config"]
 ```
 
@@ -175,7 +175,7 @@ graph LR
 - `get_identity` — immutable physical device ID, configured/fallback name,
   hostname, IP, board, and device class. Call before protected writes.
 - `get_device_status` — firmware version, board, uptime, current screen, WiFi state.
-- `get_health` — heap (internal/PSRAM), CPU, WiFi signal.
+- `get_health` — heap (internal/PSRAM), CPU, WiFi signal, and filesystem health.
 - `list_screens` / `get_current_screen` — available screens and the active one.
 - `list_pads` / `get_pad` — configured pads and their buttons (so the assistant
   knows what it can press).
@@ -185,6 +185,12 @@ graph LR
   booleans — passwords and tokens are never returned.
 - `get_component_config` — normalized expiry-only JSON for `timers`, or the saved JSON for
   `swipe`, `boot`, `button-defaults`, `hw-buttons`, or `mqtt-triggers`.
+- `get_storage_status` — persistent-storage backend (LittleFS or SDMMC), mount and card
+  status, and used/free/total capacity, matching the portal Storage page.
+- `list_storage` — list up to 128 direct entries in an absolute storage path (default `/`).
+  Paths containing `..` or `//` are rejected.
+- `read_storage_file` — return one regular file as Base64 with its MIME type and byte size.
+  Reads are capped at 65,536 bytes; use the portal Storage page for larger streamed downloads.
 - `get_ha_execution_result` — look up the pending or completed Home Assistant
   action results returned by `press_button`.
 
@@ -298,7 +304,9 @@ Active records are never evicted. When all four records are active or retained,
   (`next` or `previous`), `wrap` (boolean, default `true`), and optional
   `excluded_pads` (comma-separated 1-based pad numbers).
   It also carries a `device_config` section advertising `set_config`'s writable
-  fields and the read/write component list. Read-only, so it works with token alone.
+  fields and the read/write component list. Its `storage` object advertises the storage
+  tool names, 128-entry listing limit, and 65,536-byte Base64 file-read limit. Read-only,
+  so it works with token alone.
 - `get_pad_blocks` — list pre-built button groups (building blocks) that can be
   dropped onto a pad. Read-only.
 - `validate_pad` — dry-run validate a pad JSON (grid bounds, span overflow,
