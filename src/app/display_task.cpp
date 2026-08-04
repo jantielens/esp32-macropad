@@ -80,6 +80,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 		while (true) {
 				mgr->lock();
 				mgr->processDisplayJob();
+				bool updated_after_screen_switch = false;
 				if (mgr->lvglStopRequested) {
 						mgr->unlock();
 						mgr->lvglTaskStopped = true;
@@ -127,6 +128,11 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						mgr->currentScreen = target;
 						mgr->currentScreen->show();
 						mgr->pendingScreen = nullptr;
+						if (!screen_saver_manager_is_fully_asleep()) {
+							// Build an evicted pad before LVGL renders the newly loaded screen.
+							mgr->currentScreen->update();
+							updated_after_screen_switch = true;
+						}
 
 						// LRU promotion for pad screens — track which pads have arrays allocated
 						for (uint8_t pi = 0; pi < MAX_PADS; pi++) {
@@ -175,7 +181,8 @@ void DisplayManager::lvglTask(void* pvParameter) {
 #endif
 
 				// Update current screen (data refresh)
-				if (mgr->currentScreen && !screen_saver_manager_is_fully_asleep()) {
+				if (!updated_after_screen_switch && mgr->currentScreen
+						&& !screen_saver_manager_is_fully_asleep()) {
 						mgr->currentScreen->update();
 				}
 				
