@@ -165,7 +165,7 @@ void handlePostBrewTemplate(AsyncWebServerRequest* request, uint8_t* data,
 }
 
 // ----------------------------------------------------------------------------
-// DELETE /api/brew-templates?name=xxx — delete template from LittleFS
+// DELETE /api/brew-templates?name=xxx — delete template from persistent storage
 // ----------------------------------------------------------------------------
 
 void handleDeleteBrewTemplate(AsyncWebServerRequest* request) {

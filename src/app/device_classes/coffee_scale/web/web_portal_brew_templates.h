@@ -12,10 +12,10 @@ void handleGetBrewTemplates(AsyncWebServerRequest* request);
 // GET /api/brew-templates/get?name=xxx — download single template as JSON
 void handleGetBrewTemplate(AsyncWebServerRequest* request);
 
-// POST /api/brew-templates — upload a template JSON body; validates, saves to LittleFS, reloads
+// POST /api/brew-templates — upload a template JSON body; validates, saves to persistent storage, reloads
 void handlePostBrewTemplate(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total);
 
-// DELETE /api/brew-templates?name=xxx — delete a template from LittleFS; built-in re-emerges if applicable
+// DELETE /api/brew-templates?name=xxx — delete a template from persistent storage; built-in re-emerges if applicable
 void handleDeleteBrewTemplate(AsyncWebServerRequest* request);
 
 // Register all brew template REST API routes on the web server.

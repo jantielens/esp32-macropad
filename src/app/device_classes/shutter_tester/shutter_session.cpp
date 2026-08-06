@@ -116,7 +116,7 @@ static const uint32_t WAVEFORM_STORAGE_TARGET_SAMPLES = 2000;
 // ============================================================================
 //
 // `compute_curtain_stats()` lives in shutter_curtain_stats.cpp so it can be
-// unit-tested on the host without dragging in FreeRTOS / LittleFS / ArduinoJson
+// unit-tested on the host without dragging in FreeRTOS / filesystem / ArduinoJson
 // dependencies. The header is included transitively via shutter_session.h.
 
 // ============================================================================
@@ -348,7 +348,7 @@ struct PersistContext {
     uint16_t guide_target_count;
 };
 
-// Write the full session JSON to a LittleFS file handle.
+// Write the full session JSON to a persistent-storage file handle.
 // Uses ArduinoJson for metadata objects and raw writes for waveform arrays.
 static bool write_session_json(File& f,
                                 const PersistContext& ctx,
@@ -628,7 +628,7 @@ static bool persist_session(const PersistContext& ctx) {
         return false;
     }
 
-    // Both LittleFS and SD/FAT rename() fail if the destination already
+    // Both supported filesystem backends fail rename() if the destination already
     // exists. A stale data file can be left behind when s_next_id was
     // bumped in memory but not yet persisted to disk before a reboot,
     // causing a later session to reuse the same id. Remove any pre-existing
@@ -695,7 +695,7 @@ void shutter_session_init() {
         return;
     }
     // Ensure parent directory exists — Storage mkdir() is not recursive.
-    // (Also pre-created by pad_config_init() on SD builds; defensive on LittleFS.)
+    // (Also pre-created by pad_config_init() on SD builds; defensive on flash storage.)
     if (!Storage.exists("/storage")) {
         Storage.mkdir("/storage");
     }
@@ -851,7 +851,7 @@ void shutter_session_stop() {
     // to call action_dispatch() directly. No-op when unconfigured.
     shutter_session_actions_dispatch_start();
 
-    // persist_session() writes to LittleFS which disables the flash cache.
+    // persist_session() performs persistent filesystem I/O, which can disable the flash cache.
     // The calling task (LVGL / action dispatch) has a PSRAM stack, which is
     // illegal when the cache is disabled.  Offload to a short-lived task
     // created with xTaskCreate so its stack lands in internal RAM.
@@ -1040,7 +1040,7 @@ void shutter_session_on_recompute() {
 // ============================================================================
 
 // Inner implementation — runs on an internal-RAM-stack task because
-// shutter_test_scripts_parse() reads LittleFS which disables the SPI
+// shutter_test_scripts_parse() performs filesystem I/O which can disable the SPI
 // flash cache.  The calling LVGL/action-dispatch task has a PSRAM stack,
 // which is illegal when the cache is disabled.
 static void guide_start_inner(const char* test_id) {
@@ -1131,7 +1131,7 @@ void shutter_session_guide_start(const char* test_id) {
         vTaskDelete(nullptr);
     };
 
-    // xTaskCreate places stack in internal RAM — required for LittleFS I/O
+    // xTaskCreate places stack in internal RAM — required for filesystem I/O
     if (xTaskCreate(task_fn, "guide_start", 4096, id_copy, 5, nullptr) != pdPASS) {
         LOGE(TAG, "guide_start: failed to create task");
         free(id_copy);

@@ -153,7 +153,7 @@ static void evict_oldest() {
 }
 
 // ============================================================================
-// Display blanking — DSI panels DMA-scan PSRAM continuously; LittleFS flash
+// Display blanking — DSI panels DMA-scan PSRAM continuously; persistent filesystem
 // writes cause bus contention that starves the display DMA, producing visible
 // flicker.  Backlight-off alone is not enough on DSI panels because the DPI
 // clock keeps running.  We send panel sleep commands (Sleep In / Sleep Out)
@@ -196,7 +196,7 @@ static void restore_display(uint8_t saved) {
 }
 
 // ============================================================================
-// Save — writes JSON to LittleFS (runs from loop() task)
+// Save — writes JSON to persistent storage (runs from loop() task)
 // ============================================================================
 
 static uint32_t get_timestamp() {

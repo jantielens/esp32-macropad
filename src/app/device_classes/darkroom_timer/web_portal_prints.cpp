@@ -12,7 +12,7 @@
 // runs because this file is #include-aggregated into route_components.cpp under
 // #if IS_DARKROOM_TIMER.
 //
-// Persistence goes through the Storage facade (LittleFS or SD). Flash I/O is
+// Persistence goes through the Storage facade (flash or SD). Filesystem I/O is
 // wrapped in a panel-sleep blank/restore window because DSI panels DMA-scan
 // PSRAM continuously and flash writes starve the display DMA, causing flicker
 // (same mitigation print_log.cpp uses for deferred writes).

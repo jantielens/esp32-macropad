@@ -74,7 +74,7 @@ static void coffee_scale_register_sensors() {
 // ---------------------------------------------------------------------------
 // DeviceClass.on_setup_late hook.
 //
-// Fires AFTER LittleFS mount, AFTER WiFi/AP/portal init, AFTER web_portal_init,
+// Fires AFTER the storage facade mount, AFTER WiFi/AP/portal init, AFTER web_portal_init,
 // and BEFORE the always-on path calls sensor_manager_init() / binding inits
 // (app.ino lines 407 / 423 / 464+).
 // ---------------------------------------------------------------------------

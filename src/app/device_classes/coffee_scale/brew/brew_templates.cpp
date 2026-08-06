@@ -445,7 +445,7 @@ void brew_templates_init() {
     brew_template_register(&s_rao_v60_template);
     LOGI(TAG, "Registered %u built-in templates", (unsigned)s_registry_count);
 
-    // Load dynamic templates from LittleFS (may override built-ins)
+    // Load dynamic templates from persistent storage (may override built-ins)
     brew_template_loader_load();
 }
 
