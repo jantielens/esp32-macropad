@@ -77,10 +77,8 @@ not contain playback, selection, reordering, refresh, or seeking controls.
 
 Upload and delete are unavailable while Music or an MP3 Alert is active. Tone
 Alerts do not block library management. After a successful upload or delete,
-the list refreshes automatically. Upload validation scans the complete file,
-so truncated or corrupt MP3 streams are rejected before they reach the library.
-Large uploads show a validation step before they appear in the list; keep the
-page open until validation and the catalog refresh complete.
+the list refreshes automatically. The portal validates the destination path and
+publishes the uploaded bytes without decoding the entire MP3 first.
 
 ---
 

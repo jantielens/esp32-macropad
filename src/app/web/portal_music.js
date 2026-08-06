@@ -108,32 +108,13 @@
       .then(function (response) {
         if (!response.ok) return errorMessage(response).then(function (message) { throw new Error(message); });
         input.value = '';
-        setStatus('Validating ' + file.name + '...');
-        return waitForUpload();
+        return loadCatalog();
       })
       .catch(function (error) {
         setStatus(error.message);
       })
       .finally(function () {
         setBusy(false);
-      });
-  }
-
-  function waitForUpload() {
-    return fetch('/api/music/upload/status')
-      .then(function (response) {
-        if (!response.ok) return errorMessage(response).then(function (message) { throw new Error(message); });
-        return response.json();
-      })
-      .then(function (status) {
-        if (status.in_progress) {
-          setStatus(status.state === 'refreshing' ? 'Refreshing Music Library...' : 'Validating MP3...');
-          return new Promise(function (resolve) {
-            setTimeout(resolve, 500);
-          }).then(waitForUpload);
-        }
-        if (status.state === 'error') throw new Error(status.error || 'Music upload failed');
-        return loadCatalog();
       });
   }
 

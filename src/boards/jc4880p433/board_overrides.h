@@ -92,6 +92,9 @@
 // ============================================================================
 #define HAS_AUDIO true
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
+// minimp3's per-frame decode scratch is roughly 16 KB. Keep it in PSRAM so
+// Music playback fits the internal audio task stack.
+#define AUDIO_MP3_SCRATCH_PSRAM true
 #define AUDIO_I2S_MCLK   13    // ES8311 MCLK (master clock)
 #define AUDIO_I2S_BCLK   12    // ES8311 SCLK (bit clock)
 #define AUDIO_I2S_LRCK   10    // ES8311 LRCK (word select)

@@ -29,7 +29,7 @@ rather than adding hardware-specific behavior to callers.
 Audio-capable builds with the sound player enabled also provide a bounded Music
 CD assembled from canonical MP3 paths discovered recursively under `/media`.
 The audio worker owns the immutable catalog, CD-style transport, incremental
-decoder session, duration scan, and elapsed-time accounting. The catalog uses
+decoder session, and elapsed-time accounting. The catalog uses
 two PSRAM-backed snapshots: the worker builds an inactive slot and publishes
 it, while portal readers copy the active slot under a normal FreeRTOS mutex.
 Catalog-sized copies never run under a `portMUX` critical section or on the
@@ -39,7 +39,8 @@ resampler, output driver, and I2S path.
 Music transport supports Play/Pause, Next, Previous, and Stop. Playback starts
 at the first sorted path, does not wrap, and returns to its home position after
 Stop, a final track, or a playback failure. Before PCM is emitted for a track,
-the existing decoder scans that file to determine its duration; elapsed time
+the decoder opens the file and begins incremental playback immediately. Total
+duration is unavailable (`[music:total_s]` resolves to `-1`); elapsed time
 advances only after PCM output is accepted.
 
 Tone Alerts overlay active Music after resampling and before the existing sole
@@ -47,15 +48,10 @@ output write. MP3 Alerts are exclusive: they stop Music and use the same
 decoder session and output path. Music files can be managed through the portal
 only while neither Music nor an MP3 Alert is active.
 
-Music transport, MP3 validation, and catalog-refresh requests use a dedicated,
-bounded worker queue. This keeps them independent from replaceable tone/alert
-requests, so an alert cannot discard a pending validation or refresh. Transport
-submission is non-blocking and reports busy when the queue is full.
-
-The portal acknowledges completed Music file transfers before validation starts
-and polls a finalization status endpoint. Strict scans run on the audio worker
-without blocking the AsyncTCP handler; they yield periodically so networking
-and its watchdog remain responsive during multi-megabyte files.
+Music transport and catalog-refresh requests use a dedicated, bounded worker
+queue. This keeps them independent from replaceable tone/alert requests, so an
+alert cannot discard a pending refresh. Transport submission is non-blocking
+and reports busy when the queue is full.
 
 ## Board And Driver Selection
 
@@ -122,10 +118,14 @@ enable `AUDIO_MP3_SCRATCH_PSRAM` require PSRAM for decoder scratch space. Keep
 large decode buffers out of task stacks, check allocations, and keep output
 driver operations limited to I2S and hardware control.
 
+The minimp3 per-frame scratch workspace is roughly 16 KB. Boards with a Music
+player and a constrained internal audio stack, including `jc1060p470c`, enable
+`AUDIO_MP3_SCRATCH_PSRAM` so decoding uses
+`mp3dec_decode_frame_with_scratch()` instead of placing that workspace on the
+audio-task stack.
+
 The audio worker stack itself remains in internal RAM because it accesses
-flash-backed storage. Full-stream MP3 upload validation uses the same minimp3
-call chain as playback, so `AUDIO_TASK_STACK_SIZE` must provide at least 36 KB
-on Music-enabled builds even when decoder scratch data resides in PSRAM.
+flash-backed storage.
 
 The Music catalog is also PSRAM-backed. A catalog retains at most 32 stable,
 lexicographically ordered paths; when more files exist, discovery continues,
@@ -143,9 +143,8 @@ the maximum MP3 frame size. It is an exact valid bound, not a warning
 threshold. Do not add arbitrary headroom or treat an exact-capacity result as
 truncation. When a call ends, carry the fractional position and required
 source samples into the next call so adjacent decoded frames remain continuous.
-Upload validation scans through EOF and requires at least one decodable frame.
-It rejects decoder stalls before EOF, truncation, and arbitrary trailing data;
-the playback path applies the same clean-EOF distinction.
+Music uploads are published after path validation and storage completion; the
+first decode occurs when the track is opened for playback.
 
 ## Diagnostics And Logging
 

@@ -347,9 +347,7 @@ struct HwButtonDef {
 
 // Audio worker stack size in bytes.
 #ifndef AUDIO_TASK_STACK_SIZE
-// Full-stream MP3 validation runs minimp3 on the internal-stack audio worker.
-// Its decoder call chain requires more than 24 KB on ESP32-S3/P4 targets.
-#define AUDIO_TASK_STACK_SIZE 36864
+#define AUDIO_TASK_STACK_SIZE 24576
 #endif
 
 // Audio output sample rate in Hz.

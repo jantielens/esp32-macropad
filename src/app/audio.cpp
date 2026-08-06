@@ -47,7 +47,7 @@ struct AudioCommand {
 };
 
 #if HAS_SOUND_PLAYER
-enum MusicWorkKind : uint8_t { MUSIC_WORK_TRANSPORT, MUSIC_WORK_VALIDATE, MUSIC_WORK_REFRESH };
+enum MusicWorkKind : uint8_t { MUSIC_WORK_TRANSPORT, MUSIC_WORK_REFRESH };
 struct MusicWorkCommand {
     MusicWorkKind kind;
     MusicCommand transport;
@@ -71,12 +71,6 @@ static portMUX_TYPE g_music_info_mux = portMUX_INITIALIZER_UNLOCKED;
 static portMUX_TYPE g_music_storage_mux = portMUX_INITIALIZER_UNLOCKED;
 static bool g_music_storage_mutating = false;
 static bool g_music_catalog_dirty = false;
-static portMUX_TYPE g_music_validation_mux = portMUX_INITIALIZER_UNLOCKED;
-static StaticSemaphore_t g_music_validation_sem_storage;
-static SemaphoreHandle_t g_music_validation_sem = nullptr;
-static char g_music_validation_path[MUSIC_PATH_MAX_LEN + 32] = {};
-static bool g_music_validation_pending = false;
-static bool g_music_validation_result = false;
 static StaticSemaphore_t g_music_catalog_refresh_sem_storage;
 static SemaphoreHandle_t g_music_catalog_refresh_sem = nullptr;
 static bool g_music_catalog_refresh_pending = false;
@@ -346,16 +340,6 @@ static void audio_task(void* param) {
         if (xQueueReceive(music_work_queue, &music_work, 0) == pdTRUE) {
             if (music_work.kind == MUSIC_WORK_TRANSPORT) {
                 apply_music(music_work.transport);
-            } else if (music_work.kind == MUSIC_WORK_VALIDATE) {
-                const bool valid = sound_player_validate_path(g_music_validation_path);
-                LOGI(TAG, "Music validation: %s, audio stack free=%u bytes",
-                     valid ? "valid" : "invalid",
-                     (unsigned)uxTaskGetStackHighWaterMark(nullptr));
-                portENTER_CRITICAL(&g_music_validation_mux);
-                g_music_validation_result = valid;
-                g_music_validation_pending = false;
-                portEXIT_CRITICAL(&g_music_validation_mux);
-                xSemaphoreGive(g_music_validation_sem);
             } else {
                 refresh_music_catalog(true);
                 portENTER_CRITICAL(&g_music_storage_mux);
@@ -507,13 +491,6 @@ void audio_init(uint8_t initial_volume) {
     if (!music_catalog_store_init()) {
         LOGE(TAG, "Failed to allocate Music catalog in PSRAM");
     }
-    g_music_validation_sem = xSemaphoreCreateBinaryStatic(&g_music_validation_sem_storage);
-    if (!g_music_validation_sem) {
-        LOGE(TAG, "Failed to create Music validation semaphore");
-        vQueueDelete(audio_queue);
-        audio_queue = NULL;
-        return;
-    }
     g_music_catalog_refresh_sem = xSemaphoreCreateBinaryStatic(&g_music_catalog_refresh_sem_storage);
     if (!g_music_catalog_refresh_sem) {
         LOGE(TAG, "Failed to create Music catalog refresh semaphore");
@@ -643,34 +620,6 @@ bool audio_get_music_catalog_count(uint8_t* out_count) {
     if (!music_catalog_store_status(&status)) return false;
     *out_count = status.available ? status.count : 0;
     return status.available;
-}
-
-bool audio_music_validate_path(const char* path, uint32_t timeout_ms, bool* out_valid) {
-    if (!path || !path[0] || !out_valid || !audio_initialized || !g_music_validation_sem) return false;
-    *out_valid = false;
-    xSemaphoreTake(g_music_validation_sem, 0);
-    portENTER_CRITICAL(&g_music_validation_mux);
-    if (g_music_validation_pending) {
-        portEXIT_CRITICAL(&g_music_validation_mux);
-        return false;
-    }
-    strlcpy(g_music_validation_path, path, sizeof(g_music_validation_path));
-    g_music_validation_pending = true;
-    portEXIT_CRITICAL(&g_music_validation_mux);
-
-    MusicWorkCommand command = {MUSIC_WORK_VALIDATE, MUSIC_COMMAND_STOP};
-    if (xQueueSend(music_work_queue, &command, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
-        portENTER_CRITICAL(&g_music_validation_mux);
-        g_music_validation_pending = false;
-        portEXIT_CRITICAL(&g_music_validation_mux);
-        return false;
-    }
-    if (xSemaphoreTake(g_music_validation_sem, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) return false;
-
-    portENTER_CRITICAL(&g_music_validation_mux);
-    *out_valid = g_music_validation_result;
-    portEXIT_CRITICAL(&g_music_validation_mux);
-    return true;
 }
 
 bool audio_music_refresh_catalog(uint32_t timeout_ms) {

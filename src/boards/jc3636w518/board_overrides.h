@@ -27,9 +27,8 @@
 #define AUDIO_PA_PIN 48
 #define AUDIO_PA_ACTIVE_LOW false
 #define AUDIO_SAMPLE_RATE 48000
-// Keep minimp3's scratch workspace in PSRAM. The Music catalog is PSRAM-backed,
-// but full-stream MP3 validation still needs the 36 KB internal audio stack.
-#define AUDIO_TASK_STACK_SIZE 36864
+// Keep minimp3's scratch workspace in PSRAM. Catalog snapshots are PSRAM-backed.
+#define AUDIO_TASK_STACK_SIZE 24576
 #define AUDIO_MP3_SCRATCH_PSRAM true
 #define AUDIO_DEFAULT_VOLUME 40
 

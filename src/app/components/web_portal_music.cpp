@@ -19,16 +19,6 @@ namespace {
 
 constexpr size_t MUSIC_CATALOG_JSON_CAPACITY =
     static_cast<size_t>(MUSIC_TRACK_LIMIT) * MUSIC_PATH_MAX_LEN + 256;
-constexpr uint32_t MUSIC_WORKER_TIMEOUT_MS = 60000;
-constexpr uint32_t MUSIC_FINALIZE_TASK_STACK_SIZE = 6144;
-
-enum MusicUploadPhase : uint8_t {
-    MUSIC_UPLOAD_IDLE,
-    MUSIC_UPLOAD_VALIDATING,
-    MUSIC_UPLOAD_REFRESHING,
-    MUSIC_UPLOAD_COMPLETE,
-    MUSIC_UPLOAD_ERROR,
-};
 
 struct MusicUploadState {
     AsyncWebServerRequest* request;
@@ -38,32 +28,9 @@ struct MusicUploadState {
     size_t total;
     size_t received;
     bool active;
-    bool finalizing;
 };
 
 MusicUploadState g_music_upload = {};
-TaskHandle_t g_music_finalize_task = nullptr;
-portMUX_TYPE g_music_upload_status_mux = portMUX_INITIALIZER_UNLOCKED;
-MusicUploadPhase g_music_upload_phase = MUSIC_UPLOAD_IDLE;
-char g_music_upload_error[96] = {};
-
-const char* music_upload_phase_name(MusicUploadPhase phase) {
-    switch (phase) {
-        case MUSIC_UPLOAD_IDLE: return "idle";
-        case MUSIC_UPLOAD_VALIDATING: return "validating";
-        case MUSIC_UPLOAD_REFRESHING: return "refreshing";
-        case MUSIC_UPLOAD_COMPLETE: return "complete";
-        case MUSIC_UPLOAD_ERROR: return "error";
-    }
-    return "error";
-}
-
-void music_upload_set_status(MusicUploadPhase phase, const char* error = nullptr) {
-    portENTER_CRITICAL(&g_music_upload_status_mux);
-    g_music_upload_phase = phase;
-    strlcpy(g_music_upload_error, error ? error : "", sizeof(g_music_upload_error));
-    portEXIT_CRITICAL(&g_music_upload_status_mux);
-}
 
 bool ensure_music_parent_directories(const char* path) {
     char parent[MUSIC_PATH_MAX_LEN] = {};
@@ -91,7 +58,6 @@ void music_upload_cleanup(bool release_mutation = true, bool catalog_changed = f
 
 void music_upload_fail(AsyncWebServerRequest* request, int status, const char* message) {
     music_upload_cleanup();
-    music_upload_set_status(MUSIC_UPLOAD_ERROR, message);
     web_portal_send_json_error(request, status, message);
 }
 
@@ -136,8 +102,6 @@ bool music_upload_start(AsyncWebServerRequest* request, size_t total) {
     }
 
     g_music_upload.active = true;
-    g_music_upload.finalizing = false;
-    music_upload_set_status(MUSIC_UPLOAD_IDLE);
     g_music_upload.request = request;
     g_music_upload.total = total;
     strlcpy(g_music_upload.destination, path.c_str(), sizeof(g_music_upload.destination));
@@ -157,41 +121,11 @@ bool music_upload_start(AsyncWebServerRequest* request, size_t total) {
         return false;
     }
     request->onDisconnect([request]() {
-        if (g_music_upload.active && !g_music_upload.finalizing &&
-            g_music_upload.request == request) {
+        if (g_music_upload.active && g_music_upload.request == request) {
             music_upload_cleanup();
         }
     });
     return true;
-}
-
-void music_upload_finalize_task(void*) {
-    bool valid = false;
-    music_upload_set_status(MUSIC_UPLOAD_VALIDATING);
-    if (!audio_music_validate_path(g_music_upload.temporary, MUSIC_WORKER_TIMEOUT_MS, &valid)) {
-        music_upload_set_status(MUSIC_UPLOAD_ERROR, "Music validation timed out");
-        music_upload_cleanup();
-    } else if (!valid) {
-        music_upload_set_status(MUSIC_UPLOAD_ERROR, "Upload contains no valid MP3 stream");
-        music_upload_cleanup();
-    } else if (Storage.exists(g_music_upload.destination)) {
-        music_upload_set_status(MUSIC_UPLOAD_ERROR, "Music file already exists");
-        music_upload_cleanup();
-    } else if (!Storage.rename(g_music_upload.temporary, g_music_upload.destination)) {
-        music_upload_set_status(MUSIC_UPLOAD_ERROR, "Unable to publish music file");
-        music_upload_cleanup();
-    } else {
-        g_music_upload.temporary[0] = '\0';
-        music_upload_set_status(MUSIC_UPLOAD_REFRESHING);
-        const bool refreshed = audio_music_refresh_catalog(MUSIC_WORKER_TIMEOUT_MS);
-        // Keep the mutation reservation through refresh, then release once.
-        music_upload_cleanup(false);
-        audio_music_storage_mutation_end(!refreshed);
-        music_upload_set_status(refreshed ? MUSIC_UPLOAD_COMPLETE : MUSIC_UPLOAD_ERROR,
-                                refreshed ? nullptr : "Music catalog refresh timed out");
-    }
-    g_music_finalize_task = nullptr;
-    vTaskDelete(nullptr);
 }
 
 void handlePostMusicUpload(AsyncWebServerRequest* request, uint8_t* data,
@@ -217,14 +151,25 @@ void handlePostMusicUpload(AsyncWebServerRequest* request, uint8_t* data,
     if (g_music_upload.received != g_music_upload.total) return;
 
     g_music_upload.file.close();
-    g_music_upload.finalizing = true;
-    if (xTaskCreate(music_upload_finalize_task, "music_upload", MUSIC_FINALIZE_TASK_STACK_SIZE,
-                    nullptr, 2, &g_music_finalize_task) != pdPASS) {
-        g_music_upload.finalizing = false;
-        music_upload_fail(request, 503, "Unable to start Music validation");
+    if (Storage.exists(g_music_upload.destination)) {
+        music_upload_fail(request, 409, "Music file already exists");
         return;
     }
-    request->send(202, "application/json", "{\"accepted\":true,\"state\":\"validating\"}");
+    if (!Storage.rename(g_music_upload.temporary, g_music_upload.destination)) {
+        music_upload_fail(request, 500, "Unable to publish music file");
+        return;
+    }
+    g_music_upload.temporary[0] = '\0';
+    // Catalog discovery reads only directory entries and paths; it does not
+    // decode the uploaded MP3, so it remains safe to await here.
+    const bool refreshed = audio_music_refresh_catalog(5000);
+    music_upload_cleanup(false);
+    audio_music_storage_mutation_end(!refreshed);
+    if (!refreshed) {
+        web_portal_send_json_error(request, 503, "Music catalog refresh unavailable");
+        return;
+    }
+    request->send(201, "application/json", "{\"success\":true}");
 }
 
 } // namespace
@@ -273,21 +218,6 @@ void handleGetMusicCatalog(AsyncWebServerRequest* request) {
     web_portal_send_json_chunked(request, doc);
 }
 
-void handleGetMusicUploadStatus(AsyncWebServerRequest* request) {
-    if (!portal_auth_gate(request)) return;
-    MusicUploadPhase phase;
-    char error[sizeof(g_music_upload_error)];
-    portENTER_CRITICAL(&g_music_upload_status_mux);
-    phase = g_music_upload_phase;
-    strlcpy(error, g_music_upload_error, sizeof(error));
-    portEXIT_CRITICAL(&g_music_upload_status_mux);
-    String response = String("{\"state\":\"") + music_upload_phase_name(phase) +
-        "\",\"in_progress\":" +
-        ((phase == MUSIC_UPLOAD_VALIDATING || phase == MUSIC_UPLOAD_REFRESHING) ? "true" : "false") +
-        ",\"error\":\"" + error + "\"}";
-    request->send(200, "application/json", response);
-}
-
 void handleDeleteMusic(AsyncWebServerRequest* request) {
     if (!portal_auth_gate(request)) return;
     if (!request->hasParam("path")) {
@@ -327,7 +257,6 @@ void handleDeleteMusic(AsyncWebServerRequest* request) {
 
 static void music_routes_register(AsyncWebServer* server) {
     server->on("/api/music", HTTP_GET, handleGetMusicCatalog);
-    server->on("/api/music/upload/status", HTTP_GET, handleGetMusicUploadStatus);
     server->on("/api/music", HTTP_POST, [](AsyncWebServerRequest* request) {
         if (!portal_auth_gate(request)) return;
         if (request->contentLength() == 0) {

@@ -429,18 +429,15 @@ playback or track-selection controls.
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/music` | Returns deterministic `files`, `count`, `limit`, availability, generation, overflow, skipped-path, and refresh-status metadata |
-| `POST` | `/api/music?path=/media/...mp3` | Streams a canonical MP3 to a temporary file and returns `202` while strict validation and publication continue in the background |
-| `GET` | `/api/music/upload/status` | Returns upload finalization `state` (`validating`, `refreshing`, `complete`, or `error`), `in_progress`, and an optional error message |
+| `POST` | `/api/music?path=/media/...mp3` | Streams a canonical MP3 to a temporary file, atomically publishes it, and refreshes the catalog before returning `201` |
 | `DELETE` | `/api/music?path=/media/...mp3` | Deletes an exact canonical Music file, including one omitted from an overflowed catalog |
 
 Uploads and deletes return `409` while Music, an MP3 Alert, or another Music
 storage mutation is active. Paths must be canonical `/media` descendants with
 a case-insensitive `.mp3` final extension.
 
-Successful deletes rebuild the published catalog before the API response is
-sent. Uploads return promptly after the file transfer so the AsyncTCP handler
-does not block while a large MP3 is scanned; clients poll the upload status and
-reload the Music Library after `complete`.
+Successful uploads and deletes rebuild the published catalog before the API
+response is sent, so the Music Library immediately returns the updated list.
 The catalog publishes the lexicographically first 32 paths when more tracks
 exist and reports `overflow`, `total_found`, and `skipped`; uploads remain
 available while overflow is present so storage capacity, rather than catalog

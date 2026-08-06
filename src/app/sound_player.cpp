@@ -7,8 +7,6 @@
 #include "audio_output_driver.h"
 #include "storage.h"
 #include <esp_heap_caps.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include <string.h>
 #include "log_manager.h"
 #include "sound_store.h"
@@ -35,37 +33,13 @@ const int SOUND_PLAYER_MAX_OUTPUT_FRAMES =
 static_assert(SOUND_PLAYER_MAX_OUTPUT_FRAMES >= 1152,
               "sound-player output buffer must hold a full MPEG-1 frame");
 
-static const uint32_t SOUND_PLAYER_SOURCE_RATES[] = {
-    8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000,
-};
-static const size_t SOUND_PLAYER_SOURCE_RATE_COUNT =
-    sizeof(SOUND_PLAYER_SOURCE_RATES) / sizeof(SOUND_PLAYER_SOURCE_RATES[0]);
-
-static int sound_player_source_rate_bucket(uint32_t source_rate) {
-    for (size_t bucket = 0; bucket < SOUND_PLAYER_SOURCE_RATE_COUNT; ++bucket) {
-        if (SOUND_PLAYER_SOURCE_RATES[bucket] == source_rate) return (int)bucket;
-    }
-    return -1;
-}
-
 static bool sound_player_duration_us(uint64_t samples, uint32_t source_rate,
                                      uint64_t* duration_us) {
-    if (!duration_us || sound_player_source_rate_bucket(source_rate) < 0 ||
+    if (!duration_us || source_rate == 0 ||
         samples > UINT64_MAX / 1000000ULL) {
         return false;
     }
     *duration_us = samples * 1000000ULL / source_rate;
-    return true;
-}
-
-static bool sound_player_duration_add(uint64_t* total_us, uint64_t samples,
-                                      uint32_t source_rate) {
-    uint64_t duration_us = 0;
-    if (!total_us || !sound_player_duration_us(samples, source_rate, &duration_us) ||
-        duration_us > UINT64_MAX - *total_us) {
-        return false;
-    }
-    *total_us += duration_us;
     return true;
 }
 
@@ -180,8 +154,6 @@ struct SoundPlayer {
     size_t buf_consumed;
     bool eof;
     bool resampler_initialized;
-    bool timing_available;
-    uint64_t duration_samples[SOUND_PLAYER_SOURCE_RATE_COUNT];
     uint64_t total_us;
     uint64_t elapsed_output_frames;
     uint64_t elapsed_us;
@@ -210,18 +182,6 @@ static void sound_player_refill(SoundPlayer* player) {
     }
 }
 
-static bool sound_player_is_id3v1_tag(const uint8_t* data, size_t length) {
-    return data && length == 128 && memcmp(data, "TAG", 3) == 0;
-}
-
-static void sound_player_scan_cooperate(uint32_t* decoded_frames) {
-    if (++*decoded_frames % 16 == 0) {
-        // Full-file scans run before playback begins. Yield a tick so lower
-        // priority AsyncTCP work on the audio core can service its watchdog.
-        vTaskDelay(1);
-    }
-}
-
 static int sound_player_decode(SoundPlayer* player, int16_t* pcm,
                                mp3dec_frame_info_t* frame_info) {
 #if AUDIO_MP3_SCRATCH_PSRAM
@@ -241,54 +201,6 @@ static void sound_player_reset_decode(SoundPlayer* player) {
     player->eof = player->buf_filled < MP3_READ_BUF_SIZE;
     player->resampler_initialized = false;
     mp3dec_init(player->decoder);
-}
-
-static void sound_player_scan_duration(SoundPlayer* player) {
-    memset(player->duration_samples, 0, sizeof(player->duration_samples));
-    player->timing_available = false;
-    player->total_us = 0;
-    player->elapsed_output_frames = 0;
-    player->elapsed_us = 0;
-    sound_player_reset_decode(player);
-
-    bool valid = true;
-    uint32_t decoded_frames = 0;
-    while (player->buf_filled > 0) {
-        mp3dec_frame_info_t frame_info = {};
-        const int samples = sound_player_decode(player, nullptr, &frame_info);
-        if (frame_info.frame_bytes == 0) {
-            const size_t remaining = player->buf_filled - player->buf_consumed;
-            if (!player->eof || !sound_player_is_id3v1_tag(
-                    player->read_buf + player->buf_consumed, remaining)) {
-                valid = false;
-            }
-            break;
-        }
-        player->buf_consumed += frame_info.frame_bytes;
-        if (samples > 0) {
-            sound_player_scan_cooperate(&decoded_frames);
-            const int bucket = sound_player_source_rate_bucket((uint32_t)frame_info.hz);
-            if (bucket < 0 || (uint64_t)samples > UINT64_MAX - player->duration_samples[bucket]) {
-                valid = false;
-            } else {
-                player->duration_samples[bucket] += (uint64_t)samples;
-            }
-        }
-        sound_player_refill(player);
-    }
-
-    if (valid) {
-        for (size_t bucket = 0; bucket < SOUND_PLAYER_SOURCE_RATE_COUNT; ++bucket) {
-            if (!sound_player_duration_add(&player->total_us, player->duration_samples[bucket],
-                                           SOUND_PLAYER_SOURCE_RATES[bucket])) {
-                valid = false;
-                break;
-            }
-        }
-    }
-    if (!valid) player->total_us = 0;
-    player->timing_available = valid;
-    sound_player_reset_decode(player);
 }
 
 static void sound_player_record_accepted_output(SoundPlayer* player, int out_frames) {
@@ -359,81 +271,11 @@ SoundPlayer* sound_player_begin_path(AudioOutputDriver* output_driver, const cha
         return nullptr;
     }
 #endif
-    sound_player_scan_duration(player);
+    // Start decoding immediately. A full-file duration pass can overflow the
+    // internal audio task stack for large Music tracks before playback begins.
+    // total_us remains zero to signal an unavailable total duration.
+    sound_player_reset_decode(player);
     return player;
-}
-
-bool sound_player_validate_path(const char* path) {
-    if (!path || !path[0]) return false;
-    File file = Storage.open(path, "r");
-    if (!file) return false;
-
-    uint8_t* read_buf = (uint8_t*)sound_player_ps_alloc(MP3_READ_BUF_SIZE);
-    mp3dec_t* decoder = (mp3dec_t*)sound_player_ps_alloc(sizeof(mp3dec_t));
-    int16_t* pcm = (int16_t*)sound_player_ps_alloc(
-        MINIMP3_MAX_SAMPLES_PER_FRAME * sizeof(int16_t));
-#if AUDIO_MP3_SCRATCH_PSRAM
-    void* decode_scratch = heap_caps_malloc(mp3dec_scratch_size(),
-                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-#endif
-    bool valid = false;
-    bool corrupt = false;
-    uint32_t decoded_frames = 0;
-    if (read_buf && decoder && pcm
-#if AUDIO_MP3_SCRATCH_PSRAM
-        && decode_scratch
-#endif
-    ) {
-        mp3dec_init(decoder);
-        size_t filled = file.read(read_buf, MP3_READ_BUF_SIZE);
-        size_t consumed = 0;
-        bool eof = filled < MP3_READ_BUF_SIZE;
-        while (filled > 0) {
-            mp3dec_frame_info_t frame_info = {};
-#if AUDIO_MP3_SCRATCH_PSRAM
-            const int samples = mp3dec_decode_frame_with_scratch(
-                decoder, read_buf + consumed, (int)(filled - consumed), pcm,
-                &frame_info, decode_scratch);
-#else
-            const int samples = mp3dec_decode_frame(
-                decoder, read_buf + consumed, (int)(filled - consumed), pcm, &frame_info);
-#endif
-            if (frame_info.frame_bytes == 0) {
-                if (!eof) {
-                    corrupt = true;
-                } else if (!sound_player_is_id3v1_tag(read_buf + consumed, filled - consumed)) {
-                    corrupt = true;
-                }
-                break;
-            }
-            consumed += frame_info.frame_bytes;
-            if (samples > 0) {
-                valid = true;
-                sound_player_scan_cooperate(&decoded_frames);
-            }
-            if (consumed == filled && eof) break;
-            if (consumed > 0) {
-                const size_t remaining = filled - consumed;
-                memmove(read_buf, read_buf + consumed, remaining);
-                filled = remaining;
-                consumed = 0;
-                if (!eof) {
-                    const size_t capacity = MP3_READ_BUF_SIZE - filled;
-                    const size_t read = file.read(read_buf + filled, capacity);
-                    filled += read;
-                    eof = read < capacity;
-                }
-            }
-        }
-    }
-#if AUDIO_MP3_SCRATCH_PSRAM
-    if (decode_scratch) heap_caps_free(decode_scratch);
-#endif
-    if (pcm) heap_caps_free(pcm);
-    if (decoder) heap_caps_free(decoder);
-    if (read_buf) heap_caps_free(read_buf);
-    file.close();
-    return valid && !corrupt;
 }
 
 SoundPlayerStepResult sound_player_step(SoundPlayer* player) {
@@ -444,8 +286,7 @@ SoundPlayerStepResult sound_player_step(SoundPlayer* player) {
     mp3dec_frame_info_t frame_info = {};
     const int samples = sound_player_decode(player, player->pcm, &frame_info);
     if (frame_info.frame_bytes == 0) {
-        if (player->eof && (player->buf_filled == 0 ||
-                            sound_player_is_id3v1_tag(player->read_buf, player->buf_filled))) {
+        if (player->eof && player->buf_filled == 0) {
             return SOUND_PLAYER_STEP_COMPLETE;
         }
         LOGW(TAG, "MP3 decode stalled before EOF");
@@ -505,7 +346,7 @@ bool sound_player_get_timing(const SoundPlayer* player, uint64_t* total_us,
     if (!player || !total_us || !elapsed_us) return false;
     *total_us = player->total_us;
     *elapsed_us = player->elapsed_us;
-    return player->timing_available;
+    return true;
 }
 
 bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,

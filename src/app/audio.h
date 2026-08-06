@@ -107,11 +107,6 @@ bool audio_get_music_catalog_status(MusicCatalogStatus* out);
 // Read small catalog properties without copying its fixed-size path array.
 bool audio_get_music_catalog_count(uint8_t* out_count);
 
-// Validate an uploaded MP3 on the audio worker, which owns the decoder and
-// has sufficient stack for minimp3. Returns false when the worker is busy or
-// does not respond before timeout_ms.
-bool audio_music_validate_path(const char* path, uint32_t timeout_ms, bool* out_valid);
-
 // Rebuild the published Music catalog on the audio worker. Returns false when
 // the worker is busy or does not respond before timeout_ms.
 bool audio_music_refresh_catalog(uint32_t timeout_ms);

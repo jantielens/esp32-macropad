@@ -21,6 +21,9 @@
 #define LOOP_TASK_STACK_SIZE 6144
 // Measured under portal load: 11680 bytes remained from the 16 KB default.
 #define CONFIG_ASYNC_TCP_STACK_SIZE 8192
+// minimp3's per-frame decode scratch is roughly 16 KB. Keep it in PSRAM so
+// Music playback fits the internal audio task stack.
+#define AUDIO_MP3_SCRATCH_PSRAM true
 
 // ============================================================================
 // Driver Selection (HAL)

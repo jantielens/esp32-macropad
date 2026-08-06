@@ -30,15 +30,11 @@ SoundPlayer* sound_player_begin_path(AudioOutputDriver* output_driver,
                                      SoundPlayerPcmTransform transform = nullptr,
                                      void* transform_context = nullptr);
 
-// Verify that an MP3 at a canonical storage path scans cleanly to EOF with at
-// least one decodable frame, without loading the complete file into memory.
-bool sound_player_validate_path(const char* path);
-
 // Decode and emit at most one MP3 frame through the supplied session.
 SoundPlayerStepResult sound_player_step(SoundPlayer* player);
 
-// Snapshot current-track timing. Returns false when duration pre-scan could
-// not determine a duration; elapsed_us remains zero until output is accepted.
+// Snapshot current-track timing. total_us is zero when no total duration is
+// available; elapsed_us advances after each accepted PCM output block.
 bool sound_player_get_timing(const SoundPlayer* player, uint64_t* total_us,
                              uint64_t* elapsed_us);
 
