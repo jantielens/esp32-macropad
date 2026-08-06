@@ -9,7 +9,6 @@
 #include "board_config.h"
 #include "device_class.h"
 #include "class_branding.h"
-#include "web_assets.h"
 #include "log_manager.h"
 #include "power_config.h"
 #include "storage.h"
