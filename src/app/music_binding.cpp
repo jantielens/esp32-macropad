@@ -18,7 +18,8 @@
 namespace {
 
 const char* const kMusicKeys[] = {
-    "file", "file_name", "index", "count", "elapsed_s", "total_s", "status",
+    "file", "file_name", "title", "artist", "album", "track", "index", "count",
+    "elapsed_s", "total_s", "status",
 };
 
 const char* status_text(AudioMusicStatus status) {
@@ -42,6 +43,14 @@ bool music_binding_resolve(const char* params, char* out, size_t out_len) {
     } else if (strcmp(params, "file_name") == 0) {
         const char* filename = info.file[0] ? strrchr(info.file, '/') : nullptr;
         strlcpy(out, filename ? filename + 1 : "---", out_len);
+    } else if (strcmp(params, "title") == 0) {
+        strlcpy(out, info.metadata.title[0] ? info.metadata.title : "---", out_len);
+    } else if (strcmp(params, "artist") == 0) {
+        strlcpy(out, info.metadata.artist[0] ? info.metadata.artist : "---", out_len);
+    } else if (strcmp(params, "album") == 0) {
+        strlcpy(out, info.metadata.album[0] ? info.metadata.album : "---", out_len);
+    } else if (strcmp(params, "track") == 0) {
+        strlcpy(out, info.metadata.track[0] ? info.metadata.track : "---", out_len);
     } else if (strcmp(params, "index") == 0) {
         snprintf(out, out_len, "%u", info.index);
     } else if (strcmp(params, "count") == 0) {
@@ -69,15 +78,15 @@ const char* music_binding_validate(const char* params) {
     for (const char* key : kMusicKeys) {
         if (strcmp(params, key) == 0) return nullptr;
     }
-    return "music key must be file, file_name, index, count, elapsed_s, total_s, or status";
+    return "music key must be file, file_name, title, artist, album, track, index, count, elapsed_s, total_s, or status";
 }
 
 #if HAS_MCP
 void music_binding_describe(void* out_json) {
     JsonObject& out = *static_cast<JsonObject*>(out_json);
-    out["syntax"] = "[music:file|file_name|index|count|elapsed_s|total_s|status]";
+    out["syntax"] = "[music:file|file_name|title|artist|album|track|index|count|elapsed_s|total_s|status]";
     out["example"] = "[music:status]";
-    out["keys"] = "file, file_name, index, count, elapsed_s, total_s, status";
+    out["keys"] = "file, file_name, title, artist, album, track, index, count, elapsed_s, total_s, status";
     out["read_only"] = true;
 }
 #endif

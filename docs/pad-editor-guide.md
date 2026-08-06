@@ -1388,6 +1388,10 @@ are available on boards with audio and the sound player enabled.
 |-----|---------|-------|
 | `file` | Current canonical MP3 path | Returns `---` when no track is selected |
 | `file_name` | Current MP3 filename without parent folders | Returns `---` when no track is selected |
+| `title` | ID3 track title | Returns `---` when unavailable |
+| `artist` | ID3 artist | Returns `---` when unavailable |
+| `album` | ID3 album | Returns `---` when unavailable |
+| `track` | ID3 track number | Returns `---` when unavailable |
 | `index` | Current track number | One-based; returns `0` when no track is selected |
 | `count` | Number of discovered tracks | Returns `-1` while the catalog is unavailable |
 | `elapsed_s` | Whole seconds played in the current track | Returns `0` before playback starts |
@@ -1401,6 +1405,7 @@ are available on boards with audio and the sound player enabled.
 [music:index] / [music:count]          -> 2 / 5
 [music:file]                            -> /media/album/02-track.mp3
 [music:file_name]                       -> 02-track.mp3
+[music:title] / [music:artist]          -> Autumn Leaves / John Doe
 [music:elapsed_s] / [music:total_s] s  -> 75 / 244 s
 ```
 

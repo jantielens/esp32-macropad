@@ -39,9 +39,11 @@ resampler, output driver, and I2S path.
 Music transport supports Play/Pause, Next, Previous, and Stop. Playback starts
 at the first sorted path, does not wrap, and returns to its home position after
 Stop, a final track, or a playback failure. Before PCM is emitted for a track,
-the decoder opens the file and begins incremental playback immediately. Total
-duration is unavailable (`[music:total_s]` resolves to `-1`); elapsed time
-advances only after PCM output is accepted.
+the decoder opens the file and begins incremental playback immediately. Catalog
+discovery reads a bounded MP3 prefix to parse ID3 title, artist, album, and
+track metadata plus Xing/Info, VBRI, or CBR-estimated duration. This avoids a
+full-file decode before playback; elapsed time advances only after PCM output
+is accepted.
 
 Tone Alerts overlay active Music after resampling and before the existing sole
 output write. MP3 Alerts are exclusive: they stop Music and use the same

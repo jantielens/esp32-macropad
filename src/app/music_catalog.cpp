@@ -7,6 +7,12 @@
 #define MUSIC_CATALOG_HAS_STORAGE 1
 #endif
 
+#if MUSIC_CATALOG_HAS_STORAGE
+#include <esp_heap_caps.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#endif
+
 namespace {
 
 bool has_mp3_extension(const char* path) {
@@ -19,16 +25,19 @@ bool has_mp3_extension(const char* path) {
            extension[3] == '3';
 }
 
-void insert_sorted_path(MusicCatalogSnapshot* snapshot, const char* path) {
+void insert_sorted_path(MusicCatalogSnapshot* snapshot, const char* path,
+                        const Mp3Metadata* metadata) {
     uint8_t cursor = snapshot->count;
     while (cursor > 0 && strcmp(path, snapshot->paths[cursor - 1]) < 0) {
         if (cursor < MUSIC_TRACK_LIMIT) {
             strlcpy(snapshot->paths[cursor], snapshot->paths[cursor - 1],
                     sizeof(snapshot->paths[cursor]));
+            snapshot->metadata[cursor] = snapshot->metadata[cursor - 1];
         }
         --cursor;
     }
     strlcpy(snapshot->paths[cursor], path, sizeof(snapshot->paths[cursor]));
+    snapshot->metadata[cursor] = metadata ? *metadata : Mp3Metadata{};
 }
 
 } // namespace
@@ -39,18 +48,18 @@ void MusicCatalog::begin(MusicCatalogSnapshot* target) {
     result_ = MUSIC_CATALOG_OK;
 }
 
-MusicCatalogResult MusicCatalog::add(const char* path) {
+MusicCatalogResult MusicCatalog::add(const char* path, const Mp3Metadata* metadata) {
     if (!target_ || result_ != MUSIC_CATALOG_OK) return result_;
     if (!is_canonical_path(path)) return result_ = MUSIC_CATALOG_INVALID_PATH;
     if (target_->total_found != UINT16_MAX) ++target_->total_found;
     if (target_->count < MUSIC_TRACK_LIMIT) {
-        insert_sorted_path(target_, path);
+        insert_sorted_path(target_, path, metadata);
         ++target_->count;
         return MUSIC_CATALOG_OK;
     }
     target_->overflow = true;
     if (strcmp(path, target_->paths[MUSIC_TRACK_LIMIT - 1]) < 0) {
-        insert_sorted_path(target_, path);
+        insert_sorted_path(target_, path, metadata);
     }
     return MUSIC_CATALOG_OK;
 }
@@ -109,7 +118,11 @@ bool child_path(const char* directory_path, const char* entry_name,
     return written > 0 && static_cast<size_t>(written) < out_len;
 }
 
-bool discover_directory(File directory, const char* directory_path, MusicCatalog* catalog) {
+constexpr size_t kMetadataPrefixBytes = 8192;
+constexpr uint16_t kCatalogYieldInterval = 16;
+
+bool discover_directory(File directory, const char* directory_path, MusicCatalog* catalog,
+                        uint8_t* metadata_prefix, uint16_t* entries_since_yield) {
     for (File entry = directory.openNextFile(); entry; entry = directory.openNextFile()) {
         char path[MUSIC_PATH_MAX_LEN] = {};
         if (!child_path(directory_path, entry.name(), path, sizeof(path))) {
@@ -118,18 +131,30 @@ bool discover_directory(File directory, const char* directory_path, MusicCatalog
             continue;
         }
         if (entry.isDirectory()) {
-            if (!discover_directory(entry, path, catalog)) {
+            if (!discover_directory(entry, path, catalog, metadata_prefix, entries_since_yield)) {
                 entry.close();
                 return false;
             }
-        } else if (MusicCatalog::is_canonical_path(path) &&
-                   catalog->add(path) != MUSIC_CATALOG_OK) {
-            entry.close();
-            return false;
+        } else if (MusicCatalog::is_canonical_path(path)) {
+            Mp3Metadata metadata = {};
+            // Metadata is optional. One PSRAM prefix buffer is reused across
+            // the entire scan so large libraries do not churn the PSRAM heap.
+            if (metadata_prefix) {
+                const size_t bytes = entry.read(metadata_prefix, kMetadataPrefixBytes);
+                mp3_metadata_parse(metadata_prefix, bytes, entry.size(), &metadata);
+            }
+            if (catalog->add(path, &metadata) != MUSIC_CATALOG_OK) {
+                entry.close();
+                return false;
+            }
         } else if (has_mp3_extension(path) && !MusicCatalog::is_canonical_path(path)) {
             catalog->skip();
         }
         entry.close();
+        if (entries_since_yield && ++*entries_since_yield >= kCatalogYieldInterval) {
+            *entries_since_yield = 0;
+            taskYIELD();
+        }
     }
     return true;
 }
@@ -145,8 +170,13 @@ bool music_catalog_discover(MusicCatalog* catalog, MusicCatalogSnapshot* target)
         catalog->fail(MUSIC_CATALOG_UNAVAILABLE);
         return false;
     }
-    const bool complete = discover_directory(media, "/media", catalog);
+    uint8_t* metadata_prefix = static_cast<uint8_t*>(heap_caps_malloc(
+        kMetadataPrefixBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    uint16_t entries_since_yield = 0;
+    const bool complete = discover_directory(media, "/media", catalog,
+                                             metadata_prefix, &entries_since_yield);
     media.close();
+    if (metadata_prefix) heap_caps_free(metadata_prefix);
     if (!complete || catalog->publish() != MUSIC_CATALOG_OK) {
         catalog->fail(catalog->result());
         return false;

@@ -41,11 +41,19 @@
     if (catalog.stale) summary += ' The displayed catalog is stale after a refresh failure.';
     if (catalog.skipped) summary += ' Skipped ' + catalog.skipped + ' invalid MP3 path(s).';
     setStatus(summary);
-    files.forEach(function (path) {
+    files.forEach(function (entry) {
+      var path = typeof entry === 'string' ? entry : entry.path;
       var row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center';
       var name = document.createElement('span');
-      name.textContent = path;
+      name.textContent = entry.title
+        ? entry.title + (entry.artist ? ' — ' + entry.artist : '')
+        : path;
+      if (entry.duration_s) {
+        name.textContent += ' (' + Math.floor(entry.duration_s / 60) + ':' +
+          String(entry.duration_s % 60).padStart(2, '0') +
+          (entry.duration_estimated ? ' est.' : '') + ')';
+      }
       var remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'btn btn-outline-danger btn-sm';

@@ -428,7 +428,7 @@ playback or track-selection controls.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/music` | Returns deterministic `files`, `count`, `limit`, availability, generation, overflow, skipped-path, and refresh-status metadata |
+| `GET` | `/api/music` | Returns deterministic track entries with path, bounded ID3 metadata, fast duration when available, catalog availability, generation, overflow, skipped-path, and refresh status |
 | `POST` | `/api/music?path=/media/...mp3` | Streams a canonical MP3 to a temporary file, atomically publishes it, and refreshes the catalog before returning `201` |
 | `DELETE` | `/api/music?path=/media/...mp3` | Deletes an exact canonical Music file, including one omitted from an overflowed catalog |
 
@@ -442,6 +442,29 @@ The catalog publishes the lexicographically first 32 paths when more tracks
 exist and reports `overflow`, `total_found`, and `skipped`; uploads remain
 available while overflow is present so storage capacity, rather than catalog
 size, is the limit.
+
+`GET /api/music` returns `files` as an array of objects rather than plain path
+strings. Every object contains `path`; `title`, `artist`, `album`, and `track`
+are included only when found in the MP3's leading ID3v2 tag. `duration_s` is a
+whole-second fast duration when available. `duration_estimated` is `true` only
+when duration was derived from the first-frame CBR bitrate; Xing/Info and VBRI
+durations are frame-count based.
+
+```json
+{
+  "files": [
+    {
+      "path": "/media/01-example.mp3",
+      "title": "Example",
+      "artist": "Artist",
+      "duration_s": 213,
+      "duration_estimated": false
+    }
+  ],
+  "count": 1,
+  "limit": 32
+}
+```
 
 All endpoints return JSON responses with proper HTTP status codes.
 

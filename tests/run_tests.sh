@@ -156,10 +156,20 @@ echo "=== Running unit tests: music command ==="
 ./tests/bin/test_music_command
 echo
 
+echo "=== Building unit tests: MP3 metadata ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_mp3_metadata.cpp src/app/mp3_metadata.cpp \
+    -o tests/bin/test_mp3_metadata
+
+echo "=== Running unit tests: MP3 metadata ==="
+./tests/bin/test_mp3_metadata
+echo
+
 echo "=== Building unit tests: music catalog ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I tests -I src/app \
-    tests/test_music_catalog.cpp src/app/music_catalog.cpp \
+    tests/test_music_catalog.cpp src/app/music_catalog.cpp src/app/mp3_metadata.cpp \
     -o tests/bin/test_music_catalog
 
 echo "=== Running unit tests: music catalog ==="
@@ -308,7 +318,7 @@ echo "=== Building unit tests: music catalog ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \
     tests/test_music_catalog.cpp \
-    src/app/music_catalog.cpp \
+    src/app/music_catalog.cpp src/app/mp3_metadata.cpp \
     -o tests/bin/test_music_catalog
 
 echo "=== Running unit tests: music catalog ==="

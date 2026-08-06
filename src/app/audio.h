@@ -85,6 +85,7 @@ struct AudioMusicInfo {
     uint64_t total_us;
     uint64_t elapsed_us;
     char file[192];
+    Mp3Metadata metadata;
 };
 
 enum AudioMusicSubmitResult : uint8_t {

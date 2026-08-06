@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "mp3_metadata.h"
+
 #define MUSIC_TRACK_LIMIT 32
 #define MUSIC_PATH_MAX_LEN 192
 
@@ -21,6 +23,7 @@ struct MusicCatalogSnapshot {
     uint16_t total_found;
     uint16_t skipped;
     char paths[MUSIC_TRACK_LIMIT][MUSIC_PATH_MAX_LEN];
+    Mp3Metadata metadata[MUSIC_TRACK_LIMIT];
 };
 
 // Builds one catalog directly in caller-owned storage. It intentionally owns
@@ -30,7 +33,7 @@ struct MusicCatalogSnapshot {
 class MusicCatalog {
 public:
     void begin(MusicCatalogSnapshot* target);
-    MusicCatalogResult add(const char* path);
+    MusicCatalogResult add(const char* path, const Mp3Metadata* metadata = nullptr);
     void skip();
     MusicCatalogResult publish();
     void fail(MusicCatalogResult result);

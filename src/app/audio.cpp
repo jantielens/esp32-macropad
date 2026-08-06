@@ -93,16 +93,22 @@ static void music_tone_alert_transform(void* context, int16_t* frames, size_t fr
     tone_alert_overlay_mix((ToneAlertOverlay*)context, frames, frame_count, AUDIO_SAMPLE_RATE);
 }
 
-static void music_info_set(AudioMusicStatus status, const MusicCatalogSnapshot& catalog,
+static void music_info_set(AudioMusicStatus status, const MusicCatalogSnapshot* catalog,
                            const MusicTransport& transport, const SoundPlayer* player = nullptr) {
     AudioMusicInfo info = {};
     info.status = status;
-    info.count = catalog.available ? catalog.count : 0;
+    info.count = catalog && catalog->available ? catalog->count : 0;
     info.index = transport.has_current_track() ? transport.track_index() + 1 : 0;
-    if (transport.has_current_track() && transport.track_index() < catalog.count) {
-        strlcpy(info.file, catalog.paths[transport.track_index()], sizeof(info.file));
+    if (catalog && transport.has_current_track() && transport.track_index() < catalog->count) {
+        const uint8_t index = transport.track_index();
+        strlcpy(info.file, catalog->paths[index], sizeof(info.file));
+        info.metadata = catalog->metadata[index];
+        if (info.metadata.duration_s) info.total_us = (uint64_t)info.metadata.duration_s * 1000000ULL;
     }
-    if (player) sound_player_get_timing(player, &info.total_us, &info.elapsed_us);
+    if (player) {
+        uint64_t ignored_total_us = 0;
+        sound_player_get_timing(player, &ignored_total_us, &info.elapsed_us);
+    }
     portENTER_CRITICAL(&g_music_info_mux);
     g_music_info = info;
     portEXIT_CRITICAL(&g_music_info_mux);
@@ -113,9 +119,12 @@ static void music_info_update_timing(const SoundPlayer* player) {
     uint64_t elapsed_us = 0;
     if (!player || !sound_player_get_timing(player, &total_us, &elapsed_us)) return;
     portENTER_CRITICAL(&g_music_info_mux);
-    if (g_music_info.total_us != total_us ||
+    // The player deliberately skips full-file duration scans. Preserve the
+    // catalog's fast Xing/VBRI/CBR duration whenever the player reports zero.
+    const uint64_t effective_total_us = total_us ? total_us : g_music_info.total_us;
+    if (g_music_info.total_us != effective_total_us ||
         g_music_info.elapsed_us / 1000000ULL != elapsed_us / 1000000ULL) {
-        g_music_info.total_us = total_us;
+        g_music_info.total_us = effective_total_us;
         g_music_info.elapsed_us = elapsed_us;
     }
     portEXIT_CRITICAL(&g_music_info_mux);
@@ -270,14 +279,15 @@ static void audio_task(void* param) {
     };
     refresh_music_catalog(true);
     const MusicCatalogSnapshot* startup_catalog = music_catalog_store_active_for_audio();
-    const MusicCatalogSnapshot empty_catalog = {};
-    const MusicCatalogSnapshot& initial_catalog = startup_catalog ? *startup_catalog : empty_catalog;
     LOGI(TAG, "Music catalog startup scan: available=%d count=%u",
-            initial_catalog.available, initial_catalog.count);
-    music_info_set(initial_catalog.available
-                       ? (initial_catalog.count ? AUDIO_MUSIC_STOPPED : AUDIO_MUSIC_EMPTY)
+            startup_catalog && startup_catalog->available,
+            startup_catalog ? startup_catalog->count : 0);
+        LOGI(TAG, "Music catalog scan: audio stack free=%u bytes",
+         (unsigned)uxTaskGetStackHighWaterMark(nullptr));
+        music_info_set(startup_catalog && startup_catalog->available
+                   ? (startup_catalog->count ? AUDIO_MUSIC_STOPPED : AUDIO_MUSIC_EMPTY)
                        : AUDIO_MUSIC_UNAVAILABLE,
-                   initial_catalog, music_transport);
+               startup_catalog, music_transport);
 
     auto close_music = [&]() {
         tone_alert_overlay_stop(&music_tone_alert);
@@ -307,25 +317,26 @@ static void audio_task(void* param) {
             refresh_music_catalog(false);
         }
         const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
-        const MusicCatalogSnapshot empty_catalog = {};
-        const MusicCatalogSnapshot& catalog = active_catalog ? *active_catalog : empty_catalog;
-        if (!catalog.available || (!catalog.count && transport_command == MUSIC_TRANSPORT_PLAY_PAUSE)) {
-            music_info_set(catalog.available ? AUDIO_MUSIC_EMPTY : AUDIO_MUSIC_UNAVAILABLE, catalog, music_transport);
+        if (!active_catalog || !active_catalog->available ||
+            (!active_catalog->count && transport_command == MUSIC_TRANSPORT_PLAY_PAUSE)) {
+            music_info_set(active_catalog && active_catalog->available
+                               ? AUDIO_MUSIC_EMPTY : AUDIO_MUSIC_UNAVAILABLE,
+                           active_catalog, music_transport);
             return;
         }
-        const MusicTransportResult result = music_transport.apply(transport_command, catalog.count);
+        const MusicTransportResult result = music_transport.apply(transport_command, active_catalog->count);
         if (result.effect == MUSIC_TRANSPORT_CLOSE_TRACK) close_music();
         if ((result.effect == MUSIC_TRANSPORT_OPEN_TRACK ||
              (result.effect == MUSIC_TRANSPORT_CLOSE_TRACK &&
               music_transport.state() == MUSIC_TRANSPORT_PLAYING)) &&
             music_transport.has_current_track()) {
-            if (!open_music_track(catalog.paths[result.track_index])) {
-                music_transport.apply(MUSIC_TRANSPORT_FAILURE, catalog.count);
+            if (!open_music_track(active_catalog->paths[result.track_index])) {
+                music_transport.apply(MUSIC_TRANSPORT_FAILURE, active_catalog->count);
             }
         }
         const AudioMusicStatus status = music_transport.state() == MUSIC_TRANSPORT_PLAYING ? AUDIO_MUSIC_PLAYING :
             music_transport.state() == MUSIC_TRANSPORT_PAUSED ? AUDIO_MUSIC_PAUSED : AUDIO_MUSIC_STOPPED;
-        music_info_set(status, catalog, music_transport, music_player);
+        music_info_set(status, active_catalog, music_transport, music_player);
     };
 #endif
 
@@ -370,7 +381,7 @@ static void audio_task(void* param) {
                 const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
                 if (active_catalog) {
                     music_transport.apply(MUSIC_TRANSPORT_STOP, active_catalog->count);
-                    music_info_set(AUDIO_MUSIC_STOPPED, *active_catalog, music_transport);
+                    music_info_set(AUDIO_MUSIC_STOPPED, active_catalog, music_transport);
                 }
             }
 #endif
@@ -439,13 +450,13 @@ static void audio_task(void* param) {
                 const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
                 music_info_set(step == SOUND_PLAYER_STEP_ERROR ? AUDIO_MUSIC_ERROR :
                     (music_transport.state() == MUSIC_TRANSPORT_PLAYING ? AUDIO_MUSIC_PLAYING : AUDIO_MUSIC_STOPPED),
-                    active_catalog ? *active_catalog : empty_catalog, music_transport, music_player);
+                    active_catalog, music_transport, music_player);
             } else {
                 music_info_update_timing(music_player);
             }
         } else if (music_player) {
             const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
-            music_info_set(AUDIO_MUSIC_PAUSED, active_catalog ? *active_catalog : empty_catalog,
+            music_info_set(AUDIO_MUSIC_PAUSED, active_catalog,
                            music_transport, music_player);
         }
 #endif

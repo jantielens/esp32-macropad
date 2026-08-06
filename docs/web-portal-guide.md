@@ -75,6 +75,11 @@ Use **Upload** to add a new MP3 and **Delete** to remove a listed file.
 Nested folders are supported. The page is for library management only and does
 not contain playback, selection, reordering, refresh, or seeking controls.
 
+When an MP3 includes ID3v2 metadata, Music Library displays its title and artist
+rather than only its filename. Duration is read from Xing/Info, VBRI, or a CBR
+bitrate estimate without decoding the complete track; estimated durations are
+marked as such.
+
 Upload and delete are unavailable while Music or an MP3 Alert is active. Tone
 Alerts do not block library management. After a successful upload or delete,
 the list refreshes automatically. The portal validates the destination path and

@@ -33,13 +33,34 @@ const int SOUND_PLAYER_MAX_OUTPUT_FRAMES =
 static_assert(SOUND_PLAYER_MAX_OUTPUT_FRAMES >= 1152,
               "sound-player output buffer must hold a full MPEG-1 frame");
 
+static bool sound_player_source_rate_supported(uint32_t source_rate) {
+    switch (source_rate) {
+        case 8000: case 11025: case 12000: case 16000: case 22050:
+        case 24000: case 32000: case 44100: case 48000:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static bool sound_player_duration_us(uint64_t samples, uint32_t source_rate,
                                      uint64_t* duration_us) {
-    if (!duration_us || source_rate == 0 ||
+    if (!duration_us || !sound_player_source_rate_supported(source_rate) ||
         samples > UINT64_MAX / 1000000ULL) {
         return false;
     }
     *duration_us = samples * 1000000ULL / source_rate;
+    return true;
+}
+
+static bool sound_player_duration_add(uint64_t* total_us, uint64_t samples,
+                                      uint32_t source_rate) {
+    uint64_t duration_us = 0;
+    if (!total_us || !sound_player_duration_us(samples, source_rate, &duration_us) ||
+        duration_us > UINT64_MAX - *total_us) {
+        return false;
+    }
+    *total_us += duration_us;
     return true;
 }
 

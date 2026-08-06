@@ -18,7 +18,9 @@
 namespace {
 
 constexpr size_t MUSIC_CATALOG_JSON_CAPACITY =
-    static_cast<size_t>(MUSIC_TRACK_LIMIT) * MUSIC_PATH_MAX_LEN + 256;
+    static_cast<size_t>(MUSIC_TRACK_LIMIT) *
+        (MUSIC_PATH_MAX_LEN + MP3_METADATA_TITLE_LEN + MP3_METADATA_ARTIST_LEN +
+         MP3_METADATA_ALBUM_LEN + MP3_METADATA_TRACK_LEN + 128) + 512;
 
 struct MusicUploadState {
     AsyncWebServerRequest* request;
@@ -198,7 +200,17 @@ void handleGetMusicCatalog(AsyncWebServerRequest* request) {
     JsonObject response = doc->to<JsonObject>();
     JsonArray files = response["files"].to<JsonArray>();
     for (uint8_t index = 0; index < snapshot->count; ++index) {
-        files.add(snapshot->paths[index]);
+        JsonObject file = files.add<JsonObject>();
+        file["path"] = snapshot->paths[index];
+        const Mp3Metadata& metadata = snapshot->metadata[index];
+        if (metadata.title[0]) file["title"] = metadata.title;
+        if (metadata.artist[0]) file["artist"] = metadata.artist;
+        if (metadata.album[0]) file["album"] = metadata.album;
+        if (metadata.track[0]) file["track"] = metadata.track;
+        if (metadata.duration_s) file["duration_s"] = metadata.duration_s;
+        if (metadata.duration_source != MP3_DURATION_UNKNOWN) {
+            file["duration_estimated"] = metadata.duration_source == MP3_DURATION_CBR_ESTIMATE;
+        }
     }
     response["count"] = snapshot->count;
     response["limit"] = MUSIC_TRACK_LIMIT;
