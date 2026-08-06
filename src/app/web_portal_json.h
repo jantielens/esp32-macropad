@@ -1,3 +1,6 @@
+#ifndef WEB_PORTAL_JSON_H
+#define WEB_PORTAL_JSON_H
+
 #pragma once
 
 #include "psram_json_allocator.h"
@@ -104,4 +107,6 @@ static inline void web_portal_send_json_sized(
 
 		request->send(response);
 }
+
+#endif // WEB_PORTAL_JSON_H
 

@@ -1,3 +1,6 @@
+#ifndef STORAGE_H
+#define STORAGE_H
+
 #pragma once
 
 // ============================================================================
@@ -62,3 +65,5 @@ inline bool storage_remove_sd_owned_roots(RemoveRoot remove_root) {
 // the filesystem is mounted and ready. For SD storage the card must already
 // have been mounted via sd_storage_mount() earlier in boot.
 bool storage_mount();
+
+#endif // STORAGE_H
