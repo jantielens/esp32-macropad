@@ -230,7 +230,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
                          btn_default(defs ? defs->content_pad : nullptr, "4"), false);
 
     // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
-    // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "beep", ... } ]
+    // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "sound_alert", ... } ]
     btn->action_count = 0;
     btn->lp_action_count = 0;
     memset(btn->actions, 0, sizeof(btn->actions));

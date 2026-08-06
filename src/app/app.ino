@@ -45,6 +45,7 @@
 #include "net_binding.h"
 #include "time_binding.h"
 #include "timer_binding.h"
+#include "music_binding.h"
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
@@ -275,6 +276,12 @@ void setup()
 		device_config.magic = CONFIG_MAGIC;
 	}
 
+	#if HAS_SOUND_PLAYER
+	// The audio worker discovers Music files as soon as it starts, so mount the
+	// selected Storage backend before initializing audio.
+	storage_mount();
+	#endif
+
 	// Initialize audio subsystem (must be after touch_manager_init since they
 	// share the I2C bus — Wire must already be started, and after config load
 	// so device_config.audio_volume is available).
@@ -481,6 +488,7 @@ void setup()
 	expr_binding_init();
 	pad_binding_init();
 	timer_binding_init();
+	music_binding_init();
 	list_binding_init();
 	net_binding_init();
 	timer_config_init();

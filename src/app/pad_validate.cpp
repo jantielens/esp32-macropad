@@ -173,9 +173,9 @@ static bool action_type_known(const char* type) {
     if (!type || !type[0] || strcmp(type, "none") == 0) return true;
     static const char* const builtins[] = {
         ACTION_TYPE_SCREEN, ACTION_TYPE_MQTT, ACTION_TYPE_BACK,
-        ACTION_TYPE_KEY, ACTION_TYPE_BLE_PAIR, ACTION_TYPE_BEEP,
+        ACTION_TYPE_KEY, ACTION_TYPE_BLE_PAIR, ACTION_TYPE_MUSIC,
         ACTION_TYPE_VOLUME, ACTION_TYPE_BRIGHTNESS, ACTION_TYPE_TIMER,
-        ACTION_TYPE_SOUND, ACTION_TYPE_NOTIFY, ACTION_TYPE_SYSTEM,
+        ACTION_TYPE_SOUND_ALERT, ACTION_TYPE_NOTIFY, ACTION_TYPE_SYSTEM,
         ACTION_TYPE_HA_SERVICE, ACTION_TYPE_VISUAL_ALERT, ACTION_TYPE_CYCLE_PAD,
     };
     for (const char* builtin : builtins) {

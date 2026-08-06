@@ -77,8 +77,7 @@ TEST(empty_json) {
     ButtonAction act = parse_from_string("{}");
     ASSERT_STR(act.type, "");
     // With type=="" no arm is active; spot-check zero-init of a couple arms.
-    ASSERT_EQ(act.payload.beep.beep_volume, 0);
-    ASSERT_EQ(act.payload.sound.sound_volume, 0);
+    ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 0);
 }
 
 TEST(empty_to_json_produces_empty_object) {
@@ -173,63 +172,50 @@ TEST(key_action_round_trip) {
 }
 
 // ============================================================================
-// Beep action
+// Music action
 // ============================================================================
 
-TEST(beep_action_parse) {
+TEST(music_action_parse) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"beep\",\"beep_pattern\":\"1000:200 100 500:300\",\"beep_volume\":75}");
-    ASSERT_STR(act.type, "beep");
-    ASSERT_STR(act.payload.beep.beep_pattern, "1000:200 100 500:300");
-    ASSERT_EQ(act.payload.beep.beep_volume, 75);
+        "{\"type\":\"music\",\"music_command\":\"play_pause\"}");
+    ASSERT_STR(act.type, "music");
+    ASSERT_STR(act.payload.music.music_command, "play_pause");
 }
 
-TEST(beep_action_round_trip) {
+TEST(music_action_round_trip) {
     ButtonAction act = round_trip(
-        "{\"type\":\"beep\",\"beep_pattern\":\"440:500\",\"beep_volume\":50}");
-    ASSERT_STR(act.type, "beep");
-    ASSERT_STR(act.payload.beep.beep_pattern, "440:500");
-    ASSERT_EQ(act.payload.beep.beep_volume, 50);
+        "{\"type\":\"music\",\"music_command\":\"previous\"}");
+    ASSERT_STR(act.type, "music");
+    ASSERT_STR(act.payload.music.music_command, "previous");
 }
 
-TEST(beep_zero_volume_not_serialized) {
-    ButtonAction act = parse_from_string(
-        "{\"type\":\"beep\",\"beep_pattern\":\"1000:100\",\"beep_volume\":0}");
-    StaticJsonDocument<256> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_TRUE(!obj.containsKey("beep_volume"));
-    ASSERT_TRUE(obj.containsKey("beep_pattern"));
-}
-
-// ============================================================================
-// Sound action
+// Sound Alert action
 // ============================================================================
 
-TEST(sound_action_parse) {
+TEST(sound_alert_tone_parse) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"sound\",\"sound_file\":\"doorbell\",\"sound_volume\":80}");
-    ASSERT_STR(act.type, "sound");
-    ASSERT_STR(act.payload.sound.sound_file, "doorbell");
-    ASSERT_EQ(act.payload.sound.sound_volume, 80);
+        "{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone\",\"sound_alert_pattern\":\"1000:200\",\"sound_alert_volume\":80}");
+    ASSERT_STR(act.type, "sound_alert");
+    ASSERT_STR(act.payload.sound_alert.sound_alert_kind, "tone");
+    ASSERT_STR(act.payload.sound_alert.sound_alert_pattern, "1000:200");
+    ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 80);
 }
 
-TEST(sound_action_round_trip) {
+TEST(sound_alert_mp3_round_trip) {
     ButtonAction act = round_trip(
-        "{\"type\":\"sound\",\"sound_file\":\"startup\",\"sound_volume\":100}");
-    ASSERT_STR(act.type, "sound");
-    ASSERT_STR(act.payload.sound.sound_file, "startup");
-    ASSERT_EQ(act.payload.sound.sound_volume, 100);
+        "{\"type\":\"sound_alert\",\"sound_alert_kind\":\"mp3\",\"sound_alert_file\":\"startup\",\"sound_alert_volume\":100}");
+    ASSERT_STR(act.type, "sound_alert");
+    ASSERT_STR(act.payload.sound_alert.sound_alert_kind, "mp3");
+    ASSERT_STR(act.payload.sound_alert.sound_alert_file, "startup");
+    ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 100);
 }
 
-TEST(sound_zero_volume_not_serialized) {
+TEST(legacy_alert_aliases_are_rejected) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"sound\",\"sound_file\":\"chime\",\"sound_volume\":0}");
-    StaticJsonDocument<256> doc;
-    JsonObject obj = doc.to<JsonObject>();
-    action_to_json(act, obj);
-    ASSERT_TRUE(!obj.containsKey("sound_volume"));
-    ASSERT_TRUE(obj.containsKey("sound_file"));
+        "{\"type\":\"beep\",\"beep_pattern\":\"1000:100\"}");
+    ASSERT_STR(act.type, "");
+    act = parse_from_string("{\"type\":\"sound\",\"sound_file\":\"chime\"}");
+    ASSERT_STR(act.type, "");
 }
 
 // ============================================================================
@@ -393,9 +379,9 @@ TEST(back_action_round_trip) {
 // ============================================================================
 
 TEST(missing_optional_fields) {
-    ButtonAction act = parse_from_string("{\"type\":\"beep\"}");
-    ASSERT_STR(act.payload.beep.beep_pattern, "");
-    ASSERT_EQ(act.payload.beep.beep_volume, 0);
+    ButtonAction act = parse_from_string("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone\"}");
+    ASSERT_STR(act.payload.sound_alert.sound_alert_pattern, "");
+    ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 0);
 }
 
 // ============================================================================
@@ -430,9 +416,8 @@ TEST(per_type_round_trips_cover_all_arms) {
         ASSERT_STR(a.payload.key.key_sequence, "Ctrl+A");
     }
     {
-        ButtonAction a = round_trip("{\"type\":\"beep\",\"beep_pattern\":\"500:100\",\"beep_volume\":42}");
-        ASSERT_STR(a.payload.beep.beep_pattern, "500:100");
-        ASSERT_EQ(a.payload.beep.beep_volume, 42);
+        ButtonAction a = round_trip("{\"type\":\"music\",\"music_command\":\"next\"}");
+        ASSERT_STR(a.payload.music.music_command, "next");
     }
     {
         ButtonAction a = round_trip("{\"type\":\"volume\",\"volume_mode\":\"set\",\"volume_value\":\"55\"}");
@@ -451,9 +436,9 @@ TEST(per_type_round_trips_cover_all_arms) {
         ASSERT_STR(a.payload.timer.timer_value, "30");
     }
     {
-        ButtonAction a = round_trip("{\"type\":\"sound\",\"sound_file\":\"alert\",\"sound_volume\":90}");
-        ASSERT_STR(a.payload.sound.sound_file, "alert");
-        ASSERT_EQ(a.payload.sound.sound_volume, 90);
+        ButtonAction a = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"mp3\",\"sound_alert_file\":\"alert\",\"sound_alert_volume\":90}");
+        ASSERT_STR(a.payload.sound_alert.sound_alert_file, "alert");
+        ASSERT_EQ(a.payload.sound_alert.sound_alert_volume, 90);
     }
     {
         ButtonAction a = round_trip(
@@ -684,15 +669,14 @@ int main() {
     RUN(key_action_parse);
     RUN(key_action_round_trip);
 
-    printf("\n--- Beep action ---\n");
-    RUN(beep_action_parse);
-    RUN(beep_action_round_trip);
-    RUN(beep_zero_volume_not_serialized);
+    printf("\n--- Music action ---\n");
+    RUN(music_action_parse);
+    RUN(music_action_round_trip);
 
-    printf("\n--- Sound action ---\n");
-    RUN(sound_action_parse);
-    RUN(sound_action_round_trip);
-    RUN(sound_zero_volume_not_serialized);
+    printf("\n--- Sound Alert action ---\n");
+    RUN(sound_alert_tone_parse);
+    RUN(sound_alert_mp3_round_trip);
+    RUN(legacy_alert_aliases_are_rejected);
 
     printf("\n--- Volume action ---\n");
     RUN(volume_set_action_parse);

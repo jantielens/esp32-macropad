@@ -36,8 +36,7 @@ static bool has_any_action(const ButtonAction* acts, uint8_t count) {
 // Returns true if any action in the list produces its own audio (beep or sound).
 static bool has_audio_action(const ButtonAction* acts, uint8_t count) {
     for (uint8_t i = 0; i < count; i++)
-        if (strcmp(acts[i].type, ACTION_TYPE_BEEP) == 0 ||
-            strcmp(acts[i].type, ACTION_TYPE_SOUND) == 0) return true;
+        if (strcmp(acts[i].type, ACTION_TYPE_SOUND_ALERT) == 0) return true;
     return false;
 }
 

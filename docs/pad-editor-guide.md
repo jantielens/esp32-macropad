@@ -32,7 +32,7 @@ useful for a focused control screen or a simple whole-pad navigation surface.
 
 Swipes continue to use the pad's swipe actions. Long-presses do not trigger full-screen
 actions. Full-screen actions use the usual brief tap flash and device-level feedback beep;
-a **Play Beep** or **Play Sound** action suppresses that feedback beep.
+a **Sound Alert** action suppresses that feedback beep.
 
 Full-screen actions belong only to the current pad. They are not inherited from a template
 pad, and clearing the list restores normal button and widget interaction. A saved pad with
@@ -45,7 +45,7 @@ The stored JSON field is `pad_actions`, an array of up to three `ButtonAction` o
 {
   "pad_actions": [
     { "type": "screen", "screen_id": "pad_2" },
-    { "type": "beep", "pattern": "1000:100" }
+    { "type": "sound_alert", "sound_alert_kind": "tone", "sound_alert_pattern": "1000:100" }
   ]
 }
 ```
@@ -379,8 +379,8 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | **Publish MQTT** | Send a message to an MQTT topic. Topic and payload fields support binding templates (e.g. `[health:cpu]`). |
 | **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). The sequence field supports binding templates. ESP32-P4 boards only. |
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
-| **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. The pattern field supports binding templates. ESP32-P4 boards only. |
-| **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
+| **Sound Alert** | Play a **Tone Alert** from a beep pattern (for example, `1000:200 100 1000:200`) or an **MP3 Alert** from an uploaded sound file. Both accept an optional volume override; the tone pattern supports binding templates. ESP32-P4 boards only. |
+| **Music** | Control the Music CD Player: Play/Pause, Next, Previous, or Stop. Available on boards with the sound player enabled. |
 | **Set Volume** | Set the device audio volume to an absolute value (0–100). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
 | **Adjust Volume** | Step the device audio volume up or down by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
 | **Set Brightness** | Set the display backlight brightness to an absolute value (5–100). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
@@ -393,7 +393,7 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
-- **Tap action 2**: Play Beep → `1000:100` (confirmation chirp)
+- **Tap action 2**: Sound Alert → Tone Alert → `1000:100` (confirmation chirp)
 - **Long-press action**: Navigate to screen → `pad_3` (a dedicated lighting pad with brightness controls)
 
 **Example setup for navigation:**
@@ -478,18 +478,18 @@ actions do not store a duration.
 
 On the **Timers** page, configure up to three expiry actions for each timer slot:
 
-* Expire actions use the same action editor as buttons, so you can play a sound,
-  send an MQTT message, navigate to a screen, play a beep, or combine up to
-  three actions.
+* Expire actions use the same action editor as buttons, so you can trigger a
+  Sound Alert, control Music, send an MQTT message, navigate to a screen, or
+  combine up to three actions.
 * A countdown copies the slot's current expiry list when it starts. Editing
   settings does not change an active run; the next countdown uses the new list.
 
 | Example expire action | What happens |
 |----------------------|-------------|
-| Play Sound: `alarm` | Plays the "alarm" MP3 file |
+| Sound Alert, MP3 Alert: `alarm` | Plays the "alarm" MP3 file |
 | MQTT Publish: `home/timer/expired` → `ON` | Sends an MQTT notification |
 | Navigate to screen: `pad_alarm` | Shows an alarm pad |
-| Play Beep: `1000:300 200 1000:300` | Plays a beep pattern |
+| Sound Alert, Tone Alert: `1000:300 200 1000:300` | Plays a beep pattern |
 
 **Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
 
@@ -525,7 +525,7 @@ The bubble fades in over 200 ms, displays for the configured duration, then fade
 
 ### Visual Alert Action
 
-The **Visual Alert** action raises a full-screen pulsing color overlay on the device screen — a strong ambient cue meant to grab attention across the room (for example, a critical threshold crossing). It complements audio feedback: pair it with a **Play Beep** action for a coordinated alarm. Unlike a notification, it draws no text — just a pulsing tint that sits above everything (including the screensaver).
+The **Visual Alert** action raises a full-screen pulsing color overlay on the device screen — a strong ambient cue meant to grab attention across the room (for example, a critical threshold crossing). It complements audio feedback: pair it with a **Sound Alert** Tone Alert for a coordinated alarm. Unlike a notification, it draws no text — just a pulsing tint that sits above everything (including the screensaver).
 
 **Fields:**
 
@@ -543,7 +543,7 @@ Raising an alert wakes the screen first, so it is visible even when the display 
 **Example: energy alarm from an MQTT trigger**
 - **Trigger**: MQTT topic `home/solar/power` with an `[expr:...]` threshold
 - **Action 1**: Visual Alert → op: `start`, color: `#FF0000`, pattern: `breathe`, duration: `0`
-- **Action 2**: Play Beep → pattern: `1000:200 100 1000:200`
+- **Action 2**: Sound Alert → Tone Alert → pattern: `1000:200 100 1000:200`
 - A separate button (or a recovery trigger) fires **Visual Alert → op: `stop`** to clear it.
 
 ### Home Assistant Service Action
@@ -577,13 +577,13 @@ The action sends `POST <ha_url>/api/services/<domain>/<service>` with the access
 
 *Applies only to boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
 
-Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Play Beep** or **Play Sound** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
+Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Sound Alert** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
 
 **Behavior notes:**
 - Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
 - A configured full-screen action list takes precedence over normal button and widget taps.
   Clearing the list restores their normal interaction.
-- If any action in the sequence is a **Play Beep** or **Play Sound** action, the device-level feedback beep is automatically suppressed.
+- If any action in the sequence is a **Sound Alert** action, the device-level feedback beep is automatically suppressed.
 - When multiple actions are configured and one of them navigates to a different screen, any subsequent actions in the sequence still execute safely. The last navigation wins (the user sees the final target screen).
 - Swipe gestures use the device-level tap beep with the same suppression logic.
 
@@ -1375,6 +1375,33 @@ Use `[timer:N_expired]` in expression bindings for conditional colors or text:
 
 ```
 [expr:[timer:1_expired]=="ON" ? "#FF0000" : "#333333"]
+```
+
+### Music Binding
+
+**Syntax:** `[music:key]`
+
+Displays metadata and transport state for the Music CD Player. Music bindings
+are available on boards with audio and the sound player enabled.
+
+| Key | Returns | Notes |
+|-----|---------|-------|
+| `file` | Current canonical MP3 path | Returns `---` when no track is selected |
+| `file_name` | Current MP3 filename without parent folders | Returns `---` when no track is selected |
+| `index` | Current track number | One-based; returns `0` when no track is selected |
+| `count` | Number of discovered tracks | Returns `-1` while the catalog is unavailable |
+| `elapsed_s` | Whole seconds played in the current track | Returns `0` before playback starts |
+| `total_s` | Whole-track duration in seconds | Returns `-1` when duration is unavailable |
+| `status` | Transport state | `playing`, `paused`, `stopped`, `empty`, `unavailable`, or `error` |
+
+**Examples:**
+
+```text
+[music:status]                         -> playing
+[music:index] / [music:count]          -> 2 / 5
+[music:file]                            -> /media/album/02-track.mp3
+[music:file_name]                       -> 02-track.mp3
+[music:elapsed_s] / [music:total_s] s  -> 75 / 244 s
 ```
 
 ### Expression Binding

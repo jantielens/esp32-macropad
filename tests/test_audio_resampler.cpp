@@ -69,6 +69,23 @@ static void verify_undersized_buffer_recovery() {
     check(recovered_frames > 0, "resampler did not recover after an undersized output buffer");
 }
 
+    static void verify_track_timing() {
+        uint64_t duration_us = 0;
+        check(sound_player_duration_us(48000, 48000, &duration_us) && duration_us == 1000000,
+            "48 kHz duration conversion is incorrect");
+        check(sound_player_duration_us(44100 * 3ULL, 44100, &duration_us) && duration_us == 3000000,
+            "44.1 kHz duration conversion is incorrect");
+        check(!sound_player_duration_us(1, 12345, &duration_us),
+            "unsupported source rate was accepted");
+        check(!sound_player_duration_us(UINT64_MAX / 1000000ULL + 1, 48000, &duration_us),
+            "overflowing sample count was accepted");
+
+        uint64_t total_us = 0;
+        check(sound_player_duration_add(&total_us, 48000, 48000) &&
+            sound_player_duration_add(&total_us, 44100, 44100) && total_us == 2000000,
+            "mixed-rate duration accumulation is incorrect");
+    }
+
 int main() {
     const uint32_t source_rates[] = {8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000};
     const uint32_t target_rates[] = {16000, AUDIO_SAMPLE_RATE};
@@ -85,6 +102,7 @@ int main() {
     check(boundary_case_count > 0, "no source-rate combination exercises the output-cap boundary");
     verify_consecutive_frames(16000, 1152, AUDIO_SAMPLE_RATE, 8);
     verify_undersized_buffer_recovery();
+    verify_track_timing();
 
     std::puts("audio resampler consecutive-frame checks passed");
     return 0;

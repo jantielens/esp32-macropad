@@ -51,8 +51,7 @@ static inline bool button_pressed(uint8_t i) {
 // Play the device tap_beep cue, unless the action list itself produces audio.
 static void maybe_beep(const ButtonAction* actions, uint8_t count) {
     if (count > 0 &&
-        (strcmp(actions[0].type, ACTION_TYPE_BEEP) == 0 ||
-         strcmp(actions[0].type, ACTION_TYPE_SOUND) == 0)) {
+        strcmp(actions[0].type, ACTION_TYPE_SOUND_ALERT) == 0) {
         return;
     }
     const char* pattern = device_config.tap_beep;

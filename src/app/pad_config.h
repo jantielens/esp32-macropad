@@ -129,11 +129,11 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_BACK     "back"
 #define ACTION_TYPE_KEY      "key"
 #define ACTION_TYPE_BLE_PAIR "ble_pair"
-#define ACTION_TYPE_BEEP     "beep"
+#define ACTION_TYPE_MUSIC    "music"
+#define ACTION_TYPE_SOUND_ALERT "sound_alert"
 #define ACTION_TYPE_VOLUME     "volume"
 #define ACTION_TYPE_BRIGHTNESS "brightness"
 #define ACTION_TYPE_TIMER    "timer"
-#define ACTION_TYPE_SOUND    "sound"
 #define ACTION_TYPE_NOTIFY   "notify"
 #define ACTION_TYPE_SYSTEM   "system"
 #define ACTION_TYPE_HA_SERVICE "ha_service"
@@ -169,9 +169,14 @@ struct MqttPayload {
 struct KeyPayload {
     char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // DSL key sequence
 };
-struct BeepPayload {
-    char beep_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];  // "freq:dur freq:dur" (empty = default)
-    uint8_t beep_volume;                             // 0 = device volume, 1-100 = override
+struct MusicPayload {
+    char music_command[12];
+};
+struct SoundAlertPayload {
+    char sound_alert_kind[5];
+    char sound_alert_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];
+    char sound_alert_file[32];
+    uint8_t sound_alert_volume;
 };
 struct VolumePayload {
     char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // "set" or "adjust"
@@ -186,10 +191,6 @@ struct TimerPayload {
     char timer_command[CONFIG_TIMER_CMD_MAX_LEN];     // "toggle", "start", "stop", "adjust", "set", etc.
     char timer_mode[5];                               // "up" or "down" for start/toggle
     char timer_value[CONFIG_VALUE_MAX_LEN];           // seconds for set/adjust (supports {step})
-};
-struct SoundPayload {
-    char sound_file[32];                              // filename (no path/extension)
-    uint8_t sound_volume;                             // 0 = device vol, 1-100 = override
 };
 struct NotifyPayload {
     char notify_text[128];                                // message text (bindable). NOTE: dominates union size — see Future Work.
@@ -243,11 +244,11 @@ union ActionPayload {
     ScreenPayload     screen;       // type == ACTION_TYPE_SCREEN
     MqttPayload       mqtt;         // type == ACTION_TYPE_MQTT
     KeyPayload        key;          // type == ACTION_TYPE_KEY
-    BeepPayload       beep;         // type == ACTION_TYPE_BEEP
+    MusicPayload      music;        // type == ACTION_TYPE_MUSIC
+    SoundAlertPayload sound_alert;  // type == ACTION_TYPE_SOUND_ALERT
     VolumePayload     volume;       // type == ACTION_TYPE_VOLUME
     BrightnessPayload brightness;   // type == ACTION_TYPE_BRIGHTNESS
     TimerPayload      timer;        // type == ACTION_TYPE_TIMER
-    SoundPayload      sound;        // type == ACTION_TYPE_SOUND
     NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
     SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
     HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
@@ -280,11 +281,11 @@ static_assert(sizeof(ButtonAction) <= 420,
     printf_fn("  ScreenPayload     = %zu\n", sizeof(ScreenPayload));     \
     printf_fn("  MqttPayload       = %zu\n", sizeof(MqttPayload));       \
     printf_fn("  KeyPayload        = %zu\n", sizeof(KeyPayload));        \
-    printf_fn("  BeepPayload       = %zu\n", sizeof(BeepPayload));       \
+    printf_fn("  MusicPayload      = %zu\n", sizeof(MusicPayload));      \
+    printf_fn("  SoundAlertPayload = %zu\n", sizeof(SoundAlertPayload)); \
     printf_fn("  VolumePayload     = %zu\n", sizeof(VolumePayload));     \
     printf_fn("  BrightnessPayload = %zu\n", sizeof(BrightnessPayload)); \
     printf_fn("  TimerPayload      = %zu\n", sizeof(TimerPayload));      \
-    printf_fn("  SoundPayload      = %zu\n", sizeof(SoundPayload));      \
     printf_fn("  NotifyPayload     = %zu\n", sizeof(NotifyPayload));     \
     printf_fn("  SystemPayload     = %zu\n", sizeof(SystemPayload));     \
     printf_fn("  HaServicePayload  = %zu\n", sizeof(HaServicePayload));  \

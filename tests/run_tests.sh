@@ -136,6 +136,39 @@ echo "=== Running unit tests: binding_template ==="
 ./tests/bin/test_binding_template
 echo
 
+echo "=== Building unit tests: music transport ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_music_transport.cpp src/app/music_transport.cpp \
+    -o tests/bin/test_music_transport
+
+echo "=== Running unit tests: music transport ==="
+./tests/bin/test_music_transport
+echo
+
+echo "=== Building unit tests: music catalog ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I tests -I src/app \
+    tests/test_music_catalog.cpp src/app/music_catalog.cpp \
+    -o tests/bin/test_music_catalog
+
+echo "=== Running unit tests: music catalog ==="
+./tests/bin/test_music_catalog
+echo
+
+echo "=== Building unit tests: music binding ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_AUDIO=1 -DHAS_SOUND_PLAYER=1 -DHAS_MCP=1 \
+    -include tests/board_config.h -include tests/log_manager.h \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_music_binding.cpp src/app/music_binding.cpp src/app/binding_template.cpp tests/stubs.cpp \
+    -o tests/bin/test_music_binding
+
+echo "=== Running unit tests: music binding ==="
+./tests/bin/test_music_binding
+echo
+
 echo "=== Building integration tests: timer binding target without MQTT ==="
 g++ -std=c++17 -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
     -include tests/timer_test_overrides/board_config.h -include tests/log_manager.h \
@@ -248,6 +281,38 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running unit tests: audio resampler ==="
 ./tests/bin/test_audio_resampler
+echo
+
+echo "=== Building unit tests: music transport ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_music_transport.cpp \
+    src/app/music_transport.cpp \
+    -o tests/bin/test_music_transport
+
+echo "=== Running unit tests: music transport ==="
+./tests/bin/test_music_transport
+echo
+
+echo "=== Building unit tests: music catalog ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_music_catalog.cpp \
+    src/app/music_catalog.cpp \
+    -o tests/bin/test_music_catalog
+
+echo "=== Running unit tests: music catalog ==="
+./tests/bin/test_music_catalog
+echo
+
+echo "=== Building unit tests: tone alert overlay ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_tone_alert_overlay.cpp \
+    -o tests/bin/test_tone_alert_overlay -lm
+
+echo "=== Running unit tests: tone alert overlay ==="
+./tests/bin/test_tone_alert_overlay
 echo
 
 echo "=== Building unit tests: audio gain ==="

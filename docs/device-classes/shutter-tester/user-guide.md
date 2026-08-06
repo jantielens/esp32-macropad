@@ -467,7 +467,7 @@ The `target_speed` field on each measurement records which guided speed was bein
 
 ## Session Save Actions
 
-The firmware exposes two configurable lifecycle hooks that fire when a session is being persisted to flash. Each hook holds **up to 3 sequential actions** (any standard [`ButtonAction`](pad-editor-guide.md): notify bubble, screen navigation, MQTT publish, beep, sound, key sequence, etc.), executed in order.
+The firmware exposes two configurable lifecycle hooks that fire when a session is being persisted to flash. Each hook holds **up to 3 sequential actions** (any standard [`ButtonAction`](pad-editor-guide.md): notify bubble, screen navigation, MQTT publish, Sound Alert, Music, key sequence, etc.), executed in order.
 
 Configure them in the web portal under **Shutter Tester → Session Save Actions**.
 
@@ -475,7 +475,7 @@ Configure them in the web portal under **Shutter Tester → Session Save Actions
 
 | Event | Fires when | Use cases |
 |---|---|---|
-| **On Save Started** | `sess_stop` (or auto-stop) begins persistence | Show a "Saving…" notification, beep, or navigate to a "please wait" pad |
+| **On Save Started** | `sess_stop` (or auto-stop) begins persistence | Show a "Saving…" notification, trigger a Tone Alert, or navigate to a "please wait" pad |
 | **On Save Completed** | Background persist task finishes writing the JSON | Show "Saved ✓", navigate to the sessions list, publish an MQTT event so a Home Assistant automation can react |
 
 ```mermaid
@@ -509,7 +509,7 @@ Payload schema:
     {"type": "notify", "notify_text": "Saving session…", "notify_duration_ms": 1500}
   ],
   "save_complete_actions": [
-    {"type": "beep", "beep_pattern": "100", "beep_volume": 50},
+    {"type": "sound_alert", "sound_alert_kind": "tone", "sound_alert_pattern": "100", "sound_alert_volume": 50},
     {"type": "screen", "target": "shutter-sessions"}
   ]
 }

@@ -72,6 +72,7 @@
 
 #if HAS_SOUND_PLAYER
 #include "components/sounds_component.cpp"
+#include "components/music_component.cpp"
 #endif // HAS_SOUND_PLAYER
 
 // --- Shutter Tester components ---

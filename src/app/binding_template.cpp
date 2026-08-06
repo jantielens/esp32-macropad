@@ -10,7 +10,7 @@
 // Scheme registry
 // ============================================================================
 
-#define MAX_SCHEMES 8
+#define MAX_SCHEMES 9
 
 struct SchemeEntry {
     char name[16];

@@ -33,6 +33,40 @@ const int SOUND_PLAYER_MAX_OUTPUT_FRAMES =
 static_assert(SOUND_PLAYER_MAX_OUTPUT_FRAMES >= 1152,
               "sound-player output buffer must hold a full MPEG-1 frame");
 
+static const uint32_t SOUND_PLAYER_SOURCE_RATES[] = {
+    8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000,
+};
+static const size_t SOUND_PLAYER_SOURCE_RATE_COUNT =
+    sizeof(SOUND_PLAYER_SOURCE_RATES) / sizeof(SOUND_PLAYER_SOURCE_RATES[0]);
+
+static int sound_player_source_rate_bucket(uint32_t source_rate) {
+    for (size_t bucket = 0; bucket < SOUND_PLAYER_SOURCE_RATE_COUNT; ++bucket) {
+        if (SOUND_PLAYER_SOURCE_RATES[bucket] == source_rate) return (int)bucket;
+    }
+    return -1;
+}
+
+static bool sound_player_duration_us(uint64_t samples, uint32_t source_rate,
+                                     uint64_t* duration_us) {
+    if (!duration_us || sound_player_source_rate_bucket(source_rate) < 0 ||
+        samples > UINT64_MAX / 1000000ULL) {
+        return false;
+    }
+    *duration_us = samples * 1000000ULL / source_rate;
+    return true;
+}
+
+static bool sound_player_duration_add(uint64_t* total_us, uint64_t samples,
+                                      uint32_t source_rate) {
+    uint64_t duration_us = 0;
+    if (!total_us || !sound_player_duration_us(samples, source_rate, &duration_us) ||
+        duration_us > UINT64_MAX - *total_us) {
+        return false;
+    }
+    *total_us += duration_us;
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Linear interpolation resampler: any source rate → AUDIO_SAMPLE_RATE.
 // ---------------------------------------------------------------------------
@@ -128,204 +162,326 @@ static int resampler_process(Resampler* r, const int16_t* src, int src_samples,
 // Play MP3 file — called from audio task
 // ---------------------------------------------------------------------------
 #ifndef AUDIO_RESAMPLER_TEST
-bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
-                       volatile bool* stop_flag) {
-    if (!output_driver || !filename || !filename[0]) return false;
-
-    // Build path
-    char path[48];
-    sound_store_path(filename, path, sizeof(path));
-
-    // Open file
-    File file = Storage.open(path, "r");
-    if (!file) {
-        LOGW(TAG, "File not found: %s", path);
-        return false;
-    }
-
-    size_t file_size = file.size();
-    LOGI(TAG, "Playing %s (%u bytes)", path, (unsigned)file_size);
-
-    // Allocate buffers in PSRAM when available (saves ~35 KB internal RAM).
-    // All buffers are CPU-only — no DMA reads them directly.
-    auto ps_alloc = [](size_t sz) -> void* {
-        void* p = nullptr;
-        if (psramFound()) p = heap_caps_malloc(sz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!p)           p = heap_caps_malloc(sz, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        return p;
-    };
-
-    // Read buffer for MP3 file data (16 KB)
-    uint8_t* read_buf = (uint8_t*)ps_alloc(MP3_READ_BUF_SIZE);
-    if (!read_buf) {
-        LOGE(TAG, "Failed to allocate read buffer");
-        file.close();
-        return false;
-    }
-
-    int16_t* out_buf = (int16_t*)ps_alloc(SOUND_PLAYER_MAX_OUTPUT_FRAMES * 2 * sizeof(int16_t));
-    if (!out_buf) {
-        LOGE(TAG, "Failed to allocate output buffer");
-        heap_caps_free(read_buf);
-        file.close();
-        return false;
-    }
-
-    // MP3 decoder state (~6 KB — too large for task stack)
-    mp3dec_t* mp3d = (mp3dec_t*)ps_alloc(sizeof(mp3dec_t));
-    if (!mp3d) {
-        LOGE(TAG, "Failed to allocate MP3 decoder");
-        heap_caps_free(out_buf);
-        heap_caps_free(read_buf);
-        file.close();
-        return false;
-    }
-    mp3dec_init(mp3d);
-
+struct SoundPlayer {
+    AudioOutputDriver* output_driver;
+    SoundPlayerPcmTransform transform;
+    void* transform_context;
+    File file;
+    uint8_t* read_buf;
+    int16_t* out_buf;
+    mp3dec_t* decoder;
 #if AUDIO_MP3_SCRATCH_PSRAM
-    const size_t scratch_size = mp3dec_scratch_size();
-    void* decode_scratch = heap_caps_malloc(
-        scratch_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!decode_scratch) {
-        LOGE(TAG, "Failed to allocate MP3 scratch in PSRAM (%u bytes)",
-             (unsigned)scratch_size);
-        heap_caps_free(mp3d);
-        heap_caps_free(out_buf);
-        heap_caps_free(read_buf);
-        file.close();
-        return false;
-    }
+    void* decode_scratch;
 #endif
-
-    // PCM decode buffer (4.5 KB)
-    int16_t* pcm = (int16_t*)ps_alloc(MINIMP3_MAX_SAMPLES_PER_FRAME * sizeof(int16_t));
-    if (!pcm) {
-        LOGE(TAG, "Failed to allocate PCM buffer");
-#if AUDIO_MP3_SCRATCH_PSRAM
-        heap_caps_free(decode_scratch);
-#endif
-        heap_caps_free(mp3d);
-        heap_caps_free(out_buf);
-        heap_caps_free(read_buf);
-        file.close();
-        return false;
-    }
-
-    // Read initial data
-    size_t buf_filled = file.read(read_buf, MP3_READ_BUF_SIZE);
-    size_t buf_consumed = 0;
-    bool eof = (buf_filled < MP3_READ_BUF_SIZE);
-
+    int16_t* pcm;
+    size_t buf_filled;
+    size_t buf_consumed;
+    bool eof;
+    bool resampler_initialized;
+    bool timing_available;
+    uint64_t duration_samples[SOUND_PLAYER_SOURCE_RATE_COUNT];
+    uint64_t total_us;
+    uint64_t elapsed_output_frames;
+    uint64_t elapsed_us;
     Resampler resampler;
-    bool resampler_initialized = false;
-    bool success = true;
-    AudioStarvationStats starvation = {};
+    AudioStarvationStats starvation;
+};
 
-    while (!(*stop_flag)) {
-        // Ensure we have enough data in buffer
-        if (buf_consumed > 0) {
-            size_t remaining = buf_filled - buf_consumed;
-            memmove(read_buf, read_buf + buf_consumed, remaining);
-            buf_filled = remaining;
-            buf_consumed = 0;
+static void* sound_player_ps_alloc(size_t size) {
+    void* allocation = nullptr;
+    if (psramFound()) allocation = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!allocation) allocation = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    return allocation;
+}
 
-            if (!eof && buf_filled < MP3_READ_BUF_SIZE) {
-                size_t to_read = MP3_READ_BUF_SIZE - buf_filled;
-                size_t got = file.read(read_buf + buf_filled, to_read);
-                buf_filled += got;
-                if (got < to_read) eof = true;
-            }
-        }
+static void sound_player_refill(SoundPlayer* player) {
+    if (player->buf_consumed == 0) return;
+    const size_t remaining = player->buf_filled - player->buf_consumed;
+    memmove(player->read_buf, player->read_buf + player->buf_consumed, remaining);
+    player->buf_filled = remaining;
+    player->buf_consumed = 0;
+    if (!player->eof && player->buf_filled < MP3_READ_BUF_SIZE) {
+        const size_t to_read = MP3_READ_BUF_SIZE - player->buf_filled;
+        const size_t got = player->file.read(player->read_buf + player->buf_filled, to_read);
+        player->buf_filled += got;
+        if (got < to_read) player->eof = true;
+    }
+}
 
-        if (buf_filled == 0) break;  // No more data
+static int sound_player_decode(SoundPlayer* player, int16_t* pcm,
+                               mp3dec_frame_info_t* frame_info) {
+#if AUDIO_MP3_SCRATCH_PSRAM
+    return mp3dec_decode_frame_with_scratch(
+        player->decoder, player->read_buf, (int)player->buf_filled, pcm,
+        frame_info, player->decode_scratch);
+#else
+    return mp3dec_decode_frame(
+        player->decoder, player->read_buf, (int)player->buf_filled, pcm, frame_info);
+#endif
+}
 
-        // Decode one frame
-        mp3dec_frame_info_t frame_info;
-    #if AUDIO_MP3_SCRATCH_PSRAM
-        int samples = mp3dec_decode_frame_with_scratch(
-            mp3d, read_buf + buf_consumed,
-            (int)(buf_filled - buf_consumed), pcm, &frame_info,
-            decode_scratch);
-    #else
-        int samples = mp3dec_decode_frame(
-            mp3d, read_buf + buf_consumed,
-            (int)(buf_filled - buf_consumed), pcm, &frame_info);
-    #endif
+static void sound_player_reset_decode(SoundPlayer* player) {
+    player->file.seek(0);
+    player->buf_filled = player->file.read(player->read_buf, MP3_READ_BUF_SIZE);
+    player->buf_consumed = 0;
+    player->eof = player->buf_filled < MP3_READ_BUF_SIZE;
+    player->resampler_initialized = false;
+    mp3dec_init(player->decoder);
+}
 
-        if (frame_info.frame_bytes == 0) {
-            // No more frames can be decoded
-            break;
-        }
+static void sound_player_scan_duration(SoundPlayer* player) {
+    memset(player->duration_samples, 0, sizeof(player->duration_samples));
+    player->timing_available = false;
+    player->total_us = 0;
+    player->elapsed_output_frames = 0;
+    player->elapsed_us = 0;
+    sound_player_reset_decode(player);
 
-        buf_consumed += frame_info.frame_bytes;
-
-        if (samples == 0) {
-            // Skipped ID3 or invalid data — continue
-            continue;
-        }
-
-        // Initialize or re-initialize resampler when format changes
-        if (!resampler_initialized ||
-            (uint32_t)frame_info.hz != resampler.src_rate ||
-            (uint32_t)frame_info.channels != resampler.src_channels) {
-            resampler_init(&resampler, frame_info.hz, frame_info.channels, AUDIO_SAMPLE_RATE);
-            if (!resampler_initialized) {
-                LOGD(TAG, "MP3: %d Hz, %d ch, layer %d, %d kbps",
-                     frame_info.hz, frame_info.channels, frame_info.layer,
-                     frame_info.bitrate_kbps);
+    bool valid = true;
+    while (player->buf_filled > 0) {
+        mp3dec_frame_info_t frame_info = {};
+        const int samples = sound_player_decode(player, nullptr, &frame_info);
+        if (frame_info.frame_bytes == 0) break;
+        player->buf_consumed += frame_info.frame_bytes;
+        if (samples > 0) {
+            const int bucket = sound_player_source_rate_bucket((uint32_t)frame_info.hz);
+            if (bucket < 0 || (uint64_t)samples > UINT64_MAX - player->duration_samples[bucket]) {
+                valid = false;
             } else {
-                LOGD(TAG, "MP3 format change: %d Hz, %d ch",
-                     frame_info.hz, frame_info.channels);
-            }
-            resampler_initialized = true;
-        }
-
-        // Resample to AUDIO_SAMPLE_RATE if needed
-        int out_frames;
-        if ((uint32_t)frame_info.hz == AUDIO_SAMPLE_RATE && frame_info.channels == 2) {
-            // No resampling needed, already stereo at target rate
-            out_frames = samples;
-            memcpy(out_buf, pcm, samples * 2 * sizeof(int16_t));
-        } else if ((uint32_t)frame_info.hz == AUDIO_SAMPLE_RATE && frame_info.channels == 1) {
-            // Mono → stereo at target rate (no resampling, just dup channels)
-            out_frames = samples;
-            for (int i = 0; i < samples; i++) {
-                out_buf[i * 2]     = pcm[i];
-                out_buf[i * 2 + 1] = pcm[i];
-            }
-        } else {
-            // Resample and convert to stereo
-            bool truncated = false;
-            out_frames = resampler_process(&resampler, pcm, samples,
-                                           out_buf, SOUND_PLAYER_MAX_OUTPUT_FRAMES, &truncated);
-            if (truncated) {
-                LOGW(TAG, "Resampler output cap reached: cap=%d source=%d Hz",
-                     SOUND_PLAYER_MAX_OUTPUT_FRAMES, frame_info.hz);
+                player->duration_samples[bucket] += (uint64_t)samples;
             }
         }
+        sound_player_refill(player);
+    }
 
-        // Write PCM through the selected output driver.
-        if (out_frames > 0) {
-            if (!audio_write_with_stats(output_driver, out_buf, out_frames, &starvation)) {
-                LOGE(TAG, "Audio output write error");
-                success = false;
+    if (valid) {
+        for (size_t bucket = 0; bucket < SOUND_PLAYER_SOURCE_RATE_COUNT; ++bucket) {
+            if (!sound_player_duration_add(&player->total_us, player->duration_samples[bucket],
+                                           SOUND_PLAYER_SOURCE_RATES[bucket])) {
+                valid = false;
                 break;
             }
         }
     }
+    if (!valid) player->total_us = 0;
+    player->timing_available = valid;
+    sound_player_reset_decode(player);
+}
 
-    heap_caps_free(pcm);
+static void sound_player_record_accepted_output(SoundPlayer* player, int out_frames) {
+    if (out_frames <= 0 || (uint64_t)out_frames > UINT64_MAX - player->elapsed_output_frames) {
+        return;
+    }
+    player->elapsed_output_frames += (uint64_t)out_frames;
+    if (!sound_player_duration_us(player->elapsed_output_frames, AUDIO_SAMPLE_RATE,
+                                  &player->elapsed_us)) {
+        player->elapsed_us = 0;
+    }
+}
+
+void sound_player_close(SoundPlayer* player) {
+    if (!player) return;
+    if (player->pcm) heap_caps_free(player->pcm);
 #if AUDIO_MP3_SCRATCH_PSRAM
-    heap_caps_free(decode_scratch);
+    if (player->decode_scratch) heap_caps_free(player->decode_scratch);
 #endif
-    heap_caps_free(mp3d);
-    heap_caps_free(out_buf);
-    heap_caps_free(read_buf);
-    file.close();
+    if (player->decoder) heap_caps_free(player->decoder);
+    if (player->out_buf) heap_caps_free(player->out_buf);
+    if (player->read_buf) heap_caps_free(player->read_buf);
+    if (player->file) player->file.close();
+    heap_caps_free(player);
+}
 
-    audio_log_starvation(starvation);
-    LOGI(TAG, "Playback %s: %s", path, success ? "complete" : "error");
-    return success;
+SoundPlayer* sound_player_begin_path(AudioOutputDriver* output_driver, const char* path,
+                                     SoundPlayerPcmTransform transform,
+                                     void* transform_context) {
+    if (!output_driver || !path || !path[0]) return nullptr;
+
+    File file = Storage.open(path, "r");
+    if (!file) {
+        LOGW(TAG, "File not found: %s", path);
+        return nullptr;
+    }
+
+    const size_t file_size = file.size();
+    LOGI(TAG, "Playing %s (%u bytes)", path, (unsigned)file_size);
+    SoundPlayer* player = (SoundPlayer*)heap_caps_calloc(1, sizeof(SoundPlayer),
+                                                           MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!player) {
+        file.close();
+        return nullptr;
+    }
+    player->output_driver = output_driver;
+    player->transform = transform;
+    player->transform_context = transform_context;
+    player->file = file;
+    player->read_buf = (uint8_t*)sound_player_ps_alloc(MP3_READ_BUF_SIZE);
+    player->out_buf = (int16_t*)sound_player_ps_alloc(SOUND_PLAYER_MAX_OUTPUT_FRAMES * 2 * sizeof(int16_t));
+    player->decoder = (mp3dec_t*)sound_player_ps_alloc(sizeof(mp3dec_t));
+    player->pcm = (int16_t*)sound_player_ps_alloc(MINIMP3_MAX_SAMPLES_PER_FRAME * sizeof(int16_t));
+    if (!player->read_buf || !player->out_buf || !player->decoder || !player->pcm) {
+        LOGE(TAG, "Failed to allocate MP3 playback buffers");
+        sound_player_close(player);
+        return nullptr;
+    }
+
+#if AUDIO_MP3_SCRATCH_PSRAM
+    const size_t scratch_size = mp3dec_scratch_size();
+    player->decode_scratch = heap_caps_malloc(
+        scratch_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!player->decode_scratch) {
+        LOGE(TAG, "Failed to allocate MP3 scratch in PSRAM (%u bytes)",
+             (unsigned)scratch_size);
+        sound_player_close(player);
+        return nullptr;
+    }
+#endif
+    sound_player_scan_duration(player);
+    return player;
+}
+
+bool sound_player_validate_path(const char* path) {
+    if (!path || !path[0]) return false;
+    File file = Storage.open(path, "r");
+    if (!file) return false;
+
+    uint8_t* read_buf = (uint8_t*)sound_player_ps_alloc(MP3_READ_BUF_SIZE);
+    mp3dec_t* decoder = (mp3dec_t*)sound_player_ps_alloc(sizeof(mp3dec_t));
+    int16_t* pcm = (int16_t*)sound_player_ps_alloc(
+        MINIMP3_MAX_SAMPLES_PER_FRAME * sizeof(int16_t));
+#if AUDIO_MP3_SCRATCH_PSRAM
+    void* decode_scratch = heap_caps_malloc(mp3dec_scratch_size(),
+                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#endif
+    bool valid = false;
+    if (read_buf && decoder && pcm
+#if AUDIO_MP3_SCRATCH_PSRAM
+        && decode_scratch
+#endif
+    ) {
+        mp3dec_init(decoder);
+        size_t filled = file.read(read_buf, MP3_READ_BUF_SIZE);
+        size_t consumed = 0;
+        bool eof = filled < MP3_READ_BUF_SIZE;
+        while (filled > 0) {
+            mp3dec_frame_info_t frame_info = {};
+#if AUDIO_MP3_SCRATCH_PSRAM
+            const int samples = mp3dec_decode_frame_with_scratch(
+                decoder, read_buf + consumed, (int)(filled - consumed), pcm,
+                &frame_info, decode_scratch);
+#else
+            const int samples = mp3dec_decode_frame(
+                decoder, read_buf + consumed, (int)(filled - consumed), pcm, &frame_info);
+#endif
+            if (frame_info.frame_bytes == 0) break;
+            consumed += frame_info.frame_bytes;
+            if (samples > 0) {
+                valid = true;
+                break;
+            }
+            if (consumed == filled && eof) break;
+            if (consumed > 0) {
+                const size_t remaining = filled - consumed;
+                memmove(read_buf, read_buf + consumed, remaining);
+                filled = remaining;
+                consumed = 0;
+                if (!eof) {
+                    const size_t read = file.read(read_buf + filled, MP3_READ_BUF_SIZE - filled);
+                    filled += read;
+                    eof = read < MP3_READ_BUF_SIZE - filled + read;
+                }
+            }
+        }
+    }
+#if AUDIO_MP3_SCRATCH_PSRAM
+    if (decode_scratch) heap_caps_free(decode_scratch);
+#endif
+    if (pcm) heap_caps_free(pcm);
+    if (decoder) heap_caps_free(decoder);
+    if (read_buf) heap_caps_free(read_buf);
+    file.close();
+    return valid;
+}
+
+SoundPlayerStepResult sound_player_step(SoundPlayer* player) {
+    if (!player) return SOUND_PLAYER_STEP_ERROR;
+    sound_player_refill(player);
+    if (player->buf_filled == 0) return SOUND_PLAYER_STEP_COMPLETE;
+
+    mp3dec_frame_info_t frame_info = {};
+    const int samples = sound_player_decode(player, player->pcm, &frame_info);
+    if (frame_info.frame_bytes == 0) return SOUND_PLAYER_STEP_COMPLETE;
+    player->buf_consumed += frame_info.frame_bytes;
+    if (samples == 0) return SOUND_PLAYER_STEP_PLAYING;
+
+    if (!player->resampler_initialized ||
+        (uint32_t)frame_info.hz != player->resampler.src_rate ||
+        (uint32_t)frame_info.channels != player->resampler.src_channels) {
+            resampler_init(&player->resampler, frame_info.hz, frame_info.channels, AUDIO_SAMPLE_RATE);
+            if (!player->resampler_initialized) {
+                LOGD(TAG, "MP3: %d Hz, %d ch, layer %d, %d kbps",
+                     frame_info.hz, frame_info.channels, frame_info.layer,
+                     frame_info.bitrate_kbps);
+            }
+            player->resampler_initialized = true;
+    }
+
+    int out_frames;
+    if ((uint32_t)frame_info.hz == AUDIO_SAMPLE_RATE && frame_info.channels == 2) {
+            // No resampling needed, already stereo at target rate
+        out_frames = samples;
+        memcpy(player->out_buf, player->pcm, samples * 2 * sizeof(int16_t));
+    } else if ((uint32_t)frame_info.hz == AUDIO_SAMPLE_RATE && frame_info.channels == 1) {
+            // Mono → stereo at target rate (no resampling, just dup channels)
+        out_frames = samples;
+        for (int i = 0; i < samples; i++) {
+            player->out_buf[i * 2] = player->pcm[i];
+            player->out_buf[i * 2 + 1] = player->pcm[i];
+        }
+    } else {
+            // Resample and convert to stereo
+            bool truncated = false;
+            out_frames = resampler_process(&player->resampler, player->pcm, samples,
+                               player->out_buf, SOUND_PLAYER_MAX_OUTPUT_FRAMES, &truncated);
+            if (truncated) {
+                LOGW(TAG, "Resampler output cap reached: cap=%d source=%d Hz",
+                     SOUND_PLAYER_MAX_OUTPUT_FRAMES, frame_info.hz);
+            }
+    }
+    if (out_frames > 0 && player->transform) {
+        player->transform(player->transform_context, player->out_buf, out_frames);
+    }
+    if (out_frames > 0 && !audio_write_with_stats(player->output_driver, player->out_buf,
+                                                   out_frames, &player->starvation)) {
+        LOGE(TAG, "Audio output write error");
+        return SOUND_PLAYER_STEP_ERROR;
+    }
+    sound_player_record_accepted_output(player, out_frames);
+    return SOUND_PLAYER_STEP_PLAYING;
+}
+
+bool sound_player_get_timing(const SoundPlayer* player, uint64_t* total_us,
+                             uint64_t* elapsed_us) {
+    if (!player || !total_us || !elapsed_us) return false;
+    *total_us = player->total_us;
+    *elapsed_us = player->elapsed_us;
+    return player->timing_available;
+}
+
+bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
+                       volatile bool* stop_flag) {
+    if (!filename || !filename[0]) return false;
+    char path[48];
+    sound_store_path(filename, path, sizeof(path));
+    SoundPlayer* player = sound_player_begin_path(output_driver, path);
+    if (!player) return false;
+    SoundPlayerStepResult result = SOUND_PLAYER_STEP_PLAYING;
+    while (!*stop_flag && result == SOUND_PLAYER_STEP_PLAYING) {
+        result = sound_player_step(player);
+    }
+    audio_log_starvation(player->starvation);
+    sound_player_close(player);
+    return result != SOUND_PLAYER_STEP_ERROR;
 }
 #endif // AUDIO_RESAMPLER_TEST
 

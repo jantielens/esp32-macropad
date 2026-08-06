@@ -52,8 +52,10 @@ static bool resolve_action_bindings(ButtonAction& act) {
         action_resolve_binding_field(act.payload.mqtt.mqtt_payload, sizeof(act.payload.mqtt.mqtt_payload));
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
         action_resolve_binding_field(act.payload.key.key_sequence, sizeof(act.payload.key.key_sequence));
-    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
-        action_resolve_binding_field(act.payload.beep.beep_pattern, sizeof(act.payload.beep.beep_pattern));
+    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0 &&
+               strcmp(act.payload.sound_alert.sound_alert_kind, "tone") == 0) {
+        action_resolve_binding_field(act.payload.sound_alert.sound_alert_pattern,
+                                     sizeof(act.payload.sound_alert.sound_alert_pattern));
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
         action_resolve_binding_field(act.payload.volume.volume_value, sizeof(act.payload.volume.volume_value));
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
@@ -128,10 +130,11 @@ static void test_value_fields_resolved() {
         check_str(act.payload.key.key_sequence, "RESOLVED", "key_sequence resolved");
     }
     {
-        ButtonAction act = make_action(ACTION_TYPE_BEEP);
-        strlcpy(act.payload.beep.beep_pattern, "[mock:b]", sizeof(act.payload.beep.beep_pattern));
+        ButtonAction act = make_action(ACTION_TYPE_SOUND_ALERT);
+        strlcpy(act.payload.sound_alert.sound_alert_kind, "tone", sizeof(act.payload.sound_alert.sound_alert_kind));
+        strlcpy(act.payload.sound_alert.sound_alert_pattern, "[mock:b]", sizeof(act.payload.sound_alert.sound_alert_pattern));
         resolve_action_bindings(act);
-        check_str(act.payload.beep.beep_pattern, "RESOLVED", "beep_pattern resolved");
+        check_str(act.payload.sound_alert.sound_alert_pattern, "RESOLVED", "tone pattern resolved");
     }
     {
         ButtonAction act = make_action(ACTION_TYPE_VOLUME);
@@ -218,10 +221,11 @@ static void test_structural_fields_excluded() {
         check_str(act.payload.notify.notify_location, "[m:x]", "notify_location not resolved");
     }
     {
-        ButtonAction act = make_action(ACTION_TYPE_SOUND);
-        strlcpy(act.payload.sound.sound_file, "[mock:x]", sizeof(act.payload.sound.sound_file));
+        ButtonAction act = make_action(ACTION_TYPE_SOUND_ALERT);
+        strlcpy(act.payload.sound_alert.sound_alert_kind, "mp3", sizeof(act.payload.sound_alert.sound_alert_kind));
+        strlcpy(act.payload.sound_alert.sound_alert_file, "[mock:x]", sizeof(act.payload.sound_alert.sound_alert_file));
         resolve_action_bindings(act);
-        check_str(act.payload.sound.sound_file, "[mock:x]", "sound_file not resolved");
+        check_str(act.payload.sound_alert.sound_alert_file, "[mock:x]", "mp3 alert file not resolved");
     }
 }
 

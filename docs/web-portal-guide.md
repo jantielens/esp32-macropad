@@ -65,6 +65,17 @@ and root folder.
 
 The page does not support file uploads, deletion, or formatting.
 
+## Music
+
+Audio builds with the sound player enabled include a **Music** page. It lists
+the device's CD: up to 32 MP3 files found under `/media`, sorted in a stable
+order. Use **Upload** to add a new MP3 and **Delete** to remove a listed file.
+Nested folders are supported. The page is for library management only and does
+not contain playback, selection, reordering, refresh, or seeking controls.
+
+Upload and delete are unavailable while Music or an MP3 Alert is active. Tone
+Alerts do not block library management.
+
 ---
 
 ## Home Page
@@ -121,7 +132,7 @@ The Audio section controls device volume and optional touch-feedback beep patter
 
 **Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
 
-Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Play Beep or Play Sound action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
+Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Sound Alert action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
 
@@ -138,7 +149,7 @@ Upload MP3 files to play as button actions or via MQTT. Files are stored on the 
 | **MP3 File** | File picker for `.mp3` files (max 512 KB per file). The server validates the MP3 header on upload |
 | **Upload** | Uploads the file to the device |
 
-Once uploaded, sounds appear in the "Play Sound" action type dropdown in the button editor, swipe actions, and boot actions.
+Once uploaded, sounds are available through **Sound Alert** with the **MP3 Alert** kind in the button editor, swipe actions, and boot actions.
 
 #### BLE Signals
 
@@ -290,7 +301,7 @@ Switching between pads or navigating away with unsaved changes shows a confirmat
 
 For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines, tables, rockers), label styling, dynamic colors, pad bindings (named data sources), building blocks, and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
 
-All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, expression syntax, and known health/timer keys (including `table` and `extended_table`) are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
+All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, expression syntax, and known health, timer, and Music keys (including `table`, `extended_table`, and `status`) are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
 
 ---
 

@@ -27,9 +27,10 @@
 #define AUDIO_PA_PIN 48
 #define AUDIO_PA_ACTIVE_LOW false
 #define AUDIO_SAMPLE_RATE 48000
-// Keep this paired with AUDIO_MP3_SCRATCH_PSRAM: its PSRAM-only scratch buffer
-// would otherwise put 16 KB on this 12 KB task stack.
-#define AUDIO_TASK_STACK_SIZE 12288
+// Keep minimp3's scratch workspace in PSRAM. The audio worker also owns the
+// 32-track Music catalog, whose candidate and published snapshots require
+// roughly 12 KB of stack storage before decoder and task-local state.
+#define AUDIO_TASK_STACK_SIZE 24576
 #define AUDIO_MP3_SCRATCH_PSRAM true
 #define AUDIO_DEFAULT_VOLUME 40
 

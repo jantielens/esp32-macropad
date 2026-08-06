@@ -53,11 +53,11 @@ static void test_missing_and_malformed_exists_semantics() {
 static void test_tolerant_load_and_normalization() {
     timer_test_files["/config/timers.json"] = R"({
         "1":{"mode":"down","countdown":30,"expire_actions":[
-            {"type":"beep","beep_pattern":"a"},null,{},
-            {"type":"unknown"},{"type":"sound","sound_file":"alarm"},
+            {"type":"sound_alert","sound_alert_kind":"tone","sound_alert_pattern":"a"},null,{},
+            {"type":"unknown"},{"type":"sound_alert","sound_alert_kind":"mp3","sound_alert_file":"alarm"},
             {"type":"mqtt","topic":"ignored"}]},
         "2":{"expire_actions":"bad"},
-        "3":{"expire_actions":[{"type":"beep"}]}
+        "3":{"expire_actions":[{"type":"sound_alert","sound_alert_kind":"tone"}]}
     })";
     timer_config_init();
     assert(timer_config_exists());
@@ -75,7 +75,7 @@ static void test_tolerant_load_and_normalization() {
 }
 
 static void test_strict_writes_and_atomic_cache() {
-    const char* valid = R"({"1":{"expire_actions":[]},"2":{"expire_actions":[{"type":"beep"}]},"3":{"expire_actions":[]}})";
+    const char* valid = R"({"1":{"expire_actions":[]},"2":{"expire_actions":[{"type":"sound_alert","sound_alert_kind":"tone"}]},"3":{"expire_actions":[]}})";
     assert(save(valid));
     assert(snapshot(1).count == 0);
     assert(snapshot(2).count == 1);
@@ -98,7 +98,7 @@ static void test_strict_writes_and_atomic_cache() {
     }
 
     timer_test_write_limit = 5;
-    assert(!save(R"({"1":{"expire_actions":[{"type":"sound"}]}})"));
+    assert(!save(R"({"1":{"expire_actions":[{"type":"sound_alert","sound_alert_kind":"mp3"}]}})"));
     assert(snapshot(2).count == 1);
     timer_test_write_limit = SIZE_MAX;
 

@@ -420,6 +420,22 @@ or device taking longer to boot.
 
 ## REST API Reference
 
+### Music Library
+
+On sound-player builds, the Music portal component provides authenticated,
+management-only access to the bounded `/media` catalog. It does not expose
+playback or track-selection controls.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/music` | Returns `{ "files": [...], "count": N, "limit": 32 }` in deterministic CD order |
+| `POST` | `/api/music?path=/media/...mp3` | Streams and validates a new canonical MP3 before publishing it atomically |
+| `DELETE` | `/api/music?path=/media/...mp3` | Deletes an exact published catalog entry |
+
+Uploads and deletes return `409` while Music, an MP3 Alert, or another Music
+storage mutation is active. Paths must be canonical `/media` descendants with
+a case-insensitive `.mp3` final extension.
+
 All endpoints return JSON responses with proper HTTP status codes.
 
 **Authentication (Optional):**
@@ -1271,9 +1287,9 @@ Returns the current timer configuration for all 3 timers.
 
 ```json
 {
-  "1": { "expire_actions": [{ "type": "sound", "sound_file": "alarm" }] },
+  "1": { "expire_actions": [{ "type": "sound_alert", "sound_alert_kind": "mp3", "sound_alert_file": "alarm" }] },
   "2": { "expire_actions": [] },
-  "3": { "expire_actions": [{ "type": "beep", "beep_pattern": "1000:500" }] }
+  "3": { "expire_actions": [{ "type": "sound_alert", "sound_alert_kind": "tone", "sound_alert_pattern": "1000:500" }] }
 }
 ```
 

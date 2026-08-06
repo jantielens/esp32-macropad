@@ -75,6 +75,9 @@ portal_health_sparkline.js
 portal_health.js
 portal_storage.js
 
+# [chunk:music HAS_SOUND_PLAYER]
+portal_music.js
+
 # [chunk:pad HAS_DISPLAY]
 # Pad editor — only consumed by the pad editor fragment on display boards.
 portal_pad_colors.js

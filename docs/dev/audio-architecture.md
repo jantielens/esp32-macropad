@@ -24,6 +24,26 @@ flowchart TD
 `AUDIO_OUTPUT_DRIVER`. New output hardware must implement `AudioOutputDriver`
 rather than adding hardware-specific behavior to callers.
 
+## Music CD Player
+
+Audio-capable builds with the sound player enabled also provide a bounded Music
+CD assembled from canonical MP3 paths discovered recursively under `/media`.
+The audio worker owns the immutable catalog, CD-style transport, incremental
+decoder session, duration scan, and elapsed-time accounting. It remains the
+only owner of the command queue, decoder, resampler, output driver, and I2S
+path.
+
+Music transport supports Play/Pause, Next, Previous, and Stop. Playback starts
+at the first sorted path, does not wrap, and returns to its home position after
+Stop, a final track, or a playback failure. Before PCM is emitted for a track,
+the existing decoder scans that file to determine its duration; elapsed time
+advances only after PCM output is accepted.
+
+Tone Alerts overlay active Music after resampling and before the existing sole
+output write. MP3 Alerts are exclusive: they stop Music and use the same
+decoder session and output path. Music files can be managed through the portal
+only while neither Music nor an MP3 Alert is active.
+
 ## Board And Driver Selection
 
 Audio-capable boards select their driver and pin mapping in

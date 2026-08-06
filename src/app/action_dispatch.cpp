@@ -57,8 +57,10 @@ static bool resolve_action_bindings(ButtonAction& act) {
         try_resolve(act.payload.mqtt.mqtt_payload, sizeof(act.payload.mqtt.mqtt_payload));
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
         try_resolve(act.payload.key.key_sequence, sizeof(act.payload.key.key_sequence));
-    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
-        try_resolve(act.payload.beep.beep_pattern, sizeof(act.payload.beep.beep_pattern));
+    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0 &&
+               strcmp(act.payload.sound_alert.sound_alert_kind, "tone") == 0) {
+        try_resolve(act.payload.sound_alert.sound_alert_pattern,
+                    sizeof(act.payload.sound_alert.sound_alert_pattern));
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
         try_resolve(act.payload.volume.volume_value, sizeof(act.payload.volume.volume_value));
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
@@ -96,8 +98,9 @@ static bool action_has_any_binding(const ButtonAction& act) {
         return has(act.payload.mqtt.mqtt_topic) || has(act.payload.mqtt.mqtt_payload);
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
         return has(act.payload.key.key_sequence);
-    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
-        return has(act.payload.beep.beep_pattern);
+    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0 &&
+               strcmp(act.payload.sound_alert.sound_alert_kind, "tone") == 0) {
+        return has(act.payload.sound_alert.sound_alert_pattern);
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
         return has(act.payload.volume.volume_value);
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
@@ -131,8 +134,9 @@ void action_collect_binding_topics(const ButtonAction& act, void* user_data) {
         collect(act.payload.mqtt.mqtt_payload);
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
         collect(act.payload.key.key_sequence);
-    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
-        collect(act.payload.beep.beep_pattern);
+    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0 &&
+               strcmp(act.payload.sound_alert.sound_alert_kind, "tone") == 0) {
+        collect(act.payload.sound_alert.sound_alert_pattern);
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
         collect(act.payload.volume.volume_value);
     } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
@@ -258,27 +262,28 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
 #else
         LOGW(TAG, "%s ble_pair: not compiled", label);
 #endif
-    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
-#if HAS_AUDIO
-        const auto& b = act.payload.beep;
-        LOGI(TAG, "%s beep: pattern='%s' vol=%s", label, b.beep_pattern,
-             b.beep_volume > 0 ? String(b.beep_volume).c_str() : "device");
-        audio_beep(b.beep_pattern, b.beep_volume);
+    } else if (strcmp(act.type, ACTION_TYPE_MUSIC) == 0) {
+    #if HAS_SOUND_PLAYER
+        audio_music_command(act.payload.music.music_command);
 #else
-        LOGW(TAG, "%s beep: not compiled", label);
+        LOGW(TAG, "%s music: not compiled", label);
 #endif
-    } else if (strcmp(act.type, ACTION_TYPE_SOUND) == 0) {
+    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0) {
+#if HAS_AUDIO
+        const auto& sound_alert = act.payload.sound_alert;
+        if (strcmp(sound_alert.sound_alert_kind, "tone") == 0) {
+            audio_beep(sound_alert.sound_alert_pattern, sound_alert.sound_alert_volume);
+        } else if (strcmp(sound_alert.sound_alert_kind, "mp3") == 0) {
 #if HAS_SOUND_PLAYER
-        const auto& s = act.payload.sound;
-        if (s.sound_file[0]) {
-            LOGI(TAG, "%s sound: file='%s' vol=%s", label, s.sound_file,
-                 s.sound_volume > 0 ? String(s.sound_volume).c_str() : "device");
-            audio_play_sound(s.sound_file, s.sound_volume);
+            audio_play_sound(sound_alert.sound_alert_file, sound_alert.sound_alert_volume);
+#else
+            LOGW(TAG, "%s sound_alert MP3: not compiled", label);
+#endif
         } else {
-            LOGW(TAG, "%s sound: empty filename", label);
+            LOGW(TAG, "%s sound_alert: invalid kind", label);
         }
 #else
-        LOGW(TAG, "%s sound: not compiled", label);
+        LOGW(TAG, "%s sound_alert: not compiled", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
 #if HAS_AUDIO

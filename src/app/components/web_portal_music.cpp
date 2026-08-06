@@ -1,0 +1,257 @@
+#include "../web_portal_music.h"
+
+#if HAS_SOUND_PLAYER
+
+#include "../audio.h"
+#include "../music_catalog.h"
+#include "../sound_player.h"
+#include "../storage.h"
+#include "../web_portal_auth.h"
+#include "../web_portal_json.h"
+#include "../web_portal_routes.h"
+
+#include <ArduinoJson.h>
+#include <esp_heap_caps.h>
+#include <esp_system.h>
+#include <string.h>
+
+namespace {
+
+constexpr size_t MUSIC_CATALOG_JSON_CAPACITY =
+    static_cast<size_t>(MUSIC_TRACK_LIMIT) * MUSIC_PATH_MAX_LEN + 256;
+
+struct MusicUploadState {
+    AsyncWebServerRequest* request;
+    File file;
+    char destination[MUSIC_PATH_MAX_LEN];
+    char temporary[MUSIC_PATH_MAX_LEN + 32];
+    size_t total;
+    size_t received;
+    bool active;
+};
+
+MusicUploadState g_music_upload = {};
+
+bool ensure_music_parent_directories(const char* path) {
+    char parent[MUSIC_PATH_MAX_LEN] = {};
+    strlcpy(parent, path, sizeof(parent));
+    char* final_separator = strrchr(parent, '/');
+    if (!final_separator || final_separator == parent) return false;
+    *final_separator = '\0';
+    for (char* separator = parent + 1; *separator; ++separator) {
+        if (*separator != '/') continue;
+        *separator = '\0';
+        const bool exists = Storage.exists(parent);
+        const bool created = exists || Storage.mkdir(parent);
+        *separator = '/';
+        if (!created) return false;
+    }
+    return Storage.exists(parent) || Storage.mkdir(parent);
+}
+
+void music_upload_cleanup(bool catalog_changed = false) {
+    if (g_music_upload.file) g_music_upload.file.close();
+    if (g_music_upload.temporary[0]) Storage.remove(g_music_upload.temporary);
+    if (g_music_upload.active) audio_music_storage_mutation_end(catalog_changed);
+    g_music_upload = {};
+}
+
+void music_upload_fail(AsyncWebServerRequest* request, int status, const char* message) {
+    music_upload_cleanup();
+    web_portal_send_json_error(request, status, message);
+}
+
+bool music_upload_start(AsyncWebServerRequest* request, size_t total) {
+    if (!request->hasParam("path")) {
+        web_portal_send_json_error(request, 400, "Missing path parameter");
+        return false;
+    }
+    const String path = request->getParam("path")->value();
+    if (!MusicCatalog::is_canonical_path(path.c_str())) {
+        web_portal_send_json_error(request, 400, "Invalid music path");
+        return false;
+    }
+    if (total == 0) {
+        web_portal_send_json_error(request, 400, "Empty upload");
+        return false;
+    }
+    if (!audio_music_storage_mutation_begin()) {
+        web_portal_send_json_error(request, 409, "Music storage is busy");
+        return false;
+    }
+
+    uint8_t catalog_count = 0;
+    const bool catalog_available = audio_get_music_catalog_count(&catalog_count);
+    // A missing /media directory is the empty-library state before the first
+    // upload. The transaction below creates it; an existing but unpublished
+    // directory still indicates a discovery failure and remains unavailable.
+    if (!catalog_available && Storage.exists("/media")) {
+        audio_music_storage_mutation_end(false);
+        web_portal_send_json_error(request, 503, "Music catalog unavailable");
+        return false;
+    }
+    if (catalog_count >= MUSIC_TRACK_LIMIT) {
+        audio_music_storage_mutation_end(false);
+        web_portal_send_json_error(request, 409, "Music catalog limit reached");
+        return false;
+    }
+    if (Storage.exists(path.c_str())) {
+        audio_music_storage_mutation_end(false);
+        web_portal_send_json_error(request, 409, "Music file already exists");
+        return false;
+    }
+    if (!ensure_music_parent_directories(path.c_str())) {
+        audio_music_storage_mutation_end(false);
+        web_portal_send_json_error(request, 500, "Unable to create media directory");
+        return false;
+    }
+
+    g_music_upload.active = true;
+    g_music_upload.request = request;
+    g_music_upload.total = total;
+    strlcpy(g_music_upload.destination, path.c_str(), sizeof(g_music_upload.destination));
+    for (uint8_t attempt = 0; attempt < 4; ++attempt) {
+        snprintf(g_music_upload.temporary, sizeof(g_music_upload.temporary),
+                 "%s.upload-%08lx.tmp", g_music_upload.destination,
+                 (unsigned long)esp_random());
+        if (!Storage.exists(g_music_upload.temporary)) break;
+    }
+    if (Storage.exists(g_music_upload.temporary)) {
+        music_upload_fail(request, 500, "Unable to create temporary upload");
+        return false;
+    }
+    g_music_upload.file = Storage.open(g_music_upload.temporary, "w");
+    if (!g_music_upload.file) {
+        music_upload_fail(request, 500, "Unable to create temporary upload");
+        return false;
+    }
+    request->onDisconnect([request]() {
+        if (g_music_upload.active && g_music_upload.request == request) music_upload_cleanup();
+    });
+    return true;
+}
+
+void handlePostMusicUpload(AsyncWebServerRequest* request, uint8_t* data,
+                           size_t length, size_t index, size_t total) {
+    if (!portal_auth_gate(request)) {
+        if (g_music_upload.active && g_music_upload.request == request) music_upload_cleanup();
+        return;
+    }
+    if (index == 0) {
+        if (g_music_upload.active) {
+            web_portal_send_json_error(request, 409, "Music upload already in progress");
+            return;
+        }
+        if (!music_upload_start(request, total)) return;
+    }
+    if (!g_music_upload.active || g_music_upload.request != request) return;
+    if (index != g_music_upload.received || length > g_music_upload.total - g_music_upload.received ||
+        g_music_upload.file.write(data, length) != length) {
+        music_upload_fail(request, 500, "Music upload write failed");
+        return;
+    }
+    g_music_upload.received += length;
+    if (g_music_upload.received != g_music_upload.total) return;
+
+    g_music_upload.file.close();
+    bool valid = false;
+    if (!audio_music_validate_path(g_music_upload.temporary, 5000, &valid)) {
+        music_upload_fail(request, 503, "Music validation unavailable");
+        return;
+    }
+    if (!valid) {
+        music_upload_fail(request, 400, "Upload contains no valid MP3 frame");
+        return;
+    }
+    if (Storage.exists(g_music_upload.destination)) {
+        music_upload_fail(request, 409, "Music file already exists");
+        return;
+    }
+    if (!Storage.rename(g_music_upload.temporary, g_music_upload.destination)) {
+        music_upload_fail(request, 500, "Unable to publish music file");
+        return;
+    }
+    g_music_upload.temporary[0] = '\0';
+    music_upload_cleanup(true);
+    request->send(201, "application/json", "{\"success\":true}");
+}
+
+} // namespace
+
+void handleGetMusicCatalog(AsyncWebServerRequest* request) {
+    if (!portal_auth_gate(request)) return;
+
+    MusicCatalogSnapshot* snapshot = static_cast<MusicCatalogSnapshot*>(
+        heap_caps_malloc(sizeof(MusicCatalogSnapshot),
+                         psramFound() ? MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT
+                                      : MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (!snapshot) {
+        web_portal_send_json_error(request, 503, "Music catalog response allocation failed");
+        return;
+    }
+    audio_get_music_catalog_snapshot(snapshot);
+
+    auto doc = make_psram_json_doc(MUSIC_CATALOG_JSON_CAPACITY);
+    if (!doc || doc->capacity() == 0) {
+        web_portal_send_json_error(request, 503, "Music catalog response allocation failed");
+        return;
+    }
+    JsonObject response = doc->to<JsonObject>();
+    JsonArray files = response["files"].to<JsonArray>();
+    for (uint8_t index = 0; index < snapshot->count; ++index) {
+        files.add(snapshot->paths[index]);
+    }
+    response["count"] = snapshot->count;
+    response["limit"] = MUSIC_TRACK_LIMIT;
+    heap_caps_free(snapshot);
+    if (doc->overflowed()) {
+        web_portal_send_json_error(request, 500, "Music catalog response overflow");
+        return;
+    }
+    web_portal_send_json_chunked(request, doc);
+}
+
+void handleDeleteMusic(AsyncWebServerRequest* request) {
+    if (!portal_auth_gate(request)) return;
+    if (!request->hasParam("path")) {
+        web_portal_send_json_error(request, 400, "Missing path parameter");
+        return;
+    }
+    const String path = request->getParam("path")->value();
+    if (!MusicCatalog::is_canonical_path(path.c_str())) {
+        web_portal_send_json_error(request, 400, "Invalid music path");
+        return;
+    }
+    if (!audio_music_storage_mutation_begin()) {
+        web_portal_send_json_error(request, 409, "Music storage is busy");
+        return;
+    }
+    if (!audio_music_catalog_contains(path.c_str())) {
+        audio_music_storage_mutation_end(false);
+        web_portal_send_json_error(request, 404, "Music file not found");
+        return;
+    }
+    if (!Storage.remove(path.c_str())) {
+        audio_music_storage_mutation_end(false);
+        web_portal_send_json_error(request, 500, "Unable to delete music file");
+        return;
+    }
+    audio_music_storage_mutation_end(true);
+    request->send(200, "application/json", "{\"success\":true}");
+}
+
+static void music_routes_register(AsyncWebServer* server) {
+    server->on("/api/music", HTTP_GET, handleGetMusicCatalog);
+    server->on("/api/music", HTTP_POST, [](AsyncWebServerRequest* request) {
+        if (!portal_auth_gate(request)) return;
+        if (request->contentLength() == 0) {
+            web_portal_send_json_error(request, 400, "Empty upload");
+        }
+    }, nullptr,
+               handlePostMusicUpload);
+    server->on("/api/music", HTTP_DELETE, handleDeleteMusic);
+}
+
+REGISTER_ROUTES(music_routes_register)
+
+#endif // HAS_SOUND_PLAYER

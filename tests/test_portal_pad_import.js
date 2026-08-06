@@ -164,7 +164,7 @@ async function runImport(options = {}) {
             cols: 4,
             rows: 1,
             template_pad: 0,
-            pad_actions: [{ type: 'beep', beep_pattern: '1' }],
+            pad_actions: [{ type: 'sound_alert', sound_alert_kind: 'tone', sound_alert_pattern: '1' }],
             buttons: [{ col: 1, row: 0, icon_id: 'emoji_two' }],
         },
     ];
@@ -210,7 +210,7 @@ function pageRequests(result, page) {
     assert.strictEqual(JSON.parse(padSaves[1].options.body).template_pad, 0);
     assert.ok(!Object.hasOwn(JSON.parse(padSaves[0].options.body), 'pad_actions'));
     assert.deepStrictEqual(JSON.parse(padSaves[1].options.body).pad_actions, [
-        { type: 'beep', beep_pattern: '1' },
+        { type: 'sound_alert', sound_alert_kind: 'tone', sound_alert_pattern: '1' },
     ]);
     assert.deepStrictEqual(success.reloads, [1]);
     assert.strictEqual(success.requests.filter(request => request.kind === 'device-info').length, 1);

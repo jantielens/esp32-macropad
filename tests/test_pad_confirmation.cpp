@@ -98,7 +98,7 @@ int main() {
         JsonDocument doc;
         make_button(doc);
         JsonArray actions = doc["pad_actions"].to<JsonArray>();
-        for (int i = 0; i < 4; i++) actions.add<JsonObject>()["type"] = "beep";
+        for (int i = 0; i < 4; i++) actions.add<JsonObject>()["type"] = "sound_alert";
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
                           "too many actions (max 3)") == 0);
     }
@@ -114,7 +114,7 @@ int main() {
     {
         JsonDocument doc;
         make_button(doc);
-        doc["pad_actions"].to<JsonArray>().add("beep");
+        doc["pad_actions"].to<JsonArray>().add("sound_alert");
         CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
                           "action missing type") == 0);
     }

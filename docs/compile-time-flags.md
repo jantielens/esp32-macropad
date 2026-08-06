@@ -805,6 +805,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.cpp
   - src/app/mqtt_audio.cpp
   - src/app/portal_components.cpp
+  - src/app/route_components.cpp
   - src/app/sound_player.cpp
   - src/app/sound_player.h
   - src/app/sound_store.cpp

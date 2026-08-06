@@ -15,6 +15,10 @@
 
 #include "board_config.h"
 
+#if HAS_SOUND_PLAYER
+#include "components/web_portal_music.cpp"
+#endif
+
 #if IS_SHUTTER_TESTER
 #include "device_classes/shutter_tester/web/portal_shutter_sessions.cpp"
 #include "device_classes/shutter_tester/web/portal_shutter_tests.cpp"

@@ -113,7 +113,7 @@ static void test_start_and_toggle_states() {
     PreparedTimerCommand start = prepare_ok(payload(1, "start", "down", "30"));
     TimerExpirySnapshot snapshot = {};
     snapshot.count = 1;
-    strlcpy(snapshot.actions[0].type, ACTION_TYPE_BEEP,
+    strlcpy(snapshot.actions[0].type, ACTION_TYPE_SOUND_ALERT,
             sizeof(snapshot.actions[0].type));
     execute_ok(start, &snapshot);
     assert(timer_get_state(1) == TIMER_RUNNING);
@@ -165,7 +165,7 @@ static void test_set_adjust_and_expiry() {
     TimerExpirySnapshot snapshot = {};
     snapshot.count = 3;
     for (uint8_t index = 0; index < snapshot.count; index++) {
-        strlcpy(snapshot.actions[index].type, ACTION_TYPE_BEEP,
+        strlcpy(snapshot.actions[index].type, ACTION_TYPE_SOUND_ALERT,
                 sizeof(snapshot.actions[index].type));
     }
     execute_ok(prepare_ok(payload(1, "start", "down", "1")), &snapshot);
@@ -259,7 +259,7 @@ static void test_run_entry_point() {
 
     g_snapshot = {};
     g_snapshot.count = 1;
-    strlcpy(g_snapshot.actions[0].type, ACTION_TYPE_BEEP,
+    strlcpy(g_snapshot.actions[0].type, ACTION_TYPE_SOUND_ALERT,
             sizeof(g_snapshot.actions[0].type));
     g_snapshot_ok = true;
     assert(timer_command_run(payload(1, "start", "down", "2"),
