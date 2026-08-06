@@ -68,6 +68,7 @@
 // --- Audio-gated components ---
 #if HAS_AUDIO
 #include "components/volume_component.cpp"
+#include "components/feedback_component.cpp"
 #endif // HAS_AUDIO
 
 #if HAS_SOUND_PLAYER

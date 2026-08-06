@@ -1,3 +1,3 @@
-// Music component — nav-only registration
+// Music Library component — nav-only registration
 #include "component_registry.h"
-REGISTER_NAV_COMPONENT(music, "music", "audio", "Music", 30, "music")
+REGISTER_NAV_COMPONENT(music, "music", "audio", "Music Library", 40, "music")

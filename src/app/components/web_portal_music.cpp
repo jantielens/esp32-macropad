@@ -173,6 +173,12 @@ void handlePostMusicUpload(AsyncWebServerRequest* request, uint8_t* data,
     }
     g_music_upload.temporary[0] = '\0';
     music_upload_cleanup(true);
+    const bool refreshed = audio_music_refresh_catalog(5000);
+    audio_music_storage_mutation_end(!refreshed);
+    if (!refreshed) {
+        web_portal_send_json_error(request, 503, "Music catalog refresh unavailable");
+        return;
+    }
     request->send(201, "application/json", "{\"success\":true}");
 }
 
@@ -236,7 +242,12 @@ void handleDeleteMusic(AsyncWebServerRequest* request) {
         web_portal_send_json_error(request, 500, "Unable to delete music file");
         return;
     }
-    audio_music_storage_mutation_end(true);
+    const bool refreshed = audio_music_refresh_catalog(5000);
+    audio_music_storage_mutation_end(!refreshed);
+    if (!refreshed) {
+        web_portal_send_json_error(request, 503, "Music catalog refresh unavailable");
+        return;
+    }
     request->send(200, "application/json", "{\"success\":true}");
 }
 

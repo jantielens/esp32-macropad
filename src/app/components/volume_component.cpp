@@ -1,11 +1,11 @@
-// Volume & Beep component — nav-only registration
+// Volume component — nav-only registration
 
 #include "component_registry.h"
 
 static ComponentDef volume_component = {
     .id = "volume",
     .category = "audio",
-    .display_name = "Volume & Beep",
+    .display_name = "Volume",
     .nav_order = 10,
     .get_config = nullptr,
     .save_config = nullptr,

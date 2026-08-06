@@ -1,0 +1,22 @@
+<div class="section-header">
+  <h2>Button Feedback</h2>
+  <p>Configure the tone patterns played after button gestures.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="form-text mb-3">Tone patterns use <code>freq:duration</code> pairs (Hz:ms). Separate tones with spaces. A bare number is a silent gap.<br>Examples: <code>800:80</code> (single tap), <code>600:40 40 600:40</code> (double chirp).</div>
+    <div class="mb-3">
+      <label class="form-label" for="tap_beep">Tap Feedback</label>
+      <input type="text" class="form-control" id="tap_beep" name="tap_beep" maxlength="127" placeholder="e.g. 800:80">
+      <div class="form-text">Tone pattern after a button tap. A Sound Alert action suppresses this feedback.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="lp_beep">Long-Press Feedback</label>
+      <input type="text" class="form-control" id="lp_beep" name="lp_beep" maxlength="127" placeholder="e.g. 600:40 40 600:40">
+      <div class="form-text">Tone pattern after a button long-press. A Sound Alert action suppresses this feedback.</div>
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="feedback-save-btn">Save</button>
+    </div>
+  </div>
+</div>

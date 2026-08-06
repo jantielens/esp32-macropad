@@ -754,16 +754,23 @@ window.init_ha_discovery_fragment = function () {
 };
 
 // ============================================================================
-// Volume & Beep
+// Volume
 // ============================================================================
 
 window.init_volume_fragment = function () {
     initConfigFragment('volume-save-btn', false);
 };
 
+// ============================================================================
+// Button Feedback
+// ============================================================================
+
+window.init_feedback_fragment = function () {
+    initConfigFragment('feedback-save-btn', false);
+};
 
 // ============================================================================
-// Sound Files
+// Alert Sounds
 // ============================================================================
 
 window.init_sounds_fragment = function () {

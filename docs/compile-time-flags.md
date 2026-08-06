@@ -365,6 +365,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_config.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
+  - src/app/music_binding.cpp
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
@@ -513,6 +514,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_sub_store.cpp
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
+  - src/app/music_binding.cpp
   - src/app/net_binding.cpp
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
@@ -675,6 +677,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_sub_store.cpp
+  - src/app/music_binding.cpp
   - src/app/net_binding.cpp
   - src/app/pad_binding.cpp
   - src/app/portal_components.cpp
@@ -802,14 +805,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/audio.cpp
   - src/app/audio.h
   - src/app/board_config.h
+  - src/app/components/web_portal_music.cpp
   - src/app/ha_discovery.cpp
   - src/app/mqtt_audio.cpp
+  - src/app/music_binding.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
   - src/app/sound_player.cpp
   - src/app/sound_player.h
   - src/app/sound_store.cpp
   - src/app/sound_store.h
+  - src/app/web_portal_music.h
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_sounds.cpp
   - src/app/web_portal_sounds.h

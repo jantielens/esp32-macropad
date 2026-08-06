@@ -65,16 +65,17 @@ and root folder.
 
 The page does not support file uploads, deletion, or formatting.
 
-## Music
+## Music Library
 
-Audio builds with the sound player enabled include a **Music** page. It lists
+Audio builds with the sound player enabled include a **Music Library** page. It lists
 the device's CD: up to 32 MP3 files found under `/media`, sorted in a stable
 order. Use **Upload** to add a new MP3 and **Delete** to remove a listed file.
 Nested folders are supported. The page is for library management only and does
 not contain playback, selection, reordering, refresh, or seeking controls.
 
 Upload and delete are unavailable while Music or an MP3 Alert is active. Tone
-Alerts do not block library management.
+Alerts do not block library management. After a successful upload or delete,
+the list refreshes automatically.
 
 ---
 
@@ -120,23 +121,31 @@ The BLE keyboard always advertises with the configured device name and the chip'
 
 ### Audio
 
-*Shown only on boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
+*Shown only on boards with audio hardware.*
 
-The Audio section controls device volume and optional touch-feedback beep patterns.
+The **Audio** navigation category separates output level, button-feedback tones,
+alert-sound files, and the Music Library.
+
+#### Volume
 
 | Element | Description |
 |---------|-------------|
-| **Volume** | Slider (0–100%) controlling the device audio volume. Used by beep actions, audio cues, and siren playback. Persisted in NVS. Also controllable from Home Assistant. |
-| **Tap Beep** | Beep pattern played on every button tap that has an action configured. Leave empty for no sound. Uses the beep pattern DSL (see below). |
-| **Long-Press Beep** | Beep pattern played on every button long-press that has a long-press action configured. Leave empty for no sound. |
+| **Volume** | Slider (0–100%) controlling the device audio volume. It applies to alerts, Music, and button feedback. Persisted in NVS and controllable from Home Assistant. |
 
-**Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
+#### Button Feedback
+
+| Element | Description |
+|---------|-------------|
+| **Tap Feedback** | Tone pattern played after a button tap that has an action configured. Leave empty for no sound. |
+| **Long-Press Feedback** | Tone pattern played after a button long-press that has a long-press action configured. Leave empty for no sound. |
+
+**Tone pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
 
 Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Sound Alert action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
 
-#### Sound Files
+#### Alert Sounds
 
 *Shown only on boards with sound player support (defaults to boards with audio hardware).*
 
@@ -149,7 +158,7 @@ Upload MP3 files to play as button actions or via MQTT. Files are stored on the 
 | **MP3 File** | File picker for `.mp3` files (max 512 KB per file). The server validates the MP3 header on upload |
 | **Upload** | Uploads the file to the device |
 
-Once uploaded, sounds are available through **Sound Alert** with the **MP3 Alert** kind in the button editor, swipe actions, and boot actions.
+Once uploaded, alert sounds are available through **Sound Alert** with the **MP3 Alert** kind in the button editor, swipe actions, and boot actions.
 
 #### BLE Signals
 

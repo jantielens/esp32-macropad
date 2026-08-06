@@ -436,6 +436,9 @@ Uploads and deletes return `409` while Music, an MP3 Alert, or another Music
 storage mutation is active. Paths must be canonical `/media` descendants with
 a case-insensitive `.mp3` final extension.
 
+Successful uploads and deletes rebuild the published catalog before the API
+response is sent, so the Music Library immediately returns the updated list.
+
 All endpoints return JSON responses with proper HTTP status codes.
 
 **Authentication (Optional):**

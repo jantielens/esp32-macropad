@@ -54,7 +54,7 @@ async function loadSoundList() {
         if (!resp.ok) { container.innerHTML = '<small style="color:#86868b;">Could not load sounds.</small>'; return; }
         const names = await resp.json();
         if (!names.length) {
-            container.innerHTML = '<small style="color:#86868b;">No sound files uploaded yet.</small>';
+            container.innerHTML = '<small style="color:#86868b;">No alert sounds uploaded yet.</small>';
             return;
         }
         let html = '<table style="width:100%; border-collapse:collapse; font-size:13px;">';

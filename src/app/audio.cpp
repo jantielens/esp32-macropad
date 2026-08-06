@@ -42,6 +42,7 @@ struct AudioCommand {
     bool is_sound;           // true = play sound file (pattern holds filename)
     bool is_music;           // true = apply a Music transport command
     bool is_music_validation; // true = validate the pending temporary Music file
+    bool is_music_catalog_refresh; // true = rebuild the published Music catalog
 #endif
 };
 
@@ -69,6 +70,9 @@ static SemaphoreHandle_t g_music_validation_sem = nullptr;
 static char g_music_validation_path[MUSIC_PATH_MAX_LEN + 32] = {};
 static bool g_music_validation_pending = false;
 static bool g_music_validation_result = false;
+static StaticSemaphore_t g_music_catalog_refresh_sem_storage;
+static SemaphoreHandle_t g_music_catalog_refresh_sem = nullptr;
+static bool g_music_catalog_refresh_pending = false;
 
 static bool music_storage_playback_claim() {
     portENTER_CRITICAL(&g_music_storage_mux);
@@ -339,6 +343,14 @@ static void audio_task(void* param) {
                 xSemaphoreGive(g_music_validation_sem);
                 continue;
             }
+            if (cmd.is_music_catalog_refresh) {
+                refresh_music_catalog(true);
+                portENTER_CRITICAL(&g_music_storage_mux);
+                g_music_catalog_refresh_pending = false;
+                portEXIT_CRITICAL(&g_music_storage_mux);
+                xSemaphoreGive(g_music_catalog_refresh_sem);
+                continue;
+            }
             if (music_player && music_transport.state() == MUSIC_TRANSPORT_PLAYING && !cmd.is_sound) {
                 float tone_gain = 1.0f;
                 if (cmd.volume_override > 0 && cmd.volume_override <= 100) {
@@ -463,6 +475,13 @@ void audio_init(uint8_t initial_volume) {
     g_music_validation_sem = xSemaphoreCreateBinaryStatic(&g_music_validation_sem_storage);
     if (!g_music_validation_sem) {
         LOGE(TAG, "Failed to create Music validation semaphore");
+        vQueueDelete(audio_queue);
+        audio_queue = NULL;
+        return;
+    }
+    g_music_catalog_refresh_sem = xSemaphoreCreateBinaryStatic(&g_music_catalog_refresh_sem_storage);
+    if (!g_music_catalog_refresh_sem) {
+        LOGE(TAG, "Failed to create Music catalog refresh semaphore");
         vQueueDelete(audio_queue);
         audio_queue = NULL;
         return;
@@ -636,6 +655,28 @@ bool audio_music_validate_path(const char* path, uint32_t timeout_ms, bool* out_
     *out_valid = g_music_validation_result;
     portEXIT_CRITICAL(&g_music_validation_mux);
     return true;
+}
+
+bool audio_music_refresh_catalog(uint32_t timeout_ms) {
+    if (!audio_initialized || !g_music_catalog_refresh_sem) return false;
+    xSemaphoreTake(g_music_catalog_refresh_sem, 0);
+    portENTER_CRITICAL(&g_music_storage_mux);
+    if (g_music_catalog_refresh_pending) {
+        portEXIT_CRITICAL(&g_music_storage_mux);
+        return false;
+    }
+    g_music_catalog_refresh_pending = true;
+    portEXIT_CRITICAL(&g_music_storage_mux);
+
+    AudioCommand command = {};
+    command.is_music_catalog_refresh = true;
+    if (xQueueSend(audio_queue, &command, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
+        portENTER_CRITICAL(&g_music_storage_mux);
+        g_music_catalog_refresh_pending = false;
+        portEXIT_CRITICAL(&g_music_storage_mux);
+        return false;
+    }
+    return xSemaphoreTake(g_music_catalog_refresh_sem, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
 }
 
 bool audio_music_storage_mutation_begin() {

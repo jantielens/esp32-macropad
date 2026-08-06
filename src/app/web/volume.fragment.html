@@ -1,24 +1,13 @@
 <div class="section-header">
-  <h2>🔊 Volume &amp; Beep</h2>
-  <p>Device audio volume and touch feedback sounds.</p>
+  <h2>🔊 Volume</h2>
+  <p>Set the device audio output level.</p>
 </div>
 <div class="card mb-3" id="audio-section">
   <div class="card-body">
     <div class="mb-3">
       <label class="form-label" for="audio_volume">Volume: <strong id="audio_volume_value">50</strong>%</label>
       <input type="range" class="form-range" id="audio_volume" name="audio_volume" min="0" max="100" step="5" value="50" oninput="document.getElementById('audio_volume_value').textContent=this.value">
-      <div class="form-text">Device audio volume (0–100%). Used for beep actions and touch feedback.</div>
-    </div>
-    <div class="form-text mb-3">Beep patterns use <code>freq:duration</code> pairs (Hz:ms). Separate tones with spaces. A bare number is a silent gap.<br>Examples: <code>800:80</code> (single tap), <code>600:40 40 600:40</code> (double chirp).</div>
-    <div class="mb-3">
-      <label class="form-label" for="tap_beep">Tap Beep</label>
-      <input type="text" class="form-control" id="tap_beep" name="tap_beep" maxlength="127" placeholder="e.g. 800:80">
-      <div class="form-text">Beep pattern on button tap. Overridable per button.</div>
-    </div>
-    <div class="mb-3">
-      <label class="form-label" for="lp_beep">Long-Press Beep</label>
-      <input type="text" class="form-control" id="lp_beep" name="lp_beep" maxlength="127" placeholder="e.g. 600:40 40 600:40">
-      <div class="form-text">Beep pattern on long-press. Overridable per button.</div>
+      <div class="form-text">Device audio volume (0–100%). Applies to alerts, Music, and button feedback.</div>
     </div>
     <div class="save-bar">
       <button type="button" class="btn btn-primary btn-sm" id="volume-save-btn">Save</button>

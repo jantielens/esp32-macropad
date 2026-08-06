@@ -105,6 +105,10 @@ bool audio_music_catalog_contains(const char* path);
 // does not respond before timeout_ms.
 bool audio_music_validate_path(const char* path, uint32_t timeout_ms, bool* out_valid);
 
+// Rebuild the published Music catalog on the audio worker. Returns false when
+// the worker is busy or does not respond before timeout_ms.
+bool audio_music_refresh_catalog(uint32_t timeout_ms);
+
 // Reserve Music storage while no Music playback or MP3 alert is active.
 // The caller must release a successful reservation with
 // audio_music_storage_mutation_end().
