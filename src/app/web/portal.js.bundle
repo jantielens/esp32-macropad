@@ -73,6 +73,8 @@ portal_firmware.js
 # Health monitoring (sparkline fragment before main health)
 portal_health_sparkline.js
 portal_health.js
+
+# [chunk:storage HAS_STORAGE_BROWSER]
 portal_storage.js
 
 # [chunk:music HAS_SOUND_PLAYER]

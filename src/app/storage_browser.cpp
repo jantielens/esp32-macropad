@@ -1,5 +1,9 @@
 #include "storage_browser.h"
 
+#include "board_config.h"
+
+#if HAS_STORAGE_BROWSER
+
 #include "fs_health.h"
 #include "storage.h"
 
@@ -92,3 +96,4 @@ bool storage_browser_list(const String& path, JsonObject result, const char*& er
     if (entry) entry.close();
     return true;
 }
+#endif // HAS_STORAGE_BROWSER

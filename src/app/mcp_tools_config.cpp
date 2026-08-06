@@ -31,14 +31,18 @@
 
 #include "config_manager.h"
 #include "log_manager.h"
+#if HAS_STORAGE_BROWSER
 #include "storage_browser.h"
+#endif
 #include "web_portal_json.h"    // make_psram_json_doc
 #include "web_portal_state.h"   // web_portal_get_current_config
 
 #include <ArduinoJson.h>
+#if HAS_STORAGE_BROWSER
 #include <base64.h>
-#include <esp_heap_caps.h>
 #include <memory>
+#endif
+#include <esp_heap_caps.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -85,8 +89,10 @@ static constexpr int CFG_ERR_BUSY     = MCP_RPC_ERR_CONTROL_BUSY;
 
 static constexpr uint32_t CFG_CONTROL_TIMEOUT_MS = 2000;
 static constexpr uint32_t CFG_WRITE_TIMEOUT_MS   = 4000;
+#if HAS_STORAGE_BROWSER
 static constexpr size_t MCP_STORAGE_FILE_MAX_BYTES = 64 * 1024;
 static constexpr size_t MCP_STORAGE_FILE_RESULT_CAPACITY = 96 * 1024;
+#endif
 
 // Set a tool error code + message and return false (thin adapter over the shared
 // mcp_tool_fail in mcp_tool_util.h).
@@ -179,6 +185,7 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
 // ============================================================================
 // Storage browser — read-only counterparts to the portal Storage page.
 // ============================================================================
+#if HAS_STORAGE_BROWSER
 static bool tool_get_storage_status(const JsonObject& args, JsonObject& result, String& err) {
     (void)args;
     (void)err;
@@ -229,6 +236,7 @@ static bool tool_read_storage_file(const JsonObject& args, JsonObject& result, S
     result["content"] = base64::encode(bytes.get(), size);
     return true;
 }
+#endif // HAS_STORAGE_BROWSER
 
 // ============================================================================
 // Auxiliary component config — shared table (read + write)
@@ -833,6 +841,7 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
 // Tool descriptors + registration
 // ============================================================================
 
+#if HAS_STORAGE_BROWSER
 static const McpTool s_tool_get_storage_status = {
     "get_storage_status",
     "Read the active persistent-storage backend and capacity status: LittleFS or SDMMC, mount state, card type, and used/free/total bytes. This is the same status shown by the web portal Storage page.",
@@ -856,6 +865,7 @@ static const McpTool s_tool_read_storage_file = {
     tool_read_storage_file, true, false, false, false, MCP_STORAGE_FILE_RESULT_CAPACITY
 };
 REGISTER_MCP_TOOL(s_tool_read_storage_file);
+#endif // HAS_STORAGE_BROWSER
 
 static const McpTool s_tool_get_config = {
     "get_config",
@@ -989,6 +999,7 @@ REGISTER_MCP_TOOL(s_tool_set_config);
 // fields and the read/write component list without probing each tool schema.
 // Board-accurate: the component list is the same s_comps table the tools use.
 void mcp_config_capabilities(JsonObject& out) {
+#if HAS_STORAGE_BROWSER
     JsonObject storage = out.createNestedObject("storage");
     storage["status_tool"] = "get_storage_status";
     storage["list_tool"] = "list_storage";
@@ -996,6 +1007,7 @@ void mcp_config_capabilities(JsonObject& out) {
     storage["list_max_entries"] = STORAGE_BROWSER_LIST_MAX_ENTRIES;
     storage["read_file_max_bytes"] = MCP_STORAGE_FILE_MAX_BYTES;
     storage["read_file_encoding"] = "base64";
+#endif
     JsonObject sc = out.createNestedObject("set_config_fields");
     sc["device_name"] = "string (mDNS/hostname refreshes on next reboot)";
     sc["backlight_brightness"] = "int 5-100 (persisted + applied live)";

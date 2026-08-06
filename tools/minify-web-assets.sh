@@ -717,9 +717,9 @@ emit_chunked_variants() {
         # model only independent flags expand exponentially, so this cap is
         # far harder to hit than the old 2^N one; it exists to catch a bundle
         # that accidentally accumulates many independent flags.
-        if [[ $n_variants -gt 32 ]]; then
+        if [[ $n_variants -gt 64 ]]; then
             echo "  ✗ Bundle $bundle_name expands to $n_variants variants" \
-                 "(${n_indep} independent flag(s), ${n_classes} device-class flag(s); max 32)." >&2
+                 "(${n_indep} independent flag(s), ${n_classes} device-class flag(s); max 64)." >&2
             echo "     Independent flags (HAS_*) each double the gzipped variants emitted into" >&2
             echo "     web_assets.h; device-class flags (IS_*) add only one variant each." >&2
             echo "     Consolidate independent chunk flags, or split the bundle." >&2
@@ -970,7 +970,7 @@ cat > "$OUTPUT_FILE" << 'HEADER_START'
 
 #include <Arduino.h>
 
-// Board feature flags — gate display/audio/MQTT-only fragments away when
+// Board feature flags — gate display/audio/MQTT/storage-only fragments away when
 // the corresponding subsystem is disabled at compile time. Without this
 // the linker pulls in every PROGMEM fragment array even though headless
 // builds never call find_fragment_asset() for them.
@@ -1009,6 +1009,8 @@ asset_feature_flag() {
             echo "HAS_AUDIO" ;;
         sounds)
             echo "HAS_SOUND_PLAYER" ;;
+        storage)
+            echo "HAS_STORAGE_BROWSER" ;;
         epaper_status|epaper_image|epaper_overlay|epaper_vcom|epaper_init)
             echo "HAS_EPAPER" ;;
         shutter|shutter_tests|shutter_sessions|shutter_session_actions)

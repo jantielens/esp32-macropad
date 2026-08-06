@@ -87,6 +87,11 @@ struct HwButtonDef {
 #define HAS_MCP true
 #endif
 
+// Enable the portal and MCP browser for a filesystem partition or SD card.
+#ifndef HAS_STORAGE_BROWSER
+#define HAS_STORAGE_BROWSER true
+#endif
+
 // Enable BLE HID keyboard support.
 #ifndef HAS_BLE_HID
 #define HAS_BLE_HID true

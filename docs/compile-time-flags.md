@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 252
+Total flags: 253
 
 ### Features (HAS_*)
 
@@ -50,6 +50,7 @@ Total flags: 252
 - **HAS_SENSOR_NAU7802** default: `false` — NAU7802 24-bit I2C load-cell ADC.
 - **HAS_SENSOR_TSL2591** default: `false` — TSL2591 high-dynamic-range I2C light sensor (used for enlarger metering).
 - **HAS_SOUND_PLAYER** default: `HAS_AUDIO` — Defaults to HAS_AUDIO — enable audio to get sound player support.
+- **HAS_STORAGE_BROWSER** default: `true` — Enable the portal and MCP browser for a filesystem partition or SD card.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 
 ### Selectors (*_DRIVER)
@@ -299,25 +300,25 @@ Total flags: 252
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3636w518 | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3636w518-sd | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
-| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
-| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc1060p470c-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
-| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
-| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
-| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518 | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518-sd | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |
+| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc1060p470c-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ |  |
+| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ |  |
+| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -821,6 +822,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_sounds.cpp
   - src/app/web_portal_sounds.h
+- **HAS_STORAGE_BROWSER**
+  - src/app/board_config.h
+  - src/app/components/storage_component.cpp
+  - src/app/mcp_tools_config.cpp
+  - src/app/portal_components.cpp
+  - src/app/storage_browser.cpp
 - **HAS_TOUCH**
   - src/app/app.ino
   - src/app/board_config.h

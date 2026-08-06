@@ -1,5 +1,9 @@
 #include "component_registry.h"
 
+#include "board_config.h"
+
+#if HAS_STORAGE_BROWSER
+
 #include "storage.h"
 #include "storage_browser.h"
 #include "web_portal_json.h"
@@ -65,3 +69,4 @@ static ComponentDef storage_component = {
     .fragment_id = "storage",
 };
 REGISTER_COMPONENT(storage);
+#endif // HAS_STORAGE_BROWSER
