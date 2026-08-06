@@ -7,6 +7,8 @@
 #include "audio_output_driver.h"
 #include "storage.h"
 #include <esp_heap_caps.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <string.h>
 #include "log_manager.h"
 #include "sound_store.h"
@@ -208,6 +210,18 @@ static void sound_player_refill(SoundPlayer* player) {
     }
 }
 
+static bool sound_player_is_id3v1_tag(const uint8_t* data, size_t length) {
+    return data && length == 128 && memcmp(data, "TAG", 3) == 0;
+}
+
+static void sound_player_scan_cooperate(uint32_t* decoded_frames) {
+    if (++*decoded_frames % 16 == 0) {
+        // Full-file scans run before playback begins. Yield a tick so lower
+        // priority AsyncTCP work on the audio core can service its watchdog.
+        vTaskDelay(1);
+    }
+}
+
 static int sound_player_decode(SoundPlayer* player, int16_t* pcm,
                                mp3dec_frame_info_t* frame_info) {
 #if AUDIO_MP3_SCRATCH_PSRAM
@@ -238,12 +252,21 @@ static void sound_player_scan_duration(SoundPlayer* player) {
     sound_player_reset_decode(player);
 
     bool valid = true;
+    uint32_t decoded_frames = 0;
     while (player->buf_filled > 0) {
         mp3dec_frame_info_t frame_info = {};
         const int samples = sound_player_decode(player, nullptr, &frame_info);
-        if (frame_info.frame_bytes == 0) break;
+        if (frame_info.frame_bytes == 0) {
+            const size_t remaining = player->buf_filled - player->buf_consumed;
+            if (!player->eof || !sound_player_is_id3v1_tag(
+                    player->read_buf + player->buf_consumed, remaining)) {
+                valid = false;
+            }
+            break;
+        }
         player->buf_consumed += frame_info.frame_bytes;
         if (samples > 0) {
+            sound_player_scan_cooperate(&decoded_frames);
             const int bucket = sound_player_source_rate_bucket((uint32_t)frame_info.hz);
             if (bucket < 0 || (uint64_t)samples > UINT64_MAX - player->duration_samples[bucket]) {
                 valid = false;
@@ -354,6 +377,8 @@ bool sound_player_validate_path(const char* path) {
                                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 #endif
     bool valid = false;
+    bool corrupt = false;
+    uint32_t decoded_frames = 0;
     if (read_buf && decoder && pcm
 #if AUDIO_MP3_SCRATCH_PSRAM
         && decode_scratch
@@ -373,11 +398,18 @@ bool sound_player_validate_path(const char* path) {
             const int samples = mp3dec_decode_frame(
                 decoder, read_buf + consumed, (int)(filled - consumed), pcm, &frame_info);
 #endif
-            if (frame_info.frame_bytes == 0) break;
+            if (frame_info.frame_bytes == 0) {
+                if (!eof) {
+                    corrupt = true;
+                } else if (!sound_player_is_id3v1_tag(read_buf + consumed, filled - consumed)) {
+                    corrupt = true;
+                }
+                break;
+            }
             consumed += frame_info.frame_bytes;
             if (samples > 0) {
                 valid = true;
-                break;
+                sound_player_scan_cooperate(&decoded_frames);
             }
             if (consumed == filled && eof) break;
             if (consumed > 0) {
@@ -386,9 +418,10 @@ bool sound_player_validate_path(const char* path) {
                 filled = remaining;
                 consumed = 0;
                 if (!eof) {
-                    const size_t read = file.read(read_buf + filled, MP3_READ_BUF_SIZE - filled);
+                    const size_t capacity = MP3_READ_BUF_SIZE - filled;
+                    const size_t read = file.read(read_buf + filled, capacity);
                     filled += read;
-                    eof = read < MP3_READ_BUF_SIZE - filled + read;
+                    eof = read < capacity;
                 }
             }
         }
@@ -400,7 +433,7 @@ bool sound_player_validate_path(const char* path) {
     if (decoder) heap_caps_free(decoder);
     if (read_buf) heap_caps_free(read_buf);
     file.close();
-    return valid;
+    return valid && !corrupt;
 }
 
 SoundPlayerStepResult sound_player_step(SoundPlayer* player) {
@@ -410,7 +443,14 @@ SoundPlayerStepResult sound_player_step(SoundPlayer* player) {
 
     mp3dec_frame_info_t frame_info = {};
     const int samples = sound_player_decode(player, player->pcm, &frame_info);
-    if (frame_info.frame_bytes == 0) return SOUND_PLAYER_STEP_COMPLETE;
+    if (frame_info.frame_bytes == 0) {
+        if (player->eof && (player->buf_filled == 0 ||
+                            sound_player_is_id3v1_tag(player->read_buf, player->buf_filled))) {
+            return SOUND_PLAYER_STEP_COMPLETE;
+        }
+        LOGW(TAG, "MP3 decode stalled before EOF");
+        return SOUND_PLAYER_STEP_ERROR;
+    }
     player->buf_consumed += frame_info.frame_bytes;
     if (samples == 0) return SOUND_PLAYER_STEP_PLAYING;
 

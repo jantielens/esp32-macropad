@@ -19,61 +19,55 @@ bool has_mp3_extension(const char* path) {
            extension[3] == '3';
 }
 
-void sort_paths(MusicCatalogSnapshot* snapshot) {
-    for (uint8_t index = 1; index < snapshot->count; ++index) {
-        char value[MUSIC_PATH_MAX_LEN];
-        strlcpy(value, snapshot->paths[index], sizeof(value));
-        uint8_t cursor = index;
-        while (cursor > 0 && strcmp(value, snapshot->paths[cursor - 1]) < 0) {
+void insert_sorted_path(MusicCatalogSnapshot* snapshot, const char* path) {
+    uint8_t cursor = snapshot->count;
+    while (cursor > 0 && strcmp(path, snapshot->paths[cursor - 1]) < 0) {
+        if (cursor < MUSIC_TRACK_LIMIT) {
             strlcpy(snapshot->paths[cursor], snapshot->paths[cursor - 1],
                     sizeof(snapshot->paths[cursor]));
-            --cursor;
         }
-        strlcpy(snapshot->paths[cursor], value, sizeof(snapshot->paths[cursor]));
+        --cursor;
     }
+    strlcpy(snapshot->paths[cursor], path, sizeof(snapshot->paths[cursor]));
 }
 
 } // namespace
 
-MusicCatalog::MusicCatalog() : candidate_{}, snapshot_{}, result_(MUSIC_CATALOG_UNAVAILABLE) {}
-
-void MusicCatalog::begin() {
-    candidate_ = {};
+void MusicCatalog::begin(MusicCatalogSnapshot* target) {
+    target_ = target;
+    if (target_) *target_ = {};
     result_ = MUSIC_CATALOG_OK;
 }
 
 MusicCatalogResult MusicCatalog::add(const char* path) {
-    if (result_ != MUSIC_CATALOG_OK) return result_;
+    if (!target_ || result_ != MUSIC_CATALOG_OK) return result_;
     if (!is_canonical_path(path)) return result_ = MUSIC_CATALOG_INVALID_PATH;
-    if (candidate_.count >= MUSIC_TRACK_LIMIT) return result_ = MUSIC_CATALOG_OVERFLOW;
-    strlcpy(candidate_.paths[candidate_.count], path, sizeof(candidate_.paths[candidate_.count]));
-    ++candidate_.count;
+    if (target_->total_found != UINT16_MAX) ++target_->total_found;
+    if (target_->count < MUSIC_TRACK_LIMIT) {
+        insert_sorted_path(target_, path);
+        ++target_->count;
+        return MUSIC_CATALOG_OK;
+    }
+    target_->overflow = true;
+    if (strcmp(path, target_->paths[MUSIC_TRACK_LIMIT - 1]) < 0) {
+        insert_sorted_path(target_, path);
+    }
     return MUSIC_CATALOG_OK;
 }
 
+void MusicCatalog::skip() {
+    if (target_ && target_->skipped != UINT16_MAX) ++target_->skipped;
+}
+
 MusicCatalogResult MusicCatalog::publish() {
-    if (result_ != MUSIC_CATALOG_OK) {
-        snapshot_ = {};
-        return result_;
-    }
-    sort_paths(&candidate_);
-    candidate_.available = true;
-    snapshot_ = candidate_;
+    if (!target_ || result_ != MUSIC_CATALOG_OK) return result_;
+    target_->available = true;
     return MUSIC_CATALOG_OK;
 }
 
 void MusicCatalog::fail(MusicCatalogResult result) {
     result_ = result == MUSIC_CATALOG_OK ? MUSIC_CATALOG_UNAVAILABLE : result;
-    candidate_ = {};
-    snapshot_ = {};
-}
-
-bool MusicCatalog::contains(const char* path) const {
-    if (!path || !snapshot_.available) return false;
-    for (uint8_t index = 0; index < snapshot_.count; ++index) {
-        if (strcmp(snapshot_.paths[index], path) == 0) return true;
-    }
-    return false;
+    if (target_) *target_ = {};
 }
 
 bool MusicCatalog::is_canonical_path(const char* path) {
@@ -120,7 +114,8 @@ bool discover_directory(File directory, const char* directory_path, MusicCatalog
         char path[MUSIC_PATH_MAX_LEN] = {};
         if (!child_path(directory_path, entry.name(), path, sizeof(path))) {
             entry.close();
-            return false;
+            if (has_mp3_extension(entry.name())) catalog->skip();
+            continue;
         }
         if (entry.isDirectory()) {
             if (!discover_directory(entry, path, catalog)) {
@@ -131,6 +126,8 @@ bool discover_directory(File directory, const char* directory_path, MusicCatalog
                    catalog->add(path) != MUSIC_CATALOG_OK) {
             entry.close();
             return false;
+        } else if (has_mp3_extension(path) && !MusicCatalog::is_canonical_path(path)) {
+            catalog->skip();
         }
         entry.close();
     }
@@ -139,9 +136,9 @@ bool discover_directory(File directory, const char* directory_path, MusicCatalog
 
 } // namespace
 
-bool music_catalog_discover(MusicCatalog* catalog) {
-    if (!catalog) return false;
-    catalog->begin();
+bool music_catalog_discover(MusicCatalog* catalog, MusicCatalogSnapshot* target) {
+    if (!catalog || !target) return false;
+    catalog->begin(target);
     File media = Storage.open("/media", "r");
     if (!media || !media.isDirectory()) {
         if (media) media.close();

@@ -61,12 +61,13 @@ void audio_log_starvation(const AudioStarvationStats& stats);
 
 #if HAS_SOUND_PLAYER
 #include "music_catalog.h"
+#include "music_catalog_store.h"
+#include "music_command.h"
 
 // Play an MP3 sound file from LittleFS. Non-blocking (queued).
 // filename: sound name (without path or extension), e.g. "doorbell"
 // volume_override: 1-100 = use this volume, 0 = use device volume.
 void audio_play_sound(const char* filename, uint8_t volume_override);
-#endif
 
 enum AudioMusicStatus : uint8_t {
     AUDIO_MUSIC_STOPPED,
@@ -86,19 +87,25 @@ struct AudioMusicInfo {
     char file[192];
 };
 
-// Submit one canonical Music transport command: play_pause, next, previous,
-// or stop. It is consumed by the existing audio worker.
-void audio_music_command(const char* command);
+enum AudioMusicSubmitResult : uint8_t {
+    AUDIO_MUSIC_SUBMIT_QUEUED,
+    AUDIO_MUSIC_SUBMIT_BUSY,
+    AUDIO_MUSIC_SUBMIT_UNAVAILABLE,
+    AUDIO_MUSIC_SUBMIT_INVALID,
+};
+
+// Submit a bounded, non-blocking Music transport request to the audio worker.
+AudioMusicSubmitResult audio_music_command(MusicCommand command);
 
 // Snapshot read-only Music state for bindings and management views.
 void audio_get_music_info(AudioMusicInfo* out);
 
 // Snapshot the Music catalog discovered by the audio worker.
 bool audio_get_music_catalog_snapshot(MusicCatalogSnapshot* out);
+bool audio_get_music_catalog_status(MusicCatalogStatus* out);
 
 // Read small catalog properties without copying its fixed-size path array.
 bool audio_get_music_catalog_count(uint8_t* out_count);
-bool audio_music_catalog_contains(const char* path);
 
 // Validate an uploaded MP3 on the audio worker, which owns the decoder and
 // has sufficient stack for minimp3. Returns false when the worker is busy or
@@ -114,5 +121,7 @@ bool audio_music_refresh_catalog(uint32_t timeout_ms);
 // audio_music_storage_mutation_end().
 bool audio_music_storage_mutation_begin();
 void audio_music_storage_mutation_end(bool catalog_changed);
+
+#endif // HAS_SOUND_PLAYER
 
 #endif // HAS_AUDIO

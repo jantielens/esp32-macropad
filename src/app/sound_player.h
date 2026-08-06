@@ -30,8 +30,8 @@ SoundPlayer* sound_player_begin_path(AudioOutputDriver* output_driver,
                                      SoundPlayerPcmTransform transform = nullptr,
                                      void* transform_context = nullptr);
 
-// Verify that an MP3 at a canonical storage path contains at least one
-// decodable minimp3 frame without loading the complete file into memory.
+// Verify that an MP3 at a canonical storage path scans cleanly to EOF with at
+// least one decodable frame, without loading the complete file into memory.
 bool sound_player_validate_path(const char* path);
 
 // Decode and emit at most one MP3 frame through the supplied session.

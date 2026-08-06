@@ -15,6 +15,8 @@
 #if HAS_SOUND_PLAYER
 #include "sound_player.h"
 #include "music_catalog.h"
+#include "music_catalog_store.h"
+#include "music_command.h"
 #include "music_transport.h"
 #include "tone_alert_overlay.h"
 #endif
@@ -33,6 +35,7 @@ static AudioOutputDriver* output_driver = nullptr;
 // ---------------------------------------------------------------------------
 #define AUDIO_PATTERN_MAX_LEN 128
 #define AUDIO_QUEUE_DEPTH     2
+#define MUSIC_WORK_QUEUE_DEPTH 4
 
 struct AudioCommand {
     char pattern[AUDIO_PATTERN_MAX_LEN];
@@ -40,13 +43,19 @@ struct AudioCommand {
     bool loop;               // true = repeat until stop
 #if HAS_SOUND_PLAYER
     bool is_sound;           // true = play sound file (pattern holds filename)
-    bool is_music;           // true = apply a Music transport command
-    bool is_music_validation; // true = validate the pending temporary Music file
-    bool is_music_catalog_refresh; // true = rebuild the published Music catalog
 #endif
 };
 
+#if HAS_SOUND_PLAYER
+enum MusicWorkKind : uint8_t { MUSIC_WORK_TRANSPORT, MUSIC_WORK_VALIDATE, MUSIC_WORK_REFRESH };
+struct MusicWorkCommand {
+    MusicWorkKind kind;
+    MusicCommand transport;
+};
+#endif
+
 static QueueHandle_t audio_queue = NULL;
+static QueueHandle_t music_work_queue = NULL;
 static TaskHandle_t audio_task_handle = NULL;
 // Cross-task flags: written by audio_enqueue()/audio_stop() (caller task),
 // read/written by audio_task (FreeRTOS task).  volatile provides visibility;
@@ -59,8 +68,6 @@ static volatile bool g_playing = false;
 static bool g_file_backed_playing = false;
 static AudioMusicInfo g_music_info = {AUDIO_MUSIC_UNAVAILABLE, 0, 0, {0}};
 static portMUX_TYPE g_music_info_mux = portMUX_INITIALIZER_UNLOCKED;
-static MusicCatalogSnapshot g_music_catalog = {};
-static portMUX_TYPE g_music_catalog_mux = portMUX_INITIALIZER_UNLOCKED;
 static portMUX_TYPE g_music_storage_mux = portMUX_INITIALIZER_UNLOCKED;
 static bool g_music_storage_mutating = false;
 static bool g_music_catalog_dirty = false;
@@ -90,12 +97,6 @@ static void music_storage_playback_release() {
 
 static void music_tone_alert_transform(void* context, int16_t* frames, size_t frame_count) {
     tone_alert_overlay_mix((ToneAlertOverlay*)context, frames, frame_count, AUDIO_SAMPLE_RATE);
-}
-
-static void music_catalog_set(const MusicCatalogSnapshot& catalog) {
-    portENTER_CRITICAL(&g_music_catalog_mux);
-    g_music_catalog = catalog;
-    portEXIT_CRITICAL(&g_music_catalog_mux);
 }
 
 static void music_info_set(AudioMusicStatus status, const MusicCatalogSnapshot& catalog,
@@ -252,14 +253,37 @@ static void audio_task(void* param) {
     MusicTransport music_transport;
     SoundPlayer* music_player = nullptr;
     ToneAlertOverlay music_tone_alert = {};
-    music_catalog_discover(&music_catalog);
-    music_catalog_set(music_catalog.snapshot());
-        LOGI(TAG, "Music catalog startup scan: available=%d count=%u",
-            music_catalog.snapshot().available, music_catalog.snapshot().count);
-    music_info_set(music_catalog.snapshot().available
-                       ? (music_catalog.snapshot().count ? AUDIO_MUSIC_STOPPED : AUDIO_MUSIC_EMPTY)
+    auto refresh_music_catalog = [&](bool force) {
+        bool dirty = false;
+        portENTER_CRITICAL(&g_music_storage_mux);
+        dirty = g_music_catalog_dirty;
+        g_music_catalog_dirty = false;
+        portEXIT_CRITICAL(&g_music_storage_mux);
+        if (!force && !dirty) return;
+        MusicCatalogSnapshot* build_slot = music_catalog_store_begin_build();
+        if (!build_slot) {
+            LOGW(TAG, "Music catalog refresh skipped: store busy");
+            if (dirty) {
+                portENTER_CRITICAL(&g_music_storage_mux);
+                g_music_catalog_dirty = true;
+                portEXIT_CRITICAL(&g_music_storage_mux);
+            }
+            return;
+        }
+        const bool discovered = music_catalog_discover(&music_catalog, build_slot);
+        (void)discovered;
+        music_catalog_store_publish(music_catalog.result());
+    };
+    refresh_music_catalog(true);
+    const MusicCatalogSnapshot* startup_catalog = music_catalog_store_active_for_audio();
+    const MusicCatalogSnapshot empty_catalog = {};
+    const MusicCatalogSnapshot& initial_catalog = startup_catalog ? *startup_catalog : empty_catalog;
+    LOGI(TAG, "Music catalog startup scan: available=%d count=%u",
+            initial_catalog.available, initial_catalog.count);
+    music_info_set(initial_catalog.available
+                       ? (initial_catalog.count ? AUDIO_MUSIC_STOPPED : AUDIO_MUSIC_EMPTY)
                        : AUDIO_MUSIC_UNAVAILABLE,
-                   music_catalog.snapshot(), music_transport);
+                   initial_catalog, music_transport);
 
     auto close_music = [&]() {
         tone_alert_overlay_stop(&music_tone_alert);
@@ -276,31 +300,21 @@ static void audio_task(void* param) {
         if (!music_player) music_storage_playback_release();
         return music_player != nullptr;
     };
-    auto refresh_music_catalog = [&](bool force) {
-        bool dirty = false;
-        portENTER_CRITICAL(&g_music_storage_mux);
-        dirty = g_music_catalog_dirty;
-        g_music_catalog_dirty = false;
-        portEXIT_CRITICAL(&g_music_storage_mux);
-        if (force || dirty) {
-            music_catalog_discover(&music_catalog);
-            music_catalog_set(music_catalog.snapshot());
-        }
-    };
-    auto apply_music = [&](const char* command) {
+    auto apply_music = [&](MusicCommand command) {
         portENTER_CRITICAL(&g_music_storage_mux);
         const bool mutating = g_music_storage_mutating;
         portEXIT_CRITICAL(&g_music_storage_mux);
         if (mutating) return;
-        MusicTransportCommand transport_command = MUSIC_TRANSPORT_STOP;
-        if (strcmp(command, "play_pause") == 0) transport_command = MUSIC_TRANSPORT_PLAY_PAUSE;
-        else if (strcmp(command, "next") == 0) transport_command = MUSIC_TRANSPORT_NEXT;
-        else if (strcmp(command, "previous") == 0) transport_command = MUSIC_TRANSPORT_PREVIOUS;
-        else if (strcmp(command, "stop") != 0) return;
+        const MusicTransportCommand transport_command =
+            command == MUSIC_COMMAND_PLAY_PAUSE ? MUSIC_TRANSPORT_PLAY_PAUSE :
+            command == MUSIC_COMMAND_NEXT ? MUSIC_TRANSPORT_NEXT :
+            command == MUSIC_COMMAND_PREVIOUS ? MUSIC_TRANSPORT_PREVIOUS : MUSIC_TRANSPORT_STOP;
         if (music_transport.state() == MUSIC_TRANSPORT_STOPPED) {
             refresh_music_catalog(false);
         }
-        const MusicCatalogSnapshot& catalog = music_catalog.snapshot();
+        const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
+        const MusicCatalogSnapshot empty_catalog = {};
+        const MusicCatalogSnapshot& catalog = active_catalog ? *active_catalog : empty_catalog;
         if (!catalog.available || (!catalog.count && transport_command == MUSIC_TRANSPORT_PLAY_PAUSE)) {
             music_info_set(catalog.available ? AUDIO_MUSIC_EMPTY : AUDIO_MUSIC_UNAVAILABLE, catalog, music_transport);
             return;
@@ -328,29 +342,31 @@ static void audio_task(void* param) {
 #else
             portMAX_DELAY;
 #endif
-        if (xQueueReceive(audio_queue, &cmd, wait) == pdTRUE) {
-#if HAS_SOUND_PLAYER
-            if (cmd.is_music) {
-                apply_music(cmd.pattern);
-                continue;
-            }
-            if (cmd.is_music_validation) {
+        MusicWorkCommand music_work = {};
+        if (xQueueReceive(music_work_queue, &music_work, 0) == pdTRUE) {
+            if (music_work.kind == MUSIC_WORK_TRANSPORT) {
+                apply_music(music_work.transport);
+            } else if (music_work.kind == MUSIC_WORK_VALIDATE) {
                 const bool valid = sound_player_validate_path(g_music_validation_path);
+                LOGI(TAG, "Music validation: %s, audio stack free=%u bytes",
+                     valid ? "valid" : "invalid",
+                     (unsigned)uxTaskGetStackHighWaterMark(nullptr));
                 portENTER_CRITICAL(&g_music_validation_mux);
                 g_music_validation_result = valid;
                 g_music_validation_pending = false;
                 portEXIT_CRITICAL(&g_music_validation_mux);
                 xSemaphoreGive(g_music_validation_sem);
-                continue;
-            }
-            if (cmd.is_music_catalog_refresh) {
+            } else {
                 refresh_music_catalog(true);
                 portENTER_CRITICAL(&g_music_storage_mux);
                 g_music_catalog_refresh_pending = false;
                 portEXIT_CRITICAL(&g_music_storage_mux);
                 xSemaphoreGive(g_music_catalog_refresh_sem);
-                continue;
             }
+            continue;
+        }
+        if (xQueueReceive(audio_queue, &cmd, wait) == pdTRUE) {
+#if HAS_SOUND_PLAYER
             if (music_player && music_transport.state() == MUSIC_TRANSPORT_PLAYING && !cmd.is_sound) {
                 float tone_gain = 1.0f;
                 if (cmd.volume_override > 0 && cmd.volume_override <= 100) {
@@ -367,8 +383,11 @@ static void audio_task(void* param) {
                 music_transport.state() == MUSIC_TRANSPORT_PAUSED && !cmd.is_sound;
             if (music_player && !preserve_paused_music) {
                 close_music();
-                music_transport.apply(MUSIC_TRANSPORT_STOP, music_catalog.snapshot().count);
-                music_info_set(AUDIO_MUSIC_STOPPED, music_catalog.snapshot(), music_transport);
+                const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
+                if (active_catalog) {
+                    music_transport.apply(MUSIC_TRANSPORT_STOP, active_catalog->count);
+                    music_info_set(AUDIO_MUSIC_STOPPED, *active_catalog, music_transport);
+                }
             }
 #endif
             g_stop_requested = false;
@@ -421,23 +440,29 @@ static void audio_task(void* param) {
             const SoundPlayerStepResult step = sound_player_step(music_player);
             if (step != SOUND_PLAYER_STEP_PLAYING) {
                 close_music();
+                const MusicCatalogSnapshot* before_transition = music_catalog_store_active_for_audio();
                 const MusicTransportResult result = music_transport.apply(
                     step == SOUND_PLAYER_STEP_COMPLETE ? MUSIC_TRANSPORT_COMPLETE : MUSIC_TRANSPORT_FAILURE,
-                    music_catalog.snapshot().count);
+                    before_transition ? before_transition->count : 0);
                 if (result.effect == MUSIC_TRANSPORT_CLOSE_TRACK &&
                     music_transport.state() == MUSIC_TRANSPORT_PLAYING) {
-                    if (!open_music_track(music_catalog.snapshot().paths[result.track_index])) {
-                        music_transport.apply(MUSIC_TRANSPORT_FAILURE, music_catalog.snapshot().count);
+                    const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
+                    if (!active_catalog || !open_music_track(active_catalog->paths[result.track_index])) {
+                        music_transport.apply(MUSIC_TRANSPORT_FAILURE,
+                                              active_catalog ? active_catalog->count : 0);
                     }
                 }
+                const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
                 music_info_set(step == SOUND_PLAYER_STEP_ERROR ? AUDIO_MUSIC_ERROR :
                     (music_transport.state() == MUSIC_TRANSPORT_PLAYING ? AUDIO_MUSIC_PLAYING : AUDIO_MUSIC_STOPPED),
-                    music_catalog.snapshot(), music_transport, music_player);
+                    active_catalog ? *active_catalog : empty_catalog, music_transport, music_player);
             } else {
                 music_info_update_timing(music_player);
             }
         } else if (music_player) {
-            music_info_set(AUDIO_MUSIC_PAUSED, music_catalog.snapshot(), music_transport, music_player);
+            const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
+            music_info_set(AUDIO_MUSIC_PAUSED, active_catalog ? *active_catalog : empty_catalog,
+                           music_transport, music_player);
         }
 #endif
     }
@@ -472,6 +497,16 @@ void audio_init(uint8_t initial_volume) {
     }
 
 #if HAS_SOUND_PLAYER
+    music_work_queue = xQueueCreate(MUSIC_WORK_QUEUE_DEPTH, sizeof(MusicWorkCommand));
+    if (!music_work_queue) {
+        LOGE(TAG, "Failed to create Music work queue");
+        vQueueDelete(audio_queue);
+        audio_queue = NULL;
+        return;
+    }
+    if (!music_catalog_store_init()) {
+        LOGE(TAG, "Failed to allocate Music catalog in PSRAM");
+    }
     g_music_validation_sem = xSemaphoreCreateBinaryStatic(&g_music_validation_sem_storage);
     if (!g_music_validation_sem) {
         LOGE(TAG, "Failed to create Music validation semaphore");
@@ -576,16 +611,15 @@ bool audio_is_playing() {
 }
 
 #if HAS_SOUND_PLAYER
-void audio_music_command(const char* command) {
-    if (!audio_initialized || !command) return;
+AudioMusicSubmitResult audio_music_command(MusicCommand command) {
+    if (!audio_initialized || !music_work_queue) return AUDIO_MUSIC_SUBMIT_UNAVAILABLE;
     portENTER_CRITICAL(&g_music_storage_mux);
     const bool mutating = g_music_storage_mutating;
     portEXIT_CRITICAL(&g_music_storage_mux);
-    if (mutating) return;
-    AudioCommand cmd = {};
-    strlcpy(cmd.pattern, command, sizeof(cmd.pattern));
-    cmd.is_music = true;
-    xQueueSend(audio_queue, &cmd, portMAX_DELAY);
+    if (mutating) return AUDIO_MUSIC_SUBMIT_BUSY;
+    MusicWorkCommand work = {MUSIC_WORK_TRANSPORT, command};
+    return xQueueSend(music_work_queue, &work, 0) == pdTRUE
+        ? AUDIO_MUSIC_SUBMIT_QUEUED : AUDIO_MUSIC_SUBMIT_BUSY;
 }
 
 void audio_get_music_info(AudioMusicInfo* out) {
@@ -596,36 +630,19 @@ void audio_get_music_info(AudioMusicInfo* out) {
 }
 
 bool audio_get_music_catalog_snapshot(MusicCatalogSnapshot* out) {
-    if (!out) return false;
-    portENTER_CRITICAL(&g_music_catalog_mux);
-    *out = g_music_catalog;
-    portEXIT_CRITICAL(&g_music_catalog_mux);
-    return out->available;
+    return music_catalog_store_copy(out, nullptr);
+}
+
+bool audio_get_music_catalog_status(MusicCatalogStatus* out) {
+    return music_catalog_store_status(out);
 }
 
 bool audio_get_music_catalog_count(uint8_t* out_count) {
     if (!out_count) return false;
-    portENTER_CRITICAL(&g_music_catalog_mux);
-    const bool available = g_music_catalog.available;
-    *out_count = available ? g_music_catalog.count : 0;
-    portEXIT_CRITICAL(&g_music_catalog_mux);
-    return available;
-}
-
-bool audio_music_catalog_contains(const char* path) {
-    if (!path) return false;
-    portENTER_CRITICAL(&g_music_catalog_mux);
-    bool found = false;
-    if (g_music_catalog.available) {
-        for (uint8_t index = 0; index < g_music_catalog.count; ++index) {
-            if (strcmp(g_music_catalog.paths[index], path) == 0) {
-                found = true;
-                break;
-            }
-        }
-    }
-    portEXIT_CRITICAL(&g_music_catalog_mux);
-    return found;
+    MusicCatalogStatus status = {};
+    if (!music_catalog_store_status(&status)) return false;
+    *out_count = status.available ? status.count : 0;
+    return status.available;
 }
 
 bool audio_music_validate_path(const char* path, uint32_t timeout_ms, bool* out_valid) {
@@ -641,9 +658,8 @@ bool audio_music_validate_path(const char* path, uint32_t timeout_ms, bool* out_
     g_music_validation_pending = true;
     portEXIT_CRITICAL(&g_music_validation_mux);
 
-    AudioCommand command = {};
-    command.is_music_validation = true;
-    if (xQueueSend(audio_queue, &command, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
+    MusicWorkCommand command = {MUSIC_WORK_VALIDATE, MUSIC_COMMAND_STOP};
+    if (xQueueSend(music_work_queue, &command, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
         portENTER_CRITICAL(&g_music_validation_mux);
         g_music_validation_pending = false;
         portEXIT_CRITICAL(&g_music_validation_mux);
@@ -668,9 +684,8 @@ bool audio_music_refresh_catalog(uint32_t timeout_ms) {
     g_music_catalog_refresh_pending = true;
     portEXIT_CRITICAL(&g_music_storage_mux);
 
-    AudioCommand command = {};
-    command.is_music_catalog_refresh = true;
-    if (xQueueSend(audio_queue, &command, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
+    MusicWorkCommand command = {MUSIC_WORK_REFRESH, MUSIC_COMMAND_STOP};
+    if (xQueueSend(music_work_queue, &command, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
         portENTER_CRITICAL(&g_music_storage_mux);
         g_music_catalog_refresh_pending = false;
         portEXIT_CRITICAL(&g_music_storage_mux);

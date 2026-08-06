@@ -69,13 +69,18 @@ The page does not support file uploads, deletion, or formatting.
 
 Audio builds with the sound player enabled include a **Music Library** page. It lists
 the device's CD: up to 32 MP3 files found under `/media`, sorted in a stable
-order. Use **Upload** to add a new MP3 and **Delete** to remove a listed file.
+order. When more files exist, the page shows the first 32 and an overflow
+warning; delete a listed file and the catalog refreshes to reveal the next one.
+Use **Upload** to add a new MP3 and **Delete** to remove a listed file.
 Nested folders are supported. The page is for library management only and does
 not contain playback, selection, reordering, refresh, or seeking controls.
 
 Upload and delete are unavailable while Music or an MP3 Alert is active. Tone
 Alerts do not block library management. After a successful upload or delete,
-the list refreshes automatically.
+the list refreshes automatically. Upload validation scans the complete file,
+so truncated or corrupt MP3 streams are rejected before they reach the library.
+Large uploads show a validation step before they appear in the list; keep the
+page open until validation and the catalog refresh complete.
 
 ---
 

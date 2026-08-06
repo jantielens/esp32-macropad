@@ -146,6 +146,16 @@ echo "=== Running unit tests: music transport ==="
 ./tests/bin/test_music_transport
 echo
 
+echo "=== Building unit tests: music command ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_music_command.cpp src/app/music_command.cpp \
+    -o tests/bin/test_music_command
+
+echo "=== Running unit tests: music command ==="
+./tests/bin/test_music_command
+echo
+
 echo "=== Building unit tests: music catalog ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I tests -I src/app \

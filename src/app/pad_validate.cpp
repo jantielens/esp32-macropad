@@ -15,6 +15,7 @@
 #include "widgets/widget_registry.h"
 #include "binding_template.h"
 #include "action_registry.h"
+#include "music_command.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -101,6 +102,17 @@ static const char* validate_exact_binding_token(const char* value) {
 // Validate action-specific authoring contracts. Other action types are a no-op.
 static const char* validate_action(JsonObjectConst action) {
     const char* type = action["type"] | "";
+    if (strcmp(type, ACTION_TYPE_MUSIC) == 0) {
+#if HAS_SOUND_PLAYER
+        if (!action.containsKey("music_command")) return "music missing music_command";
+        if (!action["music_command"].is<const char*>()) return "music_command must be a string";
+        MusicCommand command;
+        return music_command_parse(action["music_command"].as<const char*>(), &command)
+            ? nullptr : "music_command must be play_pause, next, previous, or stop";
+#else
+        return "music is unavailable on this board";
+#endif
+    }
     if (strcmp(type, ACTION_TYPE_CYCLE_PAD) == 0) {
         if (action.containsKey("direction")) {
             if (!action["direction"].is<const char*>()) {
@@ -184,7 +196,7 @@ static bool action_type_known(const char* type) {
     return action_type_find(type) != nullptr;
 }
 
-static const char* validate_action_array(JsonArrayConst arr, bool require_known_type = false) {
+static const char* validate_action_array(JsonArrayConst arr, bool require_known_type = true) {
     if (arr.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3)";
     for (JsonObjectConst a : arr) {
         const char* t = a["type"] | "";

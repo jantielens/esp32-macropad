@@ -10,36 +10,41 @@ enum MusicCatalogResult : uint8_t {
     MUSIC_CATALOG_OK,
     MUSIC_CATALOG_UNAVAILABLE,
     MUSIC_CATALOG_INVALID_PATH,
-    MUSIC_CATALOG_OVERFLOW,
+    MUSIC_CATALOG_IO_ERROR,
+    MUSIC_CATALOG_OUT_OF_MEMORY,
 };
 
 struct MusicCatalogSnapshot {
     uint8_t count;
     bool available;
+    bool overflow;
+    uint16_t total_found;
+    uint16_t skipped;
     char paths[MUSIC_TRACK_LIMIT][MUSIC_PATH_MAX_LEN];
 };
 
+// Builds one catalog directly in caller-owned storage. It intentionally owns
+// no MusicCatalogSnapshot so an audio task never carries catalog-sized stack
+// frames. Paths remain sorted while being added; after the limit, the builder
+// keeps the deterministic lexicographically smallest published paths.
 class MusicCatalog {
 public:
-    MusicCatalog();
-
-    void begin();
+    void begin(MusicCatalogSnapshot* target);
     MusicCatalogResult add(const char* path);
+    void skip();
     MusicCatalogResult publish();
     void fail(MusicCatalogResult result);
 
-    const MusicCatalogSnapshot& snapshot() const { return snapshot_; }
+    const MusicCatalogSnapshot& snapshot() const { return *target_; }
     MusicCatalogResult result() const { return result_; }
-    bool contains(const char* path) const;
 
     static bool is_canonical_path(const char* path);
 
 private:
-    MusicCatalogSnapshot candidate_;
-    MusicCatalogSnapshot snapshot_;
+    MusicCatalogSnapshot* target_ = nullptr;
     MusicCatalogResult result_;
 };
 
-// Rebuild the complete published snapshot from the selected Storage backend.
-// Returns false without publishing a partial catalog on any traversal failure.
-bool music_catalog_discover(MusicCatalog* catalog);
+// Rebuild one caller-owned snapshot from the selected Storage backend. The
+// caller decides whether a failed scan replaces its active publication.
+bool music_catalog_discover(MusicCatalog* catalog, MusicCatalogSnapshot* target);

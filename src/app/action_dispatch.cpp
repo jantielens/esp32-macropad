@@ -264,7 +264,12 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_MUSIC) == 0) {
     #if HAS_SOUND_PLAYER
-        audio_music_command(act.payload.music.music_command);
+        MusicCommand command;
+        if (!music_command_parse(act.payload.music.music_command, &command)) {
+            LOGW(TAG, "%s music: invalid command", label);
+        } else if (audio_music_command(command) != AUDIO_MUSIC_SUBMIT_QUEUED) {
+            LOGW(TAG, "%s music: audio worker busy", label);
+        }
 #else
         LOGW(TAG, "%s music: not compiled", label);
 #endif

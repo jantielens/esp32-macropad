@@ -15,7 +15,7 @@
     var file = document.getElementById('music-upload-file');
     var upload = document.getElementById('music-upload-btn');
     if (file) file.disabled = value;
-    if (upload) upload.disabled = value || catalog.count >= catalog.limit;
+    if (upload) upload.disabled = value;
     document.querySelectorAll('#music-track-list button').forEach(function (button) {
       button.disabled = value;
     });
@@ -35,8 +35,12 @@
 
     list.innerHTML = '';
     var files = Array.isArray(catalog.files) ? catalog.files : [];
-    setStatus(files.length ? catalog.count + ' of ' + catalog.limit + ' music files.' :
-      'No music files found. ' + catalog.count + ' of ' + catalog.limit + ' used.');
+    var summary = files.length ? catalog.count + ' of ' + catalog.limit + ' music files.' :
+      'No music files found.';
+    if (catalog.overflow) summary += ' Showing ' + catalog.count + ' of ' + catalog.total_found + ' discovered files.';
+    if (catalog.stale) summary += ' The displayed catalog is stale after a refresh failure.';
+    if (catalog.skipped) summary += ' Skipped ' + catalog.skipped + ' invalid MP3 path(s).';
+    setStatus(summary);
     files.forEach(function (path) {
       var row = document.createElement('div');
       row.className = 'list-group-item d-flex justify-content-between align-items-center';
@@ -104,13 +108,32 @@
       .then(function (response) {
         if (!response.ok) return errorMessage(response).then(function (message) { throw new Error(message); });
         input.value = '';
-        return loadCatalog();
+        setStatus('Validating ' + file.name + '...');
+        return waitForUpload();
       })
       .catch(function (error) {
         setStatus(error.message);
       })
       .finally(function () {
         setBusy(false);
+      });
+  }
+
+  function waitForUpload() {
+    return fetch('/api/music/upload/status')
+      .then(function (response) {
+        if (!response.ok) return errorMessage(response).then(function (message) { throw new Error(message); });
+        return response.json();
+      })
+      .then(function (status) {
+        if (status.in_progress) {
+          setStatus(status.state === 'refreshing' ? 'Refreshing Music Library...' : 'Validating MP3...');
+          return new Promise(function (resolve) {
+            setTimeout(resolve, 500);
+          }).then(waitForUpload);
+        }
+        if (status.state === 'error') throw new Error(status.error || 'Music upload failed');
+        return loadCatalog();
       });
   }
 

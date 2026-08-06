@@ -66,7 +66,9 @@ static void emit_builtin_action_fields(JsonObject acts) {
     add("screen",     "target (screen id)");
     add("mqtt",       "topic, payload");
     add("key",        "sequence (key DSL)");
-    add("music",      "music_command");
+#if HAS_SOUND_PLAYER
+    add("music",      "music_command (play_pause|next|previous|stop)");
+#endif
     add("volume",     "volume_mode (set|adjust), volume_value");
     add("brightness", "brightness_mode (set|adjust), brightness_value");
     add("cycle_pad", "direction (next|previous), wrap (boolean, default true), excluded_pads (optional comma-separated 1-based pad numbers)");

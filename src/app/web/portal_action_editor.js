@@ -28,7 +28,9 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="mqtt">MQTT Publish</option>';
     h += '<option value="key">Send BLE Keys</option>';
     h += '<option value="ble_pair">Start BLE Pairing</option>';
-    h += '<option value="music">Music</option>';
+    if (typeof deviceInfoCache === 'undefined' || !deviceInfoCache || deviceInfoCache.has_sound_player === true) {
+        h += '<option value="music">Music</option>';
+    }
     h += '<option value="sound_alert">Sound Alert</option>';
     h += '<option value="timer">Timer Control</option>';
     h += '<option value="notify">Show Notification</option>';

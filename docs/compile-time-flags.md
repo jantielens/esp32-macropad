@@ -127,7 +127,7 @@ Total flags: 252
 ### Limits & Tuning
 
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
-- **AUDIO_TASK_STACK_SIZE** default: `24576` — Audio worker stack size in bytes.
+- **AUDIO_TASK_STACK_SIZE** default: `36864` — Audio worker stack size in bytes.
 - **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 - **HA_HISTORY_MIN_SLOT_SECS** default: `300` — Shortest sparkline slot duration (seconds) that Home Assistant history can fill.
@@ -807,8 +807,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/components/web_portal_music.cpp
   - src/app/ha_discovery.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_audio.cpp
   - src/app/music_binding.cpp
+  - src/app/pad_validate.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
   - src/app/sound_player.cpp
