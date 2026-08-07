@@ -12,6 +12,27 @@
 #include <vector>
 #include <algorithm>
 
+static std::vector<uint8_t> s_saved_body;
+static int s_free_count = 0;
+
+static bool save_body_ok(const uint8_t* data, size_t len) {
+    s_saved_body.assign(data, data + len);
+    return true;
+}
+
+static bool save_body_fail(const uint8_t*, size_t) {
+    return false;
+}
+
+static void* alloc_fail(size_t) {
+    return nullptr;
+}
+
+static void counted_free(void* ptr) {
+    s_free_count++;
+    free(ptr);
+}
+
 // ---- test_add_and_find ----
 static void test_add_and_find() {
     printf("  test_add_and_find...");
@@ -324,6 +345,94 @@ static void test_custom_actions() {
     printf(" PASS\n");
 }
 
+static void test_save_body_single_chunk() {
+    printf("  test_save_body_single_chunk...");
+    AsyncWebServerRequest request;
+    uint8_t body[] = {'{', '}', '\n'};
+    s_saved_body.clear();
+    component_handle_save_body(&request, body, sizeof(body), 0, sizeof(body),
+                               save_body_ok);
+    assert(request.response_code == 200);
+    assert(s_saved_body == std::vector<uint8_t>(body, body + sizeof(body)));
+    assert(request._tempObject == nullptr);
+    printf(" PASS\n");
+}
+
+static void test_save_body_multiple_chunks() {
+    printf("  test_save_body_multiple_chunks...");
+    AsyncWebServerRequest request;
+    uint8_t first[] = {'a', 'b'};
+    uint8_t second[] = {'c', 'd', 'e'};
+    s_saved_body.clear();
+    component_handle_save_body(&request, first, sizeof(first), 0, 5, save_body_ok);
+    assert(request.response_code == 0);
+    assert(request._tempObject != nullptr);
+    component_handle_save_body(&request, second, sizeof(second), 2, 5, save_body_ok);
+    assert(request.response_code == 200);
+    assert(s_saved_body == std::vector<uint8_t>({'a', 'b', 'c', 'd', 'e'}));
+    assert(request._tempObject == nullptr);
+    printf(" PASS\n");
+}
+
+static void test_save_body_rejects_overlap_or_gap() {
+    printf("  test_save_body_rejects_overlap_or_gap...");
+    uint8_t first[] = {'a', 'b'};
+    uint8_t second[] = {'c', 'd'};
+
+    AsyncWebServerRequest overlap_request;
+    component_handle_save_body(&overlap_request, first, sizeof(first), 0, 4,
+                               save_body_ok);
+    component_handle_save_body(&overlap_request, second, sizeof(second), 1, 4,
+                               save_body_ok);
+    assert(overlap_request.response_code == 400);
+    assert(overlap_request._tempObject == nullptr);
+
+    AsyncWebServerRequest gap_request;
+    component_handle_save_body(&gap_request, first, sizeof(first), 0, 5,
+                               save_body_ok);
+    component_handle_save_body(&gap_request, second, sizeof(second), 3, 5,
+                               save_body_ok);
+    assert(gap_request.response_code == 400);
+    assert(gap_request._tempObject == nullptr);
+    printf(" PASS\n");
+}
+
+static void test_save_body_over_limit() {
+    printf("  test_save_body_over_limit...");
+    AsyncWebServerRequest request;
+    uint8_t byte = 0;
+    component_handle_save_body(&request, &byte, 1, 0, 4097, save_body_ok);
+    assert(request.response_code == 413);
+    assert(request._tempObject == nullptr);
+    printf(" PASS\n");
+}
+
+static void test_save_body_allocation_failure() {
+    printf("  test_save_body_allocation_failure...");
+    AsyncWebServerRequest request;
+    uint8_t byte = 0;
+    component_registry_set_body_allocator_for_test(alloc_fail, nullptr);
+    component_handle_save_body(&request, &byte, 1, 0, 1, save_body_ok);
+    component_registry_set_body_allocator_for_test(nullptr, nullptr);
+    assert(request.response_code == 500);
+    assert(request._tempObject == nullptr);
+    printf(" PASS\n");
+}
+
+static void test_save_body_saver_failure_frees() {
+    printf("  test_save_body_saver_failure_frees...");
+    AsyncWebServerRequest request;
+    uint8_t byte = 0;
+    s_free_count = 0;
+    component_registry_set_body_allocator_for_test(malloc, counted_free);
+    component_handle_save_body(&request, &byte, 1, 0, 1, save_body_fail);
+    component_registry_set_body_allocator_for_test(nullptr, nullptr);
+    assert(request.response_code == 500);
+    assert(request._tempObject == nullptr);
+    assert(s_free_count == 1);
+    printf(" PASS\n");
+}
+
 // ---- main ----
 int main() {
     printf("=== component_registry tests ===\n");
@@ -335,6 +444,12 @@ int main() {
     test_nav_order();
     test_get_by_index();
     test_custom_actions();
+    test_save_body_single_chunk();
+    test_save_body_multiple_chunks();
+    test_save_body_rejects_overlap_or_gap();
+    test_save_body_over_limit();
+    test_save_body_allocation_failure();
+    test_save_body_saver_failure_frees();
 
     printf("=== All component_registry tests passed ===\n");
     return 0;

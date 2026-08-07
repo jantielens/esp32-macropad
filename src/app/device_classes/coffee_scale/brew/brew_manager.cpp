@@ -75,7 +75,7 @@ static BrewCapture s_captures[BREW_CAPTURE_MAX];
 static uint8_t     s_capture_count = 0;
 
 // Deferred save — brew_stop() runs on the LVGL task whose stack lives in
-// PSRAM.  Flash I/O (LittleFS + NVS) disables the cache, making a PSRAM
+// PSRAM.  Persistent filesystem and NVS I/O can disable the flash cache, making a PSRAM
 // stack inaccessible and triggering an assert.  We set a flag here and
 // perform the actual save in brew_tick(), which runs on the main Arduino
 // loop task (internal-RAM stack, flash-safe).

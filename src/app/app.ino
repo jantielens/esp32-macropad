@@ -20,6 +20,9 @@
 #include "duty_cycle.h"
 #include "hw_buttons.h"
 #include "hw_button_config.h"
+#if HAS_DISPLAY || HAS_BUTTON
+#include "action_dispatch.h"
+#endif
 #if HAS_BLE
 #include "ble_telemetry.h"
 #endif
@@ -42,10 +45,10 @@
 #include "net_binding.h"
 #include "time_binding.h"
 #include "timer_binding.h"
+#include "music_binding.h"
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
-#include "action_dispatch.h"
 #include "message_bubble.h"
 #include "visual_alert.h"
 #include "swipe_config.h"
@@ -67,9 +70,14 @@
 #include "i2c_bus.h"
 #include "sd_probe.h"
 #include "sd_storage.h"
+#include "storage.h"
 
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
+
+#ifdef LOOP_TASK_STACK_SIZE
+SET_LOOP_TASK_STACK_SIZE(LOOP_TASK_STACK_SIZE);
+#endif
 
 #if HAS_TOUCH
 #include "touch_manager.h"
@@ -153,11 +161,6 @@ void setup()
 	WiFi.onEvent(onWiFiGotIP, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 	WiFi.onEvent(onWiFiDisconnected, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
-	// Start WiFi hardware as early as possible.
-	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
-	// which can run in the background while display, config, and pads initialize.
-	wifi_manager_early_init();
-
 	LOGI("SYS", "Boot");
 	LOGI("SYS", "Firmware: v%s", FIRMWARE_VERSION);
 	LOGI("SYS", "Chip: %s (Rev %d)", ESP.getChipModel(), ESP.getChipRevision());
@@ -218,17 +221,22 @@ void setup()
 	#if USE_SD_STORAGE
 	// Mount SD card now that the splash screen is up — on failure the halt
 	// message below is visible to the user. There is no fallback storage.
-	if (!sd_storage_mount()) {
+	if (storage_boot_should_halt(sd_storage_mount())) {
 		#if HAS_DISPLAY
-		display_manager_set_splash_status("SD CARD MISSING");
+		display_manager_set_splash_status("SD card required. Correct or replace it, then reboot.");
 		#endif
-		LOGE("SYS", "SD card mount failed — halting boot");
+		LOGE("SYS", "SD card required; startup cannot continue. Check the card, filesystem, wiring, and power, then reboot.");
 		while (true) {
 			delay(1000);
 			yield();
 		}
 	}
 	#endif
+
+	// Start WiFi hardware after required storage is known to be available.
+	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
+	// which can run in the background while touch, config, and pads initialize.
+	wifi_manager_early_init();
 
 	#if HAS_TOUCH
 	// Initialize Wire bus mutex before touch and audio (both may share bus 0)
@@ -267,6 +275,12 @@ void setup()
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
 		device_config.magic = CONFIG_MAGIC;
 	}
+
+	#if HAS_SOUND_PLAYER
+	// The audio worker discovers Music files as soon as it starts, so mount the
+	// selected Storage backend before initializing audio.
+	storage_mount();
+	#endif
 
 	// Initialize audio subsystem (must be after touch_manager_init since they
 	// share the I2C bus — Wire must already be started, and after config load
@@ -474,6 +488,7 @@ void setup()
 	expr_binding_init();
 	pad_binding_init();
 	timer_binding_init();
+	music_binding_init();
 	list_binding_init();
 	net_binding_init();
 	timer_config_init();
@@ -552,7 +567,13 @@ void loop()
 
 	#if HAS_DISPLAY
 	screen_saver_manager_loop();
+	#endif
+
+	#if HAS_DISPLAY || HAS_BUTTON
 	action_dispatch_loop();
+	#endif
+
+	#if HAS_DISPLAY
 	message_bubble_loop();
 	visual_alert_loop();
 	#endif
@@ -613,7 +634,6 @@ void loop()
 				(unsigned)int_free,
 				(unsigned)psram_free);
 		}
-
 		last_heartbeat_ms = current_ms;
 	}
 

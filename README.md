@@ -10,9 +10,10 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Up to 16 pads** with configurable grids (up to 8×8, board-dependent), per-pad backgrounds, and multi-cell button spans
 - **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols) with configurable icon position, background images, icon + center label co-display, and a per-label style DSL (font family, size, alignment, overflow)
 - **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal, up to 4 bars with per-bar captions and gauge-style scale options), sparkline (multi-line with reference markers), table, list (scrollable item picker), **rocker** (split-button up/down or left/right), and **numeric rocker** (4-zone fine/coarse adjustment)
+- **Home Assistant history for sparklines** — backfill long-term Recorder statistics after reboot, with wall-clock alignment and live readings taking precedence
 - **Smooth animations** — gauges, bars, and needles ease into new values instead of jumping
 - **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
-- **Building blocks** — drop pre-built button groups (countdown timer, system info) into any pad with a single click
+- **Building blocks** — drop pre-built button groups such as System Info into any pad with a single click
 - **Custom fonts** — DSEG7 (7-segment), Bebas, and Doto pixel font, in addition to the default Montserrat
 - **Screen saver** with backlight fade, pixel-shift burn-in prevention, panel hardware sleep, LVGL throttle, and per-pad wake redirect
 
@@ -36,14 +37,15 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Hardware buttons** — map a board's physical GPIO buttons to tap and long-press action chains (works on headless boards too)
 - **Boot actions** — run a sequence of actions automatically when the device starts
 - **MQTT triggers** — dispatch action chains when a matching MQTT message arrives, no button or screen required (works on headless boards with a physical button too)
-- **On-device timers** — 3 independent count-up / countdown timers with expire actions and live `[timer:N]` bindings
+- **On-device timers** — 3 independent timers whose Start and Toggle actions carry their stopwatch or countdown mode and duration, with per-slot expire actions and live `[timer:N]` bindings
 - **Notification bubble** — display a floating message via a button action or remotely from Home Assistant
 
 ### Audio & feedback
 - **Beeps & sound files** — pattern DSL (`500:40 60 800:40`) for short cues and MP3 file playback (≤512 KB) for longer sounds
+- **MP3 player** — organize an MP3 library on the device and use it for music playback
 - **Audio feedback** for taps, long-press, and timer expiry, with per-button or per-action overrides
 - **Volume & brightness actions** — adjust device volume or backlight from any button
-- **Hardware-accelerated audio** on ESP32-P4 boards via the ES8311 codec
+- **Hardware-accelerated audio** on supported ESP32-P4 boards and jc3636w518
 
 ### Smart home & connectivity
 - **MQTT with Home Assistant auto-discovery** — registers as a full HA device with sensors, buttons, siren, volume, screen selector, and notification entities (no YAML needed)
@@ -61,6 +63,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Browser-based setup** — Wi-Fi, MQTT, security, and all device settings, no tools needed
 - **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status
 - **Optional HTTP Basic Auth** for portal access
+- **SD card support** — use a FAT32 MicroSD card for pad configurations, icons, sounds, and indexed data on supported boards
 
 ## 💡 What Can You Build?
 
@@ -68,6 +71,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Energy monitor dashboard** — real-time solar, battery, and grid power visualization
 - **Battery-powered e-paper dashboard** — rotate through one or more images, apply hourly refresh windows, refresh, and go back to sleep
 - **Media controller** — play, pause, skip, volume for your media players
+- **MP3 music player** — store a music library on the device and play it through supported audio hardware
 - **Bluetooth macro keyboard** — launch apps, paste snippets, control presentations, or trigger shortcuts on your PC or Mac
 - **Smart home remote** — replace a drawer full of remotes with one touch screen
 - **Status display** — show weather, time, sensor readings, or system stats
@@ -90,6 +94,19 @@ ESP32 Macropad runs on these ESP32 development boards:
 | **Seeed reTerminal E1003** | ESP32-S3 | 10.3" 16-level grayscale e-paper | 1404 × 1872 | Portrait |
 
 Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are the current non-touch e-paper targets.
+
+### SD Primary Storage Variants
+
+The `jc1060p470c-sd`, `jc3636w518-sd`, and `jc4880p433-sd` targets store
+persistent files on the board's MicroSD card rather than internal LittleFS.
+Format the card as FAT32 before first use. The device stops at boot when the
+card is absent or cannot be mounted, so it never falls back to internal flash.
+
+```bash
+./build.sh jc1060p470c-sd
+./build.sh jc3636w518-sd
+./build.sh jc4880p433-sd
+```
 
 ### Device Classes
 

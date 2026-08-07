@@ -9,7 +9,7 @@
 #include <stdbool.h>
 
 // ============================================================================
-// Brew Log — LittleFS storage for brew reports
+// Brew Log — persistent storage for brew reports
 // ============================================================================
 // Files stored at /brews/NNNN.json (zero-padded 4-digit ID).
 // Next ID tracked in NVS via Preferences (uint16_t).
@@ -38,7 +38,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
 // Count brews on disk.
 uint16_t brew_log_count();
 
-// Import a raw brew JSON blob (from export). Assigns a new ID, writes to LittleFS.
+// Import a raw brew JSON blob (from export). Assigns a new ID and writes it to persistent storage.
 // Returns the assigned brew ID, or 0 on failure.
 uint16_t brew_log_import_raw(const char* json, size_t json_len);
 

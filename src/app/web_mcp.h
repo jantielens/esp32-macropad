@@ -43,6 +43,9 @@ enum McpControlResult {
     MCP_CONTROL_OK      = LOOP_BRIDGE_OK,       // exec ran; *out_ok / out_msg populated
     MCP_CONTROL_BUSY    = LOOP_BRIDGE_BUSY,     // another job is in flight
     MCP_CONTROL_TIMEOUT = LOOP_BRIDGE_TIMEOUT,  // exec did not complete within timeout
+    MCP_CONTROL_INVALID = LOOP_BRIDGE_INVALID,
+    MCP_CONTROL_UNAVAILABLE = LOOP_BRIDGE_UNAVAILABLE,
+    MCP_CONTROL_TOO_LARGE = LOOP_BRIDGE_TOO_LARGE,
 };
 
 #define MCP_CONTROL_CTX_BYTES LOOP_BRIDGE_CTX_BYTES

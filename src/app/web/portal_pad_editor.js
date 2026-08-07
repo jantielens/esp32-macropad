@@ -23,6 +23,7 @@ const padState = {
     btnClipboard: null,  // Copied button settings (position-independent)
     padClipboard: null,  // Copied pad settings { cols, rows, buttons, name }
     bindings: [],        // Page-level named bindings [{name, value}]
+    padActions: [],      // Full-screen pad tap actions
     colorCache: {},      // page → hex[] — colors from visited pads
     buttonDefaults: {},  // Device-level button defaults (loaded from /api/button-defaults)
     templatePad: -1,     // Template pad index (-1 = none)
@@ -75,6 +76,24 @@ function padInit() {
         aeContainer.innerHTML = tapHtml +
             '<hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">' +
             lpHtml;
+    }
+
+    const padActionContainer = document.getElementById('pad-level-action-editors');
+    if (padActionContainer) {
+        var padActionHtml = '';
+        for (var pai = 0; pai < MAX_ACTIONS; pai++) {
+            var padActionPfx = 'pad-level-action-' + pai;
+            var padActionLabel = pai === 0 ? 'Tap Action' : 'Tap Action ' + (pai + 1);
+            var padActionHidden = pai > 0 ? ' style="display:none"' : '';
+            padActionHtml += '<div id="' + padActionPfx + '-wrap"' + padActionHidden + '>';
+            if (pai > 0) padActionHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><span></span><a class="action-remove-link" onclick="padRemoveLevelAction(' + pai + ')">&times; Remove</a></div>';
+            padActionHtml += actionEditorHTML(padActionPfx, padActionLabel, { showBleHint: true, showKeyHelp: true });
+            padActionHtml += '</div>';
+        }
+        padActionHtml += '<a id="pad-add-level-action" class="action-add-link" onclick="padAddLevelAction()">+ Add tap action</a>';
+        padActionContainer.innerHTML = padActionHtml;
+        padActionContainer.addEventListener('input', padMarkDirty);
+        padActionContainer.addEventListener('change', padMarkDirty);
     }
 
     // Generate numeric rocker adjustment action editor
@@ -219,6 +238,62 @@ function padInit() {
     waitForInfo();
 }
 
+function padUpdateLevelActionAddLink() {
+    var visibleCount = 0;
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
+        if (wrap && wrap.style.display !== 'none') visibleCount++;
+    }
+    var link = document.getElementById('pad-add-level-action');
+    if (link) link.style.display = visibleCount >= MAX_ACTIONS ? 'none' : '';
+}
+
+function padAddLevelAction() {
+    for (var i = 1; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
+        if (wrap && wrap.style.display === 'none') {
+            wrap.style.display = '';
+            padMarkDirty();
+            break;
+        }
+    }
+    padUpdateLevelActionAddLink();
+}
+
+function padRemoveLevelAction(index) {
+    var wrap = document.getElementById('pad-level-action-' + index + '-wrap');
+    if (wrap) {
+        wrap.style.display = 'none';
+        actionEditorLoad('pad-level-action-' + index, null);
+    }
+    padMarkDirty();
+    padUpdateLevelActionAddLink();
+}
+
+function padLoadLevelActions(actions) {
+    padState.padActions = (actions || []).filter(function(action) {
+        return action && typeof action === 'object' && action.type && action.type !== 'none';
+    }).slice(0, MAX_ACTIONS);
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
+        if (wrap) wrap.style.display = i === 0 || i < padState.padActions.length ? '' : 'none';
+        actionEditorLoad('pad-level-action-' + i, padState.padActions[i] || null);
+    }
+    padUpdateLevelActionAddLink();
+}
+
+function padBuildLevelActions() {
+    var actions = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) {
+        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
+        if (!wrap || wrap.style.display === 'none') continue;
+        var action = actionEditorBuild('pad-level-action-' + i);
+        if (action && action.type && action.type !== 'none') actions.push(action);
+    }
+    padState.padActions = actions;
+    return actions;
+}
+
 function padPopulateGridDropdowns() {
     const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
     const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
@@ -297,6 +372,7 @@ function padPopulateScreenDropdown() {
     for (var i = 0; i < MAX_ACTIONS; i++) {
         prefixes.push('pad-edit-action-' + i);
         prefixes.push('pad-edit-lp-action-' + i);
+        prefixes.push('pad-level-action-' + i);
     }
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
@@ -334,6 +410,7 @@ function padPopulateSoundDropdown() {
     for (var i = 0; i < MAX_ACTIONS; i++) {
         prefixes.push('pad-edit-action-' + i);
         prefixes.push('pad-edit-lp-action-' + i);
+        prefixes.push('pad-level-action-' + i);
     }
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
@@ -457,6 +534,7 @@ async function padLoadPage(page) {
     padState.rawJson = null;
     padState.buttons = [];
     padState.bindings = [];
+    padState.padActions = [];
     padState.templatePad = -1;
     padState.templateButtons = [];
     padClearDirty();
@@ -474,6 +552,7 @@ async function padLoadPage(page) {
             padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
             padSetBindableColor('pad-edit-page-bg-color', '#000000');
             padState.bindings = [];
+            padLoadLevelActions([]);
             padState.templatePad = -1;
             padState.templateButtons = [];
             padRenderBindings();
@@ -501,6 +580,7 @@ async function padLoadPage(page) {
         // Load pad bindings
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
+        padLoadLevelActions(json.pad_actions);
 
         // Load template pad setting
         padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null) ? json.template_pad : -1;
@@ -528,12 +608,25 @@ async function padLoadPage(page) {
     }
 }
 
-async function padSavePage() {
+function padCloneJson(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function padBuildSaveContext() {
+    const snapshot = {
+        page: padState.page,
+        cols: padState.cols,
+        rows: padState.rows,
+        rawJson: padCloneJson(padState.rawJson || {}),
+        buttons: padCloneJson(padState.buttons || []),
+        bindings: padCloneJson(padState.bindings || []),
+    };
+
     // Merge-on-save: start with rawJson as base, overlay our changes
-    const payload = padState.rawJson ? Object.assign({}, padState.rawJson) : {};
+    const payload = snapshot.rawJson;
     payload.layout = payload.layout || 'grid';
-    payload.cols = padState.cols;
-    payload.rows = padState.rows;
+    payload.cols = snapshot.cols;
+    payload.rows = snapshot.rows;
     const padName = document.getElementById('pad-name').value.trim();
     if (padName) payload.name = padName;
     else delete payload.name;
@@ -552,25 +645,27 @@ async function padSavePage() {
     delete payload.button_defaults;
 
     // Pad bindings → dict (skip entries with invalid names)
-    if (padState.bindings && padState.bindings.length > 0) {
-        var badNames = padState.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
+    if (snapshot.bindings.length > 0) {
+        var badNames = snapshot.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
         if (badNames.length > 0) {
-            alert('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.');
-            return;
+            throw new Error('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.');
         }
-        var bd = padBindingsToDict(padState.bindings);
+        var bd = padBindingsToDict(snapshot.bindings);
         if (bd) payload.bindings = bd;
         else delete payload.bindings;
     } else {
         delete payload.bindings;
     }
 
+    var padActions = padCloneJson(padBuildLevelActions());
+    if (padActions.length > 0) payload.pad_actions = padActions;
+    else delete payload.pad_actions;
+
     // Validate pad-level binding values before save
     if (typeof bindingValidatePadBindings === 'function') {
         var bvPad = bindingValidatePadBindings();
         if (!bvPad.valid) {
-            showMessage(bvPad.count + ' pad binding error' + (bvPad.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
-            return;
+            throw new Error(bvPad.count + ' pad binding error' + (bvPad.count > 1 ? 's' : '') + ' — check highlighted fields');
         }
     }
 
@@ -578,8 +673,7 @@ async function padSavePage() {
     if (typeof bindingValidateDefaults === 'function') {
         var bvDef = bindingValidateDefaults();
         if (!bvDef.valid) {
-            showMessage(bvDef.count + ' button defaults error' + (bvDef.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
-            return;
+            throw new Error(bvDef.count + ' button defaults error' + (bvDef.count > 1 ? 's' : '') + ' — check highlighted fields');
         }
     }
 
@@ -591,7 +685,7 @@ async function padSavePage() {
         delete payload.template_pad;
     }
 
-    payload.buttons = padState.buttons.map(b => Object.assign({}, b));
+    payload.buttons = snapshot.buttons;
 
     // Convert color ints to hex strings for JSON
     payload.buttons.forEach(b => padColorsToHex(b));
@@ -599,60 +693,85 @@ async function padSavePage() {
     // On boards with DISPLAY_BLANK_ON_SAVE, heavy PSRAM I/O during icon
     // upload causes DMA bus contention → cyan flashes on MIPI-DSI panels.
     // Blank the backlight for the entire save sequence and restore after.
-    const blankOnSave = deviceInfoCache && deviceInfoCache.display_blank_on_save;
+    return {
+        page: snapshot.page,
+        cols: snapshot.cols,
+        rows: snapshot.rows,
+        buttons: snapshot.buttons,
+        name: padName,
+        body: JSON.stringify(payload),
+        blankOnSave: Boolean(deviceInfoCache && deviceInfoCache.display_blank_on_save),
+    };
+}
+
+async function padSetSaveBrightness(brightness) {
+    const response = await fetch('/api/component/display/brightness', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brightness: brightness }),
+    });
+    if (!response.ok) throw new Error('Failed to set display brightness: HTTP ' + response.status);
+}
+
+async function padPersistPage(context) {
     let savedBrightness = 0;
+    let brightnessBlanked = false;
 
     try {
-        if (blankOnSave) {
+        if (context.blankOnSave) {
             const cfgResp = await fetch('/api/config');
-            if (cfgResp.ok) {
-                const cfg = await cfgResp.json();
-                savedBrightness = cfg.backlight_brightness ?? 80;
-            }
-            await fetch('/api/component/display/brightness', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ brightness: 0 }),
-            });
+            if (!cfgResp.ok) throw new Error('Failed to read display brightness: HTTP ' + cfgResp.status);
+            const cfg = await cfgResp.json();
+            savedBrightness = cfg.backlight_brightness ?? 80;
+            await padSetSaveBrightness(0);
+            brightnessBlanked = true;
         }
 
-        await padUploadPageIcons();
+        await padUploadPageIcons(context);
 
-        const resp = await fetch('/api/pad?page=' + padState.page, {
+        const resp = await fetch('/api/pad?page=' + context.page, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: context.body,
         });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
 
-        if (blankOnSave) {
+        if (context.blankOnSave) {
             // Wait for LVGL to rebuild tiles and render into the framebuffer
             await new Promise(r => setTimeout(r, 500));
         }
+    } finally {
+        if (brightnessBlanked) {
+            await padSetSaveBrightness(savedBrightness);
+        }
+    }
+}
 
-        showMessage('Pad ' + (padState.page + 1) + ' saved', 'success');
+async function padSavePage(options) {
+    const bulk = Boolean(options && options.bulk);
+    try {
+        const context = padBuildSaveContext();
+        await padPersistPage(context);
+
+        showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         padClearDirty();
-        padUpdateDropdownLabel(padState.page, document.getElementById('pad-name').value.trim());
+        padUpdateDropdownLabel(context.page, context.name);
 
-        // Refresh deviceInfoCache so target screen dropdowns pick up new pad names
-        await getDeviceInfo(true);
-
-        // Reload to get canonical version from device
-        padLoadPage(padState.page);
+        if (!bulk) {
+            // Refresh deviceInfoCache so target screen dropdowns pick up new pad names.
+            await getDeviceInfo(true);
+            // Reload to get canonical version from device.
+            await padLoadPage(context.page);
+        }
+        return context;
     } catch (err) {
         console.error('padSavePage error:', err);
+        if (bulk) throw err;
         showMessage('Save failed: ' + err.message, 'error');
-    } finally {
-        if (blankOnSave && savedBrightness > 0) {
-            fetch('/api/component/display/brightness', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ brightness: savedBrightness }),
-            }).catch(() => {});
-        }
+        return null;
     }
 }
 

@@ -184,8 +184,8 @@ Real-time device health monitoring integrated as a header badge with expandable 
 - **Reset Reason**: Why device last restarted
 - **CPU Usage**: Percentage based on IDLE task (nullable when runtime stats unavailable)
 - **Core Temp**: Internal temperature sensor (ESP32-C3/S2/S3/C2/C6/H2)
-- **Internal Heap**: Free/min/largest block + fragmentation
-- **PSRAM**: Free/min/largest block + fragmentation (when present)
+- **Internal Heap**: Free/min/largest block + fragmentation. On MIPI-DSI boards, the largest-block value is sampled at most every 30 seconds.
+- **PSRAM**: Free/minimum values (when present). MIPI-DSI boards intentionally omit the largest-block measurement because a PSRAM heap walk can interrupt framebuffer scan-out.
 - **Flash Usage**: Used firmware space
 - **Filesystem**: FFat presence/mounted/usage (nullable when no partition present)
 - **MQTT**: Enabled/connected/publish age
@@ -256,6 +256,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
   - **Pad selection & naming**: Dropdown for Pad 1–16 with optional custom names (max 31 chars)
   - **Grid preview**: Click any cell to open the button editor dialog
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
+  - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, content padding, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
@@ -419,6 +420,52 @@ or device taking longer to boot.
 
 ## REST API Reference
 
+### Music Library
+
+On sound-player builds, the Music portal component provides authenticated,
+management-only access to the bounded `/media` catalog. It does not expose
+playback or track-selection controls.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/music` | Returns deterministic track entries with path, bounded ID3 metadata, fast duration when available, catalog availability, generation, overflow, skipped-path, and refresh status |
+| `POST` | `/api/music?path=/media/...mp3` | Streams a canonical MP3 to a temporary file, atomically publishes it, and refreshes the catalog before returning `201` |
+| `DELETE` | `/api/music?path=/media/...mp3` | Deletes an exact canonical Music file, including one omitted from an overflowed catalog |
+
+Uploads and deletes return `409` while Music, an MP3 Alert, or another Music
+storage mutation is active. Paths must be canonical `/media` descendants with
+a case-insensitive `.mp3` final extension.
+
+Successful uploads and deletes rebuild the published catalog before the API
+response is sent, so the Music Library immediately returns the updated list.
+The catalog publishes the lexicographically first 32 paths when more tracks
+exist and reports `overflow`, `total_found`, and `skipped`; uploads remain
+available while overflow is present so storage capacity, rather than catalog
+size, is the limit.
+
+`GET /api/music` returns `files` as an array of objects rather than plain path
+strings. Every object contains `path`; `title`, `artist`, `album`, and `track`
+are included only when found in the MP3's leading ID3v2 tag. `duration_s` is a
+whole-second fast duration when available. `duration_estimated` is `true` only
+when duration was derived from the first-frame CBR bitrate; Xing/Info and VBRI
+durations are frame-count based.
+
+```json
+{
+  "files": [
+    {
+      "path": "/media/01-example.mp3",
+      "title": "Example",
+      "artist": "Artist",
+      "duration_s": 213,
+      "duration_estimated": false
+    }
+  ],
+  "count": 1,
+  "limit": 32
+}
+```
+
 All endpoints return JSON responses with proper HTTP status codes.
 
 **Authentication (Optional):**
@@ -517,9 +564,6 @@ Returns real-time device health statistics.
   "cpu_usage": 15,
   "cpu_freq": 160,
   "cpu_temperature": 42,
-  "heap_free": 250000,
-  "heap_min": 240000,
-  "heap_largest": 120000,
   "heap_internal_free": 200000,
   "heap_internal_min": 190000,
   "heap_internal_largest": 110000,
@@ -529,8 +573,6 @@ Returns real-time device health statistics.
   "heap_fragmentation": 5,
   "psram_free": 8388608,
   "psram_min": 8350000,
-  "psram_largest": 8200000,
-  "psram_fragmentation": 2,
   "flash_used": 1048576,
   "flash_total": 3145728,
   "fs_mounted": true,
@@ -553,12 +595,9 @@ Returns real-time device health statistics.
 
   "heap_internal_free_min_window": 195000,
   "heap_internal_free_max_window": 205000,
-  "heap_internal_largest_min_window": 100000,
   "heap_fragmentation_max_window": 8,
   "psram_free_min_window": 8300000,
   "psram_free_max_window": 8388608,
-  "psram_largest_min_window": 8100000,
-  "psram_fragmentation_max_window": 4,
 
   "wifi_rssi": -45,
   "wifi_channel": 6,
@@ -566,6 +605,11 @@ Returns real-time device health statistics.
   "hostname": "esp32-1234"
 }
 ```
+
+On MIPI-DSI boards, `heap_internal_largest`,
+`heap_dma_internal_largest`, and `heap_fragmentation` use timer-cached
+internal-heap measurements that can be up to 30 seconds old. The endpoint does
+not report a PSRAM largest-block value on those boards.
 
 **Notes:**
 - `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
@@ -601,9 +645,16 @@ Returns device-side health history arrays for the portal sparklines.
   "cpu_usage": [12, 14, 18],
   "heap_internal_free": [190000, 189500, 189000],
   "heap_internal_free_min_window": [188000, 188000, 188500],
-  "heap_internal_free_max_window": [195000, 194500, 194000]
+  "heap_internal_free_max_window": [195000, 194500, 194000],
+  "psram_free": [8300000, 8299000, 8298000],
+  "psram_free_min_window": [8298000, 8297000, 8296000],
+  "psram_free_max_window": [8301000, 8300000, 8299000]
 }
 ```
+
+History intentionally excludes largest-free-block measurements. Those require
+an allocator pool walk, which can interrupt continuous MIPI-DSI scan-out.
+`GET /api/health` retains its cached internal largest-block values.
 
 ### Configuration Management
 
@@ -956,6 +1007,64 @@ Switch the active runtime screen (no persistence).
 
 ---
 
+### Storage API
+
+The read-only Storage page uses the generic component API. Both endpoints
+require portal authentication when HTTP Basic Auth is enabled.
+
+#### `GET /api/component/storage/status`
+
+Returns the selected persistent-storage backend and cached usage information.
+
+```json
+{
+  "backend": "littlefs",
+  "mounted": true,
+  "card_type": "not_applicable",
+  "used_bytes": 4096,
+  "total_bytes": 1572864,
+  "free_bytes": 1568768
+}
+```
+
+`backend` is `littlefs` or `sdmmc`. SD card types are `none`, `sd`, `sdhc`, or
+`unknown`; LittleFS reports `not_applicable`.
+
+#### `GET /api/component/storage/list?path=/`
+
+Returns one directory level. `path` must be an absolute, traversal-free path
+no longer than 192 characters. Results contain at most 128 entries; a true
+`truncated` field means additional entries were omitted.
+
+```json
+{
+  "path": "/icons",
+  "entries": [
+    {
+      "name": "home.png",
+      "path": "/icons/home.png",
+      "type": "file",
+      "size": 1420,
+      "modified_at": 1785864960
+    }
+  ],
+  "truncated": false
+}
+```
+
+`type` is `directory` or `file`; `modified_at` is a Unix timestamp or `null`
+when the filesystem does not provide one.
+
+#### `GET /api/component/storage/file?path=/icons/home.png`
+
+Streams one regular file from the selected storage backend. The path uses the
+same absolute, traversal-free validation as the directory list endpoint.
+Directories and missing files return `404`. PNG, JPEG, GIF, WebP, MP3, WAV,
+and Ogg files use their browser-recognized media type; other files use
+`application/octet-stream` so browsers download them.
+
+---
+
 ### MCP Server API
 
 Requires `HAS_MCP` (default on). Off by default; enabled and tokened from the portal's **MCP** card. STA-mode only. See the user-facing [MCP Server Guide](../mcp-guide.md) for client setup.
@@ -995,7 +1104,7 @@ hardware-encoded JPEG; other boards retain the 24-bit BMP default.
 - **Response:** `image/jpeg` for JPEG or `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order).
 - **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV420 subsampling. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
 - **Memory:** Per-request snapshot, conversion, and JPEG buffers are released as soon as the final response chunk is produced. Interrupted responses release any remaining buffers when their response context is destroyed. On ESP32-P4, the lazily initialized JPEG encoder and its synchronization primitive remain allocated after first use.
-- **Thread safety:** Acquires the LVGL mutex with a 1-second timeout and serializes access to the hardware JPEG encoder. Returns `503 Display busy` if the LVGL mutex cannot be acquired.
+- **Thread safety:** The AsyncTCP handler synchronously dispatches capture work through a fixed 64-byte single slot to the LVGL task, which runs it under the existing LVGL mutex. A request that reaches its 3-second deadline keeps the slot occupied until the LVGL task finishes; its captured payload is then reclaimed on that task. Returns `503 Screenshot service busy` for a concurrent capture, `503 Screenshot service unavailable` before display dispatch is ready, and `504 Screenshot capture timed out` when the LVGL task has not completed by the deadline.
 - **Fallback:** If hardware JPEG encoding fails, the endpoint transparently returns BMP with `Content-Type: image/bmp`. Requesting `format=jpg` on a non-P4 board returns `400`.
 
 **Example:**
@@ -1018,6 +1127,32 @@ curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=70' -o s
 - BMP is uncompressed, so BMP files range from ~253 KB (360×360) to ~1.2 MB (1024×600) depending on the board.
 - The portal exposes this endpoint under **Display > Screen Preview**. Opening the fragment does not capture an image; **Capture Preview** and **Refresh Preview** request a fresh framebuffer.
 
+#### `POST /api/screen/tap?x=<x>&y=<y>`
+
+Queues one normal LVGL pointer tap at zero-based active display coordinates. This
+development API requires both `HAS_DISPLAY` and `HAS_TOUCH`, and uses the same
+Basic Auth and CORS policy as the screenshot endpoint.
+
+- **Parameters:** `x` and `y` are strict base-10 integers. A single leading `-`
+  is accepted so shared range validation can reject negative coordinates; `+`,
+  whitespace, decimal values, exponents, and trailing characters are rejected.
+- **Response:** `202` with `{"success":true,"message":"Tap queued"}` when
+  accepted into the one-slot synthetic pointer queue. `400` means malformed or
+  out-of-bounds coordinates, `409` means a tap is already pending or owes LVGL a
+  release, and `503` means the runtime touch/display manager is unavailable.
+- **Semantics:** `202` means queued, not delivered. The active UI can change
+  before LVGL consumes the point, and delivery can wait for physical release or
+  the screen saver to finish waking. The API supports one normal tap only; drag,
+  swipe, long press, multi-touch, completion polling, and screen-bound
+  transactions are excluded.
+
+The portal makes a captured preview interactive only on touch-capable boards. A
+tap maps through the rendered image's contained rectangle, ignores letterboxed
+space, queues the request, then captures one refreshed preview after 500 ms.
+Changing **Current Screen** hides the existing preview until a new manual
+capture, because screenshots are best-effort snapshots rather than screen-bound
+objects.
+
 ---
 
 ### Swipe Actions API
@@ -1039,6 +1174,49 @@ Save swipe action configuration to LittleFS.
 - **Response:** `{"success": true}` on success; JSON error on failure.
 - Actions are applied immediately without reboot.
 
+#### Navigate Pad Sequence action contract
+
+`cycle_pad` uses the same flat `ButtonAction` JSON shape as every other shared
+action surface:
+
+```json
+{
+  "type": "cycle_pad",
+  "direction": "next",
+  "wrap": true,
+  "excluded_pads": "1,5"
+}
+```
+
+`direction` defaults to `next` when omitted and accepts `next` or `previous`.
+`wrap` defaults to `true`. `excluded_pads` is an optional comma-separated list
+of 1-based pad numbers. The shared editor normalizes exclusions on load and save
+using the board's reported `max_pads`: valid values are deduplicated and sorted,
+while malformed and out-of-range tokens are ignored. Parsed firmware reads emit
+the same canonical form.
+
+Cycle eligibility comes from an atomic 32-bit snapshot owned by `pad_config`.
+Each bit reflects a successfully parsed cache entry with a post-template
+`button_count` greater than zero or one or more local `pad_actions`. Cache
+replacement publishes that entry's bit before the configuration generation
+changes. Dispatch reads only this snapshot; it does not scan cache pointers,
+copy pad configurations, or access persistent storage from the display task.
+
+#### Full-screen pad actions
+
+Pad JSON can include a local `pad_actions` array containing up to three flat
+`ButtonAction` objects. The portal exposes these below Pad Bindings as
+**Full-Screen Tap Actions**, using the shared action editor. A nonempty list
+creates a transparent full-pad input layer: normal taps dispatch the ordered
+list, swipes retain their configured behavior, and long-presses do not dispatch
+the list. The field is deliberately excluded from `template_pad` inheritance.
+
+The save API preserves an omitted `pad_actions` field. An empty array explicitly
+clears the list. Pad validation rejects non-array values, more than three
+entries, entries without `type`, unknown action types, and malformed
+action-specific payloads. The literal `"none"` type is accepted for compatibility
+but is removed during parsing and has no runtime effect.
+
 ---
 
 ### Boot Actions API
@@ -1049,7 +1227,7 @@ All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth whe
 
 Returns the current boot action configuration.
 
-- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, `volume_mode`, `volume_value`, `brightness_mode`, `brightness_value`, `timer_id`, `timer_command`, `timer_value`, etc.).
+- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, `volume_mode`, `volume_value`, `brightness_mode`, `brightness_value`, `timer_id`, `timer_command`, `timer_mode`, `timer_value`, etc.).
 - Default (no file saved): `{"actions": []}`.
 
 #### `POST /api/boot-actions`
@@ -1131,30 +1309,28 @@ Save device-level button defaults to LittleFS.
 
 Device-level timer configuration. Compile-time gated by `HAS_DISPLAY`.
 
-#### `GET /api/timers`
+#### `GET /api/component/timers/config`
 
 Returns the current timer configuration for all 3 timers.
 
-- **Response:** JSON object with keys `"1"`, `"2"`, `"3"`. Each timer object contains:
-  - `mode` — `"up"` or `"down"`
-  - `countdown` — seconds (countdown mode only, omitted if 0)
-  - `expire_actions` — array of ButtonAction objects (omitted if empty)
+- **Response:** JSON object with keys `"1"`, `"2"`, `"3"`. Each timer object contains an `expire_actions` array with zero through three ButtonAction objects.
 
 ```json
 {
-  "1": { "mode": "down", "countdown": 300, "expire_actions": [{ "type": "sound", "sound_file": "alarm" }] },
-  "2": { "mode": "up" },
-  "3": { "mode": "down", "countdown": 60, "expire_actions": [{ "type": "beep", "beep_pattern": "1000:500" }] }
+  "1": { "expire_actions": [{ "type": "sound_alert", "sound_alert_kind": "mp3", "sound_alert_file": "alarm" }] },
+  "2": { "expire_actions": [] },
+  "3": { "expire_actions": [{ "type": "sound_alert", "sound_alert_kind": "tone", "sound_alert_pattern": "1000:500" }] }
 }
 ```
 
-#### `POST /api/timers`
+#### `POST /api/component/timers/config`
 
 Save timer configuration to LittleFS and apply immediately.
 
 - **Body:** Same JSON format as GET response.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
-- Timer engine is updated immediately (mode, countdown preset, expire actions).
+- Unknown timer keys, slot fields, malformed actions, and lists over three actions reject the complete write.
+- Saving replaces the persistent source for future countdown starts. Active runs keep their existing expiry snapshot.
 
 ---
 
@@ -1276,16 +1452,16 @@ Compute tile dimensions for a given grid layout. Used by the icon picker to rend
 
 #### `GET /api/pad/blocks`
 
-Return the building block catalog — pre-configured button groups that can be inserted into a pad. Each block contains positional button definitions (relative offsets), minimum grid requirements, and optional pad-level bindings.
+Return the building block catalog, currently including System Info. Each block contains positional button definitions (relative offsets), minimum grid requirements, and optional pad-level bindings.
 
 - **Response:**
 ```json
 [
   {
-    "id": "countdown_timer",
-    "name": "Countdown Timer",
-    "desc": "3 rockers (H/M/S) + timer display + start/pause/reset",
-    "icon": "⏱️",
+    "id": "system_info",
+    "name": "System Info",
+    "desc": "Device health and network status",
+    "icon": "info",
     "min_cols": 3,
     "min_rows": 2,
     "min_free": 6,
@@ -1329,7 +1505,7 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
   "button": { "label_center": "1240W", "fg_color": "#22c55e" }
 }
 ```
-  Errors: `400` (bad params / invalid JSON), `503` (busy — another resolve/control job is in flight, retry; or out of memory), `500` (internal).
+  Errors: `400` (bad params / invalid JSON), `503` (busy: another resolve/control job is in flight, retry; or out of memory), and `500` (the main-loop dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the main loop finishes and releases its owned data.
 
 > **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 

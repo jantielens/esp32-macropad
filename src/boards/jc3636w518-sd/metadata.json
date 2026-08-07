@@ -1,0 +1,18 @@
+{
+  "device_class": "macropad",
+  "board_label": "JC3636W518 SD",
+  "description": "Guition JC3636W518 with its on-board TF card used as primary storage.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "wireless": {
+    "wifi": true,
+    "ble": true
+  },
+  "display": {
+    "size": "3.6\"",
+    "resolution": "360x360",
+    "type": "IPS",
+    "touch": true
+  }
+}

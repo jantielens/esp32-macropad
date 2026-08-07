@@ -58,8 +58,7 @@ static char buf[64];
 static void setup_countup(uint8_t id, uint32_t elapsed_ms) {
     timer_engine_init();
     s_millis = 0;
-    timer_set_mode(id, TIMER_MODE_UP);
-    timer_start(id);
+    timer_configure_and_start(id, TIMER_MODE_UP, 0, nullptr, 0);
     s_millis = elapsed_ms;
 }
 
@@ -67,9 +66,7 @@ static void setup_countup(uint8_t id, uint32_t elapsed_ms) {
 static void setup_countdown(uint8_t id, uint32_t preset_s, uint32_t elapsed_ms) {
     timer_engine_init();
     s_millis = 0;
-    timer_set_mode(id, TIMER_MODE_DOWN);
-    timer_set_countdown(id, preset_s);
-    timer_start(id);
+    timer_configure_and_start(id, TIMER_MODE_DOWN, preset_s * 1000, nullptr, 0);
     s_millis = elapsed_ms;
 }
 
@@ -257,8 +254,7 @@ TEST(all_timer_ids) {
     timer_engine_init();
     s_millis = 0;
     for (uint8_t id = 1; id <= 3; id++) {
-        timer_set_mode(id, TIMER_MODE_UP);
-        timer_start(id);
+        timer_configure_and_start(id, TIMER_MODE_UP, 0, nullptr, 0);
     }
     s_millis = 1000 * 1;  // 1s
     timer_format(1, nullptr, buf, sizeof(buf));

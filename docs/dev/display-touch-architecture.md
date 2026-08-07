@@ -231,7 +231,7 @@ When `HAS_DISPLAY` is enabled, the firmware includes a screen saver manager that
 - **Sleep overlay**: When entering `Asleep`, a full-screen black LVGL object is created on `lv_layer_top()` so RGB panels physically drive black pixels (reduces LC stress). The overlay is removed *before* the backlight rises during wake.
 - **Pixel shift**: Each sleep cycle advances a counter through 81 unique positions in a 9×9 grid (±4 px on each axis) using coprime stride 34. On wake (and on screen switch), `lv_obj_set_style_translate_x/y` is applied to `lv_scr_act()`. Pad layouts reserve `PIXEL_SHIFT_MARGIN` (4 px) insets to prevent clipping.
 - **Panel sleep**: When entering `Asleep`, the screen saver calls `displaySleep()` on the active `DisplayDriver` to put the panel controller into hardware low-power mode (MIPI-DSI DCS sleep-in, TFT_eSPI command 0x10, Arduino_GFX bus command). On wake, `displayWake()` is called before the backlight fade-in begins. Drivers that do not override these methods fall back to backlight-only sleep.
-- **Periodic sleep refresh / active de-bias**: While fully asleep, the screen saver calls `displayRefreshSleep()` on the active driver every `SCREENSAVER_SLEEP_REFRESH_MS` (default 15 min, 0 disables) so drivers can scrub residual state during long idle. `MipiDsiDriver` re-blanks both DPI framebuffers by default. On boards with `DISPLAY_HARD_RESET_ON_SLEEP` (e.g. jc1060p470c), this hook instead performs an **active LC de-bias**: it briefly powers the panel back up and drives `DISPLAY_DEBIAS_CYCLES` (default 3) full-frame white↔black inversion cycles — `DISPLAY_DEBIAS_HOLD_MS` (default 80 ms) per half-cycle — to cancel the DC bias that accumulates in cheap IPS cells (the cause of washed-out colors after multi-hour idle), then re-asserts reset. The backlight is at 0 throughout, so it is invisible, and the panel is left in the same resting state (RST low, framebuffers black) so the wake path is unchanged.
+- **Periodic sleep refresh / active de-bias**: While fully asleep, the screen saver calls `displayRefreshSleep()` on the active driver every `SCREENSAVER_SLEEP_REFRESH_MS` (default 15 min, 0 disables) so drivers can scrub residual state during long idle. `MipiDsiDriver` re-blanks the DPI framebuffer by default. On boards with `DISPLAY_HARD_RESET_ON_SLEEP`, this hook instead performs an **active LC de-bias**: it briefly powers the panel back up and drives `DISPLAY_DEBIAS_CYCLES` (default 3) full-frame white↔black inversion cycles — `DISPLAY_DEBIAS_HOLD_MS` (default 80 ms) per half-cycle — to cancel the DC bias that accumulates in cheap IPS cells (the cause of washed-out colors after multi-hour idle), then re-asserts reset. The backlight is at 0 throughout, so it is invisible, and the panel is left in the same resting state (RST low, framebuffer black) so the wake path is unchanged.
 - **LVGL throttle**: While fully asleep, the LVGL task loop delay increases from the normal 1–20 ms to `SCREENSAVER_SLEEP_TICK_MS` (default 200 ms, board-overridable). `screen->update()` is gated so widgets stop refreshing. FPS is reported as 0 during sleep. This reduces CPU usage from ~30% to ~2%.
 
 **Configuration / APIs:**
@@ -305,14 +305,14 @@ virtual MipiDsiTimingConfig getTimingConfig() const = 0;          // Panel timin
 
 Key timing parameters that differ between panels:
 
-| Parameter | ST7703 (Waveshare) | ST7701 (JC4880P433) |
-|---|---|---|
-| DPI clock | 38 MHz | 34 MHz |
-| Lane bit rate | 480 Mbps | 500 Mbps |
-| Resolution | 720×720 | 480×800 |
-| `disable_lp` | `true` (continuous HS) | `false` (LP during blanking) |
+| Parameter | ST7703 (Waveshare) | ST7701 (JC4880P433) | JD9165 (JC1060P470C) |
+|---|---|---|---|
+| DPI clock | 38 MHz | 34 MHz | 51.2 MHz |
+| Lane bit rate | 480 Mbps | 500 Mbps | 550 Mbps |
+| Resolution | 720×720 | 480×800 | 1024×600 |
+| `disable_lp` | `true` (continuous HS) | `false` (LP during blanking) | `true` (continuous HS) |
 
-The `disable_lp` flag is critical: ST7703 needs continuous high-speed mode to avoid cyan flicker, while ST7701S expects LP signaling during blanking intervals (setting `true` causes horizontal jitter).
+The `disable_lp` flag controls whether the D-PHY drops to low-power signaling during blanking intervals. ST7703 needs continuous high-speed mode (measured at +6 fps there, and it eliminated visible flashes), while ST7701S expects LP signaling during blanking (setting `true` causes horizontal jitter). JD9165 is set to `true` for consistency with ST7703; hardware A/B on jc1060p470c measured it as FPS-neutral (25 fps either way on the benchmark screen) and it does **not** eliminate that panel's intermittent full-screen cyan frames — those are a separate PSRAM-bandwidth / DPI-underrun issue, not an LP↔HS ramp artifact.
 
 ### Selecting a Driver
 

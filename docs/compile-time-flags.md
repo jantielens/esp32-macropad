@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 233
+Total flags: 254
 
 ### Features (HAS_*)
 
@@ -37,9 +37,11 @@ Total flags: 233
 - **HAS_EPAPER_FRONTLIGHT** default: `false` — Enable e-paper frontlight control on boards with frontlight hardware.
 - **HAS_EPAPER_VCOM** default: `false` — Enable the portal VCOM calibration page (TPS65186/Inkplate panels only).
 - **HAS_EPAPER_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext1 wake plus short/long press).
+- **HAS_HA_HISTORY** default: `(HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)` — Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_MCP** default: `true` — the feature out entirely (saves flash on constrained or locked-down builds).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
+- **HAS_MUSIC_ANALYSIS** default: `false` — Demand-driven Music MP3 RMS, peak, and spectrum bindings.
 - **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.
 - **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
@@ -49,10 +51,12 @@ Total flags: 233
 - **HAS_SENSOR_NAU7802** default: `false` — NAU7802 24-bit I2C load-cell ADC.
 - **HAS_SENSOR_TSL2591** default: `false` — TSL2591 high-dynamic-range I2C light sensor (used for enlarger metering).
 - **HAS_SOUND_PLAYER** default: `HAS_AUDIO` — Defaults to HAS_AUDIO — enable audio to get sound player support.
+- **HAS_STORAGE_BROWSER** default: `true` — Enable the portal and MCP browser for a filesystem partition or SD card.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
 
 ### Selectors (*_DRIVER)
 
+- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
@@ -109,6 +113,10 @@ Total flags: 233
 - **LCD_VSYNC_PIN** default: `(no default)` — RGB VSYNC pin.
 - **LD2410_OUT_PIN** default: `-1` — LD2410 OUT pin (presence). Use -1 to disable.
 - **LED_PIN** default: `2` — GPIO for the built-in LED (only used when HAS_BUILTIN_LED is true).
+- **SDMMC_CLK_PIN** default: `-1` — Optional board-specific SDMMC clock pin; -1 uses the FQBN's default slot routing.
+- **SDMMC_CMD_PIN** default: `-1` — Optional board-specific SDMMC command pin; -1 uses the FQBN's default slot routing.
+- **SDMMC_D0_PIN** default: `-1` — Optional board-specific SDMMC data-0 pin; -1 uses the FQBN's default slot routing.
+- **SDMMC_POWER_PIN** default: `-1` — Optional application-managed SD card power-enable GPIO; -1 leaves it alone.
 - **SENSOR_I2C_SCL** default: `-1` — I2C SCL pin for sensors.
 - **SENSOR_I2C_SDA** default: `-1` — I2C pins for sensors. Use -1 to keep default Wire pins.
 - **TOUCH_I2C_SCL** default: `(no default)` — Touch I2C SCL pin.
@@ -124,10 +132,12 @@ Total flags: 233
 - **AUDIO_TASK_STACK_SIZE** default: `24576` — Audio worker stack size in bytes.
 - **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
+- **HA_HISTORY_MIN_SLOT_SECS** default: `300` — Shortest sparkline slot duration (seconds) that Home Assistant history can fill.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
 - **HTTP_STREAM_CHUNK_SIZE** default: `(no default)` — failures (size ~2.3 KB requested vs ~1.6 KB largest free).
 - **JD9165_DSI_DPI_CLK_HZ** default: `51200000L` — DPI pixel clock in Hz.
+- **LOOP_TASK_STACK_SIZE** default: `(no default)` — Measured under portal, MQTT, and pad load: 4704 bytes remained from 8192.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
@@ -140,9 +150,11 @@ Total flags: 233
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
 - **MIN_USER_BRIGHTNESS** default: `5` — The screen saver bypasses this floor to allow sleep (brightness 0).
+- **SDMMC_MAX_FREQUENCY_KHZ** default: `20000` — SDMMC maximum bus frequency in kHz.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
+- **TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS** default: `30000` — Sampling period for the cached internal largest-free-block metric (ms).
 - **TFT_BACKLIGHT_PWM_FREQ** default: `1000` — Lower frequencies give wider dimming range but may cause audible coil whine.
 - **TFT_SPI_FREQ_HZ** default: `(no default)` — QSPI clock frequency (Hz).
 - **TOUCH_I2C_FREQ_HZ** default: `(no default)` — I2C frequency (Hz).
@@ -155,6 +167,9 @@ Total flags: 233
 ### Other
 
 - **AUDIO_CODEC_ADDR** default: `0x18` — I2C address of the audio codec (e.g. ES8311 = 0x18).
+- **AUDIO_DEFAULT_VOLUME** default: `50` — Default volume used when no NVS value has been stored.
+- **AUDIO_DMA_DESC_NUM** default: `6` — I2S DMA descriptor count, pinned so starvation timing stays in sync with I2S.
+- **AUDIO_DMA_FRAME_NUM** default: `240` — I2S DMA frames per descriptor. The current ESP-IDF default is 240.
 - **AUDIO_I2S_BCLK** default: `-1` — I2S bit clock pin.
 - **AUDIO_I2S_DIN** default: `-1` — I2S data in pin (ESP32 RX ← codec data output).
 - **AUDIO_I2S_DOUT** default: `-1` — I2S data out pin (ESP32 TX → codec data input).
@@ -162,6 +177,7 @@ Total flags: 233
 - **AUDIO_I2S_MCLK** default: `-1` — I2S master clock pin.
 - **AUDIO_MP3_SCRATCH_PSRAM** default: `false` — Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
 - **AUDIO_PA_ACTIVE_LOW** default: `false` — Some boards route the PA enable through an inverting transistor.
+- **AUDIO_SAMPLE_RATE** default: `48000` — Audio output sample rate in Hz.
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS** default: `100` — BLE telemetry advertising interval (ms between adv packets within a burst).
 - **BLE_TELEMETRY_DEFAULT_BURST_COUNT** default: `3` — BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
@@ -220,6 +236,10 @@ Total flags: 233
 - **SCREENSAVER_SLEEP_REFRESH_MS** default: `900000` — Interval in ms between periodic asleep-display refresh calls (0 = disabled).
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
+- **SDMMC_BUS_WIDTH** default: `4` — SDMMC bus width: 1 or 4 bits. Slot and IOMUX pins are owned by the FQBN.
+- **SDMMC_LDO_CHANNEL** default: `-1` — Optional ESP32 SDMMC LDO channel; -1 leaves the channel unchanged.
+- **SDMMC_POWER_ACTIVE_LOW** default: `false` — Whether SDMMC_POWER_PIN enables card power when driven low.
+- **SDMMC_POWER_SETTLE_MS** default: `0` — Delay after application-managed SD power is enabled.
 - **SD_PROBE_ON_BOOT** default: `false` — listing, write/read round-trip). Intended for new-board bring-up only.
 - **SHUTTER_ADC_PIN_S1** default: `-1` — ADC input pin for shutter sensor 1.
 - **SHUTTER_ADC_PIN_S2** default: `-1` — ADC input pin for shutter sensor 2.
@@ -253,6 +273,7 @@ Total flags: 233
 - **ST7703_VSYNC_BACK_PORCH** default: `20` — VSYNC back porch in lines.
 - **ST7703_VSYNC_FRONT_PORCH** default: `20` — VSYNC front porch in lines.
 - **ST7703_VSYNC_PULSE_WIDTH** default: `4` — VSYNC pulse width in lines.
+- **TELEMETRY_CACHE_INTERNAL_POOL_WALK** default: `(!TELEMETRY_ALLOW_PSRAM_POOL_WALK)` — DSI boards sample the internal largest-free-block metric off the LVGL task.
 - **TFT_BACKLIGHT_DUTY_MAX** default: `255` — Duty cycle at full saturation (before constant DC).
 - **TFT_BACKLIGHT_DUTY_MIN** default: `0` — Duty cycle where backlight first turns on.
 - **TFT_BACKLIGHT_ON** default: `(no default)` — Backlight active level.
@@ -280,43 +301,49 @@ Total flags: 233
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc3636w518 |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ |
-| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ |
-| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ |
-| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ |
-| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ✅ | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
-| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
-| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518 | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518-sd | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? |  | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |
+| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc1060p470c-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ? | ✅ | ✅ |  | ? |  |  | ✅ |  |  |  |  | ? |  |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  | ✅ |  |
+| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  | ✅ |  |
+| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
-| board-name | DISPLAY_DRIVER | TOUCH_DRIVER |
-| --- | --- | --- |
-| esp32-4848S040 | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
-| jc3248w535 | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
-| jc3636w518 | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
-| esp32-p4-lcd4b | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-shutter | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-hx711 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-nau7802 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-darkroom | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc1060p470c | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
-| esp32c3-withsensors | — | — |
-| inkplate5v2 | — | — |
-| inkplate6flick | — | — |
-| reterminal-e1003 | — | — |
+| board-name | AUDIO_OUTPUT_DRIVER | DISPLAY_DRIVER | TOUCH_DRIVER |
+| --- | --- | --- | --- |
+| esp32-4848S040 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
+| jc3248w535 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
+| jc3636w518 | AUDIO_OUTPUT_DRIVER_PCM510XA | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
+| jc3636w518-sd | AUDIO_OUTPUT_DRIVER_PCM510XA | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
+| esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-sd | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-shutter | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-hx711 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-nau7802 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-darkroom | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc1060p470c | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
+| jc1060p470c-sd | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
+| esp32c3-withsensors | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
+| inkplate5v2 | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
+| inkplate6flick | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
+| reterminal-e1003 | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)
@@ -327,6 +354,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/audio.cpp
   - src/app/audio.h
+  - src/app/audio_output_drivers.cpp
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
@@ -339,6 +367,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_config.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
+  - src/app/music_analysis.cpp
+  - src/app/music_analysis.h
+  - src/app/music_binding.cpp
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
@@ -401,6 +432,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/hw_button_config.h
   - src/app/hw_buttons.cpp
   - src/app/hw_buttons.h
+  - src/app/mcp_press_button.cpp
+  - src/app/mcp_press_button.h
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
@@ -471,6 +504,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/list_provider_pads.cpp
   - src/app/lv_conf.h
   - src/app/lvgl_heap.cpp
+  - src/app/mcp_press_button.cpp
+  - src/app/mcp_press_button.h
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
@@ -483,6 +518,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_sub_store.cpp
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
+  - src/app/music_binding.cpp
   - src/app/net_binding.cpp
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
@@ -503,10 +539,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/swipe_config.h
   - src/app/time_binding.cpp
   - src/app/timer_binding.cpp
+  - src/app/timer_command.cpp
+  - src/app/timer_command.h
   - src/app/timer_config.cpp
   - src/app/timer_config.h
   - src/app/timer_engine.cpp
+  - src/app/timer_mcp_adapter.cpp
+  - src/app/timer_mcp_adapter.h
   - src/app/touch_manager.cpp
+  - src/app/touch_manager.h
   - src/app/visual_alert.cpp
   - src/app/visual_alert.h
   - src/app/web_mcp.cpp
@@ -581,6 +622,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/device_classes/epaper/epaper_config.h
   - src/app/device_classes/epaper_device_class.cpp
+- **HAS_HA_HISTORY**
+  - src/app/board_config.h
+  - src/app/data_stream.cpp
+  - src/app/data_stream.h
+  - src/app/ha_stats.cpp
+  - src/app/ha_stats.h
+  - src/app/widgets/sparkline_widget.cpp
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino
   - src/app/board_config.h
@@ -615,9 +663,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/device_classes/shutter_tester/shutter_binding.cpp
   - src/app/expr_binding.cpp
+  - src/app/ha_service.cpp
+  - src/app/ha_service.h
+  - src/app/ha_service_delivery.cpp
+  - src/app/ha_service_delivery.h
   - src/app/health_binding.cpp
   - src/app/list_binding.cpp
   - src/app/mcp_components.cpp
+  - src/app/mcp_device_identity.cpp
+  - src/app/mcp_device_identity.h
+  - src/app/mcp_press_button.cpp
+  - src/app/mcp_press_button.h
   - src/app/mcp_tool_registry.cpp
   - src/app/mcp_tool_util.cpp
   - src/app/mcp_tool_util.h
@@ -625,11 +681,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_sub_store.cpp
+  - src/app/music_binding.cpp
   - src/app/net_binding.cpp
   - src/app/pad_binding.cpp
   - src/app/portal_components.cpp
   - src/app/time_binding.cpp
   - src/app/timer_binding.cpp
+  - src/app/timer_mcp_adapter.cpp
+  - src/app/timer_mcp_adapter.h
   - src/app/web_mcp.cpp
   - src/app/web_portal_config.cpp
   - src/app/widgets/bar_chart_widget.cpp
@@ -697,6 +756,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/widget.h
+- **HAS_MUSIC_ANALYSIS**
+  - src/app/audio.cpp
+  - src/app/board_config.h
+  - src/app/display_task.cpp
+  - src/app/music_analysis.cpp
+  - src/app/music_analysis.h
+  - src/app/music_binding.cpp
 - **HAS_SCALE**
   - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
   - src/app/device_classes/coffee_scale/brew/brew_log.cpp
@@ -750,16 +816,30 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/audio.cpp
   - src/app/audio.h
   - src/app/board_config.h
+  - src/app/components/web_portal_music.cpp
   - src/app/ha_discovery.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_audio.cpp
+  - src/app/music_analysis.cpp
+  - src/app/music_analysis.h
+  - src/app/music_binding.cpp
+  - src/app/pad_validate.cpp
   - src/app/portal_components.cpp
+  - src/app/route_components.cpp
   - src/app/sound_player.cpp
   - src/app/sound_player.h
   - src/app/sound_store.cpp
   - src/app/sound_store.h
+  - src/app/web_portal_music.h
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_sounds.cpp
   - src/app/web_portal_sounds.h
+- **HAS_STORAGE_BROWSER**
+  - src/app/board_config.h
+  - src/app/components/storage_component.cpp
+  - src/app/mcp_tools_config.cpp
+  - src/app/portal_components.cpp
+  - src/app/storage_browser.cpp
 - **HAS_TOUCH**
   - src/app/app.ino
   - src/app/board_config.h
@@ -767,6 +847,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_manager.cpp
   - src/app/display_manager.h
   - src/app/lv_conf.h
+  - src/app/mcp_tools_core.cpp
+  - src/app/mcp_tools_pads.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screens.cpp
   - src/app/screens/touch_test_screen.cpp
@@ -774,6 +856,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_drivers.cpp
   - src/app/touch_manager.cpp
   - src/app/touch_manager.h
+  - src/app/web_mcp.cpp
+  - src/app/web_portal_routes.cpp
+  - src/app/web_portal_screenshot.cpp
+  - src/app/web_portal_screenshot.h
+- **AUDIO_OUTPUT_DRIVER**
+  - src/app/audio_output_drivers.cpp
+  - src/app/board_config.h
 - **DISPLAY_DRIVER**
   - src/app/board_config.h
   - src/app/display_drivers.cpp
@@ -785,6 +874,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **AP_MAX_CONNECTIONS**
   - src/app/web_portal_ap.cpp
 - **AUDIO_CODEC_ADDR**
+  - src/app/board_config.h
+- **AUDIO_DEFAULT_VOLUME**
+  - src/app/board_config.h
+- **AUDIO_DMA_DESC_NUM**
+  - src/app/board_config.h
+- **AUDIO_DMA_FRAME_NUM**
   - src/app/board_config.h
 - **AUDIO_I2S_BCLK**
   - src/app/board_config.h
@@ -802,6 +897,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **AUDIO_PA_ACTIVE_LOW**
   - src/app/board_config.h
 - **AUDIO_PA_PIN**
+  - src/app/board_config.h
+- **AUDIO_SAMPLE_RATE**
   - src/app/board_config.h
 - **AUDIO_TASK_STACK_SIZE**
   - src/app/board_config.h
@@ -867,6 +964,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_SD_EN_PIN**
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+- **HA_HISTORY_MIN_SLOT_SECS**
+  - src/app/board_config.h
 - **HEALTH_HISTORY_ENABLED**
   - src/app/app.ino
   - src/app/board_config.h
@@ -1019,6 +1118,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LED_PIN**
   - src/app/board_config.h
+- **LOOP_TASK_STACK_SIZE**
+  - src/app/app.ino
 - **LVGL_BUFFER_PREFER_INTERNAL**
   - src/app/board_config.h
 - **LVGL_BUFFER_SIZE**
@@ -1072,6 +1173,28 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SCREEN_HISTORY_MAX**
   - src/app/board_config.h
+- **SDMMC_BUS_WIDTH**
+  - src/app/board_config.h
+- **SDMMC_CLK_PIN**
+  - src/app/board_config.h
+  - src/app/sd_storage.cpp
+- **SDMMC_CMD_PIN**
+  - src/app/board_config.h
+- **SDMMC_D0_PIN**
+  - src/app/board_config.h
+- **SDMMC_LDO_CHANNEL**
+  - src/app/board_config.h
+  - src/app/sd_storage.cpp
+- **SDMMC_MAX_FREQUENCY_KHZ**
+  - src/app/board_config.h
+- **SDMMC_POWER_ACTIVE_LOW**
+  - src/app/board_config.h
+- **SDMMC_POWER_PIN**
+  - src/app/board_config.h
+  - src/app/sd_storage.cpp
+- **SDMMC_POWER_SETTLE_MS**
+  - src/app/board_config.h
+  - src/app/sd_storage.cpp
 - **SD_PROBE_ON_BOOT**
   - src/app/app.ino
   - src/app/board_config.h
@@ -1161,6 +1284,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **ST7703_VSYNC_PULSE_WIDTH**
   - src/app/board_config.h
   - src/boards/esp32-p4-lcd4b/board_overrides.h
+- **TELEMETRY_CACHE_INTERNAL_POOL_WALK**
+  - src/app/board_config.h
+  - src/app/device_telemetry.cpp
+- **TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS**
+  - src/app/board_config.h
 - **TFT_BACKLIGHT_DUTY_MAX**
   - src/app/board_config.h
 - **TFT_BACKLIGHT_DUTY_MIN**
@@ -1220,6 +1348,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
+  - src/app/fs_health.cpp
   - src/app/sd_probe.cpp
   - src/app/sd_storage.cpp
   - src/app/sd_storage.h

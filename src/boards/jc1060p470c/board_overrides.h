@@ -17,6 +17,13 @@
 #define HAS_BACKLIGHT true
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
+// Measured under portal, MQTT, and pad load: 4704 bytes remained from 8192.
+#define LOOP_TASK_STACK_SIZE 6144
+// Measured under portal load: 11680 bytes remained from the 16 KB default.
+#define CONFIG_ASYNC_TCP_STACK_SIZE 8192
+// minimp3's per-frame decode scratch is roughly 16 KB. Keep it in PSRAM so
+// Music playback fits the internal audio task stack.
+#define AUDIO_MP3_SCRATCH_PSRAM true
 
 // ============================================================================
 // Driver Selection (HAL)
@@ -96,6 +103,8 @@
 // Pin mapping from BSP: https://github.com/cheops/JC1060P470C_I_W
 // ============================================================================
 #define HAS_AUDIO true
+#define HAS_MUSIC_ANALYSIS true
+#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
 #define AUDIO_I2S_MCLK   13    // ES8311 MCLK (master clock)
 #define AUDIO_I2S_BCLK   12    // ES8311 SCLK (bit clock)
 #define AUDIO_I2S_LRCK   10    // ES8311 LRCK (word select)

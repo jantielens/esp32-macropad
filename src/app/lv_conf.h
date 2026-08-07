@@ -393,10 +393,9 @@
 /* Attribute to mark large RAM arrays */
 #define LV_ATTRIBUTE_LARGE_RAM_ARRAY
 
-/* Prefix performance critical functions to place them into a faster memory (e.g RAM)
- * ESP32-P4: place hot LVGL functions in IRAM for faster execution.
- * Classic ESP32/C3: IRAM is too small — leave empty to avoid overflow. */
-#if defined(CONFIG_IDF_TARGET_ESP32P4) || defined(CONFIG_IDF_TARGET_ESP32S3)
+/* Prefix performance critical functions to place them into a faster memory (e.g RAM).
+ * Keep the ESP32-S3 setting; P4 is an explicit A/B measurement to recover IRAM. */
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
     #define LV_ATTRIBUTE_FAST_MEM IRAM_ATTR
 #else
     #define LV_ATTRIBUTE_FAST_MEM

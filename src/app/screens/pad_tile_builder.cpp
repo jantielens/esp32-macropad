@@ -14,6 +14,10 @@
 // ============================================================================
 
 void PadScreen::clearTiles() {
+    clearPadActionOverlay();
+    free(padActions);
+    padActions = nullptr;
+    padActionCount = 0;
     if (!tiles) { tileCount = 0; tilesBuilt = false; return; }
     for (uint8_t i = 0; i < tileCount; i++) {
         // Destroy widget state before LVGL objects are deleted
@@ -94,15 +98,19 @@ void PadScreen::buildTiles() {
     pageBindingCount = cfg->binding_count;
     memcpy(pageBindings, cfg->bindings, cfg->binding_count * sizeof(PadBinding));
 
+    padActionCount = cfg->pad_action_count;
+    if (padActionCount > 0) {
+        if (allocatePadActions()) {
+            memcpy(padActions, cfg->pad_actions,
+                   padActionCount * sizeof(ButtonAction));
+        } else {
+            padActionCount = 0;
+        }
+    }
+
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {
         LOGW(TAG, "Page %u: unsupported layout '%s', skipping", pageIndex, cfg->layout);
-        free(cfg);
-        tilesBuilt = true;
-        return;
-    }
-
-    if (cfg->button_count == 0) {
         free(cfg);
         tilesBuilt = true;
         return;
@@ -524,6 +532,20 @@ void PadScreen::buildTiles() {
         }
 
         tileCount++;
+    }
+
+    if (padActionCount > 0) {
+        padActionOverlay = lv_obj_create(container);
+        lv_obj_set_pos(padActionOverlay, 0, 0);
+        lv_obj_set_size(padActionOverlay, disp_w, disp_h);
+        lv_obj_set_style_bg_opa(padActionOverlay, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(padActionOverlay, 0, 0);
+        lv_obj_set_style_pad_all(padActionOverlay, 0, 0);
+        lv_obj_clear_flag(padActionOverlay, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(padActionOverlay, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(padActionOverlay, onPadActionTap,
+                            LV_EVENT_SHORT_CLICKED, this);
+        swipe_actions_register(padActionOverlay);
     }
 
 #if HAS_MQTT

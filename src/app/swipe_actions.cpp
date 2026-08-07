@@ -47,8 +47,7 @@ static void on_gesture(lv_event_t* e) {
 
     // Audio cue — use device tap_beep for swipes (skip if action produces audio)
 #if HAS_AUDIO
-    if (strcmp(act->type, ACTION_TYPE_BEEP) != 0 &&
-        strcmp(act->type, ACTION_TYPE_SOUND) != 0) {
+    if (strcmp(act->type, ACTION_TYPE_SOUND_ALERT) != 0) {
         const char* pattern = device_config.tap_beep;
         if (pattern[0] && strcmp(pattern, "none") != 0) {
             audio_beep(pattern, 0);

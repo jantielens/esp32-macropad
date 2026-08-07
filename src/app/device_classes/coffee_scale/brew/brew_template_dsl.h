@@ -3,7 +3,7 @@
 // Brew Template DSL — JSON parser / serializer for brew templates
 // ============================================================================
 // Host-testable: depends only on ArduinoJson + standard C++ (no ESP32 APIs).
-// The loader (brew_template_loader.cpp) handles LittleFS I/O and calls into
+// The loader (brew_template_loader.cpp) handles persistent-storage I/O and calls into
 // these pure-parsing functions.
 //
 // JSON schema (v1):

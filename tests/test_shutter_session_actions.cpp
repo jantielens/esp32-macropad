@@ -127,15 +127,15 @@ TEST(empty_actions_round_trip_to_empty) {
 TEST(round_trip_preserves_both_actions) {
     const char* json =
         "{\"save_start_actions\":[{\"type\":\"notify\",\"notify_text\":\"Saving...\"}],"
-         "\"save_complete_actions\":[{\"type\":\"beep\",\"beep_pattern\":\"100\",\"beep_volume\":50}]}";
+         "\"save_complete_actions\":[{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone\",\"sound_alert_pattern\":\"100\",\"sound_alert_volume\":50}]}";
     TestConfig cfg;
     parse_config(json, cfg);
     ASSERT_TRUE(cfg.save_start_count == 1);
     ASSERT_TRUE(cfg.save_complete_count == 1);
     ASSERT_STR(cfg.save_start_actions[0].type, "notify");
     ASSERT_STR(cfg.save_start_actions[0].payload.notify.notify_text, "Saving...");
-    ASSERT_STR(cfg.save_complete_actions[0].type, "beep");
-    ASSERT_STR(cfg.save_complete_actions[0].payload.beep.beep_pattern, "100");
+    ASSERT_STR(cfg.save_complete_actions[0].type, "sound_alert");
+    ASSERT_STR(cfg.save_complete_actions[0].payload.sound_alert.sound_alert_pattern, "100");
 
     char buf[1024];
     serialize_config(cfg, buf, sizeof(buf));
@@ -145,8 +145,8 @@ TEST(round_trip_preserves_both_actions) {
     ASSERT_TRUE(back.save_start_count == 1);
     ASSERT_STR(back.save_start_actions[0].type, "notify");
     ASSERT_STR(back.save_start_actions[0].payload.notify.notify_text, "Saving...");
-    ASSERT_STR(back.save_complete_actions[0].type, "beep");
-    ASSERT_STR(back.save_complete_actions[0].payload.beep.beep_pattern, "100");
+    ASSERT_STR(back.save_complete_actions[0].type, "sound_alert");
+    ASSERT_STR(back.save_complete_actions[0].payload.sound_alert.sound_alert_pattern, "100");
 }
 
 TEST(round_trip_screen_action) {
@@ -169,7 +169,7 @@ TEST(round_trip_three_actions_per_event) {
     const char* json =
         "{\"save_start_actions\":["
             "{\"type\":\"notify\",\"notify_text\":\"A\"},"
-            "{\"type\":\"beep\",\"beep_pattern\":\"50\",\"beep_volume\":30},"
+            "{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone\",\"sound_alert_pattern\":\"50\",\"sound_alert_volume\":30},"
             "{\"type\":\"screen\",\"target\":\"pad_2\"}"
          "],\"save_complete_actions\":["
             "{\"type\":\"notify\",\"notify_text\":\"X\"},"
@@ -181,7 +181,7 @@ TEST(round_trip_three_actions_per_event) {
     ASSERT_TRUE(cfg.save_start_count == 3);
     ASSERT_TRUE(cfg.save_complete_count == 3);
     ASSERT_STR(cfg.save_start_actions[0].type, "notify");
-    ASSERT_STR(cfg.save_start_actions[1].type, "beep");
+    ASSERT_STR(cfg.save_start_actions[1].type, "sound_alert");
     ASSERT_STR(cfg.save_start_actions[2].type, "screen");
     ASSERT_STR(cfg.save_complete_actions[2].payload.notify.notify_text, "Z");
 
@@ -191,7 +191,7 @@ TEST(round_trip_three_actions_per_event) {
     parse_config(buf, back);
     ASSERT_TRUE(back.save_start_count == 3);
     ASSERT_TRUE(back.save_complete_count == 3);
-    ASSERT_STR(back.save_start_actions[1].payload.beep.beep_pattern, "50");
+    ASSERT_STR(back.save_start_actions[1].payload.sound_alert.sound_alert_pattern, "50");
     ASSERT_STR(back.save_complete_actions[0].payload.notify.notify_text, "X");
 }
 

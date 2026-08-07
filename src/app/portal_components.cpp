@@ -27,6 +27,9 @@
 #include "components/manual_upload_component.cpp"
 #include "components/version_info_component.cpp"
 #include "components/sensor_data_component.cpp"
+#if HAS_STORAGE_BROWSER
+#include "components/storage_component.cpp"
+#endif // HAS_STORAGE_BROWSER
 
 // --- Display-gated components ---
 #if HAS_DISPLAY
@@ -67,10 +70,12 @@
 // --- Audio-gated components ---
 #if HAS_AUDIO
 #include "components/volume_component.cpp"
+#include "components/feedback_component.cpp"
 #endif // HAS_AUDIO
 
 #if HAS_SOUND_PLAYER
 #include "components/sounds_component.cpp"
+#include "components/music_component.cpp"
 #endif // HAS_SOUND_PLAYER
 
 // --- Shutter Tester components ---

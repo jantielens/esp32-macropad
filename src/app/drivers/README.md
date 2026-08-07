@@ -1,6 +1,6 @@
-# Drivers (Display + Touch)
+# Drivers (Display, Touch + Audio)
 
-This folder contains reusable **display** and **touch** driver implementations used by multiple boards.
+This folder contains reusable **display**, **touch**, and **audio** driver implementations used by multiple boards.
 
 We intentionally keep this folder **flat** (no `display_*/touch_*` filename prefixes and no `display/` or `touch/` subfolders) to keep includes simple and minimize churn.
 
@@ -31,11 +31,21 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | cyd-v2 | TFT_ESPI | ILI9341 | SPI | 320×240 | 1 | XPT2046 | inversion on, gamma fix |
 | esp32-4848S040 | ST7701_RGB | ST7701 | SPI | 480×480 | 0 | GT911 |  |
 | esp32-p4-lcd4b | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
-| esp32c3-withsensors | ? | ? | ? | ?×? | ? | ? |  |
+| esp32c3-withsensors | ? | ? | ? | ?×? | ? | none |  |
+| inkplate5v2 | ? | ? | ? | ?×? | ? | none |  |
+| inkplate6flick | ? | ? | ? | ?×? | ? | none |  |
 | jc1060p470c | JD9165_DSI | JD9165 | DSI | 1024×600 | 1 | GT911 |  |
+| jc1060p470c-sd | JD9165_DSI | JD9165 | DSI | 1024×600 | 1 | GT911 |  |
 | jc3248w535 | ARDUINO_GFX | AXS15231B | QSPI | 320×480 | 1 | AXS15231B |  |
 | jc3636w518 | ARDUINO_GFX_ST77916 | ST77916 | QSPI | 360×360 | 0 | CST816S |  |
+| jc3636w518-sd | ARDUINO_GFX_ST77916 | ST77916 | QSPI | 360×360 | 0 | CST816S |  |
 | jc4880p433 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
+| jc4880p433-darkroom | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
+| jc4880p433-hx711 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
+| jc4880p433-nau7802 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
+| jc4880p433-sd | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
+| jc4880p433-shutter | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
+| reterminal-e1003 | ? | ? | ? | ?×? | ? | none |  |
 
 <!-- BOARD_DRIVER_TABLE_END -->
 

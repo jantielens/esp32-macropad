@@ -18,6 +18,15 @@ bool mcp_finish_control(McpControlResult r, bool ok, const char* msg,
     if (r == MCP_CONTROL_TIMEOUT) {
         return mcp_tool_fail(result, err, MCP_RPC_ERR_INTERNAL, "control dispatch timed out");
     }
+    if (r == MCP_CONTROL_INVALID) {
+        return mcp_tool_fail(result, err, MCP_RPC_ERR_INTERNAL, "invalid control dispatch");
+    }
+    if (r == MCP_CONTROL_UNAVAILABLE) {
+        return mcp_tool_fail(result, err, MCP_RPC_ERR_INTERNAL, "control dispatch unavailable");
+    }
+    if (r == MCP_CONTROL_TOO_LARGE) {
+        return mcp_tool_fail(result, err, MCP_RPC_ERR_INTERNAL, "control request too large");
+    }
     if (!ok) {
         return mcp_tool_fail(result, err, MCP_RPC_ERR_INTERNAL, (msg && msg[0]) ? msg : "control failed");
     }

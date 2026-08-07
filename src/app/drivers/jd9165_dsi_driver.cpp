@@ -96,6 +96,14 @@ MipiDsiTimingConfig JD9165_DSI_Driver::getTimingConfig() const {
         .vsync_pulse_width = JD9165_DSI_VSYNC_PULSE_WIDTH,
         .vsync_back_porch = JD9165_DSI_VSYNC_BACK_PORCH,
         .vsync_front_porch = JD9165_DSI_VSYNC_FRONT_PORCH,
-        .disable_lp = false,  // Start with LP signaling; tune on hardware if needed
+        // Keep the D-PHY in continuous high-speed mode during blanking, matching
+        // the ST7703 panel. With LP signaling the host re-runs the LP->HS ramp on
+        // every blanking interval, and this panel's blanking budget is large
+        // (320 pixel clocks horizontally, 35 lines vertically).
+        // Measured on hardware: true vs false is FPS-neutral here (25 fps either
+        // way on the benchmark screen), so this is kept as the safer default.
+        // Note: it does NOT eliminate the intermittent full-screen cyan frames —
+        // those are a separate PSRAM-bandwidth / DPI-underrun issue.
+        .disable_lp = true,
     };
 }

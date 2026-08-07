@@ -20,49 +20,99 @@
 // well under a second; keep this short enough that an outage is barely felt.
 #define HA_HTTP_TIMEOUT_MS 4000
 
-// Single pending request, guarded by a spinlock. The UI task writes it in
-// ha_service_enqueue(); the main loop snapshots and clears it in
-// ha_service_execute(). Holding only fast struct copies under the lock.
-static volatile bool g_ha_request_pending = false;
-static HaServicePayload g_ha_request;
+static HaServiceDelivery g_ha_delivery;
 static portMUX_TYPE g_ha_mux = portMUX_INITIALIZER_UNLOCKED;
 
-void ha_service_enqueue(const HaServicePayload& payload) {
+static_assert(sizeof(g_ha_delivery) + sizeof(g_ha_mux) < 2048,
+              "HA queue and result store exceed 2 KiB");
+
+HaServiceEnqueueResult ha_service_enqueue(const HaServicePayload& payload,
+                                          uint32_t execution_id,
+                                          uint8_t action_index) {
     portENTER_CRITICAL(&g_ha_mux);
-    g_ha_request = payload;
-    g_ha_request_pending = true;
+    const HaServiceEnqueueResult result =
+        g_ha_delivery.enqueue(payload, execution_id, action_index);
     portEXIT_CRITICAL(&g_ha_mux);
+    return result;
 }
 
-void ha_service_execute() {
-    if (!g_ha_request_pending) return;
-
-    // Snapshot + clear the pending flag under the lock.
-    HaServicePayload req;
+#if HAS_MCP
+bool ha_service_execution_reserve(uint8_t action_count, uint32_t* execution_id) {
+    if (!execution_id) return false;
+    const uint32_t now_ms = millis();
     portENTER_CRITICAL(&g_ha_mux);
-    req = g_ha_request;
-    g_ha_request_pending = false;
+    const bool reserved =
+        g_ha_delivery.execution_reserve(action_count, now_ms, *execution_id);
     portEXIT_CRITICAL(&g_ha_mux);
+    return reserved;
+}
+
+bool ha_service_execution_set_action(uint32_t execution_id, uint8_t result_index,
+                                     uint8_t action_index,
+                                     const HaServicePayload& payload) {
+    portENTER_CRITICAL(&g_ha_mux);
+    const bool set = g_ha_delivery.execution_set_action(
+        execution_id, result_index, action_index, payload);
+    portEXIT_CRITICAL(&g_ha_mux);
+    return set;
+}
+
+bool ha_service_execution_record(const HaServiceResult& result) {
+    const uint32_t now_ms = millis();
+    portENTER_CRITICAL(&g_ha_mux);
+    const bool recorded = g_ha_delivery.execution_complete(result, now_ms);
+    portEXIT_CRITICAL(&g_ha_mux);
+    return recorded;
+}
+
+HaExecutionLookupResult ha_service_execution_snapshot(
+    uint32_t execution_id, HaExecutionSnapshot& snapshot) {
+    const uint32_t now_ms = millis();
+    portENTER_CRITICAL(&g_ha_mux);
+    const HaExecutionLookupResult lookup =
+        g_ha_delivery.execution_snapshot(execution_id, now_ms, snapshot);
+    portEXIT_CRITICAL(&g_ha_mux);
+    return lookup;
+}
+#endif
+
+static HaServiceResult execute_request(const HaServiceRequest& request) {
+    const uint32_t started_ms = millis();
+    HaServiceResult result = {};
+    result.execution_id = request.execution_id;
+    result.action_index = request.action_index;
+    result.status = HA_STATUS_INVALID_REQUEST;
+    result.http_status = HA_HTTP_STATUS_NONE;
+    strlcpy(result.entity_id, request.payload.entity_id, sizeof(result.entity_id));
+    strlcpy(result.service, request.payload.service, sizeof(result.service));
+
+    auto finish = [&](HaServiceStatus status) {
+        result.status = status;
+        result.duration_ms = (uint32_t)(millis() - started_ms);
+        return result;
+    };
+
+    const HaServicePayload& req = request.payload;
+    if (!req.entity_id[0] || !req.service[0]) {
+        LOGW(TAG, "empty entity_id/service — skipping");
+        return finish(HA_STATUS_INVALID_REQUEST);
+    }
+
+    const char* dot = strchr(req.entity_id, '.');
+    if (!dot || dot == req.entity_id) {
+        LOGW(TAG, "invalid entity_id '%s' (no domain)", req.entity_id);
+        return finish(HA_STATUS_INVALID_REQUEST);
+    }
+
 
     const DeviceConfig* cfg = web_portal_get_current_config();
     if (!cfg || !cfg->ha_url[0] || !cfg->ha_token[0]) {
         LOGW(TAG, "HA URL/token not configured — skipping");
-        return;
+        return finish(HA_STATUS_NOT_CONFIGURED);
     }
     if (WiFi.status() != WL_CONNECTED) {
         LOGW(TAG, "WiFi not connected — skipping");
-        return;
-    }
-    if (!req.entity_id[0] || !req.service[0]) {
-        LOGW(TAG, "empty entity_id/service — skipping");
-        return;
-    }
-
-    // Domain = text before first '.' in entity_id (e.g. "light.lamp" -> "light").
-    const char* dot = strchr(req.entity_id, '.');
-    if (!dot || dot == req.entity_id) {
-        LOGW(TAG, "invalid entity_id '%s' (no domain)", req.entity_id);
-        return;
+        return finish(HA_STATUS_WIFI_DISCONNECTED);
     }
     const int domain_len = (int)(dot - req.entity_id);
 
@@ -92,6 +142,7 @@ void ha_service_execute() {
     const bool is_https = strncmp(cfg->ha_url, "https://", 8) == 0;
 
     HTTPClient http;
+    http.setConnectTimeout(HA_HTTP_TIMEOUT_MS);
     http.setTimeout(HA_HTTP_TIMEOUT_MS);
 
     WiFiClientSecure tls_client;
@@ -107,7 +158,7 @@ void ha_service_execute() {
     }
     if (!began) {
         LOGW(TAG, "HTTP begin failed: %s", url);
-        return;
+        return finish(HA_STATUS_HTTP_BEGIN_FAILED);
     }
 
     char auth[CONFIG_HA_TOKEN_MAX_LEN + 12];
@@ -117,12 +168,31 @@ void ha_service_execute() {
 
     const int code = http.POST((uint8_t*)body, strlen(body));
     net_activity_mark(NET_CH_HTTP);
+    if (code > 0) result.http_status = (int16_t)code;
     if (code >= 200 && code < 300) {
         LOGI(TAG, "%s -> HTTP %d", url, code);
     } else {
-        LOGW(TAG, "%s -> HTTP %d", url, code);
+        LOGW(TAG, "%s -> HTTP %d (%s)", url, code,
+             HTTPClient::errorToString(code).c_str());
     }
     http.end();
+    if (code >= 200 && code < 300) return finish(HA_STATUS_SUCCESS);
+    if (code == HTTPC_ERROR_READ_TIMEOUT) return finish(HA_STATUS_TIMEOUT);
+    if (code < 0) return finish(HA_STATUS_TRANSPORT_ERROR);
+    return finish(HA_STATUS_HTTP_ERROR);
+}
+
+void ha_service_execute() {
+    HaServiceRequest request = {};
+    portENTER_CRITICAL(&g_ha_mux);
+    const bool dequeued = g_ha_delivery.dequeue(request);
+    portEXIT_CRITICAL(&g_ha_mux);
+    if (!dequeued) return;
+
+    const HaServiceResult result = execute_request(request);
+#if HAS_MCP
+    if (result.execution_id) ha_service_execution_record(result);
+#endif
 }
 
 #endif // HAS_DISPLAY || HAS_BUTTON

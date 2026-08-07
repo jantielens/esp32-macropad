@@ -131,6 +131,34 @@ with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote). Pass the token wi
 The same `mcp-remote` bridge works for any stdio-only MCP client (Continue and
 others) — point it at the device URL and pass the `Authorization` header.
 
+## Target the physical device
+
+An MCP client may generate, shorten, or otherwise alter its outer tool namespace.
+That namespace is not a physical device identity and must not be used to select a
+write target. Use a short local alias that you can recognize, then confirm the
+hardware identity through MCP itself.
+
+Start each write-capable session with `get_identity`. Its `device_id` is the
+application SoC's immutable factory MAC, rendered as 12 lowercase hexadecimal
+characters. Before a protected write, copy that value into `expected_device_id`:
+
+```json
+{
+  "expected_device_id": "001122aabbcc",
+  "screen": "pad_0",
+  "position": 0,
+  "button": { "label_center": "Lights" }
+}
+```
+
+Protected tools reject a missing, malformed, or mismatched assertion before they
+run and report the actual `device_id`. This applies to destructive operations,
+pad and device-class authoring, `set_config`, and `set_component_config`.
+For Coffee Scale, `scale_control` requires the assertion only for `tare` and
+`calibrate`; runtime calibration-reference adjustments remain callable normally.
+Successful protected writes return only the confirmed `device_id`, so re-read the
+relevant status/configuration tool to verify the resulting state.
+
 ## What the assistant can do
 
 ```mermaid
@@ -138,14 +166,16 @@ graph LR
     CLIENT["AI assistant"] -->|"POST /mcp (Bearer token)"| GATE["Enabled · station mode<br/>Origin · token"]
     GATE --> READ["Read tools<br/>(always available)"]
     GATE --> CONTROL["Control tools<br/>(control toggle on)"]
-    READ --> INFO["status · health · screens<br/>pads · sensors · config"]
+    READ --> INFO["status · health · screens<br/>pads · sensors · config · storage<br/>HA execution results"]
     CONTROL --> ACT["press_button · set_screen<br/>backlight · wake · system<br/>notify · visual_alert · volume · timers · config"]
 ```
 
 **Read tools** (always available once enabled):
 
+- `get_identity` — immutable physical device ID, configured/fallback name,
+  hostname, IP, board, and device class. Call before protected writes.
 - `get_device_status` — firmware version, board, uptime, current screen, WiFi state.
-- `get_health` — heap (internal/PSRAM), CPU, WiFi signal.
+- `get_health` — heap (internal/PSRAM), CPU, WiFi signal, and filesystem health.
 - `list_screens` / `get_current_screen` — available screens and the active one.
 - `list_pads` / `get_pad` — configured pads and their buttons (so the assistant
   knows what it can press).
@@ -153,22 +183,35 @@ graph LR
 - `get_config` — current device settings (device name, network, MQTT/HA,
   power, display/screen saver, audio). Secrets are redacted to `<field>_set`
   booleans — passwords and tokens are never returned.
-- `get_component_config` — the saved JSON for one auxiliary feature: `timers`,
+- `get_component_config` — normalized expiry-only JSON for `timers`, or the saved JSON for
   `swipe`, `boot`, `button-defaults`, `hw-buttons`, or `mqtt-triggers`.
+- `get_storage_status` — persistent-storage backend (LittleFS or SDMMC), mount and card
+  status, and used/free/total capacity, matching the portal Storage page.
+- `list_storage` — list up to 128 direct entries in an absolute storage path (default `/`).
+  Paths containing `..` or `//` are rejected.
+- `read_storage_file` — return one regular file as Base64 with its MIME type and byte size.
+  Reads are capped at 65,536 bytes; use the portal Storage page for larger streamed downloads.
+- `get_ha_execution_result` — look up the pending or completed Home Assistant
+  action results returned by `press_button`.
 
 **Control tools** (require the control toggle):
 
 - `press_button` — press a pad button by position or label, exactly like a tap.
 - `set_screen` — navigate to a screen.
 - `set_backlight` / `wake` — adjust display brightness or cancel the screen saver.
+- `tap_screen` — queue one normal touch-display tap at native pixel `x` and `y`
+  coordinates. Inspect a fresh screenshot in a browser first. Success means the
+  tap was queued, not delivered; it can wait for physical touch release or
+  screen-saver wake.
 - `notify` — show a message bubble on the screen (empty text dismisses it).
 - `visual_alert` — raise (`op:start`) or clear (`op:stop`) a full-screen pulsing
   color overlay as an ambient alarm: bindable `color` (default red), `pattern`
   (`breathe`/`blink`/`solid`), `period_ms`, `intensity` (1-100), and `duration_ms`
   (0 = until stopped/tapped). Wakes the screen; pairs well with `beep`.
 - `set_volume` — set (0-100) or adjust (signed delta) the speaker volume.
-- `timer_control` — start/stop/toggle/pause/resume/reset/lap/set/adjust one of
-  the three on-screen timers.
+- `timer_control` — start, stop, toggle, pause, resume, reset, set, or adjust one
+  of the three on-screen timers. Start and Toggle require `mode` (`up` or
+  `down`); countdown starts also require a positive whole-second `value`.
 - `set_config` — write a safe subset of device settings that apply live without a
   reboot: device name, backlight brightness, the screen-saver group, MQTT publish
   interval/scope, and audio volume. WiFi/MQTT/HA credentials, operating mode, and
@@ -177,18 +220,93 @@ graph LR
   `swipe`, `boot`, `button-defaults`, `hw-buttons`, `mqtt-triggers`) with a
   validated full-replacement object (read it first with `get_component_config`,
   edit, send back).
+
+The `timers` component contains only per-slot `expire_actions` arrays. A
+countdown snapshots those settings when it starts, so configuration edits apply
+to later runs. The component's `exists` result reports whether
+`/config/timers.json` physically exists, even when normalized content is empty.
 - `system_command` — `reboot`, `wifi_reconnect`, or `screensaver`.
 
 Display-related tools are present only on boards that have a display; `set_volume`
 requires audio hardware; `get_component_config` lists only the components compiled
 into the board.
 
+### Home Assistant execution results
+
+Buttons without Home Assistant actions keep the synchronous `press_button`
+response. When a button includes one or more Home Assistant service actions,
+`press_button` returns an execution ID and `state: "accepted"` while any accepted
+request remains pending:
+
+```json
+{
+  "ok": true,
+  "execution_id": 42,
+  "state": "accepted",
+  "result_tool": "get_ha_execution_result"
+}
+```
+
+Pass the ID to `get_ha_execution_result`:
+
+```json
+{
+  "execution_id": 42
+}
+```
+
+The lookup returns `pending` until every Home Assistant action has a terminal
+result. It then returns `completed` with results matched to the original action
+indices:
+
+```json
+{
+  "execution_id": 42,
+  "state": "completed",
+  "actions": [
+    {
+      "action_index": 0,
+      "entity_id": "light.studio",
+      "service": "turn_off",
+      "status": "success",
+      "http_status": 200,
+      "duration_ms": 83
+    },
+    {
+      "action_index": 2,
+      "entity_id": "media_player.studio",
+      "service": "media_play",
+      "status": "http_error",
+      "http_status": 500,
+      "duration_ms": 112
+    }
+  ]
+}
+```
+
+Terminal statuses include `success`, `not_configured`, `wifi_disconnected`,
+`invalid_request`, `http_begin_failed`, `timeout`, `transport_error`,
+`http_error`, and `queue_full`. The response omits `http_status` when no HTTP
+response was received. If all actions are rejected because the delivery queue
+is full, `press_button` returns `completed_with_errors` and the lookup reports
+each rejection as `queue_full`.
+
+The device retains four execution records. Completed records remain available
+for 60 seconds and then return `expired` on their first subsequent lookup.
+Active records are never evicted. When all four records are active or retained,
+`press_button` returns a busy error before running any button action.
+
 **Authoring tools** (require the pad authoring toggle; display boards only):
 
 - `get_capabilities` — manifest of widget types + fields, button schema, label-style
   DSL, binding schemes (incl. `[pad:name]` and `template_pad`), and grid limits.
+  Its `action_types` object includes `cycle_pad` with `direction`
+  (`next` or `previous`), `wrap` (boolean, default `true`), and optional
+  `excluded_pads` (comma-separated 1-based pad numbers).
   It also carries a `device_config` section advertising `set_config`'s writable
-  fields and the read/write component list. Read-only, so it works with token alone.
+  fields and the read/write component list. Its `storage` object advertises the storage
+  tool names, 128-entry listing limit, and 65,536-byte Base64 file-read limit. Read-only,
+  so it works with token alone.
 - `get_pad_blocks` — list pre-built button groups (building blocks) that can be
   dropped onto a pad. Read-only.
 - `validate_pad` — dry-run validate a pad JSON (grid bounds, span overflow,
@@ -204,7 +322,10 @@ into the board.
 - `set_button` / `set_buttons` — create or replace a button (or many in one save)
   by position, using the same schema as the portal pad editor.
 - `set_pad` — set pad-level fields (layout, cols/rows, wake_screen, bg_color,
-  `template_pad`, and named `[pad:name]` bindings) without touching buttons.
+  `template_pad`, named `[pad:name]` bindings, and local `pad_actions`) without
+  touching buttons. `pad_actions` is an ordered array of up to three action
+  objects that runs for a normal tap anywhere on the pad before buttons or
+  widgets receive it. Omit the field to preserve it; send `[]` to clear it.
 - `remove_button` / `clear_pad` — delete one button or empty a pad.
 
 Writes are validated before saving and persisted on the main loop. Concurrent
@@ -422,6 +543,15 @@ If portal Basic Auth is enabled, embed credentials in the URL
 `/api/screenshot`. The MCP server also advertises this workflow to the model in
 its `initialize` instructions and in `get_capabilities` (`visual_inspection`), so
 a capable assistant can offer to verify UI work on its own.
+
+On touch-display builds with control tools enabled, a browser-assisted remote
+tap uses the same workflow: capture a fresh screenshot, choose native pixel
+coordinates from that image, then call `tap_screen({"x": 120, "y": 80})`.
+The screenshot is only a best-effort snapshot, so a successful result means the
+tap was accepted into the one-slot queue, not that LVGL has delivered it to the
+same screen. The MCP bearer token authorizes `/mcp`; portal Basic Auth, when
+enabled, separately protects `/api/screenshot`. Display-only builds keep
+screenshot inspection but do not expose `tap_screen`.
 
 The `initialize` response's `instructions` field additionally gives the model a
 board-agnostic orientation to the firmware and the core **discover → act →

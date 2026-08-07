@@ -58,12 +58,11 @@
 #include "../brew/brew_log.h"
 
 #include "action_dispatch.h"
-#include "fs_health.h"          // fs_health_set_storage_usage
-#include "web_portal_json.h"   // make_psram_json_doc
 #include "log_manager.h"
+#include "storage.h"
+#include "web_portal_json.h"   // make_psram_json_doc
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
 #include <esp_heap_caps.h>
 #include <math.h>
 #include <string.h>
@@ -263,7 +262,7 @@ static bool tool_list_brews(const JsonObject& args, JsonObject& result, String& 
     result["max"] = (uint32_t)BREW_LOG_MAX_BREWS;
     JsonArray out = result.createNestedArray("brews");
 
-    File dir = LittleFS.open(BREW_LOG_DIR);
+    File dir = Storage.open(BREW_LOG_DIR);
     if (!dir || !dir.isDirectory()) {
         result["count"] = 0;
         return true;
@@ -290,7 +289,7 @@ static bool tool_list_brews(const JsonObject& args, JsonObject& result, String& 
     for (uint16_t i = 0; i < emit; i++) {
         char path[40];
         snprintf(path, sizeof(path), "%s/%04u.json", BREW_LOG_DIR, (unsigned)ids[i]);
-        File bf = LittleFS.open(path, "r");
+        File bf = Storage.open(path, "r");
         if (!bf) continue;
         size_t sz = bf.size();
         if (sz == 0 || sz > 8192) { bf.close(); continue; }
@@ -324,9 +323,9 @@ static bool tool_get_brew(const JsonObject& args, JsonObject& result, String& er
 
     char path[40];
     snprintf(path, sizeof(path), "%s/%04u.json", BREW_LOG_DIR, (unsigned)id);
-    if (!LittleFS.exists(path)) return cs_fail(result, err, CS_ERR_PARAMS, "brew not found");
+    if (!Storage.exists(path)) return cs_fail(result, err, CS_ERR_PARAMS, "brew not found");
 
-    File bf = LittleFS.open(path, "r");
+    File bf = Storage.open(path, "r");
     if (!bf) return cs_fail(result, err, CS_ERR_INTERNAL, "cannot open brew file");
     size_t sz = bf.size();
     auto doc = make_psram_json_doc(sz + 512);
@@ -506,7 +505,7 @@ static bool tool_brew_control(const JsonObject& args, JsonObject& result, String
 }
 
 // ============================================================================
-// Control tool: delete_brew — remove a saved brew (plain LittleFS I/O)
+// Control tool: delete_brew — remove a saved brew.
 // ============================================================================
 
 static bool tool_delete_brew(const JsonObject& args, JsonObject& result, String& err) {
@@ -515,9 +514,9 @@ static bool tool_delete_brew(const JsonObject& args, JsonObject& result, String&
 
     char path[40];
     snprintf(path, sizeof(path), "%s/%04u.json", BREW_LOG_DIR, (unsigned)id);
-    if (!LittleFS.exists(path)) return cs_fail(result, err, CS_ERR_PARAMS, "brew not found");
-    if (!LittleFS.remove(path)) return cs_fail(result, err, CS_ERR_INTERNAL, "delete failed");
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    if (!Storage.exists(path)) return cs_fail(result, err, CS_ERR_PARAMS, "brew not found");
+    if (!Storage.remove(path)) return cs_fail(result, err, CS_ERR_INTERNAL, "delete failed");
+    storage_publish_usage();
 
     LOGI(TAG, "Deleted brew %ld via MCP", id);
     result["status"] = "deleted";
@@ -539,16 +538,16 @@ static bool tool_delete_brew_template(const JsonObject& args, JsonObject& result
 
     char path[80];
     snprintf(path, sizeof(path), BREW_TEMPLATE_DIR "/%s.json", name);
-    if (!LittleFS.exists(path)) {
+    if (!Storage.exists(path)) {
         const BrewTemplate* t = brew_template_find(name);
         if (t && !t->is_dynamic && strcmp(t->name, name) == 0)
             return cs_fail(result, err, CS_ERR_PARAMS, "cannot delete a built-in template");
         return cs_fail(result, err, CS_ERR_PARAMS, "template file not found");
     }
 
-    LittleFS.remove(path);
+    Storage.remove(path);
     brew_template_loader_reload();
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage();
 
     const BrewTemplate* t = brew_template_find(name);
     bool reset = (t && !t->is_dynamic && strcmp(t->name, name) == 0);
@@ -591,18 +590,18 @@ static bool tool_set_brew_template(const JsonObject& args, JsonObject& result, S
     if (!name[0] || strstr(name, "..") || strchr(name, '/') || strchr(name, '\\'))
         return cs_fail(result, err, CS_ERR_PARAMS, "invalid template name");
 
-    if (!LittleFS.exists(BREW_TEMPLATE_DIR)) LittleFS.mkdir(BREW_TEMPLATE_DIR);
+    if (!Storage.exists(BREW_TEMPLATE_DIR)) Storage.mkdir(BREW_TEMPLATE_DIR);
 
     char path[80];
     snprintf(path, sizeof(path), BREW_TEMPLATE_DIR "/%s.json", name);
-    File f = LittleFS.open(path, "w");
+    File f = Storage.open(path, "w");
     if (!f) return cs_fail(result, err, CS_ERR_INTERNAL, "cannot open template file");
     size_t written = f.write((const uint8_t*)content, len);
     f.close();
     if (written != len) return cs_fail(result, err, CS_ERR_INTERNAL, "write failed");
 
     brew_template_loader_reload();
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage();
     LOGI(TAG, "Saved brew template '%s' via MCP (%u bytes)", name, (unsigned)written);
     result["status"]        = "saved";
     result["name"]          = name;

@@ -68,15 +68,12 @@ const healthHistory = {
     psramFreeTs: [],
     psramFreeMin: [],
     psramFreeMax: [],
-    heapInternalLargest: [],
-    heapInternalLargestTs: [],
 };
 
 const healthSeriesStats = {
     cpu: { min: null, max: null },
     heapInternalFree: { min: null, max: null },
     psramFree: { min: null, max: null },
-    heapInternalLargest: { min: null, max: null },
 };
 
 function healthComputeMinMaxMulti(arrays) {
@@ -128,13 +125,6 @@ function healthUpdateSeriesStats({ hasPsram = null } = {}) {
     } else {
         healthSeriesStats.psramFree.min = null;
         healthSeriesStats.psramFree.max = null;
-    }
-    {
-        const mm = healthComputeMinMaxMulti([
-            healthHistory.heapInternalLargest,
-        ]);
-        healthSeriesStats.heapInternalLargest.min = mm.min;
-        healthSeriesStats.heapInternalLargest.max = mm.max;
     }
 }
 
@@ -209,9 +199,6 @@ async function updateHealthHistory({ hasPsram = null } = {}) {
         healthReplaceArray(healthHistory.psramFreeTs, ts);
         healthReplaceArray(healthHistory.psramFreeMin, hist.psram_free_min_window);
         healthReplaceArray(healthHistory.psramFreeMax, hist.psram_free_max_window);
-
-        healthReplaceArray(healthHistory.heapInternalLargest, hist.heap_internal_largest);
-        healthReplaceArray(healthHistory.heapInternalLargestTs, ts);
 
         healthUpdateSeriesStats({ hasPsram });
         healthDrawSparklinesOnly({ hasPsram });
@@ -579,9 +566,6 @@ async function updateHealth() {
         if (psramWrap) psramWrap.style.display = hasPsram ? '' : 'none';
         const psramSparkValue = document.getElementById('health-sparkline-psram-value');
         if (psramSparkValue) psramSparkValue.textContent = hasPsram ? healthFormatBytes(health.psram_free) : '—';
-
-        const largestSparkValue = document.getElementById('health-sparkline-largest-value');
-        if (largestSparkValue) largestSparkValue.textContent = healthFormatBytes(health.heap_internal_largest);
 
         renderHealth(health);
         renderSensorsSection(health);

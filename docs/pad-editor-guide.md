@@ -23,6 +23,33 @@ At the top of the pad editor, you configure the pad itself:
 - **Wake Screen** — when the screensaver wakes up, which screen should appear? Leave empty to return to the last active screen, or pick a specific pad.
 - **Background** — the color behind the grid. Accepts a `#hex` color or a binding expression for dynamic backgrounds.
 
+### Full-Screen Tap Actions
+
+Use **Full-Screen Tap Actions** to assign up to three ordered actions to a tap anywhere
+on the pad. The action list uses the same editor and action types as buttons. A configured
+full-screen action captures normal taps before buttons and widgets receive them, which is
+useful for a focused control screen or a simple whole-pad navigation surface.
+
+Swipes continue to use the pad's swipe actions. Long-presses do not trigger full-screen
+actions. Full-screen actions use the usual brief tap flash and device-level feedback beep;
+a **Sound Alert** action suppresses that feedback beep.
+
+Full-screen actions belong only to the current pad. They are not inherited from a template
+pad, and clearing the list restores normal button and widget interaction. A saved pad with
+at least one full-screen action is included in **Navigate Pad Sequence**, even if it has no
+buttons.
+
+The stored JSON field is `pad_actions`, an array of up to three `ButtonAction` objects:
+
+```json
+{
+  "pad_actions": [
+    { "type": "screen", "screen_id": "pad_2" },
+    { "type": "sound_alert", "sound_alert_kind": "tone", "sound_alert_pattern": "1000:100" }
+  ]
+}
+```
+
 > **Example**: A home energy dashboard might use a 4×2 grid named "Energy" with a dark background (`#111111`) — four columns for solar, grid, battery, and net power, with two rows for the bar chart and its label.
 
 ### Button Defaults
@@ -73,7 +100,7 @@ Building blocks are pre-configured groups of buttons that you can insert into a 
 
 **Availability checks** — a block only appears in the menu when the current pad meets its requirements:
 
-- Grid dimensions are at least as large as the block's minimum (e.g., 3 columns × 2 rows for the Countdown Timer).
+- Grid dimensions are at least as large as the block's minimum.
 - The pad has enough free (empty) cells for the block's buttons.
 - The total button count after insertion stays within the 64-button limit.
 
@@ -83,7 +110,7 @@ After placing a block, all its buttons become regular buttons — you can edit, 
 
 | Block | Size | Description |
 |-------|------|-------------|
-| **Countdown Timer** | 3×2 min | Three rocker buttons (1 min, 10 sec, 1 sec) in the top row, plus a 2-column-span timer display with `font_family:segment` and a combined start/pause/reset button in the bottom row. Uses Timer 1. |
+| **System Info** | 3×3 min | Device health and network information with live bindings. |
 
 > **Tip**: Building blocks and template pads serve different purposes. Use **template pads** to share common buttons (like navigation) across many pads. Use **building blocks** to quickly add a self-contained functional group (like a timer control panel) to a specific pad.
 
@@ -348,16 +375,17 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | **None** | No action (display-only button) |
 | **Navigate to screen** | Jump to another pad or screen (e.g., `pad_1`, `info_screen`) |
 | **Go back** | Return to the previous screen |
+| **Navigate Pad Sequence** | Move to the next or previous configured, non-empty pad. Optionally wrap at the boundary and exclude specific 1-based pad numbers. |
 | **Publish MQTT** | Send a message to an MQTT topic. Topic and payload fields support binding templates (e.g. `[health:cpu]`). |
 | **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). The sequence field supports binding templates. ESP32-P4 boards only. |
 | **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
-| **Play Beep** | Play a beep pattern through the speaker. Specify a pattern (e.g. `1000:200 100 1000:200` for a double beep) and an optional volume override. The pattern field supports binding templates. ESP32-P4 boards only. |
-| **Play Sound** | Play an uploaded MP3 sound file through the speaker. Select a file from the dropdown and optionally set a volume override. Upload sounds on the Home page under Audio &gt; Sound Files. ESP32-P4 boards only. |
+| **Sound Alert** | Play a **Tone Alert** from a beep pattern (for example, `1000:200 100 1000:200`) or an **MP3 Alert** from an uploaded sound file. Both accept an optional volume override; the tone pattern supports binding templates. ESP32-P4 boards only. |
+| **Music** | Control the Music CD Player: Play/Pause, Next, Previous, or Stop. Available on boards with the sound player enabled. |
 | **Set Volume** | Set the device audio volume to an absolute value (0–100). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
 | **Adjust Volume** | Step the device audio volume up or down by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
 | **Set Brightness** | Set the display backlight brightness to an absolute value (5–100). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
 | **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
-| **Timer** | Control one of 3 independent timers — toggle, start, stop, pause, resume, reset, lap, set countdown, adjust countdown time, or set mode. Set and adjust countdown values support binding templates. See [Timer Actions](#timer-actions) below. |
+| **Timer** | Control one of 3 independent timers. Start and Toggle select stopwatch or countdown mode; countdown duration, Set, and Adjust values support binding templates. See [Timer Actions](#timer-actions) below. |
 | **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
 | **Visual Alert** | Raise or clear a full-screen pulsing color overlay as an ambient alarm. Configure the color (bindable), pattern (breathe/blink/solid), period, intensity, and duration. ESP32-P4 boards only. See [Visual Alert Action](#visual-alert-action) below. |
 | **Home Assistant Service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
@@ -365,12 +393,30 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
-- **Tap action 2**: Play Beep → `1000:100` (confirmation chirp)
+- **Tap action 2**: Sound Alert → Tone Alert → `1000:100` (confirmation chirp)
 - **Long-press action**: Navigate to screen → `pad_3` (a dedicated lighting pad with brightness controls)
 
 **Example setup for navigation:**
 - **Tap action**: Navigate to screen → `pad_2` (cameras pad)
 - Button label: "Cameras" with a `videocam` Material Symbol icon
+
+### Navigate Pad Sequence Action
+
+The **Navigate Pad Sequence** action moves through eligible pads in numeric order. Choose
+**Next** for ascending pad numbers or **Previous** for descending numbers.
+Enable **Wrap** to continue from the opposite end when the action reaches the
+first or last eligible pad. With Wrap disabled, an action at the boundary does
+nothing.
+
+Only saved pads with at least one effective button or a full-screen tap action participate.
+Buttons inherited from a template count, including buttons that are disabled or dynamically
+hidden. Full-screen actions remain local to their own pad. Empty pads are skipped. The
+optional **Excluded Pads** field accepts comma-separated, 1-based pad numbers such as
+`2,5,8`; duplicates are removed and invalid or out-of-range entries are ignored.
+
+For directional navigation, assign **Navigate Pad Sequence → Previous** to the left swipe and
+**Navigate Pad Sequence → Next** to the right swipe, with Wrap enabled on both. Existing swipe
+defaults are unchanged until you configure these actions.
 
 ### BLE Key Sequences
 
@@ -409,40 +455,45 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 The **Timer** action type controls one of 3 independent on-device timers. Timers support count-up (stopwatch) and countdown modes. Use `[timer:N]` bindings on labels to display the timer value (see [Timer Binding](#timer-binding)).
 
-Timer configuration (mode, countdown duration, expire actions) is set at the device level on the **Home** page under the **Timers** section. Button actions only control the timer at runtime.
+Start and Toggle actions contain the mode and, for countdowns, the duration. This makes a copied button preserve how it starts the timer. The **Timers** page stores only the expiry actions for each slot.
 
 When you select a Timer action, a dropdown groups all actions by timer:
 
 | Action | Description |
 |--------|-------------|
-| **Toggle** | Stopped → start, running → pause, paused → resume |
-| **Start** | Start the timer |
+| **Toggle** | When stopped, apply its Mode and Duration and start; when running, pause; when paused, resume |
+| **Start** | Apply its Mode and Duration, reset elapsed time, and start fresh in every state |
 | **Stop** | Stop and reset to 0 (count-up) or the countdown preset (countdown) |
 | **Pause** | Freeze the timer at its current value |
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
-| **Lap** | Reset the timer and start fresh (useful for step timing) |
 | **Set Countdown** | Set the countdown preset to an absolute number of seconds. Only affects countdown-mode timers |
 | **Adjust** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). Only affects countdown-mode timers |
 
+For Start and Toggle, select **Stopwatch (Count Up)** or **Countdown**. Countdown
+actions require a positive whole-second Duration and may use a binding. Stopwatch
+actions do not store a duration.
+
 #### Device-Level Timer Configuration
 
-On the **Home** page, the **Timers** section lets you configure each timer:
+On the **Timers** page, configure up to three expiry actions for each timer slot:
 
-- **Mode** — Count Up (stopwatch) or Countdown
-- **Countdown Duration** — the starting value in seconds (countdown mode only)
-- **Expire Actions** — up to 3 actions to execute when a countdown timer reaches zero. These use the same action editor as button actions, so you can play a sound, send an MQTT message, navigate to a screen, play a beep, or any combination:
+* Expire actions use the same action editor as buttons, so you can trigger a
+  Sound Alert, control Music, send an MQTT message, navigate to a screen, or
+  combine up to three actions.
+* A countdown copies the slot's current expiry list when it starts. Editing
+  settings does not change an active run; the next countdown uses the new list.
 
 | Example expire action | What happens |
 |----------------------|-------------|
-| Play Sound: `alarm` | Plays the "alarm" MP3 file |
+| Sound Alert, MP3 Alert: `alarm` | Plays the "alarm" MP3 file |
 | MQTT Publish: `home/timer/expired` → `ON` | Sends an MQTT notification |
 | Navigate to screen: `pad_alarm` | Shows an alarm pad |
-| Play Beep: `1000:300 200 1000:300` | Plays a beep pattern |
+| Sound Alert, Tone Alert: `1000:300 200 1000:300` | Plays a beep pattern |
 
 **Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
 
-> **Tip**: Create a V60 coffee timer pad with a "Start" button, "+15s" and "-10s" adjust buttons, and a large display button showing `[timer:1;mm:ss]`. Configure Timer 1 as a 240-second countdown on the Home page, with an expire action that plays an alarm sound.
+> **Tip**: Create a V60 coffee timer pad with a Start action set to Countdown and a 240-second Duration, "+15s" and "-10s" Adjust actions, and a large display button showing `[timer:1;mm:ss]`. Configure Timer 1's expiry list to play an alarm sound.
 
 ### Notification Action
 
@@ -474,7 +525,7 @@ The bubble fades in over 200 ms, displays for the configured duration, then fade
 
 ### Visual Alert Action
 
-The **Visual Alert** action raises a full-screen pulsing color overlay on the device screen — a strong ambient cue meant to grab attention across the room (for example, a critical threshold crossing). It complements audio feedback: pair it with a **Play Beep** action for a coordinated alarm. Unlike a notification, it draws no text — just a pulsing tint that sits above everything (including the screensaver).
+The **Visual Alert** action raises a full-screen pulsing color overlay on the device screen — a strong ambient cue meant to grab attention across the room (for example, a critical threshold crossing). It complements audio feedback: pair it with a **Sound Alert** Tone Alert for a coordinated alarm. Unlike a notification, it draws no text — just a pulsing tint that sits above everything (including the screensaver).
 
 **Fields:**
 
@@ -492,7 +543,7 @@ Raising an alert wakes the screen first, so it is visible even when the display 
 **Example: energy alarm from an MQTT trigger**
 - **Trigger**: MQTT topic `home/solar/power` with an `[expr:...]` threshold
 - **Action 1**: Visual Alert → op: `start`, color: `#FF0000`, pattern: `breathe`, duration: `0`
-- **Action 2**: Play Beep → pattern: `1000:200 100 1000:200`
+- **Action 2**: Sound Alert → Tone Alert → pattern: `1000:200 100 1000:200`
 - A separate button (or a recovery trigger) fires **Visual Alert → op: `stop`** to clear it.
 
 ### Home Assistant Service Action
@@ -526,11 +577,13 @@ The action sends `POST <ha_url>/api/services/<domain>/<service>` with the access
 
 *Applies only to boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
 
-Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Play Beep** or **Play Sound** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
+Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Sound Alert** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
 
 **Behavior notes:**
 - Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
-- If any action in the sequence is a **Play Beep** or **Play Sound** action, the device-level feedback beep is automatically suppressed.
+- A configured full-screen action list takes precedence over normal button and widget taps.
+  Clearing the list restores their normal interaction.
+- If any action in the sequence is a **Sound Alert** action, the device-level feedback beep is automatically suppressed.
 - When multiple actions are configured and one of them navigates to a different screen, any subsequent actions in the sequence still execute safely. The last navigation wins (the user sees the final target screen).
 - Swipe gestures use the device-level tap beep with the same suppression logic.
 
@@ -833,12 +886,15 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 
 | Setting | Description |
 |---------|-------------|
-| **Data binding (main line)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`). Each line has a color swatch below the binding input |
-| **Data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream and color. Leave empty for single line |
+| **Live data binding (line 1)** | A binding template that resolves to a number (e.g., `[mqtt:sensor/temp;temperature]`, `[health:cpu]`). The line color and optional Home Assistant history source are configured alongside it |
+| **Live data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream, color, and optional history source. Leave empty for a single line |
 | **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data. Accepts a number or a binding expression (e.g. `[health:heap_total]`) for dynamic scaling |
 | **Same scale for all lines** | When enabled (default), all lines in a multi-line sparkline share the same auto-scaled Y-axis range, so values are visually comparable. Disable to let each line auto-scale independently — useful when lines have very different magnitudes and you want to compare trends/shapes rather than absolute values. Has no effect when explicit min/max are configured or with single-line sparklines |
-| **Time window** | How many seconds of history to display (default: 300 = 5 minutes) |
-| **Data points** | Number of samples in the line (default: 60). More points = higher resolution but slightly more memory |
+| **Time range** | How much history to display, entered in seconds, minutes, hours, or days (default: 5 minutes, maximum: 7 days) |
+| **One point every** | Desired time represented by each point, entered in seconds, minutes, or hours. The editor calculates the required point count and stores it within the 2–1024 point limit |
+| **Backfill from Home Assistant** | Fills the line from long-term statistics after a restart. A live data binding is required because history fills that same stream; it does not create a separate line |
+| **History entity (line 1/2/3)** | Home Assistant entity ID (e.g. `sensor.living_room_temperature`) used when backfill is enabled |
+| **Historical value (line 1/2/3)** | **Average reading** (mean) for measurements, **Latest state** for the most recently recorded value in each period, or **Accumulated total** (sum) for energy, water, and other total sensors |
 | **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
 | **Line separation** | Per-line vertical offset in pixels (0 = off, 1–6). When non-zero and the widget has more than one line, each line is nudged by a small symmetric offset (e.g. two lines fan out by ±offset, three lines by −offset / 0 / +offset) so lines with near-identical values stay visually distinct instead of drawing on top of each other. The current-value dot and min/max markers move with their line. Note: this shifts lines a couple of pixels off their exact value, so leave it at 0 when precise pixel-accurate readout matters |
 | **Max marker size** | Dot radius for the maximum-value marker (0 = off, 1–20 px). When non-zero, a dot and optional label are drawn at the highest point in the visible data |
@@ -859,6 +915,16 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 **Auto-scaling** — when min and max are left empty, the sparkline automatically scales the Y-axis to fit the observed data range. This is the recommended default for most use cases. With multiple lines and **Same scale for all lines** enabled (default), all lines share the same Y-axis range computed from the global min/max across all streams — so a value of 50 on line 1 and 50 on line 2 appear at the same height. Disable it if your lines have very different magnitudes (e.g., watts 0–5000 vs efficiency 0–100) and you want each to fill the chart independently.
 
 **Data gaps** — if data stops arriving (e.g., MQTT sensor goes offline), the sparkline uses Last Observation Carried Forward (LOCF) to fill gaps, keeping the graph smooth instead of showing holes.
+
+**History backfill from Home Assistant** — a freshly booted device has no history, so a 24-hour sparkline would take a full day to fill up. Enable **Backfill from Home Assistant** beside a line's live binding and set its **History entity**. The device fetches that entity's long-term statistics once the clock is synchronized, then fills the empty part of the chart. Live data always wins: backfilled values are only written to slots the device has not sampled itself.
+
+Requirements and limits:
+
+- The Home Assistant URL and a long-lived access token must be configured on the portal's Integrations page.
+- Home Assistant records statistics on 5-minute boundaries, so a line whose point interval is under 5 minutes is not backfilled. The pad editor calculates the interval and warns when this is the case.
+- Windows longer than an hour per slot use Home Assistant's hourly statistics; shorter ones use the 5-minute statistics.
+- Only boards with PSRAM include this feature.
+- Backfill runs once per stream, one stream at a time, in the background — it does not block the UI.
 
 Labels, icons, and colors still work alongside the widget. A typical sparkline button uses the top label for a title ("Temperature") and the bottom label for the current value (`[mqtt:sensor/temp;temperature;%.1f°C]`).
 
@@ -1050,7 +1116,7 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `heap_total` | Total heap size (bytes) | `8390520` |
 | `heap_free` | Free heap memory (bytes) | `145320` |
 | `heap_min` | Heap low-water mark (bytes) | `98000` |
-| `heap_largest` | Largest free block (bytes) | `65536` |
+| `heap_largest` | Largest free block (bytes; up to 30 seconds stale on MIPI-DSI boards) | `65536` |
 | `heap_internal_total` | Total internal RAM (bytes) | `327680` |
 | `heap_internal` | Free internal RAM (bytes) | `82000` |
 | `heap_internal_used` | Used internal RAM (total − free) | `245680` |
@@ -1058,7 +1124,7 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `psram_free` | Free PSRAM (bytes) | `6291456` |
 | `psram_used` | Used PSRAM (total − free) | `2097152` |
 | `psram_min` | PSRAM low-water mark (bytes) | `4194304` |
-| `psram_largest` | Largest free PSRAM block (bytes) | `4194304` |
+| `psram_largest` | Largest free PSRAM block (bytes; unavailable on MIPI-DSI boards, use a pipe fallback) | `4194304` |
 | `wifi_connected` | WiFi connection status | `ON` / `OFF` |
 | `wifi_ssid` | Connected network name | `MyNetwork` |
 | `ip` | Device IP address | `192.168.1.42` |
@@ -1262,7 +1328,7 @@ A precision timer with milliseconds:
 
 ### Timer Binding
 
-**Syntax:** `[timer:N]`, `[timer:N;format]`, `[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]`
+**Syntax:** `[timer:N]`, `[timer:N;format]`, `[timer:N_state]`, `[timer:N_expired]`, `[timer:N_mode]`, `[timer:N_target]`
 
 Displays the value or state of one of the 3 on-device timers. Timer N is 1, 2, or 3.
 
@@ -1285,8 +1351,11 @@ The numeric default makes `[timer:N]` usable as a data source for gauge, bar cha
 | `N_state` | Timer state | `running`, `paused`, `stopped` |
 | `N_expired` | Countdown expired? | `ON`, `OFF` |
 | `N_mode` | Timer direction | `up`, `down` |
+| `N_target` | Active countdown preset in whole seconds | `0` or a positive integer |
 
 Countdown timers that run past zero show negative values (e.g., `-0:05`).
+The target updates after Start, Set, and Adjust actions. Normal ticking, Stop, and
+Reset leave it unchanged. Count-up and unconfigured timers return `0`.
 
 **Examples:**
 
@@ -1299,12 +1368,57 @@ Countdown timers that run past zero show negative values (e.g., `-0:05`).
 [timer:1_state]              → running
 [timer:1_expired]            → OFF
 [timer:1_mode]               → down
+[timer:1_target]             → 300
 ```
 
 Use `[timer:N_expired]` in expression bindings for conditional colors or text:
 
 ```
 [expr:[timer:1_expired]=="ON" ? "#FF0000" : "#333333"]
+```
+
+### Music Binding
+
+**Syntax:** `[music:key]`
+
+Displays metadata and transport state for the Music CD Player. Music bindings
+are available on boards with audio and the sound player enabled.
+
+| Key | Returns | Notes |
+|-----|---------|-------|
+| `file` | Current canonical MP3 path | Returns `---` when no track is selected |
+| `file_name` | Current MP3 filename without parent folders | Returns `---` when no track is selected |
+| `title` | ID3 track title | Returns `---` when unavailable |
+| `artist` | ID3 artist | Returns `---` when unavailable |
+| `album` | ID3 album | Returns `---` when unavailable |
+| `track` | ID3 track number | Returns `---` when unavailable |
+| `index` | Current track number | One-based; returns `0` when no track is selected |
+| `count` | Number of discovered tracks | Returns `-1` while the catalog is unavailable |
+| `elapsed_s` | Whole seconds played in the current track | Returns `0` before playback starts |
+| `total_s` | Whole-track duration in seconds | Returns `-1` when duration is unavailable |
+| `status` | Transport state | `playing`, `paused`, `stopped`, `empty`, `unavailable`, or `error` |
+
+When enabled by the board firmware, Music analysis bindings expose the current
+track's pre-volume PCM level. They are demand-driven, so playback skips the
+analysis work when no configured binding uses them.
+
+| Key | Returns |
+|-----|---------|
+| `analysis.rms` | Smoothed average level, integer `0`–`100` |
+| `analysis.peak` | Fast-attack, slow-release peak level, integer `0`–`100` |
+| `analysis.band.0` through `analysis.band.7` | Eight fixed logarithmic spectrum levels, each `0`–`100` |
+
+**Examples:**
+
+```text
+[music:status]                         -> playing
+[music:index] / [music:count]          -> 2 / 5
+[music:file]                            -> /media/album/02-track.mp3
+[music:file_name]                       -> 02-track.mp3
+[music:title] / [music:artist]          -> Autumn Leaves / John Doe
+[music:elapsed_s] / [music:total_s] s  -> 75 / 244 s
+[music:analysis.rms]                    -> 37
+[music:analysis.band.3]                 -> 62
 ```
 
 ### Expression Binding

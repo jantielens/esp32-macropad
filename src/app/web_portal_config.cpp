@@ -143,6 +143,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["display"] = (bool)HAS_DISPLAY;
 				caps["ble_hid"] = (bool)HAS_BLE_HID;
 				caps["mcp"] = (bool)HAS_MCP;
+				caps["ha_history"] = (bool)HAS_HA_HISTORY;
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;

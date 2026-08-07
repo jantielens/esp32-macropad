@@ -11,6 +11,17 @@
 #define HAS_BLE_HID true
 #define IS_SHUTTER_TESTER true
 
+// Host tests exercise the PSRAM-gated feature set (mirrors a PSRAM board).
+#ifndef HAS_PSRAM
+#define HAS_PSRAM 1
+#endif
+#ifndef HAS_HA_HISTORY
+#define HAS_HA_HISTORY (HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)
+#endif
+#ifndef HA_HISTORY_MIN_SLOT_SECS
+#define HA_HISTORY_MIN_SLOT_SECS 300
+#endif
+
 #ifndef MAX_PADS
 #define MAX_PADS 16
 #endif

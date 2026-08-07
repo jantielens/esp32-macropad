@@ -77,14 +77,14 @@ struct ShutterSessionMeasurement {
 // Public API
 // ============================================================================
 
-// Call once from setup() inside IS_SHUTTER_TESTER block, after LittleFS is mounted.
+// Call once from setup() inside IS_SHUTTER_TESTER block, after the storage facade is mounted.
 void shutter_session_init();
 
 // Start a new session. camera may be nullptr or empty.
 // No-op if a session is already active.
 void shutter_session_start(const char* camera);
 
-// Stop the current session: persists it to LittleFS via FsIndexedStore, then clears state.
+// Stop the current session: persists it through FsIndexedStore, then clears state.
 // No-op if no session is active.
 void shutter_session_stop();
 

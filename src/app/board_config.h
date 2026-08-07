@@ -87,6 +87,11 @@ struct HwButtonDef {
 #define HAS_MCP true
 #endif
 
+// Enable the portal and MCP browser for a filesystem partition or SD card.
+#ifndef HAS_STORAGE_BROWSER
+#define HAS_STORAGE_BROWSER true
+#endif
+
 // Enable BLE HID keyboard support.
 #ifndef HAS_BLE_HID
 #define HAS_BLE_HID true
@@ -340,6 +345,11 @@ struct HwButtonDef {
 #define HAS_SOUND_PLAYER HAS_AUDIO
 #endif
 
+// Demand-driven Music MP3 RMS, peak, and spectrum bindings.
+#ifndef HAS_MUSIC_ANALYSIS
+#define HAS_MUSIC_ANALYSIS false
+#endif
+
 // Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
 #ifndef AUDIO_MP3_SCRATCH_PSRAM
 #define AUDIO_MP3_SCRATCH_PSRAM false
@@ -348,6 +358,35 @@ struct HwButtonDef {
 // Audio worker stack size in bytes.
 #ifndef AUDIO_TASK_STACK_SIZE
 #define AUDIO_TASK_STACK_SIZE 24576
+#endif
+
+// Audio output sample rate in Hz.
+#ifndef AUDIO_SAMPLE_RATE
+#define AUDIO_SAMPLE_RATE 48000
+#endif
+
+// I2S DMA descriptor count, pinned so starvation timing stays in sync with I2S.
+#ifndef AUDIO_DMA_DESC_NUM
+#define AUDIO_DMA_DESC_NUM 6
+#endif
+
+// I2S DMA frames per descriptor. The current ESP-IDF default is 240.
+#ifndef AUDIO_DMA_FRAME_NUM
+#define AUDIO_DMA_FRAME_NUM 240
+#endif
+
+// Default volume used when no NVS value has been stored.
+#ifndef AUDIO_DEFAULT_VOLUME
+#define AUDIO_DEFAULT_VOLUME 50
+#endif
+
+// Audio output driver selection.
+#define AUDIO_OUTPUT_DRIVER_ES8311   0
+#define AUDIO_OUTPUT_DRIVER_PCM510XA 1
+
+// Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
+#ifndef AUDIO_OUTPUT_DRIVER
+#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
 #endif
 
 // ============================================================================
@@ -365,6 +404,64 @@ struct HwButtonDef {
 // flash cache-disable starving the framebuffer DMA.
 #ifndef USE_SD_STORAGE
 #define USE_SD_STORAGE false
+#endif
+
+// SDMMC bus width: 1 or 4 bits. Slot and IOMUX pins are owned by the FQBN.
+#ifndef SDMMC_BUS_WIDTH
+#define SDMMC_BUS_WIDTH 4
+#endif
+
+// SDMMC maximum bus frequency in kHz.
+#ifndef SDMMC_MAX_FREQUENCY_KHZ
+#define SDMMC_MAX_FREQUENCY_KHZ 20000
+#endif
+
+// Optional application-managed SD card power-enable GPIO; -1 leaves it alone.
+#ifndef SDMMC_POWER_PIN
+#define SDMMC_POWER_PIN -1
+#endif
+
+// Whether SDMMC_POWER_PIN enables card power when driven low.
+#ifndef SDMMC_POWER_ACTIVE_LOW
+#define SDMMC_POWER_ACTIVE_LOW false
+#endif
+
+// Delay after application-managed SD power is enabled.
+#ifndef SDMMC_POWER_SETTLE_MS
+#define SDMMC_POWER_SETTLE_MS 0
+#endif
+
+// Optional ESP32 SDMMC LDO channel; -1 leaves the channel unchanged.
+#ifndef SDMMC_LDO_CHANNEL
+#define SDMMC_LDO_CHANNEL -1
+#endif
+
+// Optional board-specific SDMMC clock pin; -1 uses the FQBN's default slot routing.
+#ifndef SDMMC_CLK_PIN
+#define SDMMC_CLK_PIN -1
+#endif
+
+// Optional board-specific SDMMC command pin; -1 uses the FQBN's default slot routing.
+#ifndef SDMMC_CMD_PIN
+#define SDMMC_CMD_PIN -1
+#endif
+
+// Optional board-specific SDMMC data-0 pin; -1 uses the FQBN's default slot routing.
+#ifndef SDMMC_D0_PIN
+#define SDMMC_D0_PIN -1
+#endif
+
+#if USE_SD_STORAGE && !HAS_SD_CARD
+#error "USE_SD_STORAGE requires HAS_SD_CARD=true"
+#endif
+
+#if SDMMC_BUS_WIDTH != 1 && SDMMC_BUS_WIDTH != 4
+#error "SDMMC_BUS_WIDTH must be 1 or 4"
+#endif
+
+#if (SDMMC_CLK_PIN >= 0 || SDMMC_CMD_PIN >= 0 || SDMMC_D0_PIN >= 0) && \
+    (SDMMC_CLK_PIN < 0 || SDMMC_CMD_PIN < 0 || SDMMC_D0_PIN < 0)
+#error "SDMMC_CLK_PIN, SDMMC_CMD_PIN, and SDMMC_D0_PIN must be set together"
 #endif
 
 // Run a diagnostic SD probe early in setup() (mount, card info, directory
@@ -657,6 +754,28 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 #ifndef DISPLAY_DRIVER
 #define DISPLAY_DRIVER DISPLAY_DRIVER_TFT_ESPI  // Default to TFT_eSPI
+#endif
+
+// MIPI-DSI panels continuously DMA-scan a PSRAM framebuffer. A PSRAM heap
+// free-list walk can starve that scan and produce a visible blue frame.
+#ifndef TELEMETRY_ALLOW_PSRAM_POOL_WALK
+#if HAS_DISPLAY && (DISPLAY_DRIVER == DISPLAY_DRIVER_ST7703_DSI || \
+                    DISPLAY_DRIVER == DISPLAY_DRIVER_ST7701_DSI || \
+                    DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI)
+#define TELEMETRY_ALLOW_PSRAM_POOL_WALK 0
+#else
+#define TELEMETRY_ALLOW_PSRAM_POOL_WALK 1
+#endif
+#endif
+
+// DSI boards sample the internal largest-free-block metric off the LVGL task.
+#ifndef TELEMETRY_CACHE_INTERNAL_POOL_WALK
+#define TELEMETRY_CACHE_INTERNAL_POOL_WALK (!TELEMETRY_ALLOW_PSRAM_POOL_WALK)
+#endif
+
+// Sampling period for the cached internal largest-free-block metric (ms).
+#ifndef TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS
+#define TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS 30000
 #endif
 
 // Display shape constants (used by pad layout engine for grid/curated decisions)
@@ -1034,6 +1153,20 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 #ifndef DATA_STREAM_MAX_STREAMS
 #define DATA_STREAM_MAX_STREAMS 64
+#endif
+
+// Requires PSRAM for the background fetch task and response buffers.
+// Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
+#ifndef HAS_HA_HISTORY
+#define HAS_HA_HISTORY (HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)
+#endif
+
+// Recorder statistics are only published on 5-minute boundaries, so hydration is
+// skipped for streams whose per-slot duration is finer than one Recorder period.
+//
+// Shortest sparkline slot duration (seconds) that Home Assistant history can fill.
+#ifndef HA_HISTORY_MIN_SLOT_SECS
+#define HA_HISTORY_MIN_SLOT_SECS 300
 #endif
 
 #endif // BOARD_CONFIG_H

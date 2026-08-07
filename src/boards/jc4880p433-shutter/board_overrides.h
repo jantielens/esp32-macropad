@@ -24,6 +24,12 @@
 // during writes. Boot halts with "SD CARD MISSING" splash if no card.
 #define HAS_SD_CARD     true
 #define USE_SD_STORAGE  true
+#define SDMMC_BUS_WIDTH 4
+#define SDMMC_MAX_FREQUENCY_KHZ 20000
+#define SDMMC_POWER_PIN 45
+#define SDMMC_POWER_ACTIVE_LOW true
+#define SDMMC_POWER_SETTLE_MS 10
+#define SDMMC_LDO_CHANNEL 4
 
 // ============================================================================
 // Disable Network Image Fetch

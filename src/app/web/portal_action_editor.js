@@ -24,11 +24,14 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<option value="">(none)</option>';
     h += '<option value="screen">Navigate to Screen</option>';
     h += '<option value="back">Navigate Back</option>';
+    h += '<option value="cycle_pad">Navigate Pad Sequence</option>';
     h += '<option value="mqtt">MQTT Publish</option>';
     h += '<option value="key">Send BLE Keys</option>';
     h += '<option value="ble_pair">Start BLE Pairing</option>';
-    h += '<option value="beep">Play Beep</option>';
-    h += '<option value="sound">Play Sound</option>';
+    if (typeof deviceInfoCache === 'undefined' || !deviceInfoCache || deviceInfoCache.has_sound_player === true) {
+        h += '<option value="music">Music</option>';
+    }
+    h += '<option value="sound_alert">Sound Alert</option>';
     h += '<option value="timer">Timer Control</option>';
     h += '<option value="notify">Show Notification</option>';
     h += '<option value="visual_alert">Visual Alert</option>';
@@ -44,6 +47,21 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div class="form-group">';
     h += '<label class="form-label" for="' + prefix + '-target">Target Screen</label>';
     h += '<select class="form-select form-select-sm" id="' + prefix + '-target"><option value="">(none)</option></select>';
+    h += '</div></div>';
+    // Pad sequence navigation
+    h += '<div id="' + prefix + '-cycle-pad-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-cycle-pad-direction">Direction</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-cycle-pad-direction">';
+    h += '<option value="next">Next</option><option value="previous">Previous</option>';
+    h += '</select></div>';
+    h += '<div class="form-group">';
+    h += '<label><input type="checkbox" id="' + prefix + '-cycle-pad-wrap" checked> Wrap at first or last pad</label>';
+    h += '</div>';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-cycle-pad-exclusions">Excluded Pads</label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-cycle-pad-exclusions" placeholder="e.g. 2, 5, 8">';
+    h += '<small>Optional comma-separated 1-based pad numbers.</small>';
     h += '</div></div>';
     // MQTT
     h += '<div id="' + prefix + '-mqtt-group" style="display:none;">';
@@ -64,30 +82,31 @@ function actionEditorHTML(prefix, label, opts) {
         h += '<small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms. Supports bindings.</small>';
     }
     h += '</div></div>';
-    // Beep
-    h += '<div id="' + prefix + '-beep-group" style="display:none;">';
+    // Music
+    h += '<div id="' + prefix + '-music-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-beep-pattern">Beep Pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-beep-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200">';
-    h += '<small>Space-separated steps. <b>freq:dur</b> = tone, bare <b>dur</b> = silence gap (ms). E.g. <b>1000:200</b> (single beep), <b>1000:200 100 1000:200</b> (double beep), <b>800:100 50 1200:100</b> (two-tone chirp). Supports bindings.</small>';
+    h += '<label class="form-label" for="' + prefix + '-music-command">Command</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-music-command">';
+    h += '<option value="play_pause">Play/Pause</option><option value="next">Next</option><option value="previous">Previous</option><option value="stop">Stop</option>';
+    h += '</select></div></div>';
+    // Sound Alert
+    h += '<div id="' + prefix + '-sound-alert-group" style="display:none;">';
+    h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-kind">Kind</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-alert-kind" onchange="actionEditorSoundAlertChanged(\'' + prefix + '\')">';
+    h += '<option value="tone">Tone Alert</option><option value="mp3">MP3 Alert</option></select></div>';
+    h += '<div id="' + prefix + '-sound-alert-tone-group">';
+    h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-pattern">Tone Pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sound-alert-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200"></div></div>';
+    h += '<div id="' + prefix + '-sound-alert-mp3-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-sound-alert-file">MP3 Alert File</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-alert-file"><option value="">(none)</option></select>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-beep-volume">Volume Override (%)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-beep-volume" min="0" max="100" placeholder="(use device volume)">';
+    h += '<label class="form-label" for="' + prefix + '-sound-alert-volume">Volume Override (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-sound-alert-volume" min="0" max="100" placeholder="(use device volume)">';
     h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
-    h += '</div></div>';
-    // Sound file
-    h += '<div id="' + prefix + '-sound-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-sound-file">Sound File</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-file"><option value="">(none)</option></select>';
-    h += '<small>MP3 files uploaded via the web portal. Upload sounds in Home &rarr; Sound Files.</small>';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-sound-volume">Volume Override (%)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-sound-volume" min="0" max="100" placeholder="(use device volume)">';
-    h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
-    h += '</div></div>';
+    h += '</div></div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
     h += '<div class="form-group">';
@@ -101,12 +120,24 @@ function actionEditorHTML(prefix, label, opts) {
         h += '<option value="' + t + ':pause">T' + t + ': Pause</option>';
         h += '<option value="' + t + ':resume">T' + t + ': Resume</option>';
         h += '<option value="' + t + ':reset">T' + t + ': Reset</option>';
-        h += '<option value="' + t + ':lap">T' + t + ': Lap</option>';
         h += '<option value="' + t + ':set">T' + t + ': Set Countdown</option>';
         h += '<option value="' + t + ':adjust">T' + t + ': Adjust Countdown</option>';
         h += '</optgroup>';
     }
     h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-mode-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-timer-mode">Mode</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-timer-mode" onchange="actionEditorTimerChanged(\'' + prefix + '\')">';
+    h += '<option value="">Select mode</option>';
+    h += '<option value="up">Stopwatch (Count Up)</option>';
+    h += '<option value="down">Countdown</option>';
+    h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-timer-duration-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-timer-duration">Duration (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-duration" placeholder="e.g. 300">';
+    h += '<small>Positive whole seconds. Supports bindings.</small>';
     h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-set-group" style="display:none;">';
     h += '<label class="form-label" for="' + prefix + '-timer-set-sec">Countdown (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
@@ -252,8 +283,8 @@ function actionEditorTypeChanged(prefix) {
     var mqttGrp = document.getElementById(prefix + '-mqtt-group');
     var keyGrp = document.getElementById(prefix + '-key-group');
     var bleHint = document.getElementById(prefix + '-ble-hint');
-    var beepGrp = document.getElementById(prefix + '-beep-group');
-    var soundGrp = document.getElementById(prefix + '-sound-group');
+    var musicGrp = document.getElementById(prefix + '-music-group');
+    var soundAlertGrp = document.getElementById(prefix + '-sound-alert-group');
     if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
     // List widget: inject synthetic "Selected … Item" option in screen dropdown
     if (type === 'screen') {
@@ -271,8 +302,11 @@ function actionEditorTypeChanged(prefix) {
     if (mqttGrp) mqttGrp.style.display = (type === 'mqtt') ? '' : 'none';
     if (keyGrp) keyGrp.style.display = (type === 'key') ? '' : 'none';
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
-    if (beepGrp) beepGrp.style.display = (type === 'beep') ? '' : 'none';
-    if (soundGrp) soundGrp.style.display = (type === 'sound') ? '' : 'none';
+    if (musicGrp) musicGrp.style.display = (type === 'music') ? '' : 'none';
+    if (soundAlertGrp) soundAlertGrp.style.display = (type === 'sound_alert') ? '' : 'none';
+    if (type === 'sound_alert') actionEditorSoundAlertChanged(prefix);
+    var cyclePadGrp = document.getElementById(prefix + '-cycle-pad-group');
+    if (cyclePadGrp) cyclePadGrp.style.display = (type === 'cycle_pad') ? '' : 'none';
     var timerGrp = document.getElementById(prefix + '-timer-group');
     if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
     var notifyGrp = document.getElementById(prefix + '-notify-group');
@@ -287,11 +321,34 @@ function actionEditorTypeChanged(prefix) {
     }
     var systemGrp = document.getElementById(prefix + '-system-group');
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
-    if (['notify', 'visual_alert', 'mqtt', 'key', 'beep', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
+    if (['notify', 'visual_alert', 'mqtt', 'key', 'sound_alert', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
     if (type === 'system') actionEditorSystemChanged(prefix);
     // Extension-contributed type-change hooks (e.g. shutter group visibility)
     _actionEditorExtensions.forEach(function(ext) { if (ext.typeChanged) ext.typeChanged(prefix, type); });
+}
+
+function actionEditorNormalizeCyclePadExclusions(value) {
+    var configuredMax = (typeof deviceInfoCache !== 'undefined' && deviceInfoCache)
+        ? Number(deviceInfoCache.max_pads) : 0;
+    var maxPads = configuredMax > 0 ? Math.floor(configuredMax) : 16;
+    var unique = {};
+    String(value || '').split(',').forEach(function(token) {
+        token = token.trim();
+        if (!/^[0-9]+$/.test(token)) return;
+        var pad = Number(token);
+        if (pad >= 1 && pad <= maxPads) unique[pad] = true;
+    });
+    return Object.keys(unique).map(Number).sort(function(a, b) { return a - b; }).join(',');
+}
+
+function actionEditorSoundAlertChanged(prefix) {
+    var kind = document.getElementById(prefix + '-sound-alert-kind');
+    var tone = document.getElementById(prefix + '-sound-alert-tone-group');
+    var mp3 = document.getElementById(prefix + '-sound-alert-mp3-group');
+    var isMp3 = kind && kind.value === 'mp3';
+    if (tone) tone.style.display = isMp3 ? 'none' : '';
+    if (mp3) mp3.style.display = isMp3 ? '' : 'none';
 }
 
 // Show/hide system command sub-fields based on the command dropdown.
@@ -334,8 +391,14 @@ function actionEditorTimerChanged(prefix) {
     var val = sel.value; // e.g. "1:toggle", "2:adjust"
     var parts = val.split(':');
     var cmd = parts[1] || '';
+    var starts = cmd === 'start' || cmd === 'toggle';
+    var mode = document.getElementById(prefix + '-timer-mode');
+    var modeGrp = document.getElementById(prefix + '-timer-mode-group');
+    var durationGrp = document.getElementById(prefix + '-timer-duration-group');
     var setGrp = document.getElementById(prefix + '-timer-set-group');
     var adjustGrp = document.getElementById(prefix + '-timer-adjust-group');
+    if (modeGrp) modeGrp.style.display = starts ? '' : 'none';
+    if (durationGrp) durationGrp.style.display = starts && mode && mode.value === 'down' ? '' : 'none';
     if (setGrp) setGrp.style.display = (cmd === 'set') ? '' : 'none';
     if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
 }
@@ -343,7 +406,7 @@ function actionEditorTimerChanged(prefix) {
 // Suffixes for binding-capable action text inputs (shared with binding validator).
 var _ACTION_BIND_SUFFIXES = [
     '-notify-text', '-notify-duration', '-topic', '-payload', '-sequence',
-    '-beep-pattern', '-timer-set-sec', '-timer-adjust-sec'
+    '-sound-alert-pattern', '-timer-duration', '-timer-set-sec', '-timer-adjust-sec'
 ];
 
 // Initialize bindable-color pickers and binding font toggles for all bindable fields.
@@ -386,17 +449,25 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.payload || '';
     el = document.getElementById(prefix + '-sequence');
     if (el) el.value = action.sequence || '';
-    el = document.getElementById(prefix + '-beep-pattern');
-    if (el) el.value = action.beep_pattern || '';
-    el = document.getElementById(prefix + '-beep-volume');
-    if (el) el.value = (action.beep_volume > 0) ? action.beep_volume : '';
-    el = document.getElementById(prefix + '-sound-file');
+    el = document.getElementById(prefix + '-music-command');
+    if (el) el.value = action.music_command || 'play_pause';
+    el = document.getElementById(prefix + '-sound-alert-kind');
+    if (el) el.value = action.sound_alert_kind || 'tone';
+    el = document.getElementById(prefix + '-sound-alert-pattern');
+    if (el) el.value = action.sound_alert_pattern || '';
+    el = document.getElementById(prefix + '-sound-alert-file');
     if (el) {
-        el.value = action.sound_file || '';
+        el.value = action.sound_alert_file || '';
         if (el.selectedIndex < 0) el.value = '';
     }
-    el = document.getElementById(prefix + '-sound-volume');
-    if (el) el.value = (action.sound_volume > 0) ? action.sound_volume : '';
+    el = document.getElementById(prefix + '-sound-alert-volume');
+    if (el) el.value = (action.sound_alert_volume > 0) ? action.sound_alert_volume : '';
+    el = document.getElementById(prefix + '-cycle-pad-direction');
+    if (el) el.value = action.direction === 'previous' ? 'previous' : 'next';
+    el = document.getElementById(prefix + '-cycle-pad-wrap');
+    if (el) el.checked = action.wrap !== false;
+    el = document.getElementById(prefix + '-cycle-pad-exclusions');
+    if (el) el.value = actionEditorNormalizeCyclePadExclusions(action.excluded_pads || '');
 
     // Timer: load from proper fields
     if (action.timer_id && action.timer_command) {
@@ -405,7 +476,12 @@ function actionEditorLoad(prefix, action) {
             el.value = action.timer_id + ':' + action.timer_command;
             if (el.selectedIndex < 0) el.value = '1:toggle';
         }
-        if (action.timer_command === 'set') {
+        if (action.timer_command === 'start' || action.timer_command === 'toggle') {
+            el = document.getElementById(prefix + '-timer-mode');
+            if (el) el.value = action.timer_mode || '';
+            el = document.getElementById(prefix + '-timer-duration');
+            if (el) el.value = action.timer_mode === 'down' ? (action.timer_value || '') : '';
+        } else if (action.timer_command === 'set') {
             el = document.getElementById(prefix + '-timer-set-sec');
             if (el) el.value = action.timer_value || '';
         } else if (action.timer_command === 'adjust') {
@@ -415,6 +491,10 @@ function actionEditorLoad(prefix, action) {
     } else {
         el = document.getElementById(prefix + '-timer-action');
         if (el) el.value = '1:toggle';
+        el = document.getElementById(prefix + '-timer-mode');
+        if (el) el.value = '';
+        el = document.getElementById(prefix + '-timer-duration');
+        if (el) el.value = '';
     }
     // Notify fields
     el = document.getElementById(prefix + '-notify-text');
@@ -488,17 +568,33 @@ function actionEditorBuild(prefix) {
         var seq = document.getElementById(prefix + '-sequence');
         if (seq) act.sequence = (seq.value || '').trim();
     }
-    if (type === 'beep') {
-        var bp = document.getElementById(prefix + '-beep-pattern');
-        if (bp) act.beep_pattern = (bp.value || '').trim();
-        var bv = document.getElementById(prefix + '-beep-volume');
-        if (bv && bv.value !== '') act.beep_volume = parseInt(bv.value, 10);
+    if (type === 'music') {
+        var musicCommand = document.getElementById(prefix + '-music-command');
+        if (musicCommand) act.music_command = musicCommand.value;
     }
-    if (type === 'sound') {
-        var sf = document.getElementById(prefix + '-sound-file');
-        if (sf) act.sound_file = sf.value || '';
-        var sv = document.getElementById(prefix + '-sound-volume');
-        if (sv && sv.value !== '') act.sound_volume = parseInt(sv.value, 10);
+    if (type === 'sound_alert') {
+        var kind = document.getElementById(prefix + '-sound-alert-kind');
+        act.sound_alert_kind = kind ? kind.value : 'tone';
+        var volume = document.getElementById(prefix + '-sound-alert-volume');
+        if (volume && volume.value !== '') act.sound_alert_volume = parseInt(volume.value, 10);
+        if (act.sound_alert_kind === 'tone') {
+            var pattern = document.getElementById(prefix + '-sound-alert-pattern');
+            if (pattern) act.sound_alert_pattern = (pattern.value || '').trim();
+        } else {
+            var file = document.getElementById(prefix + '-sound-alert-file');
+            if (file) act.sound_alert_file = file.value || '';
+        }
+    }
+    if (type === 'cycle_pad') {
+        var cycleDirection = document.getElementById(prefix + '-cycle-pad-direction');
+        var cycleWrap = document.getElementById(prefix + '-cycle-pad-wrap');
+        var cycleExclusions = document.getElementById(prefix + '-cycle-pad-exclusions');
+        act.direction = cycleDirection && cycleDirection.value === 'previous' ? 'previous' : 'next';
+        act.wrap = cycleWrap ? cycleWrap.checked : true;
+        var normalizedExclusions = actionEditorNormalizeCyclePadExclusions(
+            cycleExclusions ? cycleExclusions.value : '');
+        if (cycleExclusions) cycleExclusions.value = normalizedExclusions;
+        if (normalizedExclusions) act.excluded_pads = normalizedExclusions;
     }
 
     if (type === 'timer') {
@@ -508,7 +604,41 @@ function actionEditorBuild(prefix) {
             var parts = val.split(':');
             act.timer_id = parseInt(parts[0], 10);
             act.timer_command = parts[1] || '';
-            if (act.timer_command === 'set') {
+            if (act.timer_command === 'start' || act.timer_command === 'toggle') {
+                var mode = document.getElementById(prefix + '-timer-mode');
+                var duration = document.getElementById(prefix + '-timer-duration');
+                act.timer_mode = mode ? mode.value : '';
+                if (act.timer_mode !== 'up' && act.timer_mode !== 'down') {
+                    if (mode) { mode.setCustomValidity('Select a Timer mode.'); mode.reportValidity(); mode.focus(); }
+                    if (typeof showMessage === 'function') showMessage('Timer Mode is required for Start and Toggle.', 'error');
+                    throw new Error('Timer Mode is required for Start and Toggle');
+                }
+                if (mode) mode.setCustomValidity('');
+                if (act.timer_mode === 'down') {
+                    var durationValue = duration ? (duration.value || '').trim() : '';
+                    var durationTokens = typeof bindingTokenize === 'function'
+                        ? bindingTokenize(durationValue) : [];
+                    var bindingResult = typeof validateBinding === 'function'
+                        ? validateBinding(durationValue, { requireKnownScheme: true })
+                        : { valid: false };
+                    var isBinding = durationTokens.length === 1
+                        && durationTokens[0].start === 0
+                        && durationTokens[0].end === durationValue.length
+                        && durationTokens[0].raw === durationValue
+                        && bindingResult.valid;
+                    var isSeconds = /^[1-9][0-9]*$/.test(durationValue)
+                        && Number(durationValue) <= 4294967;
+                    if (!durationValue || (!isBinding && !isSeconds)) {
+                        if (duration) { duration.setCustomValidity('Enter 1-4294967 whole seconds or a binding.'); duration.reportValidity(); duration.focus(); }
+                        if (typeof showMessage === 'function') showMessage('Timer Duration must be 1-4294967 whole seconds or a binding.', 'error');
+                        throw new Error('Timer Duration must be 1-4294967 whole seconds or a binding');
+                    }
+                    if (duration) duration.setCustomValidity('');
+                    act.timer_value = durationValue;
+                } else if (duration) {
+                    duration.setCustomValidity('');
+                }
+            } else if (act.timer_command === 'set') {
                 var setSec = document.getElementById(prefix + '-timer-set-sec');
                 if (setSec && setSec.value !== '') act.timer_value = (setSec.value || '').trim();
             } else if (act.timer_command === 'adjust') {
@@ -664,7 +794,7 @@ function actionEditorPopulateScreens(prefixes, screens) {
 function actionEditorPopulateSounds(prefixes, sounds) {
     if (!sounds) return;
     prefixes.forEach(function(prefix) {
-        var sel = document.getElementById(prefix + '-sound-file');
+        var sel = document.getElementById(prefix + '-sound-alert-file');
         if (!sel) return;
         while (sel.options.length > 1) sel.remove(1);
         sounds.forEach(function(name) {

@@ -55,6 +55,12 @@ void component_handle_save_body(AsyncWebServerRequest* request,
     uint8_t* data, size_t len, size_t index, size_t total,
     ComponentSaveRawFn save_fn, size_t max_size = 4096);
 
+// Host-test allocation hooks. Passing nullptr restores the defaults.
+typedef void* (*ComponentBodyAllocFn)(size_t size);
+typedef void (*ComponentBodyFreeFn)(void* ptr);
+void component_registry_set_body_allocator_for_test(ComponentBodyAllocFn alloc_fn,
+                                                     ComponentBodyFreeFn free_fn);
+
 // Auto-registration macro — mirrors REGISTER_WIDGET() pattern
 // Usage: REGISTER_COMPONENT(my_feature);
 // Requires a static ComponentDef named <name>_component in the same file

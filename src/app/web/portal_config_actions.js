@@ -54,7 +54,7 @@ async function loadSoundList() {
         if (!resp.ok) { container.innerHTML = '<small style="color:#86868b;">Could not load sounds.</small>'; return; }
         const names = await resp.json();
         if (!names.length) {
-            container.innerHTML = '<small style="color:#86868b;">No sound files uploaded yet.</small>';
+            container.innerHTML = '<small style="color:#86868b;">No alert sounds uploaded yet.</small>';
             return;
         }
         let html = '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
@@ -439,24 +439,9 @@ function timerConfigInitEditors() {
         html += '<details class="editor-group" id="timer-' + tid + '-group">';
         html += '<summary>Timer ' + tid + '</summary>';
         html += '<div class="editor-group-body">';
-        // Mode dropdown
-        html += '<div class="form-group">';
-        html += '<label for="timer-' + tid + '-mode">Mode</label>';
-        html += '<select id="timer-' + tid + '-mode" onchange="timerModeChanged(' + tid + ')">';
-        html += '<option value="up">Stopwatch (Count Up)</option>';
-        html += '<option value="down">Countdown</option>';
-        html += '</select>';
-        html += '</div>';
-        // Countdown duration (visible only in countdown mode)
-        html += '<div class="form-group" id="timer-' + tid + '-countdown-group" style="display:none;">';
-        html += '<label for="timer-' + tid + '-countdown">Countdown Duration (seconds)</label>';
-        html += '<input type="number" id="timer-' + tid + '-countdown" min="1" max="86400" placeholder="e.g. 300">';
-        html += '<small>Duration in seconds. The timer will count down from this value.</small>';
-        html += '</div>';
-        // Expire actions (visible only in countdown mode)
-        html += '<div id="timer-' + tid + '-expire-section" style="display:none;">';
+        html += '<div id="timer-' + tid + '-expire-section">';
         html += '<h4 style="margin: 12px 0 8px;">On Expire Actions</h4>';
-        html += '<small style="display:block; margin-bottom:12px;">Actions to run when the countdown reaches zero (e.g. play a sound, send MQTT message).</small>';
+        html += '<small style="display:block; margin-bottom:12px;">Actions snapshotted when a countdown starts and run once when it reaches zero.</small>';
         for (var ai = 1; ai <= 3; ai++) {
             var prefix = 'timer-' + tid + '-expire-' + ai;
             html += '<details class="editor-group" id="' + prefix + '-group">';
@@ -471,16 +456,6 @@ function timerConfigInitEditors() {
     container.innerHTML = html;
 }
 
-function timerModeChanged(tid) {
-    var modeEl = document.getElementById('timer-' + tid + '-mode');
-    if (!modeEl) return;
-    var isDown = (modeEl.value === 'down');
-    var cdGrp = document.getElementById('timer-' + tid + '-countdown-group');
-    var expSec = document.getElementById('timer-' + tid + '-expire-section');
-    if (cdGrp) cdGrp.style.display = isDown ? '' : 'none';
-    if (expSec) expSec.style.display = isDown ? '' : 'none';
-}
-
 async function loadTimerConfig() {
     try {
         const response = await fetch('/api/component/timers/config');
@@ -488,16 +463,11 @@ async function loadTimerConfig() {
         const data = await response.json();
         TIMER_IDS.forEach(function(tid) {
             var tcfg = data[String(tid)] || {};
-            var modeEl = document.getElementById('timer-' + tid + '-mode');
-            if (modeEl) modeEl.value = tcfg.mode || 'up';
-            var cdEl = document.getElementById('timer-' + tid + '-countdown');
-            if (cdEl) cdEl.value = (tcfg.countdown > 0) ? tcfg.countdown : '';
             var expireActions = tcfg.expire_actions || [];
             for (var ai = 1; ai <= 3; ai++) {
                 var prefix = 'timer-' + tid + '-expire-' + ai;
                 actionEditorLoad(prefix, expireActions[ai - 1] || {});
             }
-            timerModeChanged(tid);
         });
     } catch (err) {
         console.error('Failed to load timer config:', err);
@@ -507,19 +477,13 @@ async function loadTimerConfig() {
 async function saveTimerConfig() {
     var payload = {};
     TIMER_IDS.forEach(function(tid) {
-        var modeEl = document.getElementById('timer-' + tid + '-mode');
-        var cdEl = document.getElementById('timer-' + tid + '-countdown');
-        var tcfg = { mode: modeEl ? modeEl.value : 'up' };
-        if (tcfg.mode === 'down' && cdEl && cdEl.value !== '' && parseInt(cdEl.value, 10) > 0) {
-            tcfg.countdown = parseInt(cdEl.value, 10);
-        }
-        // Collect expire actions
+        var tcfg = { expire_actions: [] };
         var actions = [];
         for (var ai = 1; ai <= 3; ai++) {
             var a = actionEditorBuild('timer-' + tid + '-expire-' + ai);
             if (a.type) actions.push(a);
         }
-        if (actions.length > 0) tcfg.expire_actions = actions;
+        tcfg.expire_actions = actions;
         payload[String(tid)] = tcfg;
     });
     try {

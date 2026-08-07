@@ -127,6 +127,7 @@ function padCopyPad() {
         bg_color: padGetBindableColor('pad-edit-page-bg-color') || '#000000',
         buttons: padState.buttons.map(b => Object.assign({}, b)),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
+        padActions: padBuildLevelActions().map(a => Object.assign({}, a)),
         buttonDefaults: Object.assign({}, padState.buttonDefaults),
         templatePad: padState.templatePad,
     };
@@ -150,6 +151,7 @@ function padPastePad() {
 
     padState.bindings = padState.padClipboard.bindings ? padState.padClipboard.bindings.map(b => Object.assign({}, b)) : [];
     padRenderBindings();
+    padLoadLevelActions(padState.padClipboard.padActions);
 
     // Paste button defaults
     padLoadButtonDefaults(padState.padClipboard.buttonDefaults || {});
@@ -190,6 +192,8 @@ function padExportPad() {
         var bd = padBindingsToDict(padState.bindings);
         if (bd) payload.bindings = bd;
     }
+    const padActions = padBuildLevelActions();
+    if (padActions.length > 0) payload.pad_actions = padActions;
     if (padState.templatePad >= 0) {
         payload.template_pad = padState.templatePad;
     }
@@ -232,6 +236,7 @@ async function padImportPad(evt) {
 
         padState.bindings = padBindingsFromJson(json.bindings);
         padRenderBindings();
+        padLoadLevelActions(json.pad_actions);
 
         // Load template pad (clear if it would reference self)
         padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null &&
@@ -314,9 +319,11 @@ async function deviceExportConfig() {
 
 async function deviceImportConfig(evt) {
     const file = evt.target.files[0];
+    const originalPage = padState.page;
     evt.target.value = '';
     if (!file) return;
 
+    let failedPage = null;
     try {
         const text = await file.text();
         const data = JSON.parse(text);
@@ -341,11 +348,12 @@ async function deviceImportConfig(evt) {
 
         // Step 2: Import device-level button defaults
         if (data.button_defaults && typeof data.button_defaults === 'object') {
-            await fetch('/api/component/button-defaults/config', {
+            const response = await fetch('/api/component/button-defaults/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data.button_defaults),
-            }).catch(() => {});
+            });
+            if (!response.ok) throw new Error('Button defaults import failed: HTTP ' + response.status);
         }
 
         // Step 3: Import all pad configs (save each to trigger icon rendering)
@@ -353,10 +361,13 @@ async function deviceImportConfig(evt) {
             const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
             for (let i = 0; i < data.pads.length && i < maxPads; i++) {
                 const padJson = data.pads[i];
+                failedPage = i;
                 if (!padJson) {
                     // Delete pad if it was null in export
-                    await fetch('/api/icons/page?page=' + i, { method: 'DELETE' }).catch(() => {});
-                    await fetch('/api/pad?page=' + i, { method: 'DELETE' }).catch(() => {});
+                    const iconResponse = await fetch('/api/icons/page?page=' + i, { method: 'DELETE' });
+                    if (!iconResponse.ok) throw new Error('Icon delete failed: HTTP ' + iconResponse.status);
+                    const padResponse = await fetch('/api/pad?page=' + i, { method: 'DELETE' });
+                    if (!padResponse.ok) throw new Error('Pad delete failed: HTTP ' + padResponse.status);
                     continue;
                 }
 
@@ -366,28 +377,37 @@ async function deviceImportConfig(evt) {
                 padState.cols = padJson.cols || 3;
                 padState.rows = padJson.rows || 2;
                 padState.buttons = (padJson.buttons || []).map(b => Object.assign({}, b));
+                padState.bindings = padBindingsFromJson(padJson.bindings);
+                padLoadLevelActions(padJson.pad_actions);
+                padState.templatePad = (padJson.template_pad !== undefined &&
+                    padJson.template_pad !== null && padJson.template_pad !== i)
+                    ? padJson.template_pad : -1;
                 document.getElementById('pad-page-select').value = i;
                 document.getElementById('pad-cols').value = padState.cols;
                 document.getElementById('pad-rows').value = padState.rows;
                 document.getElementById('pad-name').value = padJson.name || '';
                 document.getElementById('pad-wake-screen').value = padJson.wake_screen || '';
+                padPopulateTemplateDropdown(i);
+                document.getElementById('pad-template-pad').value = padState.templatePad;
                 padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
                 padSetBindableColor('pad-edit-page-bg-color', padJson.bg_color, '#000000');
 
-                // Delete old icons first
-                await fetch('/api/icons/page?page=' + i, { method: 'DELETE' }).catch(() => {});
-
-                // Save pad (includes icon upload)
-                await padSavePage();
+                // Save pad through the shared icon and pad persistence path.
+                await padSavePage({ bulk: true });
             }
         }
+
+        await getDeviceInfo(true);
+        document.getElementById('pad-page-select').value = originalPage;
+        await padLoadPage(originalPage);
 
         // Reboot to apply NVS config
         setTimeout(() => {
             fetch('/api/reboot', { method: 'POST' }).catch(() => {});
         }, 500);
     } catch (err) {
-        showMessage('Import failed: ' + err.message, 'error');
+        const pageSuffix = failedPage === null ? '' : ' on Pad ' + (failedPage + 1);
+        showMessage('Import failed' + pageSuffix + ': ' + err.message, 'error');
     }
 }
 
@@ -416,6 +436,7 @@ async function padDeletePage() {
         padSetBindableColor('pad-edit-page-bg-color', '#000000');
         padState.bindings = [];
         padRenderBindings();
+        padLoadLevelActions([]);
         padUpdateDropdownLabel(padState.page, '');
         padRenderGrid();
     } catch (err) {

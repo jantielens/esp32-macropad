@@ -493,11 +493,86 @@ window.init_screen_preview_fragment = function () {
     var spinner = document.getElementById('screen-preview-spinner');
     var status = document.getElementById('screen-preview-status');
     var screenSelect = document.getElementById('screen_preview_selection');
+    var touchSupported = false;
+    var captured = false;
+    var tapInFlight = false;
+    var screenSyncInFlight = false;
+    var screenChangeInFlight = false;
+    var screenSyncTimer = 0;
 
     if (!frame || !image || !captureButton) return;
 
+    function setPreviewInteractive(enabled) {
+        frame.classList.toggle('screen-preview-interactive', enabled);
+    }
+
+    function invalidatePreview() {
+        captured = false;
+        setPreviewInteractive(false);
+        image.onload = null;
+        image.onerror = null;
+        image.style.display = 'none';
+        if (placeholder) placeholder.style.display = '';
+    }
+
+    function capturePreview(afterTap) {
+        captureButton.disabled = true;
+        if (spinner) spinner.style.display = '';
+        if (status) status.textContent = afterTap ? 'Refreshing preview...' : 'Capturing preview...';
+
+        image.onload = function () {
+            if (!image.isConnected) return;
+            captured = true;
+            image.style.display = '';
+            if (placeholder) placeholder.style.display = 'none';
+            setPreviewInteractive(touchSupported);
+            frame.classList.remove('screen-preview-busy');
+            tapInFlight = false;
+            captureButton.disabled = false;
+            if (spinner) spinner.style.display = 'none';
+            if (captureLabel) captureLabel.textContent = 'Refresh Preview';
+            if (status) status.textContent = afterTap
+                ? 'Tap queued. Preview refreshed at ' + new Date().toLocaleTimeString() + '.'
+                : 'Preview captured at ' + new Date().toLocaleTimeString() + '.';
+        };
+        image.onerror = function () {
+            if (!image.isConnected) return;
+            captured = false;
+            setPreviewInteractive(false);
+            frame.classList.remove('screen-preview-busy');
+            tapInFlight = false;
+            captureButton.disabled = false;
+            if (spinner) spinner.style.display = 'none';
+            if (status) status.textContent = afterTap
+                ? 'Tap was queued, but preview refresh failed. Try again.'
+                : 'Preview capture failed. Try again.';
+        };
+        image.src = '/api/screenshot?_=' + Date.now();
+    }
+
+    async function syncCurrentScreen() {
+        if (!screenSelect || !screenSelect.isConnected) {
+            clearInterval(screenSyncTimer);
+            return;
+        }
+        if (screenSyncInFlight || screenChangeInFlight) return;
+        screenSyncInFlight = true;
+        try {
+            var info = await getDeviceInfo(true);
+            if (!info || !screenSelect.isConnected || !info.current_screen) return;
+            if (screenSelect.value !== info.current_screen) {
+                screenSelect.value = info.current_screen;
+                screenSelect.dataset.currentScreen = info.current_screen;
+            }
+        } finally {
+            screenSyncInFlight = false;
+        }
+    }
+
     getDeviceInfo().then(function (info) {
         if (!info || !frame.isConnected) return;
+
+        touchSupported = info.has_touch === true;
 
         var width = Number(info.display_coord_width);
         var height = Number(info.display_coord_height);
@@ -519,20 +594,24 @@ window.init_screen_preview_fragment = function () {
                 screenSelect.appendChild(opt);
             });
             screenSelect.dataset.currentScreen = info.current_screen || screenSelect.value;
+            capturePreview(false);
         }
     });
 
     if (screenSelect) {
         screenSelect.addEventListener('change', async function (event) {
             var previousScreen = screenSelect.dataset.currentScreen || '';
+            invalidatePreview();
             captureButton.disabled = true;
             if (status) status.textContent = 'Switching screen...';
+            screenChangeInFlight = true;
             var changed = await handleScreenChange(event);
+            screenChangeInFlight = false;
             if (!captureButton.isConnected) return;
             captureButton.disabled = false;
             if (changed) {
                 screenSelect.dataset.currentScreen = screenSelect.value;
-                if (status) status.textContent = 'Screen changed. Refresh the preview to capture it.';
+                capturePreview(false);
             } else {
                 screenSelect.value = previousScreen;
                 if (status) status.textContent = 'Screen change failed. The previous screen remains active.';
@@ -541,26 +620,51 @@ window.init_screen_preview_fragment = function () {
     }
 
     captureButton.addEventListener('click', function () {
-        captureButton.disabled = true;
-        if (spinner) spinner.style.display = '';
-        if (status) status.textContent = 'Capturing preview...';
+        capturePreview(false);
+    });
 
-        image.onload = function () {
-            if (!image.isConnected) return;
-            image.style.display = '';
-            if (placeholder) placeholder.style.display = 'none';
+    screenSyncTimer = setInterval(syncCurrentScreen, 2000);
+
+    image.addEventListener('click', async function (event) {
+        if (!touchSupported || !captured || tapInFlight) return;
+        var rect = image.getBoundingClientRect();
+        var naturalWidth = image.naturalWidth;
+        var naturalHeight = image.naturalHeight;
+        if (!naturalWidth || !naturalHeight || !rect.width || !rect.height) return;
+
+        var scale = Math.min(rect.width / naturalWidth, rect.height / naturalHeight);
+        var renderedWidth = naturalWidth * scale;
+        var renderedHeight = naturalHeight * scale;
+        var offsetX = (rect.width - renderedWidth) / 2;
+        var offsetY = (rect.height - renderedHeight) / 2;
+        var imageX = event.clientX - rect.left - offsetX;
+        var imageY = event.clientY - rect.top - offsetY;
+        if (imageX < 0 || imageY < 0 || imageX >= renderedWidth || imageY >= renderedHeight) return;
+
+        var x = Math.min(naturalWidth - 1, Math.floor(imageX / scale));
+        var y = Math.min(naturalHeight - 1, Math.floor(imageY / scale));
+        tapInFlight = true;
+        captureButton.disabled = true;
+        setPreviewInteractive(false);
+        frame.classList.add('screen-preview-busy');
+        if (status) status.textContent = 'Queueing tap...';
+
+        try {
+            var response = await fetch('/api/screen/tap?x=' + x + '&y=' + y, { method: 'POST' });
+            var body = null;
+            try { body = await response.json(); } catch (_) {}
+            if (response.status !== 202) {
+                throw new Error((body && body.message) || ('HTTP ' + response.status));
+            }
+            if (status) status.textContent = 'Tap queued. Refreshing preview...';
+            setTimeout(function () { capturePreview(true); }, 500);
+        } catch (error) {
+            tapInFlight = false;
+            frame.classList.remove('screen-preview-busy');
+            setPreviewInteractive(touchSupported && captured);
             captureButton.disabled = false;
-            if (spinner) spinner.style.display = 'none';
-            if (captureLabel) captureLabel.textContent = 'Refresh Preview';
-            if (status) status.textContent = 'Preview captured at ' + new Date().toLocaleTimeString() + '.';
-        };
-        image.onerror = function () {
-            if (!image.isConnected) return;
-            captureButton.disabled = false;
-            if (spinner) spinner.style.display = 'none';
-            if (status) status.textContent = 'Preview capture failed. Try again.';
-        };
-        image.src = '/api/screenshot?_=' + Date.now();
+            if (status) status.textContent = 'Tap failed: ' + error.message;
+        }
     });
 };
 
@@ -650,16 +754,23 @@ window.init_ha_discovery_fragment = function () {
 };
 
 // ============================================================================
-// Volume & Beep
+// Volume
 // ============================================================================
 
 window.init_volume_fragment = function () {
     initConfigFragment('volume-save-btn', false);
 };
 
+// ============================================================================
+// Button Feedback
+// ============================================================================
+
+window.init_feedback_fragment = function () {
+    initConfigFragment('feedback-save-btn', false);
+};
 
 // ============================================================================
-// Sound Files
+// Alert Sounds
 // ============================================================================
 
 window.init_sounds_fragment = function () {
@@ -738,6 +849,7 @@ window.init_version_info_fragment = function () {
 // ============================================================================
 
 window.init_pad_editor_fragment = function () {
+    if (typeof loadConfig === 'function') loadConfig();
     if (typeof padInit === 'function') padInit();
     if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 };

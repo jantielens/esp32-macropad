@@ -9,5 +9,9 @@
 
 void handleGetScreenshot(AsyncWebServerRequest *request);
 
+#if HAS_TOUCH
+void handlePostScreenTap(AsyncWebServerRequest *request);
+#endif
+
 #endif // HAS_DISPLAY
 #endif // WEB_PORTAL_SCREENSHOT_H

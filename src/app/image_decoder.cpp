@@ -2,6 +2,7 @@
 
 #if HAS_IMAGE_FETCH
 
+#include "image_rgba_source.h"
 #include "log_manager.h"
 #include <esp_heap_caps.h>
 #include <string.h>
@@ -512,7 +513,7 @@ static bool cover_scale_rgb888_to_565(
 
 // Same but for RGBA8888 source (4 bytes/pixel, alpha discarded)
 static bool cover_scale_rgba8888_to_565(
-    const uint8_t* src, int src_w, int src_h,
+    const uint8_t* src, int src_w, int src_h, size_t src_stride,
     uint16_t* dst, int dst_w, int dst_h)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
@@ -544,10 +545,10 @@ static bool cover_scale_rgba8888_to_565(
             if (sx0 < 0) { sx0 = 0; fx = 0; }
             if (sx1 >= src_w) sx1 = src_w - 1;
 
-            const uint8_t* p00 = src + ((size_t)sy0 * src_w + sx0) * 4;
-            const uint8_t* p10 = src + ((size_t)sy0 * src_w + sx1) * 4;
-            const uint8_t* p01 = src + ((size_t)sy1 * src_w + sx0) * 4;
-            const uint8_t* p11 = src + ((size_t)sy1 * src_w + sx1) * 4;
+            const uint8_t* p00 = image_rgba_source_pixel(src, sy0, src_stride, sx0);
+            const uint8_t* p10 = image_rgba_source_pixel(src, sy0, src_stride, sx1);
+            const uint8_t* p01 = image_rgba_source_pixel(src, sy1, src_stride, sx0);
+            const uint8_t* p11 = image_rgba_source_pixel(src, sy1, src_stride, sx1);
 
             float w00 = (1.0f - fx) * (1.0f - fy);
             float w10 = fx * (1.0f - fy);
@@ -636,7 +637,7 @@ static bool letterbox_scale_rgb888_to_565(
 
 // Same but for RGBA8888 source (4 bytes/pixel, alpha discarded)
 static bool letterbox_scale_rgba8888_to_565(
-    const uint8_t* src, int src_w, int src_h,
+    const uint8_t* src, int src_w, int src_h, size_t src_stride,
     uint16_t* dst, int dst_w, int dst_h)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
@@ -673,10 +674,10 @@ static bool letterbox_scale_rgba8888_to_565(
             if (sx0 < 0) { sx0 = 0; fx = 0; }
             if (sx1 >= src_w) sx1 = src_w - 1;
 
-            const uint8_t* p00 = src + ((size_t)sy0 * src_w + sx0) * 4;
-            const uint8_t* p10 = src + ((size_t)sy0 * src_w + sx1) * 4;
-            const uint8_t* p01 = src + ((size_t)sy1 * src_w + sx0) * 4;
-            const uint8_t* p11 = src + ((size_t)sy1 * src_w + sx1) * 4;
+            const uint8_t* p00 = image_rgba_source_pixel(src, sy0, src_stride, sx0);
+            const uint8_t* p10 = image_rgba_source_pixel(src, sy0, src_stride, sx1);
+            const uint8_t* p01 = image_rgba_source_pixel(src, sy1, src_stride, sx0);
+            const uint8_t* p11 = image_rgba_source_pixel(src, sy1, src_stride, sx1);
 
             float w00 = (1.0f - fx) * (1.0f - fy);
             float w10 = fx * (1.0f - fy);
@@ -833,23 +834,52 @@ static bool decode_jpeg(const uint8_t* data, size_t len,
 // ============================================================================
 
 static bool decode_png(const uint8_t* data, size_t len,
-                       uint8_t** out_rgba, int* out_w, int* out_h) {
-    unsigned char* pixels = nullptr;
+                       lv_draw_buf_t** out_draw_buf, int* out_w, int* out_h) {
+    unsigned char* decoded = nullptr;
     unsigned pw = 0, ph = 0;
 
-    unsigned err = lodepng_decode32(&pixels, &pw, &ph, data, len);
+    unsigned err = lodepng_decode32(&decoded, &pw, &ph, data, len);
     if (err) {
         LOGE(TAG, "PNG err=%u: %s", err, lodepng_error_text(err));
+        if (decoded) lv_draw_buf_destroy((lv_draw_buf_t*)decoded);
+        return false;
+    }
+
+    lv_draw_buf_t* draw_buf = (lv_draw_buf_t*)decoded;
+    if (!draw_buf || !draw_buf->data) {
+        LOGE(TAG, "PNG returned null draw buffer or data");
+        if (draw_buf) lv_draw_buf_destroy(draw_buf);
         return false;
     }
 
     if (pw == 0 || ph == 0 || pw > 4096 || ph > 4096) {
         LOGE(TAG, "PNG invalid dims %ux%u", pw, ph);
-        lv_free(pixels);  // lodepng uses lv_malloc
+        lv_draw_buf_destroy(draw_buf);
         return false;
     }
 
-    *out_rgba = pixels;
+    if (draw_buf->header.w != pw || draw_buf->header.h != ph) {
+        LOGE(TAG, "PNG draw buffer dims mismatch: decoded=%ux%u buffer=%ux%u",
+             pw, ph, draw_buf->header.w, draw_buf->header.h);
+        lv_draw_buf_destroy(draw_buf);
+        return false;
+    }
+
+    if (draw_buf->header.cf != LV_COLOR_FORMAT_ARGB8888) {
+        LOGE(TAG, "PNG incompatible color format: %u", draw_buf->header.cf);
+        lv_draw_buf_destroy(draw_buf);
+        return false;
+    }
+
+    if (!image_rgba_source_is_valid(pw, ph, draw_buf->header.stride,
+                                    draw_buf->data_size)) {
+        LOGE(TAG, "PNG invalid buffer bounds: %ux%u stride=%u size=%u",
+             pw, ph, draw_buf->header.stride, draw_buf->data_size);
+        lv_draw_buf_destroy(draw_buf);
+        return false;
+    }
+
+    *out_draw_buf = draw_buf;
     *out_w = (int)pw;
     *out_h = (int)ph;
     return true;
@@ -918,15 +948,19 @@ bool image_decode_to_rgb565(
             heap_caps_free(rgb888);
         }
     } else if (fmt == IMAGE_FORMAT_PNG) {
-        uint8_t* rgba = nullptr;
+        lv_draw_buf_t* draw_buf = nullptr;
         int src_w = 0, src_h = 0;
-        if (decode_png(data, len, &rgba, &src_w, &src_h)) {
+        if (decode_png(data, len, &draw_buf, &src_w, &src_h)) {
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
-                ok = letterbox_scale_rgba8888_to_565(rgba, src_w, src_h, out, target_w, target_h);
+                ok = letterbox_scale_rgba8888_to_565(
+                    draw_buf->data, src_w, src_h, draw_buf->header.stride,
+                    out, target_w, target_h);
             } else {
-                ok = cover_scale_rgba8888_to_565(rgba, src_w, src_h, out, target_w, target_h);
+                ok = cover_scale_rgba8888_to_565(
+                    draw_buf->data, src_w, src_h, draw_buf->header.stride,
+                    out, target_w, target_h);
             }
-            lv_free(rgba);  // lodepng uses lv_malloc
+            lv_draw_buf_destroy(draw_buf);
         }
     }
 

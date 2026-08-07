@@ -127,6 +127,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		#if HAS_DISPLAY
 				// Display screen information
 				response->print(",\"has_display\":true");
+				response->print(",\"has_touch\":");
+				response->print(HAS_TOUCH ? "true" : "false");
 				response->print(",\"max_pads\":");
 				response->print(MAX_PADS);
 				response->print(",\"max_grid_cols\":");
@@ -198,6 +200,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 				}
 		#else
 				response->print(",\"has_display\":false");
+				response->print(",\"has_touch\":false");
 		#endif
 
 		response->print("}");
@@ -295,8 +298,6 @@ void handleGetHealthHistory(AsyncWebServerRequest *request) {
 		PRINT_U32_ARRAY_FIELD("psram_free", s.psram_free);
 		PRINT_U32_ARRAY_FIELD("psram_free_min_window", s.psram_free_min_window);
 		PRINT_U32_ARRAY_FIELD("psram_free_max_window", s.psram_free_max_window);
-
-		PRINT_U32_ARRAY_FIELD("heap_internal_largest", s.heap_internal_largest);
 
 #undef PRINT_U32_ARRAY_FIELD
 

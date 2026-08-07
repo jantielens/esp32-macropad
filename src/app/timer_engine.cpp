@@ -7,6 +7,7 @@
 #include "pad_config.h"
 
 #include <Arduino.h>
+#include <freertos/semphr.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -27,6 +28,8 @@ struct TimerInstance {
 };
 
 static TimerInstance s_timers[TIMER_COUNT];
+static SemaphoreHandle_t s_timer_mutex = nullptr;
+static bool s_timer_ready = false;
 
 // ============================================================================
 // Helpers
@@ -40,6 +43,14 @@ static inline TimerInstance& get(uint8_t id) {
     return s_timers[id - 1];
 }
 
+static inline void timer_lock() {
+    xSemaphoreTake(s_timer_mutex, portMAX_DELAY);
+}
+
+static inline void timer_unlock() {
+    xSemaphoreGive(s_timer_mutex);
+}
+
 // Raw elapsed ms for a timer (regardless of mode)
 static uint32_t raw_elapsed(const TimerInstance& t) {
     uint32_t total = t.accumulated_ms;
@@ -49,155 +60,254 @@ static uint32_t raw_elapsed(const TimerInstance& t) {
     return total;
 }
 
+static void configure_and_start_locked(TimerInstance& t, TimerMode mode,
+                                       uint32_t countdown_ms,
+                                       const ButtonAction* expire_actions,
+                                       uint8_t expire_action_count) {
+    t.mode = mode;
+    t.countdown_ms = mode == TIMER_MODE_DOWN ? countdown_ms : 0;
+    t.accumulated_ms = 0;
+    t.start_ms = millis();
+    t.state = TIMER_RUNNING;
+    t.expire_fired = false;
+    t.expire_action_count = mode == TIMER_MODE_DOWN
+        ? (expire_action_count > TIMER_MAX_EXPIRE_ACTIONS
+            ? TIMER_MAX_EXPIRE_ACTIONS : expire_action_count)
+        : 0;
+    memset(t.expire_actions, 0, sizeof(t.expire_actions));
+    if (t.expire_action_count > 0 && expire_actions) {
+        memcpy(t.expire_actions, expire_actions,
+               t.expire_action_count * sizeof(ButtonAction));
+    }
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
 
 void timer_engine_init() {
+    if (!s_timer_mutex) s_timer_mutex = xSemaphoreCreateMutex();
+    if (!s_timer_mutex) {
+        s_timer_ready = false;
+        return;
+    }
+    timer_lock();
     memset(s_timers, 0, sizeof(s_timers));
+    s_timer_ready = true;
+    timer_unlock();
 }
 
-void timer_start(uint8_t id) {
-    if (!valid_id(id)) return;
-    auto& t = get(id);
-    t.accumulated_ms = 0;
-    t.start_ms = millis();
-    t.state = TIMER_RUNNING;
-    t.expire_fired = false;
+bool timer_configure_and_start(uint8_t id, TimerMode mode, uint32_t countdown_ms,
+                               const ButtonAction* expire_actions,
+                               uint8_t expire_action_count) {
+        if (!s_timer_ready || !valid_id(id)
+            || (mode != TIMER_MODE_UP && mode != TIMER_MODE_DOWN)
+            || (mode == TIMER_MODE_DOWN && countdown_ms == 0)
+            || (mode == TIMER_MODE_UP && countdown_ms != 0)
+            || expire_action_count > TIMER_MAX_EXPIRE_ACTIONS
+            || (expire_action_count > 0 && !expire_actions)) {
+        return false;
+    }
+    timer_lock();
+    configure_and_start_locked(get(id), mode, countdown_ms,
+                               expire_actions, expire_action_count);
+    timer_unlock();
+    return true;
 }
 
-void timer_stop(uint8_t id) {
-    if (!valid_id(id)) return;
+bool timer_toggle_prepared(uint8_t id, TimerState expected_state, TimerMode mode,
+                           uint32_t countdown_ms, const ButtonAction* expire_actions,
+                           uint8_t expire_action_count) {
+        if (!s_timer_ready || !valid_id(id)
+            || (mode != TIMER_MODE_UP && mode != TIMER_MODE_DOWN)
+            || (mode == TIMER_MODE_DOWN && countdown_ms == 0)
+            || (mode == TIMER_MODE_UP && countdown_ms != 0)
+            || expire_action_count > TIMER_MAX_EXPIRE_ACTIONS
+            || (expire_action_count > 0 && !expire_actions)) {
+        return false;
+    }
+    timer_lock();
+    TimerInstance& t = get(id);
+    if (t.state != expected_state) {
+        timer_unlock();
+        return false;
+    }
+    if (t.state == TIMER_STOPPED) {
+        configure_and_start_locked(t, mode, countdown_ms,
+                                   expire_actions, expire_action_count);
+    } else if (t.state == TIMER_RUNNING) {
+        t.accumulated_ms += millis() - t.start_ms;
+        t.state = TIMER_PAUSED;
+    } else {
+        t.start_ms = millis();
+        t.state = TIMER_RUNNING;
+    }
+    timer_unlock();
+    return true;
+}
+
+bool timer_stop(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return false;
+    timer_lock();
     auto& t = get(id);
     t.accumulated_ms = 0;
     t.state = TIMER_STOPPED;
     t.expire_fired = false;
+    timer_unlock();
+    return true;
 }
 
-void timer_pause(uint8_t id) {
-    if (!valid_id(id)) return;
+bool timer_pause(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return false;
+    timer_lock();
     auto& t = get(id);
-    if (t.state != TIMER_RUNNING) return;
-    t.accumulated_ms += millis() - t.start_ms;
-    t.state = TIMER_PAUSED;
+    if (t.state == TIMER_RUNNING) {
+        t.accumulated_ms += millis() - t.start_ms;
+        t.state = TIMER_PAUSED;
+    }
+    timer_unlock();
+    return true;
 }
 
-void timer_resume(uint8_t id) {
-    if (!valid_id(id)) return;
+bool timer_resume(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return false;
+    timer_lock();
     auto& t = get(id);
-    if (t.state != TIMER_PAUSED) return;
-    t.start_ms = millis();
-    t.state = TIMER_RUNNING;
+    if (t.state == TIMER_PAUSED) {
+        t.start_ms = millis();
+        t.state = TIMER_RUNNING;
+    }
+    timer_unlock();
+    return true;
 }
 
-void timer_reset(uint8_t id) {
-    if (!valid_id(id)) return;
+bool timer_reset(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return false;
+    timer_lock();
     auto& t = get(id);
     t.accumulated_ms = 0;
     t.expire_fired = false;
     if (t.state == TIMER_RUNNING) {
         t.start_ms = millis();
     }
+    timer_unlock();
+    return true;
 }
 
-void timer_toggle(uint8_t id) {
-    if (!valid_id(id)) return;
-    auto& t = get(id);
-    switch (t.state) {
-        case TIMER_STOPPED: timer_start(id);  break;
-        case TIMER_RUNNING: timer_pause(id);  break;
-        case TIMER_PAUSED:  timer_resume(id); break;
+bool timer_set_countdown_ms(uint8_t id, uint32_t countdown_ms) {
+    if (!s_timer_ready || !valid_id(id)) return false;
+    timer_lock();
+    TimerInstance& t = get(id);
+    if (t.mode != TIMER_MODE_DOWN) {
+        timer_unlock();
+        return false;
     }
+    t.countdown_ms = countdown_ms;
+    if (t.expire_fired && raw_elapsed(t) < t.countdown_ms) {
+        t.expire_fired = false;
+    }
+    timer_unlock();
+    return true;
 }
 
-void timer_lap(uint8_t id) {
-    // "Lap" resets the given timer and starts it fresh
-    if (!valid_id(id)) return;
-    timer_start(id);
-}
-
-void timer_set_countdown(uint8_t id, uint32_t seconds) {
-    if (!valid_id(id)) return;
-    get(id).countdown_ms = seconds * 1000UL;
-}
-
-void timer_set_mode(uint8_t id, TimerMode mode) {
-    if (!valid_id(id)) return;
-    get(id).mode = mode;
-}
-
-void timer_adjust(uint8_t id, int32_t delta_seconds) {
-    if (!valid_id(id)) return;
+bool timer_adjust(uint8_t id, int32_t delta_seconds) {
+    if (!s_timer_ready || !valid_id(id)) return false;
+    timer_lock();
     auto& t = get(id);
-    if (t.mode != TIMER_MODE_DOWN) return;
+    if (t.mode != TIMER_MODE_DOWN) {
+        timer_unlock();
+        return false;
+    }
     int64_t new_ms = (int64_t)t.countdown_ms + (int64_t)delta_seconds * 1000;
     if (new_ms < 0) new_ms = 0;
+    if (new_ms > UINT32_MAX) new_ms = UINT32_MAX;
     t.countdown_ms = (uint32_t)new_ms;
     // If we pulled back out of overtime, re-arm the expire actions
     if (t.expire_fired && raw_elapsed(t) < t.countdown_ms) {
         t.expire_fired = false;
     }
-}
-
-void timer_set_expire_actions(uint8_t id, const ButtonAction* actions, uint8_t count) {
-    if (!valid_id(id)) return;
-    auto& t = get(id);
-    if (count > TIMER_MAX_EXPIRE_ACTIONS) count = TIMER_MAX_EXPIRE_ACTIONS;
-    t.expire_action_count = count;
-    if (count > 0 && actions) {
-        memcpy(t.expire_actions, actions, count * sizeof(ButtonAction));
-    }
-}
-
-void timer_clear_expire_actions(uint8_t id) {
-    if (!valid_id(id)) return;
-    auto& t = get(id);
-    t.expire_action_count = 0;
-    memset(t.expire_actions, 0, sizeof(t.expire_actions));
+    timer_unlock();
+    return true;
 }
 
 uint32_t timer_get_ms(uint8_t id) {
-    if (!valid_id(id)) return 0;
+    if (!s_timer_ready || !valid_id(id)) return 0;
+    timer_lock();
     auto& t = get(id);
     uint32_t elapsed = raw_elapsed(t);
+    uint32_t result;
     if (t.mode == TIMER_MODE_DOWN) {
         if (elapsed >= t.countdown_ms) {
-            return elapsed - t.countdown_ms;  // overtime (past zero)
+            result = elapsed - t.countdown_ms;  // overtime (past zero)
+        } else {
+            result = t.countdown_ms - elapsed;  // remaining
         }
-        return t.countdown_ms - elapsed;      // remaining
+    } else {
+        result = elapsed;
     }
-    return elapsed;
+    timer_unlock();
+    return result;
+}
+
+uint32_t timer_get_target_seconds(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return 0;
+    timer_lock();
+    const TimerInstance& timer = get(id);
+    uint32_t result = timer.mode == TIMER_MODE_DOWN
+        ? timer.countdown_ms / 1000 : 0;
+    timer_unlock();
+    return result;
 }
 
 TimerState timer_get_state(uint8_t id) {
-    if (!valid_id(id)) return TIMER_STOPPED;
-    return get(id).state;
+    if (!s_timer_ready || !valid_id(id)) return TIMER_STOPPED;
+    timer_lock();
+    TimerState state = get(id).state;
+    timer_unlock();
+    return state;
 }
 
 TimerMode timer_get_mode(uint8_t id) {
-    if (!valid_id(id)) return TIMER_MODE_UP;
-    return get(id).mode;
+    if (!s_timer_ready || !valid_id(id)) return TIMER_MODE_UP;
+    timer_lock();
+    TimerMode mode = get(id).mode;
+    timer_unlock();
+    return mode;
 }
 
 bool timer_is_expired(uint8_t id) {
-    if (!valid_id(id)) return false;
+    if (!s_timer_ready || !valid_id(id)) return false;
+    timer_lock();
     auto& t = get(id);
-    if (t.mode != TIMER_MODE_DOWN) return false;
-    return raw_elapsed(t) >= t.countdown_ms;
+    bool expired = t.mode == TIMER_MODE_DOWN && raw_elapsed(t) >= t.countdown_ms;
+    timer_unlock();
+    return expired;
 }
 
 bool timer_is_overtime(uint8_t id) {
-    if (!valid_id(id)) return false;
+    if (!s_timer_ready || !valid_id(id)) return false;
+    timer_lock();
     auto& t = get(id);
-    if (t.mode != TIMER_MODE_DOWN) return false;
-    if (t.state == TIMER_STOPPED) return false;
-    return raw_elapsed(t) > t.countdown_ms;
+    bool overtime = t.mode == TIMER_MODE_DOWN
+        && t.state != TIMER_STOPPED
+        && raw_elapsed(t) > t.countdown_ms;
+    timer_unlock();
+    return overtime;
 }
 
 int timer_format(uint8_t id, const char* fmt, char* out, size_t out_len) {
     if (!out || out_len == 0) return 0;
-    bool overtime = timer_is_overtime(id);
-    uint32_t ms = timer_get_ms(id);
+    if (!s_timer_ready || !valid_id(id)) return snprintf(out, out_len, "0.0");
+    timer_lock();
+    const TimerInstance& t = get(id);
+    uint32_t elapsed = raw_elapsed(t);
+    bool overtime = t.mode == TIMER_MODE_DOWN
+        && t.state != TIMER_STOPPED
+        && elapsed > t.countdown_ms;
+    uint32_t ms = t.mode == TIMER_MODE_DOWN
+        ? (elapsed >= t.countdown_ms ? elapsed - t.countdown_ms : t.countdown_ms - elapsed)
+        : elapsed;
+    timer_unlock();
     uint32_t total_s = ms / 1000;
     uint32_t h = total_s / 3600;
     uint32_t m = (total_s % 3600) / 60;
@@ -222,17 +332,28 @@ int timer_format(uint8_t id, const char* fmt, char* out, size_t out_len) {
 }
 
 void timer_engine_tick() {
+    if (!s_timer_ready) return;
     for (uint8_t i = 0; i < TIMER_COUNT; i++) {
+        ButtonAction actions[TIMER_MAX_EXPIRE_ACTIONS] = {};
+        uint8_t action_count = 0;
+        timer_lock();
         auto& t = s_timers[i];
-        if (t.mode != TIMER_MODE_DOWN) continue;
-        if (t.state != TIMER_RUNNING) continue;
-        if (t.expire_fired) continue;
-        if (t.expire_action_count == 0) continue;
-        if (raw_elapsed(t) >= t.countdown_ms) {
+        if (t.mode == TIMER_MODE_DOWN
+                && t.state == TIMER_RUNNING
+                && !t.expire_fired
+                && raw_elapsed(t) >= t.countdown_ms) {
             t.expire_fired = true;
+            action_count = t.expire_action_count;
+            if (action_count > 0) {
+                memcpy(actions, t.expire_actions,
+                       action_count * sizeof(ButtonAction));
+            }
+        }
+        timer_unlock();
+        if (action_count > 0) {
             char label[12];
             snprintf(label, sizeof(label), "T%u Expire", i + 1);
-            action_list_dispatch(t.expire_actions, t.expire_action_count, label);
+            action_list_dispatch(actions, action_count, label);
         }
     }
 }

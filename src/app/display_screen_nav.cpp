@@ -5,6 +5,7 @@
 
 #include "display_manager.h"
 #include "log_manager.h"
+#include "pad_cycle.h"
 
 extern portMUX_TYPE g_splash_status_mux;
 
@@ -72,6 +73,34 @@ bool DisplayManager::goBack() {
 		skipHistoryPush = true;
 		LOGI("Display", "Queued go-back (history depth: %zu)", screenHistoryCount);
 		return true;
+}
+
+bool DisplayManager::cyclePad(int8_t direction, bool wrap, uint32_t excludedMask) {
+		bool didLock = false;
+		lockIfNeeded(didLock);
+
+		Screen* anchorScreen = pendingScreen ? pendingScreen : currentScreen;
+		int anchorPad = -1;
+		for (uint8_t index = 0; index < MAX_PADS; index++) {
+				if (anchorScreen == padScreens[index]) {
+						anchorPad = index;
+						break;
+				}
+		}
+
+		int destination = pad_cycle_select(anchorPad, pad_config_get_eligible_mask(),
+		                                     excludedMask, direction, wrap);
+		if (destination >= 0) {
+				pendingScreen = padScreens[destination];
+				skipHistoryPush = false;
+		}
+		unlockIfNeeded(didLock);
+
+		if (destination >= 0) {
+				LOGI("Display", "Queued cycle to Pad %d", destination + 1);
+				return true;
+		}
+		return false;
 }
 
 void DisplayManager::handleSleepScreenRedirect() {

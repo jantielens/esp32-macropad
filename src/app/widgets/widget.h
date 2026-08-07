@@ -68,7 +68,6 @@ inline uint32_t resolve_color(const char* s, uint32_t def) {
 // Resolve a number string (static "8" or "[scheme:...]") to float.
 inline float resolve_number(const char* s, float def) {
     if (!s || !s[0]) return def;
-#if HAS_MQTT
     if (binding_template_has_bindings(s)) {
         char resolved[BINDING_TEMPLATE_MAX_LEN];
         binding_template_resolve(s, resolved, sizeof(resolved));
@@ -76,7 +75,6 @@ inline float resolve_number(const char* s, float def) {
         float val = strtof(resolved, &end);
         return (end == resolved) ? def : val;
     }
-#endif
     char* end = nullptr;
     float val = strtof(s, &end);
     return (end == s) ? def : val;

@@ -11,7 +11,7 @@
 // Print Session Log — Storage-facade persistence for darkroom prints
 // ============================================================================
 // Files stored at /prints/YYMMDD-NNN.json (date-based ID) on the Storage
-// facade (LittleFS or SD).
+// facade (flash or SD).
 // Date and sequence tracked in NVS (namespace "print_log").
 // Auto-evicts oldest print when count exceeds DARKROOM_PRINT_LOG_MAX.
 // Deferred I/O: tick functions snapshot data, loop() writes to disk.

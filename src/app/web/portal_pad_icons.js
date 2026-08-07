@@ -274,29 +274,30 @@ function padCanvasToPNG(canvas) {
     });
 }
 
-async function padGetButtonSizes() {
+async function padGetButtonSizes(cols, rows) {
     if (padButtonSizesCache &&
-        padButtonSizesCache.cols === padState.cols &&
-        padButtonSizesCache.rows === padState.rows) {
+        padButtonSizesCache.cols === cols &&
+        padButtonSizesCache.rows === rows) {
         return padButtonSizesCache;
     }
-    const resp = await fetch('/api/pad/button_sizes?cols=' + padState.cols + '&rows=' + padState.rows);
+    const resp = await fetch('/api/pad/button_sizes?cols=' + cols + '&rows=' + rows);
     if (!resp.ok) throw new Error('Failed to get button sizes');
     const data = await resp.json();
-    data.cols = padState.cols;
-    data.rows = padState.rows;
+    data.cols = cols;
+    data.rows = rows;
     padButtonSizesCache = data;
     return data;
 }
 
-async function padUploadPageIcons() {
+async function padUploadPageIcons(context) {
     // Always delete old page icons (cleans up removed icons)
-    await fetch('/api/icons/page?page=' + padState.page, { method: 'DELETE' });
+    const deleteResponse = await fetch('/api/icons/page?page=' + context.page, { method: 'DELETE' });
+    if (!deleteResponse.ok) throw new Error('Failed to delete existing icons: HTTP ' + deleteResponse.status);
 
-    const iconButtons = padState.buttons.filter(b => b.icon_id);
+    const iconButtons = context.buttons.filter(b => b.icon_id);
     if (iconButtons.length === 0) return;
 
-    const btnSizes = await padGetButtonSizes();
+    const btnSizes = await padGetButtonSizes(context.cols, context.rows);
     const baseW = btnSizes.button_w - btnSizes.padding * 2;
     const baseH = btnSizes.button_h - btnSizes.padding * 2;
 
@@ -346,7 +347,7 @@ async function padUploadPageIcons() {
 
         padRenderIconOnCanvas(canvas, btn.icon_id, iconW, iconH);
         const pngBlob = await padCanvasToPNG(canvas);
-        const key = 'pad_' + padState.page + '_' + btn.col + '_' + btn.row;
+        const key = 'pad_' + context.page + '_' + btn.col + '_' + btn.row;
 
         const resp = await fetch('/api/icons/install?id=' + encodeURIComponent(key) + '&kind=' + kind, {
             method: 'POST',
@@ -354,7 +355,7 @@ async function padUploadPageIcons() {
             body: pngBlob,
         });
         if (!resp.ok) {
-            console.error('Icon upload failed for ' + key);
+            throw new Error('Icon upload failed for ' + key + ': HTTP ' + resp.status);
         }
     }
 }

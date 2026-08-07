@@ -16,8 +16,22 @@ extern "C" {
 // - Usage numbers are only reported after some other subsystem has mounted the FS
 //   and provided totals via fs_health_set_storage_usage().
 
+typedef enum FSBackend {
+		FS_BACKEND_LITTLEFS,
+		FS_BACKEND_SDMMC,
+} FSBackend;
+
+typedef enum FSCardType {
+		FS_CARD_TYPE_NOT_APPLICABLE,
+		FS_CARD_TYPE_NONE,
+		FS_CARD_TYPE_SD,
+		FS_CARD_TYPE_SDHC,
+		FS_CARD_TYPE_UNKNOWN,
+} FSCardType;
+
 typedef struct FSHealthStats {
-		bool storage_partition_present;
+		FSBackend backend;
+		FSCardType card_type;
 		bool storage_mounted;
 		uint64_t storage_used_bytes;
 		uint64_t storage_total_bytes;
@@ -28,6 +42,9 @@ void fs_health_init();
 // Called by subsystems that successfully mounted the storage backend
 // (LittleFS or SD_MMC). uint64_t accommodates SD cards larger than 4 GiB.
 void fs_health_set_storage_usage(uint64_t used_bytes, uint64_t total_bytes);
+
+// Records the SDMMC card type after a successful mount.
+void fs_health_set_sd_card_type(FSCardType card_type);
 
 // Returns cached stats (always succeeds after fs_health_init()).
 void fs_health_get(FSHealthStats* out);

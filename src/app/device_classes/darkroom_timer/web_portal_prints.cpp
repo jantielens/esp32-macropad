@@ -12,7 +12,7 @@
 // runs because this file is #include-aggregated into route_components.cpp under
 // #if IS_DARKROOM_TIMER.
 //
-// Persistence goes through the Storage facade (LittleFS or SD). Flash I/O is
+// Persistence goes through the Storage facade (flash or SD). Filesystem I/O is
 // wrapped in a panel-sleep blank/restore window because DSI panels DMA-scan
 // PSRAM continuously and flash writes starve the display DMA, causing flicker
 // (same mitigation print_log.cpp uses for deferred writes).
@@ -61,7 +61,7 @@ static void restore_display(uint8_t saved) {
     if (displayManager && displayManager->getDriver()) {
         displayManager->lock();
         displayManager->getDriver()->displayWake();
-        // displaySleep() zeroes both DPI framebuffers, but LVGL's dirty-area
+        // displaySleep() zeroes the DPI framebuffer, but LVGL's dirty-area
         // tracking still believes the screen is painted, so it would only
         // redraw self-invalidating widgets — leaving the rest black until the
         // next navigation. Force a full-screen invalidate so the entire UI

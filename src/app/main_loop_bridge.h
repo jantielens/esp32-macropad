@@ -23,6 +23,9 @@ enum LoopBridgeResult {
     LOOP_BRIDGE_OK = 0,    // exec ran; *out_ok / out_msg are populated
     LOOP_BRIDGE_BUSY,      // another job is in flight
     LOOP_BRIDGE_TIMEOUT,   // exec did not complete within timeout
+    LOOP_BRIDGE_INVALID,   // invalid callback/context or consumer/ISR caller
+    LOOP_BRIDGE_UNAVAILABLE, // bridge has not been initialized
+    LOOP_BRIDGE_TOO_LARGE, // context exceeds LOOP_BRIDGE_CTX_BYTES
 };
 
 // Job executed on the main loop. `ctx` points at the internal copy of the
@@ -30,13 +33,14 @@ enum LoopBridgeResult {
 // into msg (capacity msg_len). It runs in main/LVGL task context, so
 // action_dispatch / display calls are safe here.
 typedef void (*LoopBridgeExec)(const void* ctx, bool* ok, char* msg, size_t msg_len);
+typedef void (*LoopBridgeCleanup)(const void* ctx);
 
 // Maximum context size copied into the internal slot.
 #define LOOP_BRIDGE_CTX_BYTES 256
 
 // Create the completion semaphore. Call once during setup (idempotent; safe to
-// call again). loop_bridge_dispatch() returns LOOP_BRIDGE_TIMEOUT until this has
-// run.
+// call again). loop_bridge_dispatch() returns LOOP_BRIDGE_UNAVAILABLE until
+// this has run.
 void loop_bridge_init();
 
 // Web task: package a job, schedule it on the main loop, and block (bounded)
@@ -45,7 +49,8 @@ LoopBridgeResult loop_bridge_dispatch(LoopBridgeExec exec,
                                       const void* ctx, size_t ctx_len,
                                       uint32_t timeout_ms,
                                       bool* out_ok,
-                                      char* out_msg, size_t out_msg_len);
+                                      char* out_msg, size_t out_msg_len,
+                                      LoopBridgeCleanup abandoned_cleanup = nullptr);
 
 // Web task: queue a fire-and-forget job and return immediately. The main loop
 // reclaims the slot after execution; callers only learn whether it was queued.

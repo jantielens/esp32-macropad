@@ -32,6 +32,7 @@ After every significant change, the agent must:
    - `README.md` — Main project documentation
    - `docs/dev/web-portal.md` — Web portal and REST API guide
    - `docs/dev/display-touch-architecture.md` — Display/touch HAL and screen architecture
+   - `docs/dev/audio-architecture.md` — Audio output, I2S, memory, and MP3 playback architecture
    - `docs/dev/adding-a-device-class.md` — Device class extension contract
    - `docs/dev/scripts.md` — Script usage guide
    - `docs/dev/library-management.md` — Library management guide
@@ -87,6 +88,7 @@ If the build fails:
 - New user-facing control or feature added → Consider whether it should be exposed to the MCP server (a control/authoring tool via `REGISTER_MCP_TOOL`, and/or advertised in `get_capabilities`) so AI clients can use it; update `docs/mcp-guide.md`
 - Web UI feature changed → Update `docs/dev/web-portal.md` features section and `docs/web-portal-guide.md`
 - Display/touch driver added/changed → Update `docs/dev/display-touch-architecture.md` driver sections
+- Audio output driver, I2S framing, or MP3 playback changed → Update `docs/dev/audio-architecture.md`
 - Screen management changed → Update `docs/dev/display-touch-architecture.md` screen lifecycle
 - New version released → Update `CHANGELOG.md` with changes, update `src/version.h` with new version number
 - Release process changed → Update `docs/dev/build-and-release-process.md` with new workflow

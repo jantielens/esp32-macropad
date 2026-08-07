@@ -13,7 +13,7 @@
 #define SHUTTER_TEST_ID_MAX_LEN    17  // 16 chars + null
 #define SHUTTER_TEST_NAME_MAX_LEN  64
 
-// File path on LittleFS for test script storage.
+// File path on persistent storage for test script storage.
 #define SHUTTER_TEST_FILE_PATH     "/storage/shutter_tests.txt"
 
 // A single speed entry in a test script.
@@ -37,7 +37,7 @@ struct ShutterTestParseResult {
     uint8_t count;
 };
 
-// Parse the test script file from LittleFS.
+// Parse the test script file from persistent storage.
 // Returns the number of valid test scripts found (0 if file missing/empty).
 // Fills `result` with parsed data. Caller owns the result (stack-allocated).
 uint8_t shutter_test_scripts_parse(ShutterTestParseResult* result);

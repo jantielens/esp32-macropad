@@ -10,7 +10,7 @@
 // Brew Template Registry
 // ============================================================================
 // Built-in templates are registered at startup via brew_templates_init().
-// Future config-driven templates (loaded from LittleFS JSON) can be added at
+// Future config-driven templates (loaded from persistent-storage JSON) can be added at
 // runtime with brew_template_register() — the manager is pointer-agnostic.
 
 // Register a template. Built-ins pass is_dynamic=false (static const storage).
@@ -31,7 +31,7 @@ const BrewTemplate* brew_template_get(uint8_t index);
 // Remove all dynamically-allocated templates (called before reloading from FS).
 void brew_templates_clear_dynamic();
 
-// Register all built-in templates and load dynamic templates from LittleFS.
+// Register all built-in templates and load dynamic templates from persistent storage.
 // Call once at startup.
 void brew_templates_init();
 

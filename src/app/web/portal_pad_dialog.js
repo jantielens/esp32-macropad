@@ -2,9 +2,149 @@
 // Part of the ESP32 Macropad configuration portal.
 // Bundled into portal_pad_editor.js during minification.
 
+var PAD_SPARKLINE_MAX_WINDOW_SECONDS = 7 * 86400;
+var PAD_SPARKLINE_MAX_POINTS = 1024;
+var PAD_SPARKLINE_MIN_INTERVAL_SECONDS = 0.1;
+
 function padConfirmChanged() {
     var enabled = document.getElementById('pad-edit-confirm').checked;
     document.getElementById('pad-edit-confirm-text-group').style.display = enabled ? '' : 'none';
+}
+
+function padGetSparklineWindowSeconds() {
+    var value = parseFloat(document.getElementById('pad-edit-sparkline-window').value);
+    var unit = parseInt(document.getElementById('pad-edit-sparkline-window-unit').value);
+    if (!isFinite(value) || value <= 0) value = 5;
+    if (!isFinite(unit) || unit <= 0) unit = 60;
+    return Math.round(value * unit);
+}
+
+function padSetSparklineWindowSeconds(seconds) {
+    var units = [86400, 3600, 60, 1];
+    var unit = 1;
+    for (var i = 0; i < units.length; i++) {
+        if (seconds >= units[i] && seconds % units[i] === 0) {
+            unit = units[i];
+            break;
+        }
+    }
+    document.getElementById('pad-edit-sparkline-window').value = seconds / unit;
+    document.getElementById('pad-edit-sparkline-window-unit').value = String(unit);
+}
+
+function padGetSparklineIntervalSeconds() {
+    var value = parseFloat(document.getElementById('pad-edit-sparkline-interval').value);
+    var unit = parseInt(document.getElementById('pad-edit-sparkline-interval-unit').value);
+    if (!isFinite(value) || value <= 0) value = 5;
+    if (!isFinite(unit) || unit <= 0) unit = 60;
+    return value * unit;
+}
+
+function padSetSparklineIntervalSeconds(seconds) {
+    var units = [3600, 60, 1];
+    var unit = 1;
+    for (var i = 0; i < units.length; i++) {
+        if (seconds >= units[i]) {
+            unit = units[i];
+            break;
+        }
+    }
+    var value = Math.ceil((seconds / unit) * 1000) / 1000;
+    document.getElementById('pad-edit-sparkline-interval').value = value;
+    document.getElementById('pad-edit-sparkline-interval-unit').value = String(unit);
+}
+
+function padGetSparklineSlotCount() {
+    var requested = Math.ceil(padGetSparklineWindowSeconds() / padGetSparklineIntervalSeconds());
+    if (!isFinite(requested)) requested = 60;
+    var intervalLimit = Math.floor(padGetSparklineWindowSeconds() / PAD_SPARKLINE_MIN_INTERVAL_SECONDS);
+    return Math.max(2, Math.min(PAD_SPARKLINE_MAX_POINTS, intervalLimit, requested));
+}
+
+function padFormatSparklineDuration(seconds) {
+    if (seconds < 1) return Math.round(seconds * 1000) + ' milliseconds';
+    if (seconds >= 86400 && seconds % 86400 === 0) return (seconds / 86400) + ' day' + (seconds === 86400 ? '' : 's');
+    if (seconds >= 3600 && seconds % 3600 === 0) return (seconds / 3600) + ' hour' + (seconds === 3600 ? '' : 's');
+    if (seconds >= 60 && seconds % 60 === 0) return (seconds / 60) + ' minute' + (seconds === 60 ? '' : 's');
+    return seconds + ' second' + (seconds === 1 ? '' : 's');
+}
+
+function padSparklineStatHelp(stat) {
+    if (stat === 'state') return 'Most recently recorded value for each Home Assistant statistics period.';
+    if (stat === 'sum') return 'Home Assistant\'s accumulated total, intended for energy, water, and other total sensors.';
+    return 'Average value during each Home Assistant statistics period. Usually right for measurements.';
+}
+
+function padUpdateSparklineEditor() {
+    var historyAvailable = (window.__device_caps || {}).ha_history === true;
+    document.querySelectorAll('.sparkline-ha-source').forEach(function (el) {
+        el.style.display = historyAvailable ? '' : 'none';
+    });
+
+    var lines = [
+        { suffix: '', binding: 'pad-edit-sparkline-data-binding' },
+        { suffix: '-2', binding: 'pad-edit-sparkline-data-binding-2' },
+        { suffix: '-3', binding: 'pad-edit-sparkline-data-binding-3' }
+    ];
+    var anyHistoryEnabled = false;
+    lines.forEach(function (line) {
+        var hasBinding = document.getElementById(line.binding).value.trim() !== '';
+        var enabled = document.getElementById('pad-edit-sparkline-ha-enabled' + line.suffix);
+        var fields = document.getElementById('pad-edit-sparkline-ha-fields' + line.suffix);
+        var dependency = document.getElementById('pad-edit-sparkline-ha-dependency' + line.suffix);
+        var entity = document.getElementById('pad-edit-sparkline-ha-entity' + line.suffix);
+        var stat = document.getElementById('pad-edit-sparkline-ha-stat' + line.suffix);
+
+        enabled.disabled = !hasBinding;
+        dependency.textContent = hasBinding ? '' : 'Set a live data binding first; history fills that stream after a restart.';
+        fields.style.display = (hasBinding && enabled.checked) ? '' : 'none';
+        entity.disabled = !hasBinding || !enabled.checked;
+        stat.disabled = !hasBinding || !enabled.checked;
+        document.getElementById('pad-edit-sparkline-ha-stat-help' + line.suffix).textContent = padSparklineStatHelp(stat.value);
+        if (hasBinding && enabled.checked) anyHistoryEnabled = true;
+    });
+
+    var windowSeconds = padGetSparklineWindowSeconds();
+    var windowUnit = parseInt(document.getElementById('pad-edit-sparkline-window-unit').value);
+    document.getElementById('pad-edit-sparkline-window').max = String(PAD_SPARKLINE_MAX_WINDOW_SECONDS / windowUnit);
+    document.getElementById('pad-edit-sparkline-window-warn').style.display = windowSeconds > PAD_SPARKLINE_MAX_WINDOW_SECONDS ? '' : 'none';
+    var requestedSlots = Math.ceil(windowSeconds / padGetSparklineIntervalSeconds());
+    if (!isFinite(requestedSlots)) requestedSlots = 60;
+    var slots = padGetSparklineSlotCount();
+    document.getElementById('pad-edit-sparkline-slots').value = slots;
+    var intervalSeconds = windowSeconds / slots;
+    document.getElementById('pad-edit-sparkline-resolution').textContent =
+        slots + ' data points, actual interval ' + padFormatSparklineDuration(Math.round(intervalSeconds)) + '.';
+
+    var pointsWarn = document.getElementById('pad-edit-sparkline-points-warn');
+    var intervalLimit = Math.floor(windowSeconds / PAD_SPARKLINE_MIN_INTERVAL_SECONDS);
+    if (requestedSlots > intervalLimit && intervalLimit < PAD_SPARKLINE_MAX_POINTS) {
+        pointsWarn.textContent = 'The minimum interval is 100 milliseconds. This range is limited to ' +
+            intervalLimit + ' data points.';
+        pointsWarn.style.display = '';
+    } else if (requestedSlots > PAD_SPARKLINE_MAX_POINTS) {
+        pointsWarn.textContent = 'This interval needs ' + requestedSlots + ' points. Maximum is ' + PAD_SPARKLINE_MAX_POINTS + '; use at least ' +
+            padFormatSparklineDuration(Math.ceil(windowSeconds / PAD_SPARKLINE_MAX_POINTS)) + ' per point.';
+        pointsWarn.style.display = '';
+    } else if (requestedSlots < 2) {
+        pointsWarn.textContent = 'A chart needs at least 2 points; use at most ' +
+            padFormatSparklineDuration(Math.floor(windowSeconds / 2)) + ' per point.';
+        pointsWarn.style.display = '';
+    } else {
+        pointsWarn.style.display = 'none';
+    }
+
+    var warn = document.getElementById('pad-edit-sparkline-ha-warn');
+    var needsHourlyHistory = windowSeconds > 86400 && intervalSeconds < 3600;
+    if (anyHistoryEnabled && needsHourlyHistory) {
+        warn.textContent = 'Home Assistant uses hourly history beyond 24 hours, so backfill needs at least 1 hour per point at this range. Live data still uses the finer interval.';
+        warn.style.display = '';
+    } else if (anyHistoryEnabled && intervalSeconds < 300) {
+        warn.textContent = 'Home Assistant history is stored in 5-minute periods, so backfill is skipped at this resolution. Live data still uses the finer interval.';
+        warn.style.display = '';
+    } else {
+        warn.style.display = 'none';
+    }
 }
 
 function padDialogOpen(col, row) {
@@ -222,8 +362,21 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-sparkline-data-binding-3').value = btn.widget_data_binding_3 || '';
     document.getElementById('pad-edit-sparkline-min').value = (btn.widget_sparkline_min !== undefined && btn.widget_sparkline_min !== null) ? btn.widget_sparkline_min : '';
     document.getElementById('pad-edit-sparkline-max').value = (btn.widget_sparkline_max !== undefined && btn.widget_sparkline_max !== null) ? btn.widget_sparkline_max : '';
-    document.getElementById('pad-edit-sparkline-window').value = (btn.widget_sparkline_window !== undefined) ? btn.widget_sparkline_window : 300;
-    document.getElementById('pad-edit-sparkline-slots').value = (btn.widget_sparkline_slots !== undefined) ? btn.widget_sparkline_slots : 60;
+    const sparklineWindow = (btn.widget_sparkline_window !== undefined) ? btn.widget_sparkline_window : 300;
+    const sparklineSlots = (btn.widget_sparkline_slots !== undefined) ? btn.widget_sparkline_slots : 60;
+    padSetSparklineWindowSeconds(sparklineWindow);
+    padSetSparklineIntervalSeconds(sparklineWindow / sparklineSlots);
+    document.getElementById('pad-edit-sparkline-slots').value = sparklineSlots;
+    document.getElementById('pad-edit-sparkline-ha-entity').value = btn.widget_sparkline_ha_entity || '';
+    document.getElementById('pad-edit-sparkline-ha-entity-2').value = btn.widget_sparkline_ha_entity_2 || '';
+    document.getElementById('pad-edit-sparkline-ha-entity-3').value = btn.widget_sparkline_ha_entity_3 || '';
+    document.getElementById('pad-edit-sparkline-ha-stat').value = btn.widget_sparkline_ha_stat || 'mean';
+    document.getElementById('pad-edit-sparkline-ha-stat-2').value = btn.widget_sparkline_ha_stat_2 || 'mean';
+    document.getElementById('pad-edit-sparkline-ha-stat-3').value = btn.widget_sparkline_ha_stat_3 || 'mean';
+    document.getElementById('pad-edit-sparkline-ha-enabled').checked = !!btn.widget_sparkline_ha_entity;
+    document.getElementById('pad-edit-sparkline-ha-enabled-2').checked = !!btn.widget_sparkline_ha_entity_2;
+    document.getElementById('pad-edit-sparkline-ha-enabled-3').checked = !!btn.widget_sparkline_ha_entity_3;
+    padUpdateSparklineEditor();
     padSetBindableColor('pad-edit-sparkline-line-color', btn.widget_sparkline_line_color, '#4CAF50');
     padSetBindableColor('pad-edit-sparkline-line-color-2', btn.widget_sparkline_line_color_2, '#2196F3');
     padSetBindableColor('pad-edit-sparkline-line-color-3', btn.widget_sparkline_line_color_3, '#9C27B0');
@@ -312,9 +465,6 @@ function padDialogClose() {
 function padDialogOk(keepOpen) {
     const col = padState.editCol;
     const row = padState.editRow;
-
-    // Remove existing button at this position
-    padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
 
     // Build new button object — only include fields with values
     const btn = { col: col, row: row };
@@ -513,10 +663,19 @@ function padDialogOk(keepOpen) {
             const sMax = padGetBindableNumber('pad-edit-sparkline-max', undefined);
             if (sMin !== undefined) btn.widget_sparkline_min = sMin;
             if (sMax !== undefined) btn.widget_sparkline_max = sMax;
-            const sWindow = parseInt(document.getElementById('pad-edit-sparkline-window').value);
-            btn.widget_sparkline_window = (isNaN(sWindow) || sWindow < 10) ? 300 : sWindow;
-            const sSlots = parseInt(document.getElementById('pad-edit-sparkline-slots').value);
-            btn.widget_sparkline_slots = (isNaN(sSlots) || sSlots < 2) ? 60 : (sSlots > 255) ? 255 : sSlots;
+            const sWindow = padGetSparklineWindowSeconds();
+            btn.widget_sparkline_window = (isNaN(sWindow) || sWindow < 10) ? 300 : Math.min(PAD_SPARKLINE_MAX_WINDOW_SECONDS, sWindow);
+            btn.widget_sparkline_slots = padGetSparklineSlotCount();
+            for (const suffix of ['', '_2', '_3']) {
+                const dom = suffix.replace('_', '-');
+                const entity = document.getElementById('pad-edit-sparkline-ha-entity' + dom).value.trim();
+                const enabled = document.getElementById('pad-edit-sparkline-ha-enabled' + dom).checked;
+                const binding = document.getElementById('pad-edit-sparkline-data-binding' + dom).value.trim();
+                if (enabled && binding && entity) {
+                    btn['widget_sparkline_ha_entity' + suffix] = entity;
+                    btn['widget_sparkline_ha_stat' + suffix] = document.getElementById('pad-edit-sparkline-ha-stat' + dom).value;
+                }
+            }
             btn.widget_sparkline_line_color = padGetBindableColor('pad-edit-sparkline-line-color');
             btn.widget_sparkline_line_color_2 = padGetBindableColor('pad-edit-sparkline-line-color-2');
             btn.widget_sparkline_line_color_3 = padGetBindableColor('pad-edit-sparkline-line-color-3');
@@ -619,6 +778,7 @@ function padDialogOk(keepOpen) {
         }
     }
 
+    padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
     padState.buttons.push(btn);
     padMarkDirty();
     if (!keepOpen) padDialogClose();

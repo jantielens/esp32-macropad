@@ -7,7 +7,7 @@ applyTo: "**"
 
 Review code changes for documentation accuracy: identify docs that contradict the new code, missing doc updates, and stale references.
 
-## Review Criteria
+## Review Standards
 
 ### Documentation Files to Check
 
@@ -16,6 +16,7 @@ When code changes affect documented behavior, verify these files are still accur
 * `README.md` — Project overview, feature list, script table, API table, board list
 * `docs/dev/web-portal.md` — REST API endpoints, web portal architecture
 * `docs/dev/display-touch-architecture.md` — Display/touch HAL, driver hierarchy, screen lifecycle
+* `docs/dev/audio-architecture.md` — Audio output, I2S, memory, and MP3 playback architecture
 * `docs/dev/scripts.md` — Script usage, parameters, examples
 * `docs/dev/build-and-release-process.md` — Build system, branding, release workflow
 * `docs/dev/library-management.md` — Arduino library management
@@ -53,7 +54,7 @@ When code changes affect documented behavior, verify these files are still accur
 
 ## Severity Guidelines
 
-| Severity | Criteria |
+| Severity | Meaning |
 |---|---|
 | Critical | Doc describes behavior opposite to what code now does; API docs show wrong endpoint |
 | High | Missing docs for new user-facing feature; CHANGELOG omits breaking change |

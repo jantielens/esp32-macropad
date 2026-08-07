@@ -35,13 +35,55 @@ The orange **CPU** badge in the header shows real-time CPU usage with a breathin
 - **Reset reason** — why the device last restarted
 - **CPU usage** — percentage (based on FreeRTOS IDLE task measurement)
 - **Core temperature** — internal chip temperature sensor
-- **Heap memory** — free, minimum, largest block, and fragmentation
-- **PSRAM** — same metrics for external RAM (when present)
+- **Heap memory** — free, minimum, largest block, and fragmentation. On MIPI-DSI boards, largest-block data can be up to 30 seconds old.
+- **PSRAM** — free and minimum values for external RAM (when present). MIPI-DSI boards do not report PSRAM largest-block data because measuring it can disrupt display scan-out.
 - **Flash usage** — firmware size
-- **Filesystem** — LittleFS partition usage (for icons)
+- **Filesystem** — active storage backend, mount state, and usage. SD primary-storage variants also report card type.
 - **MQTT** — connection status and publish timing
 - **Display** — FPS and render timing
 - **Wi-Fi signal** — RSSI and IP address
+
+---
+
+## SD Primary Storage
+
+The `jc1060p470c-sd`, `jc3636w518-sd`, and `jc4880p433-sd` firmware targets
+store pad configurations, icons, sounds, and indexed data on a FAT32 MicroSD
+card. They halt at startup when the card is missing or unreadable instead of
+falling back to internal flash. The Health overlay reports `SDMMC` as the
+filesystem backend after a successful mount.
+
+## Storage Page
+
+The **Storage** page in the **Device** category shows the active backend,
+mount status, card type when applicable, total capacity, and used/free space.
+It also provides a read-only folder browser. Folders appear before files and
+entries are alphabetical within each group. Expand a folder to view its direct
+contents, select **Open** beside a file to view supported media in your browser
+or download other file types, or use **Refresh** to reload the storage summary
+and root folder.
+
+The page does not support file uploads, deletion, or formatting.
+
+## Music Library
+
+Audio builds with the sound player enabled include a **Music Library** page. It lists
+the device's CD: up to 32 MP3 files found under `/media`, sorted in a stable
+order. When more files exist, the page shows the first 32 and an overflow
+warning; delete a listed file and the catalog refreshes to reveal the next one.
+Use **Upload** to add a new MP3 and **Delete** to remove a listed file.
+Nested folders are supported. The page is for library management only and does
+not contain playback, selection, reordering, refresh, or seeking controls.
+
+When an MP3 includes ID3v2 metadata, Music Library displays its title and artist
+rather than only its filename. Duration is read from Xing/Info, VBRI, or a CBR
+bitrate estimate without decoding the complete track; estimated durations are
+marked as such.
+
+Upload and delete are unavailable while Music or an MP3 Alert is active. Tone
+Alerts do not block library management. After a successful upload or delete,
+the list refreshes automatically. The portal validates the destination path and
+publishes the uploaded bytes without decoding the entire MP3 first.
 
 ---
 
@@ -87,23 +129,31 @@ The BLE keyboard always advertises with the configured device name and the chip'
 
 ### Audio
 
-*Shown only on boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
+*Shown only on boards with audio hardware.*
 
-The Audio section controls device volume and optional touch-feedback beep patterns.
+The **Audio** navigation category separates output level, button-feedback tones,
+alert-sound files, and the Music Library.
+
+#### Volume
 
 | Element | Description |
 |---------|-------------|
-| **Volume** | Slider (0–100%) controlling the device audio volume. Used by beep actions, audio cues, and siren playback. Persisted in NVS. Also controllable from Home Assistant. |
-| **Tap Beep** | Beep pattern played on every button tap that has an action configured. Leave empty for no sound. Uses the beep pattern DSL (see below). |
-| **Long-Press Beep** | Beep pattern played on every button long-press that has a long-press action configured. Leave empty for no sound. |
+| **Volume** | Slider (0–100%) controlling the device audio volume. It applies to alerts, Music, and button feedback. Persisted in NVS and controllable from Home Assistant. |
 
-**Beep pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
+#### Button Feedback
 
-Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Play Beep or Play Sound action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
+| Element | Description |
+|---------|-------------|
+| **Tap Feedback** | Tone pattern played after a button tap that has an action configured. Leave empty for no sound. |
+| **Long-Press Feedback** | Tone pattern played after a button long-press that has a long-press action configured. Leave empty for no sound. |
+
+**Tone pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
+
+Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Sound Alert action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
 
-#### Sound Files
+#### Alert Sounds
 
 *Shown only on boards with sound player support (defaults to boards with audio hardware).*
 
@@ -116,7 +166,7 @@ Upload MP3 files to play as button actions or via MQTT. Files are stored on the 
 | **MP3 File** | File picker for `.mp3` files (max 512 KB per file). The server validates the MP3 header on upload |
 | **Upload** | Uploads the file to the device |
 
-Once uploaded, sounds appear in the "Play Sound" action type dropdown in the button editor, swipe actions, and boot actions.
+Once uploaded, alert sounds are available through **Sound Alert** with the **MP3 Alert** kind in the button editor, swipe actions, and boot actions.
 
 #### BLE Signals
 
@@ -166,6 +216,17 @@ manual, so opening the fragment does not allocate a framebuffer or encode an
 image. Use **Refresh Preview** after changing screens or when the displayed
 content changes.
 
+On boards with a touch display, a captured preview is also interactive. Click or
+tap a point on the screenshot to queue one normal device tap at that pixel. The
+portal refreshes the preview once after the request is accepted. Clicks in the
+empty bars around a portrait or landscape image are ignored.
+
+The preview is a best-effort snapshot. A queued tap can wait for a physical
+touch to release or for the screen saver to wake, and the screen can change
+before the device consumes it. After changing **Current Screen**, the old image
+is hidden and cannot be tapped; capture a fresh preview first. Screen Preview
+does not support dragging, swiping, long presses, multi-touch, or live video.
+
 ### Screen Saver (Burn-in Prevention)
 
 Protects your LCD from burn-in by turning off the backlight after a period of inactivity. A built-in pixel-shift mechanism moves content slightly each sleep cycle to prevent ghosting.
@@ -211,11 +272,11 @@ The number of available trigger slots depends on the board (8 by default, fewer 
 
 *Shown only on boards with a display.*
 
-Configure up to 3 independent on-device timers. Each timer can run in **Count Up** (stopwatch) or **Countdown** mode. For countdown timers, set the starting duration in seconds and configure **expire actions** — up to 3 actions that execute when the countdown reaches zero.
+Configure up to three expiry actions for each on-device timer slot. The Timer action editor sets the mode on every Start and Toggle action and shows Duration when Countdown is selected.
 
 Expire actions use the same action editor as buttons, so you can play a sound, send an MQTT message, navigate to a screen, play a beep pattern, or any combination. This replaces the previous beep-only expiry with full action parity.
 
-Timer configuration is applied at boot and updated immediately when saved. Button actions on pads only control timers at runtime (toggle, start, stop, pause, adjust). Use `[timer:N]` bindings on pad button labels to display timer values.
+When a countdown starts, it copies the slot's saved expiry list. Changes apply to the next run and do not alter a countdown already in progress. Runtime state, mode, and duration are not persisted across reboot. Use `[timer:N]` bindings on pad button labels to display timer values. Use `[timer:N_target]` for the active countdown preset in whole seconds, such as a gauge maximum. The target changes after Start, Set, and Adjust, but normal ticking, Stop, and Reset leave it unchanged. Count-up and unconfigured timers return `0`.
 
 ## E-Paper Page
 
@@ -257,7 +318,7 @@ Switching between pads or navigating away with unsaved changes shows a confirmat
 
 For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines, tables, rockers), label styling, dynamic colors, pad bindings (named data sources), building blocks, and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
 
-All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, expression syntax, and known health/timer keys (including `table` and `extended_table`) are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
+All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, expression syntax, and known health, timer, and Music keys (including `table`, `extended_table`, and `status`) are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
 
 ---
 

@@ -2,85 +2,43 @@
 
 #if HAS_AUDIO
 
-#include <Wire.h>
 #include <math.h>
-#include "driver/i2s_std.h"
-#include "driver/gpio.h"
-#include "esp_heap_caps.h"
 #include "esp_memory_utils.h"
+#include <esp_timer.h>
+#include "audio_output_driver.h"
+#include "device_telemetry.h"
 #include "log_manager.h"
-#include "i2c_bus.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
 
 #if HAS_SOUND_PLAYER
 #include "sound_player.h"
+#include "music_catalog.h"
+#include "music_catalog_store.h"
+#include "music_command.h"
+#include "music_transport.h"
+#include "tone_alert_overlay.h"
+#if HAS_MUSIC_ANALYSIS
+#include "music_analysis.h"
+#endif
 #endif
 
 #define TAG "Audio"
 
 // ---------------------------------------------------------------------------
-// ES8311 register addresses
-// ---------------------------------------------------------------------------
-#define ES8311_RESET_REG00         0x00
-#define ES8311_CLK_MANAGER_REG01   0x01
-#define ES8311_CLK_MANAGER_REG02   0x02
-#define ES8311_CLK_MANAGER_REG03   0x03
-#define ES8311_CLK_MANAGER_REG04   0x04
-#define ES8311_CLK_MANAGER_REG05   0x05
-#define ES8311_CLK_MANAGER_REG06   0x06
-#define ES8311_CLK_MANAGER_REG07   0x07
-#define ES8311_CLK_MANAGER_REG08   0x08
-#define ES8311_SDPIN_REG09         0x09
-#define ES8311_SDPOUT_REG0A        0x0A
-#define ES8311_SYSTEM_REG0B        0x0B
-#define ES8311_SYSTEM_REG0C        0x0C
-#define ES8311_SYSTEM_REG0D        0x0D
-#define ES8311_SYSTEM_REG0E        0x0E
-#define ES8311_SYSTEM_REG10        0x10
-#define ES8311_SYSTEM_REG11        0x11
-#define ES8311_SYSTEM_REG12        0x12
-#define ES8311_SYSTEM_REG13        0x13
-#define ES8311_SYSTEM_REG14        0x14
-#define ES8311_ADC_REG15           0x15
-#define ES8311_ADC_REG16           0x16
-#define ES8311_ADC_REG17           0x17
-#define ES8311_ADC_REG1B           0x1B
-#define ES8311_ADC_REG1C           0x1C
-#define ES8311_DAC_REG31           0x31
-#define ES8311_DAC_REG32           0x32
-#define ES8311_DAC_REG37           0x37
-#define ES8311_GPIO_REG44          0x44
-#define ES8311_GP_REG45            0x45
-
-// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-static i2s_chan_handle_t tx_handle = NULL;
-static i2s_chan_handle_t rx_handle = NULL;  // RX channel needed for ES8311 clock generation
 static bool audio_initialized = false;
 static uint8_t current_volume = 70; // 0-100
-static const uint32_t SAMPLE_RATE = 16000;
-static const uint32_t MCLK_FREQ = SAMPLE_RATE * 384;
-
-// Coefficient table entry for MCLK=6144000, Rate=16000
-static const uint8_t COEFF_PRE_DIV   = 0x03;
-static const uint8_t COEFF_PRE_MULTI = 0x02;
-static const uint8_t COEFF_ADC_DIV   = 0x01;
-static const uint8_t COEFF_DAC_DIV   = 0x01;
-static const uint8_t COEFF_FS_MODE   = 0x00;
-static const uint8_t COEFF_LRCK_H    = 0x00;
-static const uint8_t COEFF_LRCK_L    = 0xFF;
-static const uint8_t COEFF_BCLK_DIV  = 0x04;
-static const uint8_t COEFF_ADC_OSR   = 0x10;
-static const uint8_t COEFF_DAC_OSR   = 0x20;
+static AudioOutputDriver* output_driver = nullptr;
 
 // ---------------------------------------------------------------------------
 // Async playback queue
 // ---------------------------------------------------------------------------
 #define AUDIO_PATTERN_MAX_LEN 128
 #define AUDIO_QUEUE_DEPTH     2
+#define MUSIC_WORK_QUEUE_DEPTH 4
 
 struct AudioCommand {
     char pattern[AUDIO_PATTERN_MAX_LEN];
@@ -91,7 +49,16 @@ struct AudioCommand {
 #endif
 };
 
+#if HAS_SOUND_PLAYER
+enum MusicWorkKind : uint8_t { MUSIC_WORK_TRANSPORT, MUSIC_WORK_REFRESH };
+struct MusicWorkCommand {
+    MusicWorkKind kind;
+    MusicCommand transport;
+};
+#endif
+
 static QueueHandle_t audio_queue = NULL;
+static QueueHandle_t music_work_queue = NULL;
 static TaskHandle_t audio_task_handle = NULL;
 // Cross-task flags: written by audio_enqueue()/audio_stop() (caller task),
 // read/written by audio_task (FreeRTOS task).  volatile provides visibility;
@@ -100,154 +67,106 @@ static TaskHandle_t audio_task_handle = NULL;
 // when nothing is playing is harmlessly cleared on the next queue receive.
 static volatile bool g_stop_requested = false;
 static volatile bool g_playing = false;
+#if HAS_SOUND_PLAYER
+static bool g_file_backed_playing = false;
+static AudioMusicInfo g_music_info = {AUDIO_MUSIC_UNAVAILABLE, 0, 0, {0}};
+static portMUX_TYPE g_music_info_mux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE g_music_storage_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool g_music_storage_mutating = false;
+static bool g_music_catalog_dirty = false;
+static StaticSemaphore_t g_music_catalog_refresh_sem_storage;
+static SemaphoreHandle_t g_music_catalog_refresh_sem = nullptr;
+static bool g_music_catalog_refresh_pending = false;
 
-// ---------------------------------------------------------------------------
-// ES8311 I2C helpers (Wire bus 0, protected by i2c_bus mutex)
-// ---------------------------------------------------------------------------
-static bool es8311_write(uint8_t reg, uint8_t val) {
-    i2c_bus_lock();
-    Wire.beginTransmission(AUDIO_CODEC_ADDR);
-    Wire.write(reg);
-    Wire.write(val);
-    bool ok = Wire.endTransmission() == 0;
-    i2c_bus_unlock();
+static bool music_storage_playback_claim() {
+    portENTER_CRITICAL(&g_music_storage_mux);
+    const bool available = !g_music_storage_mutating && !g_file_backed_playing;
+    if (available) g_file_backed_playing = true;
+    portEXIT_CRITICAL(&g_music_storage_mux);
+    return available;
+}
+
+static void music_storage_playback_release() {
+    portENTER_CRITICAL(&g_music_storage_mux);
+    g_file_backed_playing = false;
+    portEXIT_CRITICAL(&g_music_storage_mux);
+}
+
+static void music_tone_alert_transform(void* context, int16_t* frames, size_t frame_count) {
+#if HAS_MUSIC_ANALYSIS
+    music_analysis_process(frames, frame_count);
+#endif
+    tone_alert_overlay_mix((ToneAlertOverlay*)context, frames, frame_count, AUDIO_SAMPLE_RATE);
+}
+
+static void music_info_set(AudioMusicStatus status, const MusicCatalogSnapshot* catalog,
+                           const MusicTransport& transport, const SoundPlayer* player = nullptr) {
+    AudioMusicInfo info = {};
+    info.status = status;
+    info.count = catalog && catalog->available ? catalog->count : 0;
+    info.index = transport.has_current_track() ? transport.track_index() + 1 : 0;
+    if (catalog && transport.has_current_track() && transport.track_index() < catalog->count) {
+        const uint8_t index = transport.track_index();
+        strlcpy(info.file, catalog->paths[index], sizeof(info.file));
+        info.metadata = catalog->metadata[index];
+        if (info.metadata.duration_s) info.total_us = (uint64_t)info.metadata.duration_s * 1000000ULL;
+    }
+    if (player) {
+        uint64_t ignored_total_us = 0;
+        sound_player_get_timing(player, &ignored_total_us, &info.elapsed_us);
+    }
+    portENTER_CRITICAL(&g_music_info_mux);
+    g_music_info = info;
+    portEXIT_CRITICAL(&g_music_info_mux);
+}
+
+static void music_info_update_timing(const SoundPlayer* player) {
+    uint64_t total_us = 0;
+    uint64_t elapsed_us = 0;
+    if (!player || !sound_player_get_timing(player, &total_us, &elapsed_us)) return;
+    portENTER_CRITICAL(&g_music_info_mux);
+    // The player deliberately skips full-file duration scans. Preserve the
+    // catalog's fast Xing/VBRI/CBR duration whenever the player reports zero.
+    const uint64_t effective_total_us = total_us ? total_us : g_music_info.total_us;
+    if (g_music_info.total_us != effective_total_us ||
+        g_music_info.elapsed_us / 1000000ULL != elapsed_us / 1000000ULL) {
+        g_music_info.total_us = effective_total_us;
+        g_music_info.elapsed_us = elapsed_us;
+    }
+    portEXIT_CRITICAL(&g_music_info_mux);
+}
+#endif
+
+static constexpr int64_t kOutputBufferedUs =
+    (int64_t)AUDIO_DMA_DESC_NUM * AUDIO_DMA_FRAME_NUM * 1000000 / AUDIO_SAMPLE_RATE;
+
+bool audio_write_with_stats(AudioOutputDriver* driver, const int16_t* frames,
+                            size_t frame_count, AudioStarvationStats* stats) {
+    const int64_t before_write_us = esp_timer_get_time();
+    if (stats->previous_write_complete_us != 0) {
+        const int64_t gap_us = before_write_us - stats->previous_write_complete_us;
+        if (gap_us > kOutputBufferedUs) {
+            stats->event_count++;
+            if (gap_us > stats->worst_gap_us) stats->worst_gap_us = gap_us;
+        }
+    }
+    const bool ok = driver->write(frames, frame_count);
+    stats->previous_write_complete_us = esp_timer_get_time();
     return ok;
 }
 
-static uint8_t es8311_read(uint8_t reg) {
-    i2c_bus_lock();
-    Wire.beginTransmission(AUDIO_CODEC_ADDR);
-    Wire.write(reg);
-    Wire.endTransmission(false);
-    Wire.requestFrom((uint8_t)AUDIO_CODEC_ADDR, (uint8_t)1);
-    uint8_t val = Wire.available() ? Wire.read() : 0xFF;
-    i2c_bus_unlock();
-    return val;
-}
-
-// Map 0-100 user volume to ES8311 REG32 (0x00-0xFF)
-static void es8311_apply_volume(uint8_t vol_0_100) {
-    uint8_t reg_val = (uint8_t)((uint16_t)vol_0_100 * 255 / 100);
-    bool ok = es8311_write(ES8311_DAC_REG32, reg_val);
-    LOGD(TAG, "Volume: %u%% -> REG32=0x%02X %s", vol_0_100, reg_val, ok ? "OK" : "FAIL");
-}
-
-// ---------------------------------------------------------------------------
-// ES8311 init — matches Espressif reference driver
-// ---------------------------------------------------------------------------
-static bool es8311_init_codec() {
-    // I2C noise immunity (written twice per official driver)
-    es8311_write(ES8311_GPIO_REG44, 0x08);
-    es8311_write(ES8311_GPIO_REG44, 0x08);
-
-    es8311_write(ES8311_CLK_MANAGER_REG01, 0x30);
-    es8311_write(ES8311_CLK_MANAGER_REG02, 0x00);
-    es8311_write(ES8311_CLK_MANAGER_REG03, 0x10);
-    es8311_write(ES8311_ADC_REG16, 0x24);
-    es8311_write(ES8311_CLK_MANAGER_REG04, 0x10);
-    es8311_write(ES8311_CLK_MANAGER_REG05, 0x00);
-    es8311_write(ES8311_SYSTEM_REG0B, 0x00);
-    es8311_write(ES8311_SYSTEM_REG0C, 0x00);
-    es8311_write(ES8311_SYSTEM_REG10, 0x1F);
-    es8311_write(ES8311_SYSTEM_REG11, 0x7F);
-    es8311_write(ES8311_RESET_REG00, 0x80);
-
-    // Slave mode
-    uint8_t regv = es8311_read(ES8311_RESET_REG00);
-    regv &= 0xBF;
-    es8311_write(ES8311_RESET_REG00, regv);
-
-    // Enable all clocks, MCLK from pin
-    es8311_write(ES8311_CLK_MANAGER_REG01, 0x3F);
-    regv = es8311_read(ES8311_CLK_MANAGER_REG01);
-    regv &= 0x7F;
-    regv &= ~0x40;
-    es8311_write(ES8311_CLK_MANAGER_REG01, regv);
-
-    // Clock dividers from coefficient table
-    regv = es8311_read(ES8311_CLK_MANAGER_REG02) & 0x07;
-    regv |= (COEFF_PRE_DIV - 1) << 5;
-    uint8_t datmp = (COEFF_PRE_MULTI == 1) ? 0 : (COEFF_PRE_MULTI == 2) ? 1
-                  : (COEFF_PRE_MULTI == 4) ? 2 : 3;
-    regv |= datmp << 3;
-    es8311_write(ES8311_CLK_MANAGER_REG02, regv);
-
-    regv = es8311_read(ES8311_CLK_MANAGER_REG05) & 0x00;
-    regv |= (COEFF_ADC_DIV - 1) << 4;
-    regv |= (COEFF_DAC_DIV - 1) << 0;
-    es8311_write(ES8311_CLK_MANAGER_REG05, regv);
-
-    regv = es8311_read(ES8311_CLK_MANAGER_REG03) & 0x80;
-    regv |= COEFF_FS_MODE << 6;
-    regv |= COEFF_ADC_OSR;
-    es8311_write(ES8311_CLK_MANAGER_REG03, regv);
-
-    regv = es8311_read(ES8311_CLK_MANAGER_REG04) & 0x80;
-    regv |= COEFF_DAC_OSR;
-    es8311_write(ES8311_CLK_MANAGER_REG04, regv);
-
-    regv = es8311_read(ES8311_CLK_MANAGER_REG07) & 0xC0;
-    regv |= COEFF_LRCK_H;
-    es8311_write(ES8311_CLK_MANAGER_REG07, regv);
-    es8311_write(ES8311_CLK_MANAGER_REG08, COEFF_LRCK_L);
-
-    regv = es8311_read(ES8311_CLK_MANAGER_REG06) & 0xE0;
-    regv |= (COEFF_BCLK_DIV - 1);
-    regv &= ~0x20;
-    es8311_write(ES8311_CLK_MANAGER_REG06, regv);
-
-    es8311_write(ES8311_SYSTEM_REG13, 0x10);
-    es8311_write(ES8311_ADC_REG1B, 0x0A);
-    es8311_write(ES8311_ADC_REG1C, 0x6A);
-
-    // Power up DAC path (CODEC_MODE_DECODE)
-    uint8_t dac_iface = es8311_read(ES8311_SDPIN_REG09) & 0xBF;
-    dac_iface &= ~(1 << 6);
-    es8311_write(ES8311_SDPIN_REG09, dac_iface);
-
-    uint8_t adc_iface = es8311_read(ES8311_SDPOUT_REG0A) & 0xBF;
-    adc_iface |= (1 << 6);
-    es8311_write(ES8311_SDPOUT_REG0A, adc_iface);
-
-    es8311_write(ES8311_ADC_REG17, 0xBF);
-    es8311_write(ES8311_SYSTEM_REG0E, 0x02);
-    es8311_write(ES8311_SYSTEM_REG12, 0x00);
-    es8311_write(ES8311_SYSTEM_REG14, 0x1A);
-    es8311_write(ES8311_SYSTEM_REG0D, 0x01);
-    es8311_write(ES8311_ADC_REG15, 0x40);
-    es8311_write(ES8311_DAC_REG37, 0x08);
-    es8311_write(ES8311_GP_REG45, 0x00);
-
-    // Set internal reference signal (ADCL + DACR) — per official driver
-    es8311_write(ES8311_GPIO_REG44, 0x58);
-
-    // Format: I2S Philips, 16-bit
-    // REG09/0A bits [3:2]=word_len (11=16-bit), bits [1:0]=format (00=I2S)
-    dac_iface = es8311_read(ES8311_SDPIN_REG09);
-    dac_iface &= 0xF0;
-    dac_iface |= 0x0C;
-    es8311_write(ES8311_SDPIN_REG09, dac_iface);
-
-    adc_iface = es8311_read(ES8311_SDPOUT_REG0A);
-    adc_iface &= 0xF0;
-    adc_iface |= 0x0C;
-    es8311_write(ES8311_SDPOUT_REG0A, adc_iface);
-
-    // Unmute DAC
-    regv = es8311_read(ES8311_DAC_REG31) & 0x9F;
-    es8311_write(ES8311_DAC_REG31, regv);
-
-    LOGI(TAG, "ES8311 codec initialized (MCLK=%lu Hz, Fs=%lu Hz)", MCLK_FREQ, SAMPLE_RATE);
-    return true;
+void audio_log_starvation(const AudioStarvationStats& stats) {
+    LOGI(TAG, "Output starvation: events=%u worst_gap_us=%lld buffered_us=%lld",
+         stats.event_count, stats.worst_gap_us, kOutputBufferedUs);
 }
 
 // ---------------------------------------------------------------------------
 // Tone generation — play one segment (freq Hz for duration_ms)
 // ---------------------------------------------------------------------------
-static void play_tone(uint16_t freq_hz, uint16_t duration_ms) {
-    if (!tx_handle) return;
+static void play_tone(uint16_t freq_hz, uint16_t duration_ms, AudioStarvationStats* stats) {
+    if (!output_driver) return;
 
-    uint32_t total_samples = (uint32_t)SAMPLE_RATE * duration_ms / 1000;
+    uint32_t total_samples = (uint32_t)AUDIO_SAMPLE_RATE * duration_ms / 1000;
     if (total_samples == 0) return;
 
     static const size_t FRAMES_PER_CHUNK = 512;
@@ -260,15 +179,13 @@ static void play_tone(uint16_t freq_hz, uint16_t duration_ms) {
         while (frames_done < total_samples) {
             size_t chunk = (total_samples - frames_done < FRAMES_PER_CHUNK)
                          ? (total_samples - frames_done) : FRAMES_PER_CHUNK;
-            size_t bytes = chunk * 2 * sizeof(int16_t);
-            size_t written;
-            i2s_channel_write(tx_handle, buf, bytes, &written, portMAX_DELAY);
+            if (!audio_write_with_stats(output_driver, buf, chunk, stats)) return;
             frames_done += chunk;
         }
         return;
     }
 
-    float phase_inc = 2.0f * M_PI * freq_hz / SAMPLE_RATE;
+    float phase_inc = 2.0f * M_PI * freq_hz / AUDIO_SAMPLE_RATE;
     float phase = 0.0f;
     const float amplitude = 32767.0f;
     const uint32_t fade_len = (total_samples > 400) ? 200 : total_samples / 4;
@@ -293,9 +210,7 @@ static void play_tone(uint16_t freq_hz, uint16_t duration_ms) {
             if (phase >= 2.0f * M_PI) phase -= 2.0f * M_PI;
         }
 
-        size_t bytes = chunk * 2 * sizeof(int16_t);
-        size_t written;
-        i2s_channel_write(tx_handle, buf, bytes, &written, portMAX_DELAY);
+        if (!audio_write_with_stats(output_driver, buf, chunk, stats)) return;
         frames_done += chunk;
     }
 }
@@ -305,9 +220,9 @@ static void play_tone(uint16_t freq_hz, uint16_t duration_ms) {
 //   Space-delimited: "freq:dur" for tones, bare "dur" for silence gaps
 //   e.g. "1000:200 100 1000:200" = beep, 100ms gap, beep
 // ---------------------------------------------------------------------------
-static void play_pattern(const char* pattern) {
+static void play_pattern(const char* pattern, AudioStarvationStats* stats) {
     if (!pattern || !pattern[0]) {
-        play_tone(1000, 200); // default beep
+        play_tone(1000, 200, stats); // default beep
         return;
     }
 
@@ -324,12 +239,12 @@ static void play_pattern(const char* pattern) {
             uint16_t freq = (uint16_t)atoi(tok);
             uint16_t dur  = (uint16_t)atoi(colon + 1);
             if (dur > 0 && dur <= 10000) {
-                play_tone(freq, dur);
+                play_tone(freq, dur, stats);
             }
         } else {
             uint16_t dur = (uint16_t)atoi(tok);
             if (dur > 0 && dur <= 10000) {
-                play_tone(0, dur); // silence gap
+                play_tone(0, dur, stats); // silence gap
             }
         }
         tok = strtok_r(NULL, " ", &saveptr);
@@ -342,9 +257,146 @@ static void play_pattern(const char* pattern) {
 // ---------------------------------------------------------------------------
 static void audio_task(void* param) {
     AudioCommand cmd;
+#if HAS_SOUND_PLAYER
+    MusicCatalog music_catalog;
+    MusicTransport music_transport;
+    SoundPlayer* music_player = nullptr;
+    ToneAlertOverlay music_tone_alert = {};
+    auto refresh_music_catalog = [&](bool force) {
+        bool dirty = false;
+        portENTER_CRITICAL(&g_music_storage_mux);
+        dirty = g_music_catalog_dirty;
+        g_music_catalog_dirty = false;
+        portEXIT_CRITICAL(&g_music_storage_mux);
+        if (!force && !dirty) return;
+        MusicCatalogSnapshot* build_slot = music_catalog_store_begin_build();
+        if (!build_slot) {
+            LOGW(TAG, "Music catalog refresh skipped: store busy");
+            if (dirty) {
+                portENTER_CRITICAL(&g_music_storage_mux);
+                g_music_catalog_dirty = true;
+                portEXIT_CRITICAL(&g_music_storage_mux);
+            }
+            return;
+        }
+        const bool discovered = music_catalog_discover(&music_catalog, build_slot);
+        (void)discovered;
+        music_catalog_store_publish(music_catalog.result());
+    };
+    refresh_music_catalog(true);
+    const MusicCatalogSnapshot* startup_catalog = music_catalog_store_active_for_audio();
+    LOGI(TAG, "Music catalog startup scan: available=%d count=%u",
+            startup_catalog && startup_catalog->available,
+            startup_catalog ? startup_catalog->count : 0);
+        LOGI(TAG, "Music catalog scan: audio stack free=%u bytes",
+         (unsigned)uxTaskGetStackHighWaterMark(nullptr));
+        music_info_set(startup_catalog && startup_catalog->available
+                   ? (startup_catalog->count ? AUDIO_MUSIC_STOPPED : AUDIO_MUSIC_EMPTY)
+                       : AUDIO_MUSIC_UNAVAILABLE,
+               startup_catalog, music_transport);
+
+    auto close_music = [&]() {
+        tone_alert_overlay_stop(&music_tone_alert);
+#if HAS_MUSIC_ANALYSIS
+        music_analysis_set_playing(false);
+#endif
+        if (music_player) {
+            sound_player_close(music_player);
+            music_player = nullptr;
+            music_storage_playback_release();
+        }
+    };
+    auto open_music_track = [&](const char* path) {
+        if (!music_storage_playback_claim()) return false;
+        music_player = sound_player_begin_path(output_driver, path,
+                                               music_tone_alert_transform, &music_tone_alert);
+    #if HAS_MUSIC_ANALYSIS
+        if (music_player) music_analysis_set_playing(true);
+    #endif
+        if (!music_player) music_storage_playback_release();
+        return music_player != nullptr;
+    };
+    auto apply_music = [&](MusicCommand command) {
+        portENTER_CRITICAL(&g_music_storage_mux);
+        const bool mutating = g_music_storage_mutating;
+        portEXIT_CRITICAL(&g_music_storage_mux);
+        if (mutating) return;
+        const MusicTransportCommand transport_command =
+            command == MUSIC_COMMAND_PLAY_PAUSE ? MUSIC_TRANSPORT_PLAY_PAUSE :
+            command == MUSIC_COMMAND_NEXT ? MUSIC_TRANSPORT_NEXT :
+            command == MUSIC_COMMAND_PREVIOUS ? MUSIC_TRANSPORT_PREVIOUS : MUSIC_TRANSPORT_STOP;
+        if (music_transport.state() == MUSIC_TRANSPORT_STOPPED) {
+            refresh_music_catalog(false);
+        }
+        const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
+        if (!active_catalog || !active_catalog->available ||
+            (!active_catalog->count && transport_command == MUSIC_TRANSPORT_PLAY_PAUSE)) {
+            music_info_set(active_catalog && active_catalog->available
+                               ? AUDIO_MUSIC_EMPTY : AUDIO_MUSIC_UNAVAILABLE,
+                           active_catalog, music_transport);
+            return;
+        }
+        const MusicTransportResult result = music_transport.apply(transport_command, active_catalog->count);
+        if (result.effect == MUSIC_TRANSPORT_CLOSE_TRACK) close_music();
+        if ((result.effect == MUSIC_TRANSPORT_OPEN_TRACK ||
+             (result.effect == MUSIC_TRANSPORT_CLOSE_TRACK &&
+              music_transport.state() == MUSIC_TRANSPORT_PLAYING)) &&
+            music_transport.has_current_track()) {
+            if (!open_music_track(active_catalog->paths[result.track_index])) {
+                music_transport.apply(MUSIC_TRANSPORT_FAILURE, active_catalog->count);
+            }
+        }
+        const AudioMusicStatus status = music_transport.state() == MUSIC_TRANSPORT_PLAYING ? AUDIO_MUSIC_PLAYING :
+            music_transport.state() == MUSIC_TRANSPORT_PAUSED ? AUDIO_MUSIC_PAUSED : AUDIO_MUSIC_STOPPED;
+        music_info_set(status, active_catalog, music_transport, music_player);
+    };
+#endif
 
     for (;;) {
-        if (xQueueReceive(audio_queue, &cmd, portMAX_DELAY) == pdTRUE) {
+        const TickType_t wait =
+#if HAS_SOUND_PLAYER
+            music_transport.state() == MUSIC_TRANSPORT_PLAYING ? 0 : pdMS_TO_TICKS(250);
+#else
+            portMAX_DELAY;
+#endif
+        MusicWorkCommand music_work = {};
+        if (xQueueReceive(music_work_queue, &music_work, 0) == pdTRUE) {
+            if (music_work.kind == MUSIC_WORK_TRANSPORT) {
+                apply_music(music_work.transport);
+            } else {
+                refresh_music_catalog(true);
+                portENTER_CRITICAL(&g_music_storage_mux);
+                g_music_catalog_refresh_pending = false;
+                portEXIT_CRITICAL(&g_music_storage_mux);
+                xSemaphoreGive(g_music_catalog_refresh_sem);
+            }
+            continue;
+        }
+        if (xQueueReceive(audio_queue, &cmd, wait) == pdTRUE) {
+#if HAS_SOUND_PLAYER
+            if (music_player && music_transport.state() == MUSIC_TRANSPORT_PLAYING && !cmd.is_sound) {
+                float tone_gain = 1.0f;
+                if (cmd.volume_override > 0 && cmd.volume_override <= 100) {
+                    tone_gain = current_volume == 0 ? 0.0f :
+                        (float)cmd.volume_override / current_volume;
+                }
+                if (!tone_alert_overlay_start(&music_tone_alert, cmd.pattern, cmd.loop,
+                                              AUDIO_SAMPLE_RATE, tone_gain)) {
+                    LOGW(TAG, "Tone alert pattern rejected while Music is playing");
+                }
+                continue;
+            }
+            const bool preserve_paused_music = music_player &&
+                music_transport.state() == MUSIC_TRANSPORT_PAUSED && !cmd.is_sound;
+            if (music_player && !preserve_paused_music) {
+                close_music();
+                const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
+                if (active_catalog) {
+                    music_transport.apply(MUSIC_TRANSPORT_STOP, active_catalog->count);
+                    music_info_set(AUDIO_MUSIC_STOPPED, active_catalog, music_transport);
+                }
+            }
+#endif
             g_stop_requested = false;
             g_playing = true;
 
@@ -353,27 +405,78 @@ static void audio_task(void* param) {
                 play_vol = cmd.volume_override;
             }
             LOGD(TAG, "Play: vol=%u%% (override=%u, device=%u) loop=%d", play_vol, cmd.volume_override, current_volume, cmd.loop);
-            es8311_apply_volume(play_vol);
+            output_driver->setVolume(play_vol);
 
 #if HAS_SOUND_PLAYER
             if (cmd.is_sound) {
-                sound_player_play(tx_handle, cmd.pattern, &g_stop_requested);
+                if (music_storage_playback_claim()) {
+                    sound_player_play(output_driver, cmd.pattern, &g_stop_requested);
+                    music_storage_playback_release();
+                } else {
+                    LOGW(TAG, "MP3 alert skipped while Music storage is busy");
+                }
             } else
 #endif
             if (cmd.loop) {
+                AudioStarvationStats stats = {};
                 while (!g_stop_requested) {
-                    play_pattern(cmd.pattern);
+                    play_pattern(cmd.pattern, &stats);
                 }
+                audio_log_starvation(stats);
             } else {
-                play_pattern(cmd.pattern);
+                AudioStarvationStats stats = {};
+                play_pattern(cmd.pattern, &stats);
+                audio_log_starvation(stats);
             }
 
             // Restore device volume if overridden
             if (cmd.volume_override > 0 && cmd.volume_override <= 100) {
-                es8311_apply_volume(current_volume);
+                output_driver->setVolume(current_volume);
             }
             g_playing = false;
         }
+#if HAS_SOUND_PLAYER
+    if (music_transport.state() == MUSIC_TRANSPORT_STOPPED) {
+            refresh_music_catalog(false);
+    }
+        if (music_player && music_transport.state() == MUSIC_TRANSPORT_PLAYING) {
+            if (g_stop_requested) {
+                tone_alert_overlay_stop(&music_tone_alert);
+                g_stop_requested = false;
+            }
+            const SoundPlayerStepResult step = sound_player_step(music_player);
+            if (step != SOUND_PLAYER_STEP_PLAYING) {
+                close_music();
+                const MusicCatalogSnapshot* before_transition = music_catalog_store_active_for_audio();
+                const MusicTransportResult result = music_transport.apply(
+                    step == SOUND_PLAYER_STEP_COMPLETE ? MUSIC_TRANSPORT_COMPLETE : MUSIC_TRANSPORT_FAILURE,
+                    before_transition ? before_transition->count : 0);
+                if (result.effect == MUSIC_TRANSPORT_CLOSE_TRACK &&
+                    music_transport.state() == MUSIC_TRANSPORT_PLAYING) {
+                    const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
+                    if (!active_catalog || !open_music_track(active_catalog->paths[result.track_index])) {
+                        music_transport.apply(MUSIC_TRANSPORT_FAILURE,
+                                              active_catalog ? active_catalog->count : 0);
+                    }
+                }
+                const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
+                music_info_set(step == SOUND_PLAYER_STEP_ERROR ? AUDIO_MUSIC_ERROR :
+                    (music_transport.state() == MUSIC_TRANSPORT_PLAYING ? AUDIO_MUSIC_PLAYING : AUDIO_MUSIC_STOPPED),
+                    active_catalog, music_transport, music_player);
+            } else {
+                music_info_update_timing(music_player);
+            }
+        } else if (music_player) {
+#if HAS_MUSIC_ANALYSIS
+            // No PCM is produced while paused, so clear the last visualizer
+            // frame instead of leaving stale levels on the display.
+            music_analysis_set_playing(false);
+#endif
+            const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
+            music_info_set(AUDIO_MUSIC_PAUSED, active_catalog,
+                           music_transport, music_player);
+        }
+#endif
     }
 }
 
@@ -381,104 +484,22 @@ static void audio_task(void* param) {
 // Public API
 // ---------------------------------------------------------------------------
 void audio_init(uint8_t initial_volume) {
-    LOGI(TAG, "Initializing audio (ESP-IDF I2S + ES8311)");
+    LOGI(TAG, "Initializing audio output");
+
+#if HAS_MUSIC_ANALYSIS
+    music_analysis_init();
+#endif
 
     current_volume = (initial_volume > 100) ? 100 : initial_volume;
-
-    // PA on permanently (no idle management — avoids settle-time clipping)
-    if (AUDIO_PA_PIN >= 0) {
-        pinMode(AUDIO_PA_PIN, OUTPUT);
-        digitalWrite(AUDIO_PA_PIN, AUDIO_PA_ACTIVE_LOW ? LOW : HIGH);
-        LOGI(TAG, "PA enabled (GPIO%d, active-%s)",
-             AUDIO_PA_PIN, AUDIO_PA_ACTIVE_LOW ? "LOW" : "HIGH");
-    }
-
-    // I2S channel setup — create both TX and RX (vendor demo does full-duplex;
-    // RX channel is required for proper ES8311 clock generation on ESP32-P4)
-    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-    chan_cfg.auto_clear = true;
-    esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle, &rx_handle);
-    if (err != ESP_OK) {
-        LOGE(TAG, "i2s_new_channel failed: %s", esp_err_to_name(err));
+    output_driver = audio_output_driver_create();
+    if (!output_driver) {
+        LOGE(TAG, "No audio output driver");
         return;
     }
+    output_driver->setMuted(false);
+    if (!output_driver->begin(AUDIO_SAMPLE_RATE)) return;
 
-    i2s_std_config_t std_cfg = {
-        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
-        .gpio_cfg = {
-            .mclk = (gpio_num_t)AUDIO_I2S_MCLK,
-            .bclk = (gpio_num_t)AUDIO_I2S_BCLK,
-            .ws   = (gpio_num_t)AUDIO_I2S_LRCK,
-            .dout = (gpio_num_t)AUDIO_I2S_DOUT,
-            .din  = (gpio_num_t)AUDIO_I2S_DIN,
-            .invert_flags = {
-                .mclk_inv = false,
-                .bclk_inv = false,
-                .ws_inv   = false,
-            },
-        },
-    };
-    std_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_384;
-
-    err = i2s_channel_init_std_mode(tx_handle, &std_cfg);
-    if (err != ESP_OK) {
-        LOGE(TAG, "i2s_channel_init_std_mode(TX) failed: %s", esp_err_to_name(err));
-        i2s_del_channel(tx_handle);
-        tx_handle = NULL;
-        return;
-    }
-
-    err = i2s_channel_init_std_mode(rx_handle, &std_cfg);
-    if (err != ESP_OK) {
-        LOGE(TAG, "i2s_channel_init_std_mode(RX) failed: %s", esp_err_to_name(err));
-        i2s_del_channel(rx_handle);
-        i2s_del_channel(tx_handle);
-        rx_handle = NULL;
-        tx_handle = NULL;
-        return;
-    }
-
-    err = i2s_channel_enable(tx_handle);
-    if (err != ESP_OK) {
-        LOGE(TAG, "i2s_channel_enable(TX) failed: %s", esp_err_to_name(err));
-        i2s_del_channel(rx_handle);
-        i2s_del_channel(tx_handle);
-        rx_handle = NULL;
-        tx_handle = NULL;
-        return;
-    }
-
-    err = i2s_channel_enable(rx_handle);
-    if (err != ESP_OK) {
-        LOGE(TAG, "i2s_channel_enable(RX) failed: %s", esp_err_to_name(err));
-        i2s_channel_disable(tx_handle);
-        i2s_del_channel(rx_handle);
-        i2s_del_channel(tx_handle);
-        rx_handle = NULL;
-        tx_handle = NULL;
-        return;
-    }
-
-    LOGI(TAG, "I2S TX: %u Hz, 16-bit stereo, MCLK=%lu Hz (384x)", SAMPLE_RATE, MCLK_FREQ);
-
-    // Let MCLK stabilize before configuring codec
-    vTaskDelay(pdMS_TO_TICKS(50));
-
-    // Initialize codec
-    if (!es8311_init_codec()) {
-        LOGE(TAG, "ES8311 init failed");
-        i2s_channel_disable(rx_handle);
-        i2s_channel_disable(tx_handle);
-        i2s_del_channel(rx_handle);
-        i2s_del_channel(tx_handle);
-        rx_handle = NULL;
-        tx_handle = NULL;
-        return;
-    }
-
-    // Set initial volume
-    es8311_apply_volume(current_volume);
+    output_driver->setVolume(current_volume);
 
     // Create command queue and audio task. The stack remains internal because
     // sound playback reads LittleFS while the flash cache is disabled.
@@ -488,14 +509,28 @@ void audio_init(uint8_t initial_volume) {
     audio_queue = xQueueCreate(AUDIO_QUEUE_DEPTH, sizeof(AudioCommand));
     if (!audio_queue) {
         LOGE(TAG, "Failed to create audio queue");
-        i2s_channel_disable(rx_handle);
-        i2s_channel_disable(tx_handle);
-        i2s_del_channel(rx_handle);
-        i2s_del_channel(tx_handle);
-        rx_handle = NULL;
-        tx_handle = NULL;
         return;
     }
+
+#if HAS_SOUND_PLAYER
+    music_work_queue = xQueueCreate(MUSIC_WORK_QUEUE_DEPTH, sizeof(MusicWorkCommand));
+    if (!music_work_queue) {
+        LOGE(TAG, "Failed to create Music work queue");
+        vQueueDelete(audio_queue);
+        audio_queue = NULL;
+        return;
+    }
+    if (!music_catalog_store_init()) {
+        LOGE(TAG, "Failed to allocate Music catalog in PSRAM");
+    }
+    g_music_catalog_refresh_sem = xSemaphoreCreateBinaryStatic(&g_music_catalog_refresh_sem_storage);
+    if (!g_music_catalog_refresh_sem) {
+        LOGE(TAG, "Failed to create Music catalog refresh semaphore");
+        vQueueDelete(audio_queue);
+        audio_queue = NULL;
+        return;
+    }
+#endif
 
     BaseType_t task_result = xTaskCreatePinnedToCoreWithCaps(
         audio_task, "audio", AUDIO_TASK_STACK_SIZE, NULL, 5,
@@ -505,12 +540,6 @@ void audio_init(uint8_t initial_volume) {
         LOGE(TAG, "Failed to create audio task with internal stack");
         vQueueDelete(audio_queue);
         audio_queue = NULL;
-        i2s_channel_disable(rx_handle);
-        i2s_channel_disable(tx_handle);
-        i2s_del_channel(rx_handle);
-        i2s_del_channel(tx_handle);
-        rx_handle = NULL;
-        tx_handle = NULL;
         return;
     }
 
@@ -522,16 +551,11 @@ void audio_init(uint8_t initial_volume) {
         audio_task_handle = NULL;
         vQueueDelete(audio_queue);
         audio_queue = NULL;
-        i2s_channel_disable(rx_handle);
-        i2s_channel_disable(tx_handle);
-        i2s_del_channel(rx_handle);
-        i2s_del_channel(tx_handle);
-        rx_handle = NULL;
-        tx_handle = NULL;
         return;
     }
 
     audio_initialized = true;
+    device_telemetry_log_memory_snapshot("audio");
     LOGI(TAG, "Audio ready (volume=%u%%, PA always-on)", current_volume);
 }
 
@@ -539,7 +563,7 @@ void audio_set_volume(uint8_t vol_0_100) {
     if (vol_0_100 > 100) vol_0_100 = 100;
     current_volume = vol_0_100;
     if (audio_initialized) {
-        es8311_apply_volume(current_volume);
+        output_driver->setVolume(current_volume);
     }
     LOGI(TAG, "Volume: %u%%", current_volume);
 }
@@ -596,6 +620,87 @@ bool audio_is_playing() {
 }
 
 #if HAS_SOUND_PLAYER
+AudioMusicSubmitResult audio_music_command(MusicCommand command) {
+    if (!audio_initialized || !music_work_queue) return AUDIO_MUSIC_SUBMIT_UNAVAILABLE;
+    portENTER_CRITICAL(&g_music_storage_mux);
+    const bool mutating = g_music_storage_mutating;
+    portEXIT_CRITICAL(&g_music_storage_mux);
+    if (mutating) return AUDIO_MUSIC_SUBMIT_BUSY;
+    MusicWorkCommand work = {MUSIC_WORK_TRANSPORT, command};
+    return xQueueSend(music_work_queue, &work, 0) == pdTRUE
+        ? AUDIO_MUSIC_SUBMIT_QUEUED : AUDIO_MUSIC_SUBMIT_BUSY;
+}
+
+void audio_get_music_info(AudioMusicInfo* out) {
+    if (!out) return;
+    portENTER_CRITICAL(&g_music_info_mux);
+    *out = g_music_info;
+    portEXIT_CRITICAL(&g_music_info_mux);
+}
+
+bool audio_get_music_catalog_snapshot(MusicCatalogSnapshot* out) {
+    return music_catalog_store_copy(out, nullptr);
+}
+
+bool audio_get_music_catalog_status(MusicCatalogStatus* out) {
+    return music_catalog_store_status(out);
+}
+
+bool audio_get_music_catalog_count(uint8_t* out_count) {
+    if (!out_count) return false;
+    MusicCatalogStatus status = {};
+    if (!music_catalog_store_status(&status)) return false;
+    *out_count = status.available ? status.count : 0;
+    return status.available;
+}
+
+bool audio_music_refresh_catalog(uint32_t timeout_ms) {
+    if (!audio_initialized || !g_music_catalog_refresh_sem) return false;
+    xSemaphoreTake(g_music_catalog_refresh_sem, 0);
+    portENTER_CRITICAL(&g_music_storage_mux);
+    if (g_music_catalog_refresh_pending) {
+        portEXIT_CRITICAL(&g_music_storage_mux);
+        return false;
+    }
+    g_music_catalog_refresh_pending = true;
+    portEXIT_CRITICAL(&g_music_storage_mux);
+
+    MusicWorkCommand command = {MUSIC_WORK_REFRESH, MUSIC_COMMAND_STOP};
+    if (xQueueSend(music_work_queue, &command, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
+        portENTER_CRITICAL(&g_music_storage_mux);
+        g_music_catalog_refresh_pending = false;
+        portEXIT_CRITICAL(&g_music_storage_mux);
+        return false;
+    }
+    return xSemaphoreTake(g_music_catalog_refresh_sem, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+}
+
+bool audio_music_storage_mutation_begin() {
+    if (!audio_initialized) return false;
+    portENTER_CRITICAL(&g_music_storage_mux);
+    if (g_music_storage_mutating || g_file_backed_playing) {
+        portEXIT_CRITICAL(&g_music_storage_mux);
+        return false;
+    }
+    portENTER_CRITICAL(&g_music_info_mux);
+    const AudioMusicStatus status = g_music_info.status;
+    portEXIT_CRITICAL(&g_music_info_mux);
+    if (status == AUDIO_MUSIC_PLAYING || status == AUDIO_MUSIC_PAUSED) {
+        portEXIT_CRITICAL(&g_music_storage_mux);
+        return false;
+    }
+    g_music_storage_mutating = true;
+    portEXIT_CRITICAL(&g_music_storage_mux);
+    return true;
+}
+
+void audio_music_storage_mutation_end(bool catalog_changed) {
+    portENTER_CRITICAL(&g_music_storage_mux);
+    if (catalog_changed) g_music_catalog_dirty = true;
+    g_music_storage_mutating = false;
+    portEXIT_CRITICAL(&g_music_storage_mux);
+}
+
 void audio_play_sound(const char* filename, uint8_t volume_override) {
     if (!audio_initialized) {
         LOGW(TAG, "Audio not initialized");
@@ -605,6 +710,10 @@ void audio_play_sound(const char* filename, uint8_t volume_override) {
         LOGW(TAG, "Empty sound filename");
         return;
     }
+    portENTER_CRITICAL(&g_music_storage_mux);
+    const bool mutating = g_music_storage_mutating;
+    portEXIT_CRITICAL(&g_music_storage_mux);
+    if (mutating) return;
     // Note: don't check sound_store_exists() here — it does flash I/O and the
     // caller may be the LVGL task whose stack is in PSRAM (crashes on ESP32-P4).
     // sound_player_play() handles file-not-found gracefully.

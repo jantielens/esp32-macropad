@@ -42,7 +42,8 @@ MipiDsiDriver::MipiDsiDriver()
       currentBrightness(100),
       displayWidth(DISPLAY_WIDTH), displayHeight(DISPLAY_HEIGHT), displayRotation(DISPLAY_ROTATION),
       backlightOn(false), flushX(0), flushY(0), flushW(0), flushH(0), lvglDisplay(nullptr),
-      physX(0), physY(0), physW(0), physH(0)
+      physX(0), physY(0), physW(0), physH(0),
+      drawErr(ESP_OK), drawErrCount(0), lastReportedDrawErrCount(0)
 {
 }
 
@@ -146,16 +147,19 @@ void MipiDsiDriver::init() {
     // 4. Create DPI panel with disable_lp=true and use_dma2d=true
     //    disable_lp: keeps D-PHY in HS mode during blanking (avoids flicker)
     //    use_dma2d: hardware-accelerated async pixel copy (avoids blocking CPU)
-    //    num_fbs=2: double-buffered framebuffer. ESP-IDF mirrors draw_bitmap
-    //      writes across both FBs so partial flushes stay coherent, and
-    //      scanout reads one FB while draw_bitmap writes the other —
-    //      eliminates the tear/flicker window inherent to single-FB mode.
+    //    num_fbs=1: single framebuffer. ESP-IDF only ping-pongs between
+    //      framebuffers when the caller hands esp_lcd_panel_draw_bitmap() a
+    //      pointer that *is* one of the framebuffers (the zero-copy path).
+    //      We always pass the LVGL/PPA staging buffer, so DMA2D copies into
+    //      the currently scanned-out FB and the panel's fb index never moves.
+    //      Additional framebuffers would be allocated but never scanned out —
+    //      W*H*2 bytes of PSRAM each, for no tear protection whatsoever.
     esp_lcd_dpi_panel_config_t dpi_config = {
         .virtual_channel = 0,
         .dpi_clk_src = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
         .dpi_clock_freq_mhz = (uint32_t)(timing.dpi_clock_hz / 1000000),
         .pixel_format = LCD_COLOR_PIXEL_FORMAT_RGB565,
-        .num_fbs = 2,
+        .num_fbs = 1,
         .video_timing = {
             .h_size = displayWidth,
             .v_size = displayHeight,
@@ -179,15 +183,13 @@ void MipiDsiDriver::init() {
     // 6. Initialize DPI panel — starts continuous DMA refresh from PSRAM
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
     
-    // 7. Get PSRAM framebuffer pointers (allocated by ESP-IDF during panel creation).
-    //    With num_fbs=2 the driver ping-pongs between fb0 and fb1 internally.
+    // 7. Get the PSRAM framebuffer pointer (allocated by ESP-IDF during panel creation).
     void* fb0 = nullptr;
-    void* fb1 = nullptr;
-    ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 2, &fb0, &fb1));
+    ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 1, &fb0));
     framebuffer = (uint16_t*)fb0;
     
-    LOGI(tag, "DSI initialized: %dx%d, disable_lp=%s, use_dma2d=true, dual FB @ %p / %p",
-         displayWidth, displayHeight, timing.disable_lp ? "true" : "false", fb0, fb1);
+    LOGI(tag, "DSI initialized: %dx%d, disable_lp=%s, use_dma2d=true, FB @ %p",
+         displayWidth, displayHeight, timing.disable_lp ? "true" : "false", fb0);
     
     delay(50);
     setBacklightBrightness(currentBrightness);
@@ -305,11 +307,24 @@ bool onPpaDone(ppa_client_handle_t client,
     // Issue DMA2D copy of rotated buffer to framebuffer.
     // g_displayFlushBusy was already set at the top of pushColors() and
     // remains true until onColorTransDone clears it.
-    esp_lcd_panel_draw_bitmap(driver->panel_handle,
-                              driver->physX, driver->physY,
-                              driver->physX + driver->physW,
-                              driver->physY + driver->physH,
-                              driver->rotBuffer);
+    esp_err_t err = esp_lcd_panel_draw_bitmap(driver->panel_handle,
+                                              driver->physX, driver->physY,
+                                              driver->physX + driver->physW,
+                                              driver->physY + driver->physH,
+                                              driver->rotBuffer);
+    if (err != ESP_OK) {
+        // draw_bitmap returns ESP_ERR_INVALID_STATE when a previous DMA2D copy
+        // is still in flight. In that case no completion callback ever fires,
+        // so onColorTransDone would never run and LVGL would wait forever.
+        // Release it here instead. This runs in ISR context, so record the
+        // error for pushColors() to log from task context rather than
+        // formatting a message here.
+        driver->drawErr = err;
+        driver->drawErrCount++;
+        g_displayFlushBusy = false;
+        lv_display_flush_ready(driver->lvglDisplay);
+        return false;
+    }
     // Note: DMA2D completion is handled by onColorTransDone → flush_ready
     return false;
 }
@@ -319,6 +334,14 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
         return;
     }
 
+    // Report any draw_bitmap failure recorded by onPpaDone (ISR context can't
+    // log). Drained here so a persistent fault is visible in the serial log.
+    if (drawErrCount != lastReportedDrawErrCount) {
+        LOGE(getLogTag(), "draw_bitmap failed in PPA callback: 0x%x (%lu total)",
+             (int)drawErr, (unsigned long)drawErrCount);
+        lastReportedDrawErrCount = drawErrCount;
+    }
+
     // Mark flush in-flight for the entire duration of the push, covering both
     // the non-rotated direct DMA2D path and the rotated PPA→DMA2D chain.
     // Cleared by onColorTransDone ISR after the final DMA2D copy completes.
@@ -326,10 +349,18 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
 
     if (displayRotation == 0 || !rotBuffer || !ppaClient) {
         // No rotation — direct DMA2D async copy
-        esp_lcd_panel_draw_bitmap(panel_handle,
-                                  flushX, flushY,
-                                  flushX + flushW, flushY + flushH,
-                                  data);
+        esp_err_t err = esp_lcd_panel_draw_bitmap(panel_handle,
+                                                  flushX, flushY,
+                                                  flushX + flushW, flushY + flushH,
+                                                  data);
+        if (err != ESP_OK) {
+            // ESP_ERR_INVALID_STATE means a previous DMA2D copy is still in
+            // flight; no completion callback will fire, so release LVGL here
+            // or it waits on flush_ready forever.
+            LOGE(getLogTag(), "draw_bitmap failed: 0x%x", (int)err);
+            g_displayFlushBusy = false;
+            lv_display_flush_ready(lvglDisplay);
+        }
         return;
     }
 
@@ -405,7 +436,10 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
     esp_err_t err = ppa_do_scale_rotate_mirror(ppaClient, &srm);
     if (err != ESP_OK) {
         LOGE(getLogTag(), "PPA rotate failed: 0x%x", err);
-        // Signal flush_ready so LVGL doesn't stall
+        // Signal flush_ready so LVGL doesn't stall. onColorTransDone will never
+        // run for this flush, so clear the in-flight flag here too — otherwise
+        // displayDriverIsFlushBusy() stays true forever and stalls pad polling.
+        g_displayFlushBusy = false;
         lv_display_flush_ready(lvglDisplay);
         return;
     }
@@ -425,7 +459,7 @@ bool MipiDsiDriver::asyncFlush() const {
     return true;
 }
 
-// Zero both DPI framebuffers and flush PSRAM cache so the scanout sees black.
+// Zero the DPI framebuffer and flush PSRAM cache so the scanout sees black.
 // The ESP-IDF DPI peripheral keeps streaming the framebuffer over the MIPI
 // lanes at 60 Hz even after DCS Sleep In, so the only reliable way to
 // protect IPS cells from hours of identical content (image-persistence /
@@ -433,27 +467,21 @@ bool MipiDsiDriver::asyncFlush() const {
 // (Note: esp_lcd_panel_disp_on_off() on the DPI panel handle is not
 // implemented in our ESP-IDF version — it returns ESP_ERR_NOT_SUPPORTED
 // and logs an error — so framebuffer blanking is the actual mitigation.)
-// Fill both DPI framebuffers with a byte-uniform RGB565 color (0x0000 black,
+// Fill the DPI framebuffer with a byte-uniform RGB565 color (0x0000 black,
 // 0xFFFF white) and flush the PSRAM cache so the DPI peripheral's continuous
 // scanout reads the new content. The high and low bytes of `color` must match
 // for memset to produce the intended pixel value.
 void MipiDsiDriver::fillFramebuffers(uint16_t color) {
     if (!panel_handle) return;
     void* fb0 = nullptr;
-    void* fb1 = nullptr;
-    if (esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 2, &fb0, &fb1) != ESP_OK) {
+    if (esp_lcd_dpi_panel_get_frame_buffer(panel_handle, 1, &fb0) != ESP_OK) {
         return;
     }
+    if (!fb0) return;
     const int fill = (int)(color & 0xFF);
     const size_t fb_bytes = (size_t)displayWidth * (size_t)displayHeight * sizeof(uint16_t);
-    if (fb0) {
-        memset(fb0, fill, fb_bytes);
-        esp_cache_msync(fb0, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-    }
-    if (fb1 && fb1 != fb0) {
-        memset(fb1, fill, fb_bytes);
-        esp_cache_msync(fb1, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-    }
+    memset(fb0, fill, fb_bytes);
+    esp_cache_msync(fb0, fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
 }
 
 void MipiDsiDriver::blankFramebuffers() {
@@ -585,7 +613,7 @@ bool MipiDsiDriver::needsTwoPhaseWake() const {
 // Periodic scrub during long idle, called by the screensaver every
 // SCREENSAVER_SLEEP_REFRESH_MS while fully asleep.
 //   - Keep-awake mode: the panel stays powered and scanning, so this just
-//     re-blanks both framebuffers as insurance against any transient LVGL
+//     re-blanks the framebuffer as insurance against any transient LVGL
 //     write that slipped past the opaque overlay.
 //   - Hard-reset mode: actively de-bias the LC by briefly powering the panel
 //     up and driving full-frame white↔black inversion cycles (backlight off),
@@ -597,7 +625,7 @@ bool MipiDsiDriver::needsTwoPhaseWake() const {
 //     panel mid-equilibration leaves it in a marginal VCOM state that flickers
 //     for minutes on the next wake. Leaves RST LOW + framebuffers black so the
 //     normal hard-reset wake path is unchanged.
-//   - Otherwise: re-blank both framebuffers as insurance against any transient
+//   - Otherwise: re-blank the framebuffer as insurance against any transient
 //     LVGL write that slipped past the opaque top-layer overlay (e.g. overlay
 //     teardown race during fade-in) leaving stale pixels to ghost over hours.
 void MipiDsiDriver::displayRefreshSleep() {

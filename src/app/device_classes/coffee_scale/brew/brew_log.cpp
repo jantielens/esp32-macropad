@@ -2,11 +2,10 @@
 
 #if HAS_SCALE
 
-#include "fs_health.h"
 #include "log_manager.h"
+#include "storage.h"
 
 #include <ArduinoJson.h>
-#include <LittleFS.h>
 #include <Preferences.h>
 #include <time.h>
 
@@ -46,7 +45,7 @@ static void set_next_id(uint16_t id) {
 
 // Scan /brews/ to find the lowest ID file (for eviction).
 static uint16_t find_oldest_id() {
-    File dir = LittleFS.open(BREW_LOG_DIR);
+    File dir = Storage.open(BREW_LOG_DIR);
     if (!dir || !dir.isDirectory()) return 0;
 
     uint16_t oldest = UINT16_MAX;
@@ -69,7 +68,7 @@ static void evict_oldest() {
 
     char path[32];
     brew_log_path(oldest, path, sizeof(path));
-    LittleFS.remove(path);
+    Storage.remove(path);
     LOGI(TAG, "Evicted brew %u", (unsigned)oldest);
 }
 
@@ -98,7 +97,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
     // If time is before 2024, NTP hasn't synced
     uint32_t ts = (now > 1704067200) ? (uint32_t)now : 0;
 
-    File f = LittleFS.open(path, "w");
+    File f = Storage.open(path, "w");
     if (!f) {
         LOGE(TAG, "Failed to open %s for writing", path);
         return 0;
@@ -256,8 +255,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
     // Advance NVS counter
     set_next_id(id + 1);
 
-    // Update fs health
-    fs_health_set_storage_usage(LittleFS.usedBytes(), LittleFS.totalBytes());
+    storage_publish_usage();
 
     LOGI(TAG, "Saved brew %u [%s]: %.1fg in %lums, %u samples",
          (unsigned)id, template_name ? template_name : "free_pour",
@@ -272,7 +270,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
 // ============================================================================
 
 uint16_t brew_log_count() {
-    File dir = LittleFS.open(BREW_LOG_DIR);
+    File dir = Storage.open(BREW_LOG_DIR);
     if (!dir || !dir.isDirectory()) return 0;
 
     uint16_t count = 0;
@@ -295,7 +293,7 @@ uint16_t brew_log_import_raw(const char* json, size_t json_len) {
     char path[32];
     brew_log_path(id, path, sizeof(path));
 
-    File f = LittleFS.open(path, "w");
+    File f = Storage.open(path, "w");
     if (!f) {
         LOGE(TAG, "Import: failed to open %s", path);
         return 0;
@@ -304,6 +302,7 @@ uint16_t brew_log_import_raw(const char* json, size_t json_len) {
     f.close();
 
     set_next_id(id + 1);
+    storage_publish_usage();
     LOGI(TAG, "Imported brew %u (%u bytes)", (unsigned)id, (unsigned)json_len);
     return id;
 }

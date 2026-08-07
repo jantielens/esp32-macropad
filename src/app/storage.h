@@ -1,3 +1,6 @@
+#ifndef STORAGE_H
+#define STORAGE_H
+
 #pragma once
 
 // ============================================================================
@@ -33,7 +36,28 @@
 // `usedBytes()` / `totalBytes()` walk the FAT on SD cards and can be slow
 // on large volumes, so this helper throttles repeat calls to once per minute.
 // Pass `force=true` once after mount to populate the cache immediately.
-void storage_publish_usage(bool force);
+void storage_publish_usage(bool force = false);
+
+inline bool storage_boot_should_halt(bool sd_mount_succeeded) {
+#if USE_SD_STORAGE
+  return !sd_mount_succeeded;
+#else
+  (void)sd_mount_succeeded;
+  return false;
+#endif
+}
+
+template <typename RemoveRoot>
+inline bool storage_remove_sd_owned_roots(RemoveRoot remove_root) {
+  static const char* const owned_roots[] = {
+    "/config", "/icons", "/sounds", "/storage", "/prints", "/brews",
+  };
+  bool ok = true;
+  for (const char* root : owned_roots) {
+    if (!remove_root(root)) ok = false;
+  }
+  return ok;
+}
 
 // Mount the persistent filesystem backend and ensure base directories exist.
 // Idempotent — safe to call from multiple subsystems (pad config, hw button
@@ -41,3 +65,5 @@ void storage_publish_usage(bool force);
 // the filesystem is mounted and ready. For SD storage the card must already
 // have been mounted via sd_storage_mount() earlier in boot.
 bool storage_mount();
+
+#endif // STORAGE_H

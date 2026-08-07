@@ -120,7 +120,7 @@ struct DeviceConfig {
 #endif
 
 #if HAS_AUDIO
-		uint8_t audio_volume;                    // 0-100, default 70
+		uint8_t audio_volume;                    // 0-100, default AUDIO_DEFAULT_VOLUME
 		char tap_beep[CONFIG_BEEP_PATTERN_MAX_LEN];   // Beep DSL on tap (empty = disabled)
 		char lp_beep[CONFIG_BEEP_PATTERN_MAX_LEN];    // Beep DSL on long-press (empty = disabled)
 #endif

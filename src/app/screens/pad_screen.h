@@ -141,6 +141,11 @@ private:
     PadBinding* pageBindings;
     uint8_t pageBindingCount;
 
+    ButtonAction* padActions;
+    uint8_t padActionCount;
+    lv_obj_t* padActionOverlay;
+    lv_timer_t* padActionFlashTimer;
+
     bool arraysAllocated;      // true when lazy arrays are live
 
     // --- Lightweight state (kept even when evicted) ---
@@ -165,6 +170,8 @@ private:
     // Allocate / free the heavy binding arrays (PSRAM preferred)
     bool allocateArrays();
     void freeArrays();
+    bool allocatePadActions();
+    void clearPadActionOverlay();
 
     // Build/destroy tile LVGL objects from config
     void buildTiles();
@@ -188,6 +195,9 @@ private:
     // Event callbacks
     static void onTap(lv_event_t* e);
     static void onLongPress(lv_event_t* e);
+    static void onPadActionTap(lv_event_t* e);
+    static void padActionFlashTimerCb(lv_timer_t* timer);
+    void showPadActionFlash();
 
 public:
     static void tapFlashTimerCb(lv_timer_t* timer);

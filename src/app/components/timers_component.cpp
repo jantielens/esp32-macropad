@@ -11,27 +11,8 @@
 #include <ArduinoJson.h>
 
 static void timers_get_config(AsyncWebServerRequest *request) {
-    const TimerConfig* cfg = timer_config_get();
-
-    auto doc = make_psram_json_doc(3072);
-
-    for (uint8_t i = 0; cfg && i < TIMER_COUNT; i++) {
-        char key[4];
-        snprintf(key, sizeof(key), "%u", i + 1);
-        JsonObject tobj = doc->createNestedObject(key);
-
-        const TimerSettings& ts = cfg->timers[i];
-        tobj["mode"] = (ts.mode == TIMER_MODE_DOWN) ? "down" : "up";
-        if (ts.countdown > 0) tobj["countdown"] = ts.countdown;
-
-        if (ts.expire_action_count > 0) {
-            JsonArray arr = tobj.createNestedArray("expire_actions");
-            for (uint8_t a = 0; a < ts.expire_action_count; a++) {
-                JsonObject aobj = arr.createNestedObject();
-                action_to_json(ts.expire_actions[a], aobj);
-            }
-        }
-    }
+    auto doc = make_psram_json_doc(4096);
+    timer_config_to_json(doc->to<JsonObject>());
 
     web_portal_send_json_chunked(request, doc);
 }

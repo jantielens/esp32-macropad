@@ -3,6 +3,7 @@
 #if HAS_DISPLAY || HAS_BUTTON
 
 #include "action_registry.h"
+#include "pad_cycle.h"
 #include <string.h>
 
 // ============================================================================
@@ -27,9 +28,14 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         strlcpy(act.payload.mqtt.mqtt_payload, a["payload"] | "", sizeof(act.payload.mqtt.mqtt_payload));
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
         strlcpy(act.payload.key.key_sequence, a["sequence"] | "", sizeof(act.payload.key.key_sequence));
-    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
-        strlcpy(act.payload.beep.beep_pattern, a["beep_pattern"] | "", sizeof(act.payload.beep.beep_pattern));
-        act.payload.beep.beep_volume = (uint8_t)(a["beep_volume"] | 0);
+    } else if (strcmp(act.type, ACTION_TYPE_MUSIC) == 0) {
+        const char* command = a["music_command"] | "";
+        if (strcmp(command, "play_pause") != 0 && strcmp(command, "next") != 0 &&
+            strcmp(command, "previous") != 0 && strcmp(command, "stop") != 0) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
+        strlcpy(act.payload.music.music_command, command, sizeof(act.payload.music.music_command));
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
         strlcpy(act.payload.volume.volume_mode,  a["volume_mode"]  | "", sizeof(act.payload.volume.volume_mode));
         strlcpy(act.payload.volume.volume_value, a["volume_value"] | "", sizeof(act.payload.volume.volume_value));
@@ -37,12 +43,37 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         strlcpy(act.payload.brightness.brightness_mode,  a["brightness_mode"]  | "", sizeof(act.payload.brightness.brightness_mode));
         strlcpy(act.payload.brightness.brightness_value, a["brightness_value"] | "", sizeof(act.payload.brightness.brightness_value));
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
+        const char* command = a["timer_command"] | "";
+        const char* mode = a["timer_mode"] | "";
+        const char* value = a["timer_value"] | "";
+        if (strlen(command) >= sizeof(act.payload.timer.timer_command)
+                || strlen(mode) >= sizeof(act.payload.timer.timer_mode)
+                || strlen(value) >= sizeof(act.payload.timer.timer_value)) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
         act.payload.timer.timer_id = (uint8_t)(a["timer_id"] | 0);
-        strlcpy(act.payload.timer.timer_command, a["timer_command"] | "", sizeof(act.payload.timer.timer_command));
-        strlcpy(act.payload.timer.timer_value,   a["timer_value"]   | "", sizeof(act.payload.timer.timer_value));
-    } else if (strcmp(act.type, ACTION_TYPE_SOUND) == 0) {
-        strlcpy(act.payload.sound.sound_file, a["sound_file"] | "", sizeof(act.payload.sound.sound_file));
-        act.payload.sound.sound_volume = (uint8_t)(a["sound_volume"] | 0);
+        strlcpy(act.payload.timer.timer_command, command, sizeof(act.payload.timer.timer_command));
+        strlcpy(act.payload.timer.timer_mode, mode, sizeof(act.payload.timer.timer_mode));
+        strlcpy(act.payload.timer.timer_value, value, sizeof(act.payload.timer.timer_value));
+    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0) {
+        const char* kind = a["sound_alert_kind"] | "";
+        const char* pattern = a["sound_alert_pattern"] | "";
+        const char* file = a["sound_alert_file"] | "";
+        const uint8_t volume = (uint8_t)(a["sound_alert_volume"] | 0);
+        if ((strcmp(kind, "tone") != 0 && strcmp(kind, "mp3") != 0) || volume > 100 ||
+            (strcmp(kind, "tone") == 0 && file[0]) ||
+            (strcmp(kind, "mp3") == 0 && (pattern[0] || !file[0]))) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
+        strlcpy(act.payload.sound_alert.sound_alert_kind, kind,
+                sizeof(act.payload.sound_alert.sound_alert_kind));
+        strlcpy(act.payload.sound_alert.sound_alert_pattern, pattern,
+                sizeof(act.payload.sound_alert.sound_alert_pattern));
+        strlcpy(act.payload.sound_alert.sound_alert_file, file,
+                sizeof(act.payload.sound_alert.sound_alert_file));
+        act.payload.sound_alert.sound_alert_volume = volume;
     } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
         strlcpy(act.payload.notify.notify_text,         a["notify_text"]         | "", sizeof(act.payload.notify.notify_text));
         strlcpy(act.payload.notify.notify_duration_ms,  a["notify_duration_ms"]  | "", sizeof(act.payload.notify.notify_duration_ms));
@@ -65,6 +96,25 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         act.payload.visual_alert.va_period_ms  = (uint16_t)(a["period_ms"]   | 0);
         act.payload.visual_alert.va_intensity  = (uint16_t)(a["intensity"]   | 0);
         act.payload.visual_alert.va_duration_ms = (uint32_t)(a["duration_ms"] | 0);
+    } else if (strcmp(act.type, ACTION_TYPE_CYCLE_PAD) == 0) {
+        if ((a.containsKey("direction") && !a["direction"].is<const char*>())
+                || (a.containsKey("wrap") && !a["wrap"].is<bool>())
+                || (a.containsKey("excluded_pads") && !a["excluded_pads"].is<const char*>())) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
+        const char* direction = a["direction"] | "next";
+        if (strcmp(direction, "next") != 0 && strcmp(direction, "previous") != 0) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
+        act.payload.cycle_pad.direction = strcmp(direction, "previous") == 0 ? -1 : 1;
+        act.payload.cycle_pad.wrap = a["wrap"] | true;
+        act.payload.cycle_pad.excluded_mask =
+            pad_cycle_parse_exclusions(a["excluded_pads"] | "");
+    } else if (strcmp(act.type, "beep") == 0 || strcmp(act.type, "sound") == 0) {
+        memset(&act, 0, sizeof(ButtonAction));
+        return;
     } else {
         // Device-class action types (e.g. shutter) self-register via
         // action_type_register(); fall through to the registry.
@@ -85,9 +135,8 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
         if (act.payload.mqtt.mqtt_payload[0]) obj["payload"] = act.payload.mqtt.mqtt_payload;
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
         if (act.payload.key.key_sequence[0]) obj["sequence"] = act.payload.key.key_sequence;
-    } else if (strcmp(act.type, ACTION_TYPE_BEEP) == 0) {
-        if (act.payload.beep.beep_pattern[0]) obj["beep_pattern"] = act.payload.beep.beep_pattern;
-        if (act.payload.beep.beep_volume > 0) obj["beep_volume"]  = act.payload.beep.beep_volume;
+    } else if (strcmp(act.type, ACTION_TYPE_MUSIC) == 0) {
+        if (act.payload.music.music_command[0]) obj["music_command"] = act.payload.music.music_command;
     } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
         if (act.payload.volume.volume_mode[0])  obj["volume_mode"]  = act.payload.volume.volume_mode;
         if (act.payload.volume.volume_value[0]) obj["volume_value"] = act.payload.volume.volume_value;
@@ -97,10 +146,21 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
         if (act.payload.timer.timer_id > 0)     obj["timer_id"]      = act.payload.timer.timer_id;
         if (act.payload.timer.timer_command[0]) obj["timer_command"] = act.payload.timer.timer_command;
+        if (act.payload.timer.timer_mode[0])    obj["timer_mode"]    = act.payload.timer.timer_mode;
         if (act.payload.timer.timer_value[0])   obj["timer_value"]   = act.payload.timer.timer_value;
-    } else if (strcmp(act.type, ACTION_TYPE_SOUND) == 0) {
-        if (act.payload.sound.sound_file[0])    obj["sound_file"]   = act.payload.sound.sound_file;
-        if (act.payload.sound.sound_volume > 0) obj["sound_volume"] = act.payload.sound.sound_volume;
+    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0) {
+        obj["sound_alert_kind"] = act.payload.sound_alert.sound_alert_kind;
+        if (strcmp(act.payload.sound_alert.sound_alert_kind, "tone") == 0 &&
+            act.payload.sound_alert.sound_alert_pattern[0]) {
+            obj["sound_alert_pattern"] = act.payload.sound_alert.sound_alert_pattern;
+        }
+        if (strcmp(act.payload.sound_alert.sound_alert_kind, "mp3") == 0 &&
+            act.payload.sound_alert.sound_alert_file[0]) {
+            obj["sound_alert_file"] = act.payload.sound_alert.sound_alert_file;
+        }
+        if (act.payload.sound_alert.sound_alert_volume > 0) {
+            obj["sound_alert_volume"] = act.payload.sound_alert.sound_alert_volume;
+        }
     } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
         if (act.payload.notify.notify_text[0])         obj["notify_text"]         = act.payload.notify.notify_text;
         if (act.payload.notify.notify_duration_ms[0])  obj["notify_duration_ms"]  = act.payload.notify.notify_duration_ms;
@@ -123,6 +183,13 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
         if (act.payload.visual_alert.va_period_ms > 0)   obj["period_ms"]   = act.payload.visual_alert.va_period_ms;
         if (act.payload.visual_alert.va_intensity > 0)   obj["intensity"]   = act.payload.visual_alert.va_intensity;
         if (act.payload.visual_alert.va_duration_ms > 0) obj["duration_ms"] = act.payload.visual_alert.va_duration_ms;
+    } else if (strcmp(act.type, ACTION_TYPE_CYCLE_PAD) == 0) {
+        obj["direction"] = act.payload.cycle_pad.direction < 0 ? "previous" : "next";
+        obj["wrap"] = act.payload.cycle_pad.wrap;
+        char exclusions[MAX_PADS * 3 + 1];
+        pad_cycle_format_exclusions(act.payload.cycle_pad.excluded_mask,
+                                    exclusions, sizeof(exclusions));
+        if (exclusions[0]) obj["excluded_pads"] = exclusions;
     } else {
         const ActionTypeDef* t = action_type_find(act.type);
         if (t && t->serialize) t->serialize(act, obj);

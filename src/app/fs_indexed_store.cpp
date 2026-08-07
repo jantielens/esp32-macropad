@@ -97,7 +97,7 @@ void FsIndexedStore::_manifest_path(char* out, size_t out_len) const {
     snprintf(out, out_len, "%s/%s", _base_path, MANIFEST_FILENAME);
 }
 
-// Public path helper — returns LittleFS path for use in AsyncFileResponse
+// Public path helper — returns a backend-neutral path for use in AsyncFileResponse
 String FsIndexedStore::data_path(const char* id) const {
     char buf[256];
     _data_path(id, buf, sizeof(buf));

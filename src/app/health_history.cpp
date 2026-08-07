@@ -72,9 +72,9 @@ static void hist_timer_cb(TimerHandle_t) {
 		const int cpu_usage = device_telemetry_get_cpu_usage();
 		s.cpu_usage = (cpu_usage < 0) ? (int16_t)-1 : (int16_t)cpu_usage;
 
-		// Lightweight heap counter reads only — no PSRAM free-list walks.
+		// Counter reads only. Largest-block walks can hold allocator locks with
+		// interrupts disabled, which is unsafe beside continuous display scan-out.
 		s.heap_internal_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-		s.heap_internal_largest = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 		s.psram_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 
 		// DMA-capable internal heap watermark. This is the pool that backs
@@ -88,13 +88,12 @@ static void hist_timer_cb(TimerHandle_t) {
 			constexpr uint32_t kDmaInternalWarnIntervalMs = 5000;
 			static uint32_t s_last_dma_warn_ms = 0;
 			const uint32_t dma_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-			const uint32_t dma_largest = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 			if (dma_free < kDmaInternalLowThreshold) {
 				const uint32_t now_ms = (uint32_t)millis();
 				if (s_last_dma_warn_ms == 0 || (now_ms - s_last_dma_warn_ms) >= kDmaInternalWarnIntervalMs) {
 					s_last_dma_warn_ms = now_ms;
-					LOGW("HealthHist", "DMA-internal heap low: free=%u largest=%u (threshold=%u)",
-						(unsigned)dma_free, (unsigned)dma_largest, (unsigned)kDmaInternalLowThreshold);
+					LOGW("HealthHist", "DMA-internal heap low: free=%u (threshold=%u)",
+						(unsigned)dma_free, (unsigned)kDmaInternalLowThreshold);
 				}
 			}
 		}

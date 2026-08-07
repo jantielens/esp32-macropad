@@ -71,7 +71,13 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define CONFIG_BINDABLE_SHORT_LEN       64
 #define CONFIG_WIDGET_TYPE_MAX_LEN     16
 #define MAX_WIDGET_BINDINGS             4
-#define WIDGET_CONFIG_MAX_BYTES      1600
+
+// Per-button widget config blob. This is multiplied by MAX_PAD_BUTTONS inside
+// every PadConfig, so keep the cap tight and verify large widget configs with
+// their local static_assert.
+#ifndef WIDGET_CONFIG_MAX_BYTES
+#define WIDGET_CONFIG_MAX_BYTES  1600
+#endif
 
 // Icon position relative to center label
 #define ICON_POS_ABOVE   0   // Default: icon above center label
@@ -123,15 +129,16 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_BACK     "back"
 #define ACTION_TYPE_KEY      "key"
 #define ACTION_TYPE_BLE_PAIR "ble_pair"
-#define ACTION_TYPE_BEEP     "beep"
+#define ACTION_TYPE_MUSIC    "music"
+#define ACTION_TYPE_SOUND_ALERT "sound_alert"
 #define ACTION_TYPE_VOLUME     "volume"
 #define ACTION_TYPE_BRIGHTNESS "brightness"
 #define ACTION_TYPE_TIMER    "timer"
-#define ACTION_TYPE_SOUND    "sound"
 #define ACTION_TYPE_NOTIFY   "notify"
 #define ACTION_TYPE_SYSTEM   "system"
 #define ACTION_TYPE_HA_SERVICE "ha_service"
 #define ACTION_TYPE_VISUAL_ALERT "visual_alert"
+#define ACTION_TYPE_CYCLE_PAD "cycle_pad"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -162,9 +169,14 @@ struct MqttPayload {
 struct KeyPayload {
     char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // DSL key sequence
 };
-struct BeepPayload {
-    char beep_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];  // "freq:dur freq:dur" (empty = default)
-    uint8_t beep_volume;                             // 0 = device volume, 1-100 = override
+struct MusicPayload {
+    char music_command[12];
+};
+struct SoundAlertPayload {
+    char sound_alert_kind[5];
+    char sound_alert_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];
+    char sound_alert_file[32];
+    uint8_t sound_alert_volume;
 };
 struct VolumePayload {
     char volume_mode[CONFIG_VOLUME_MODE_MAX_LEN];    // "set" or "adjust"
@@ -177,11 +189,8 @@ struct BrightnessPayload {
 struct TimerPayload {
     uint8_t timer_id;                                 // 1-3
     char timer_command[CONFIG_TIMER_CMD_MAX_LEN];     // "toggle", "start", "stop", "adjust", "set", etc.
+    char timer_mode[5];                               // "up" or "down" for start/toggle
     char timer_value[CONFIG_VALUE_MAX_LEN];           // seconds for set/adjust (supports {step})
-};
-struct SoundPayload {
-    char sound_file[32];                              // filename (no path/extension)
-    uint8_t sound_volume;                             // 0 = device vol, 1-100 = override
 };
 struct NotifyPayload {
     char notify_text[128];                                // message text (bindable). NOTE: dominates union size — see Future Work.
@@ -198,7 +207,7 @@ struct SystemPayload {
 };
 struct HaServicePayload {
     char entity_id[48];   // e.g. "light.living_room" (domain = text before first '.')
-    char service[20];     // e.g. "toggle", "turn_on", "set_cover_position"
+    char service[64];     // bare service, e.g. "toggle", "media_previous_track"
     char data_json[64];   // optional extra JSON object, e.g. {"brightness_pct":80}
 };
 struct VisualAlertPayload {
@@ -208,6 +217,11 @@ struct VisualAlertPayload {
     uint16_t va_period_ms;                        // pulse cadence, 0 = default 800
     uint16_t va_intensity;                        // max overlay opacity 0-100%, 0 = default 100
     uint32_t va_duration_ms;                       // 0 = persist until stopped
+};
+struct CyclePadPayload {
+    int8_t direction;                              // +1 = next, -1 = previous
+    bool wrap;                                     // wrap at the numeric boundary
+    uint32_t excluded_mask;                        // bit N excludes user-visible Pad N+1
 };
 
 // Opaque slot reserved for device-class action payloads. Each device class
@@ -230,15 +244,16 @@ union ActionPayload {
     ScreenPayload     screen;       // type == ACTION_TYPE_SCREEN
     MqttPayload       mqtt;         // type == ACTION_TYPE_MQTT
     KeyPayload        key;          // type == ACTION_TYPE_KEY
-    BeepPayload       beep;         // type == ACTION_TYPE_BEEP
+    MusicPayload      music;        // type == ACTION_TYPE_MUSIC
+    SoundAlertPayload sound_alert;  // type == ACTION_TYPE_SOUND_ALERT
     VolumePayload     volume;       // type == ACTION_TYPE_VOLUME
     BrightnessPayload brightness;   // type == ACTION_TYPE_BRIGHTNESS
     TimerPayload      timer;        // type == ACTION_TYPE_TIMER
-    SoundPayload      sound;        // type == ACTION_TYPE_SOUND
     NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
     SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
     HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
     VisualAlertPayload visual_alert; // type == ACTION_TYPE_VISUAL_ALERT
+    CyclePadPayload   cycle_pad;    // type == ACTION_TYPE_CYCLE_PAD
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, "" (none) carry no payload data — only the type tag.
@@ -266,15 +281,16 @@ static_assert(sizeof(ButtonAction) <= 420,
     printf_fn("  ScreenPayload     = %zu\n", sizeof(ScreenPayload));     \
     printf_fn("  MqttPayload       = %zu\n", sizeof(MqttPayload));       \
     printf_fn("  KeyPayload        = %zu\n", sizeof(KeyPayload));        \
-    printf_fn("  BeepPayload       = %zu\n", sizeof(BeepPayload));       \
+    printf_fn("  MusicPayload      = %zu\n", sizeof(MusicPayload));      \
+    printf_fn("  SoundAlertPayload = %zu\n", sizeof(SoundAlertPayload)); \
     printf_fn("  VolumePayload     = %zu\n", sizeof(VolumePayload));     \
     printf_fn("  BrightnessPayload = %zu\n", sizeof(BrightnessPayload)); \
     printf_fn("  TimerPayload      = %zu\n", sizeof(TimerPayload));      \
-    printf_fn("  SoundPayload      = %zu\n", sizeof(SoundPayload));      \
     printf_fn("  NotifyPayload     = %zu\n", sizeof(NotifyPayload));     \
     printf_fn("  SystemPayload     = %zu\n", sizeof(SystemPayload));     \
     printf_fn("  HaServicePayload  = %zu\n", sizeof(HaServicePayload));  \
     printf_fn("  VisualAlertPayload= %zu\n", sizeof(VisualAlertPayload)); \
+    printf_fn("  CyclePadPayload   = %zu\n", sizeof(CyclePadPayload));    \
 } while (0)
 
 // LabelBinding removed — MQTT bindings are now inline in label text.
@@ -400,6 +416,11 @@ struct PadConfig {
     uint8_t binding_count;
     PadBinding bindings[PAD_MAX_BINDINGS];
 
+    // Full-screen pad actions. These remain local to this pad and are not
+    // inherited from template_pad.
+    ButtonAction pad_actions[MAX_BUTTON_ACTIONS];
+    uint8_t pad_action_count;
+
     uint8_t button_count;
     ScreenButtonConfig buttons[MAX_PAD_BUTTONS];
 };
@@ -446,6 +467,10 @@ void pad_config_rebuild_all_caches();
 // Generation counter — incremented on every save/delete. PadScreen uses this
 // to detect config changes and rebuild tiles.
 uint32_t pad_config_get_generation();
+
+// Atomic snapshot of configured pads with at least one post-template button or
+// an effective full-screen pad action.
+uint32_t pad_config_get_eligible_mask();
 
 #ifdef __cplusplus
 }

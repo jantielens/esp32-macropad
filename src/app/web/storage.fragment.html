@@ -1,0 +1,34 @@
+<div class="section-header d-flex align-items-center justify-content-between gap-3">
+  <div>
+    <h2>Storage</h2>
+    <p class="mb-0">Persistent files on this device.</p>
+  </div>
+  <button id="storage-refresh-btn" class="btn btn-outline-secondary" type="button">Refresh</button>
+</div>
+
+<div id="storage-error" class="alert alert-warning d-none" role="alert"></div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-sm-4"><div class="text-muted small">Backend</div><div id="storage-backend">-</div></div>
+      <div class="col-sm-4"><div class="text-muted small">Status</div><div id="storage-status">-</div></div>
+      <div class="col-sm-4"><div class="text-muted small">Capacity</div><div id="storage-capacity">-</div></div>
+    </div>
+    <div class="progress mt-3" role="progressbar" aria-label="Storage usage">
+      <div id="storage-usage-bar" class="progress-bar" style="width: 0%"></div>
+    </div>
+    <div id="storage-usage-text" class="text-muted small mt-2">-</div>
+  </div>
+</div>
+
+<div class="card storage-browser-card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>Name</th><th class="text-end">Size</th><th class="text-end">Modified</th><th></th></tr></thead>
+        <tbody id="storage-entries"><tr><td colspan="4" class="text-muted p-3">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>

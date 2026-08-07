@@ -7,7 +7,7 @@
 // validity gates applied after edge detection succeeds.
 //
 // This translation unit is intentionally dependency-free (no FreeRTOS,
-// LittleFS, LVGL, Arduino) so it can be unit-tested on the host.
+// filesystem, LVGL, Arduino) so it can be unit-tested on the host.
 
 #include "shutter_curtain_stats.h"
 

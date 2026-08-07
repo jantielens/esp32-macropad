@@ -2,6 +2,7 @@
 
 #if USE_SD_STORAGE
 
+#include "fs_health.h"
 #include "log_manager.h"
 
 #include <Arduino.h>
@@ -9,55 +10,61 @@
 
 #define TAG "SDStor"
 
-// ----------------------------------------------------------------------------
-// Pin mapping (hardcoded for jc4880p433 — the only board enabling
-// USE_SD_STORAGE today). Future boards should externalize these to
-// board_overrides.h #defines and reference them here.
-// ----------------------------------------------------------------------------
-// SDMMC Slot 0 IOMUX pins on ESP32-P4
-static constexpr int SD_PIN_CLK   = 43;
-static constexpr int SD_PIN_CMD   = 44;
-static constexpr int SD_PIN_D0    = 39;
-static constexpr int SD_PIN_D1    = 40;
-static constexpr int SD_PIN_D2    = 41;
-static constexpr int SD_PIN_D3    = 42;
-static constexpr int SD_PIN_POWER = 45;  // Active LOW power enable
-static constexpr int SD_LDO_CHANNEL = 4;
+static bool s_mounted = false;
+
+static FSCardType fs_card_type_from_sdmmc(uint8_t card_type) {
+    if (card_type == CARD_NONE) return FS_CARD_TYPE_NONE;
+    if (card_type == CARD_SD) return FS_CARD_TYPE_SD;
+    if (card_type == CARD_SDHC) return FS_CARD_TYPE_SDHC;
+    return FS_CARD_TYPE_UNKNOWN;
+}
 
 bool sd_storage_mount() {
-    LOGI(TAG, "Powering SD card (GPIO%d LOW + LDO ch%d)", SD_PIN_POWER, SD_LDO_CHANNEL);
-    pinMode(SD_PIN_POWER, OUTPUT);
-    digitalWrite(SD_PIN_POWER, LOW);
-    delay(10);
+    if (s_mounted) return true;
 
-    if (!SD_MMC.setPins(SD_PIN_CLK, SD_PIN_CMD,
-                        SD_PIN_D0, SD_PIN_D1, SD_PIN_D2, SD_PIN_D3)) {
-        LOGE(TAG, "SD_MMC.setPins() failed");
-        return false;
-    }
+#if SDMMC_POWER_PIN >= 0
+    pinMode(SDMMC_POWER_PIN, OUTPUT);
+    digitalWrite(SDMMC_POWER_PIN, SDMMC_POWER_ACTIVE_LOW ? LOW : HIGH);
+#if SDMMC_POWER_SETTLE_MS > 0
+    delay(SDMMC_POWER_SETTLE_MS);
+#endif
+#endif
 
-    SD_MMC.setPowerChannel(SD_LDO_CHANNEL);
+#if SDMMC_LDO_CHANNEL >= 0
+    SD_MMC.setPowerChannel(SDMMC_LDO_CHANNEL);
+#endif
 
-    // begin(mountpoint, mode1bit, format_if_mount_failed)
-    // mode1bit = false  → request 4-bit bus
-    // format_if_mount_failed = false → never auto-format a misconfigured card
-    if (!SD_MMC.begin("/sdcard", false, false)) {
-        LOGE(TAG, "SD_MMC.begin() failed — card missing, unformatted, or wiring fault");
+#if SDMMC_CLK_PIN >= 0
+    SD_MMC.setPins(SDMMC_CLK_PIN, SDMMC_CMD_PIN, SDMMC_D0_PIN);
+#endif
+
+    if (!SD_MMC.begin("/sdcard", SDMMC_BUS_WIDTH == 1, false,
+                      SDMMC_MAX_FREQUENCY_KHZ)) {
+        LOGE(TAG, "SDMMC mount failed; check the card, filesystem, wiring, and power, then reboot");
         return false;
     }
 
     const uint8_t type = SD_MMC.cardType();
-    const char* type_name =
-        (type == CARD_NONE) ? "NONE" :
-        (type == CARD_MMC)  ? "MMC"  :
-        (type == CARD_SD)   ? "SDSC" :
-        (type == CARD_SDHC) ? "SDHC" : "UNKNOWN";
+    const FSCardType health_card_type = fs_card_type_from_sdmmc(type);
+    if (health_card_type == FS_CARD_TYPE_NONE) {
+        LOGE(TAG, "SDMMC mount reported no card; check the card, filesystem, wiring, and power, then reboot");
+        return false;
+    }
+
+    fs_health_set_sd_card_type(health_card_type);
+    s_mounted = true;
+    const char* type_name = health_card_type == FS_CARD_TYPE_SD ? "SD" :
+                            health_card_type == FS_CARD_TYPE_SDHC ? "SDHC" : "UNKNOWN";
     LOGI(TAG, "SD card mounted: type=%s size=%llu MB",
          type_name, SD_MMC.cardSize() / (1024ULL * 1024ULL));
     LOGI(TAG, "FS used=%llu MB total=%llu MB",
          SD_MMC.usedBytes() / (1024ULL * 1024ULL),
          SD_MMC.totalBytes() / (1024ULL * 1024ULL));
     return true;
+}
+
+bool sd_storage_is_mounted() {
+    return s_mounted;
 }
 
 #endif  // USE_SD_STORAGE

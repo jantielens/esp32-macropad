@@ -1,0 +1,20 @@
+<div class="section-header">
+  <h2>Music Library</h2>
+  <p>Music tracks discovered in the device media directory.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div id="music-catalog-status" class="form-text mb-2">Loading music catalog...</div>
+    <div id="music-track-list" class="list-group mb-3"></div>
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-8">
+        <label class="form-label" for="music-upload-file">MP3 File</label>
+        <input type="file" class="form-control" id="music-upload-file" accept=".mp3,audio/mpeg">
+      </div>
+      <div class="col-sm-4">
+        <button type="button" class="btn btn-primary w-100" id="music-upload-btn">Upload</button>
+      </div>
+    </div>
+    <div class="form-text mt-2">Files are stored under <code>/media</code>.</div>
+  </div>
+</div>

@@ -513,6 +513,10 @@ bool screen_saver_manager_is_fully_asleep() {
 		return g_state == ScreenSaverState::Asleep;
 }
 
+bool screen_saver_manager_input_ready() {
+		return g_state.load() == ScreenSaverState::Awake;
+}
+
 ScreenSaverStatus screen_saver_manager_get_status() {
 		ScreenSaverStatus status;
 		status.enabled = is_enabled();

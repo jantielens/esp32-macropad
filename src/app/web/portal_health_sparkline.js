@@ -68,7 +68,6 @@ const healthSparklineHoverIndex = {
     'health-sparkline-cpu': null,
     'health-sparkline-heap': null,
     'health-sparkline-psram': null,
-    'health-sparkline-largest': null,
 };
 
 function healthSetSparklineHoverIndex(canvasId, index) {
@@ -280,10 +279,6 @@ function healthDrawSparklinesOnly({ hasPsram = null } = {}) {
         highlightIndex: resolvedHasPsram ? healthGetSparklineHoverIndex('health-sparkline-psram') : null,
     });
 
-    sparklineDraw(document.getElementById('health-sparkline-largest'), healthHistory.heapInternalLargest, {
-        color: '#ff2d55',
-        highlightIndex: healthGetSparklineHoverIndex('health-sparkline-largest'),
-    });
 }
 
 function healthAttachSparklineTooltip(canvas, getPayloadForIndex) {
@@ -480,30 +475,5 @@ function healthInitSparklineTooltips() {
         };
     });
 
-    const largestCanvas = document.getElementById('health-sparkline-largest');
-    healthAttachSparklineTooltip(largestCanvas, (t) => {
-        const v = healthHistory.heapInternalLargest;
-        const ts = healthHistory.heapInternalLargestTs;
-        const n = v.length;
-        if (n < 1) return null;
-        const i = Math.max(0, Math.min(n - 1, Math.round(t * (n - 1))));
-        const val = v[i];
-        const tsv = ts[i];
-        const age = healthFormatAgeMs(Date.now() - tsv);
-        const smin = healthSeriesStats.heapInternalLargest.min;
-        const smax = healthSeriesStats.heapInternalLargest.max;
-
-        const sparklineLine = formatMinMaxDeltaLine(smin, smax, healthFormatBytes);
-
-        return {
-            index: i,
-            html: tooltipHtml({
-                title: 'Internal Largest Block',
-                age,
-                hero: healthFormatBytes(val),
-                sparklineLineHtml: sparklineLine,
-            }),
-        };
-    });
 }
 

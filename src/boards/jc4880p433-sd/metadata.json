@@ -1,0 +1,19 @@
+{
+  "device_class": "macropad",
+  "board_label": "JC4880P433 SD",
+  "description": "Guition JC4880P433 with its on-board MicroSD card used as primary storage.",
+  "chip_family": "ESP32-P4",
+  "flash_mb": 16,
+  "psram_mb": 32,
+  "wireless": {
+    "wifi": true,
+    "ble": true,
+    "notes": "WiFi/BLE via ESP-Hosted ESP32-C6 over SDIO"
+  },
+  "display": {
+    "size": "4.3\"",
+    "resolution": "480x800",
+    "type": "MIPI-DSI",
+    "touch": true
+  }
+}

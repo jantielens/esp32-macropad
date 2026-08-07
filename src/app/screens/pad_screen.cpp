@@ -61,6 +61,8 @@ PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
       numberBindings(nullptr), numberBindingCount(0),
       btnStateBindings(nullptr), btnStateBindingCount(0),
       pageBindings(nullptr), pageBindingCount(0),
+    padActions(nullptr), padActionCount(0),
+    padActionOverlay(nullptr), padActionFlashTimer(nullptr),
       arraysAllocated(false),
       cachedGeneration(UINT32_MAX), tilesBuilt(false),
       padHoldMask(0), padHeldMask(0) {
@@ -98,6 +100,19 @@ bool PadScreen::allocateArrays() {
     return true;
 }
 
+bool PadScreen::allocatePadActions() {
+    if (padActions) return true;
+
+    padActions = (ButtonAction*)heap_caps_calloc(
+        MAX_BUTTON_ACTIONS, sizeof(ButtonAction), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!padActions) padActions = (ButtonAction*)calloc(MAX_BUTTON_ACTIONS, sizeof(ButtonAction));
+    if (!padActions) {
+        LOGE(TAG, "Pad %u: OOM for full-screen actions", pageIndex);
+        return false;
+    }
+    return true;
+}
+
 // Free the heavy binding arrays (called on eviction or destruction).
 void PadScreen::freeArrays() {
     if (!arraysAllocated) return;
@@ -108,6 +123,7 @@ void PadScreen::freeArrays() {
     free(numberBindings);   numberBindings = nullptr;
     free(btnStateBindings); btnStateBindings = nullptr;
     free(pageBindings);     pageBindings = nullptr;
+    free(padActions);       padActions = nullptr;
 
     tileCount = 0;
     bindingCount = 0;
@@ -115,6 +131,7 @@ void PadScreen::freeArrays() {
     numberBindingCount = 0;
     btnStateBindingCount = 0;
     pageBindingCount = 0;
+    padActionCount = 0;
 
     arraysAllocated = false;
     tilesBuilt = false;

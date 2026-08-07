@@ -9,7 +9,6 @@
 #include "board_config.h"
 #include "device_class.h"
 #include "class_branding.h"
-#include "web_assets.h"
 #include "log_manager.h"
 #include "power_config.h"
 #include "storage.h"
@@ -287,7 +286,7 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_AUDIO
-		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, 50);
+		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, AUDIO_DEFAULT_VOLUME);
 		{
 			size_t n = preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 			if (n == 0) strlcpy(config->tap_beep, "500:40", CONFIG_BEEP_PATTERN_MAX_LEN);
@@ -457,13 +456,19 @@ static bool factory_reset_rmrf(const char* path) {
 		bool ok = true;
 		File entry = root.openNextFile();
 		while (entry) {
-				// Build the child's full path. Some FS impls return absolute names
-				// from entry.name(); strip a leading slash so we don't get "//foo".
+				// Build the child's full path. Filesystem implementations can return
+				// either the complete child path or a root-relative name.
 				const char* name = entry.name();
-				if (name && name[0] == '/') name++;
-				String child(path);
-				if (!child.endsWith("/")) child += "/";
-				child += (name ? name : "");
+				String child;
+				const size_t path_len = strlen(path);
+				if (name && strncmp(name, path, path_len) == 0 && name[path_len] == '/') {
+						child = name;
+				} else {
+						while (name && name[0] == '/') name++;
+						child = String(path);
+						if (!child.endsWith("/")) child += "/";
+						child += (name ? name : "");
+				}
 
 				bool is_dir = entry.isDirectory();
 				entry.close();
@@ -505,10 +510,9 @@ bool config_manager_factory_reset() {
 #if USE_SD_STORAGE
 		// SD: cannot safely format from firmware. Selectively remove the
 		// directories the firmware owns; leave any user files at root alone.
-		fs_ok &= factory_reset_rmrf("/config");
-		fs_ok &= factory_reset_rmrf("/icons");
-		fs_ok &= factory_reset_rmrf("/sounds");
-		fs_ok &= factory_reset_rmrf("/storage");
+		fs_ok &= storage_remove_sd_owned_roots([](const char* root) {
+			return factory_reset_rmrf(root);
+		});
 #else
 		// LittleFS: format wipes everything in the data partition cleanly.
 		if (!LittleFS.format()) {

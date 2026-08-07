@@ -2,7 +2,7 @@
 // Brew Template DSL — JSON parser / serializer for brew templates
 // ============================================================================
 // Host-testable: depends only on ArduinoJson + standard C++ (no ESP32 APIs,
-// no LittleFS, no Serial).  The thin loader layer (brew_template_loader.cpp)
+// no filesystem, no Serial).  The thin loader layer (brew_template_loader.cpp)
 // handles filesystem I/O and calls these pure-parsing functions.
 
 #include "brew_template_dsl.h"
