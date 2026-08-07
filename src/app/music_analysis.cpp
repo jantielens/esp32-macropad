@@ -106,8 +106,8 @@ static void publish_window() {
             // Fast attack, slower release: bars react to new energy quickly
             // but remain visible long enough for the display to paint them.
             g_band_levels[band] = target >= g_band_levels[band]
-                ? (uint8_t)((g_band_levels[band] + target + 1U) / 2U)
-                : (uint8_t)((g_band_levels[band] * 7U + target + 4U) / 8U);
+                ? (uint8_t)((g_band_levels[band] + target * 3U + 2U) / 4U)
+                : (uint8_t)((g_band_levels[band] * 3U + target + 2U) / 4U);
             g_bands[band] = g_band_levels[band];
         }
     }
