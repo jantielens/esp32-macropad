@@ -367,6 +367,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_config.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
+  - src/app/music_analysis.cpp
+  - src/app/music_analysis.h
   - src/app/music_binding.cpp
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen_events.cpp
@@ -758,6 +760,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/audio.cpp
   - src/app/board_config.h
   - src/app/display_task.cpp
+  - src/app/music_analysis.cpp
+  - src/app/music_analysis.h
   - src/app/music_binding.cpp
 - **HAS_SCALE**
   - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
@@ -816,6 +820,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_audio.cpp
+  - src/app/music_analysis.cpp
+  - src/app/music_analysis.h
   - src/app/music_binding.cpp
   - src/app/pad_validate.cpp
   - src/app/portal_components.cpp
