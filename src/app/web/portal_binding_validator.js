@@ -860,6 +860,24 @@ bindingRegisterScheme('timer', {
     }
 });
 
+// ─── Scheme: music ───────────────────────────────────────────────
+// [music:key], including optional compile-time Music analysis keys.
+bindingRegisterScheme('music', {
+    validate: function(params) {
+        var key = bindingSplitParams(params)[0].trim();
+        var base = ['file', 'file_name', 'title', 'artist', 'album', 'track',
+            'index', 'count', 'elapsed_s', 'total_s', 'status'];
+        if (base.indexOf(key) !== -1) return null;
+        if (/^analysis\.(rms|peak)$/.test(key)) return null;
+        var match = key.match(/^analysis\.band\.(\d+)$/);
+        if (match) {
+            var band = parseInt(match[1]);
+            return band >= 0 && band < 8 ? null : 'Music analysis band must be 0 through 7';
+        }
+        return 'Unknown music key';
+    }
+});
+
 // ─── Scheme: pad ─────────────────────────────────────────────────
 // [pad:name;format]
 bindingRegisterScheme('pad', {

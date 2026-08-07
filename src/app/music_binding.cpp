@@ -7,8 +7,12 @@
 #include "audio.h"
 #include "binding_template.h"
 #include "log_manager.h"
+#if HAS_MUSIC_ANALYSIS
+#include "music_analysis.h"
+#endif
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if HAS_MCP
@@ -20,7 +24,22 @@ namespace {
 const char* const kMusicKeys[] = {
     "file", "file_name", "title", "artist", "album", "track", "index", "count",
     "elapsed_s", "total_s", "status",
+#if HAS_MUSIC_ANALYSIS
+    "analysis.rms", "analysis.peak",
+#endif
 };
+
+bool is_analysis_key(const char* key) {
+#if HAS_MUSIC_ANALYSIS
+    if (strcmp(key, "analysis.rms") == 0 || strcmp(key, "analysis.peak") == 0) return true;
+    if (strncmp(key, "analysis.band.", 14) == 0) {
+        const int band = atoi(key + 14);
+        return band >= 0 && band < 8;
+    }
+#endif
+    (void)key;
+    return false;
+}
 
 const char* status_text(AudioMusicStatus status) {
     switch (status) {
@@ -62,6 +81,22 @@ bool music_binding_resolve(const char* params, char* out, size_t out_len) {
         else snprintf(out, out_len, "%llu", (unsigned long long)(info.total_us / 1000000ULL));
     } else if (strcmp(params, "status") == 0) {
         strlcpy(out, status_text(info.status), out_len);
+#if HAS_MUSIC_ANALYSIS
+    } else if (strcmp(params, "analysis.rms") == 0 ||
+               strcmp(params, "analysis.peak") == 0 ||
+               strncmp(params, "analysis.band.", 14) == 0) {
+        MusicAnalysisSnapshot analysis = {};
+        music_analysis_get_snapshot(&analysis);
+        if (strcmp(params, "analysis.rms") == 0) {
+            snprintf(out, out_len, "%u", analysis.rms);
+        } else if (strcmp(params, "analysis.peak") == 0) {
+            snprintf(out, out_len, "%u", analysis.peak);
+        } else {
+            const int band = atoi(params + 14);
+            if (band < 0 || band >= 8) return false;
+            snprintf(out, out_len, "%u", analysis.bands[band]);
+        }
+#endif
     } else {
         return false;
     }
@@ -78,7 +113,13 @@ const char* music_binding_validate(const char* params) {
     for (const char* key : kMusicKeys) {
         if (strcmp(params, key) == 0) return nullptr;
     }
-    return "music key must be file, file_name, title, artist, album, track, index, count, elapsed_s, total_s, or status";
+    if (is_analysis_key(params)) return nullptr;
+#if HAS_MUSIC_ANALYSIS
+    if (strncmp(params, "analysis.", 9) == 0) {
+        return "analysis key must be rms, peak, or band.0 through band.7";
+    }
+#endif
+    return "unknown music key";
 }
 
 #if HAS_MCP
@@ -87,6 +128,9 @@ void music_binding_describe(void* out_json) {
     out["syntax"] = "[music:file|file_name|title|artist|album|track|index|count|elapsed_s|total_s|status]";
     out["example"] = "[music:status]";
     out["keys"] = "file, file_name, title, artist, album, track, index, count, elapsed_s, total_s, status";
+#if HAS_MUSIC_ANALYSIS
+    out["analysis"] = "analysis.rms, analysis.peak, analysis.band.0 through analysis.band.7; integer levels from 0 to 100 before volume scaling";
+#endif
     out["read_only"] = true;
 }
 #endif

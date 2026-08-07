@@ -12,6 +12,9 @@
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #include "timer_engine.h"
+#if HAS_MUSIC_ANALYSIS
+#include "music_analysis.h"
+#endif
 
 #include <esp_timer.h>
 
@@ -175,8 +178,22 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						if (gen != s_ds_generation) {
 								s_ds_generation = gen;
 								data_stream_rebuild();
+#if HAS_MUSIC_ANALYSIS
+								music_analysis_rebuild_demand();
+#endif
 						}
 						data_stream_poll();
+				}
+#endif
+
+#if HAS_MUSIC_ANALYSIS && !HAS_MQTT
+				{
+						static uint32_t s_music_generation = UINT32_MAX;
+						const uint32_t generation = pad_config_get_generation();
+						if (generation != s_music_generation) {
+							music_analysis_rebuild_demand();
+							s_music_generation = generation;
+						}
 				}
 #endif
 

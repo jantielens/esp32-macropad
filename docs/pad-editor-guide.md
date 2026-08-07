@@ -1398,6 +1398,16 @@ are available on boards with audio and the sound player enabled.
 | `total_s` | Whole-track duration in seconds | Returns `-1` when duration is unavailable |
 | `status` | Transport state | `playing`, `paused`, `stopped`, `empty`, `unavailable`, or `error` |
 
+When enabled by the board firmware, Music analysis bindings expose the current
+track's pre-volume PCM level. They are demand-driven, so playback skips the
+analysis work when no configured binding uses them.
+
+| Key | Returns |
+|-----|---------|
+| `analysis.rms` | Smoothed average level, integer `0`–`100` |
+| `analysis.peak` | Fast-attack, slow-release peak level, integer `0`–`100` |
+| `analysis.band.0` through `analysis.band.7` | Eight fixed logarithmic spectrum levels, each `0`–`100` |
+
 **Examples:**
 
 ```text
@@ -1407,6 +1417,8 @@ are available on boards with audio and the sound player enabled.
 [music:file_name]                       -> 02-track.mp3
 [music:title] / [music:artist]          -> Autumn Leaves / John Doe
 [music:elapsed_s] / [music:total_s] s  -> 75 / 244 s
+[music:analysis.rms]                    -> 37
+[music:analysis.band.3]                 -> 62
 ```
 
 ### Expression Binding

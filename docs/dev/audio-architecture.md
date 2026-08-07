@@ -55,6 +55,27 @@ queue. This keeps them independent from replaceable tone/alert requests, so an
 alert cannot discard a pending refresh. Transport submission is non-blocking
 and reports busy when the queue is full.
 
+### Demand-Driven Music Analysis
+
+On selected ESP32-P4 audio boards, `HAS_MUSIC_ANALYSIS` enables optional
+pre-volume analysis of Music MP3 playback. The existing Music binding exposes
+the values through `[music:analysis.*]`:
+
+* `[music:analysis.rms]` and `[music:analysis.peak]` return integer levels from
+    0 to 100.
+* `[music:analysis.band.0]` through `[music:analysis.band.7]` return eight fixed
+    logarithmic visualizer bands.
+
+The feature has two guards. The compile-time flag removes the analyzer from
+boards that do not support it. On enabled boards, the display task rebuilds a
+demand mask from configured binding consumers. Music playback only reads this
+mask when producing PCM and skips analysis when no analysis binding is present.
+
+Spectrum analysis uses a bounded, PSRAM-first 2048-frame mono window and eight
+fixed Goertzel filters. It is capped at 20 updates per second and does not add a
+general FFT dependency. The small published snapshot is copied under a short
+critical section; PCM buffers remain owned by the audio worker.
+
 ## Board And Driver Selection
 
 Audio-capable boards select their driver and pin mapping in

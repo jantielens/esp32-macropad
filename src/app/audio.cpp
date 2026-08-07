@@ -19,6 +19,9 @@
 #include "music_command.h"
 #include "music_transport.h"
 #include "tone_alert_overlay.h"
+#if HAS_MUSIC_ANALYSIS
+#include "music_analysis.h"
+#endif
 #endif
 
 #define TAG "Audio"
@@ -90,6 +93,9 @@ static void music_storage_playback_release() {
 }
 
 static void music_tone_alert_transform(void* context, int16_t* frames, size_t frame_count) {
+#if HAS_MUSIC_ANALYSIS
+    music_analysis_process(frames, frame_count);
+#endif
     tone_alert_overlay_mix((ToneAlertOverlay*)context, frames, frame_count, AUDIO_SAMPLE_RATE);
 }
 
@@ -291,6 +297,9 @@ static void audio_task(void* param) {
 
     auto close_music = [&]() {
         tone_alert_overlay_stop(&music_tone_alert);
+#if HAS_MUSIC_ANALYSIS
+        music_analysis_set_playing(false);
+#endif
         if (music_player) {
             sound_player_close(music_player);
             music_player = nullptr;
@@ -301,6 +310,9 @@ static void audio_task(void* param) {
         if (!music_storage_playback_claim()) return false;
         music_player = sound_player_begin_path(output_driver, path,
                                                music_tone_alert_transform, &music_tone_alert);
+    #if HAS_MUSIC_ANALYSIS
+        if (music_player) music_analysis_set_playing(true);
+    #endif
         if (!music_player) music_storage_playback_release();
         return music_player != nullptr;
     };
@@ -455,6 +467,11 @@ static void audio_task(void* param) {
                 music_info_update_timing(music_player);
             }
         } else if (music_player) {
+#if HAS_MUSIC_ANALYSIS
+            // No PCM is produced while paused, so clear the last visualizer
+            // frame instead of leaving stale levels on the display.
+            music_analysis_set_playing(false);
+#endif
             const MusicCatalogSnapshot* active_catalog = music_catalog_store_active_for_audio();
             music_info_set(AUDIO_MUSIC_PAUSED, active_catalog,
                            music_transport, music_player);
@@ -468,6 +485,10 @@ static void audio_task(void* param) {
 // ---------------------------------------------------------------------------
 void audio_init(uint8_t initial_volume) {
     LOGI(TAG, "Initializing audio output");
+
+#if HAS_MUSIC_ANALYSIS
+    music_analysis_init();
+#endif
 
     current_volume = (initial_volume > 100) ? 100 : initial_volume;
     output_driver = audio_output_driver_create();

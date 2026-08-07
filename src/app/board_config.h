@@ -345,6 +345,11 @@ struct HwButtonDef {
 #define HAS_SOUND_PLAYER HAS_AUDIO
 #endif
 
+// Demand-driven Music MP3 RMS, peak, and spectrum bindings.
+#ifndef HAS_MUSIC_ANALYSIS
+#define HAS_MUSIC_ANALYSIS false
+#endif
+
 // Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
 #ifndef AUDIO_MP3_SCRATCH_PSRAM
 #define AUDIO_MP3_SCRATCH_PSRAM false

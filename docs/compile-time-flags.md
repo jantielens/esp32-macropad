@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 253
+Total flags: 254
 
 ### Features (HAS_*)
 
@@ -41,6 +41,7 @@ Total flags: 253
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_MCP** default: `true` — the feature out entirely (saves flash on constrained or locked-down builds).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
+- **HAS_MUSIC_ANALYSIS** default: `false` — Demand-driven Music MP3 RMS, peak, and spectrum bindings.
 - **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.
 - **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
@@ -300,25 +301,25 @@ Total flags: 253
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3636w518 | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3636w518-sd | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |
-| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |
-| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc1060p470c-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ? | ✅ | ✅ | ? |  |  | ✅ |  |  |  |  | ? |  |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ |  |
-| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ |  |
-| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ |  |
+| board-name | HAS_AUDIO | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3248w535 |  | ✅ |  |  |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518 | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518-sd | ✅ | ✅ |  |  |  |  | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-shutter | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? |  | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-hx711 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-nau7802 | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |
+| jc4880p433-darkroom | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |
+| jc1060p470c | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc1060p470c-sd | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32c3-withsensors |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  | ? | ? | ✅ | ✅ |  | ? |  |  | ✅ |  |  |  |  | ? |  |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  | ✅ |  |
+| inkplate6flick |  |  |  |  |  |  |  |  | ✅ |  | ✅ | ✅ | ? |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  | ✅ |  |
+| reterminal-e1003 |  |  |  |  |  |  |  |  | ✅ |  |  | ✅ | ? |  | ✅ | ✅ |  | ? |  |  |  |  |  |  |  |  | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -753,6 +754,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/widget.h
+- **HAS_MUSIC_ANALYSIS**
+  - src/app/audio.cpp
+  - src/app/board_config.h
+  - src/app/display_task.cpp
+  - src/app/music_binding.cpp
 - **HAS_SCALE**
   - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
   - src/app/device_classes/coffee_scale/brew/brew_log.cpp

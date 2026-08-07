@@ -91,6 +91,7 @@
 // Pin mapping from BSP: https://github.com/csvke/esp32_p4_jc4880p433c_bsp
 // ============================================================================
 #define HAS_AUDIO true
+#define HAS_MUSIC_ANALYSIS true
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
 // minimp3's per-frame decode scratch is roughly 16 KB. Keep it in PSRAM so
 // Music playback fits the internal audio task stack.
