@@ -15,6 +15,7 @@ src/app/web_assets.h
 src/app/project_branding.h
 src/app/github_release_config.h
 src/app/repo_slug_config.h
+src/app/stt_credentials.h
 
 # Arduino CLI configuration
 .arduino15/

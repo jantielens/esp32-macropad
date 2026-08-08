@@ -349,6 +349,22 @@ function actionEditorHTML(prefix, label, opts) {
     h += actionEditorCommandOptionsHTML('system');
     h += '</select>';
     h += '</div></div>';
+    // Catalog-driven command selector for registered action types. The
+    // firmware supplies both `commands` and `command_field`, so a new action
+    // type does not need a portal-specific editor extension merely to select
+    // and persist a command.
+    h += '<div id="' + prefix + '-catalog-command-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-catalog-command">Command</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-catalog-command" onchange="actionEditorCatalogCommandChanged(\'' + prefix + '\')"></select>';
+    h += '</div></div>';
+    // Speech-to-text completion publish
+    h += '<div id="' + prefix + '-stt-mqtt-topic-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-stt-mqtt-topic">Publish Transcript to MQTT Topic</label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-stt-mqtt-topic" maxlength="127" placeholder="e.g. voice/transcript">';
+    h += '<small>Optional. Published only after a successful transcription.</small>';
+    h += '</div></div>';
     // Volume
     h += '<div id="' + prefix + '-volume-group" style="display:none;">';
     h += '<div class="form-group">';
@@ -447,6 +463,15 @@ function actionEditorTypeChanged(prefix) {
     }
     var systemGrp = document.getElementById(prefix + '-system-group');
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
+    var catalogCommandGrp = document.getElementById(prefix + '-catalog-command-group');
+    var catalogCommand = document.getElementById(prefix + '-catalog-command');
+    var catalogEntry = actionEditorCatalogEntry(type);
+    var hasCatalogCommand = catalogEntry && catalogEntry.command_field && catalogEntry.commands;
+    if (catalogCommandGrp) catalogCommandGrp.style.display = hasCatalogCommand ? '' : 'none';
+    if (hasCatalogCommand && catalogCommand) {
+        catalogCommand.innerHTML = actionEditorCommandOptionsHTML(type);
+    }
+    actionEditorCatalogCommandChanged(prefix);
     var volumeGrp = document.getElementById(prefix + '-volume-group');
     if (volumeGrp) volumeGrp.style.display = (type === 'volume') ? '' : 'none';
     var brightnessGrp = document.getElementById(prefix + '-brightness-group');
@@ -457,6 +482,16 @@ function actionEditorTypeChanged(prefix) {
     if (type === 'brightness') actionEditorVolumeBrightnessChanged(prefix, 'brightness');
     // Extension-contributed type-change hooks (e.g. shutter group visibility)
     _actionEditorExtensions.forEach(function(ext) { if (ext.typeChanged) ext.typeChanged(prefix, type); });
+}
+
+function actionEditorCatalogCommandChanged(prefix) {
+    var type = document.getElementById(prefix + '-type');
+    var command = document.getElementById(prefix + '-catalog-command');
+    var sttMqttTopic = document.getElementById(prefix + '-stt-mqtt-topic-group');
+    if (sttMqttTopic) {
+        sttMqttTopic.style.display = type && type.value === 'stt' && command &&
+            command.value === 'record_stop_transcribe' ? '' : 'none';
+    }
 }
 
 function actionEditorNormalizeCyclePadExclusions(value) {
@@ -666,9 +701,17 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.type === 'brightness' && action.brightness_mode !== 'adjust') ? (action.brightness_value || '') : '';
     el = document.getElementById(prefix + '-brightness-adjust-value');
     if (el) el.value = (action.type === 'brightness' && action.brightness_mode === 'adjust') ? (action.brightness_value || '') : '';
+    el = document.getElementById(prefix + '-stt-mqtt-topic');
+    if (el) el.value = action.stt_mqtt_topic || '';
     // Extension-contributed load hooks (e.g. shutter field population)
-    _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
     actionEditorTypeChanged(prefix);
+    var catalogEntry = actionEditorCatalogEntry(action.type);
+    if (catalogEntry && catalogEntry.command_field) {
+        el = document.getElementById(prefix + '-catalog-command');
+        if (el) el.value = action[catalogEntry.command_field] || el.value;
+    }
+    actionEditorCatalogCommandChanged(prefix);
+    _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
 }
 
 // Build an action object from the form. Returns {} if type is empty.
@@ -811,6 +854,15 @@ function actionEditorBuild(prefix) {
     if (type === 'system') {
         var sc = document.getElementById(prefix + '-system-command');
         if (sc) act.system_command = sc.value;
+    }
+    var catalogEntry = actionEditorCatalogEntry(type);
+    if (catalogEntry && catalogEntry.command_field) {
+        var catalogCommand = document.getElementById(prefix + '-catalog-command');
+        if (catalogCommand) act[catalogEntry.command_field] = catalogCommand.value;
+    }
+    if (type === 'stt' && act.stt_command === 'record_stop_transcribe') {
+        var sttMqttTopic = document.getElementById(prefix + '-stt-mqtt-topic');
+        if (sttMqttTopic) act.stt_mqtt_topic = (sttMqttTopic.value || '').trim();
     }
     if (type === 'volume' || type === 'brightness') {
         var vbCmd = document.getElementById(prefix + '-' + type + '-command');

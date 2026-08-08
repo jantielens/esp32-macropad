@@ -102,6 +102,26 @@ the sample rate. Keep the codec configuration and I2S channel rate aligned.
 ES8311 provides hardware volume control, so `setVolume()` programs the codec
 rather than scaling each PCM sample in software.
 
+### Speech To Text Input
+
+`esp32-p4-lcd4b` enables `HAS_STT` and `HAS_ES7210_MIC`. ES8311 remains the
+output codec; the ES7210 dual-microphone ADC provides capture samples on the
+existing I2S RX channel. Both codecs use the shared 48 kHz clock. The STT worker
+selects one microphone channel and decimates it to a 16 kHz mono, 16-bit WAV.
+Recording is capped at 30 seconds, so the WAV uses at most 960,044 bytes of
+PSRAM and is discarded after the transcription request completes.
+
+The worker runs on core 0 and sends the in-memory WAV to the Azure AI Foundry
+OpenAI-compatible transcription endpoint. It only publishes a small status/text
+snapshot to the display task and must not call LVGL.
+
+Create `src/app/stt_credentials.h` from
+`src/app/stt_credentials.h.example` and set `STT_AZURE_API_KEY` before using
+the feature. `STT_AZURE_MODEL` must be the Azure AI Foundry deployment name.
+The firmware sends audio to that deployment's transcription endpoint. The
+local header is ignored by Git. The current spike uses an insecure TLS client,
+so use it only on a trusted network until certificate validation is configured.
+
 ## PCM510xA Output
 
 The PCM510xA has no I2C or SPI control interface. The driver creates a

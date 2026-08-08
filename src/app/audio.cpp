@@ -568,6 +568,13 @@ void audio_set_volume(uint8_t vol_0_100) {
     LOGI(TAG, "Volume: %u%%", current_volume);
 }
 
+bool audio_read_input(int16_t* samples, size_t sample_count, size_t* samples_read,
+                      uint32_t timeout_ms) {
+    if (samples_read) *samples_read = 0;
+    if (!audio_initialized || !output_driver) return false;
+    return output_driver->read(samples, sample_count, samples_read, timeout_ms);
+}
+
 uint8_t audio_get_volume() {
     return current_volume;
 }

@@ -156,6 +156,16 @@ echo "=== Running unit tests: music command ==="
 ./tests/bin/test_music_command
 echo
 
+echo "=== Building unit tests: STT WAV framing ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_stt_wav.cpp src/app/stt_wav.cpp \
+    -o tests/bin/test_stt_wav
+
+echo "=== Running unit tests: STT WAV framing ==="
+./tests/bin/test_stt_wav
+echo
+
 echo "=== Building unit tests: MP3 metadata ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \

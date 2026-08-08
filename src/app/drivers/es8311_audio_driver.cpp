@@ -38,6 +38,36 @@
 #define ES8311_GPIO_REG44          0x44
 #define ES8311_GP_REG45            0x45
 
+#if HAS_ES7210_MIC
+#define ES7210_RESET_REG00          0x00
+#define ES7210_MAINCLK_REG02        0x02
+#define ES7210_LRCK_DIVH_REG04      0x04
+#define ES7210_LRCK_DIVL_REG05      0x05
+#define ES7210_POWER_DOWN_REG06     0x06
+#define ES7210_OSR_REG07            0x07
+#define ES7210_TIME_CONTROL0_REG09  0x09
+#define ES7210_TIME_CONTROL1_REG0A  0x0A
+#define ES7210_SDP_INTERFACE1_REG11 0x11
+#define ES7210_SDP_INTERFACE2_REG12 0x12
+#define ES7210_ADC34_HPF2_REG20     0x20
+#define ES7210_ADC34_HPF1_REG21     0x21
+#define ES7210_ADC12_HPF2_REG22     0x22
+#define ES7210_ADC12_HPF1_REG23     0x23
+#define ES7210_ANALOG_REG40         0x40
+#define ES7210_MIC12_BIAS_REG41     0x41
+#define ES7210_MIC34_BIAS_REG42     0x42
+#define ES7210_MIC1_GAIN_REG43      0x43
+#define ES7210_MIC2_GAIN_REG44      0x44
+#define ES7210_MIC3_GAIN_REG45      0x45
+#define ES7210_MIC4_GAIN_REG46      0x46
+#define ES7210_MIC1_POWER_REG47     0x47
+#define ES7210_MIC2_POWER_REG48     0x48
+#define ES7210_MIC3_POWER_REG49     0x49
+#define ES7210_MIC4_POWER_REG4A     0x4A
+#define ES7210_MIC12_POWER_REG4B    0x4B
+#define ES7210_MIC34_POWER_REG4C    0x4C
+#endif
+
 struct ES8311Coeff {
     uint32_t mclk_hz;
     uint32_t sample_rate;
@@ -89,6 +119,69 @@ static uint8_t es8311_read(uint8_t reg) {
     i2c_bus_unlock();
     return val;
 }
+
+#if HAS_ES7210_MIC
+static bool es7210_write(uint8_t reg, uint8_t val) {
+    i2c_bus_lock();
+    Wire.beginTransmission(AUDIO_MIC_CODEC_ADDR);
+    Wire.write(reg);
+    Wire.write(val);
+    const bool ok = Wire.endTransmission() == 0;
+    i2c_bus_unlock();
+    return ok;
+}
+
+static bool es7210_init(uint32_t sample_rate) {
+    if (sample_rate != 48000) {
+        LOGE(TAG, "ES7210 only configured for 48 kHz, got %lu Hz", sample_rate);
+        return false;
+    }
+
+    const struct {
+        uint8_t reg;
+        uint8_t value;
+    } config[] = {
+        {ES7210_RESET_REG00, 0xFF},
+        {ES7210_RESET_REG00, 0x32},
+        {ES7210_TIME_CONTROL0_REG09, 0x30},
+        {ES7210_TIME_CONTROL1_REG0A, 0x30},
+        {ES7210_ADC12_HPF1_REG23, 0x2A},
+        {ES7210_ADC12_HPF2_REG22, 0x0A},
+        {ES7210_ADC34_HPF1_REG21, 0x2A},
+        {ES7210_ADC34_HPF2_REG20, 0x0A},
+        {ES7210_SDP_INTERFACE1_REG11, 0x60},
+        {ES7210_SDP_INTERFACE2_REG12, 0x00},
+        {ES7210_ANALOG_REG40, 0xC3},
+        {ES7210_MIC12_BIAS_REG41, 0x70},
+        {ES7210_MIC34_BIAS_REG42, 0x70},
+        {ES7210_MIC1_GAIN_REG43, 0x1A},
+        {ES7210_MIC2_GAIN_REG44, 0x1A},
+        {ES7210_MIC3_GAIN_REG45, 0x1A},
+        {ES7210_MIC4_GAIN_REG46, 0x1A},
+        {ES7210_MIC1_POWER_REG47, 0x08},
+        {ES7210_MIC2_POWER_REG48, 0x08},
+        {ES7210_MIC3_POWER_REG49, 0x08},
+        {ES7210_MIC4_POWER_REG4A, 0x08},
+        {ES7210_OSR_REG07, 0x20},
+        {ES7210_MAINCLK_REG02, 0xC1},
+        {ES7210_LRCK_DIVH_REG04, 0x01},
+        {ES7210_LRCK_DIVL_REG05, 0x00},
+        {ES7210_POWER_DOWN_REG06, 0x04},
+        {ES7210_MIC12_POWER_REG4B, 0x0F},
+        {ES7210_MIC34_POWER_REG4C, 0x0F},
+        {ES7210_RESET_REG00, 0x71},
+        {ES7210_RESET_REG00, 0x41},
+    };
+    for (const auto& entry : config) {
+        if (!es7210_write(entry.reg, entry.value)) {
+            LOGE(TAG, "ES7210 write failed reg=0x%02X", entry.reg);
+            return false;
+        }
+    }
+    LOGI(TAG, "ES7210 microphone ADC initialized (Fs=%lu Hz)", sample_rate);
+    return true;
+}
+#endif
 
 bool ES8311AudioDriver::initCodec(uint32_t sample_rate) {
     const uint32_t mclk_hz = sample_rate * static_cast<uint32_t>(kEs8311MclkMultiple);
@@ -255,6 +348,13 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
         cleanup();
         return false;
     }
+#if HAS_ES7210_MIC
+    if (!es7210_init(sample_rate)) {
+        LOGE(TAG, "ES7210 microphone init failed");
+        cleanup();
+        return false;
+    }
+#endif
     return true;
 }
 
@@ -267,6 +367,21 @@ bool ES8311AudioDriver::write(const int16_t* frames, size_t frame_count) {
         return false;
     }
     return written == frame_count * 2 * sizeof(int16_t);
+}
+
+bool ES8311AudioDriver::read(int16_t* samples, size_t sample_count,
+                             size_t* samples_read, uint32_t timeout_ms) {
+    if (samples_read) *samples_read = 0;
+    if (!rx_handle || !samples || sample_count == 0) return false;
+    size_t bytes_read = 0;
+    esp_err_t err = i2s_channel_read(rx_handle, samples, sample_count * sizeof(int16_t),
+                                     &bytes_read, pdMS_TO_TICKS(timeout_ms));
+    if (err != ESP_OK) {
+        LOGE(TAG, "I2S read error: %s", esp_err_to_name(err));
+        return false;
+    }
+    if (samples_read) *samples_read = bytes_read / sizeof(int16_t);
+    return bytes_read > 0;
 }
 
 void ES8311AudioDriver::setVolume(uint8_t vol_0_100) {

@@ -139,6 +139,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_HA_SERVICE "ha_service"
 #define ACTION_TYPE_VISUAL_ALERT "visual_alert"
 #define ACTION_TYPE_CYCLE_PAD "cycle_pad"
+#define ACTION_TYPE_STT "stt"
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -223,6 +224,10 @@ struct CyclePadPayload {
     bool wrap;                                     // wrap at the numeric boundary
     uint32_t excluded_mask;                        // bit N excludes user-visible Pad N+1
 };
+struct SttPayload {
+    char stt_command[24];                           // "record_start" or "record_stop_transcribe"
+    char stt_mqtt_topic[CONFIG_MQTT_TOPIC_MAX_LEN]; // optional transcript destination
+};
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -254,6 +259,7 @@ union ActionPayload {
     HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
     VisualAlertPayload visual_alert; // type == ACTION_TYPE_VISUAL_ALERT
     CyclePadPayload   cycle_pad;    // type == ACTION_TYPE_CYCLE_PAD
+    SttPayload        stt;          // type == ACTION_TYPE_STT
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, "" (none) carry no payload data — only the type tag.

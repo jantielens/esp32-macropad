@@ -117,15 +117,18 @@
 // Audio (ES8311 codec + NS4150B amplifier over I2S)
 // ============================================================================
 #define HAS_AUDIO true
+#define HAS_STT true
 #define HAS_MUSIC_ANALYSIS true
+#define HAS_ES7210_MIC true
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
 #define AUDIO_I2S_MCLK   13
 #define AUDIO_I2S_BCLK   12
 #define AUDIO_I2S_DOUT    9   // ESP32 TX → ES8311 DSDIN (codec data input)
 #define AUDIO_I2S_LRCK   10
-#define AUDIO_I2S_DIN    11   // ESP32 RX ← ES8311 ASDOUT (codec data output)
+#define AUDIO_I2S_DIN    11   // ESP32 RX ← ES7210 SDOUT2 (dual-microphone ADC)
 #define AUDIO_PA_PIN     53   // NS4150B power amplifier enable (active high)
 #define AUDIO_CODEC_ADDR 0x18 // ES8311 I2C address
+#define AUDIO_MIC_CODEC_ADDR 0x40 // ES7210 I2C address
 
 // ============================================================================
 // Display: blank backlight during pad save to hide PSRAM bus contention

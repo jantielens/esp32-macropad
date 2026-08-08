@@ -384,6 +384,7 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | Audio | **Music** | Command: Play/Pause, Next track, Previous track, or Stop. Available on boards with the sound player enabled. |
 | Audio | **Play sound alert** | Play a **Tone Alert** from a beep pattern (for example, `1000:200 100 1000:200`) or an **MP3 Alert** from an uploaded sound file. Both accept an optional volume override; the tone pattern supports binding templates. ESP32-P4 boards only. |
 | Audio | **Volume** | Command: Set volume to an absolute value (0–100), or Adjust volume by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. ESP32-P4 boards only. |
+| Audio | **Speech to text** | Command: Start recording or Stop and transcribe. Captures at most 30 seconds from the built-in microphone and sends the resulting WAV to the configured Azure AI Foundry transcription service. Stop and transcribe can optionally publish a successful transcript to an MQTT topic. Available on `esp32-p4-lcd4b`. |
 | Display | **Brightness** | Command: Set brightness to an absolute value (5–100), or Adjust brightness by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Session-only, resets on reboot. |
 | Display | **Show notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
 | Display | **Visual alert** | Command: Start or Stop a full-screen pulsing color overlay used as an ambient alarm. Configure the color (bindable), pattern (breathe/blink/solid), period, intensity, and duration. ESP32-P4 boards only. See [Visual Alert Action](#visual-alert-action) below. |
@@ -1418,6 +1419,32 @@ analysis work when no configured binding uses them.
 [music:elapsed_s] / [music:total_s] s  -> 75 / 244 s
 [music:analysis.rms]                    -> 37
 [music:analysis.band.3]                 -> 62
+```
+
+### Speech To Text Binding
+
+**Syntax:** `[stt:key]`
+
+Speech to text is available on `esp32-p4-lcd4b` when the local Azure credentials
+are configured. Add one button with **Speech to text / Start recording** and a
+second with **Speech to text / Stop and transcribe**. The recording is held in
+PSRAM only and is not retained after reboot.
+
+The Stop and transcribe action can optionally set **Publish Transcript to MQTT
+Topic**. When transcription succeeds, the device publishes the transcript as a
+non-retained MQTT message to that topic. It does not publish after recording or
+transcription errors.
+
+| Key | Returns |
+|-----|---------|
+| `status` | `idle`, `recording`, `transcribing`, `ready`, or `error` |
+| `text` | Most recent completed transcript, or the most recent error message |
+
+Use the bindings in button labels, for example:
+
+```text
+[stt:status]
+[stt:text|Listening result will appear here]
 ```
 
 ### Expression Binding

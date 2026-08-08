@@ -67,6 +67,10 @@
 #include "audio.h"
 #endif
 
+#if HAS_STT
+#include "stt.h"
+#endif
+
 #include "i2c_bus.h"
 #include "sd_probe.h"
 #include "sd_storage.h"
@@ -484,6 +488,9 @@ void setup()
 
 	#if HAS_DISPLAY
 	health_binding_init();
+	#if HAS_STT
+	stt_init();
+	#endif
 	time_binding_init();
 	expr_binding_init();
 	pad_binding_init();
@@ -593,6 +600,9 @@ void loop()
 
 	#if HAS_MQTT
 	mqtt_manager.loop();
+	#if HAS_STT
+	stt_loop();
+	#endif
 	mqtt_screen_loop();
 	mqtt_wake_loop();
 	mqtt_audio_loop();

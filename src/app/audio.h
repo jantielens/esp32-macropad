@@ -37,6 +37,12 @@ void audio_stop();
 // Returns true if a pattern is currently playing (one-shot or loop).
 bool audio_is_playing();
 
+// Read PCM samples from the board-selected audio input. The ES8311 input uses
+// 16-bit stereo samples; callers may select one channel for mono recording.
+// Returns false when the board has no input path or no samples were read.
+bool audio_read_input(int16_t* samples, size_t sample_count, size_t* samples_read,
+                      uint32_t timeout_ms);
+
 // ---------------------------------------------------------------------------
 // Internal: output-starvation instrumentation.
 // Shared by the tone path (audio.cpp) and the MP3 path (sound_player.cpp).

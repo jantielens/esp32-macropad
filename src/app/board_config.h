@@ -298,6 +298,17 @@ struct HwButtonDef {
 #define HAS_AUDIO false
 #endif
 
+// Speech-to-text recording and Azure transcription. Boards with a microphone
+// input path may opt in through their board_overrides.h.
+#ifndef HAS_STT
+#define HAS_STT false
+#endif
+
+// Optional ES7210 microphone ADC on the shared audio I2C/I2S bus.
+#ifndef HAS_ES7210_MIC
+#define HAS_ES7210_MIC false
+#endif
+
 // NS4150B power amplifier enable pin.
 #ifndef AUDIO_PA_PIN
 #define AUDIO_PA_PIN -1
@@ -312,6 +323,11 @@ struct HwButtonDef {
 // I2C address of the audio codec (e.g. ES8311 = 0x18).
 #ifndef AUDIO_CODEC_ADDR
 #define AUDIO_CODEC_ADDR 0x18
+#endif
+
+// I2C address of the ES7210 microphone ADC when HAS_ES7210_MIC is enabled.
+#ifndef AUDIO_MIC_CODEC_ADDR
+#define AUDIO_MIC_CODEC_ADDR 0x40
 #endif
 
 // I2S master clock pin.

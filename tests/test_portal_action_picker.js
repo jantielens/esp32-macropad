@@ -55,6 +55,13 @@ const FIXTURE_CATALOG = [
         commands: [{ id: 'set', label: 'Set volume' }, { id: 'adjust', label: 'Adjust volume' }]
     },
     {
+        type: 'stt', group: 'Audio', label: 'Speech to text', command_field: 'stt_command',
+        commands: [
+            { id: 'record_start', label: 'Start recording' },
+            { id: 'record_stop_transcribe', label: 'Stop and transcribe' }
+        ]
+    },
+    {
         type: 'timer', group: 'Timer', label: 'Timer',
         commands: ['toggle', 'start', 'stop', 'pause', 'resume', 'reset', 'set', 'adjust']
             .map(function(id) { return { id: id, label: id }; })
@@ -113,6 +120,25 @@ assert(volumeCommands.includes('<option value="adjust">Adjust volume</option>'))
 
 // A type absent from this build's catalog yields no command options, not a crash.
 assert.strictEqual(context.actionEditorCommandOptionsHTML('brightness'), '');
+
+// Registered action types declare their command field in the catalog, so the
+// generic selector renders and round-trips their selected command.
+const sttPrefix = 'stt-picker';
+context.actionEditorHTML(sttPrefix, '', {});
+context.actionEditorLoad(sttPrefix, {
+    type: 'stt', stt_command: 'record_stop_transcribe', stt_mqtt_topic: 'voice/transcript'
+});
+const sttGroup = document.getElementById(sttPrefix + '-catalog-command-group');
+const sttCommand = document.getElementById(sttPrefix + '-catalog-command');
+const sttMqttTopicGroup = document.getElementById(sttPrefix + '-stt-mqtt-topic-group');
+const sttMqttTopic = document.getElementById(sttPrefix + '-stt-mqtt-topic');
+assert.strictEqual(sttGroup.style.display, '');
+assert(sttCommand.innerHTML.includes('record_start'));
+assert.strictEqual(sttCommand.value, 'record_stop_transcribe');
+assert.strictEqual(sttMqttTopicGroup.style.display, '');
+assert.strictEqual(sttMqttTopic.value, 'voice/transcript');
+assert.strictEqual(context.actionEditorBuild(sttPrefix).stt_command, 'record_stop_transcribe');
+assert.strictEqual(context.actionEditorBuild(sttPrefix).stt_mqtt_topic, 'voice/transcript');
 
 // --- Shutter Tester: command family -> command population ---
 const familyOptions = context.actionEditorFamilyOptionsHTML('shutter');

@@ -102,6 +102,24 @@ static const char* validate_exact_binding_token(const char* value) {
 // Validate action-specific authoring contracts. Other action types are a no-op.
 static const char* validate_action(JsonObjectConst action) {
     const char* type = action["type"] | "";
+    if (strcmp(type, ACTION_TYPE_STT) == 0) {
+        if (!action.containsKey("stt_command") || !action["stt_command"].is<const char*>()) {
+            return "stt missing stt_command";
+        }
+        const char* command = action["stt_command"].as<const char*>();
+        if (strcmp(command, "record_start") != 0 && strcmp(command, "record_stop_transcribe") != 0) {
+            return "stt_command must be record_start or record_stop_transcribe";
+        }
+        if (action.containsKey("stt_mqtt_topic")) {
+            if (!action["stt_mqtt_topic"].is<const char*>()) {
+                return "stt_mqtt_topic must be a string";
+            }
+            if (strlen(action["stt_mqtt_topic"].as<const char*>()) >= CONFIG_MQTT_TOPIC_MAX_LEN) {
+                return "stt_mqtt_topic too long";
+            }
+        }
+        return nullptr;
+    }
     if (strcmp(type, ACTION_TYPE_MUSIC) == 0) {
 #if HAS_SOUND_PLAYER
         if (!action.containsKey("music_command")) return "music missing music_command";

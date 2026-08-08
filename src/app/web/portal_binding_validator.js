@@ -860,6 +860,16 @@ bindingRegisterScheme('timer', {
     }
 });
 
+// ─── Scheme: stt ─────────────────────────────────────────────────
+// [stt:status] or [stt:text]
+bindingRegisterScheme('stt', {
+    maxParams: 1,
+    firstParamRequired: true,
+    firstParamLabel: 'Speech-to-text key',
+    keysLabel: 'speech-to-text key',
+    keys: ['status', 'text']
+});
+
 // ─── Scheme: music ───────────────────────────────────────────────
 // [music:key], including optional compile-time Music analysis keys.
 bindingRegisterScheme('music', {

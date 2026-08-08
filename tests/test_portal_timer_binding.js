@@ -21,4 +21,12 @@ const invalid = context.validateBinding('[timer:1_unknown]');
 assert.strictEqual(invalid.valid, false);
 assert.match(invalid.errors[0].message, /_target/);
 
+for (const token of ['[stt:status]', '[stt:text]']) {
+    assert.strictEqual(context.validateBinding(token).valid, true, token);
+}
+
+const invalidStt = context.validateBinding('[stt:result]');
+assert.strictEqual(invalidStt.valid, false);
+assert.match(invalidStt.errors[0].message, /speech-to-text key/);
+
 console.log('portal_timer_binding: PASS');

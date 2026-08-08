@@ -8,6 +8,8 @@ class ES8311AudioDriver final : public AudioOutputDriver {
 public:
     bool begin(uint32_t sample_rate) override;
     bool write(const int16_t* frames, size_t frame_count) override;
+    bool read(int16_t* samples, size_t sample_count, size_t* samples_read,
+              uint32_t timeout_ms) override;
     void setVolume(uint8_t vol_0_100) override;
 
 private:
