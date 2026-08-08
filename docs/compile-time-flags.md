@@ -437,6 +437,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
+  - src/app/web_portal_device_api.cpp
 - **HAS_CUSTOM_FONTS**
   - src/app/board_config.h
   - src/app/custom_fonts.cpp
@@ -818,7 +819,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/components/web_portal_music.cpp
   - src/app/ha_discovery.cpp
-  - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_audio.cpp
   - src/app/music_analysis.cpp
   - src/app/music_analysis.h

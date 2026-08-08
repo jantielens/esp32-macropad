@@ -14,38 +14,19 @@
 (function() {
     var SPEEDS = ['1s','1/2s','1/4s','1/5s','1/8s','1/10s','1/15s','1/25s','1/30s','1/50s','1/60s','1/100s','1/125s','1/200s','1/250s','1/500s','1/1000s','1/2000s'];
 
-    function options() {
-        return '<option value="shutter">Shutter Speed Control</option>';
-    }
-
     function groups(prefix, _opts) {
         var h = '';
         h += '<div id="' + prefix + '-shutter-group" style="display:none;">';
         h += '<div class="form-group">';
+        h += '<label class="form-label" for="' + prefix + '-shutter-family">Command family</label>';
+        h += '<select class="form-select form-select-sm" id="' + prefix + '-shutter-family" onchange="actionEditorShutterFamilyChanged(\'' + prefix + '\')">';
+        h += actionEditorFamilyOptionsHTML('shutter');
+        h += '</select>';
+        h += '</div>';
+        h += '<div class="form-group">';
         h += '<label class="form-label" for="' + prefix + '-shutter-command">Command</label>';
         h += '<select class="form-select form-select-sm" id="' + prefix + '-shutter-command" onchange="actionEditorShutterChanged(\'' + prefix + '\')">';
-        h += '<optgroup label="Target Speed">';
-        h += '<option value="toggle_lock">Toggle Lock</option>';
-        h += '<option value="set">Set Target Speed</option>';
-        h += '<option value="adjust">Adjust Target Speed</option>';
-        h += '</optgroup>';
-        h += '<optgroup label="Session">';
-        h += '<option value="sess_toggle">Session: Toggle Start/Stop</option>';
-        h += '<option value="sess_start">Session: Start</option>';
-        h += '<option value="sess_stop">Session: Stop</option>';
-        h += '<option value="sess_discard">Session: Discard Last Shot</option>';
-        h += '</optgroup>';
-        h += '<optgroup label="Guided Test">';
-        h += '<option value="guide_start">Guide: Start Test</option>';
-        h += '<option value="guide_stop">Guide: Stop</option>';
-        h += '<option value="guide_skip">Guide: Skip Step</option>';
-        h += '<option value="guide_redo">Guide: Redo Step</option>';
-        h += '</optgroup>';
-        h += '<optgroup label="Alignment">';
-        h += '<option value="align_start">Alignment: Start</option>';
-        h += '<option value="align_stop">Alignment: Stop</option>';
-        h += '<option value="recalibrate">Recalibrate Baseline</option>';
-        h += '</optgroup>';
+        h += actionEditorFamilyCommandOptionsHTML('shutter', 'target_speed');
         h += '</select>';
         h += '</div>';
         // Set: speed picker
@@ -82,9 +63,14 @@
     }
 
     function load(prefix, action) {
+        var familyEl = document.getElementById(prefix + '-shutter-family');
+        var commandEl = document.getElementById(prefix + '-shutter-command');
+        var cmd = (action.type === 'shutter') ? (action.shutter_command || 'toggle_lock') : 'toggle_lock';
+        var family = actionEditorFamilyForCommand('shutter', cmd) || 'target_speed';
+        if (familyEl) familyEl.value = family;
+        if (commandEl) commandEl.innerHTML = actionEditorFamilyCommandOptionsHTML('shutter', family);
+        if (commandEl) commandEl.value = cmd;
         if (action.type === 'shutter') {
-            var sc = document.getElementById(prefix + '-shutter-command');
-            if (sc) sc.value = action.shutter_command || 'toggle_lock';
             if (action.shutter_command === 'set') {
                 var ss = document.getElementById(prefix + '-shutter-set-speed');
                 if (ss) ss.value = action.shutter_value || '1/125s';
@@ -95,9 +81,6 @@
                 var sa = document.getElementById(prefix + '-shutter-arg');
                 if (sa) sa.value = action.shutter_value || '';
             }
-        } else {
-            var scd = document.getElementById(prefix + '-shutter-command');
-            if (scd) scd.value = 'toggle_lock';
         }
     }
 
@@ -124,7 +107,6 @@
 
     if (typeof _actionEditorExtensions !== 'undefined') {
         _actionEditorExtensions.push({
-            options: options,
             groups: groups,
             typeChanged: typeChanged,
             load: load,
@@ -132,6 +114,17 @@
         });
     }
 })();
+
+// Exposed globally for inline onchange="actionEditorShutterFamilyChanged(...)".
+// Rebuilds the Command select's options for the newly chosen family and
+// re-derives dependent sub-field visibility for its now-default command.
+function actionEditorShutterFamilyChanged(prefix) {
+    var familyEl = document.getElementById(prefix + '-shutter-family');
+    var commandEl = document.getElementById(prefix + '-shutter-command');
+    if (!familyEl || !commandEl) return;
+    commandEl.innerHTML = actionEditorFamilyCommandOptionsHTML('shutter', familyEl.value);
+    actionEditorShutterChanged(prefix);
+}
 
 // Exposed globally for inline onchange="actionEditorShutterChanged(...)" handlers
 // rendered into the shutter command <select> above.

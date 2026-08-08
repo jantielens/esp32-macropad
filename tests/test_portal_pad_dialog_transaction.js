@@ -27,7 +27,12 @@ const context = {
     padLabelFromInput() { return ''; },
     padGetBindableColor() { return ''; },
     padGetEffectiveDefault() { return ''; },
-    actionEditorBuild() { throw new Error('Timer Duration is invalid'); }
+    actionEditorBuild() { throw new Error('Timer Duration is invalid'); },
+    padActionPrefixes(gesture) { return [gesture + '-0', gesture + '-1', gesture + '-2']; },
+    actionEditorListBuild(prefixes) {
+        return prefixes.map(function(p) { return context.actionEditorBuild(p); })
+            .filter(function(a) { return a && a.type; });
+    }
 };
 
 vm.createContext(context);

@@ -494,6 +494,8 @@ echo
 echo "=== Running unit tests: timer_action_editor ==="
 node tests/test_timer_action_editor.js
 node tests/test_portal_action_editor_cycle.js
+node tests/test_portal_action_picker.js
+node tests/test_portal_action_list.js
 node tests/test_portal_timer_binding.js
 node tests/test_portal_pad_dialog_transaction.js
 node tests/test_portal_pad_import.js
@@ -838,6 +840,10 @@ echo
 
 echo "=== Running guard: MCP binding-scheme parity (register <-> describe) ==="
 ./tests/test_mcp_scheme_parity.sh
+echo
+
+echo "=== Running guard: action catalog completeness ==="
+./tests/test_action_catalog_completeness.sh
 echo
 
 echo "=== Running guard: MCP storage browser parity ==="

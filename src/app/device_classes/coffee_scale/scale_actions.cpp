@@ -43,6 +43,25 @@ static char* scale_value_field(ButtonAction& act, size_t* out_size) {
     return p.value;
 }
 
+static void scale_describe(JsonObject& out) {
+    out["group"] = "Coffee Scale";
+    out["label"] = "Scale";
+    JsonArray fields = out.createNestedArray("fields");
+    JsonObject command_field = fields.createNestedObject();
+    command_field["name"] = "scale_command";
+    command_field["description"] = "required command identifier";
+    JsonObject value_field = fields.createNestedObject();
+    value_field["name"] = "scale_value";
+    value_field["description"] = "grams for cal_weight (signed adjustment) or cal_weight_set (absolute value); binding templates are supported";
+    JsonArray commands = out.createNestedArray("commands");
+    const char* ids[] = {"tare", "calibrate", "cal_weight", "cal_weight_set"};
+    const char* labels[] = {"Tare", "Calibrate", "Adjust calibration weight", "Set calibration weight"};
+    for (uint8_t i = 0; i < 4; ++i) {
+        JsonObject item = commands.createNestedObject();
+        item["id"] = ids[i]; item["label"] = labels[i];
+    }
+}
+
 #if HAS_SCALE
 static void scale_dispatch(const ButtonAction& act, const char* label) {
     const ScalePayload& sp = scale_payload(act);
@@ -85,6 +104,7 @@ static const ActionTypeDef scale_action_type = {
     /* serialize   */ scale_serialize,
     /* dispatch    */ scale_dispatch,
     /* value_field */ scale_value_field,
+    /* describe    */ scale_describe,
 };
 
 REGISTER_ACTION_TYPE(scale_action_type);

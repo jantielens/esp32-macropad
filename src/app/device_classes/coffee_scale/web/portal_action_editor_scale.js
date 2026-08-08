@@ -9,24 +9,15 @@
     if (typeof _actionEditorExtensions === 'undefined') return;
 
     _actionEditorExtensions.push({
-        // Extra <option> tags for the type dropdown
-        options: function() {
-            return '<option value="scale">Scale Control</option>'
-                 + '<option value="brew">Brew Control</option>';
-        },
-
         // Extra form group HTML
         groups: function(prefix) {
             var h = '';
             // Scale — sub-command dropdown with conditional fields
             h += '<div id="' + prefix + '-scale-group" style="display:none;">';
             h += '<div class="form-group">';
-            h += '<label for="' + prefix + '-scale-cmd">Scale Command</label>';
+            h += '<label for="' + prefix + '-scale-cmd">Command</label>';
             h += '<select id="' + prefix + '-scale-cmd" onchange="_actionEditorScaleChanged(\'' + prefix + '\')">';
-            h += '<option value="tare">Tare</option>';
-            h += '<option value="calibrate">Calibrate</option>';
-            h += '<option value="cal_weight">Cal Weight &plusmn;</option>';
-            h += '<option value="cal_weight_set">Cal Weight Set</option>';
+            h += actionEditorCommandOptionsHTML('scale');
             h += '</select>';
             h += '</div>';
             h += '<div class="form-group" id="' + prefix + '-scale-delta-group" style="display:none;">';
@@ -43,7 +34,7 @@
             // Brew — command dropdown (populated dynamically from /api/brew-templates)
             h += '<div id="' + prefix + '-brew-group" style="display:none;">';
             h += '<div class="form-group">';
-            h += '<label for="' + prefix + '-brew-cmd">Brew Command</label>';
+            h += '<label for="' + prefix + '-brew-cmd">Command</label>';
             h += '<select id="' + prefix + '-brew-cmd">';
             h += '<option value="">Loading templates...</option>';
             h += '</select>';

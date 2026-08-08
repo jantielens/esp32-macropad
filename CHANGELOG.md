@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* **Action editor UX is now consistent across the portal and MCP**: actions are organized into catalog-driven groups such as Navigation, Connectivity, Audio, Display, Timer, and Device, with sentence-case type and command labels. Multi-command actions expose their commands from the firmware catalog, device-class actions use the same metadata path, and Shutter Tester actions are organized by command family. Action arrays now use three fixed ordered slots with contextual labels such as **Action 1**, **Left action 1**, or **Select action 1**; empty slots collapse to **Add action** and are omitted when saved. Existing persisted action types, fields, and JSON remain unchanged, including round-tripping actions unavailable in the current build. The same catalog also supplies concrete field metadata to MCP clients, while `GET /api/info?catalog=1` supplies the portal projection.
+
 ## [1.24.0] - 2026-08-06
 
 ### Added

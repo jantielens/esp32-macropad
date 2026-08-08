@@ -10,6 +10,12 @@ class Element {
         this.dataset = {};
         this.selectedIndex = 0;
         this.attributes = {};
+        var classes = new Set();
+        this.classList = {
+            add: function(c) { classes.add(c); },
+            remove: function(c) { classes.delete(c); },
+            contains: function(c) { return classes.has(c); }
+        };
     }
     addEventListener() {}
     hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name); }
@@ -28,7 +34,10 @@ const document = {
 const context = {
     console,
     document,
-    deviceInfoCache: { max_pads: 6 },
+    deviceInfoCache: {
+        max_pads: 6,
+        catalog: [{ type: 'cycle_pad', group: 'Navigation', label: 'Navigate pad sequence' }]
+    },
     listInjectSyntheticScreenOption() {},
     padInitBindableColor() {},
     padSetBindableColor() {},
@@ -51,7 +60,7 @@ function build(exclusions) {
 }
 
 const html = context.actionEditorHTML(prefix, '', {});
-assert(html.includes('value="cycle_pad">Navigate Pad Sequence</option>'));
+assert(html.includes('value="cycle_pad">Navigate pad sequence</option>'));
 assert(html.includes(prefix + '-cycle-pad-direction'));
 assert(html.includes(prefix + '-cycle-pad-wrap'));
 assert(html.includes(prefix + '-cycle-pad-exclusions'));

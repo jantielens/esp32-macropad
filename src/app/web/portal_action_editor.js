@@ -8,8 +8,130 @@
 
 // Extension modules (e.g. portal_action_editor_shutter.js) can register into
 // _actionEditorExtensions to add action types without modifying this file.
-// Each extension provides: options, groups, typeChanged, load, build hooks.
+// Each extension provides: groups, typeChanged, load, build hooks. Type-select
+// options are no longer contributed by extensions — action_catalog.cpp (see
+// GET /api/info?catalog=1) is the single source for every type's group and
+// label, built-in or device-class.
 var _actionEditorExtensions = [];
+
+// Shared fixed slot count for every action-array host (pad tap/long-press,
+// pad-level, boot, hardware button, MQTT trigger, timer expiry, Shutter
+// Tester session actions). Must match MAX_BUTTON_ACTIONS in pad_config.h.
+const MAX_ACTIONS = 3;
+
+// 1-based slot-id generator for hosts whose ids follow "<base><1..MAX_ACTIONS>"
+// (boot actions, hardware buttons, MQTT triggers, timer expiry, Shutter
+// Tester session actions). The pad editor uses its own 0-based prefixes
+// (padActionPrefixes in portal_pad_editor.js) since its ids predate this.
+function actionEditorSlotPrefixes(base) {
+    var out = [];
+    for (var i = 1; i <= MAX_ACTIONS; i++) out.push(base + i);
+    return out;
+}
+
+// Presentation-only lookups into the firmware-authored catalog cached on
+// deviceInfoCache.catalog. Every host awaits getDeviceInfo() before calling
+// actionEditorHTML(), so the catalog is always populated by the time these
+// run — no fetch here, no fallback table, no later refresh pass.
+function actionEditorCatalog() {
+    return (typeof deviceInfoCache !== 'undefined' && deviceInfoCache && deviceInfoCache.catalog) || [];
+}
+
+function actionEditorCatalogEntry(type) {
+    var catalog = actionEditorCatalog();
+    for (var i = 0; i < catalog.length; i++) {
+        if (catalog[i].type === type) return catalog[i];
+    }
+    return null;
+}
+
+// Grouped <optgroup> markup for the type <select>, in catalog order.
+function actionEditorTypeOptionsHTML() {
+    var order = [];
+    var byGroup = {};
+    actionEditorCatalog().forEach(function(entry) {
+        if (!byGroup[entry.group]) { byGroup[entry.group] = []; order.push(entry.group); }
+        byGroup[entry.group].push(entry);
+    });
+    var html = '<option value="">(none)</option>';
+    order.forEach(function(group) {
+        html += '<optgroup label="' + group + '">';
+        byGroup[group].forEach(function(entry) {
+            html += '<option value="' + entry.type + '">' + entry.label + '</option>';
+        });
+        html += '</optgroup>';
+    });
+    return html;
+}
+
+// <option> tags for a multi-command type's Command selector. '' for a
+// direct action (no commands) or a type absent from this build's catalog.
+function actionEditorCommandOptionsHTML(type) {
+    var entry = actionEditorCatalogEntry(type);
+    if (!entry || !entry.commands) return '';
+    return entry.commands.map(function(c) {
+        return '<option value="' + c.id + '">' + c.label + '</option>';
+    }).join('');
+}
+
+// Timer's Command selector is per-instance ("T1: Toggle", "T2: Start", ...);
+// labels still come from the catalog's single 'timer' entry so the text
+// shown for each command has one source regardless of which instance it's for.
+function actionEditorTimerCommandOptionsHTML(instance) {
+    var entry = actionEditorCatalogEntry('timer');
+    if (!entry || !entry.commands) return '';
+    return entry.commands.map(function(c) {
+        return '<option value="' + instance + ':' + c.id + '">T' + instance + ': ' + c.label + '</option>';
+    }).join('');
+}
+
+// Family-then-command types (currently only Shutter Tester).
+function actionEditorFamilyOptionsHTML(type) {
+    var entry = actionEditorCatalogEntry(type);
+    if (!entry || !entry.command_families) return '';
+    return entry.command_families.map(function(f) {
+        return '<option value="' + f.id + '">' + f.label + '</option>';
+    }).join('');
+}
+
+function actionEditorFamilyCommandOptionsHTML(type, familyId) {
+    var entry = actionEditorCatalogEntry(type);
+    if (!entry || !entry.command_families) return '';
+    var family = entry.command_families.filter(function(f) { return f.id === familyId; })[0];
+    if (!family || !family.commands) return '';
+    return family.commands.map(function(c) {
+        return '<option value="' + c.id + '">' + c.label + '</option>';
+    }).join('');
+}
+
+function actionEditorFamilyForCommand(type, commandId) {
+    var entry = actionEditorCatalogEntry(type);
+    if (!entry || !entry.command_families) return null;
+    var match = entry.command_families.filter(function(f) {
+        return (f.commands || []).some(function(c) { return c.id === commandId; });
+    })[0];
+    return match ? match.id : null;
+}
+
+// Preserves a persisted action whose type this build's catalog does not
+// contain, keyed by prefix, so a save round-trips it untouched instead of
+// silently reducing it to a bare {type}. Cleared once the user picks a
+// different type for that slot.
+var _actionEditorUnsupported = {};
+
+// Give the <select> a disabled placeholder option for an unsupported type so
+// el.value = type actually sticks (a <select> silently ignores an unknown value).
+function actionEditorEnsureUnsupportedOption(select, type) {
+    if (!select || !type) return;
+    for (var i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === type) return;
+    }
+    var opt = document.createElement('option');
+    opt.value = type;
+    opt.textContent = type + ' (unsupported by this build)';
+    opt.disabled = true;
+    select.appendChild(opt);
+}
 
 // Generate the HTML for one action editor instance.
 // prefix: unique ID prefix (e.g. "pad-edit-action", "swipe-right")
@@ -20,24 +142,10 @@ function actionEditorHTML(prefix, label, opts) {
     var h = '';
     h += '<div class="form-group">';
     if (label) h += '<label class="form-label" for="' + prefix + '-type">' + label + '</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">'; 
-    h += '<option value="">(none)</option>';
-    h += '<option value="screen">Navigate to Screen</option>';
-    h += '<option value="back">Navigate Back</option>';
-    h += '<option value="cycle_pad">Navigate Pad Sequence</option>';
-    h += '<option value="mqtt">MQTT Publish</option>';
-    h += '<option value="key">Send BLE Keys</option>';
-    h += '<option value="ble_pair">Start BLE Pairing</option>';
-    if (typeof deviceInfoCache === 'undefined' || !deviceInfoCache || deviceInfoCache.has_sound_player === true) {
-        h += '<option value="music">Music</option>';
-    }
-    h += '<option value="sound_alert">Sound Alert</option>';
-    h += '<option value="timer">Timer Control</option>';
-    h += '<option value="notify">Show Notification</option>';
-    h += '<option value="visual_alert">Visual Alert</option>';
-    h += '<option value="system">System Command</option>';
-    _actionEditorExtensions.forEach(function(ext) { if (ext.options) h += ext.options(); });
+    h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
+    h += actionEditorTypeOptionsHTML();
     h += '</select>';
+    h += '<small id="' + prefix + '-context" class="action-context" style="display:none; color:#86868b;"></small>';
     if (opts.showBleHint) {
         h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
     }
@@ -87,7 +195,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div class="form-group">';
     h += '<label class="form-label" for="' + prefix + '-music-command">Command</label>';
     h += '<select class="form-select form-select-sm" id="' + prefix + '-music-command">';
-    h += '<option value="play_pause">Play/Pause</option><option value="next">Next</option><option value="previous">Previous</option><option value="stop">Stop</option>';
+    h += actionEditorCommandOptionsHTML('music');
     h += '</select></div></div>';
     // Sound Alert
     h += '<div id="' + prefix + '-sound-alert-group" style="display:none;">';
@@ -110,19 +218,10 @@ function actionEditorHTML(prefix, label, opts) {
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-timer-action">Timer Action</label>';
+    h += '<label class="form-label" for="' + prefix + '-timer-action">Command</label>';
     h += '<select class="form-select form-select-sm" id="' + prefix + '-timer-action" onchange="actionEditorTimerChanged(\'' + prefix + '\')">'; 
     for (var t = 1; t <= 3; t++) {
-        h += '<optgroup label="Timer ' + t + '">';
-        h += '<option value="' + t + ':toggle">T' + t + ': Toggle</option>';
-        h += '<option value="' + t + ':start">T' + t + ': Start</option>';
-        h += '<option value="' + t + ':stop">T' + t + ': Stop</option>';
-        h += '<option value="' + t + ':pause">T' + t + ': Pause</option>';
-        h += '<option value="' + t + ':resume">T' + t + ': Resume</option>';
-        h += '<option value="' + t + ':reset">T' + t + ': Reset</option>';
-        h += '<option value="' + t + ':set">T' + t + ': Set Countdown</option>';
-        h += '<option value="' + t + ':adjust">T' + t + ': Adjust Countdown</option>';
-        h += '</optgroup>';
+        h += '<optgroup label="Timer ' + t + '">' + actionEditorTimerCommandOptionsHTML(t) + '</optgroup>';
     }
     h += '</select>';
     h += '</div>';
@@ -203,10 +302,9 @@ function actionEditorHTML(prefix, label, opts) {
     // Visual Alert
     h += '<div id="' + prefix + '-va-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-va-op">Action</label>';
+    h += '<label class="form-label" for="' + prefix + '-va-op">Command</label>';
     h += '<select class="form-select form-select-sm" id="' + prefix + '-va-op" onchange="actionEditorVaOpChanged(\'' + prefix + '\')">';
-    h += '<option value="start" selected>Start Alert</option>';
-    h += '<option value="stop">Stop Alert</option>';
+    h += actionEditorCommandOptionsHTML('visual_alert');
     h += '</select>';
     h += '<small>Start raises a full-screen pulsing overlay (wakes the screen). Stop clears it.</small>';
     h += '</div>';
@@ -243,29 +341,47 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</div>';
     h += '</div>';  // va-config-group
     h += '</div>';  // va-group
-    // System command
+    // Device command (reboot / Wi-Fi / screensaver)
     h += '<div id="' + prefix + '-system-group" style="display:none;">';
     h += '<div class="form-group">';
     h += '<label class="form-label" for="' + prefix + '-system-command">Command</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-system-command" onchange="actionEditorSystemChanged(\'' + prefix + '\')">'; 
-    h += '<option value="reboot">Reboot Device</option>';
-    h += '<option value="wifi_reconnect">Reconnect WiFi</option>';
-    h += '<option value="screensaver">Enable Screensaver</option>';
-    h += '<option value="volume_set">Set Volume</option>';
-    h += '<option value="volume_adjust">Adjust Volume</option>';
-    h += '<option value="brightness_set">Set Brightness</option>';
-    h += '<option value="brightness_adjust">Adjust Brightness</option>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-system-command">';
+    h += actionEditorCommandOptionsHTML('system');
+    h += '</select>';
+    h += '</div></div>';
+    // Volume
+    h += '<div id="' + prefix + '-volume-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-volume-command">Command</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-volume-command" onchange="actionEditorVolumeBrightnessChanged(\'' + prefix + '\', \'volume\')">';
+    h += actionEditorCommandOptionsHTML('volume');
     h += '</select>';
     h += '</div>';
-    // Set value sub-field (volume/brightness set)
-    h += '<div class="form-group" id="' + prefix + '-sys-set-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-sys-set-value" id="' + prefix + '-sys-set-label">Value (%)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-sys-set-value" min="0" max="100" placeholder="e.g. 50">';
+    h += '<div class="form-group" id="' + prefix + '-volume-set-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-volume-set-value">Volume (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-volume-set-value" min="0" max="100" placeholder="e.g. 50">';
     h += '</div>';
-    // Adjust value sub-field (volume/brightness adjust)
-    h += '<div class="form-group" id="' + prefix + '-sys-adjust-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-sys-adjust-value" id="' + prefix + '-sys-adjust-label">Adjust (%)</label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sys-adjust-value" placeholder="e.g. 10, -10, or {step}">';
+    h += '<div class="form-group" id="' + prefix + '-volume-adjust-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-volume-adjust-value">Adjust Volume (%)</label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-volume-adjust-value" placeholder="e.g. 10, -10, or {step}">';
+    h += '<small>Positive increases, negative decreases. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
+    h += '</div>';
+    h += '</div>';
+    // Brightness
+    h += '<div id="' + prefix + '-brightness-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-brightness-command">Command</label>';
+    h += '<select class="form-select form-select-sm" id="' + prefix + '-brightness-command" onchange="actionEditorVolumeBrightnessChanged(\'' + prefix + '\', \'brightness\')">';
+    h += actionEditorCommandOptionsHTML('brightness');
+    h += '</select>';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-brightness-set-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-brightness-set-value">Brightness (%)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-brightness-set-value" min="5" max="100" placeholder="e.g. 50">';
+    h += '</div>';
+    h += '<div class="form-group" id="' + prefix + '-brightness-adjust-group" style="display:none;">';
+    h += '<label class="form-label" for="' + prefix + '-brightness-adjust-value">Adjust Brightness (%)</label>';
+    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-brightness-adjust-value" placeholder="e.g. 10, -10, or {step}">';
     h += '<small>Positive increases, negative decreases. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
     h += '</div>';
     h += '</div>';
@@ -279,6 +395,16 @@ function actionEditorTypeChanged(prefix) {
     var typeEl = document.getElementById(prefix + '-type');
     if (!typeEl) return;
     var type = typeEl.value;
+    if (_actionEditorUnsupported[prefix] && _actionEditorUnsupported[prefix].type !== type) {
+        delete _actionEditorUnsupported[prefix];
+    }
+    var contextEl = document.getElementById(prefix + '-context');
+    if (contextEl) {
+        var entry = actionEditorCatalogEntry(type);
+        contextEl.textContent = entry ? (entry.group + ' / ' + entry.label) : '';
+        contextEl.style.display = entry ? '' : 'none';
+    }
+    actionEditorListRefreshSlot(prefix);
     var screenGrp = document.getElementById(prefix + '-screen-group');
     var mqttGrp = document.getElementById(prefix + '-mqtt-group');
     var keyGrp = document.getElementById(prefix + '-key-group');
@@ -321,9 +447,14 @@ function actionEditorTypeChanged(prefix) {
     }
     var systemGrp = document.getElementById(prefix + '-system-group');
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
+    var volumeGrp = document.getElementById(prefix + '-volume-group');
+    if (volumeGrp) volumeGrp.style.display = (type === 'volume') ? '' : 'none';
+    var brightnessGrp = document.getElementById(prefix + '-brightness-group');
+    if (brightnessGrp) brightnessGrp.style.display = (type === 'brightness') ? '' : 'none';
     if (['notify', 'visual_alert', 'mqtt', 'key', 'sound_alert', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
-    if (type === 'system') actionEditorSystemChanged(prefix);
+    if (type === 'volume') actionEditorVolumeBrightnessChanged(prefix, 'volume');
+    if (type === 'brightness') actionEditorVolumeBrightnessChanged(prefix, 'brightness');
     // Extension-contributed type-change hooks (e.g. shutter group visibility)
     _actionEditorExtensions.forEach(function(ext) { if (ext.typeChanged) ext.typeChanged(prefix, type); });
 }
@@ -352,28 +483,15 @@ function actionEditorSoundAlertChanged(prefix) {
 }
 
 // Show/hide system command sub-fields based on the command dropdown.
-function actionEditorSystemChanged(prefix) {
-    var sel = document.getElementById(prefix + '-system-command');
+// Show/hide the volume/brightness set-vs-adjust value field for the given kind.
+function actionEditorVolumeBrightnessChanged(prefix, kind) {
+    var sel = document.getElementById(prefix + '-' + kind + '-command');
     if (!sel) return;
     var cmd = sel.value;
-    var setGrp = document.getElementById(prefix + '-sys-set-group');
-    var adjustGrp = document.getElementById(prefix + '-sys-adjust-group');
-    var setLabel = document.getElementById(prefix + '-sys-set-label');
-    var setInput = document.getElementById(prefix + '-sys-set-value');
-    var adjustLabel = document.getElementById(prefix + '-sys-adjust-label');
-    var isSet = (cmd === 'volume_set' || cmd === 'brightness_set');
-    var isAdjust = (cmd === 'volume_adjust' || cmd === 'brightness_adjust');
-    if (setGrp) setGrp.style.display = isSet ? '' : 'none';
-    if (adjustGrp) adjustGrp.style.display = isAdjust ? '' : 'none';
-    if (isSet) {
-        var isBright = (cmd === 'brightness_set');
-        if (setInput) setInput.min = isBright ? '5' : '0';
-        if (setLabel) setLabel.textContent = isBright ? 'Brightness (%)' : 'Volume (%)';
-    }
-    if (isAdjust) {
-        var isBright = (cmd === 'brightness_adjust');
-        if (adjustLabel) adjustLabel.textContent = isBright ? 'Adjust Brightness (%)' : 'Adjust Volume (%)';
-    }
+    var setGrp = document.getElementById(prefix + '-' + kind + '-set-group');
+    var adjustGrp = document.getElementById(prefix + '-' + kind + '-adjust-group');
+    if (setGrp) setGrp.style.display = (cmd === 'set') ? '' : 'none';
+    if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
 }
 
 // Show/hide the visual-alert config fields based on the op dropdown.
@@ -432,7 +550,16 @@ function actionEditorLoad(prefix, action) {
     if (!action) action = {};
     var el;
     el = document.getElementById(prefix + '-type');
-    if (el) el.value = action.type || '';
+    if (el) {
+        el.value = action.type || '';
+        if (action.type && !actionEditorCatalogEntry(action.type)) {
+            actionEditorEnsureUnsupportedOption(el, action.type);
+            el.value = action.type;
+            _actionEditorUnsupported[prefix] = action;
+        } else {
+            delete _actionEditorUnsupported[prefix];
+        }
+    }
     el = document.getElementById(prefix + '-target');
     if (el) {
         el.value = action.target || '';
@@ -522,26 +649,23 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.intensity > 0) ? action.intensity : '';
     el = document.getElementById(prefix + '-va-duration');
     if (el) el.value = (action.duration_ms > 0) ? action.duration_ms : '';
-    // System fields — also handles volume/brightness mapped into system command
-    if (action.type === 'volume' || action.type === 'brightness') {
-        // Map volume/brightness type into system command UI
-        el = document.getElementById(prefix + '-type');
-        if (el) el.value = 'system';
-        var mode = (action.type === 'volume') ? (action.volume_mode || 'set') : (action.brightness_mode || 'set');
-        el = document.getElementById(prefix + '-system-command');
-        if (el) el.value = action.type + '_' + mode;
-        var val = (action.type === 'volume') ? (action.volume_value || '') : (action.brightness_value || '');
-        if (mode === 'set') {
-            el = document.getElementById(prefix + '-sys-set-value');
-            if (el) el.value = val;
-        } else {
-            el = document.getElementById(prefix + '-sys-adjust-value');
-            if (el) el.value = val;
-        }
-    } else {
-        el = document.getElementById(prefix + '-system-command');
-        if (el) el.value = action.system_command || 'reboot';
-    }
+    // Device command (reboot / Wi-Fi / screensaver)
+    el = document.getElementById(prefix + '-system-command');
+    if (el) el.value = action.system_command || 'reboot';
+    // Volume / Brightness — first-class types, each with its own Command
+    // (set/adjust) select and set/adjust value inputs.
+    el = document.getElementById(prefix + '-volume-command');
+    if (el) el.value = action.volume_mode || 'set';
+    el = document.getElementById(prefix + '-volume-set-value');
+    if (el) el.value = (action.type === 'volume' && action.volume_mode !== 'adjust') ? (action.volume_value || '') : '';
+    el = document.getElementById(prefix + '-volume-adjust-value');
+    if (el) el.value = (action.type === 'volume' && action.volume_mode === 'adjust') ? (action.volume_value || '') : '';
+    el = document.getElementById(prefix + '-brightness-command');
+    if (el) el.value = action.brightness_mode || 'set';
+    el = document.getElementById(prefix + '-brightness-set-value');
+    if (el) el.value = (action.type === 'brightness' && action.brightness_mode !== 'adjust') ? (action.brightness_value || '') : '';
+    el = document.getElementById(prefix + '-brightness-adjust-value');
+    if (el) el.value = (action.type === 'brightness' && action.brightness_mode === 'adjust') ? (action.brightness_value || '') : '';
     // Extension-contributed load hooks (e.g. shutter field population)
     _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
     actionEditorTypeChanged(prefix);
@@ -553,6 +677,11 @@ function actionEditorBuild(prefix) {
     if (!typeEl) return {};
     var type = typeEl.value;
     if (!type) return {};
+    // Round-trip a persisted action whose type this build's catalog does not
+    // contain — its fields have no editor, so save it back exactly as loaded.
+    if (_actionEditorUnsupported[prefix] && _actionEditorUnsupported[prefix].type === type) {
+        return _actionEditorUnsupported[prefix];
+    }
     var act = { type: type };
     if (type === 'screen') {
         var t = document.getElementById(prefix + '-target');
@@ -681,22 +810,14 @@ function actionEditorBuild(prefix) {
     }
     if (type === 'system') {
         var sc = document.getElementById(prefix + '-system-command');
-        if (sc) {
-            var cmd = sc.value;
-            var sysMap = { volume_set: ['volume','set'], volume_adjust: ['volume','adjust'],
-                           brightness_set: ['brightness','set'], brightness_adjust: ['brightness','adjust'] };
-            var m = sysMap[cmd];
-            if (m) {
-                act.type = m[0];
-                var modeKey = m[0] + '_mode', valKey = m[0] + '_value';
-                act[modeKey] = m[1];
-                var inputId = prefix + (m[1] === 'set' ? '-sys-set-value' : '-sys-adjust-value');
-                var inp = document.getElementById(inputId);
-                if (inp && inp.value !== '') act[valKey] = (inp.value || '').trim();
-            } else {
-                act.system_command = cmd;
-            }
-        }
+        if (sc) act.system_command = sc.value;
+    }
+    if (type === 'volume' || type === 'brightness') {
+        var vbCmd = document.getElementById(prefix + '-' + type + '-command');
+        var mode = vbCmd ? vbCmd.value : 'set';
+        act[type + '_mode'] = mode;
+        var vbInput = document.getElementById(prefix + '-' + type + '-' + mode + '-value');
+        if (vbInput && vbInput.value !== '') act[type + '_value'] = (vbInput.value || '').trim();
     }
     // Extension-contributed build hooks (e.g. shutter merges shutter_command/shutter_value).
     _actionEditorExtensions.forEach(function(ext) {
@@ -809,22 +930,68 @@ function actionEditorPopulateSounds(prefixes, sounds) {
 // ============================================================================
 // Action list helpers — DRY plumbing for fragments that host N action editors
 // ============================================================================
+// Every action array uses this same fixed-slot pattern: N ordered positions,
+// an unused slot collapsed as "Add action", and no drag/reorder — slot order
+// is execution order. Default slot labels are "Action 1".."Action N"; a host
+// whose slots carry distinct meaning (rocker zones, list selection) supplies
+// its own via the labels argument or actionEditorListSetLabels().
 
-// Render N action editor groups inside containerId, one per prefix in prefixes[].
-// labels[i] is the <summary> text for that group (defaults to prefix).
-function actionEditorListRender(containerId, prefixes, labels) {
+// Render N fixed action slots inside containerId, one per prefix in prefixes[].
+// labels[i] overrides the default "Action N" slot label. opts.actionOptions is
+// forwarded to actionEditorHTML for every slot (e.g. { showBleHint: true }).
+function actionEditorListRender(containerId, prefixes, labels, opts) {
+    opts = opts || {};
     var container = document.getElementById(containerId);
     if (!container) return;
     var html = '';
     prefixes.forEach(function(prefix, i) {
-        var summary = (labels && labels[i]) || prefix;
-        html += '<details class="editor-group" id="' + prefix + '-group">';
-        html += '<summary>' + summary + '</summary>';
+        var label = (labels && labels[i]) || ('Action ' + (i + 1));
+        html += '<details class="editor-group action-list-slot" id="' + prefix + '-group" data-slot-label="' + label + '">';
+        html += '<summary>' + actionEditorSlotAddLabel(label) + '</summary>';
         html += '<div class="editor-group-body">';
-        html += actionEditorHTML(prefix);
+        html += actionEditorHTML(prefix, '', opts.actionOptions);
         html += '</div></details>';
     });
     container.innerHTML = html;
+}
+
+// Derives the collapsed-slot placeholder from a slot label by stripping its
+// trailing slot number and prefixing "Add " (e.g. "Tap action 1" -> "Add tap
+// action", "Action 1" -> "Add action"), so slots in different sections read
+// distinctly even before the user notices which section they're in.
+function actionEditorSlotAddLabel(label) {
+    var base = String(label || 'Action').replace(/\s+\d+$/, '');
+    return 'Add ' + base.charAt(0).toLowerCase() + base.slice(1);
+}
+
+// Update slot labels in place (e.g. when a widget's axis/type changes the
+// meaning of its slots) without rebuilding already-rendered editor markup.
+// A slot currently showing its "Add ..." placeholder stays that way until
+// populated; a populated slot's visible summary updates immediately.
+function actionEditorListSetLabels(prefixes, labels) {
+    prefixes.forEach(function(prefix, i) {
+        var group = document.getElementById(prefix + '-group');
+        if (!group) return;
+        var label = (labels && labels[i]) || ('Action ' + (i + 1));
+        group.dataset.slotLabel = label;
+        var typeEl = document.getElementById(prefix + '-type');
+        var summary = group.querySelector('summary');
+        if (summary) summary.textContent = (typeEl && typeEl.value) ? label : actionEditorSlotAddLabel(label);
+    });
+}
+
+// Sync one slot's collapsed state and summary text to whether it currently
+// has an action type selected. Called from actionEditorTypeChanged() so it
+// runs on load and on every user-driven type change; a no-op for editors that
+// aren't inside an actionEditorListRender() slot.
+function actionEditorListRefreshSlot(prefix) {
+    var group = document.getElementById(prefix + '-group');
+    if (!group || !group.classList.contains('action-list-slot')) return;
+    var typeEl = document.getElementById(prefix + '-type');
+    var hasAction = !!(typeEl && typeEl.value);
+    var summary = group.querySelector('summary');
+    if (summary) summary.textContent = hasAction ? group.dataset.slotLabel : actionEditorSlotAddLabel(group.dataset.slotLabel);
+    if (hasAction) group.open = true;
 }
 
 // Load an array of action objects into N editor prefixes (positional).
@@ -835,16 +1002,11 @@ function actionEditorListLoad(prefixes, actions) {
     });
 }
 
-// Build an array of action objects from N editor prefixes.
-// opts.trimEmpty (default true): drop trailing actions with empty type.
-function actionEditorListBuild(prefixes, opts) {
-    opts = opts || {};
-    var trim = (opts.trimEmpty !== false);
-    var out = prefixes.map(function(prefix) { return actionEditorBuild(prefix); });
-    if (trim) {
-        while (out.length > 0 && !out[out.length - 1].type) out.pop();
-    }
-    return out;
+// Build an array of action objects from N editor prefixes. Empty slots are
+// omitted; non-empty actions keep their configured order.
+function actionEditorListBuild(prefixes) {
+    return prefixes.map(function(prefix) { return actionEditorBuild(prefix); })
+        .filter(function(action) { return !!action.type; });
 }
 
 // Wire screen + sound dropdowns for a fragment hosting one or more action editors.

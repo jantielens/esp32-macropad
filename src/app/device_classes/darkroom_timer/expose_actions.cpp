@@ -50,12 +50,32 @@ static char* expose_value_field(ButtonAction& act, size_t* out_size) {
     return p.value;
 }
 
+static void expose_describe(JsonObject& out) {
+    out["group"] = "Darkroom Timer";
+    out["label"] = "Exposure timer";
+    JsonArray fields = out.createNestedArray("fields");
+    JsonObject command_field = fields.createNestedObject();
+    command_field["name"] = "expose_command";
+    command_field["description"] = "required command identifier";
+    JsonObject value_field = fields.createNestedObject();
+    value_field["name"] = "expose_value";
+    value_field["description"] = "seconds for set_time/adjust_seconds, f-stops for adjust_stops, or percentage points for dry-down commands; binding templates are supported";
+    JsonArray commands = out.createNestedArray("commands");
+    const char* ids[] = {"toggle", "start", "stop", "pause", "resume", "reset", "focus", "focus_off", "focus_toggle", "set_time", "adjust_seconds", "adjust_stops", "set_dry_down", "adjust_dry_down"};
+    const char* labels[] = {"Toggle start/pause/resume", "Start", "Stop", "Pause", "Resume", "Reset", "Focus light on", "Focus light off", "Toggle focus light", "Set time", "Adjust seconds", "Adjust f-stops", "Set dry-down", "Adjust dry-down"};
+    for (uint8_t i = 0; i < 14; ++i) {
+        JsonObject item = commands.createNestedObject();
+        item["id"] = ids[i]; item["label"] = labels[i];
+    }
+}
+
 static const ActionTypeDef expose_action_type = {
     /* type_name   */ ACTION_TYPE_EXPOSE,
     /* parse       */ expose_parse,
     /* serialize   */ expose_serialize,
     /* dispatch    */ expose_dispatch,
     /* value_field */ expose_value_field,
+    /* describe    */ expose_describe,
 };
 
 REGISTER_ACTION_TYPE(expose_action_type);

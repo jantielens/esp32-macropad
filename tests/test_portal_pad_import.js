@@ -109,12 +109,20 @@ async function runImport(options = {}) {
         console: { error() {}, log() {}, warn() {} },
         document,
         deviceInfoCache: { display_blank_on_save: true, max_pads: 2 },
+        MAX_ACTIONS: 3,
         confirm() { return true; },
         showMessage(message, type) { messages.push({ message, type }); },
         padBindingsFromJson() { return []; },
         padBindingsToDict() { return null; },
         actionEditorBuild() { return {}; },
         actionEditorLoad() {},
+        actionEditorListLoad(prefixes, actions) {
+            (actions || []).forEach(function(a, i) { context.actionEditorLoad(prefixes[i], a); });
+        },
+        actionEditorListBuild(prefixes) {
+            return prefixes.map(function(p) { return context.actionEditorBuild(p); })
+                .filter(function(a) { return a && a.type; });
+        },
         padColorsToHex() {},
         padGetBindableColor() { return '#000000'; },
         padSetBindableColor() {},

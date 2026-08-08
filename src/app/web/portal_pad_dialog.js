@@ -243,23 +243,13 @@ function padDialogOpen(col, row) {
     var tapActions = btn.actions || [];
     // Legacy single-action fallback
     if (!tapActions.length && btn.action && btn.action.type) tapActions = [btn.action];
-    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
-        actionEditorLoad('pad-edit-action-' + ai, tapActions[ai] || null);
-        var wrap = document.getElementById('pad-edit-action-' + ai + '-wrap');
-        if (wrap) wrap.style.display = (ai === 0 || (tapActions[ai] && tapActions[ai].type)) ? '' : 'none';
-    }
-    padUpdateAddLink('tap');
+    actionEditorListLoad(padActionPrefixes('tap'), tapActions);
 
     // Long-press actions (array of up to 3)
     var lpActions = btn.lp_actions || [];
     // Legacy single-action fallback
     if (!lpActions.length && btn.lp_action && btn.lp_action.type) lpActions = [btn.lp_action];
-    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
-        actionEditorLoad('pad-edit-lp-action-' + ai, lpActions[ai] || null);
-        var wrap = document.getElementById('pad-edit-lp-action-' + ai + '-wrap');
-        if (wrap) wrap.style.display = (ai === 0 || (lpActions[ai] && lpActions[ai].type)) ? '' : 'none';
-    }
-    padUpdateAddLink('lp');
+    actionEditorListLoad(padActionPrefixes('lp'), lpActions);
 
     document.getElementById('pad-edit-confirm').checked =
         !!btn.confirm && !document.getElementById('pad-edit-widget-type').value;
@@ -510,19 +500,11 @@ function padDialogOk(keepOpen) {
     if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
 
     // Tap actions (array)
-    var tapArr = [];
-    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
-        var a = actionEditorBuild('pad-edit-action-' + ai);
-        if (a.type) tapArr.push(a);
-    }
+    var tapArr = actionEditorListBuild(padActionPrefixes('tap'));
     if (tapArr.length) btn.actions = tapArr;
 
     // Long-press actions (array)
-    var lpArr = [];
-    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
-        var a = actionEditorBuild('pad-edit-lp-action-' + ai);
-        if (a.type) lpArr.push(a);
-    }
+    var lpArr = actionEditorListBuild(padActionPrefixes('lp'));
     if (lpArr.length) btn.lp_actions = lpArr;
 
     if (document.getElementById('pad-edit-confirm').checked) {

@@ -51,12 +51,32 @@ static char* meter_value_field(ButtonAction& act, size_t* out_size) {
     return p.value;
 }
 
+static void meter_describe(JsonObject& out) {
+    out["group"] = "Darkroom Timer";
+    out["label"] = "Light meter";
+    JsonArray fields = out.createNestedArray("fields");
+    JsonObject command_field = fields.createNestedObject();
+    command_field["name"] = "meter_command";
+    command_field["description"] = "required command identifier";
+    JsonObject value_field = fields.createNestedObject();
+    value_field["name"] = "meter_value";
+    value_field["description"] = "lux or seconds for set/adjust commands; binding templates are supported";
+    JsonArray commands = out.createNestedArray("commands");
+    const char* ids[] = {"read_lref", "read_bright", "read_dark", "set_lref", "adjust_lref", "set_zone5", "adjust_zone5", "mag_measure_a", "mag_measure_b", "mag_clear"};
+    const char* labels[] = {"Read Lref", "Read bright spot", "Read dark spot", "Set Lref", "Adjust Lref", "Set Zone V time", "Adjust Zone V time", "Measure magnification A", "Measure magnification B", "Clear magnification compensation"};
+    for (uint8_t i = 0; i < 10; ++i) {
+        JsonObject item = commands.createNestedObject();
+        item["id"] = ids[i]; item["label"] = labels[i];
+    }
+}
+
 static const ActionTypeDef meter_action_type = {
     /* type_name   */ ACTION_TYPE_METER,
     /* parse       */ meter_parse,
     /* serialize   */ meter_serialize,
     /* dispatch    */ meter_action_dispatch,
     /* value_field */ meter_value_field,
+    /* describe    */ meter_describe,
 };
 
 REGISTER_ACTION_TYPE(meter_action_type);

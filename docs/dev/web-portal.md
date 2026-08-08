@@ -510,6 +510,17 @@ Returns comprehensive device information.
   "has_display": true,
   "has_audio": true,
   "has_sound_player": true,
+  "catalog": [
+    {
+      "type": "timer",
+      "group": "Timer",
+      "label": "Timer",
+      "commands": [
+        {"id": "start", "label": "Start"},
+        {"id": "set", "label": "Set countdown"}
+      ]
+    }
+  ],
   "max_pads": 16,
   "max_grid_cols": 8,
   "max_grid_rows": 8,
@@ -532,6 +543,11 @@ Returns comprehensive device information.
 
 **Portal Mode Field:**
 - `ap_active`: `true` when the device is running in AP / captive-portal mode, `false` in full STA mode. Portal JS derives `portalMode` (`"core"` vs `"full"`) from this flag. (Replaces the removed `GET /api/mode` endpoint.)
+
+**Action Catalog:**
+- Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
+- Each catalog entry contains `type`, `group`, and `label`. Multi-command entries also contain `commands`, an array of `{id, label}` objects; device-class entries may additionally contain `command_families`.
+- The portal uses this projection to populate action type and command selectors. MCP capability metadata uses the same catalog source with field documentation included.
 
 **Display Fields** (only when `has_display` is `true`):
 - `display_coord_width` / `display_coord_height`: Display resolution

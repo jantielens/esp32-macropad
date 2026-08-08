@@ -51,12 +51,32 @@ static char* strip_value_field(ButtonAction& act, size_t* out_size) {
     return p.value;
 }
 
+static void strip_describe(JsonObject& out) {
+    out["group"] = "Darkroom Timer";
+    out["label"] = "Test strip";
+    JsonArray fields = out.createNestedArray("fields");
+    JsonObject command_field = fields.createNestedObject();
+    command_field["name"] = "strip_command";
+    command_field["description"] = "required command identifier";
+    JsonObject value_field = fields.createNestedObject();
+    value_field["name"] = "strip_value";
+    value_field["description"] = "command-specific time, segment, or tick value; binding templates are supported";
+    JsonArray commands = out.createNestedArray("commands");
+    const char* ids[] = {"start", "cancel", "set_base", "adjust_base", "step_up", "step_down", "adjust_segments", "set_segments", "set_countdown", "adjust_countdown", "set_pause", "adjust_pause", "set_tick"};
+    const char* labels[] = {"Start sequence", "Cancel sequence", "Set base time", "Adjust base time", "Increase step interval", "Decrease step interval", "Adjust segments", "Set segments", "Set initial countdown", "Adjust initial countdown", "Set pause duration", "Adjust pause duration", "Set exposure tick"};
+    for (uint8_t i = 0; i < 13; ++i) {
+        JsonObject item = commands.createNestedObject();
+        item["id"] = ids[i]; item["label"] = labels[i];
+    }
+}
+
 static const ActionTypeDef strip_action_type = {
     /* type_name   */ ACTION_TYPE_STRIP,
     /* parse       */ strip_parse,
     /* serialize   */ strip_serialize,
     /* dispatch    */ strip_dispatch,
     /* value_field */ strip_value_field,
+    /* describe    */ strip_describe,
 };
 
 REGISTER_ACTION_TYPE(strip_action_type);

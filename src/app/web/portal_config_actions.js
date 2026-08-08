@@ -9,9 +9,12 @@
 const SWIPE_DIRECTIONS = ['swipe-left', 'swipe-right', 'swipe-up', 'swipe-down'];
 const SWIPE_LABELS = { 'swipe-right': 'Swipe Right', 'swipe-left': 'Swipe Left', 'swipe-up': 'Swipe Up', 'swipe-down': 'Swipe Down' };
 
-function swipeInitEditors() {
+async function swipeInitEditors() {
     var container = document.getElementById('swipe-editors');
     if (!container) return;
+    // The action-type picker renders from the firmware catalog cached on
+    // deviceInfoCache; wait for it before building any action editor markup.
+    await getDeviceInfo();
     var html = '';
     SWIPE_DIRECTIONS.forEach(function(dir) {
         html += '<details class="editor-group" id="' + dir + '-group">';
@@ -168,11 +171,11 @@ async function saveSwipeActions() {
 // Boot Actions
 // ============================================================================
 
-const BOOT_ACTION_PREFIXES = ['boot-action-1', 'boot-action-2', 'boot-action-3'];
-const BOOT_ACTION_LABELS = ['Action 1', 'Action 2', 'Action 3'];
+const BOOT_ACTION_PREFIXES = actionEditorSlotPrefixes('boot-action-');
 
-function bootActionsInitEditors() {
-    actionEditorListRender('boot-action-editors', BOOT_ACTION_PREFIXES, BOOT_ACTION_LABELS);
+async function bootActionsInitEditors() {
+    await getDeviceInfo();
+    actionEditorListRender('boot-action-editors', BOOT_ACTION_PREFIXES);
 }
 
 async function loadBootActions() {
@@ -214,16 +217,19 @@ async function saveBootActions() {
 var HW_BUTTON_PREFIXES = [];
 
 function hwButtonTapPrefixes(n) {
-    return ['hwbtn-' + n + '-tap-1', 'hwbtn-' + n + '-tap-2', 'hwbtn-' + n + '-tap-3'];
+    return actionEditorSlotPrefixes('hwbtn-' + n + '-tap-');
 }
 function hwButtonHoldPrefixes(n) {
-    return ['hwbtn-' + n + '-hold-1', 'hwbtn-' + n + '-hold-2', 'hwbtn-' + n + '-hold-3'];
+    return actionEditorSlotPrefixes('hwbtn-' + n + '-hold-');
 }
 
 async function initHwButtons() {
     var container = document.getElementById('hw-button-editors');
     if (!container) return;
     HW_BUTTON_PREFIXES = [];
+    // The action-type picker renders from the firmware catalog cached on
+    // deviceInfoCache; wait for it before building any action editor markup.
+    await getDeviceInfo();
     var data;
     try {
         const response = await fetch('/api/component/hw-buttons/config');
@@ -260,21 +266,20 @@ async function initHwButtons() {
         html += '<details class="editor-group" id="hwbtn-' + n + '-group">';
         html += '<summary>' + title + '</summary>';
         html += '<div class="editor-group-body">';
-        html += '<h4 class="mt-2 mb-1">Tap Actions</h4>';
+        html += '<div class="action-group-heading">Tap actions</div>';
         html += '<div id="hwbtn-' + n + '-tap-editors"></div>';
-        html += '<h4 class="mt-2 mb-1">Hold Actions</h4>';
+        html += '<div class="action-group-heading">Hold actions</div>';
         html += '<div id="hwbtn-' + n + '-hold-editors"></div>';
         html += '</div></details>';
     });
     container.innerHTML = html;
 
-    var listLabels = ['Action 1', 'Action 2', 'Action 3'];
     buttons.forEach(function (btn, idx) {
         var n = idx + 1;
         var tapPrefixes = hwButtonTapPrefixes(n);
         var holdPrefixes = hwButtonHoldPrefixes(n);
-        actionEditorListRender('hwbtn-' + n + '-tap-editors', tapPrefixes, listLabels);
-        actionEditorListRender('hwbtn-' + n + '-hold-editors', holdPrefixes, listLabels);
+        actionEditorListRender('hwbtn-' + n + '-tap-editors', tapPrefixes);
+        actionEditorListRender('hwbtn-' + n + '-hold-editors', holdPrefixes);
         actionEditorListLoad(tapPrefixes, btn.tap_actions || []);
         actionEditorListLoad(holdPrefixes, btn.hold_actions || []);
         HW_BUTTON_PREFIXES = HW_BUTTON_PREFIXES.concat(tapPrefixes, holdPrefixes);
@@ -320,13 +325,16 @@ async function saveHwButtons() {
 var MQTT_TRIGGER_PREFIXES = [];
 
 function mqttTriggerPrefixes(n) {
-    return ['mqtttrig-' + n + '-1', 'mqtttrig-' + n + '-2', 'mqtttrig-' + n + '-3'];
+    return actionEditorSlotPrefixes('mqtttrig-' + n + '-');
 }
 
 async function initMqttTriggers() {
     var container = document.getElementById('mqtt-trigger-editors');
     if (!container) return;
     MQTT_TRIGGER_PREFIXES = [];
+    // The action-type picker renders from the firmware catalog cached on
+    // deviceInfoCache; wait for it before building any action editor markup.
+    await getDeviceInfo();
     var data;
     try {
         const response = await fetch('/api/component/mqtt-triggers/config');
@@ -353,16 +361,15 @@ async function initMqttTriggers() {
         html += '<input type="text" id="mqtttrig-' + n + '-topic" class="form-control form-control-sm mb-1" maxlength="127" spellcheck="false" placeholder="home/sensor/state">';
         html += '<label class="form-label">Value filter (empty = match any)</label>';
         html += '<input type="text" id="mqtttrig-' + n + '-value" class="form-control form-control-sm mb-2" maxlength="63" spellcheck="false" placeholder="e.g. ON">';
-        html += '<h4 class="mt-2 mb-1">Actions</h4>';
+        html += '<div class="action-group-heading">Actions</div>';
         html += '<div id="mqtttrig-' + n + '-editors"></div>';
         html += '</div></details>';
     }
     container.innerHTML = html;
 
-    var listLabels = ['Action 1', 'Action 2', 'Action 3'];
     for (var n = 1; n <= max; n++) {
         var prefixes = mqttTriggerPrefixes(n);
-        actionEditorListRender('mqtttrig-' + n + '-editors', prefixes, listLabels);
+        actionEditorListRender('mqtttrig-' + n + '-editors', prefixes);
         var trig = triggers[n - 1];
         if (trig) {
             var topicEl = document.getElementById('mqtttrig-' + n + '-topic');
@@ -424,36 +431,35 @@ async function saveMqttTriggers() {
 // ============================================================================
 
 const TIMER_IDS = [1, 2, 3];
-const TIMER_EXPIRE_PREFIXES = [];
-for (var _ti = 1; _ti <= 3; _ti++) {
-    for (var _ai = 1; _ai <= 3; _ai++) {
-        TIMER_EXPIRE_PREFIXES.push('timer-' + _ti + '-expire-' + _ai);
-    }
+function timerExpirePrefixes(tid) {
+    return actionEditorSlotPrefixes('timer-' + tid + '-expire-');
 }
+const TIMER_EXPIRE_PREFIXES = TIMER_IDS.reduce(function(all, tid) {
+    return all.concat(timerExpirePrefixes(tid));
+}, []);
 
-function timerConfigInitEditors() {
+async function timerConfigInitEditors() {
     var container = document.getElementById('timer-config-editors');
     if (!container) return;
+    // The action-type picker renders from the firmware catalog cached on
+    // deviceInfoCache; wait for it before building any action editor markup.
+    await getDeviceInfo();
     var html = '';
     TIMER_IDS.forEach(function(tid) {
         html += '<details class="editor-group" id="timer-' + tid + '-group">';
         html += '<summary>Timer ' + tid + '</summary>';
         html += '<div class="editor-group-body">';
         html += '<div id="timer-' + tid + '-expire-section">';
-        html += '<h4 style="margin: 12px 0 8px;">On Expire Actions</h4>';
+        html += '<div class="action-group-heading">On expire actions</div>';
         html += '<small style="display:block; margin-bottom:12px;">Actions snapshotted when a countdown starts and run once when it reaches zero.</small>';
-        for (var ai = 1; ai <= 3; ai++) {
-            var prefix = 'timer-' + tid + '-expire-' + ai;
-            html += '<details class="editor-group" id="' + prefix + '-group">';
-            html += '<summary>Action ' + ai + '</summary>';
-            html += '<div class="editor-group-body">';
-            html += actionEditorHTML(prefix);
-            html += '</div></details>';
-        }
+        html += '<div id="timer-' + tid + '-expire-editors"></div>';
         html += '</div>';
         html += '</div></details>';
     });
     container.innerHTML = html;
+    TIMER_IDS.forEach(function(tid) {
+        actionEditorListRender('timer-' + tid + '-expire-editors', timerExpirePrefixes(tid));
+    });
 }
 
 async function loadTimerConfig() {
@@ -463,11 +469,7 @@ async function loadTimerConfig() {
         const data = await response.json();
         TIMER_IDS.forEach(function(tid) {
             var tcfg = data[String(tid)] || {};
-            var expireActions = tcfg.expire_actions || [];
-            for (var ai = 1; ai <= 3; ai++) {
-                var prefix = 'timer-' + tid + '-expire-' + ai;
-                actionEditorLoad(prefix, expireActions[ai - 1] || {});
-            }
+            actionEditorListLoad(timerExpirePrefixes(tid), tcfg.expire_actions || []);
         });
     } catch (err) {
         console.error('Failed to load timer config:', err);
@@ -477,14 +479,7 @@ async function loadTimerConfig() {
 async function saveTimerConfig() {
     var payload = {};
     TIMER_IDS.forEach(function(tid) {
-        var tcfg = { expire_actions: [] };
-        var actions = [];
-        for (var ai = 1; ai <= 3; ai++) {
-            var a = actionEditorBuild('timer-' + tid + '-expire-' + ai);
-            if (a.type) actions.push(a);
-        }
-        tcfg.expire_actions = actions;
-        payload[String(tid)] = tcfg;
+        payload[String(tid)] = { expire_actions: actionEditorListBuild(timerExpirePrefixes(tid)) };
     });
     try {
         const response = await fetch('/api/component/timers/config', {

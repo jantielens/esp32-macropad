@@ -32,11 +32,11 @@ useful for a focused control screen or a simple whole-pad navigation surface.
 
 Swipes continue to use the pad's swipe actions. Long-presses do not trigger full-screen
 actions. Full-screen actions use the usual brief tap flash and device-level feedback beep;
-a **Sound Alert** action suppresses that feedback beep.
+a **Play sound alert** action suppresses that feedback beep.
 
 Full-screen actions belong only to the current pad. They are not inherited from a template
 pad, and clearing the list restores normal button and widget interaction. A saved pad with
-at least one full-screen action is included in **Navigate Pad Sequence**, even if it has no
+at least one full-screen action is included in **Navigate pad sequence**, even if it has no
 buttons.
 
 The stored JSON field is `pad_actions`, an array of up to three `ButtonAction` objects:
@@ -358,9 +358,11 @@ For static images or cameras that only expose a snapshot endpoint, set the URL t
 
 ### Actions (Tap and Long-Press)
 
-Each button supports up to **3 sequential actions** per gesture — one for **tap** and one for **long-press** (triggered after holding ~500ms). Actions execute in order: for example, action 1 publishes an MQTT message, action 2 plays a beep, and action 3 navigates to another screen.
+Each button supports up to **3 sequential actions** per gesture — one for **tap** and one for **long-press** (triggered after holding ~500ms). Actions execute in order: for example, action 1 publishes an MQTT message, action 2 plays a sound alert, and action 3 navigates to another screen.
 
-By default, only the first action slot is shown. Click **"+ Add tap action"** or **"+ Add long-press action"** to reveal additional slots. Use the **"× Remove"** link to hide a slot and clear its action.
+Each gesture always shows three fixed action slots. An unused slot is collapsed and reads **Add tap action** or **Add long-press action**; click it to choose a type. Once a slot has an action, it expands and its heading shows the slot's position (**Tap action 1**, **Tap action 2**, and so on). To remove an action, set its type back to **(none)** — the slot collapses again.
+
+The action-type dropdown groups every available action by category (**Navigation**, **Connectivity**, **BLE**, **Audio**, **Display**, **Timer**, **Device**, and any enabled device class). A short breadcrumb above the fields confirms the selected group and type, such as `Audio / Music`. A type with more than one operation shows a **Command** selector below it; Shutter Tester additionally shows a **Command family** selector before its **Command** selector. Only action types the current firmware build actually supports appear in the list.
 
 Under **Action Safety**, enable **Confirm before tap or long-press actions** to show a modal prompt before either action list runs. You can provide a custom confirmation message or leave it empty to generate one from the button label. **Confirm** runs the complete action list in order; **Cancel** or 10 seconds without a response runs none of the actions.
 
@@ -370,39 +372,36 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 
 **Action types:**
 
-| Type | What it does |
-|------|-------------|
-| **None** | No action (display-only button) |
-| **Navigate to screen** | Jump to another pad or screen (e.g., `pad_1`, `info_screen`) |
-| **Go back** | Return to the previous screen |
-| **Navigate Pad Sequence** | Move to the next or previous configured, non-empty pad. Optionally wrap at the boundary and exclude specific 1-based pad numbers. |
-| **Publish MQTT** | Send a message to an MQTT topic. Topic and payload fields support binding templates (e.g. `[health:cpu]`). |
-| **Send BLE Keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). The sequence field supports binding templates. ESP32-P4 boards only. |
-| **Start BLE Pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
-| **Sound Alert** | Play a **Tone Alert** from a beep pattern (for example, `1000:200 100 1000:200`) or an **MP3 Alert** from an uploaded sound file. Both accept an optional volume override; the tone pattern supports binding templates. ESP32-P4 boards only. |
-| **Music** | Control the Music CD Player: Play/Pause, Next, Previous, or Stop. Available on boards with the sound player enabled. |
-| **Set Volume** | Set the device audio volume to an absolute value (0–100). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
-| **Adjust Volume** | Step the device audio volume up or down by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. Sub-option of System Command. ESP32-P4 boards only. |
-| **Set Brightness** | Set the display backlight brightness to an absolute value (5–100). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
-| **Adjust Brightness** | Step the display brightness up or down by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Sub-option of System Command. Session-only, resets on reboot. |
-| **Timer** | Control one of 3 independent timers. Start and Toggle select stopwatch or countdown mode; countdown duration, Set, and Adjust values support binding templates. See [Timer Actions](#timer-actions) below. |
-| **Show Notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
-| **Visual Alert** | Raise or clear a full-screen pulsing color overlay as an ambient alarm. Configure the color (bindable), pattern (breathe/blink/solid), period, intensity, and duration. ESP32-P4 boards only. See [Visual Alert Action](#visual-alert-action) below. |
-| **Home Assistant Service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
-| **System Command** | Trigger a device-level operation: **Reboot Device**, **Reconnect WiFi**, **Enable Screensaver**, **Set/Adjust Volume**, or **Set/Adjust Brightness**. |
+| Group | Type | What it does |
+|---|---|---|
+| Navigation | **Navigate to screen** | Jump to another pad or screen (e.g., `pad_1`, `info_screen`) |
+| Navigation | **Navigate back** | Return to the previous screen |
+| Navigation | **Navigate pad sequence** | Move to the next or previous configured, non-empty pad. Optionally wrap at the boundary and exclude specific 1-based pad numbers. |
+| Connectivity | **Publish MQTT message** | Send a message to an MQTT topic. Topic and payload fields support binding templates (e.g. `[health:cpu]`). |
+| Connectivity | **Call Home Assistant service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
+| BLE | **Send BLE keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). The sequence field supports binding templates. ESP32-P4 boards only. |
+| BLE | **Start BLE pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
+| Audio | **Music** | Command: Play/Pause, Next track, Previous track, or Stop. Available on boards with the sound player enabled. |
+| Audio | **Play sound alert** | Play a **Tone Alert** from a beep pattern (for example, `1000:200 100 1000:200`) or an **MP3 Alert** from an uploaded sound file. Both accept an optional volume override; the tone pattern supports binding templates. ESP32-P4 boards only. |
+| Audio | **Volume** | Command: Set volume to an absolute value (0–100), or Adjust volume by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. ESP32-P4 boards only. |
+| Display | **Brightness** | Command: Set brightness to an absolute value (5–100), or Adjust brightness by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Session-only, resets on reboot. |
+| Display | **Show notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
+| Display | **Visual alert** | Command: Start or Stop a full-screen pulsing color overlay used as an ambient alarm. Configure the color (bindable), pattern (breathe/blink/solid), period, intensity, and duration. ESP32-P4 boards only. See [Visual Alert Action](#visual-alert-action) below. |
+| Timer | **Timer** | Command: Toggle, Start, Stop, Pause, Resume, Reset, Set countdown, or Adjust countdown, on one of 3 independent timers. Start and Toggle select stopwatch or countdown mode; countdown duration, Set, and Adjust values support binding templates. See [Timer Actions](#timer-actions) below. |
+| Device | **Device command** | Command: Restart device, Reconnect Wi-Fi, or Enable screensaver. |
 
 **Example setup for a smart light:**
-- **Tap action 1**: Publish MQTT → topic: `home/lights/kitchen/set`, payload: `toggle`
-- **Tap action 2**: Sound Alert → Tone Alert → `1000:100` (confirmation chirp)
-- **Long-press action**: Navigate to screen → `pad_3` (a dedicated lighting pad with brightness controls)
+- **Tap action 1**: Publish MQTT message → topic: `home/lights/kitchen/set`, payload: `toggle`
+- **Tap action 2**: Play sound alert → Tone Alert → `1000:100` (confirmation chirp)
+- **Long-press action 1**: Navigate to screen → `pad_3` (a dedicated lighting pad with brightness controls)
 
 **Example setup for navigation:**
-- **Tap action**: Navigate to screen → `pad_2` (cameras pad)
+- **Tap action 1**: Navigate to screen → `pad_2` (cameras pad)
 - Button label: "Cameras" with a `videocam` Material Symbol icon
 
 ### Navigate Pad Sequence Action
 
-The **Navigate Pad Sequence** action moves through eligible pads in numeric order. Choose
+The **Navigate pad sequence** action moves through eligible pads in numeric order. Choose
 **Next** for ascending pad numbers or **Previous** for descending numbers.
 Enable **Wrap** to continue from the opposite end when the action reaches the
 first or last eligible pad. With Wrap disabled, an action at the boundary does
@@ -414,8 +413,8 @@ hidden. Full-screen actions remain local to their own pad. Empty pads are skippe
 optional **Excluded Pads** field accepts comma-separated, 1-based pad numbers such as
 `2,5,8`; duplicates are removed and invalid or out-of-range entries are ignored.
 
-For directional navigation, assign **Navigate Pad Sequence → Previous** to the left swipe and
-**Navigate Pad Sequence → Next** to the right swipe, with Wrap enabled on both. Existing swipe
+For directional navigation, assign **Navigate pad sequence → Previous** to the left swipe and
+**Navigate pad sequence → Next** to the right swipe, with Wrap enabled on both. Existing swipe
 defaults are unchanged until you configure these actions.
 
 ### BLE Key Sequences
@@ -457,9 +456,9 @@ The **Timer** action type controls one of 3 independent on-device timers. Timers
 
 Start and Toggle actions contain the mode and, for countdowns, the duration. This makes a copied button preserve how it starts the timer. The **Timers** page stores only the expiry actions for each slot.
 
-When you select a Timer action, a dropdown groups all actions by timer:
+When you select the **Timer** type, the **Command** selector groups every command by timer instance (T1/T2/T3):
 
-| Action | Description |
+| Command | Description |
 |--------|-------------|
 | **Toggle** | When stopped, apply its Mode and Duration and start; when running, pause; when paused, resume |
 | **Start** | Apply its Mode and Duration, reset elapsed time, and start fresh in every state |
@@ -467,8 +466,8 @@ When you select a Timer action, a dropdown groups all actions by timer:
 | **Pause** | Freeze the timer at its current value |
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
-| **Set Countdown** | Set the countdown preset to an absolute number of seconds. Only affects countdown-mode timers |
-| **Adjust** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). Only affects countdown-mode timers |
+| **Set countdown** | Set the countdown preset to an absolute number of seconds. Only affects countdown-mode timers |
+| **Adjust countdown** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). Only affects countdown-mode timers |
 
 For Start and Toggle, select **Stopwatch (Count Up)** or **Countdown**. Countdown
 actions require a positive whole-second Duration and may use a binding. Stopwatch
@@ -479,17 +478,17 @@ actions do not store a duration.
 On the **Timers** page, configure up to three expiry actions for each timer slot:
 
 * Expire actions use the same action editor as buttons, so you can trigger a
-  Sound Alert, control Music, send an MQTT message, navigate to a screen, or
+  sound alert, control Music, send an MQTT message, navigate to a screen, or
   combine up to three actions.
 * A countdown copies the slot's current expiry list when it starts. Editing
   settings does not change an active run; the next countdown uses the new list.
 
 | Example expire action | What happens |
 |----------------------|-------------|
-| Sound Alert, MP3 Alert: `alarm` | Plays the "alarm" MP3 file |
-| MQTT Publish: `home/timer/expired` → `ON` | Sends an MQTT notification |
+| Play sound alert, MP3 Alert: `alarm` | Plays the "alarm" MP3 file |
+| Publish MQTT message: `home/timer/expired` → `ON` | Sends an MQTT notification |
 | Navigate to screen: `pad_alarm` | Shows an alarm pad |
-| Sound Alert, Tone Alert: `1000:300 200 1000:300` | Plays a beep pattern |
+| Play sound alert, Tone Alert: `1000:300 200 1000:300` | Plays a beep pattern |
 
 **Countdown overtime** — when a countdown timer reaches zero, it keeps running and displays negative values (e.g., "-0:05", "-1:23"). This lets you see how far past the target time you are. The `[timer:N_expired]` binding returns `ON` when the timer has crossed zero.
 
@@ -497,7 +496,7 @@ On the **Timers** page, configure up to three expiry actions for each timer slot
 
 ### Notification Action
 
-The **Show Notification** action displays a floating message bubble on the device screen — useful for confirmations, alerts, or status messages triggered by button presses or automations.
+The **Show notification** action displays a floating message bubble on the device screen — useful for confirmations, alerts, or status messages triggered by button presses or automations.
 
 **Fields:**
 
@@ -515,40 +514,40 @@ The **Show Notification** action displays a floating message bubble on the devic
 The bubble fades in over 200 ms, displays for the configured duration, then fades out. Tap anywhere on the bubble to dismiss it immediately. A new notification replaces the active one.
 
 **Example: confirmation bubble on MQTT publish**
-- **Tap action 1**: Publish MQTT → topic: `home/lights/toggle`, payload: `ON`
-- **Tap action 2**: Show Notification → message: `Lights toggled!`, duration: `2000`
+- **Tap action 1**: Publish MQTT message → topic: `home/lights/toggle`, payload: `ON`
+- **Tap action 2**: Show notification → message: `Lights toggled!`, duration: `2000`
 
 **Example: persistent alert from binding**
-- **Tap action**: Show Notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, duration: `0`, bg_color: `#1a3a1a`, location: `center`
+- **Tap action 1**: Show notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, duration: `0`, bg_color: `#1a3a1a`, location: `center`
 
 > **Home Assistant integration**: Notifications can also be triggered remotely via the **Notify** text entity. See the [Home Assistant Integration Guide](ha-integration-guide.md#notifications) for details and automation examples.
 
 ### Visual Alert Action
 
-The **Visual Alert** action raises a full-screen pulsing color overlay on the device screen — a strong ambient cue meant to grab attention across the room (for example, a critical threshold crossing). It complements audio feedback: pair it with a **Sound Alert** Tone Alert for a coordinated alarm. Unlike a notification, it draws no text — just a pulsing tint that sits above everything (including the screensaver).
+The **Visual alert** action raises a full-screen pulsing color overlay on the device screen — a strong ambient cue meant to grab attention across the room (for example, a critical threshold crossing). It complements audio feedback: pair it with a **Play sound alert** Tone Alert for a coordinated alarm. Unlike a notification, it draws no text — just a pulsing tint that sits above everything (including the screensaver).
 
 **Fields:**
 
 | Field | Description |
 |-------|-------------|
-| **Action** | **Start Alert** (default) raises the overlay and wakes the screen; **Stop Alert** clears it. |
+| **Command** | **Start alert** (default) raises the overlay and wakes the screen; **Stop alert** clears it. |
 | **Color** | Overlay tint hex (default red `#FF0000`). Supports binding templates, so an `[expr:...]` can pick red vs. amber based on severity. |
 | **Pattern** | **Breathe** (default, smooth eased pulse), **Blink** (hard on/off), or **Solid** (static tint). |
 | **Period (ms)** | Pulse cadence for breathe/blink (default `800`). Ignored for solid. |
 | **Intensity (%)** | Maximum overlay opacity, 1–100 (default `100` = full flash; lower values give a translucent tint). |
 | **Duration (ms)** | How long the alert runs. `0` (default) persists until stopped, tapped, or replaced by another alert. |
 
-Raising an alert wakes the screen first, so it is visible even when the display is asleep. Clear it with a **Stop Alert** action, by letting the duration elapse, or by tapping anywhere on the overlay. A new alert replaces the current one (last-write-wins). A notification bubble raised afterward stacks above the tint, so words stay readable.
+Raising an alert wakes the screen first, so it is visible even when the display is asleep. Clear it with a **Stop alert** command, by letting the duration elapse, or by tapping anywhere on the overlay. A new alert replaces the current one (last-write-wins). A notification bubble raised afterward stacks above the tint, so words stay readable.
 
 **Example: energy alarm from an MQTT trigger**
 - **Trigger**: MQTT topic `home/solar/power` with an `[expr:...]` threshold
-- **Action 1**: Visual Alert → op: `start`, color: `#FF0000`, pattern: `breathe`, duration: `0`
-- **Action 2**: Sound Alert → Tone Alert → pattern: `1000:200 100 1000:200`
-- A separate button (or a recovery trigger) fires **Visual Alert → op: `stop`** to clear it.
+- **Action 1**: Visual alert → command: `Start alert`, color: `#FF0000`, pattern: `breathe`, duration: `0`
+- **Action 2**: Play sound alert → Tone Alert → pattern: `1000:200 100 1000:200`
+- A separate button (or a recovery trigger) fires **Visual alert → command: `Stop alert`** to clear it.
 
 ### Home Assistant Service Action
 
-The **Home Assistant Service** action calls a Home Assistant service directly over the REST API — for example, toggling a light, running a scene, or opening a cover — without routing through MQTT.
+The **Call Home Assistant service** action calls a Home Assistant service directly over the REST API — for example, toggling a light, running a scene, or opening a cover — without routing through MQTT.
 
 **Prerequisites**: On the portal's **Home Assistant** page, set the **Home Assistant URL** (base URL including scheme and port, e.g. `http://192.168.1.50:8123`) and a **Long-Lived Access Token** (created under your HA profile). HTTPS URLs are supported (the certificate is not verified). Leave the URL empty to disable service actions.
 
@@ -563,13 +562,13 @@ The **Home Assistant Service** action calls a Home Assistant service directly ov
 The action sends `POST <ha_url>/api/services/<domain>/<service>` with the access token as a bearer credential. The HTTP request runs on the main loop (not the render task), so the UI stays responsive. These fields are stored literally and do **not** support binding templates.
 
 **Example: toggle a light**
-- **Tap action**: Home Assistant Service → entity ID: `light.living_room`, service: `toggle`
+- **Tap action 1**: Call Home Assistant service → entity ID: `light.living_room`, service: `toggle`
 
 **Example: set brightness on turn-on**
-- **Tap action**: Home Assistant Service → entity ID: `light.kitchen`, service: `turn_on`, service data: `{"brightness_pct": 75}`
+- **Tap action 1**: Call Home Assistant service → entity ID: `light.kitchen`, service: `turn_on`, service data: `{"brightness_pct": 75}`
 
 **Example: run a scene**
-- **Tap action**: Home Assistant Service → entity ID: `scene.movie_night`, service: `turn_on`
+- **Tap action 1**: Call Home Assistant service → entity ID: `scene.movie_night`, service: `turn_on`
 
 > See the [Home Assistant Integration Guide](ha-integration-guide.md#service-actions-rest-api) for setup details and more examples.
 
@@ -577,13 +576,13 @@ The action sends `POST <ha_url>/api/services/<domain>/<service>` with the access
 
 *Applies only to boards with audio hardware (ESP32-P4 boards with ES8311 codec).*
 
-Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Sound Alert** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
+Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Play sound alert** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
 
 **Behavior notes:**
 - Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
 - A configured full-screen action list takes precedence over normal button and widget taps.
   Clearing the list restores their normal interaction.
-- If any action in the sequence is a **Sound Alert** action, the device-level feedback beep is automatically suppressed.
+- If any action in the sequence is a **Play sound alert** action, the device-level feedback beep is automatically suppressed.
 - When multiple actions are configured and one of them navigates to a different screen, any subsequent actions in the sequence still execute safely. The last navigation wins (the user sees the final target screen).
 - Swipe gestures use the device-level tap beep with the same suppression logic.
 
@@ -602,14 +601,14 @@ Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes
 **How it works:**
 
 - The button area is divided into two equal zones along the selected axis.
-- **Zone A** (top or left) dispatches the **Tap Action** set.
-- **Zone B** (bottom or right) dispatches the **Long-Press Action** set.
+- **Zone A** (top or left) dispatches the **Up action** / **Left action** slots.
+- **Zone B** (bottom or right) dispatches the **Down action** / **Right action** slots.
 - Small chevron indicators (▲▼ or ◄►) appear at the edges so the user knows the button is directional.
 - The tap flash overlay covers only the tapped half for clear visual feedback.
 - Both zones use the device's **Tap Beep** pattern (suppressed when the action itself produces audio).
 - Long-press is disabled on rocker buttons since both action slots are used for the two zones.
 
-> **Note:** The action labels in the button editor change contextually when a rocker widget is selected — "Tap Action" becomes "Up Action" (or "Left Action") and "Long-Press Action" becomes "Down Action" (or "Right Action").
+> **Note:** The action slot labels in the button editor change contextually when a rocker widget is selected — "Tap action" becomes "Up action" (or "Left action") and "Long-press action" becomes "Down action" (or "Right action").
 
 **Configuration:**
 
@@ -626,8 +625,8 @@ Unlike the other widgets, the rocker doesn't visualize data. Instead, it changes
 | Widget | Rocker |
 | Direction | Vertical |
 | Center label | `☀️` or `[health:brightness]` |
-| Up Action | System Command → Adjust Brightness → `10` |
-| Down Action | System Command → Adjust Brightness → `-10` |
+| Up action 1 | Brightness → command: Adjust brightness → `10` |
+| Down action 1 | Brightness → command: Adjust brightness → `-10` |
 
 Labels, icons, and colors work alongside the rocker widget. A typical rocker button uses the center label for an icon or the current value, with top/bottom labels for context.
 
@@ -677,11 +676,11 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 | Direction | Horizontal |
 | Col Span | 2 |
 | Center label | `[timer:1;mm:ss]` |
-| Adjustment Action | Type: `timer`, Timer: `1`, Command: `Adjust Countdown`, Value: `{step}` |
+| Adjustment Action | Type: `timer`, Timer: `1`, Command: `Adjust countdown`, Value: `{step}` |
 | Small Step | 1 |
 | Large Step | 10 |
 
-Tapping the inner-right zone sends an "Adjust Countdown" action with value `1` (add 1 second). Tapping the outer-left zone sends value `-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1;mm:ss]` binding.
+Tapping the inner-right zone sends an "Adjust countdown" action with value `1` (add 1 second). Tapping the outer-left zone sends value `-10` (subtract 10 seconds). The center label shows the live timer value via the `[timer:1;mm:ss]` binding.
 
 ### List
 
@@ -708,8 +707,8 @@ Tapping a list item dispatches the button's configured **Tap Actions** with `[li
 |---------|-------------|
 | **Data Binding** | The provider ID string (e.g., `shutter_tests`). Not an MQTT topic |
 | **Filter** | Optional comma-separated rules that include or exclude items returned by the provider. Plain text — binding tokens like `[mqtt:...]` are **not** resolved here. Empty = all items. See syntax below |
-| **Select Action** (tap) | The button's normal tap action(s), dispatched when a list item is tapped. Use `[list:provider_id.selected]` as the screen target to navigate to the selected item |
-| **Long-Press Action** | Optional long-press action(s), dispatched on item long-press |
+| **Select action** (tap) | The button's normal tap action(s), dispatched when a list item is tapped. Use `[list:provider_id.selected]` as the screen target to navigate to the selected item |
+| **Long-press action** | Optional long-press action(s), dispatched on item long-press |
 
 **Filter syntax:**
 
@@ -739,7 +738,7 @@ The `[list:provider_id.selected]` binding token is scoped per provider — each 
 |---------|-------|
 | Widget | List |
 | Data Binding | `shutter_tests` |
-| Tap Action | Type: `mqtt`, Topic: `macropad/test/start`, Payload: `[list:shutter_tests.selected]` |
+| Select action 1 | Type: `mqtt`, Topic: `macropad/test/start`, Payload: `[list:shutter_tests.selected]` |
 
 When the user taps "Full Range Test" (id: `full-range`), the widget dispatches an MQTT publish to `macropad/test/start` with payload `full-range`.
 
@@ -755,7 +754,7 @@ When the user taps "Full Range Test" (id: `full-range`), the widget dispatches a
 |---------|-------|
 | Widget | List |
 | Data Binding | `pads` |
-| Tap Action | Type: `screen`, Screen: `[list:pads.selected]` |
+| Select action 1 | Type: `screen`, Screen: `[list:pads.selected]` |
 
 Tapping "Pad 2: Home Assistant" (id: `pad_2`) navigates to that pad screen.
 
