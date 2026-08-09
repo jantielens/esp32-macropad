@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **Microphone input abstraction and ESP32-P4 driver**: audio-input boards now expose a board-neutral API for one-task-at-a-time capture of native interleaved PCM frames. The `esp32-p4-lcd4b` target enables the ES7210 microphone ADC through the existing ES8311 I2S transport, starting RX only while a caller owns a capture session. The abstraction leaves recording, encoding, storage, and network delivery to its callers.
+* **Demand-driven microphone level bindings**: audio-input display boards now expose read-only `[audio:input.rms]` and `[audio:input.peak]` bindings as 0-100 sound levels, plus `[audio:input.active]` to report whether the microphone meter is currently sampling. Sampling starts only while one of these bindings is resolving on a visible button, so boards and pads that do not use the feature do not spend I2S or CPU time on microphone reads.
+
 ### Changed
 
 * **Action editor UX is now consistent across the portal and MCP**: actions are organized into catalog-driven groups such as Navigation, Connectivity, Audio, Display, Timer, and Device, with sentence-case type and command labels. Multi-command actions expose their commands from the firmware catalog, device-class actions use the same metadata path, and Shutter Tester actions are organized by command family. Action arrays now use three fixed ordered slots with contextual labels such as **Action 1**, **Left action 1**, or **Select action 1**; empty slots collapse to **Add action** and are omitted when saved. Existing persisted action types, fields, and JSON remain unchanged, including round-tripping actions unavailable in the current build. The same catalog also supplies concrete field metadata to MCP clients, while `GET /api/info?catalog=1` supplies the portal projection.

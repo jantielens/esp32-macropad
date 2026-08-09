@@ -1,6 +1,9 @@
 #include "drivers/pcm510xa_audio_driver.h"
 
 #include <Arduino.h>
+#if HAS_AUDIO_INPUT
+#include "audio_input_driver.h"
+#endif
 #include "audio_gain.h"
 #include "log_manager.h"
 
@@ -111,3 +114,7 @@ AudioOutputDriver* audio_output_driver_create() {
     static PCM510xADriver driver;
     return &driver;
 }
+
+#if HAS_AUDIO_INPUT
+AudioInputDriver* audio_input_driver_create() { return nullptr; }
+#endif

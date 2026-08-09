@@ -300,6 +300,10 @@ Active records are never evicted. When all four records are active or retained,
 
 - `get_capabilities` — manifest of widget types + fields, button schema, label-style
   DSL, binding schemes (incl. `[pad:name]` and `template_pad`), and grid limits.
+  On microphone-input boards, it also advertises the read-only `[audio:input.rms]`,
+  `[audio:input.peak]`, and `[audio:input.active]` bindings. RMS and peak are
+  sound levels from 0 to 100; `active` is `true` while the resolver-driven meter
+  is sampling.
   Its `action_types` array is generated from the same firmware catalog that
   drives the portal's action-type picker (`action_catalog.cpp`), so both
   surfaces describe the same groups, labels, commands, and fields. Each entry

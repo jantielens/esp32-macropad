@@ -298,6 +298,20 @@ struct HwButtonDef {
 #define HAS_AUDIO false
 #endif
 
+// Enable board-selected PCM microphone input support.
+#ifndef HAS_AUDIO_INPUT
+#define HAS_AUDIO_INPUT false
+#endif
+
+// Enable ES7210 microphone ADC initialization on the shared I2S transport.
+#ifndef HAS_ES7210_MIC
+#define HAS_ES7210_MIC false
+#endif
+
+#if HAS_AUDIO_INPUT && !HAS_AUDIO
+#error "HAS_AUDIO_INPUT requires HAS_AUDIO."
+#endif
+
 // NS4150B power amplifier enable pin.
 #ifndef AUDIO_PA_PIN
 #define AUDIO_PA_PIN -1
@@ -312,6 +326,11 @@ struct HwButtonDef {
 // I2C address of the audio codec (e.g. ES8311 = 0x18).
 #ifndef AUDIO_CODEC_ADDR
 #define AUDIO_CODEC_ADDR 0x18
+#endif
+
+// I2C address of the microphone ADC (e.g. ES7210 = 0x40).
+#ifndef AUDIO_MIC_ADC_ADDR
+#define AUDIO_MIC_ADC_ADDR 0x40
 #endif
 
 // I2S master clock pin.
@@ -387,6 +406,10 @@ struct HwButtonDef {
 // Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 #ifndef AUDIO_OUTPUT_DRIVER
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
+#endif
+
+#if HAS_AUDIO_INPUT && AUDIO_OUTPUT_DRIVER != AUDIO_OUTPUT_DRIVER_ES8311
+#error "HAS_AUDIO_INPUT requires an audio output driver with a microphone input path."
 #endif
 
 // ============================================================================

@@ -46,6 +46,9 @@
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "music_binding.h"
+#if HAS_AUDIO_INPUT && HAS_DISPLAY
+#include "audio_input_binding.h"
+#endif
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
@@ -65,6 +68,10 @@
 
 #if HAS_AUDIO
 #include "audio.h"
+#endif
+
+#if HAS_AUDIO_INPUT
+#include "audio_input.h"
 #endif
 
 #include "i2c_bus.h"
@@ -287,6 +294,9 @@ void setup()
 	// so device_config.audio_volume is available).
 	#if HAS_AUDIO
 	audio_init(device_config.audio_volume);
+	#if HAS_AUDIO_INPUT
+	audio_input_meter_init();
+	#endif
 	#endif
 
 	const bool force_config_mode_burst = power_manager_should_force_config_mode();
@@ -489,6 +499,9 @@ void setup()
 	pad_binding_init();
 	timer_binding_init();
 	music_binding_init();
+	#if HAS_AUDIO_INPUT && HAS_DISPLAY
+	audio_input_binding_init();
+	#endif
 	list_binding_init();
 	net_binding_init();
 	timer_config_init();

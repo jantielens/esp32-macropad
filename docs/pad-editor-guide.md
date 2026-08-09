@@ -188,6 +188,17 @@ You can even put multiple bindings in a single label:
 
 This might display "22.3° / 45%". See the [Binding Templates](#binding-templates) chapter for full syntax.
 
+On boards with microphone input, these read-only bindings show live microphone
+state:
+
+* `[audio:input.rms]` is the average sound level from 0 to 100.
+* `[audio:input.peak]` is the highest recent sound level from 0 to 100.
+* `[audio:input.active]` is `true` while microphone sampling is active, and
+  `false` when the meter is idle.
+
+Microphone sampling starts only while an audio input binding is being resolved
+on a visible button.
+
 > **Tip**: The button editor has a **?** button next to each label field that opens a built-in binding reference with examples.
 
 ### Label Style Overrides
