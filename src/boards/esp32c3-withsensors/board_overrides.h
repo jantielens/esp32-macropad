@@ -35,6 +35,11 @@
 
 // Enable user button (GPIO9 on ESP32-C3 Super Mini)
 #define HAS_BUTTON true
+
+// Hardware button actions can use pausable continuations. Keep one slot on
+// this internal-RAM-constrained C3 target instead of the default three.
+#define ACTION_CONTINUATION_SLOTS 1
+
 // User button GPIO
 #define BUTTON_PIN 9
 // Button polarity (active-low)

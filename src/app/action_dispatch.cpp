@@ -239,8 +239,8 @@ static ActionResult action_dispatch_resolved(const ButtonAction& act, const char
         }
         if (!continuation_token) {
             LOGW(TAG, "%s delay: %s", label,
-                 action_continuation_is_active()
-                     ? "another pausable action is already active"
+                 action_continuation_is_full()
+                     ? "all pausable action slots are occupied"
                      : "must be used in an action list");
             return ACTION_FAILED;
         }

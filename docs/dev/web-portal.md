@@ -258,7 +258,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
   - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
-  - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. Only one pausable action can be pending device-wide at a time
+  - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. The firmware catalog supplies the board's maximum concurrent pausable-action count (three by default)
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, content padding, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
@@ -1237,7 +1237,9 @@ but is removed during parsing and has no runtime effect.
 The built-in `delay` action uses `{ "type": "delay", "duration_ms": 3000 }`.
 `duration_ms` must be a whole number from 1 to 55,000. It pauses the current
 ordered action list and resumes remaining actions after the duration elapses.
-Only one pausable action can be pending device-wide at a time.
+Up to three pausable actions can be pending device-wide at a time by default.
+The board may override `ACTION_CONTINUATION_SLOTS`; the portal reads the active
+limit from the action catalog.
 
 ---
 

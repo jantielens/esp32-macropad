@@ -62,7 +62,7 @@ const FIXTURE_CATALOG = [
         commands: ['toggle', 'start', 'stop', 'pause', 'resume', 'reset', 'set', 'adjust']
             .map(function(id) { return { id: id, label: id }; })
     },
-    { type: 'delay', group: 'Timer', label: 'Delay' },
+    { type: 'delay', group: 'Timer', label: 'Delay', max_pending_actions: 3 },
     {
         type: 'shutter', group: 'Shutter Tester', label: 'Shutter tester',
         command_families: [
@@ -138,7 +138,7 @@ assert.strictEqual(context.actionEditorFamilyForCommand('shutter', 'toggle_lock'
 // Selecting a family repopulates the command select for that family alone.
 const prefix = 'picker';
 const editorHtml = context.actionEditorHTML(prefix, '', {});
-assert(editorHtml.includes('Only one pausable action can be pending device-wide at a time'));
+assert(editorHtml.includes('Up to 3 pausable actions can be pending device-wide at a time'));
 const familyEl = document.getElementById(prefix + '-shutter-family');
 familyEl.value = 'session';
 context.actionEditorShutterFamilyChanged(prefix);

@@ -46,6 +46,12 @@ function actionEditorCatalogEntry(type) {
     return null;
 }
 
+function actionEditorPausableActionLimit() {
+    var delayAction = actionEditorCatalogEntry('delay');
+    return delayAction && Number.isInteger(delayAction.max_pending_actions)
+        ? delayAction.max_pending_actions : 1;
+}
+
 // Grouped <optgroup> markup for the type <select>, in catalog order.
 function actionEditorTypeOptionsHTML() {
     var order = [];
@@ -140,6 +146,7 @@ function actionEditorEnsureUnsupportedOption(select, type) {
 // opts:   { showBleHint: bool, showKeyHelp: bool }
 function actionEditorHTML(prefix, label, opts) {
     opts = opts || {};
+    var pausableActionLimit = actionEditorPausableActionLimit();
     var h = '';
     h += '<div class="form-group">';
     if (label) h += '<label class="form-label" for="' + prefix + '-type">' + label + '</label>';
@@ -347,7 +354,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div class="form-group">';
     h += '<label class="form-label" for="' + prefix + '-delay-duration">Duration (ms)</label>';
     h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-delay-duration" min="1" max="' + ACTION_DELAY_MAX_DURATION_MS + '" value="1000" required>';
-    h += '<small>Pauses this action list before running the following action. Only one pausable action can be pending device-wide at a time; another pausable action stops its action list.</small>';
+    h += '<small>Pauses this action list before running the following action. Up to ' + pausableActionLimit + ' pausable actions can be pending device-wide at a time; another pausable action stops its action list when all slots are occupied.</small>';
     h += '</div></div>';
     // Device command (reboot / Wi-Fi / screensaver)
     h += '<div id="' + prefix + '-system-group" style="display:none;">';

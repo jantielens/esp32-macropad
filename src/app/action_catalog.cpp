@@ -2,6 +2,7 @@
 
 #if HAS_DISPLAY || HAS_BUTTON
 
+#include "action_continuation.h"
 #include "action_registry.h"
 
 namespace {
@@ -158,6 +159,7 @@ void action_catalog_emit(JsonArray actions, bool include_field_docs) {
     {
         JsonObject a = add_action(actions, "delay", "Timer", "Delay");
         add_field(a, include_field_docs, "duration_ms", "whole milliseconds, 1-55000");
+        a["max_pending_actions"] = ACTION_CONTINUATION_SLOTS;
     }
     {
         // reboot/wifi_reconnect always compile; screensaver needs a display to sleep.

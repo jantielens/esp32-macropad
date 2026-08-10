@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 
 #include "binding_template.h"
+#include "action_continuation.h"
 #include "timer_binding.h"
 #include "timer_engine.h"
 #include "widgets/widget.h"
@@ -16,7 +17,8 @@ extern "C" unsigned long millis() {
     return g_now;
 }
 
-void action_list_dispatch(const ButtonAction*, uint8_t, const char*) {}
+void action_list_dispatch(const ButtonAction*, uint8_t, const char*,
+                          ActionContinuationOwner) {}
 
 static void check_resolves(const char* token, const char* expected) {
     char output[64];

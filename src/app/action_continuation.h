@@ -23,8 +23,8 @@ enum ActionContinuationOwner : uint8_t {
     ACTION_CONTINUATION_OWNER_LVGL,
 };
 
-// Reserve the single continuation slot and copy an action suffix. The caller
-// must release it unless the dispatched action returns ACTION_PENDING.
+// Reserve a continuation slot and copy an action suffix. The caller must
+// release it unless the dispatched action returns ACTION_PENDING.
 bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_count,
                                const char* label, uint32_t* token,
                                ActionContinuationOwner owner = ACTION_CONTINUATION_OWNER_LOOP);
@@ -35,8 +35,8 @@ void action_continuation_mark_pending(uint32_t token);
 // the saved suffix resumes later on its originating dispatch task.
 bool action_continuation_complete(uint32_t token, bool success);
 
-// Reports whether the single continuation slot is currently reserved.
-bool action_continuation_is_active();
+// Reports whether every continuation slot is currently reserved.
+bool action_continuation_is_full();
 
 // Arrange successful completion after duration_ms. Used by the built-in delay
 // action; dispatch still resumes only from the normal owner task.

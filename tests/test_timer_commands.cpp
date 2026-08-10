@@ -9,6 +9,7 @@
 #include "timer_command.h"
 #include "timer_config.h"
 #include "timer_mcp_adapter.h"
+#include "action_continuation.h"
 
 static unsigned long g_now = 0;
 extern "C" unsigned long millis() { return g_now; }
@@ -18,7 +19,8 @@ static bool g_restart_on_first = false;
 static bool g_snapshot_ok = false;
 static TimerExpirySnapshot g_snapshot = {};
 
-void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char*) {
+void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char*,
+                          ActionContinuationOwner) {
     for (uint8_t index = 0; index < count; index++) {
         (void)actions[index];
         g_dispatched++;

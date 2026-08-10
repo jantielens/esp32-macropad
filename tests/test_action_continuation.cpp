@@ -1,4 +1,4 @@
-// Unit tests for the fixed action continuation slot.
+// Unit tests for the fixed action continuation pool.
 
 #include <cstdio>
 #include <cstring>
@@ -115,14 +115,45 @@ TEST(completed_suffix_stays_with_originating_owner) {
               ACTION_CONTINUATION_SUCCESS);
 }
 
-TEST(active_slot_rejects_second_and_stale_token) {
-    const uint32_t token = begin_with_suffix(ACTION_TYPE_KEY);
-    ASSERT_TRUE(token != 0);
+TEST(pool_accepts_capacity_and_rejects_overflow) {
     ButtonAction suffix[1] = {};
+    uint32_t tokens[ACTION_CONTINUATION_SLOTS] = {};
+    for (uint8_t index = 0; index < ACTION_CONTINUATION_SLOTS; ++index) {
+        ASSERT_TRUE(action_continuation_begin(suffix, 1, "Pool", &tokens[index]));
+    }
+    uint32_t overflow_token = 0;
+    ASSERT_TRUE(!action_continuation_begin(suffix, 1, "Overflow", &overflow_token));
+    ASSERT_TRUE(action_continuation_is_full());
+    action_continuation_release(tokens[0]);
+    ASSERT_TRUE(!action_continuation_is_full());
+    for (uint8_t index = 1; index < ACTION_CONTINUATION_SLOTS; ++index) {
+        action_continuation_release(tokens[index]);
+    }
+}
+
+TEST(ready_slot_bypasses_earlier_unfinished_slot) {
+    ButtonAction first_suffix[1] = {};
+    ButtonAction second_suffix[1] = {};
+    strlcpy(first_suffix[0].type, ACTION_TYPE_KEY, sizeof(first_suffix[0].type));
+    strlcpy(second_suffix[0].type, ACTION_TYPE_MQTT, sizeof(second_suffix[0].type));
+    uint32_t first_token = 0;
     uint32_t second_token = 0;
-    ASSERT_TRUE(!action_continuation_begin(suffix, 1, "Second", &second_token));
-    action_continuation_release(token);
-    ASSERT_TRUE(!action_continuation_complete(token, true));
+    ASSERT_TRUE(action_continuation_begin(first_suffix, 1, "First", &first_token));
+    ASSERT_TRUE(action_continuation_begin(second_suffix, 1, "Second", &second_token));
+    action_continuation_mark_pending(first_token);
+    action_continuation_mark_pending(second_token);
+    ASSERT_TRUE(action_continuation_complete(second_token, true));
+
+    ButtonAction out[MAX_BUTTON_ACTIONS - 1] = {};
+    uint8_t count = 0;
+    char label[ACTION_CONTINUATION_LABEL_MAX_LEN];
+    ASSERT_EQ(action_continuation_take(out, &count, label, sizeof(label)),
+              ACTION_CONTINUATION_SUCCESS);
+    ASSERT_EQ(count, 1);
+    ASSERT_TRUE(strcmp(label, "Second") == 0);
+    ASSERT_TRUE(strcmp(out[0].type, ACTION_TYPE_MQTT) == 0);
+    action_continuation_release(first_token);
+    ASSERT_TRUE(!action_continuation_complete(first_token, true));
 }
 
 TEST(pending_action_pauses_and_resumes_copied_suffix) {
@@ -164,7 +195,8 @@ int main() {
     RUN(timeout_discards_suffix);
     RUN(scheduled_success_waits_for_due_time);
     RUN(completed_suffix_stays_with_originating_owner);
-    RUN(active_slot_rejects_second_and_stale_token);
+    RUN(pool_accepts_capacity_and_rejects_overflow);
+    RUN(ready_slot_bypasses_earlier_unfinished_slot);
     RUN(pending_action_pauses_and_resumes_copied_suffix);
     RUN(failed_pending_action_does_not_resume_suffix);
     std::printf("action continuation: %d passed, %d failed\n", g_pass, g_fail);

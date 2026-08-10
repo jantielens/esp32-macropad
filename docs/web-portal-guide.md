@@ -314,8 +314,9 @@ For sensitive normal-button actions, open **Action Safety** in the Actions group
 
 Choose **Timer / Delay** when a later action must wait. Set a whole-number
 duration from 1 to 55,000 ms. Delay pauses only the current ordered action list;
-when it completes, the next action runs. Only one pausable action can be pending
-device-wide at a time; starting another pausable action stops its action list.
+when it completes, the next action runs. By default, up to three pausable actions
+can be pending device-wide at a time; starting another pausable action when all
+slots are occupied stops its action list.
 
 The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
 

@@ -41,7 +41,7 @@ void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char
         const ActionResult result = action_dispatch(actions[i], label,
                                                     continuation_token);
         if (!reserved) {
-            // An existing continuation must not prevent unrelated synchronous
+            // Occupied continuation slots must not prevent unrelated synchronous
             // action arrays from running. Pending-capable actions treat token 0
             // as unavailable and return ACTION_FAILED before starting work.
             if (result == ACTION_PENDING) {

@@ -574,6 +574,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define MAX_MQTT_TRIGGERS 8
 #endif
 
+// Maximum independent pending action lists; each consumes about 884 bytes of internal RAM; constrained boards should override this to 1.
+#ifndef ACTION_CONTINUATION_SLOTS
+#define ACTION_CONTINUATION_SLOTS 3
+#endif
+
 // ============================================================================
 // Sensors (Optional)
 // ============================================================================

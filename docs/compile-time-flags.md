@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 257
+Total flags: 258
 
 ### Features (HAS_*)
 
@@ -168,6 +168,7 @@ Total flags: 257
 
 ### Other
 
+- **ACTION_CONTINUATION_SLOTS** default: `3` — Maximum independent pending action lists; each consumes about 884 bytes of internal RAM; constrained boards should override this to 1.
 - **AUDIO_CODEC_ADDR** default: `0x18` — I2C address of the audio codec (e.g. ES8311 = 0x18).
 - **AUDIO_DEFAULT_VOLUME** default: `50` — Default volume used when no NVS value has been stored.
 - **AUDIO_DMA_DESC_NUM** default: `6` — I2S DMA descriptor count, pinned so starvation timing stays in sync with I2S.
@@ -431,6 +432,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_BUTTON**
   - src/app/action_catalog.cpp
   - src/app/action_catalog.h
+  - src/app/action_continuation.cpp
+  - src/app/action_continuation.h
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
   - src/app/action_list.cpp
@@ -462,6 +465,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_DISPLAY**
   - src/app/action_catalog.cpp
   - src/app/action_catalog.h
+  - src/app/action_continuation.cpp
+  - src/app/action_continuation.h
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
   - src/app/action_list.cpp
@@ -896,6 +901,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/touch_drivers.cpp
   - src/app/touch_manager.cpp
+- **ACTION_CONTINUATION_SLOTS**
+  - src/app/board_config.h
 - **AP_MAX_CONNECTIONS**
   - src/app/web_portal_ap.cpp
 - **AUDIO_CODEC_ADDR**

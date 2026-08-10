@@ -369,7 +369,7 @@ For static images or cameras that only expose a snapshot endpoint, set the URL t
 
 ### Actions (Tap and Long-Press)
 
-Each button supports up to **3 sequential actions** per gesture, one for **tap** and one for **long-press** (triggered after holding ~500ms). Actions execute in order: for example, action 1 publishes an MQTT message, action 2 plays a sound alert, and action 3 navigates to another screen. A **Delay** action pauses its current list for the configured duration, then runs its remaining actions. Only one pausable action can be pending device-wide at a time; starting another pausable action stops its action list.
+Each button supports up to **3 sequential actions** per gesture, one for **tap** and one for **long-press** (triggered after holding ~500ms). Actions execute in order: for example, action 1 publishes an MQTT message, action 2 plays a sound alert, and action 3 navigates to another screen. A **Delay** action pauses its current list for the configured duration, then runs its remaining actions. By default, up to three pausable actions can be pending device-wide at a time; starting another pausable action when all slots are occupied stops its action list.
 
 Each gesture always shows three fixed action slots. An unused slot is collapsed and reads **Add tap action** or **Add long-press action**; click it to choose a type. Once a slot has an action, it expands and its heading shows the slot's position (**Tap action 1**, **Tap action 2**, and so on). To remove an action, set its type back to **(none)** — the slot collapses again.
 
@@ -399,7 +399,7 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | Display | **Show notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
 | Display | **Visual alert** | Command: Start or Stop a full-screen pulsing color overlay used as an ambient alarm. Configure the color (bindable), pattern (breathe/blink/solid), period, intensity, and duration. ESP32-P4 boards only. See [Visual Alert Action](#visual-alert-action) below. |
 | Timer | **Timer** | Command: Toggle, Start, Stop, Pause, Resume, Reset, Set countdown, or Adjust countdown, on one of 3 independent timers. Start and Toggle select stopwatch or countdown mode; countdown duration, Set, and Adjust values support binding templates. See [Timer Actions](#timer-actions) below. |
-| Timer | **Delay** | Pause the current action list for a whole-number duration from 1 to 55,000 ms, then continue with the next action. Only one pausable action can be pending device-wide at a time. The duration is not bindable. |
+| Timer | **Delay** | Pause the current action list for a whole-number duration from 1 to 55,000 ms, then continue with the next action. By default, up to three pausable actions can be pending device-wide at a time. The duration is not bindable. |
 | Device | **Device command** | Command: Restart device, Reconnect Wi-Fi, or Enable screensaver. |
 
 **Example setup for a smart light:**

@@ -25,6 +25,9 @@
 #ifndef MAX_PADS
 #define MAX_PADS 16
 #endif
+#ifndef ACTION_CONTINUATION_SLOTS
+#define ACTION_CONTINUATION_SLOTS 3
+#endif
 #ifndef UI_SCALE_TIER
 #define UI_SCALE_TIER 0
 #endif
