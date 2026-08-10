@@ -380,6 +380,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_config.cpp
 - **HAS_AUDIO_INPUT**
   - src/app/app.ino
+  - src/app/audio_input.cpp
+  - src/app/audio_input.h
+  - src/app/audio_input_binding.cpp
   - src/app/board_config.h
   - src/app/drivers/es8311_audio_driver.cpp
   - src/app/drivers/es8311_audio_driver.h
@@ -468,6 +471,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_registry.cpp
   - src/app/action_registry.h
   - src/app/app.ino
+  - src/app/audio_input_binding.cpp
   - src/app/board_config.h
   - src/app/boot_actions.cpp
   - src/app/boot_actions.h
@@ -663,6 +667,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_tile_builder.cpp
   - src/app/web_portal_firmware.cpp
 - **HAS_MCP**
+  - src/app/audio_input_binding.cpp
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h

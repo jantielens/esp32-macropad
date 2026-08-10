@@ -358,11 +358,12 @@ echo
 echo "=== Building unit tests: action_parse ==="
 g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -include tests/log_manager.h -include tests/board_config.h \
-    -I src/app \
+    -I tests -I src/app \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_parse.cpp \
     src/app/action_parse.cpp \
     src/app/action_list.cpp \
+    src/app/action_continuation.cpp \
     src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     src/app/binding_template.cpp \
@@ -371,6 +372,20 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
 
 echo "=== Running unit tests: action_parse ==="
 ./tests/bin/test_action_parse
+echo
+
+echo "=== Building unit tests: action continuation ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I tests -I src/app -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_action_continuation.cpp \
+    src/app/action_list.cpp \
+    src/app/action_continuation.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_continuation
+
+echo "=== Running unit tests: action continuation ==="
+./tests/bin/test_action_continuation
 echo
 
 echo "=== Building unit tests: pad_cycle ==="

@@ -33,14 +33,16 @@ static void strip_serialize(const ButtonAction& act, JsonObject obj) {
     if (p.value[0])   obj["strip_value"]   = p.value;
 }
 
-static void strip_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult strip_dispatch(const ButtonAction& act, const char* label,
+                                   uint32_t /*continuation_token*/) {
     const StripPayload& p = strip_payload(act);
     if (!p.command[0]) {
         LOGW(TAG, "%s strip: empty command", label);
-        return;
+        return ACTION_COMPLETE;
     }
     LOGI(TAG, "%s strip: %s %s", label, p.command, p.value);
     test_strip_dispatch(p.command, p.value);
+    return ACTION_COMPLETE;
 }
 
 // `value` is the single bindable/numeric field (numeric rocker {step} target

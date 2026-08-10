@@ -112,6 +112,16 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         act.payload.cycle_pad.wrap = a["wrap"] | true;
         act.payload.cycle_pad.excluded_mask =
             pad_cycle_parse_exclusions(a["excluded_pads"] | "");
+    } else if (strcmp(act.type, ACTION_TYPE_DELAY) == 0) {
+        if (!a["duration_ms"].is<uint32_t>()) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
+        act.payload.delay.duration_ms = a["duration_ms"].as<uint32_t>();
+        if (!action_delay_duration_is_valid(act.payload.delay.duration_ms)) {
+            memset(&act, 0, sizeof(ButtonAction));
+            return;
+        }
     } else if (strcmp(act.type, "beep") == 0 || strcmp(act.type, "sound") == 0) {
         memset(&act, 0, sizeof(ButtonAction));
         return;
@@ -190,6 +200,8 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
         pad_cycle_format_exclusions(act.payload.cycle_pad.excluded_mask,
                                     exclusions, sizeof(exclusions));
         if (exclusions[0]) obj["excluded_pads"] = exclusions;
+    } else if (strcmp(act.type, ACTION_TYPE_DELAY) == 0) {
+        obj["duration_ms"] = act.payload.delay.duration_ms;
     } else {
         const ActionTypeDef* t = action_type_find(act.type);
         if (t && t->serialize) t->serialize(act, obj);

@@ -5,7 +5,7 @@
 #include "../screens/pad_screen.h"
 #include "../list_provider.h"
 #include "../list_binding.h"
-#include "../action_dispatch.h"
+#include "../action_list.h"
 #include <string.h>
 #include <stddef.h>
 
@@ -39,9 +39,7 @@ static void list_dispatch_actions(ListWidgetState* st, uintptr_t idx,
     list_binding_set_selected(st->provider_id, st->ids[idx]);
     ButtonAction local[MAX_BUTTON_ACTIONS];
     memcpy(local, src, count * sizeof(ButtonAction));
-    for (uint8_t i = 0; i < count; i++) {
-        action_dispatch(local[i], label);
-    }
+    action_list_dispatch(local, count, label, ACTION_CONTINUATION_OWNER_LVGL);
 }
 
 // ---- Event handlers ----

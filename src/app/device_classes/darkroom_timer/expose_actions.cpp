@@ -32,14 +32,16 @@ static void expose_serialize(const ButtonAction& act, JsonObject obj) {
     if (p.value[0])   obj["expose_value"]   = p.value;
 }
 
-static void expose_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult expose_dispatch(const ButtonAction& act, const char* label,
+                                    uint32_t /*continuation_token*/) {
     const ExposePayload& p = expose_payload(act);
     if (!p.command[0]) {
         LOGW(TAG, "%s expose: empty command", label);
-        return;
+        return ACTION_COMPLETE;
     }
     LOGI(TAG, "%s expose: %s %s", label, p.command, p.value);
     expose_timer_dispatch(p.command, p.value);
+    return ACTION_COMPLETE;
 }
 
 // `value` is the single bindable/numeric field (numeric rocker {step} target

@@ -132,6 +132,16 @@ static const char* validate_action(JsonObjectConst action) {
         }
         return nullptr;
     }
+    if (strcmp(type, ACTION_TYPE_DELAY) == 0) {
+        if (!action.containsKey("duration_ms") || !action["duration_ms"].is<uint32_t>()) {
+            return "delay duration_ms must be a whole number";
+        }
+        const uint32_t duration_ms = action["duration_ms"].as<uint32_t>();
+        if (!action_delay_duration_is_valid(duration_ms)) {
+            return "delay duration_ms must be 1-55000";
+        }
+        return nullptr;
+    }
     if (strcmp(type, ACTION_TYPE_HA_SERVICE) != 0) return nullptr;
 
     if (!action.containsKey("entity_id")) return "ha_service missing entity_id";
@@ -189,6 +199,7 @@ static bool action_type_known(const char* type) {
         ACTION_TYPE_VOLUME, ACTION_TYPE_BRIGHTNESS, ACTION_TYPE_TIMER,
         ACTION_TYPE_SOUND_ALERT, ACTION_TYPE_NOTIFY, ACTION_TYPE_SYSTEM,
         ACTION_TYPE_HA_SERVICE, ACTION_TYPE_VISUAL_ALERT, ACTION_TYPE_CYCLE_PAD,
+        ACTION_TYPE_DELAY,
     };
     for (const char* builtin : builtins) {
         if (strcmp(type, builtin) == 0) return true;

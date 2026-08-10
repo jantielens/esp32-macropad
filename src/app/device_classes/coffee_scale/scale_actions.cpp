@@ -63,7 +63,8 @@ static void scale_describe(JsonObject& out) {
 }
 
 #if HAS_SCALE
-static void scale_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult scale_dispatch(const ButtonAction& act, const char* label,
+                                   uint32_t /*continuation_token*/) {
     const ScalePayload& sp = scale_payload(act);
     const char* cmd = sp.command;
     if (!cmd[0] || strcmp(cmd, "tare") == 0) {
@@ -91,10 +92,13 @@ static void scale_dispatch(const ButtonAction& act, const char* label) {
     } else {
         LOGW(TAG, "%s scale: unknown cmd '%s'", label, cmd);
     }
+    return ACTION_COMPLETE;
 }
 #else
-static void scale_dispatch(const ButtonAction& /*act*/, const char* label) {
+static ActionResult scale_dispatch(const ButtonAction& /*act*/, const char* label,
+                                   uint32_t /*continuation_token*/) {
     LOGW(TAG, "%s scale: not compiled (HAS_SCALE=0)", label);
+    return ACTION_COMPLETE;
 }
 #endif
 

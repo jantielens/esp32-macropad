@@ -2,6 +2,8 @@
 
 #if HAS_DISPLAY || HAS_BUTTON
 
+#include "action_continuation.h"
+#include "action_list.h"
 #include "action_registry.h"
 #include "log_manager.h"
 
@@ -158,10 +160,12 @@ void action_collect_binding_topics(const ButtonAction& act, void* user_data) {
 }
 #endif // HAS_MQTT
 
-static void action_dispatch_resolved(const ButtonAction& act, const char* label);
+static ActionResult action_dispatch_resolved(const ButtonAction& act, const char* label,
+                                             uint32_t continuation_token);
 
-void action_dispatch(const ButtonAction& act_in, const char* label) {
-    if (!act_in.type[0]) return;
+ActionResult action_dispatch(const ButtonAction& act_in, const char* label,
+                             uint32_t continuation_token) {
+    if (!act_in.type[0]) return ACTION_COMPLETE;
 
     // Resolve binding templates in value fields before dispatch.
     // binding_template_resolve accesses MQTT subscription state shared with the
@@ -181,18 +185,19 @@ void action_dispatch(const ButtonAction& act_in, const char* label) {
 #endif
     if (!resolved) {
         LOGW(TAG, "%s binding result exceeds action field capacity", label);
-        return;
+        return ACTION_COMPLETE;
     }
-        action_dispatch_resolved(act, label);
+        return action_dispatch_resolved(act, label, continuation_token);
     } else {
-        action_dispatch_resolved(act_in, label);
+        return action_dispatch_resolved(act_in, label, continuation_token);
     }
 #else
-    action_dispatch_resolved(act_in, label);
+    return action_dispatch_resolved(act_in, label, continuation_token);
 #endif
 }
 
-static void action_dispatch_resolved(const ButtonAction& act, const char* label) {
+static ActionResult action_dispatch_resolved(const ButtonAction& act, const char* label,
+                                             uint32_t continuation_token) {
 
     if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
 #if HAS_DISPLAY
@@ -225,6 +230,26 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
 #else
     LOGW(TAG, "%s cycle_pad: no display", label);
 #endif
+    } else if (strcmp(act.type, ACTION_TYPE_DELAY) == 0) {
+        const uint32_t duration_ms = act.payload.delay.duration_ms;
+        if (!action_delay_duration_is_valid(duration_ms)) {
+            LOGW(TAG, "%s delay: duration must be 1-%u ms", label,
+                 (unsigned)ACTION_DELAY_MAX_DURATION_MS);
+            return ACTION_FAILED;
+        }
+        if (!continuation_token) {
+            LOGW(TAG, "%s delay: %s", label,
+                 action_continuation_is_active()
+                     ? "another pausable action is already active"
+                     : "must be used in an action list");
+            return ACTION_FAILED;
+        }
+        if (!action_continuation_schedule_success(continuation_token, duration_ms)) {
+            LOGW(TAG, "%s delay: continuation is no longer available", label);
+            return ACTION_FAILED;
+        }
+        LOGI(TAG, "%s delay: %lu ms", label, (unsigned long)duration_ms);
+        return ACTION_PENDING;
     } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
 #if HAS_MQTT
         const auto& m = act.payload.mqtt;
@@ -419,11 +444,12 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
         // action type registry; delegate dispatch when found.
         const ActionTypeDef* t = action_type_find(act.type);
         if (t && t->dispatch) {
-            t->dispatch(act, label);
+            return t->dispatch(act, label, continuation_token);
         } else {
             LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
         }
     }
+    return ACTION_COMPLETE;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,6 +457,7 @@ static void action_dispatch_resolved(const ButtonAction& act, const char* label)
 // ---------------------------------------------------------------------------
 void action_dispatch_loop() {
     ha_service_execute();
+    action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LOOP);
 }
 
 #endif // HAS_DISPLAY || HAS_BUTTON

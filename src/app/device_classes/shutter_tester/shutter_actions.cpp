@@ -89,7 +89,8 @@ static void shutter_describe(JsonObject& out) {
     }
 }
 
-static void shutter_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult shutter_dispatch(const ButtonAction& act, const char* label,
+                                     uint32_t /*continuation_token*/) {
     const ShutterPayload& sh = shutter_payload(act);
     const char* cmd = sh.command;
     if (strcmp(cmd, "set") == 0) {
@@ -144,6 +145,7 @@ static void shutter_dispatch(const ButtonAction& act, const char* label) {
     } else {
         LOGW(TAG, "%s shutter: unknown cmd '%s'", label, cmd);
     }
+    return ACTION_COMPLETE;
 }
 
 static const ActionTypeDef shutter_action_type = {

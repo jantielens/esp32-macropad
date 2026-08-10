@@ -8,6 +8,7 @@
 #include "rtos_task_utils.h"
 
 #include "data_stream.h"
+#include "action_list.h"
 #include "button_confirmation.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
@@ -83,6 +84,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 		while (true) {
 				mgr->lock();
 				mgr->processDisplayJob();
+				action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
 				bool updated_after_screen_switch = false;
 				if (mgr->lvglStopRequested) {
 						mgr->unlock();

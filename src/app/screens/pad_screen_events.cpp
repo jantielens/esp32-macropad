@@ -1,5 +1,5 @@
 #include "pad_screen.h"
-#include "../action_dispatch.h"
+#include "../action_list.h"
 #include "../button_confirmation.h"
 #include "../display_manager.h"
 #include "../log_manager.h"
@@ -53,7 +53,7 @@ static bool confirm_or_dispatch(const ButtonTile* tile, const ButtonAction* acti
         return button_confirmation_show(actions, count, event_label,
                                         tile->confirm_text, button_display_label(tile));
     }
-    for (uint8_t i = 0; i < count; i++) action_dispatch(actions[i], event_label);
+    action_list_dispatch(actions, count, event_label, ACTION_CONTINUATION_OWNER_LVGL);
     return true;
 }
 
@@ -289,7 +289,7 @@ void PadScreen::onTap(lv_event_t* e) {
                 }
             }
 #endif
-            action_dispatch(local_nr, nr_event);
+            action_list_dispatch(&local_nr, 1, nr_event, ACTION_CONTINUATION_OWNER_LVGL);
 #if HAS_MQTT
             publish_button_event(tile, "press");
 #endif
@@ -323,7 +323,7 @@ void PadScreen::onTap(lv_event_t* e) {
     }
 
     if (tile->widget_type) {
-        for (uint8_t i = 0; i < count; i++) action_dispatch(local[i], event_label);
+        action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL);
     } else {
         confirm_or_dispatch(tile, local, count, event_label);
     }
@@ -381,7 +381,7 @@ void PadScreen::onLongPress(lv_event_t* e) {
     }
 
     if (tile->widget_type) {
-        for (uint8_t i = 0; i < count; i++) action_dispatch(local[i], "LP");
+        action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL);
     } else {
         confirm_or_dispatch(tile, local, count, "LP");
     }
@@ -450,6 +450,6 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
         }
     }
 #endif
-    for (uint8_t i = 0; i < count; i++) action_dispatch(local[i], "PadTap");
+    action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL);
 }
 

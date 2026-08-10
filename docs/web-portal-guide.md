@@ -312,6 +312,11 @@ Label fields in the button editor support explicit line breaks with `\n` (for ex
 
 For sensitive normal-button actions, open **Action Safety** in the Actions group and enable **Confirm before tap or long-press actions**. The device shows an explicit Cancel/Confirm prompt before running either action list, uses the optional custom message when present, and cancels automatically after 10 seconds.
 
+Choose **Timer / Delay** when a later action must wait. Set a whole-number
+duration from 1 to 55,000 ms. Delay pauses only the current ordered action list;
+when it completes, the next action runs. Only one pausable action can be pending
+device-wide at a time; starting another pausable action stops its action list.
+
 The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
 
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.

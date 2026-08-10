@@ -4,6 +4,7 @@
 
 #if HAS_DISPLAY || HAS_BUTTON
 
+#include "action_result.h"
 #include "pad_config.h"  // ButtonAction
 #include <ArduinoJson.h>
 
@@ -35,7 +36,11 @@ struct ActionTypeDef {
     const char* type_name;                                                  // matches ButtonAction::type
     void (*parse)(const JsonObject& a, ButtonAction& act);                  // flat JSON -> payload arm
     void (*serialize)(const ButtonAction& act, JsonObject obj);             // payload arm -> flat JSON
-    void (*dispatch)(const ButtonAction& act, const char* label);           // execute side effects
+    // A nonzero continuation_token reserves the action suffix. Return
+    // ACTION_PENDING only after accepting that token; token 0 means another
+    // continuation is active and must be rejected with ACTION_FAILED.
+    ActionResult (*dispatch)(const ButtonAction& act, const char* label,
+                             uint32_t continuation_token);                  // execute side effects
     char* (*value_field)(ButtonAction& act, size_t* out_size);              // &payload.value (+ buffer size), or nullptr
     void (*describe)(JsonObject& out);                                       // optional: list flat JSON fields for the MCP manifest (nullptr = none)
 };

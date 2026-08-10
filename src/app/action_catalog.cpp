@@ -156,6 +156,10 @@ void action_catalog_emit(JsonArray actions, bool include_field_docs) {
     }
 #endif
     {
+        JsonObject a = add_action(actions, "delay", "Timer", "Delay");
+        add_field(a, include_field_docs, "duration_ms", "whole milliseconds, 1-55000");
+    }
+    {
         // reboot/wifi_reconnect always compile; screensaver needs a display to sleep.
         JsonObject a = add_action(actions, "system", "Device", "Device command");
         JsonArray commands = a.createNestedArray("commands");

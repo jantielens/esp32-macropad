@@ -29,6 +29,9 @@ class Element {
     }
     appendChild(opt) { this.options.push(opt); return opt; }
     addEventListener() {}
+    setCustomValidity() {}
+    reportValidity() { return true; }
+    focus() {}
     hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name); }
     getAttribute(name) { return this.attributes[name]; }
     setAttribute(name, value) { this.attributes[name] = value; }
@@ -59,6 +62,7 @@ const FIXTURE_CATALOG = [
         commands: ['toggle', 'start', 'stop', 'pause', 'resume', 'reset', 'set', 'adjust']
             .map(function(id) { return { id: id, label: id }; })
     },
+    { type: 'delay', group: 'Timer', label: 'Delay' },
     {
         type: 'shutter', group: 'Shutter Tester', label: 'Shutter tester',
         command_families: [
@@ -101,6 +105,7 @@ const optionsHtml = context.actionEditorTypeOptionsHTML();
 assert(optionsHtml.includes('<optgroup label="Navigation">'));
 assert(optionsHtml.includes('<option value="screen">Navigate to screen</option>'));
 assert(optionsHtml.includes('<option value="back">Navigate back</option>'));
+assert(optionsHtml.includes('<option value="delay">Delay</option>'));
 assert(optionsHtml.includes('<optgroup label="Connectivity">'));
 assert(optionsHtml.includes('<option value="mqtt">Publish MQTT message</option>'));
 assert(optionsHtml.includes('<optgroup label="Shutter Tester">'));
@@ -132,7 +137,8 @@ assert.strictEqual(context.actionEditorFamilyForCommand('shutter', 'toggle_lock'
 
 // Selecting a family repopulates the command select for that family alone.
 const prefix = 'picker';
-context.actionEditorHTML(prefix, '', {});
+const editorHtml = context.actionEditorHTML(prefix, '', {});
+assert(editorHtml.includes('Only one pausable action can be pending device-wide at a time'));
 const familyEl = document.getElementById(prefix + '-shutter-family');
 familyEl.value = 'session';
 context.actionEditorShutterFamilyChanged(prefix);
@@ -144,6 +150,13 @@ assert(!commandEl.innerHTML.includes('toggle_lock'));
 context.actionEditorLoad(prefix, { type: 'shutter', shutter_command: 'sess_start' });
 assert.strictEqual(familyEl.value, 'session');
 assert(document.getElementById(prefix + '-shutter-command').innerHTML.includes('sess_start'));
+
+// Delay uses a bounded numeric duration and persists the flat JSON contract.
+context.actionEditorLoad(prefix, { type: 'delay', duration_ms: 2500 });
+assert.strictEqual(document.getElementById(prefix + '-delay-duration').value, 2500);
+const delayAction = context.actionEditorBuild(prefix);
+assert.strictEqual(delayAction.type, 'delay');
+assert.strictEqual(delayAction.duration_ms, 2500);
 
 // --- Regression guard: no broad DOM sweep that could catch unrelated selects ---
 // The discarded prior implementation used

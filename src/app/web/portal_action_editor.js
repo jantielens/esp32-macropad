@@ -18,6 +18,7 @@ var _actionEditorExtensions = [];
 // pad-level, boot, hardware button, MQTT trigger, timer expiry, Shutter
 // Tester session actions). Must match MAX_BUTTON_ACTIONS in pad_config.h.
 const MAX_ACTIONS = 3;
+const ACTION_DELAY_MAX_DURATION_MS = 55000;
 
 // 1-based slot-id generator for hosts whose ids follow "<base><1..MAX_ACTIONS>"
 // (boot actions, hardware buttons, MQTT triggers, timer expiry, Shutter
@@ -341,6 +342,13 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</div>';
     h += '</div>';  // va-config-group
     h += '</div>';  // va-group
+    // Delay
+    h += '<div id="' + prefix + '-delay-group" style="display:none;">';
+    h += '<div class="form-group">';
+    h += '<label class="form-label" for="' + prefix + '-delay-duration">Duration (ms)</label>';
+    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-delay-duration" min="1" max="' + ACTION_DELAY_MAX_DURATION_MS + '" value="1000" required>';
+    h += '<small>Pauses this action list before running the following action. Only one pausable action can be pending device-wide at a time; another pausable action stops its action list.</small>';
+    h += '</div></div>';
     // Device command (reboot / Wi-Fi / screensaver)
     h += '<div id="' + prefix + '-system-group" style="display:none;">';
     h += '<div class="form-group">';
@@ -445,6 +453,8 @@ function actionEditorTypeChanged(prefix) {
         if (vaCol && !vaCol.value) padSetBindableColor(prefix + '-va-color', '#ff0000', '#ff0000');
         actionEditorVaOpChanged(prefix);
     }
+    var delayGrp = document.getElementById(prefix + '-delay-group');
+    if (delayGrp) delayGrp.style.display = (type === 'delay') ? '' : 'none';
     var systemGrp = document.getElementById(prefix + '-system-group');
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
     var volumeGrp = document.getElementById(prefix + '-volume-group');
@@ -649,6 +659,8 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.intensity > 0) ? action.intensity : '';
     el = document.getElementById(prefix + '-va-duration');
     if (el) el.value = (action.duration_ms > 0) ? action.duration_ms : '';
+    el = document.getElementById(prefix + '-delay-duration');
+    if (el) el.value = (action.type === 'delay' && action.duration_ms > 0) ? action.duration_ms : '1000';
     // Device command (reboot / Wi-Fi / screensaver)
     el = document.getElementById(prefix + '-system-command');
     if (el) el.value = action.system_command || 'reboot';
@@ -807,6 +819,20 @@ function actionEditorBuild(prefix) {
         if (vaInt && vaInt.value !== '') act.intensity = parseInt(vaInt.value, 10);
         var vaDur = document.getElementById(prefix + '-va-duration');
         if (vaDur && vaDur.value !== '') act.duration_ms = parseInt(vaDur.value, 10);
+    }
+    if (type === 'delay') {
+        var delayDuration = document.getElementById(prefix + '-delay-duration');
+        var delayValue = delayDuration ? Number(delayDuration.value) : 0;
+        if (!Number.isInteger(delayValue) || delayValue < 1 || delayValue > ACTION_DELAY_MAX_DURATION_MS) {
+            if (delayDuration) {
+            delayDuration.setCustomValidity('Enter a whole number from 1 to ' + ACTION_DELAY_MAX_DURATION_MS + '.');
+                delayDuration.reportValidity();
+                delayDuration.focus();
+            }
+            throw new Error('Delay duration must be 1-' + ACTION_DELAY_MAX_DURATION_MS + ' milliseconds');
+        }
+        if (delayDuration) delayDuration.setCustomValidity('');
+        act.duration_ms = delayValue;
     }
     if (type === 'system') {
         var sc = document.getElementById(prefix + '-system-command');

@@ -33,14 +33,16 @@ static void meter_serialize(const ButtonAction& act, JsonObject obj) {
     if (p.value[0])   obj["meter_value"]   = p.value;
 }
 
-static void meter_action_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult meter_action_dispatch(const ButtonAction& act, const char* label,
+                                          uint32_t /*continuation_token*/) {
     const MeterPayload& p = meter_payload(act);
     if (!p.command[0]) {
         LOGW(TAG, "%s meter: empty command", label);
-        return;
+        return ACTION_COMPLETE;
     }
     LOGI(TAG, "%s meter: %s %s", label, p.command, p.value);
     meter_dispatch(p.command, p.value);
+    return ACTION_COMPLETE;
 }
 
 // `value` is the single bindable/numeric field (numeric rocker {step} target

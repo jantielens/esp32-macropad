@@ -66,7 +66,8 @@ static void brew_describe(JsonObject& out) {
 }
 
 #if HAS_SCALE
-static void brew_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult brew_dispatch(const ButtonAction& act, const char* label,
+                                  uint32_t /*continuation_token*/) {
     const BrewPayload& bp = brew_payload(act);
     const char* cmd = bp.command;
     // Empty command defaults to "advance" — preserves legacy
@@ -98,10 +99,13 @@ static void brew_dispatch(const ButtonAction& act, const char* label) {
     } else {
         LOGW(TAG, "%s brew: unknown cmd '%s'", label, cmd);
     }
+    return ACTION_COMPLETE;
 }
 #else
-static void brew_dispatch(const ButtonAction& /*act*/, const char* label) {
+static ActionResult brew_dispatch(const ButtonAction& /*act*/, const char* label,
+                                  uint32_t /*continuation_token*/) {
     LOGW(TAG, "%s brew: not compiled (HAS_SCALE=0)", label);
+    return ACTION_COMPLETE;
 }
 #endif
 

@@ -33,14 +33,16 @@ static void print_serialize(const ButtonAction& act, JsonObject obj) {
     if (p.value[0])   obj["print_value"]   = p.value;
 }
 
-static void print_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult print_dispatch(const ButtonAction& act, const char* label,
+                                   uint32_t /*continuation_token*/) {
     const PrintPayload& p = print_payload(act);
     if (!p.command[0]) {
         LOGW(TAG, "%s print: empty command", label);
-        return;
+        return ACTION_COMPLETE;
     }
     LOGI(TAG, "%s print: %s %s", label, p.command, p.value);
     print_log_dispatch(p.command, p.value);
+    return ACTION_COMPLETE;
 }
 
 // `value` is the single bindable/numeric field (numeric rocker {step} target

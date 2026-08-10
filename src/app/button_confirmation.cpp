@@ -59,7 +59,8 @@ static void on_confirm(lv_event_t* event) {
     s_action_count = 0;
     destroy_prompt();
     LOGI(TAG, "Confirmed; dispatching %u action(s)", count);
-    action_list_dispatch(s_actions, count, s_event_label);
+    action_list_dispatch(s_actions, count, s_event_label,
+                         ACTION_CONTINUATION_OWNER_LVGL);
 }
 
 static lv_obj_t* create_button(lv_obj_t* parent, const char* text,

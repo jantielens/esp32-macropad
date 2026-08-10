@@ -35,15 +35,17 @@ static void shelly_serialize(const ButtonAction& act, JsonObject obj) {
     obj["shelly_on"]    = p.on;
 }
 
-static void shelly_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult shelly_dispatch(const ButtonAction& act, const char* label,
+                                    uint32_t /*continuation_token*/) {
     const ShellyPayload& p = shelly_payload(act);
     if (!p.host[0]) {
         LOGW(TAG, "%s shelly: empty host", label);
-        return;
+        return ACTION_COMPLETE;
     }
     LOGI(TAG, "%s shelly: %s relay %u %s", label, p.host, p.relay,
          p.on ? "on" : "off");
     relay_queue_shelly(p.host, p.relay, p.on);
+    return ACTION_COMPLETE;
 }
 
 static void shelly_describe(JsonObject& out) {

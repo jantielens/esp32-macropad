@@ -17,7 +17,10 @@ extern "C" unsigned long millis() { return s_millis; }
 // Stub: action_dispatch (referenced by timer_engine_tick, not under test)
 // ---------------------------------------------------------------------------
 #include "pad_config.h"
-void action_dispatch(const ButtonAction&, const char*) {}
+#include "action_result.h"
+ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
+    return ACTION_COMPLETE;
+}
 void action_list_dispatch(const ButtonAction*, uint8_t, const char*) {}
 
 // ---------------------------------------------------------------------------
