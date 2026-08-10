@@ -131,13 +131,23 @@ struct HwButtonDef {
 #define IS_DARKROOM_TIMER false
 #endif
 
-// Feature-rich device classes (shutter tester, coffee scale, darkroom timer)
-// allocate large scratch/history buffers directly in PSRAM with no internal-RAM
-// fallback — a deliberate policy, since these classes are always shipped on
+// Voice-assistant product variant. When true the firmware compiles cloud
+// transcription, voice actions, transcript bindings, and portal controls.
+#ifndef IS_VOICE_ASSISTANT
+#define IS_VOICE_ASSISTANT false
+#endif
+
+// Feature-rich device classes (shutter tester, coffee scale, darkroom timer,
+// Voice Assistant) allocate large scratch/history buffers directly in PSRAM
+// with no internal-RAM fallback — a deliberate policy, since these classes are always shipped on
 // PSRAM-equipped boards. Enforce it at compile time so a mis-configured board
 // fails fast here instead of OOM'ing at runtime.
-#if (IS_SHUTTER_TESTER || IS_COFFEE_SCALE || IS_DARKROOM_TIMER) && !HAS_PSRAM
+#if (IS_SHUTTER_TESTER || IS_COFFEE_SCALE || IS_DARKROOM_TIMER || IS_VOICE_ASSISTANT) && !HAS_PSRAM
 #  error "Feature-rich device classes require PSRAM."
+#endif
+
+#if IS_VOICE_ASSISTANT && (!HAS_AUDIO_INPUT || !HAS_MQTT || !HAS_DISPLAY)
+#  error "Voice Assistant requires display, MQTT, and audio input."
 #endif
 
 // Enable e-paper wake-button handling (ext1 wake plus short/long press).

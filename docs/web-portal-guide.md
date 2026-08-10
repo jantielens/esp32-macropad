@@ -153,6 +153,23 @@ Buttons with no actions configured are completely inert — no visual tap flash 
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
 
+### Voice Assistant
+
+*Shown only on the `esp32-p4-lcd4b-voice` board variant.*
+
+The **Voice Assistant** page is the primary portal category for this board
+variant. It configures the Azure AI Foundry host, transcription deployment, and
+API key. Set an optional two-letter ISO 639-1 language code, such as `en` or
+`nl`, to select the transcription language; leave it blank for Azure
+auto-detection. The API key is stored on the device as a write-only value: leave
+the field blank to keep the saved key. The portal reports only whether the key
+is configured. The public Azure CA certificate is versioned in the firmware.
+
+Configure a button action list to publish `[stt:text]` to MQTT after **Stop and
+transcribe** completes. The first release does not subscribe to LLM responses
+or attach correlation IDs, so reply ordering is the responsibility of the MQTT
+automation.
+
 #### Alert Sounds
 
 *Shown only on boards with sound player support (defaults to boards with audio hardware).*

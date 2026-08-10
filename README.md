@@ -120,6 +120,7 @@ The firmware auto-detects a device class at build time based on board capability
 | **Shutter Tester** | `IS_SHUTTER_TESTER` | `ESP32-MP Shutter Tester` | `ESP32-MP-SHUTTER-XXXXXX` | `jc4880p433-shutter` — see [docs/device-classes/shutter-tester/](docs/device-classes/shutter-tester/README.md) |
 | **Coffee Scale** | `IS_COFFEE_SCALE` | `ESP32-MP Coffee Scale` | `ESP32-MP-SCALE-XXXXXX` | `jc4880p433-nau7802`, `jc4880p433-hx711` — see [docs/device-classes/coffee-scale/](docs/device-classes/coffee-scale/README.md) |
 | **Darkroom Timer** | `IS_DARKROOM_TIMER` | `ESP32-MP Darkroom Timer` | `ESP32-MP-DARKROOM-XXXXXX` | `jc4880p433-darkroom` — see [docs/device-classes/darkroom-timer/](docs/device-classes/darkroom-timer/README.md) |
+| **Voice Assistant** | `IS_VOICE_ASSISTANT` | `ESP32-MP Voice Assistant` | `ESP32-MP-VOICE-XXXXXX` | `esp32-p4-lcd4b-voice` |
 
 `XXXXXX` is the last six hex digits of the ESP32 chip ID. Per-board metadata (label, description, specs) lives in `src/boards/<board>/metadata.json` and is consumed by the flash page generator.
 

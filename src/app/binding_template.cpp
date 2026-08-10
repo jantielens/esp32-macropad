@@ -10,8 +10,6 @@
 // Scheme registry
 // ============================================================================
 
-#define MAX_SCHEMES 10
-
 struct SchemeEntry {
     char name[16];
     binding_resolver_fn resolver;
@@ -20,12 +18,12 @@ struct SchemeEntry {
     binding_validate_fn validate;
 };
 
-static SchemeEntry g_schemes[MAX_SCHEMES];
+static SchemeEntry g_schemes[BINDING_MAX_SCHEMES];
 static int g_scheme_count = 0;
 
 bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
                                binding_topic_collector_fn collector) {
-    if (!scheme || !scheme[0] || g_scheme_count >= MAX_SCHEMES) return false;
+    if (!scheme || !scheme[0] || g_scheme_count >= BINDING_MAX_SCHEMES) return false;
     SchemeEntry& e = g_schemes[g_scheme_count];
     strlcpy(e.name, scheme, sizeof(e.name));
     e.resolver = resolver;

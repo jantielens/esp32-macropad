@@ -60,6 +60,7 @@ declare -A FQBN_TARGETS=(
     ["jc3636w518"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3636W518 (16MB + OPI PSRAM)
     ["jc3636w518-sd"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3636W518 SDMMC primary-storage variant
     ["esp32-p4-lcd4b"]="esp32:esp32:esp32p4:FlashSize=32M,PSRAM=enabled,PartitionScheme=ota_8mb_32MB" # ESP32-P4 Waveshare WIFI6-Touch-LCD-4B (720x720 MIPI-DSI + GT911 touch; 32MB + 32MB PSRAM)
+    ["esp32-p4-lcd4b-voice"]="esp32:esp32:esp32p4:FlashSize=32M,PSRAM=enabled,PartitionScheme=ota_8mb_32MB" # ESP32-P4 LCD4B Azure Voice Assistant variant
     ["jc4880p433"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 (480x800 MIPI-DSI ST7701 + GT911 touch; 16MB + 32MB PSRAM)
     ["jc4880p433-sd"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 SDMMC primary-storage variant
     ["jc4880p433-shutter"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + BPW34 photodiode array (Shutter Tester variant)
@@ -247,6 +248,7 @@ device_class_brand_prefix() {
         shutter_tester) echo "ESP32-MP Shutter Tester" ;;
         coffee_scale)   echo "ESP32-MP Coffee Scale" ;;
         darkroom_timer) echo "ESP32-MP Darkroom Timer" ;;
+        voice_assistant) echo "ESP32-MP Voice Assistant" ;;
         *)              echo "" ;;
     esac
 }
@@ -273,6 +275,10 @@ device_class_for_board() {
         fi
         if grep -qE '^[[:space:]]*#define[[:space:]]+IS_DARKROOM_TIMER[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
             echo "darkroom_timer"
+            return
+        fi
+        if grep -qE '^[[:space:]]*#define[[:space:]]+IS_VOICE_ASSISTANT[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+            echo "voice_assistant"
             return
         fi
         if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_EPAPER[[:space:]]+true[[:space:]]*$' "$overrides_file"; then

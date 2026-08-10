@@ -1,0 +1,10 @@
+{
+  "device_class": "voice_assistant",
+  "board_label": "ESP32-P4 LCD4B Voice Assistant",
+  "description": "Waveshare ESP32-P4 LCD4B configured for cloud speech transcription through Azure AI Foundry.",
+  "chip_family": "ESP32-P4",
+  "flash_mb": 32,
+  "psram_mb": 32,
+  "wireless": { "wifi": true, "ble": true, "notes": "WiFi/BLE via ESP-Hosted ESP32-C6 over SDIO" },
+  "display": { "size": "4.0\"", "resolution": "720x720", "type": "MIPI-DSI", "touch": true }
+}

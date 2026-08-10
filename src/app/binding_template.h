@@ -21,6 +21,7 @@
 
 #define BINDING_TEMPLATE_MAX_LEN       192   // Max resolved output length
 #define BINDING_MAX_TOKENS             4     // Max binding tokens per label
+#define BINDING_MAX_SCHEMES             16    // Max registered binding schemes
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,7 +45,7 @@ typedef bool (*binding_resolver_fn)(const char* params, char* out, size_t out_le
 typedef void (*binding_topic_collector_fn)(const char* params, void* user_data);
 
 // Register a scheme resolver. scheme is a short name (e.g. "mqtt").
-// Max 10 schemes. Returns false if registry is full.
+// Returns false if the registry is full.
 bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
                                binding_topic_collector_fn collector);
 

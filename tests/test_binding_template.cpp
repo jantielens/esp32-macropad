@@ -90,17 +90,16 @@ static void test_single_token_unknown_scheme() {
 static void test_scheme_registry_capacity() {
     std::printf("--- scheme registry capacity ---\n");
 
-    static const char* const scheme_names[] = {
-        "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8",
-    };
-    for (const char* scheme_name : scheme_names) {
+    for (uint8_t index = 0; index < BINDING_MAX_SCHEMES - 2; ++index) {
+        char scheme_name[16] = {};
+        std::snprintf(scheme_name, sizeof(scheme_name), "s%u", (unsigned)index + 1);
         check_true(binding_template_register(scheme_name, mock_big_resolve, mock_collect),
                    "scheme accepted within registry capacity");
     }
-    check_true(binding_template_scheme_count() == 10,
-               "registry includes all ten accepted schemes");
+    check_true(binding_template_scheme_count() == BINDING_MAX_SCHEMES,
+               "registry includes all accepted schemes");
     check_true(!binding_template_register("overflow", mock_big_resolve, mock_collect),
-               "eleventh scheme is rejected");
+               "overflow scheme is rejected");
 }
 
 int main() {

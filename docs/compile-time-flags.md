@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 258
+Total flags: 259
 
 ### Features (HAS_*)
 
@@ -208,6 +208,7 @@ Total flags: 258
 - **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
+- **IS_VOICE_ASSISTANT** default: `false` — transcription, voice actions, transcript bindings, and portal controls.
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
 - **JD9165_DSI_HSYNC_PULSE_WIDTH** default: `24` — HSYNC pulse width in pixel clocks.
@@ -312,6 +313,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 | ✅ |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
 | jc3636w518-sd | ✅ |  | ✅ |  |  |  |  | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
 | jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
 | jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
 | jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  | ? |  | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
@@ -336,6 +338,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 | AUDIO_OUTPUT_DRIVER_PCM510XA | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | jc3636w518-sd | AUDIO_OUTPUT_DRIVER_PCM510XA | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
+| esp32-p4-lcd4b-voice | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-sd | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-shutter | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
@@ -1110,6 +1113,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
   - src/app/widgets.cpp
+- **IS_VOICE_ASSISTANT**
+  - src/app/board_config.h
+  - src/app/device_class_registry.cpp
+  - src/app/device_classes.cpp
+  - src/app/portal_components.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **JD9165_DSI_HSYNC_BACK_PORCH**

@@ -228,6 +228,18 @@ Board-specific firmware variants can promote a custom nav category to first posi
 - `PORTAL_PRIMARY_FRAGMENT` must resolve to an item inside `PORTAL_PRIMARY_CATEGORY`. If it doesn't, the entire primary configuration is ignored.
 - In AP mode, the primary category and `primary` object are suppressed entirely.
 
+### Component Categories
+
+For a normal portal component, use one of the category IDs emitted by
+`kNavCategories` in `web_portal_component_api.cpp`: `device`, `display`,
+`pads`, `actions`, `connectivity`, `audio`, `sensors`, or `firmware`.
+
+The component registry accepts any category string, but `/api/portal/nav` emits
+only those fixed categories. A component assigned to an unknown category
+registers successfully yet is silently absent from portal navigation. Use a
+different category only for a board-specific `PORTAL_PRIMARY_CATEGORY` and set
+every component in that custom section to the same category ID.
+
 **When not configured (default):** all four flags default to `""` and the portal behaves exactly as before — no hero card, `#welcome` on startup, no extra nav category.
 
 **Startup routing fallback chain:** URL hash (if present and item exists in nav) → primary fragment → `#welcome` → first visible item.
@@ -549,6 +561,7 @@ Returns comprehensive device information.
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
 - Each catalog entry contains `type`, `group`, and `label`. Multi-command entries also contain `commands`, an array of `{id, label}` objects; device-class entries may additionally contain `command_families`.
 - The portal uses this projection to populate action type and command selectors. MCP capability metadata uses the same catalog source with field documentation included.
+- Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start` and `record_stop_transcribe` commands. The latter returns pending and resumes the remaining action list only after transcription succeeds.
 
 **Display Fields** (only when `has_display` is `true`):
 - `display_coord_width` / `display_coord_height`: Display resolution

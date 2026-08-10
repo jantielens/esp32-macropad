@@ -134,3 +134,9 @@ portal_action_editor_darkroom.js
 # init_<id>_fragment() handlers that portal_fragment_init.js invokes on load.
 portal_darkroom_init.js
 portal_prints.js
+
+# [chunk:voice_actions IS_VOICE_ASSISTANT]
+portal_action_editor_voice.js
+
+# [chunk:voice_pages IS_VOICE_ASSISTANT]
+portal_voice.js

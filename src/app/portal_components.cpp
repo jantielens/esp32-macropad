@@ -101,6 +101,11 @@
 #include "device_classes/darkroom_timer/components/prints_component.cpp"
 #endif // IS_DARKROOM_TIMER
 
+// --- Voice Assistant components ---
+#if IS_VOICE_ASSISTANT
+#include "device_classes/voice_assistant/components/voice_component.cpp"
+#endif // IS_VOICE_ASSISTANT
+
 // --- E-Paper-gated components ---
 // Split into one component per nav entry (Status / Image & Schedule /
 // Status Overlay / VCOM) — all share the "epaper" category. Image and

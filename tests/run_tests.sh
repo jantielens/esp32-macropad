@@ -156,6 +156,16 @@ echo "=== Running unit tests: music command ==="
 ./tests/bin/test_music_command
 echo
 
+echo "=== Building unit tests: Voice Assistant WAV ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_voice_wav.cpp src/app/device_classes/voice_assistant/voice_wav.cpp \
+    -o tests/bin/test_voice_wav
+
+echo "=== Running unit tests: Voice Assistant WAV ==="
+./tests/bin/test_voice_wav
+echo
+
 echo "=== Building unit tests: MP3 metadata ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \

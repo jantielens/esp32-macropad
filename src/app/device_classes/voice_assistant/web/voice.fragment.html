@@ -1,0 +1,30 @@
+<div class="section-header">
+  <h2>Voice Assistant</h2>
+  <p>Configure Azure AI Foundry speech transcription.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="voice_azure_host">Azure AI Foundry host</label>
+      <input type="text" class="form-control" id="voice_azure_host" name="voice_azure_host" maxlength="127" placeholder="your-resource.services.ai.azure.com">
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="voice_azure_model">Transcription deployment</label>
+      <input type="text" class="form-control" id="voice_azure_model" name="voice_azure_model" maxlength="63" placeholder="gpt-4o-transcribe">
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="voice_azure_language">Transcription language</label>
+      <input type="text" class="form-control" id="voice_azure_language" name="voice_azure_language" maxlength="2" pattern="[A-Za-z]{2}" placeholder="Auto-detect">
+      <div class="form-text">Optional ISO 639-1 code, for example <code>en</code> or <code>nl</code>. Leave empty to let Azure auto-detect the language.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="voice_azure_api_key">Azure API key</label>
+      <input type="password" class="form-control" id="voice_azure_api_key" name="voice_azure_api_key" maxlength="127" placeholder="Leave empty to keep current" autocomplete="new-password">
+      <div class="form-text">Stored on the device and never returned by the portal. Leave blank to keep the saved key.</div>
+    </div>
+    <div class="form-text mb-3" id="voice-credentials-status"></div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="voice-save-btn">Save</button>
+    </div>
+  </div>
+</div>

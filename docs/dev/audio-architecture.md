@@ -48,6 +48,30 @@ Pads can display these read-only microphone bindings:
 The meter task remains asleep and does not read I2S data unless one of these
 bindings is actively resolved.
 
+## Voice Assistant
+
+The `esp32-p4-lcd4b-voice` board variant enables the `voice_assistant` device
+class. It reserves the same board-neutral microphone input from a background
+worker, downsamples the 48 kHz input to 16 kHz mono PCM WAV in PSRAM, and sends
+the recording to Azure AI Foundry for transcription. Recordings are discarded
+after the request completes and are never persisted.
+
+The worker is the sole capture owner while recording. A `record_start` voice
+action begins capture; `record_stop_transcribe` stops it and pauses any later
+actions in that action array. A successful transcription resumes those actions,
+so a following ordinary MQTT action can publish `[stt:text]`. Failed and
+timed-out work discards the remaining actions.
+
+The Azure API key, host, deployment name, and optional ISO 639-1 language code
+are stored in NVS. An empty language code uses Azure auto-detection. The portal
+accepts the API key as a write-only password field and only reports whether it
+is configured; it never returns or logs the value. The endpoint CA certificate
+is versioned in `voice_assistant/azure_ca.h`. MQTT publication is an ordinary
+action that uses `[stt:text]` after the transcription continuation succeeds.
+
+Pads can display `[stt:status]` (`idle`, `recording`, `transcribing`, `ready`,
+or `error`) and `[stt:text]` (the latest transcript or error message).
+
 ## Music CD Player
 
 Audio-capable builds with the sound player enabled also provide a bounded Music
