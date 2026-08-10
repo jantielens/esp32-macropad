@@ -561,7 +561,7 @@ Returns comprehensive device information.
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
 - Each catalog entry contains `type`, `group`, and `label`. Multi-command entries also contain `commands`, an array of `{id, label}` objects; device-class entries may additionally contain `command_families`.
 - The portal uses this projection to populate action type and command selectors. MCP capability metadata uses the same catalog source with field documentation included.
-- Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start` and `record_stop_transcribe` commands. The latter returns pending and resumes the remaining action list only after transcription succeeds.
+- Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, and `record_cancel` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation.
 
 **Display Fields** (only when `has_display` is `true`):
 - `display_coord_width` / `display_coord_height`: Display resolution

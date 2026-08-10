@@ -135,8 +135,9 @@ function actionEditorEnsureUnsupportedOption(select, type) {
     }
     var opt = document.createElement('option');
     opt.value = type;
-    opt.textContent = type + ' (unsupported by this build)';
-    opt.disabled = true;
+    var entry = actionEditorCatalogEntry(type);
+    opt.textContent = entry ? entry.label : type + ' (unsupported by this build)';
+    opt.disabled = !entry;
     select.appendChild(opt);
 }
 
@@ -569,9 +570,15 @@ function actionEditorLoad(prefix, action) {
     el = document.getElementById(prefix + '-type');
     if (el) {
         el.value = action.type || '';
-        if (action.type && !actionEditorCatalogEntry(action.type)) {
+        // The catalog can refresh after this editor's HTML was rendered. In
+        // that case the catalog recognizes the type but the existing select
+        // has no matching option, leaving it at '(none)' while extension
+        // fields still load. Restore the missing option before loading it.
+        if (action.type && el.value !== action.type) {
             actionEditorEnsureUnsupportedOption(el, action.type);
             el.value = action.type;
+        }
+        if (action.type && !actionEditorCatalogEntry(action.type)) {
             _actionEditorUnsupported[prefix] = action;
         } else {
             delete _actionEditorUnsupported[prefix];

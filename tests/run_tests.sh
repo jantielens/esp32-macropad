@@ -166,6 +166,26 @@ echo "=== Running unit tests: Voice Assistant WAV ==="
 ./tests/bin/test_voice_wav
 echo
 
+echo "=== Building unit tests: Voice Assistant transcription request ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_voice_transcription_request.cpp src/app/device_classes/voice_assistant/voice_transcription_request.cpp \
+    -o tests/bin/test_voice_transcription_request
+
+echo "=== Running unit tests: Voice Assistant transcription request ==="
+./tests/bin/test_voice_transcription_request
+echo
+
+echo "=== Building unit tests: Voice Assistant auto-stop ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_voice_auto_stop.cpp src/app/device_classes/voice_assistant/voice_auto_stop.cpp \
+    -o tests/bin/test_voice_auto_stop
+
+echo "=== Running unit tests: Voice Assistant auto-stop ==="
+./tests/bin/test_voice_auto_stop
+echo
+
 echo "=== Building unit tests: MP3 metadata ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \

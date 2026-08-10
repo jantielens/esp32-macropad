@@ -165,10 +165,15 @@ auto-detection. The API key is stored on the device as a write-only value: leave
 the field blank to keep the saved key. The portal reports only whether the key
 is configured. The public Azure CA certificate is versioned in the firmware.
 
-Configure a button action list to publish `[stt:text]` to MQTT after **Stop and
-transcribe** completes. The first release does not subscribe to LLM responses
-or attach correlation IDs, so reply ordering is the responsibility of the MQTT
-automation.
+For a one-tap capture button, configure **Record until silence** followed by a
+Publish MQTT action whose payload is `[stt:text]`. Set the trailing silence in
+milliseconds (default `1000`) and a speech-level threshold from 0 to 100
+(default `2`), using the same RMS scale as `[audio:input.rms]`. It waits for
+speech before starting the trailing-silence timer. Use **Stop and transcribe**
+as a separate control to finish an active recording early, or **Cancel
+recording** to discard an active recording without transcription. The first
+release does not subscribe to LLM responses or attach correlation IDs, so reply
+ordering is the responsibility of the MQTT automation.
 
 #### Alert Sounds
 

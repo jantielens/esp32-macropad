@@ -9,6 +9,8 @@
 #include "voice_assistant/voice_config.h"
 
 #include "voice_assistant/voice_wav.cpp"
+#include "voice_assistant/voice_auto_stop.cpp"
+#include "voice_assistant/voice_transcription_request.cpp"
 #include "voice_assistant/voice_config.cpp"
 #include "voice_assistant/voice.cpp"
 #include "voice_assistant/voice_binding.cpp"

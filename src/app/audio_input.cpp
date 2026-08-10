@@ -3,6 +3,7 @@
 #if HAS_AUDIO_INPUT
 
 #include <Arduino.h>
+#include "audio_pcm_level.h"
 #include "log_manager.h"
 
 #include <freertos/FreeRTOS.h>
@@ -36,27 +37,6 @@ bool owned_by_current_task() {
     return owns_capture;
 }
 
-uint8_t pcm_to_level(uint32_t amplitude) {
-    if (amplitude > 32767U) amplitude = 32767U;
-    return (uint8_t)((amplitude * 100U + 16383U) / 32767U);
-}
-
-uint32_t isqrt_u64(uint64_t value) {
-    uint64_t result = 0;
-    uint64_t bit = 1ULL << 62;
-    while (bit > value) bit >>= 2;
-    while (bit != 0) {
-        if (value >= result + bit) {
-            value -= result + bit;
-            result = (result >> 1) + bit;
-        } else {
-            result >>= 1;
-        }
-        bit >>= 2;
-    }
-    return (uint32_t)result;
-}
-
 bool meter_requested() {
     const uint64_t now_us = (uint64_t)esp_timer_get_time();
     portENTER_CRITICAL(&g_meter_mux);
@@ -73,24 +53,13 @@ void meter_set_inactive() {
 }
 
 void meter_publish(const int16_t* samples, size_t frame_count, uint8_t channels) {
-    uint64_t sum_sq = 0;
-    uint32_t peak = 0;
-    for (size_t frame = 0; frame < frame_count; ++frame) {
-        int32_t mono = 0;
-        for (uint8_t channel = 0; channel < channels; ++channel) {
-            mono += samples[frame * channels + channel];
-        }
-        mono /= channels;
-        const uint32_t amplitude = mono < 0 ? (uint32_t)-mono : (uint32_t)mono;
-        sum_sq += (uint64_t)(mono * (int64_t)mono);
-        if (amplitude > peak) peak = amplitude;
-    }
-
+    const AudioPcmLevels levels = audio_pcm_levels(samples, frame_count, channels);
+    const uint64_t sampled_at_us = (uint64_t)esp_timer_get_time();
     portENTER_CRITICAL(&g_meter_mux);
-    g_meter_snapshot.rms = pcm_to_level(isqrt_u64(sum_sq / frame_count));
-    g_meter_snapshot.peak = pcm_to_level(peak);
+    g_meter_snapshot.rms = levels.rms;
+    g_meter_snapshot.peak = levels.peak;
     g_meter_snapshot.active = true;
-    g_meter_last_sample_us = (uint64_t)esp_timer_get_time();
+    g_meter_last_sample_us = sampled_at_us;
     portEXIT_CRITICAL(&g_meter_mux);
 }
 

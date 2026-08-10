@@ -694,6 +694,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/darkroom_timer/test_strip.h
   - src/app/device_classes/shutter_tester/mcp/mcp_tools_shutter.cpp
   - src/app/device_classes/shutter_tester/shutter_binding.cpp
+  - src/app/device_classes/voice_assistant/voice_binding.cpp
   - src/app/expr_binding.cpp
   - src/app/ha_service.cpp
   - src/app/ha_service.h
@@ -1117,6 +1118,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
+  - src/app/device_classes/voice_assistant/components/voice_component.cpp
+  - src/app/device_classes/voice_assistant/voice.cpp
+  - src/app/device_classes/voice_assistant/voice.h
+  - src/app/device_classes/voice_assistant/voice_actions.cpp
+  - src/app/device_classes/voice_assistant/voice_binding.cpp
+  - src/app/device_classes/voice_assistant/voice_binding.h
+  - src/app/device_classes/voice_assistant/voice_config.cpp
+  - src/app/device_classes/voice_assistant/voice_config.h
+  - src/app/device_classes/voice_assistant/voice_payload.h
+  - src/app/device_classes/voice_assistant_device_class.cpp
   - src/app/portal_components.cpp
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h

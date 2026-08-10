@@ -401,7 +401,7 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | Timer | **Timer** | Command: Toggle, Start, Stop, Pause, Resume, Reset, Set countdown, or Adjust countdown, on one of 3 independent timers. Start and Toggle select stopwatch or countdown mode; countdown duration, Set, and Adjust values support binding templates. See [Timer Actions](#timer-actions) below. |
 | Timer | **Delay** | Pause the current action list for a whole-number duration from 1 to 55,000 ms, then continue with the next action. By default, up to three pausable actions can be pending device-wide at a time. The duration is not bindable. |
 | Device | **Device command** | Command: Restart device, Reconnect Wi-Fi, or Enable screensaver. |
-| Audio | **Voice Assistant** | On Voice Assistant builds: Start recording, or Stop and transcribe. Stop and transcribe pauses the current action list until transcription succeeds. |
+| Audio | **Voice Assistant** | On Voice Assistant builds: Start recording, Stop and transcribe, Record until silence, or Cancel recording. Record until silence pauses the action list until transcription succeeds; configure its trailing silence and speech-level threshold on the same scale as `[audio:input.rms]`. |
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT message → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -413,14 +413,13 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 - Button label: "Cameras" with a `videocam` Material Symbol icon
 
 **Example Voice Assistant button:**
-- **Tap action 1**: Voice Assistant → Start recording
-- **Tap action 2**: Voice Assistant → Stop and transcribe
-- **Tap action 3**: Publish MQTT message → topic: `home/voice/transcript`, payload: `[stt:text]`
+- **Tap action 1**: Voice Assistant → Record until silence → trailing silence: `1000`, speech level threshold: `2`
+- **Tap action 2**: Publish MQTT message → topic: `home/voice/transcript`, payload: `[stt:text]`
 
-The second action resumes the third only after Azure transcription succeeds. A
+The first action resumes the second only after Azure transcription succeeds. A
 failed transcription stops the remaining action list. Use `[stt:status]` for a
-status label (`idle`, `recording`, `transcribing`, `ready`, or `error`) and
-`[stt:text]` to display the latest transcript or error message.
+status label (`idle`, `recording`, `listening`, `transcribing`, `ready`, or
+`error`) and `[stt:text]` to display the latest transcript or error message.
 
 ### Navigate Pad Sequence Action
 

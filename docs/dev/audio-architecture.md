@@ -56,11 +56,19 @@ worker, downsamples the 48 kHz input to 16 kHz mono PCM WAV in PSRAM, and sends
 the recording to Azure AI Foundry for transcription. Recordings are discarded
 after the request completes and are never persisted.
 
-The worker is the sole capture owner while recording. A `record_start` voice
-action begins capture; `record_stop_transcribe` stops it and pauses any later
-actions in that action array. A successful transcription resumes those actions,
-so a following ordinary MQTT action can publish `[stt:text]`. Failed and
-timed-out work discards the remaining actions.
+The worker is the sole capture owner while recording. `record_start` begins a
+manual recording; `record_stop_transcribe` stops it and pauses any later
+actions in that action array. `record_until_silence` begins an automatic
+recording, detects speech from the same 0-100 RMS scale as `[audio:input.rms]`,
+then stops after its configured trailing silence. Its action fields are
+`silence_ms` (100-10000, default 1000) and `speech_threshold` (0-100, default
+2). It waits for speech before counting silence and has the same 30-second cap
+as manual recording. A successful transcription resumes later actions, so a
+following ordinary MQTT action can publish `[stt:text]`. During automatic
+recording, a `record_stop_transcribe` action requests an immediate stop but the
+original automatic action owns the resumed suffix. `record_cancel` discards an
+active manual or automatic recording without transcribing or running later
+actions. Failed and timed-out work discards the remaining actions.
 
 The Azure API key, host, deployment name, and optional ISO 639-1 language code
 are stored in NVS. An empty language code uses Azure auto-detection. The portal
@@ -69,8 +77,9 @@ is configured; it never returns or logs the value. The endpoint CA certificate
 is versioned in `voice_assistant/azure_ca.h`. MQTT publication is an ordinary
 action that uses `[stt:text]` after the transcription continuation succeeds.
 
-Pads can display `[stt:status]` (`idle`, `recording`, `transcribing`, `ready`,
-or `error`) and `[stt:text]` (the latest transcript or error message).
+Pads can display `[stt:status]` (`idle`, `recording`, `listening`,
+`transcribing`, `ready`, or `error`) and `[stt:text]` (the latest transcript or
+error message).
 
 ## Music CD Player
 

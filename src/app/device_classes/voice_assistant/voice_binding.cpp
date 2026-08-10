@@ -34,7 +34,7 @@ void voice_binding_describe(void* out_json) {
     JsonObject& out = *static_cast<JsonObject*>(out_json);
     out["syntax"] = "[stt:status|text]";
     out["example"] = "[stt:text]";
-    out["keys"] = "status, text";
+    out["keys"] = "status, text (status: idle, recording, listening, transcribing, ready, error)";
     out["read_only"] = true;
 }
 #endif
