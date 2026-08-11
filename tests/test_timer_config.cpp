@@ -6,8 +6,25 @@
 #include <thread>
 #include <freertos/semphr.h>
 
+#include "action_parse_builtin.h"
+#include "action_registry.h"
 #include "timer_config.h"
 #include <LittleFS.h>
+
+static const ActionTypeDef kTimerActionType = {
+    ACTION_TYPE_TIMER, action_parse_timer, action_serialize_timer,
+    nullptr, nullptr, nullptr,
+};
+static const ActionTypeDef kSoundAlertActionType = {
+    ACTION_TYPE_SOUND_ALERT, action_parse_sound_alert, action_serialize_sound_alert,
+    nullptr, nullptr, nullptr,
+};
+static struct ActionTypeRegistration {
+    ActionTypeRegistration() {
+        action_type_register(&kTimerActionType);
+        action_type_register(&kSoundAlertActionType);
+    }
+} kActionTypeRegistration;
 
 std::map<std::string, std::string> timer_test_files;
 bool timer_test_fail_open = false;

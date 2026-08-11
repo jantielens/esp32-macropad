@@ -257,13 +257,6 @@ function actionEditorHTML(prefix, label, opts) {
         h += '<small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms. Supports bindings.</small>';
     }
     h += '</div></div>';
-    // Music
-    h += '<div id="' + prefix + '-music-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-music-command">Command</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-music-command">';
-    h += actionEditorCommandOptionsHTML('music');
-    h += '</select></div></div>';
     // Sound Alert
     h += '<div id="' + prefix + '-sound-alert-group" style="display:none;">';
     h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-kind">Kind</label>';
@@ -415,14 +408,6 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-delay-duration" min="1" max="' + ACTION_DELAY_MAX_DURATION_MS + '" value="1000" required>';
     h += '<small>Pauses this action list before running the following action. Up to ' + pausableActionLimit + ' pausable actions can be pending device-wide at a time; another pausable action stops its action list when all slots are occupied.</small>';
     h += '</div></div>';
-    // Device command (reboot / Wi-Fi / screensaver)
-    h += '<div id="' + prefix + '-system-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-system-command">Command</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-system-command">';
-    h += actionEditorCommandOptionsHTML('system');
-    h += '</select>';
-    h += '</div></div>';
     h += actionEditorGenericFieldsHTML(prefix);
     // Extension-contributed groups (e.g. shutter command UI on shutter-tester builds)
     _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
@@ -448,7 +433,6 @@ function actionEditorTypeChanged(prefix) {
     var mqttGrp = document.getElementById(prefix + '-mqtt-group');
     var keyGrp = document.getElementById(prefix + '-key-group');
     var bleHint = document.getElementById(prefix + '-ble-hint');
-    var musicGrp = document.getElementById(prefix + '-music-group');
     var soundAlertGrp = document.getElementById(prefix + '-sound-alert-group');
     if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
     // List widget: inject synthetic "Selected … Item" option in screen dropdown
@@ -467,7 +451,6 @@ function actionEditorTypeChanged(prefix) {
     if (mqttGrp) mqttGrp.style.display = (type === 'mqtt') ? '' : 'none';
     if (keyGrp) keyGrp.style.display = (type === 'key') ? '' : 'none';
     if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
-    if (musicGrp) musicGrp.style.display = (type === 'music') ? '' : 'none';
     if (soundAlertGrp) soundAlertGrp.style.display = (type === 'sound_alert') ? '' : 'none';
     if (type === 'sound_alert') actionEditorSoundAlertChanged(prefix);
     var cyclePadGrp = document.getElementById(prefix + '-cycle-pad-group');
@@ -486,8 +469,6 @@ function actionEditorTypeChanged(prefix) {
     }
     var delayGrp = document.getElementById(prefix + '-delay-group');
     if (delayGrp) delayGrp.style.display = (type === 'delay') ? '' : 'none';
-    var systemGrp = document.getElementById(prefix + '-system-group');
-    if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
     actionEditorCatalog().forEach(function(entry) {
         var group = document.getElementById(prefix + '-generic-' + entry.type + '-group');
         if (group) group.style.display = entry.type === type ? '' : 'none';
@@ -617,8 +598,6 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.payload || '';
     el = document.getElementById(prefix + '-sequence');
     if (el) el.value = action.sequence || '';
-    el = document.getElementById(prefix + '-music-command');
-    if (el) el.value = action.music_command || 'play_pause';
     el = document.getElementById(prefix + '-sound-alert-kind');
     if (el) el.value = action.sound_alert_kind || 'tone';
     el = document.getElementById(prefix + '-sound-alert-pattern');
@@ -692,9 +671,6 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.duration_ms > 0) ? action.duration_ms : '';
     el = document.getElementById(prefix + '-delay-duration');
     if (el) el.value = (action.type === 'delay' && action.duration_ms > 0) ? action.duration_ms : '1000';
-    // Device command (reboot / Wi-Fi / screensaver)
-    el = document.getElementById(prefix + '-system-command');
-    if (el) el.value = action.system_command || 'reboot';
     actionEditorSetGenericFields(prefix, action.type || '', action);
     // Extension-contributed load hooks (e.g. shutter field population)
     _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
@@ -727,10 +703,6 @@ function actionEditorBuild(prefix) {
     if (type === 'key') {
         var seq = document.getElementById(prefix + '-sequence');
         if (seq) act.sequence = (seq.value || '').trim();
-    }
-    if (type === 'music') {
-        var musicCommand = document.getElementById(prefix + '-music-command');
-        if (musicCommand) act.music_command = musicCommand.value;
     }
     if (type === 'sound_alert') {
         var kind = document.getElementById(prefix + '-sound-alert-kind');
@@ -852,10 +824,6 @@ function actionEditorBuild(prefix) {
         }
         if (delayDuration) delayDuration.setCustomValidity('');
         act.duration_ms = delayValue;
-    }
-    if (type === 'system') {
-        var sc = document.getElementById(prefix + '-system-command');
-        if (sc) act.system_command = sc.value;
     }
     // Extension-contributed build hooks (e.g. shutter merges shutter_command/shutter_value).
     _actionEditorExtensions.forEach(function(ext) {

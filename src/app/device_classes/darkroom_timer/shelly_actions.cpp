@@ -66,15 +66,13 @@ static void shelly_describe(JsonObject& out) {
     JsonObject off = commands.createNestedObject(); off["id"] = "off"; off["label"] = "Turn off";
 }
 
-static const ActionTypeDef shelly_action_type = {
+DEFINE_AND_REGISTER_ACTION_TYPE(shelly_action_type,
     /* type_name   */ ACTION_TYPE_SHELLY,
     /* parse       */ shelly_parse,
     /* serialize   */ shelly_serialize,
     /* dispatch    */ shelly_dispatch,
     /* value_field */ nullptr,  // host/relay/on — no single bindable value field
     /* describe    */ shelly_describe,
-};
-
-REGISTER_ACTION_TYPE(shelly_action_type);
+);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

@@ -11,27 +11,23 @@
 // ============================================================================
 // Action Type Registry
 // ============================================================================
-// Vtable-based registry for action types added by device classes (e.g. shutter
-// tester). Built-in action types (screen, mqtt, key, beep, volume,
-// brightness, timer, sound, notify, system, back, ble_pair) remain handled
-// directly by the strcmp ladders in action_parse.cpp / action_dispatch.cpp;
-// the registry is the fallthrough path for any type the ladder does not
-// recognize.
+// Vtable-based registry for built-in and device-class action types. The
+// registry is the production source of truth for parse/serialize, dispatch,
+// availability, validation, catalog metadata, and bindable fields.
 //
 // All function pointers may be nullptr. parse/serialize are mandatory for
 // types with payload data; dispatch is mandatory for types that produce side
 // effects.
 //
-// value_field is the single seam for everything shared code does to a
-// device-class payload's bindable/numeric value: binding resolution, the '['
-// binding scan, and numeric-rocker {step} substitution. By the universal
-// device-class convention every payload is { command, value } with `value`
-// as the one bindable field, so exposing value_field gives a type all three
-// behaviors at once and removes the per-type "forgot a hook" failure mode.
-// Types with no single value field (e.g. shelly) leave it nullptr. An
-// implementation writes the value buffer's size to *out_size (callers always
-// pass a valid pointer) and returns the field.
+// value_field supports the common single bindable/numeric value used by
+// device-class actions. binding_fields extends that model for built-ins with
+// multiple or conditional bindable fields without adding a UI schema.
+typedef bool (*ActionBindableFieldVisitor)(char* field, size_t field_size,
+                                           bool reject_overflow, void* context);
 
+// describe() may expose only the existing generic editor field types (text,
+// number, select, toggle). Actions with conditional or specialized controls
+// keep their custom portal editor while still using this registry contract.
 struct ActionTypeDef {
     ActionTypeDef(
         const char* type_name,
@@ -42,10 +38,12 @@ struct ActionTypeDef {
         char* (*value_field)(ButtonAction& act, size_t* out_size),
         void (*describe)(JsonObject& out),
         bool (*available)() = nullptr,
-        const char* (*validate)(JsonObjectConst action) = nullptr)
+                const char* (*validate)(JsonObjectConst action) = nullptr,
+                bool (*binding_fields)(ButtonAction& act, ActionBindableFieldVisitor visitor,
+                                                             void* context) = nullptr)
         : type_name(type_name), parse(parse), serialize(serialize), dispatch(dispatch),
           value_field(value_field), describe(describe), available(available),
-          validate(validate) {}
+                    validate(validate), binding_fields(binding_fields) {}
 
     const char* type_name;                                                  // matches ButtonAction::type
     void (*parse)(const JsonObject& a, ButtonAction& act);                  // flat JSON -> payload arm
@@ -59,6 +57,8 @@ struct ActionTypeDef {
     void (*describe)(JsonObject& out);                                       // optional: list flat JSON fields for the MCP manifest (nullptr = none)
     bool (*available)();                                                      // optional: false hides and rejects the type on this build
     const char* (*validate)(JsonObjectConst action);                         // optional: authoring validation; nullptr = valid
+    bool (*binding_fields)(ButtonAction& act, ActionBindableFieldVisitor visitor,
+                           void* context);                                   // optional: visit bindable payload fields
 };
 
 void action_type_register(const ActionTypeDef* type);
@@ -86,6 +86,8 @@ void action_substitute_step_field(char* field, size_t field_size, float step);
 // hooks: implement value_field once and the type gets all three. All are
 // no-ops when def or def->value_field is nullptr.
 void action_type_substitute_step(const ActionTypeDef* def, ButtonAction& act, float step);
+bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& act,
+                                       ActionBindableFieldVisitor visitor, void* context);
 #if HAS_MQTT
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act);
 bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act);
@@ -99,5 +101,12 @@ void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& ac
     static struct var##AutoReg {                                               \
         var##AutoReg() { action_type_register(&var); }                         \
     } _##var##_auto_reg
+
+// Define an immutable action type and register it as one declaration. Use
+// this for production action types so the definition cannot be omitted from
+// the registry by a separate registration step.
+#define DEFINE_AND_REGISTER_ACTION_TYPE(var, ...)                              \
+    const ActionTypeDef var = { __VA_ARGS__ };                                  \
+    REGISTER_ACTION_TYPE(var)
 
 #endif // HAS_DISPLAY || HAS_BUTTON

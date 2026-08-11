@@ -357,7 +357,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:USAGE -->
 - **HAS_AUDIO**
-  - src/app/action_catalog.cpp
+  - src/app/action_builtin_types.cpp
   - src/app/action_dispatch.cpp
   - src/app/app.ino
   - src/app/audio.cpp
@@ -412,7 +412,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/dummy_sensor.cpp
   - src/app/web_portal_config.cpp
 - **HAS_BLE_HID**
-  - src/app/action_catalog.cpp
+  - src/app/action_builtin_types.cpp
   - src/app/action_dispatch.cpp
   - src/app/app.ino
   - src/app/ble_hid.cpp
@@ -433,6 +433,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/power_manager.cpp
 - **HAS_BUTTON**
+  - src/app/action_builtin_types.cpp
   - src/app/action_catalog.cpp
   - src/app/action_catalog.h
   - src/app/action_continuation.cpp
@@ -466,6 +467,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/fonts/custom_fonts.h
   - src/app/pad_layout.h
 - **HAS_DISPLAY**
+  - src/app/action_builtin_types.cpp
   - src/app/action_catalog.cpp
   - src/app/action_catalog.h
   - src/app/action_continuation.cpp
@@ -733,7 +735,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/widget.h
 - **HAS_MQTT**
-  - src/app/action_catalog.cpp
+  - src/app/action_builtin_types.cpp
   - src/app/action_dispatch.cpp
   - src/app/action_dispatch.h
   - src/app/action_registry.cpp
@@ -845,7 +847,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_SENSOR_TSL2591**
   - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
 - **HAS_SOUND_PLAYER**
-  - src/app/action_catalog.cpp
+  - src/app/action_builtin_types.cpp
   - src/app/action_dispatch.cpp
   - src/app/app.ino
   - src/app/audio.cpp
@@ -857,7 +859,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/music_analysis.cpp
   - src/app/music_analysis.h
   - src/app/music_binding.cpp
-  - src/app/pad_validate.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
   - src/app/sound_player.cpp

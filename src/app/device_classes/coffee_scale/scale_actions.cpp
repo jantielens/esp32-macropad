@@ -102,15 +102,13 @@ static ActionResult scale_dispatch(const ButtonAction& /*act*/, const char* labe
 }
 #endif
 
-static const ActionTypeDef scale_action_type = {
+DEFINE_AND_REGISTER_ACTION_TYPE(scale_action_type,
     /* type_name   */ ACTION_TYPE_SCALE,
     /* parse       */ scale_parse,
     /* serialize   */ scale_serialize,
     /* dispatch    */ scale_dispatch,
     /* value_field */ scale_value_field,
     /* describe    */ scale_describe,
-};
-
-REGISTER_ACTION_TYPE(scale_action_type);
+);
 
 #endif // HAS_DISPLAY && IS_COFFEE_SCALE

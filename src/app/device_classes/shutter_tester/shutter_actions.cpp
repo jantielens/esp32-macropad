@@ -148,15 +148,13 @@ static ActionResult shutter_dispatch(const ButtonAction& act, const char* label,
     return ACTION_COMPLETE;
 }
 
-static const ActionTypeDef shutter_action_type = {
+DEFINE_AND_REGISTER_ACTION_TYPE(shutter_action_type,
     /* type_name   */ ACTION_TYPE_SHUTTER,
     /* parse       */ shutter_parse,
     /* serialize   */ shutter_serialize,
     /* dispatch    */ shutter_dispatch,
     /* value_field */ shutter_value_field,
     /* describe    */ shutter_describe,
-};
-
-REGISTER_ACTION_TYPE(shutter_action_type);
+);
 
 #endif // HAS_DISPLAY && IS_SHUTTER_TESTER

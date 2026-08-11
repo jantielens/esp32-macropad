@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "action_registry.h"
 #include "pad_config.h"
 
 #include <freertos/FreeRTOS.h>
@@ -139,32 +140,12 @@ static void collect_key(const char* key, uint8_t* demand) {
 }
 
 static void collect_action(const ButtonAction& action, uint8_t* demand) {
-    const char* fields[5] = {};
-    if (strcmp(action.type, ACTION_TYPE_SCREEN) == 0) {
-        fields[0] = action.payload.screen.screen_id;
-    } else if (strcmp(action.type, ACTION_TYPE_MQTT) == 0) {
-        fields[0] = action.payload.mqtt.mqtt_topic;
-        fields[1] = action.payload.mqtt.mqtt_payload;
-    } else if (strcmp(action.type, ACTION_TYPE_KEY) == 0) {
-        fields[0] = action.payload.key.key_sequence;
-    } else if (strcmp(action.type, ACTION_TYPE_VOLUME) == 0) {
-        fields[0] = action.payload.volume.volume_value;
-    } else if (strcmp(action.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        fields[0] = action.payload.brightness.brightness_value;
-    } else if (strcmp(action.type, ACTION_TYPE_TIMER) == 0) {
-        fields[0] = action.payload.timer.timer_value;
-    } else if (strcmp(action.type, ACTION_TYPE_NOTIFY) == 0) {
-        fields[0] = action.payload.notify.notify_text;
-        fields[1] = action.payload.notify.notify_duration_ms;
-        fields[2] = action.payload.notify.notify_text_color;
-        fields[3] = action.payload.notify.notify_bg_color;
-        fields[4] = action.payload.notify.notify_border_color;
-    } else if (strcmp(action.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
-        fields[0] = action.payload.visual_alert.va_color;
-    }
-    for (const char* field : fields) {
-        if (field) music_analysis_collect_demand(field, demand);
-    }
+    auto collect = [](char* field, size_t, bool, void* context) {
+        music_analysis_collect_demand(field, static_cast<uint8_t*>(context));
+        return true;
+    };
+    action_type_visit_bindable_fields(action_type_find(action.type),
+                                      const_cast<ButtonAction&>(action), collect, demand);
 }
 
 } // namespace

@@ -109,15 +109,13 @@ static ActionResult brew_dispatch(const ButtonAction& /*act*/, const char* label
 }
 #endif
 
-static const ActionTypeDef brew_action_type = {
+DEFINE_AND_REGISTER_ACTION_TYPE(brew_action_type,
     /* type_name   */ ACTION_TYPE_BREW,
     /* parse       */ brew_parse,
     /* serialize   */ brew_serialize,
     /* dispatch    */ brew_dispatch,
     /* value_field */ brew_value_field,
     /* describe    */ brew_describe,
-};
-
-REGISTER_ACTION_TYPE(brew_action_type);
+);
 
 #endif // HAS_DISPLAY && IS_COFFEE_SCALE

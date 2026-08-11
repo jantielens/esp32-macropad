@@ -15,7 +15,6 @@
 #include "widgets/widget_registry.h"
 #include "binding_template.h"
 #include "action_registry.h"
-#include "music_command.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -107,43 +106,19 @@ static const char* validate_action(JsonObjectConst action) {
         if (!action_type_is_supported(type)) return "action is unavailable on this board";
         return action_type_validate(registered_type, action);
     }
-    if (strcmp(type, ACTION_TYPE_MUSIC) == 0) {
-#if HAS_SOUND_PLAYER
-        if (!action.containsKey("music_command")) return "music missing music_command";
-        if (!action["music_command"].is<const char*>()) return "music_command must be a string";
-        MusicCommand command;
-        return music_command_parse(action["music_command"].as<const char*>(), &command)
-            ? nullptr : "music_command must be play_pause, next, previous, or stop";
-#else
-        return "music is unavailable on this board";
-#endif
-    }
+    // Isolated host validation tests intentionally omit built-in registration.
+    // Keep these fallbacks behavior-identical to their registry validators.
     if (strcmp(type, ACTION_TYPE_CYCLE_PAD) == 0) {
         if (action.containsKey("direction")) {
-            if (!action["direction"].is<const char*>()) {
-                return "cycle_pad direction must be a string";
-            }
+            if (!action["direction"].is<const char*>()) return "cycle_pad direction must be a string";
             const char* direction = action["direction"].as<const char*>();
             if (strcmp(direction, "next") != 0 && strcmp(direction, "previous") != 0) {
                 return "cycle_pad direction must be 'next' or 'previous'";
             }
         }
-        if (action.containsKey("wrap") && !action["wrap"].is<bool>()) {
-            return "cycle_pad wrap must be boolean";
-        }
-        if (action.containsKey("excluded_pads")
-                && !action["excluded_pads"].is<const char*>()) {
+        if (action.containsKey("wrap") && !action["wrap"].is<bool>()) return "cycle_pad wrap must be boolean";
+        if (action.containsKey("excluded_pads") && !action["excluded_pads"].is<const char*>()) {
             return "cycle_pad excluded_pads must be a string";
-        }
-        return nullptr;
-    }
-    if (strcmp(type, ACTION_TYPE_DELAY) == 0) {
-        if (!action.containsKey("duration_ms") || !action["duration_ms"].is<uint32_t>()) {
-            return "delay duration_ms must be a whole number";
-        }
-        const uint32_t duration_ms = action["duration_ms"].as<uint32_t>();
-        if (!action_delay_duration_is_valid(duration_ms)) {
-            return "delay duration_ms must be 1-55000";
         }
         return nullptr;
     }
@@ -153,9 +128,7 @@ static const char* validate_action(JsonObjectConst action) {
     if (!action["entity_id"].is<const char*>()) return "ha_service entity_id must be a string";
     const char* entity_id = action["entity_id"].as<const char*>();
     if (!entity_id[0]) return "ha_service entity_id must not be empty";
-    if (strlen(entity_id) >= sizeof(((HaServicePayload*)nullptr)->entity_id)) {
-        return "ha_service entity_id too long";
-    }
+    if (strlen(entity_id) >= sizeof(((HaServicePayload*)nullptr)->entity_id)) return "ha_service entity_id too long";
     const char* separator = strchr(entity_id, '.');
     if (!separator || separator == entity_id || !separator[1] || strchr(separator + 1, '.')) {
         return "ha_service entity_id must have nonempty domain and object portions";
@@ -163,7 +136,6 @@ static const char* validate_action(JsonObjectConst action) {
     for (const char* cursor = entity_id; *cursor; ++cursor) {
         if (isspace((unsigned char)*cursor)) return "ha_service entity_id must not contain whitespace";
     }
-
     if (!action.containsKey("service")) return "ha_service missing service";
     if (!action["service"].is<const char*>()) return "ha_service service must be a string";
     const char* service = action["service"].as<const char*>();
@@ -173,38 +145,31 @@ static const char* validate_action(JsonObjectConst action) {
         snprintf(s_len_err, sizeof(s_len_err), "service must be bare; use '%s'", service_separator + 1);
         return s_len_err;
     }
-    if (strlen(service) >= sizeof(((HaServicePayload*)nullptr)->service)) {
-        return "ha_service service too long";
-    }
+    if (strlen(service) >= sizeof(((HaServicePayload*)nullptr)->service)) return "ha_service service too long";
     for (const char* cursor = service; *cursor; ++cursor) {
         unsigned char character = (unsigned char)*cursor;
         if (!islower(character) && !isdigit(character) && character != '_') {
             return "ha_service service must contain only lowercase letters, digits, and '_'";
         }
     }
-
     if (!action.containsKey("data_json")) return nullptr;
     if (!action["data_json"].is<const char*>()) return "ha_service data_json must be a string";
     const char* data_json = action["data_json"].as<const char*>();
     if (!data_json[0]) return nullptr;
-    if (strlen(data_json) >= sizeof(((HaServicePayload*)nullptr)->data_json)) {
-        return "ha_service data_json too long";
-    }
+    if (strlen(data_json) >= sizeof(((HaServicePayload*)nullptr)->data_json)) return "ha_service data_json too long";
     JsonDocument data;
     if (deserializeJson(data, data_json)) return "ha_service data_json must contain valid JSON";
-    if (!data.is<JsonObjectConst>()) return "ha_service data_json root must be an object";
-    return nullptr;
+    return data.is<JsonObjectConst>() ? nullptr : "ha_service data_json root must be an object";
 }
 
 static bool action_type_known(const char* type) {
     if (!type || !type[0] || strcmp(type, "none") == 0) return true;
+    // Host validator tests provide a minimal registry stub, so retain the
+    // built-in fallback list for that isolated configuration.
     static const char* const builtins[] = {
-        ACTION_TYPE_SCREEN, ACTION_TYPE_MQTT,
-        ACTION_TYPE_KEY, ACTION_TYPE_BLE_PAIR, ACTION_TYPE_MUSIC,
-        ACTION_TYPE_TIMER,
-        ACTION_TYPE_SOUND_ALERT, ACTION_TYPE_NOTIFY, ACTION_TYPE_SYSTEM,
-        ACTION_TYPE_HA_SERVICE, ACTION_TYPE_VISUAL_ALERT, ACTION_TYPE_CYCLE_PAD,
-        ACTION_TYPE_DELAY,
+        ACTION_TYPE_MQTT, ACTION_TYPE_TIMER, ACTION_TYPE_SOUND_ALERT,
+        ACTION_TYPE_NOTIFY, ACTION_TYPE_SYSTEM, ACTION_TYPE_HA_SERVICE,
+        ACTION_TYPE_VISUAL_ALERT, ACTION_TYPE_CYCLE_PAD,
     };
     for (const char* builtin : builtins) {
         if (strcmp(type, builtin) == 0) return true;

@@ -62,6 +62,16 @@ const FIXTURE_CATALOG = [
         ]
     },
     {
+        type: 'system', group: 'Device', label: 'Device command',
+        commands: [{ id: 'reboot', label: 'Restart device' }, { id: 'wifi_reconnect', label: 'Reconnect Wi-Fi' }],
+        editor_fields: [{ name: 'system_command', label: 'Command', type: 'select', command_options: true }]
+    },
+    {
+        type: 'music', group: 'Audio', label: 'Music',
+        commands: [{ id: 'play_pause', label: 'Play/Pause' }, { id: 'next', label: 'Next track' }],
+        editor_fields: [{ name: 'music_command', label: 'Command', type: 'select', command_options: true }]
+    },
+    {
         type: 'timer', group: 'Timer', label: 'Timer',
         commands: ['toggle', 'start', 'stop', 'pause', 'resume', 'reset', 'set', 'adjust']
             .map(function(id) { return { id: id, label: id }; })
@@ -144,11 +154,23 @@ const prefix = 'picker';
 const editorHtml = context.actionEditorHTML(prefix, '', {});
 assert(editorHtml.includes('Up to 3 pausable actions can be pending device-wide at a time'));
 assert(editorHtml.includes('picker-generic-volume-volume_mode'));
+assert(editorHtml.includes('picker-generic-system-system_command'));
+assert(editorHtml.includes('picker-generic-music-music_command'));
+assert(!editorHtml.includes('picker-system-command'));
+assert(!editorHtml.includes('picker-music-command'));
 context.actionEditorLoad(prefix, { type: 'volume', volume_mode: 'adjust', volume_value: '{step}' });
 const volumeAction = context.actionEditorBuild(prefix);
 assert.strictEqual(volumeAction.type, 'volume');
 assert.strictEqual(volumeAction.volume_mode, 'adjust');
 assert.strictEqual(volumeAction.volume_value, '{step}');
+context.actionEditorLoad(prefix, { type: 'system', system_command: 'wifi_reconnect' });
+const systemAction = context.actionEditorBuild(prefix);
+assert.strictEqual(systemAction.type, 'system');
+assert.strictEqual(systemAction.system_command, 'wifi_reconnect');
+context.actionEditorLoad(prefix, { type: 'music', music_command: 'next' });
+const musicAction = context.actionEditorBuild(prefix);
+assert.strictEqual(musicAction.type, 'music');
+assert.strictEqual(musicAction.music_command, 'next');
 const familyEl = document.getElementById(prefix + '-shutter-family');
 familyEl.value = 'session';
 context.actionEditorShutterFamilyChanged(prefix);

@@ -6,10 +6,9 @@
 # presentation metadata shared by the web portal (GET /api/info?catalog=1) and
 # the MCP capability manifest (get_capabilities). Because there is only one
 # table, there is nothing for a second copy to drift from — the failure mode
-# this guard exists to catch is a forgotten entry: a built-in type handled in
-# the action_parse.cpp / action_dispatch.cpp strcmp ladder, or a device-class
-# type registered via REGISTER_ACTION_TYPE, that has no catalog metadata and
-# is therefore invisible to both the portal picker and MCP pad authoring.
+# this guard exists to catch is a built-in type that was declared but not
+# registered, or a registered type without catalog metadata, leaving it
+# invisible to both the portal picker and MCP pad authoring.
 #
 # This is a textual guard (no compilation): it scans src/app for type ladders,
 # registrations, and catalog entries, and diffs the resulting sets.
@@ -19,15 +18,14 @@ cd "$(dirname "$0")/.."
 
 SRC_DIR="src/app"
 CATALOG="$SRC_DIR/action_catalog.cpp"
-PARSE="$SRC_DIR/action_parse.cpp"
-DISPATCH="$SRC_DIR/action_dispatch.cpp"
 BUILTIN_TYPES="$SRC_DIR/action_builtin_types.cpp"
+BUILTIN_CONFIG="$SRC_DIR/pad_config.h"
 
 fail=0
 
 # ---------------------------------------------------------------------------
-# 1. Built-in types: every ACTION_TYPE_* used in the parse/dispatch ladders
-#    must have handwritten catalog metadata or a registered builtin definition.
+# 1. Built-in types: every ACTION_TYPE_* declaration must have a registered
+#    builtin definition. ACTION_TYPE_NONE ("") is the empty-action sentinel.
 #    ACTION_TYPE_NONE ("") is the empty-action sentinel, not a real type, and
 #    is excluded.
 # ---------------------------------------------------------------------------
@@ -37,17 +35,11 @@ declare -A MACRO_VALUE
 while IFS=' ' read -r macro value; do
     [ -z "$macro" ] && continue
     MACRO_VALUE["$macro"]="$value"
-done < <(grep -rhoE '#define ACTION_TYPE_[A-Z_]+ *"[a-z_]*"' "$SRC_DIR" 2>/dev/null \
+done < <(grep -hE '#define ACTION_TYPE_[A-Z_]+ *"[a-z_]*"' "$BUILTIN_CONFIG" 2>/dev/null \
     | sed -E 's/#define +(ACTION_TYPE_[A-Z_]+) *"([a-z_]*)"/\1 \2/')
 
 if [ "${#MACRO_VALUE[@]}" -eq 0 ]; then
     echo "FAIL: found no '#define ACTION_TYPE_*' declarations under $SRC_DIR" >&2
-    exit 1
-fi
-
-ladder_macros="$(grep -ohE 'ACTION_TYPE_[A-Z_]+' "$PARSE" "$DISPATCH" 2>/dev/null | sort -u)"
-if [ -z "$ladder_macros" ]; then
-    echo "FAIL: found no ACTION_TYPE_* references in $PARSE / $DISPATCH" >&2
     exit 1
 fi
 
@@ -59,13 +51,14 @@ for macro in $registered_builtin_macros; do
     [ -n "$value" ] && catalog_types="$(printf '%s\n%s\n' "$catalog_types" "$value" | sort -u)"
 done
 
+defined_builtin_macros="$(printf '%s\n' "${!MACRO_VALUE[@]}" | sort)"
 missing_builtins=""
-for macro in $ladder_macros; do
+for macro in $defined_builtin_macros; do
     [ "$macro" = "ACTION_TYPE_NONE" ] && continue
     value="${MACRO_VALUE[$macro]:-}"
     if [ -z "$value" ]; then
         fail=1
-        echo "FAIL: $macro is used in the action ladder but has no '#define $macro \"...\"'" >&2
+        echo "FAIL: $macro has no '#define $macro \"...\"'" >&2
         continue
     fi
     if ! echo "$catalog_types" | grep -qx "$value"; then
@@ -74,7 +67,7 @@ for macro in $ladder_macros; do
 done
 if [ -n "$missing_builtins" ]; then
     fail=1
-    echo "FAIL: built-in action type(s) in the parse/dispatch ladder have no catalog entry:" >&2
+    echo "FAIL: built-in action type(s) have no registered catalog definition:" >&2
     for t in $missing_builtins; do
         echo "  - $t  -> add catalog metadata or register a builtin ActionTypeDef" >&2
     done

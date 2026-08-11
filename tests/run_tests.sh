@@ -112,7 +112,8 @@ echo
 echo "=== Building integration tests: expr_binding ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \
-    -I src/app \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_expr_binding.cpp \
     src/app/binding_template.cpp \
     src/app/expr_eval.cpp \
@@ -563,11 +564,20 @@ node --check src/app/web/portal_config_actions.js
 echo
 
 echo "=== Building unit tests: action_bindings ==="
-g++ -std=c++17 -Wall -Wextra -Werror \
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -DHAS_AUDIO=1 -DHAS_SOUND_PLAYER=1 \
     -include tests/log_manager.h -include tests/board_config.h \
-    -I src/app \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_bindings.cpp \
+    src/app/action_builtin_types.cpp \
+    src/app/action_parse.cpp \
+    src/app/action_list.cpp \
+    src/app/action_continuation.cpp \
+    src/app/action_registry.cpp \
     src/app/binding_template.cpp \
+    src/app/music_command.cpp \
+    src/app/pad_cycle.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_action_bindings -lm
 

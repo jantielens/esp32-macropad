@@ -133,16 +133,14 @@ char* voice_value_field(ButtonAction& action, size_t* out_size) {
     return payload.text;
 }
 
-const ActionTypeDef kVoiceActionType = {
+DEFINE_AND_REGISTER_ACTION_TYPE(kVoiceActionType,
     /* type_name   */ ACTION_TYPE_VOICE,
     /* parse       */ voice_parse,
     /* serialize   */ voice_serialize,
     /* dispatch    */ voice_dispatch,
     /* value_field */ voice_value_field,
     /* describe    */ voice_describe,
-};
-
-REGISTER_ACTION_TYPE(kVoiceActionType);
+);
 } // namespace
 
 #endif // IS_VOICE_ASSISTANT

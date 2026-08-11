@@ -72,15 +72,13 @@ static void strip_describe(JsonObject& out) {
     }
 }
 
-static const ActionTypeDef strip_action_type = {
+DEFINE_AND_REGISTER_ACTION_TYPE(strip_action_type,
     /* type_name   */ ACTION_TYPE_STRIP,
     /* parse       */ strip_parse,
     /* serialize   */ strip_serialize,
     /* dispatch    */ strip_dispatch,
     /* value_field */ strip_value_field,
     /* describe    */ strip_describe,
-};
-
-REGISTER_ACTION_TYPE(strip_action_type);
+);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

@@ -6,6 +6,7 @@
 #include "action_list.h"
 #include "action_registry.h"
 #include "log_manager.h"
+#include "music_command.h"
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -83,121 +84,264 @@ ActionResult action_dispatch_brightness(const ButtonAction& act, const char* lab
     return ACTION_COMPLETE;
 }
 
+ActionResult action_dispatch_system(const ButtonAction& act, const char* label, uint32_t) {
+    const char* syscmd = act.payload.system.system_command;
+    if (strcmp(syscmd, "reboot") == 0) {
+        LOGI(TAG, "%s system: reboot", label);
+        delay(200);
+        ESP.restart();
+    } else if (strcmp(syscmd, "wifi_reconnect") == 0) {
+        LOGI(TAG, "%s system: wifi_reconnect", label);
+        wifi_manager_request_reconnect();
+    } else if (strcmp(syscmd, "screensaver") == 0) {
+#if HAS_DISPLAY
+        LOGI(TAG, "%s system: screensaver", label);
+        screen_saver_manager_sleep_now();
+#else
+        LOGW(TAG, "%s system: screensaver unavailable (no display)", label);
+#endif
+    } else {
+        LOGW(TAG, "%s system: unknown command '%s'", label, syscmd);
+    }
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_music(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_SOUND_PLAYER
+    MusicCommand command;
+    if (!music_command_parse(act.payload.music.music_command, &command)) {
+        LOGW(TAG, "%s music: invalid command", label);
+    } else if (audio_music_command(command) != AUDIO_MUSIC_SUBMIT_QUEUED) {
+        LOGW(TAG, "%s music: audio worker busy", label);
+    }
+#else
+    LOGW(TAG, "%s music: not compiled", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_screen(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_DISPLAY
+    const char* screen_id = act.payload.screen.screen_id;
+    if (screen_id[0]) {
+        bool ok = false;
+        display_manager_show_screen(screen_id, &ok);
+        if (!ok) LOGW(TAG, "%s nav failed: '%s'", label, screen_id);
+    }
+#else
+    LOGW(TAG, "%s screen: no display", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_key(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_BLE_HID
+    const char* sequence = act.payload.key.key_sequence;
+    if (!ble_hid_is_initialized()) {
+        LOGW(TAG, "%s key: BLE disabled", label);
+    } else if (sequence[0]) {
+        LOGI(TAG, "%s key: '%s'", label, sequence);
+        ble_hid_request_sequence(sequence);
+    } else {
+        LOGW(TAG, "%s key: empty sequence", label);
+    }
+#else
+    LOGW(TAG, "%s key: not compiled", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_ble_pair(const ButtonAction&, const char* label, uint32_t) {
+#if HAS_BLE_HID
+    if (!ble_hid_is_initialized()) {
+        LOGW(TAG, "%s ble_pair: BLE disabled", label);
+    } else {
+        LOGI(TAG, "%s ble_pair: starting re-pairing", label);
+        ble_hid_request_pairing();
+    }
+#else
+    LOGW(TAG, "%s ble_pair: not compiled", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_delay(const ButtonAction& act, const char* label,
+                                   uint32_t continuation_token) {
+    const uint32_t duration_ms = act.payload.delay.duration_ms;
+    if (!action_delay_duration_is_valid(duration_ms)) {
+        LOGW(TAG, "%s delay: duration must be 1-%u ms", label,
+             (unsigned)ACTION_DELAY_MAX_DURATION_MS);
+        return ACTION_FAILED;
+    }
+    if (!continuation_token) {
+        LOGW(TAG, "%s delay: %s", label,
+             action_continuation_is_full()
+                 ? "all pausable action slots are occupied"
+                 : "must be used in an action list");
+        return ACTION_FAILED;
+    }
+    if (!action_continuation_schedule_success(continuation_token, duration_ms)) {
+        LOGW(TAG, "%s delay: continuation is no longer available", label);
+        return ACTION_FAILED;
+    }
+    LOGI(TAG, "%s delay: %lu ms", label, (unsigned long)duration_ms);
+    return ACTION_PENDING;
+}
+
+ActionResult action_dispatch_cycle_pad(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_DISPLAY
+    const auto& cycle = act.payload.cycle_pad;
+    if (!display_manager_cycle_pad(cycle.direction, cycle.wrap, cycle.excluded_mask)) {
+        LOGD(TAG, "%s cycle_pad: no eligible destination", label);
+    }
+#else
+    LOGW(TAG, "%s cycle_pad: no display", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_mqtt(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_MQTT
+    const auto& mqtt = act.payload.mqtt;
+    if (mqtt.mqtt_topic[0]) {
+        bool ok = mqtt_manager.publish(mqtt.mqtt_topic, mqtt.mqtt_payload, false);
+        LOGI(TAG, "%s mqtt: topic='%s' payload='%s' %s", label, mqtt.mqtt_topic,
+             mqtt.mqtt_payload, ok ? "ok" : "FAIL");
+    } else {
+        LOGW(TAG, "%s mqtt: empty topic", label);
+    }
+#else
+    LOGW(TAG, "%s mqtt: not compiled", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_sound_alert(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_AUDIO
+    const auto& sound_alert = act.payload.sound_alert;
+    if (strcmp(sound_alert.sound_alert_kind, "tone") == 0) {
+        audio_beep(sound_alert.sound_alert_pattern, sound_alert.sound_alert_volume);
+    } else if (strcmp(sound_alert.sound_alert_kind, "mp3") == 0) {
+#if HAS_SOUND_PLAYER
+        audio_play_sound(sound_alert.sound_alert_file, sound_alert.sound_alert_volume);
+#else
+        LOGW(TAG, "%s sound_alert MP3: not compiled", label);
+#endif
+    } else {
+        LOGW(TAG, "%s sound_alert: invalid kind", label);
+    }
+#else
+    LOGW(TAG, "%s sound_alert: not compiled", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_timer(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_DISPLAY
+    const auto& timer = act.payload.timer;
+    char error[96];
+    if (timer_command_run(timer, error, sizeof(error))) {
+        LOGI(TAG, "%s timer: %u:%s", label, timer.timer_id, timer.timer_command);
+    } else {
+        LOGW(TAG, "%s timer: %s", label, error);
+    }
+#else
+    LOGW(TAG, "%s timer: no display", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_notify(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_DISPLAY
+    const auto& notify = act.payload.notify;
+    MessageBubbleParams params = {};
+    strlcpy(params.text, notify.notify_text, sizeof(params.text));
+    if (!params.text[0]) {
+        message_bubble_dismiss();
+        LOGI(TAG, "%s notify: dismiss", label);
+    } else {
+        const char* duration = notify.notify_duration_ms[0] ? notify.notify_duration_ms : "3000";
+        params.duration_ms = (uint16_t)atoi(duration);
+        const char* text_color = notify.notify_text_color[0] ? notify.notify_text_color : "#ffffff";
+        if (!parse_hex_color(text_color, &params.text_color)) params.text_color = 0xFFFFFF;
+        const char* background = notify.notify_bg_color[0] ? notify.notify_bg_color : "#333333";
+        if (!parse_hex_color(background, &params.bg_color)) params.bg_color = 0x333333;
+        if (notify.notify_border_color[0]) {
+            params.has_border = parse_hex_color(notify.notify_border_color, &params.border_color);
+        }
+        params.opacity = notify.notify_opacity;
+        params.font_size = notify.notify_font_size;
+        params.location = notify_location_from_str(notify.notify_location);
+        message_bubble_show(&params);
+        LOGI(TAG, "%s notify: '%s' dur=%u loc=%s", label, params.text, params.duration_ms,
+             notify.notify_location[0] ? notify.notify_location : "bottom");
+    }
+#else
+    LOGW(TAG, "%s notify: no display", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_visual_alert(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_DISPLAY
+    const auto& visual_alert = act.payload.visual_alert;
+    if (strcmp(visual_alert.va_op, "stop") == 0) {
+        visual_alert_stop();
+        LOGI(TAG, "%s visual_alert: stop", label);
+    } else {
+        screen_saver_manager_notify_activity(true);
+        VisualAlertParams params = {};
+        const char* color = visual_alert.va_color[0] ? visual_alert.va_color : "#FF0000";
+        if (!parse_hex_color(color, &params.color)) params.color = 0xFF0000;
+        params.pattern = visual_alert_pattern_from_str(visual_alert.va_pattern);
+        params.period_ms = visual_alert.va_period_ms > 0 ? visual_alert.va_period_ms : VA_DEFAULT_PERIOD_MS;
+        params.intensity = visual_alert.va_intensity > 0 ? (uint8_t)visual_alert.va_intensity : VA_DEFAULT_INTENSITY;
+        params.duration_ms = visual_alert.va_duration_ms;
+        visual_alert_show(&params);
+        LOGI(TAG, "%s visual_alert: start pat=%u per=%u int=%u dur=%u", label,
+             params.pattern, params.period_ms, params.intensity, params.duration_ms);
+    }
+#else
+    LOGW(TAG, "%s visual_alert: no display", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_ha_service(const ButtonAction& act, const char* label, uint32_t) {
+    const auto& service = act.payload.ha_service;
+    if (service.entity_id[0] && service.service[0]) {
+        LOGI(TAG, "%s ha_service: %s.%s", label, service.entity_id, service.service);
+        if (ha_service_enqueue(service) == HA_SERVICE_QUEUE_FULL) {
+            LOGW(TAG, "%s ha_service queue full: entity='%s' service='%s'", label,
+                 service.entity_id, service.service);
+        }
+    } else {
+        LOGW(TAG, "%s ha_service: missing entity_id/service", label);
+    }
+    return ACTION_COMPLETE;
+}
+
 #if HAS_MQTT
 // Resolve binding templates in the active payload arm's resolvable fields.
 // Structural fields (commands, modes, ids) are excluded — only fields that
 // users may template are visited. Type-dispatched so we only touch the
 // active arm of the discriminated union (writing a non-active arm is UB).
 static bool resolve_action_bindings(ButtonAction& act) {
-    auto try_resolve = [](char* field, size_t len, bool reject_overflow = false) {
-        return action_resolve_binding_field(field, len, reject_overflow);
-    };
-
-    if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
-        try_resolve(act.payload.screen.screen_id, sizeof(act.payload.screen.screen_id));
-    } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
-        try_resolve(act.payload.mqtt.mqtt_topic,   sizeof(act.payload.mqtt.mqtt_topic));
-        try_resolve(act.payload.mqtt.mqtt_payload, sizeof(act.payload.mqtt.mqtt_payload));
-    } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
-        try_resolve(act.payload.key.key_sequence, sizeof(act.payload.key.key_sequence));
-    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0 &&
-               strcmp(act.payload.sound_alert.sound_alert_kind, "tone") == 0) {
-        try_resolve(act.payload.sound_alert.sound_alert_pattern,
-                    sizeof(act.payload.sound_alert.sound_alert_pattern));
-    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
-        try_resolve(act.payload.volume.volume_value, sizeof(act.payload.volume.volume_value));
-    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        try_resolve(act.payload.brightness.brightness_value, sizeof(act.payload.brightness.brightness_value));
-    } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
-        if (!try_resolve(act.payload.timer.timer_value,
-                         sizeof(act.payload.timer.timer_value), true)) return false;
-    } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
-        try_resolve(act.payload.notify.notify_text,         sizeof(act.payload.notify.notify_text));
-        try_resolve(act.payload.notify.notify_duration_ms,  sizeof(act.payload.notify.notify_duration_ms));
-        try_resolve(act.payload.notify.notify_text_color,   sizeof(act.payload.notify.notify_text_color));
-        try_resolve(act.payload.notify.notify_bg_color,     sizeof(act.payload.notify.notify_bg_color));
-        try_resolve(act.payload.notify.notify_border_color, sizeof(act.payload.notify.notify_border_color));
-    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
-        try_resolve(act.payload.visual_alert.va_color, sizeof(act.payload.visual_alert.va_color));
-    } else {
-        // Device-class action types (e.g. shutter) self-register via the
-        // action type registry; resolve bindings generically against their
-        // value_field accessor (if any).
-        const ActionTypeDef* t = action_type_find(act.type);
-        if (!action_type_resolve_bindings(t, act)) return false;
-    }
-    // sound, system, back, ble_pair: no bindable fields today.
-    return true;
+    return action_type_resolve_bindings(action_type_find(act.type), act);
 }
 
 // Quick scan: return true if the active payload arm contains a binding token.
 // Checks only for '[' to avoid the ButtonAction copy for the common case.
 // Type-dispatched so we only read the active union arm.
 static bool action_has_any_binding(const ButtonAction& act) {
-    auto has = [](const char* f) { return f[0] && memchr(f, '[', strlen(f)); };
-    if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
-        return has(act.payload.screen.screen_id);
-    } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
-        return has(act.payload.mqtt.mqtt_topic) || has(act.payload.mqtt.mqtt_payload);
-    } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
-        return has(act.payload.key.key_sequence);
-    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0 &&
-               strcmp(act.payload.sound_alert.sound_alert_kind, "tone") == 0) {
-        return has(act.payload.sound_alert.sound_alert_pattern);
-    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
-        return has(act.payload.volume.volume_value);
-    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        return has(act.payload.brightness.brightness_value);
-    } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
-        return has(act.payload.timer.timer_value);
-    } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
-        return has(act.payload.notify.notify_text)
-            || has(act.payload.notify.notify_duration_ms)
-            || has(act.payload.notify.notify_text_color)
-            || has(act.payload.notify.notify_bg_color)
-            || has(act.payload.notify.notify_border_color);
-    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
-        return has(act.payload.visual_alert.va_color);
-    }
-    const ActionTypeDef* t = action_type_find(act.type);
-    return action_type_has_binding(t, act);
+    return action_type_has_binding(action_type_find(act.type), act);
 }
 
 // Collect MQTT topics from every bindable field of an action. Mirrors the
 // field set in resolve_action_bindings() so a token used only inside a button
 // action still gets subscribed by mqtt_sub_store's scan.
 void action_collect_binding_topics(const ButtonAction& act, void* user_data) {
-    auto collect = [&](const char* field) {
-        if (field[0]) binding_template_collect_topics(field, user_data);
-    };
-    if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
-        collect(act.payload.screen.screen_id);
-    } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
-        collect(act.payload.mqtt.mqtt_topic);
-        collect(act.payload.mqtt.mqtt_payload);
-    } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
-        collect(act.payload.key.key_sequence);
-    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0 &&
-               strcmp(act.payload.sound_alert.sound_alert_kind, "tone") == 0) {
-        collect(act.payload.sound_alert.sound_alert_pattern);
-    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
-        collect(act.payload.volume.volume_value);
-    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        collect(act.payload.brightness.brightness_value);
-    } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
-        collect(act.payload.timer.timer_value);
-    } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
-        collect(act.payload.notify.notify_text);
-        collect(act.payload.notify.notify_duration_ms);
-        collect(act.payload.notify.notify_text_color);
-        collect(act.payload.notify.notify_bg_color);
-        collect(act.payload.notify.notify_border_color);
-    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
-        collect(act.payload.visual_alert.va_color);
-    } else {
-        const ActionTypeDef* t = action_type_find(act.type);
-        action_type_collect_topics(t, act, user_data);
-    }
+    action_type_collect_topics(action_type_find(act.type), act, user_data);
 }
 #endif // HAS_MQTT
 
@@ -239,234 +383,9 @@ ActionResult action_dispatch(const ButtonAction& act_in, const char* label,
 
 static ActionResult action_dispatch_resolved(const ButtonAction& act, const char* label,
                                              uint32_t continuation_token) {
-
-    const ActionTypeDef* registered_type = action_type_find(act.type);
-    if (registered_type && registered_type->dispatch) {
-        return registered_type->dispatch(act, label, continuation_token);
-    }
-
-    if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
-#if HAS_DISPLAY
-        const char* screen_id = act.payload.screen.screen_id;
-        if (screen_id[0]) {
-            bool ok = false;
-            display_manager_show_screen(screen_id, &ok);
-            if (!ok) {
-                LOGW(TAG, "%s nav failed: '%s'", label, screen_id);
-            }
-        }
-#else
-        LOGW(TAG, "%s screen: no display", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_CYCLE_PAD) == 0) {
-#if HAS_DISPLAY
-    const auto& cycle = act.payload.cycle_pad;
-    if (!display_manager_cycle_pad(cycle.direction, cycle.wrap,
-                       cycle.excluded_mask)) {
-        LOGD(TAG, "%s cycle_pad: no eligible destination", label);
-    }
-#else
-    LOGW(TAG, "%s cycle_pad: no display", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_DELAY) == 0) {
-        const uint32_t duration_ms = act.payload.delay.duration_ms;
-        if (!action_delay_duration_is_valid(duration_ms)) {
-            LOGW(TAG, "%s delay: duration must be 1-%u ms", label,
-                 (unsigned)ACTION_DELAY_MAX_DURATION_MS);
-            return ACTION_FAILED;
-        }
-        if (!continuation_token) {
-            LOGW(TAG, "%s delay: %s", label,
-                 action_continuation_is_full()
-                     ? "all pausable action slots are occupied"
-                     : "must be used in an action list");
-            return ACTION_FAILED;
-        }
-        if (!action_continuation_schedule_success(continuation_token, duration_ms)) {
-            LOGW(TAG, "%s delay: continuation is no longer available", label);
-            return ACTION_FAILED;
-        }
-        LOGI(TAG, "%s delay: %lu ms", label, (unsigned long)duration_ms);
-        return ACTION_PENDING;
-    } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
-#if HAS_MQTT
-        const auto& m = act.payload.mqtt;
-        if (m.mqtt_topic[0]) {
-            bool ok = mqtt_manager.publish(m.mqtt_topic, m.mqtt_payload, false);
-            LOGI(TAG, "%s mqtt: topic='%s' payload='%s' %s", label, m.mqtt_topic, m.mqtt_payload, ok ? "ok" : "FAIL");
-        } else {
-            LOGW(TAG, "%s mqtt: empty topic", label);
-        }
-#else
-        LOGW(TAG, "%s mqtt: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
-#if HAS_BLE_HID
-        const char* seq = act.payload.key.key_sequence;
-        if (!ble_hid_is_initialized()) {
-            LOGW(TAG, "%s key: BLE disabled", label);
-        } else if (seq[0]) {
-            LOGI(TAG, "%s key: '%s'", label, seq);
-            ble_hid_request_sequence(seq);
-        } else {
-            LOGW(TAG, "%s key: empty sequence", label);
-        }
-#else
-        LOGW(TAG, "%s key: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_BLE_PAIR) == 0) {
-#if HAS_BLE_HID
-        if (!ble_hid_is_initialized()) {
-            LOGW(TAG, "%s ble_pair: BLE disabled", label);
-        } else {
-            LOGI(TAG, "%s ble_pair: starting re-pairing", label);
-            ble_hid_request_pairing();
-        }
-#else
-        LOGW(TAG, "%s ble_pair: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_MUSIC) == 0) {
-    #if HAS_SOUND_PLAYER
-        MusicCommand command;
-        if (!music_command_parse(act.payload.music.music_command, &command)) {
-            LOGW(TAG, "%s music: invalid command", label);
-        } else if (audio_music_command(command) != AUDIO_MUSIC_SUBMIT_QUEUED) {
-            LOGW(TAG, "%s music: audio worker busy", label);
-        }
-#else
-        LOGW(TAG, "%s music: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0) {
-#if HAS_AUDIO
-        const auto& sound_alert = act.payload.sound_alert;
-        if (strcmp(sound_alert.sound_alert_kind, "tone") == 0) {
-            audio_beep(sound_alert.sound_alert_pattern, sound_alert.sound_alert_volume);
-        } else if (strcmp(sound_alert.sound_alert_kind, "mp3") == 0) {
-#if HAS_SOUND_PLAYER
-            audio_play_sound(sound_alert.sound_alert_file, sound_alert.sound_alert_volume);
-#else
-            LOGW(TAG, "%s sound_alert MP3: not compiled", label);
-#endif
-        } else {
-            LOGW(TAG, "%s sound_alert: invalid kind", label);
-        }
-#else
-        LOGW(TAG, "%s sound_alert: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
-#if HAS_DISPLAY
-        const auto& t = act.payload.timer;
-        char error[96];
-        if (timer_command_run(t, error, sizeof(error))) {
-            LOGI(TAG, "%s timer: %u:%s", label, t.timer_id, t.timer_command);
-        } else {
-            LOGW(TAG, "%s timer: %s", label, error);
-        }
-#else
-        LOGW(TAG, "%s timer: no display", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
-#if HAS_DISPLAY
-        const auto& n = act.payload.notify;
-        MessageBubbleParams params = {};
-
-        strlcpy(params.text, n.notify_text, sizeof(params.text));
-
-        if (!params.text[0]) {
-            message_bubble_dismiss();
-            LOGI(TAG, "%s notify: dismiss", label);
-        } else {
-            // Duration — apply default for empty (already resolved by generic pass)
-            const char* dur = n.notify_duration_ms[0] ? n.notify_duration_ms : "3000";
-            params.duration_ms = (uint16_t)atoi(dur);
-
-            // Colors — apply defaults for empty (already resolved by generic pass)
-            const char* tc = n.notify_text_color[0] ? n.notify_text_color : "#ffffff";
-            if (!parse_hex_color(tc, &params.text_color)) params.text_color = 0xFFFFFF;
-
-            const char* bg = n.notify_bg_color[0] ? n.notify_bg_color : "#333333";
-            if (!parse_hex_color(bg, &params.bg_color)) params.bg_color = 0x333333;
-
-            if (n.notify_border_color[0]) {
-                params.has_border = parse_hex_color(n.notify_border_color, &params.border_color);
-            }
-
-            params.opacity = n.notify_opacity;
-            params.font_size = n.notify_font_size;
-            params.location = notify_location_from_str(n.notify_location);
-
-            message_bubble_show(&params);
-            LOGI(TAG, "%s notify: '%s' dur=%u loc=%s", label, params.text,
-                 params.duration_ms, n.notify_location[0] ? n.notify_location : "bottom");
-        }
-#else
-        LOGW(TAG, "%s notify: no display", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
-#if HAS_DISPLAY
-        const auto& va = act.payload.visual_alert;
-        if (strcmp(va.va_op, "stop") == 0) {
-            visual_alert_stop();
-            LOGI(TAG, "%s visual_alert: stop", label);
-        } else {
-            // Wake first so the alert is visible even if the screen is asleep.
-            screen_saver_manager_notify_activity(true);
-
-            VisualAlertParams params = {};
-            const char* col = va.va_color[0] ? va.va_color : "#FF0000";
-            if (!parse_hex_color(col, &params.color)) params.color = 0xFF0000;
-            params.pattern     = visual_alert_pattern_from_str(va.va_pattern);
-            params.period_ms   = va.va_period_ms > 0 ? va.va_period_ms : VA_DEFAULT_PERIOD_MS;
-            params.intensity   = va.va_intensity  > 0 ? (uint8_t)va.va_intensity : VA_DEFAULT_INTENSITY;
-            params.duration_ms = va.va_duration_ms;
-
-            visual_alert_show(&params);
-            LOGI(TAG, "%s visual_alert: start pat=%u per=%u int=%u dur=%u", label,
-                 params.pattern, params.period_ms, params.intensity, params.duration_ms);
-        }
-#else
-        LOGW(TAG, "%s visual_alert: no display", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_SYSTEM) == 0) {
-        const char* syscmd = act.payload.system.system_command;
-        if (strcmp(syscmd, "reboot") == 0) {
-            LOGI(TAG, "%s system: reboot", label);
-            delay(200);
-            ESP.restart();
-        } else if (strcmp(syscmd, "wifi_reconnect") == 0) {
-            LOGI(TAG, "%s system: wifi_reconnect", label);
-            wifi_manager_request_reconnect();
-        } else if (strcmp(syscmd, "screensaver") == 0) {
-#if HAS_DISPLAY
-            LOGI(TAG, "%s system: screensaver", label);
-            screen_saver_manager_sleep_now();
-#else
-            LOGW(TAG, "%s system: screensaver unavailable (no display)", label);
-#endif
-        } else {
-            LOGW(TAG, "%s system: unknown command '%s'", label, syscmd);
-        }
-    } else if (strcmp(act.type, ACTION_TYPE_HA_SERVICE) == 0) {
-        const auto& h = act.payload.ha_service;
-        if (h.entity_id[0] && h.service[0]) {
-            LOGI(TAG, "%s ha_service: %s.%s", label, h.entity_id, h.service);
-            if (ha_service_enqueue(h) == HA_SERVICE_QUEUE_FULL) {
-                LOGW(TAG, "%s ha_service queue full: entity='%s' service='%s'",
-                     label, h.entity_id, h.service);
-            }
-        } else {
-            LOGW(TAG, "%s ha_service: missing entity_id/service", label);
-        }
-    } else {
-        // Device-class action types (e.g. shutter) self-register via the
-        // action type registry; delegate dispatch when found.
-        const ActionTypeDef* t = action_type_find(act.type);
-        if (t && t->dispatch) {
-            return t->dispatch(act, label, continuation_token);
-        } else {
-            LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
-        }
-    }
+    const ActionTypeDef* type = action_type_find(act.type);
+    if (type && type->dispatch) return type->dispatch(act, label, continuation_token);
+    LOGW(TAG, "%s unknown action type: '%s'", label, act.type);
     return ACTION_COMPLETE;
 }
 

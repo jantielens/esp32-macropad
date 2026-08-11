@@ -72,15 +72,13 @@ static void print_describe(JsonObject& out) {
     }
 }
 
-static const ActionTypeDef print_action_type = {
+DEFINE_AND_REGISTER_ACTION_TYPE(print_action_type,
     /* type_name   */ ACTION_TYPE_PRINT,
     /* parse       */ print_parse,
     /* serialize   */ print_serialize,
     /* dispatch    */ print_dispatch,
     /* value_field */ print_value_field,
     /* describe    */ print_describe,
-};
-
-REGISTER_ACTION_TYPE(print_action_type);
+);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

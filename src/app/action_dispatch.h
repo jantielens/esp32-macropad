@@ -25,6 +25,32 @@ ActionResult action_dispatch_volume(const ButtonAction& act, const char* label,
 									uint32_t continuation_token);
 ActionResult action_dispatch_brightness(const ButtonAction& act, const char* label,
 										uint32_t continuation_token);
+ActionResult action_dispatch_system(const ButtonAction& act, const char* label,
+									 uint32_t continuation_token);
+ActionResult action_dispatch_music(const ButtonAction& act, const char* label,
+									uint32_t continuation_token);
+ActionResult action_dispatch_screen(const ButtonAction& act, const char* label,
+									 uint32_t continuation_token);
+ActionResult action_dispatch_key(const ButtonAction& act, const char* label,
+								  uint32_t continuation_token);
+ActionResult action_dispatch_ble_pair(const ButtonAction& act, const char* label,
+									   uint32_t continuation_token);
+ActionResult action_dispatch_delay(const ButtonAction& act, const char* label,
+									uint32_t continuation_token);
+ActionResult action_dispatch_mqtt(const ButtonAction& act, const char* label,
+								  uint32_t continuation_token);
+ActionResult action_dispatch_timer(const ButtonAction& act, const char* label,
+								   uint32_t continuation_token);
+ActionResult action_dispatch_sound_alert(const ButtonAction& act, const char* label,
+										 uint32_t continuation_token);
+ActionResult action_dispatch_notify(const ButtonAction& act, const char* label,
+									uint32_t continuation_token);
+ActionResult action_dispatch_ha_service(const ButtonAction& act, const char* label,
+										uint32_t continuation_token);
+ActionResult action_dispatch_visual_alert(const ButtonAction& act, const char* label,
+										  uint32_t continuation_token);
+ActionResult action_dispatch_cycle_pad(const ButtonAction& act, const char* label,
+									   uint32_t continuation_token);
 
 // Process deferred action work and loop-owned action continuations — call from loop().
 void action_dispatch_loop();
