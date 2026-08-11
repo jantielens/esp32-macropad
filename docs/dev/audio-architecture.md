@@ -81,6 +81,18 @@ Pads can display `[stt:status]` (`idle`, `recording`, `listening`,
 `transcribing`, `ready`, or `error`) and `[stt:text]` (the latest transcript or
 error message).
 
+The same device class can queue Azure Text-to-Speech MP3 responses. Its worker
+downloads bounded MP3 data to PSRAM and transfers that buffer to the audio task;
+it never writes a temporary sound file. The audio task owns the buffer after
+queueing and frees it on successful completion, decoder errors, a stop request,
+or queue flush. TTS action text is the one bindable action value; voice and
+volume remain optional per-action overrides. Each request carries a generation
+guard, so a newer request stops playback and prevents older HTTP responses from
+starting later. TTS has independent Azure host, deployment, API key, optional
+two-letter ISO 639-1 language, default voice, and optional instructions
+settings. The language contributes speech guidance, while instructions are
+passed verbatim to Azure for dialect, accent, or pronunciation guidance.
+
 ## Music CD Player
 
 Audio-capable builds with the sound player enabled also provide a bounded Music

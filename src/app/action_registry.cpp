@@ -70,15 +70,17 @@ bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act) 
     return field && field[0] && memchr(field, '[', strlen(field)) != nullptr;
 }
 
-void action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act) {
-    if (!def || !def->value_field) return;
+bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act) {
+    if (!def || !def->value_field) return true;
     size_t size = 0;
     char* field = def->value_field(act, &size);
     if (field && field[0] && size && binding_template_has_bindings(field)) {
         char tmp[BINDING_TEMPLATE_MAX_LEN];
         binding_template_resolve(field, tmp, sizeof(tmp));
+        if (strlen(tmp) >= size) return false;
         strlcpy(field, tmp, size);
     }
+    return true;
 }
 
 void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& act, void* user_data) {

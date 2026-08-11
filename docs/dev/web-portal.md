@@ -561,7 +561,7 @@ Returns comprehensive device information.
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
 - Each catalog entry contains `type`, `group`, and `label`. Multi-command entries also contain `commands`, an array of `{id, label}` objects; device-class entries may additionally contain `command_families`.
 - The portal uses this projection to populate action type and command selectors. MCP capability metadata uses the same catalog source with field documentation included.
-- Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, and `record_cancel` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation.
+- Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, `record_cancel`, and `speak` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation. `speak` resolves its text field as a binding template, then queues Azure TTS with optional voice and volume overrides. The Text-to-Speech settings also expose optional ISO-639-1 language guidance and verbatim Azure instructions. A newer speech request replaces active or queued speech.
 
 **Display Fields** (only when `has_display` is `true`):
 - `display_coord_width` / `display_coord_height`: Display resolution
@@ -733,6 +733,19 @@ Returns current device configuration (passwords excluded).
   "tap_beep": "",
   "lp_beep": "",
 
+  "voice_azure_host": "your-resource.services.ai.azure.com",
+  "voice_azure_model": "gpt-4o-mini-transcribe",
+  "voice_azure_language": "en",
+  "voice_azure_api_key": "",
+  "voice_api_key_configured": true,
+  "voice_tts_host": "your-resource.services.ai.azure.com",
+  "voice_tts_deployment": "gpt-4o-mini-tts",
+  "voice_tts_language": "en",
+  "voice_tts_voice": "alloy",
+  "voice_tts_instructions": "Speak clearly.",
+  "voice_tts_api_key": "",
+  "voice_tts_api_key_configured": true,
+
   "ha_url": "",
   "ha_token": ""
 }
@@ -743,6 +756,7 @@ Returns current device configuration (passwords excluded).
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
+  - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.
 - `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config` — it is always reported as an empty string.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
 
@@ -790,6 +804,17 @@ Save new configuration. Device reboots after successful save.
   "tap_beep": "800:80",
   "lp_beep": "600:40 40 600:40",
 
+  "voice_azure_host": "your-resource.services.ai.azure.com",
+  "voice_azure_model": "gpt-4o-mini-transcribe",
+  "voice_azure_language": "en",
+  "voice_azure_api_key": "new-transcription-key",
+  "voice_tts_host": "your-resource.services.ai.azure.com",
+  "voice_tts_deployment": "gpt-4o-mini-tts",
+  "voice_tts_language": "en",
+  "voice_tts_voice": "alloy",
+  "voice_tts_instructions": "Speak clearly.",
+  "voice_tts_api_key": "new-speech-key",
+
   "ha_url": "http://192.168.1.50:8123",
   "ha_token": "eyJhbGciOi..."
 }
@@ -807,6 +832,7 @@ Save new configuration. Device reboots after successful save.
 - Only fields present in request are updated
 - Password field: empty string = no change, non-empty = update
 - `ha_token` follows the same rule: empty string = keep current, non-empty = update. `ha_url` is always updated when present.
+- Voice API keys follow the same write-only rule: an empty `voice_azure_api_key` or `voice_tts_api_key` preserves the stored key, while a non-empty value replaces it. Other Voice Assistant fields update only when present.
 - Basic Auth password is never returned by `GET /api/config`.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.

@@ -176,6 +176,16 @@ echo "=== Running unit tests: Voice Assistant transcription request ==="
 ./tests/bin/test_voice_transcription_request
 echo
 
+echo "=== Building unit tests: Voice Assistant TTS request ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_voice_tts_request.cpp src/app/device_classes/voice_assistant/voice_tts_request.cpp \
+    -o tests/bin/test_voice_tts_request
+
+echo "=== Running unit tests: Voice Assistant TTS request ==="
+./tests/bin/test_voice_tts_request
+echo
+
 echo "=== Building unit tests: Voice Assistant auto-stop ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \

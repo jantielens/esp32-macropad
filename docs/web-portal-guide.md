@@ -175,6 +175,17 @@ recording** to discard an active recording without transcription. The first
 release does not subscribe to LLM responses or attach correlation IDs, so reply
 ordering is the responsibility of the MQTT automation.
 
+The page also stores independent Azure Text-to-Speech host, speech deployment,
+write-only API key, optional two-letter ISO 639-1 language, optional TTS
+instructions, and default voice (`alloy`). The language is included as Azure
+speech guidance. TTS instructions are passed verbatim to Azure and can guide
+dialect, accent, or pronunciation. Add a **Speak text** Voice Assistant action to request an MP3 from a
+`gpt-4o-mini-tts` deployment. Its text field supports normal binding templates;
+an action can optionally override the configured voice and audio volume. A new
+speech request stops the previous playback and supersedes an older request that
+finishes downloading later. Voice overrides must name a supported Azure voice;
+they are not language or locale fields.
+
 #### Alert Sounds
 
 *Shown only on boards with sound player support (defaults to boards with audio hardware).*

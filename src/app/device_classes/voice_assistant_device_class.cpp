@@ -11,6 +11,7 @@
 #include "voice_assistant/voice_wav.cpp"
 #include "voice_assistant/voice_auto_stop.cpp"
 #include "voice_assistant/voice_transcription_request.cpp"
+#include "voice_assistant/voice_tts_request.cpp"
 #include "voice_assistant/voice_config.cpp"
 #include "voice_assistant/voice.cpp"
 #include "voice_assistant/voice_binding.cpp"
@@ -42,6 +43,13 @@ static void config_api_get_hook(const DeviceConfig*, JsonObject& root) {
     root["voice_azure_language"] = config.azure_language;
     root["voice_azure_api_key"] = "";
     root["voice_api_key_configured"] = voice_api_key_configured();
+    root["voice_tts_host"] = config.tts_host;
+    root["voice_tts_deployment"] = config.tts_deployment;
+    root["voice_tts_language"] = config.tts_language;
+    root["voice_tts_voice"] = config.tts_voice;
+    root["voice_tts_instructions"] = config.tts_instructions;
+    root["voice_tts_api_key"] = "";
+    root["voice_tts_api_key_configured"] = config.tts_api_key[0] != '\0';
 }
 
 static void config_api_set_hook(DeviceConfig*, JsonObject& body) {
@@ -56,6 +64,24 @@ static void config_api_set_hook(DeviceConfig*, JsonObject& body) {
     }
     if (body.containsKey("voice_azure_api_key")) {
         voice_config_set_api_key(body["voice_azure_api_key"]);
+    }
+    if (body.containsKey("voice_tts_host")) {
+        voice_config_set_tts_host(body["voice_tts_host"] | "");
+    }
+    if (body.containsKey("voice_tts_deployment")) {
+        voice_config_set_tts_deployment(body["voice_tts_deployment"] | "");
+    }
+    if (body.containsKey("voice_tts_language")) {
+        voice_config_set_tts_language(body["voice_tts_language"] | "");
+    }
+    if (body.containsKey("voice_tts_voice")) {
+        voice_config_set_tts_voice(body["voice_tts_voice"] | "alloy");
+    }
+    if (body.containsKey("voice_tts_instructions")) {
+        voice_config_set_tts_instructions(body["voice_tts_instructions"] | "");
+    }
+    if (body.containsKey("voice_tts_api_key")) {
+        voice_config_set_tts_api_key(body["voice_tts_api_key"]);
     }
 }
 

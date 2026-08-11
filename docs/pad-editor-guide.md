@@ -401,7 +401,7 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | Timer | **Timer** | Command: Toggle, Start, Stop, Pause, Resume, Reset, Set countdown, or Adjust countdown, on one of 3 independent timers. Start and Toggle select stopwatch or countdown mode; countdown duration, Set, and Adjust values support binding templates. See [Timer Actions](#timer-actions) below. |
 | Timer | **Delay** | Pause the current action list for a whole-number duration from 1 to 55,000 ms, then continue with the next action. By default, up to three pausable actions can be pending device-wide at a time. The duration is not bindable. |
 | Device | **Device command** | Command: Restart device, Reconnect Wi-Fi, or Enable screensaver. |
-| Audio | **Voice Assistant** | On Voice Assistant builds: Start recording, Stop and transcribe, Record until silence, or Cancel recording. Record until silence pauses the action list until transcription succeeds; configure its trailing silence and speech-level threshold on the same scale as `[audio:input.rms]`. |
+| Audio | **Voice Assistant** | On Voice Assistant builds: Start recording, Stop and transcribe, Record until silence, Cancel recording, or Speak text. Record until silence pauses the action list until transcription succeeds; configure its trailing silence and speech-level threshold on the same scale as `[audio:input.rms]`. Speak text resolves binding templates such as `[mqtt:assistant/answer]`, then requests Azure TTS; optional voice and volume overrides take precedence over the device defaults, and newer speech replaces earlier speech. |
 
 **Example setup for a smart light:**
 - **Tap action 1**: Publish MQTT message → topic: `home/lights/kitchen/set`, payload: `toggle`
@@ -420,6 +420,12 @@ The first action resumes the second only after Azure transcription succeeds. A
 failed transcription stops the remaining action list. Use `[stt:status]` for a
 status label (`idle`, `recording`, `listening`, `transcribing`, `ready`, or
 `error`) and `[stt:text]` to display the latest transcript or error message.
+
+**Example Voice Assistant reply button:**
+- **Tap action 1**: Voice Assistant -> Speak text -> text: `[mqtt:assistant/answer]`
+
+Use a dedicated reply topic so that the message spoken by the device does not
+also trigger the automation that generates the reply.
 
 ### Navigate Pad Sequence Action
 

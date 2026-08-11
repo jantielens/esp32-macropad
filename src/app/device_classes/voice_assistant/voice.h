@@ -33,6 +33,7 @@ bool voice_start_until_silence(uint16_t silence_ms, uint8_t speech_threshold,
                                uint32_t continuation_token);
 VoiceStopResult voice_stop_and_transcribe(uint32_t continuation_token);
 bool voice_cancel_recording();
+bool voice_speak(const char* text, const char* voice, uint8_t volume);
 void voice_get_snapshot(VoiceSnapshot* out);
 const char* voice_status_name(VoiceStatus status);
 bool voice_api_key_configured();

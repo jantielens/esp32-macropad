@@ -83,7 +83,7 @@ static bool resolve_action_bindings(ButtonAction& act) {
         // action type registry; resolve bindings generically against their
         // value_field accessor (if any).
         const ActionTypeDef* t = action_type_find(act.type);
-        action_type_resolve_bindings(t, act);
+        if (!action_type_resolve_bindings(t, act)) return false;
     }
     // sound, system, back, ble_pair: no bindable fields today.
     return true;

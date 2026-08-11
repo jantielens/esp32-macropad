@@ -13,11 +13,16 @@
 #define VOICE_AUTO_STOP_MAX_SILENCE_MS 10000U
 #define VOICE_AUTO_STOP_MIN_THRESHOLD 0U
 #define VOICE_AUTO_STOP_MAX_THRESHOLD 100U
+#define VOICE_TTS_TEXT_MAX_LEN 60
+#define VOICE_TTS_VOICE_MAX_LEN 8
 
 struct VoicePayload {
     char command[24];
     uint16_t silence_ms;
     uint8_t speech_threshold;
+    char text[VOICE_TTS_TEXT_MAX_LEN];
+    char voice[VOICE_TTS_VOICE_MAX_LEN];
+    uint8_t volume;
 };
 
 inline bool voice_auto_stop_settings_valid(uint32_t silence_ms, uint32_t speech_threshold) {

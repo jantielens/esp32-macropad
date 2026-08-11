@@ -157,28 +157,46 @@ static void test_resolve_bindings_via_registry() {
     if (!def || !def->value_field) { g_fail++; return; }
     {
         ButtonAction act = make_fake("[mock:x]");
-        action_type_resolve_bindings(def, act);
+        check_true(action_type_resolve_bindings(def, act), "binding resolution succeeds");
         check_str(fake_payload(act).value, "RESOLVED", "binding resolved");
     }
     {
         // resolve_bindings must leave {step} untouched — only the rocker
         // substitutes it. This is the cross-feature invariant.
         ButtonAction act = make_fake("{step}");
-        action_type_resolve_bindings(def, act);
+        check_true(action_type_resolve_bindings(def, act), "plain value resolution succeeds");
         check_str(fake_payload(act).value, "{step}", "{step} survives binding resolution");
     }
+}
+
+static bool long_resolve(const char* params, char* out, size_t out_len) {
+    (void)params;
+    memset(out, 'x', out_len - 1);
+    out[out_len - 1] = '\0';
+    return true;
+}
+
+static void test_resolve_bindings_rejects_overflow() {
+    printf("--- resolve_bindings rejects overflow ---\n");
+    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
+    if (!def || !def->value_field) { g_fail++; return; }
+    ButtonAction act = make_fake("[long:x]");
+    check_true(!action_type_resolve_bindings(def, act), "oversized binding result is rejected");
+    check_str(fake_payload(act).value, "[long:x]", "overflow leaves original value unchanged");
 }
 
 int main() {
     printf("=== action registry value-field contract tests ===\n\n");
 
     binding_template_register("mock", mock_resolve, mock_collect);
+    binding_template_register("long", long_resolve, mock_collect);
     action_type_register(&fake_action_type);
 
     test_lookup_returns_registered_def();
     test_substitute_step_via_registry();
     test_has_binding_via_registry();
     test_resolve_bindings_via_registry();
+    test_resolve_bindings_rejects_overflow();
 
     printf("\n=== %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

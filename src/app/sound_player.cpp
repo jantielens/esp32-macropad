@@ -156,7 +156,7 @@ static int resampler_process(Resampler* r, const int16_t* src, int src_samples,
 }
 
 // ---------------------------------------------------------------------------
-// Play MP3 file — called from audio task
+// Play MP3 source — called from audio task
 // ---------------------------------------------------------------------------
 #ifndef AUDIO_RESAMPLER_TEST
 struct SoundPlayer {
@@ -164,6 +164,9 @@ struct SoundPlayer {
     SoundPlayerPcmTransform transform;
     void* transform_context;
     File file;
+    const uint8_t* memory;
+    size_t memory_size;
+    size_t memory_offset;
     uint8_t* read_buf;
     int16_t* out_buf;
     mp3dec_t* decoder;
@@ -197,7 +200,13 @@ static void sound_player_refill(SoundPlayer* player) {
     player->buf_consumed = 0;
     if (!player->eof && player->buf_filled < MP3_READ_BUF_SIZE) {
         const size_t to_read = MP3_READ_BUF_SIZE - player->buf_filled;
-        const size_t got = player->file.read(player->read_buf + player->buf_filled, to_read);
+        const size_t got = player->memory
+            ? min(to_read, player->memory_size - player->memory_offset)
+            : player->file.read(player->read_buf + player->buf_filled, to_read);
+        if (player->memory && got) {
+            memcpy(player->read_buf + player->buf_filled, player->memory + player->memory_offset, got);
+            player->memory_offset += got;
+        }
         player->buf_filled += got;
         if (got < to_read) player->eof = true;
     }
@@ -216,8 +225,14 @@ static int sound_player_decode(SoundPlayer* player, int16_t* pcm,
 }
 
 static void sound_player_reset_decode(SoundPlayer* player) {
-    player->file.seek(0);
-    player->buf_filled = player->file.read(player->read_buf, MP3_READ_BUF_SIZE);
+    if (player->memory) {
+        player->memory_offset = min(player->memory_size, (size_t)MP3_READ_BUF_SIZE);
+        player->buf_filled = player->memory_offset;
+        memcpy(player->read_buf, player->memory, player->buf_filled);
+    } else {
+        player->file.seek(0);
+        player->buf_filled = player->file.read(player->read_buf, MP3_READ_BUF_SIZE);
+    }
     player->buf_consumed = 0;
     player->eof = player->buf_filled < MP3_READ_BUF_SIZE;
     player->resampler_initialized = false;
@@ -295,6 +310,35 @@ SoundPlayer* sound_player_begin_path(AudioOutputDriver* output_driver, const cha
     // Start decoding immediately. A full-file duration pass can overflow the
     // internal audio task stack for large Music tracks before playback begins.
     // total_us remains zero to signal an unavailable total duration.
+    sound_player_reset_decode(player);
+    return player;
+}
+
+SoundPlayer* sound_player_begin_memory(AudioOutputDriver* output_driver, const uint8_t* data,
+                                       size_t size) {
+    if (!output_driver || !data || !size) return nullptr;
+    SoundPlayer* player = (SoundPlayer*)heap_caps_calloc(1, sizeof(SoundPlayer),
+                                                           MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!player) return nullptr;
+    player->output_driver = output_driver;
+    player->memory = data;
+    player->memory_size = size;
+    player->read_buf = (uint8_t*)sound_player_ps_alloc(MP3_READ_BUF_SIZE);
+    player->out_buf = (int16_t*)sound_player_ps_alloc(SOUND_PLAYER_MAX_OUTPUT_FRAMES * 2 * sizeof(int16_t));
+    player->decoder = (mp3dec_t*)sound_player_ps_alloc(sizeof(mp3dec_t));
+    player->pcm = (int16_t*)sound_player_ps_alloc(MINIMP3_MAX_SAMPLES_PER_FRAME * sizeof(int16_t));
+    if (!player->read_buf || !player->out_buf || !player->decoder || !player->pcm) {
+        LOGE(TAG, "Failed to allocate memory MP3 playback buffers");
+        sound_player_close(player);
+        return nullptr;
+    }
+#if AUDIO_MP3_SCRATCH_PSRAM
+    player->decode_scratch = heap_caps_malloc(mp3dec_scratch_size(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!player->decode_scratch) {
+        sound_player_close(player);
+        return nullptr;
+    }
+#endif
     sound_player_reset_decode(player);
     return player;
 }
@@ -379,6 +423,20 @@ bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
     if (!player) return false;
     SoundPlayerStepResult result = SOUND_PLAYER_STEP_PLAYING;
     while (!*stop_flag && result == SOUND_PLAYER_STEP_PLAYING) {
+        result = sound_player_step(player);
+    }
+    audio_log_starvation(player->starvation);
+    sound_player_close(player);
+    return result != SOUND_PLAYER_STEP_ERROR;
+}
+
+bool sound_player_play_memory(AudioOutputDriver* output_driver, const uint8_t* data,
+                              size_t size, volatile bool* stop_flag,
+                              bool (*guard)(uint32_t), uint32_t generation) {
+    SoundPlayer* player = sound_player_begin_memory(output_driver, data, size);
+    if (!player) return false;
+    SoundPlayerStepResult result = SOUND_PLAYER_STEP_PLAYING;
+    while (!*stop_flag && (!guard || guard(generation)) && result == SOUND_PLAYER_STEP_PLAYING) {
         result = sound_player_step(player);
     }
     audio_log_starvation(player->starvation);
