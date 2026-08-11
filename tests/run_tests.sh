@@ -554,6 +554,7 @@ node tests/test_portal_action_list.js
 node tests/test_portal_timer_binding.js
 node tests/test_portal_pad_dialog_transaction.js
 node tests/test_portal_pad_import.js
+node tests/test_portal_pad_dirty.js
 python3 tests/test_timer_mcp_integration.py
 node --check src/app/web/portal_action_editor.js
 node --check src/app/web/portal_binding_validator.js

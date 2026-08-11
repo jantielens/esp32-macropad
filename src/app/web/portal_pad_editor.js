@@ -32,7 +32,8 @@ const padState = {
 
 let padDirty = false;
 
-function padMarkDirty() {
+function padMarkDirty(event) {
+    if (event && event.isTrusted === false) return;
     padDirty = true;
 }
 
