@@ -33,6 +33,8 @@ constexpr size_t kMaxSamples = kOutputRate * kMaxSeconds;
 constexpr size_t kMaxWavBytes = VOICE_WAV_HEADER_BYTES + kMaxSamples * sizeof(int16_t);
 constexpr uint32_t kReadTimeoutMs = 250;
 constexpr uint32_t kRequestTimeoutMs = 30000;
+static_assert(kRequestTimeoutMs < ACTION_CONTINUATION_TIMEOUT_MS,
+              "Azure request timeout must remain below action continuation timeout");
 constexpr uint32_t kWorkerStackBytes = 12288;
 constexpr size_t kTtsMaxMp3Bytes = 256 * 1024;
 constexpr size_t kTtsInitialMp3Bytes = 16 * 1024;
@@ -313,8 +315,13 @@ bool upload_transcription(const uint8_t* wav, size_t wav_size, char* transcript,
         if (!client.connected() && !client.available()) break;
         vTaskDelay(pdMS_TO_TICKS(10));
     }
+    const bool response_timed_out = (uint32_t)(millis() - started) >= kRequestTimeoutMs;
     client.stop();
     response[response_len] = '\0';
+    if (response_timed_out) {
+        strlcpy(transcript, "Azure request timed out", transcript_size);
+        return false;
+    }
     const char* body = strstr(response, "\r\n\r\n");
     int status = 0;
     sscanf(response, "HTTP/%*u.%*u %d", &status);

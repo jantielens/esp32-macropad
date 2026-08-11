@@ -186,6 +186,13 @@ speech request stops the previous playback and supersedes an older request that
 finishes downloading later. Voice overrides must name a supported Azure voice;
 they are not language or locale fields.
 
+Azure transcription waits up to 30 seconds and does not retry automatically.
+If it fails, `[stt:status]` becomes `error`, `[stt:text]` contains the reason,
+and remaining actions in that recording's list do not run. Correct the reported
+problem and start another recording. Speak text is best-effort: it does not
+pause its action list, and an Azure TTS failure skips that speech request while
+recording the reason in the device log.
+
 #### Alert Sounds
 
 *Shown only on boards with sound player support (defaults to boards with audio hardware).*

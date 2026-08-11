@@ -420,12 +420,19 @@ The first action resumes the second only after Azure transcription succeeds. A
 failed transcription stops the remaining action list. Use `[stt:status]` for a
 status label (`idle`, `recording`, `listening`, `transcribing`, `ready`, or
 `error`) and `[stt:text]` to display the latest transcript or error message.
+Azure transcription waits up to 30 seconds and does not retry automatically.
+On failure, correct the reported configuration or connection problem, then
+start another recording.
 
 **Example Voice Assistant reply button:**
 - **Tap action 1**: Voice Assistant -> Speak text -> text: `[mqtt:assistant/answer]`
 
 Use a dedicated reply topic so that the message spoken by the device does not
 also trigger the automation that generates the reply.
+
+Speak text is best-effort: it queues the request and does not pause the action
+list. Azure TTS failures skip that speech request and are recorded in the
+device log; they do not update `[stt:status]` or `[stt:text]`.
 
 ### Navigate Pad Sequence Action
 
