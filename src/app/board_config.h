@@ -520,6 +520,11 @@ struct HwButtonDef {
 #define BUTTON_ACTIVE_LOW true
 #endif
 
+// Enables a boot-hold button to enter configuration mode without runtime actions.
+#ifndef HAS_CONFIG_MODE_BUTTON
+#define HAS_CONFIG_MODE_BUTTON HAS_BUTTON
+#endif
+
 // ----------------------------------------------------------------------------
 // Hardware Button Actions (optional, GPIO-direct buttons)
 // ----------------------------------------------------------------------------

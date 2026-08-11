@@ -123,7 +123,7 @@ void onWiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
 }
 
 static bool check_config_mode_button() {
-	#if HAS_BUTTON
+	#if HAS_CONFIG_MODE_BUTTON
 	pinMode(BUTTON_PIN, BUTTON_ACTIVE_LOW ? INPUT_PULLUP : INPUT_PULLDOWN);
 
 	const unsigned long start = millis();

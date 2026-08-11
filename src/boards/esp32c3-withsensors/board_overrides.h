@@ -33,28 +33,15 @@
 // Enable BTHome v2 BLE telemetry as an alternative transport (duty_cycle_ble mode).
 #define HAS_BLE true
 
-// Enable user button (GPIO9 on ESP32-C3 Super Mini)
-#define HAS_BUTTON true
+// GPIO9 remains available as the boot-hold configuration-mode input, but this
+// headless target does not compile runtime hardware-button actions.
+#define HAS_BUTTON false
+#define HAS_CONFIG_MODE_BUTTON true
 
-// Hardware button actions can use pausable continuations. Keep one slot on
-// this internal-RAM-constrained C3 target instead of the default three.
-#define ACTION_CONTINUATION_SLOTS 1
-
-// User button GPIO
+// Boot-hold configuration-mode GPIO.
 #define BUTTON_PIN 9
 // Button polarity (active-low)
 #define BUTTON_ACTIVE_LOW true
-
-// Hardware button actions: declare GPIO9 as a configurable action button.
-// (BUTTON_PIN / BUTTON_ACTIVE_LOW above remain for boot-hold config-mode
-// detection in check_config_mode_button(); these defs drive the runtime
-// tap/hold action dispatcher.)
-#define NUM_HW_BUTTONS 1
-#ifdef __cplusplus
-static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
-    { .pin = 9, .active_low = true, .label = "BTN" }
-};
-#endif
 
 // Enable BME280 sensor sample
 #define HAS_SENSOR_BME280 false
@@ -71,7 +58,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
 // Sensor I2C pins (ESP32-C3 Super Mini defaults)
 // Set to -1 to use Wire defaults if needed.
 #define SENSOR_I2C_SDA 8
-// SCL moved to GPIO10 to keep GPIO9 free for the user button.
+// SCL moved to GPIO10 to keep GPIO9 free for boot-hold configuration mode.
 #define SENSOR_I2C_SCL 10
 
 // LD2410 OUT pin (presence)
