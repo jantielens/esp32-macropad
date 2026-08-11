@@ -4,6 +4,9 @@
 #include "../display_manager.h"
 #include "../log_manager.h"
 #include "../swipe_actions.h"
+#if HAS_NATIVE_EXTENSIONS
+#include "../native_extension.h"
+#endif
 #if HAS_AUDIO
 #include "../audio.h"
 #include "../config_manager.h"
@@ -192,6 +195,14 @@ void PadScreen::onTap(lv_event_t* e) {
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
+#if HAS_NATIVE_EXTENSIONS
+    if (strcmp(tile->widget_cfg.type, "external") == 0) {
+        const uint32_t instance_id = (static_cast<uint32_t>(tile->page) << 16) |
+                         (static_cast<uint32_t>(tile->col) << 8) | tile->row;
+        if (native_extension_on_tap(tile->widget_cfg.extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
+    }
+#endif
+
     // Rocker widget: select zone-based action set from tap coordinates
     const ButtonAction* src_actions;
     uint8_t src_count;
@@ -336,6 +347,14 @@ void PadScreen::onTap(lv_event_t* e) {
 void PadScreen::onLongPress(lv_event_t* e) {
     ButtonTile* tile = (ButtonTile*)lv_event_get_user_data(e);
     if (!tile || !tile->obj) return;
+
+#if HAS_NATIVE_EXTENSIONS
+    if (strcmp(tile->widget_cfg.type, "external") == 0) {
+        const uint32_t instance_id = (static_cast<uint32_t>(tile->page) << 16) |
+                         (static_cast<uint32_t>(tile->col) << 8) | tile->row;
+        if (native_extension_on_long_press(tile->widget_cfg.extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
+    }
+#endif
 
     // Rocker use tap zones — suppress long-press
     if (tile->widget_type &&

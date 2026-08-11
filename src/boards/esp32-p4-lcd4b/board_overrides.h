@@ -14,6 +14,7 @@
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
 #define HAS_BACKLIGHT true
+#define HAS_NATIVE_EXTENSIONS true
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
 // Keep minimp3's 16 KB per-frame workspace out of scarce internal RAM.

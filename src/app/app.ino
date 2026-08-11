@@ -79,6 +79,10 @@
 #include "sd_storage.h"
 #include "storage.h"
 
+#if HAS_NATIVE_EXTENSIONS
+#include "native_extension.h"
+#endif
+
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
 
@@ -366,6 +370,12 @@ void setup()
 	#if HAS_DISPLAY
 	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
 	pad_config_init();
+
+	#if HAS_NATIVE_EXTENSIONS
+	// The extension package is optional; an absent or invalid package must not
+	// prevent the core firmware from continuing to boot.
+	native_extension_init();
+	#endif
 
 	// Load swipe gesture actions from LittleFS (uses same filesystem)
 	swipe_config_init();

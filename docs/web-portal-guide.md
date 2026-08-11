@@ -360,6 +360,12 @@ slots are occupied stops its action list.
 
 The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
 
+On ESP32-P4 builds, the **Extensions** page has two small slots
+and one large slot for trusted native `.elf` files. Upload a file named
+`extension-id@version.elf`, then reboot to install it into executable flash.
+Select **Extension** as a button's widget, choose an enabled installed
+extension, and optionally provide per-button configuration text.
+
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 
 For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines, tables, rockers), label styling, dynamic colors, pad bindings (named data sources), building blocks, and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.

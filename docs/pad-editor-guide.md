@@ -627,6 +627,16 @@ Buttons use the device-level beep patterns configured on the Home page. To play 
 
 Widgets replace the standard button rendering with specialized visualizations or interaction modes. Select the widget type in the button editor.
 
+### Extension
+
+On ESP32-P4 boards, the **Extension** widget runs an enabled native Extension
+installed from the Device portal. Choose the package and
+optionally enter up to 511 bytes of configuration text for that button. An
+Extension can appear on multiple buttons; each placement has its own instance
+and configuration. The button action lists remain available when the Extension
+returns pass-through from tap or long press. See the [Extension developer guide](dev/extensions.md)
+for package and lifecycle details.
+
 ### Rocker
 
 The rocker widget splits a button into two tap zones — tap the top half to trigger one set of actions, tap the bottom half to trigger another. This turns a single button into a directional control, ideal for brightness up/down, volume +/−, thermostat setpoints, or any value you want to nudge from one place.

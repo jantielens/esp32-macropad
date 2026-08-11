@@ -147,6 +147,38 @@ python3 tools/png2lvgl_assets.py assets/png src/app/png_assets.cpp src/app/png_a
 
 ---
 
+## tools/build-p4-extension.sh
+
+**Purpose:** Build the ESP32-P4 native-extension proof package as a
+position-independent RISC-V ELF.
+
+**Usage:**
+```bash
+bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
+```
+
+**Requirements:** `setup.sh` must have installed the ESP32 Arduino platform.
+The script locates its bundled RISC-V compiler automatically; set
+`ESP32_P4_TOOLCHAIN_DIR` only to override that location.
+
+Name the resulting file using `<extension-id>@<version>.elf`, for example
+`build/extensions/hello-world@1.0.0.elf`. Upload it through the Extensions page
+to a chosen slot. The upload stages on storage and becomes active after the
+next boot installs it into executable flash.
+
+Two source examples are provided:
+
+```bash
+bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
+bash tools/build-p4-extension.sh extensions/advanced-sample/advanced_sample.cpp build/extensions/advanced-sample@1.0.0.elf
+```
+
+`hello-world` only renders `hello world`. `advanced-sample` renders its
+per-button configuration, handles tap events, passes long-press events through
+to normal button actions, and writes lifecycle/event messages to the device log.
+
+---
+
 ## tools/generate-board-driver-table.py
 
 **Purpose:** Generate a markdown table mapping **board → selected display/touch backends → basic hardware**.

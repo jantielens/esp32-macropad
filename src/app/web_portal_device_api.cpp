@@ -1,5 +1,6 @@
-#include "web_portal_device_api.h"
+#include <Arduino.h>
 
+#include "web_portal_device_api.h"
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
 
@@ -128,6 +129,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_AUDIO ? "true" : "false");
 		response->print(",\"has_sound_player\":");
 		response->print(HAS_SOUND_PLAYER ? "true" : "false");
+		response->print(",\"has_native_extensions\":");
+		response->print(HAS_NATIVE_EXTENSIONS ? "true" : "false");
 
 		// Action authoring catalog: only computed and sent when explicitly
 		// requested, so the bare response used by reboot connection polling

@@ -53,6 +53,13 @@ async function padInit() {
     // so the picker is complete and correct on first paint.
     await getDeviceInfo();
 
+    const nativeExtensions = deviceInfoCache && deviceInfoCache.has_native_extensions === true;
+    const externalWidgetOption = document.getElementById('pad-edit-external-widget-option');
+    if (externalWidgetOption) externalWidgetOption.style.display = nativeExtensions ? '' : 'none';
+    if (nativeExtensions && typeof extensionFetchSlots === 'function') {
+        try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
+    }
+
     // Generate action editor HTML from shared module — three fixed action
     // slots per gesture. An unused slot collapses as its own "Add ..."
     // placeholder; labels are set here for the non-widget default and
@@ -362,6 +369,15 @@ function padWidgetTypeChanged() {
     WIDGET_SECTIONS.forEach(s => {
         const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
         if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
+    });
+    var extensionSection = document.getElementById('pad-edit-extension-section');
+    if (extensionSection) {
+        extensionSection.style.display = wtype === 'external' ? '' : 'none';
+        if (wtype === 'external') extensionSection.open = true;
+    }
+    ['pad-edit-labels-section', 'pad-edit-icon-section', 'pad-edit-image-section'].forEach(function (id) {
+        var section = document.getElementById(id);
+        if (section) section.style.display = wtype === 'external' ? 'none' : '';
     });
     var confirmGroup = document.getElementById('pad-edit-confirm-group');
     var confirmInput = document.getElementById('pad-edit-confirm');

@@ -427,6 +427,21 @@ function padDialogOpen(col, row) {
     // action screen dropdowns (which were populated earlier with empty provider).
     if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
 
+    const extensionSelect = document.getElementById('pad-edit-extension-id');
+    if (extensionSelect) {
+        extensionSelect.replaceChildren();
+        const installed = (window.extensionCatalog || []).filter(function (slot) { return slot.installed && slot.enabled; });
+        if (!installed.length) {
+            const empty = document.createElement('option'); empty.value = ''; empty.textContent = 'No enabled extensions installed'; extensionSelect.appendChild(empty);
+        } else {
+            installed.forEach(function (slot) {
+                const option = document.createElement('option'); option.value = slot.id; option.textContent = slot.id + ' @ ' + slot.version; extensionSelect.appendChild(option);
+            });
+        }
+        extensionSelect.value = btn.extension_id || '';
+    }
+    document.getElementById('pad-edit-extension-config').value = btn.extension_config || '';
+
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
@@ -744,6 +759,13 @@ function padDialogOk(keepOpen) {
             if (listProvider) btn.widget_data_binding = listProvider;
             const listFilter = document.getElementById('pad-edit-list-filter').value.trim();
             if (listFilter) btn.widget_data_binding_2 = listFilter;
+        }
+        if (wtype === 'external') {
+            const extensionId = document.getElementById('pad-edit-extension-id').value;
+            if (!extensionId) { showMessage('Select an installed extension', 'error'); return; }
+            btn.extension_id = extensionId;
+            const extensionConfig = document.getElementById('pad-edit-extension-config').value.trim();
+            if (extensionConfig) btn.extension_config = extensionConfig;
         }
     }
 

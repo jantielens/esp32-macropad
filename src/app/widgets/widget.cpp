@@ -5,7 +5,7 @@
 #include <string.h>
 
 // Dynamic widget type registry (populated by auto-registration constructors)
-static constexpr int MAX_WIDGET_TYPES = 8;
+static constexpr int MAX_WIDGET_TYPES = 12;
 static const WidgetType* s_widget_types[MAX_WIDGET_TYPES] = {};
 static int s_widget_count = 0;
 

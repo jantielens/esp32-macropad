@@ -27,6 +27,9 @@
 #include "components/manual_upload_component.cpp"
 #include "components/version_info_component.cpp"
 #include "components/sensor_data_component.cpp"
+#if HAS_NATIVE_EXTENSIONS
+#include "components/extensions_component.cpp"
+#endif
 #if HAS_STORAGE_BROWSER
 #include "components/storage_component.cpp"
 #endif // HAS_STORAGE_BROWSER

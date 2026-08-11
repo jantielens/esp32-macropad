@@ -80,6 +80,9 @@ portal_storage.js
 # [chunk:music HAS_SOUND_PLAYER]
 portal_music.js
 
+# Extensions manager is safe to ship on all variants; navigation is firmware-gated.
+portal_extensions.js
+
 # [chunk:pad HAS_DISPLAY]
 # Pad editor — only consumed by the pad editor fragment on display boards.
 portal_pad_colors.js

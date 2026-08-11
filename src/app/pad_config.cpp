@@ -280,6 +280,8 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     // Widget type (bar_chart, gauge, etc.)
     const char* wtype = obj["widget_type"] | "";
     strlcpy(btn->widget.type, wtype, CONFIG_WIDGET_TYPE_MAX_LEN);
+    strlcpy(btn->widget.extension_id, obj["extension_id"] | "", sizeof(btn->widget.extension_id));
+    strlcpy(btn->widget.extension_config, obj["extension_config"] | "", sizeof(btn->widget.extension_config));
     // Data bindings: data_binding[0] from "widget_data_binding",
     // data_binding[1..3] from "widget_data_binding_2..4"
     strlcpy(btn->widget.data_binding[0], obj["widget_data_binding"] | "", CONFIG_LABEL_MAX_LEN);
