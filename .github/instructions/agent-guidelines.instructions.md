@@ -85,6 +85,8 @@ If the build fails:
 - New requirement added → Update `README.md` prerequisites
 - REST API endpoint added/changed → Update `docs/dev/web-portal.md` and `README.md` API table
 - New binding scheme added → Register an MCP `describe` hook (and a `validate` hook for constrained schemes) via `binding_template_set_scheme_describe()` / `binding_template_set_scheme_validate()` so the scheme appears in the MCP pad-authoring manifest; `tests/test_mcp_scheme_parity.sh` enforces this
+- New built-in action added → Add its persisted type/payload to `pad_config.h`; create one self-contained `src/app/actions/<type>_action.cpp` with parse, serialize, dispatch, validation, binding handling, and `describe()` metadata; call `DEFINE_AND_REGISTER_ACTION_TYPE(...)` exactly once; add the module to `src/app/actions/action_modules.inc`; run `tests/test_action_catalog_completeness.sh`. Do not add action-specific ladders to `action_parse.cpp` or `action_dispatch.cpp`.
+- New device-class action added → Keep its self-contained action module under `src/app/device_classes/<class>/`, call `DEFINE_AND_REGISTER_ACTION_TYPE(...)` exactly once, and include it through the existing device-class aggregation path. Do not add it to the built-in action manifest.
 - New user-facing control or feature added → Consider whether it should be exposed to the MCP server (a control/authoring tool via `REGISTER_MCP_TOOL`, and/or advertised in `get_capabilities`) so AI clients can use it; update `docs/mcp-guide.md`
 - Web UI feature changed → Update `docs/dev/web-portal.md` features section and `docs/web-portal-guide.md`
 - Display/touch driver added/changed → Update `docs/dev/display-touch-architecture.md` driver sections

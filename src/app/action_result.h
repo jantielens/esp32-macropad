@@ -1,4 +1,5 @@
-#pragma once
+#ifndef ACTION_RESULT_H
+#define ACTION_RESULT_H
 
 #include <stdint.h>
 
@@ -10,3 +11,5 @@ enum ActionResult : uint8_t {
     ACTION_FAILED,
     ACTION_PENDING,
 };
+
+#endif // ACTION_RESULT_H

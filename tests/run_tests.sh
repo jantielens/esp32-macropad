@@ -297,6 +297,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I ~/Arduino/libraries/lvgl/src \
     tests/test_pad_confirmation.cpp \
     src/app/pad_validate.cpp \
+    src/app/action_validate.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_pad_confirmation
 
@@ -402,6 +403,8 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I tests -I src/app \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_parse.cpp \
+    src/app/actions.cpp \
+    src/app/music_command.cpp \
     src/app/action_parse.cpp \
     src/app/action_list.cpp \
     src/app/action_continuation.cpp \
@@ -469,10 +472,13 @@ echo
 echo "=== Building unit tests: shutter_session_actions ==="
 g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -include tests/log_manager.h -include tests/board_config.h \
-    -I src/app -I src/app/device_classes/shutter_tester \
+    -I tests -I src/app -I src/app/device_classes/shutter_tester \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_shutter_session_actions.cpp \
+    src/app/actions.cpp \
+    src/app/music_command.cpp \
     src/app/action_parse.cpp \
+    src/app/action_continuation.cpp \
     src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     src/app/binding_template.cpp \
@@ -535,7 +541,10 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     tests/test_timer_config.cpp \
     src/app/timer_config.cpp \
     src/app/config_psram.cpp \
+    src/app/actions.cpp \
+    src/app/music_command.cpp \
     src/app/action_parse.cpp \
+    src/app/action_continuation.cpp \
     src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     tests/stubs.cpp \
@@ -570,13 +579,13 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I tests -I src/app \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_bindings.cpp \
-    src/app/action_builtin_types.cpp \
+    src/app/actions.cpp \
+    src/app/music_command.cpp \
     src/app/action_parse.cpp \
     src/app/action_list.cpp \
     src/app/action_continuation.cpp \
     src/app/action_registry.cpp \
     src/app/binding_template.cpp \
-    src/app/music_command.cpp \
     src/app/pad_cycle.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_action_bindings -lm

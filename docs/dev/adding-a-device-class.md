@@ -382,9 +382,16 @@ inline const FooPayload& foo_payload(const ButtonAction& act) {
 #endif
 ```
 
-Then register the `ActionTypeDef` via `REGISTER_ACTION_TYPE(...)` in the
-class's `foo_actions.cpp` (see
+Keep parse, serialize, dispatch, validation, binding-field handling, and
+`describe()` metadata in the class's `foo_actions.cpp`. Define and register
+the descriptor together with one `DEFINE_AND_REGISTER_ACTION_TYPE(...)` call
+(see
 [src/app/device_classes/shutter_tester/shutter_actions.cpp](src/app/device_classes/shutter_tester/shutter_actions.cpp)).
+
+Do not add a device-class action to `src/app/actions/action_modules.inc`.
+That manifest aggregates built-in actions only. Device-class action modules
+remain with their owner and are compiled by the existing feature-gated
+device-class aggregator.
 
 If your payload follows the `{ command, value }` convention and `value` is
 bindable (`[scheme:...]` tokens) and/or the numeric rocker's `{step}` target,

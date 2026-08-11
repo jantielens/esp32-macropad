@@ -47,31 +47,6 @@ static void mock_collect(const char* params, void* user_data) {
     (void)user_data;
 }
 
-// ---------------------------------------------------------------------------
-// The built-in catalog references dispatch handlers, but this test only
-// exercises binding traversal.
-#define ACTION_DISPATCH_STUB(name) \
-    ActionResult name(const ButtonAction&, const char*, uint32_t) { return ACTION_COMPLETE; }
-
-ACTION_DISPATCH_STUB(action_dispatch_back)
-ACTION_DISPATCH_STUB(action_dispatch_volume)
-ACTION_DISPATCH_STUB(action_dispatch_brightness)
-ACTION_DISPATCH_STUB(action_dispatch_system)
-ACTION_DISPATCH_STUB(action_dispatch_music)
-ACTION_DISPATCH_STUB(action_dispatch_screen)
-ACTION_DISPATCH_STUB(action_dispatch_key)
-ACTION_DISPATCH_STUB(action_dispatch_ble_pair)
-ACTION_DISPATCH_STUB(action_dispatch_delay)
-ACTION_DISPATCH_STUB(action_dispatch_mqtt)
-ACTION_DISPATCH_STUB(action_dispatch_timer)
-ACTION_DISPATCH_STUB(action_dispatch_sound_alert)
-ACTION_DISPATCH_STUB(action_dispatch_notify)
-ACTION_DISPATCH_STUB(action_dispatch_ha_service)
-ACTION_DISPATCH_STUB(action_dispatch_visual_alert)
-ACTION_DISPATCH_STUB(action_dispatch_cycle_pad)
-
-#undef ACTION_DISPATCH_STUB
-
 static bool resolve_action_bindings(ButtonAction& act) {
     return action_type_resolve_bindings(action_type_find(act.type), act);
 }

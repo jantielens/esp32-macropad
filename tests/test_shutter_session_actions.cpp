@@ -19,29 +19,10 @@
 #include <ArduinoJson.h>
 #include "pad_config.h"
 #include "action_parse.h"
-#include "action_parse_builtin.h"
 #include "action_registry.h"
 #include "shutter_session_actions.h"
 
-static const ActionTypeDef kScreenActionType = {
-    ACTION_TYPE_SCREEN, action_parse_screen, action_serialize_screen,
-    nullptr, nullptr, nullptr,
-};
-static const ActionTypeDef kNotifyActionType = {
-    ACTION_TYPE_NOTIFY, action_parse_notify, action_serialize_notify,
-    nullptr, nullptr, nullptr,
-};
-static const ActionTypeDef kSoundAlertActionType = {
-    ACTION_TYPE_SOUND_ALERT, action_parse_sound_alert, action_serialize_sound_alert,
-    nullptr, nullptr, nullptr,
-};
-static struct ActionTypeRegistration {
-    ActionTypeRegistration() {
-        action_type_register(&kScreenActionType);
-        action_type_register(&kNotifyActionType);
-        action_type_register(&kSoundAlertActionType);
-    }
-} kActionTypeRegistration;
+extern "C" unsigned long millis() { return 0; }
 
 static int g_pass = 0;
 static int g_fail = 0;

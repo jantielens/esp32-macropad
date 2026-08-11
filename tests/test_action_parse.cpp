@@ -13,7 +13,6 @@
 #include "pad_config.h"
 #include "action_list.h"
 #include "action_parse.h"
-#include "action_parse_builtin.h"
 #include "action_registry.h"
 
 ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
@@ -21,32 +20,6 @@ ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
 }
 
 extern "C" unsigned long millis() { return 0; }
-
-#define TEST_PARSE_ACTION(name, parse_fn, serialize_fn) \
-    static const ActionTypeDef name = { name##_type, parse_fn, serialize_fn, nullptr, nullptr, nullptr }; \
-    static struct name##Registration { name##Registration() { action_type_register(&name); } } name##_registration
-
-#define TEST_PARSE_ACTION_TYPE(name, type, parse_fn, serialize_fn) \
-    static constexpr const char name##_type[] = type; \
-    TEST_PARSE_ACTION(name, parse_fn, serialize_fn)
-
-TEST_PARSE_ACTION_TYPE(kVolumeAction, ACTION_TYPE_VOLUME, action_parse_volume, action_serialize_volume);
-TEST_PARSE_ACTION_TYPE(kBrightnessAction, ACTION_TYPE_BRIGHTNESS, action_parse_brightness, action_serialize_brightness);
-TEST_PARSE_ACTION_TYPE(kSystemAction, ACTION_TYPE_SYSTEM, action_parse_system, action_serialize_system);
-TEST_PARSE_ACTION_TYPE(kMusicAction, ACTION_TYPE_MUSIC, action_parse_music, action_serialize_music);
-TEST_PARSE_ACTION_TYPE(kScreenAction, ACTION_TYPE_SCREEN, action_parse_screen, action_serialize_screen);
-TEST_PARSE_ACTION_TYPE(kKeyAction, ACTION_TYPE_KEY, action_parse_key, action_serialize_key);
-TEST_PARSE_ACTION_TYPE(kDelayAction, ACTION_TYPE_DELAY, action_parse_delay, action_serialize_delay);
-TEST_PARSE_ACTION_TYPE(kMqttAction, ACTION_TYPE_MQTT, action_parse_mqtt, action_serialize_mqtt);
-TEST_PARSE_ACTION_TYPE(kTimerAction, ACTION_TYPE_TIMER, action_parse_timer, action_serialize_timer);
-TEST_PARSE_ACTION_TYPE(kSoundAlertAction, ACTION_TYPE_SOUND_ALERT, action_parse_sound_alert, action_serialize_sound_alert);
-TEST_PARSE_ACTION_TYPE(kNotifyAction, ACTION_TYPE_NOTIFY, action_parse_notify, action_serialize_notify);
-TEST_PARSE_ACTION_TYPE(kHaServiceAction, ACTION_TYPE_HA_SERVICE, action_parse_ha_service, action_serialize_ha_service);
-TEST_PARSE_ACTION_TYPE(kVisualAlertAction, ACTION_TYPE_VISUAL_ALERT, action_parse_visual_alert, action_serialize_visual_alert);
-TEST_PARSE_ACTION_TYPE(kCyclePadAction, ACTION_TYPE_CYCLE_PAD, action_parse_cycle_pad, action_serialize_cycle_pad);
-
-#undef TEST_PARSE_ACTION_TYPE
-#undef TEST_PARSE_ACTION
 
 static int g_pass = 0;
 static int g_fail = 0;

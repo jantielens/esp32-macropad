@@ -62,6 +62,14 @@ const FIXTURE_CATALOG = [
         ]
     },
     {
+        type: 'brightness', group: 'Display', label: 'Brightness',
+        commands: [{ id: 'set', label: 'Set brightness' }, { id: 'adjust', label: 'Adjust brightness' }],
+        editor_fields: [
+            { name: 'brightness_mode', label: 'Command', type: 'select', command_options: true },
+            { name: 'brightness_value', label: 'Value (%)', type: 'text', bindable: true }
+        ]
+    },
+    {
         type: 'system', group: 'Device', label: 'Device command',
         commands: [{ id: 'reboot', label: 'Restart device' }, { id: 'wifi_reconnect', label: 'Reconnect Wi-Fi' }],
         editor_fields: [{ name: 'system_command', label: 'Command', type: 'select', command_options: true }]
@@ -130,8 +138,9 @@ const volumeCommands = context.actionEditorCommandOptionsHTML('volume');
 assert(volumeCommands.includes('<option value="set">Set volume</option>'));
 assert(volumeCommands.includes('<option value="adjust">Adjust volume</option>'));
 
-// A type absent from this build's catalog yields no command options, not a crash.
-assert.strictEqual(context.actionEditorCommandOptionsHTML('brightness'), '');
+const brightnessCommands = context.actionEditorCommandOptionsHTML('brightness');
+assert(brightnessCommands.includes('<option value="set">Set brightness</option>'));
+assert(brightnessCommands.includes('<option value="adjust">Adjust brightness</option>'));
 
 // --- Shutter Tester: command family -> command population ---
 const familyOptions = context.actionEditorFamilyOptionsHTML('shutter');
@@ -154,6 +163,8 @@ const prefix = 'picker';
 const editorHtml = context.actionEditorHTML(prefix, '', {});
 assert(editorHtml.includes('Up to 3 pausable actions can be pending device-wide at a time'));
 assert(editorHtml.includes('picker-generic-volume-volume_mode'));
+assert(editorHtml.includes('picker-generic-brightness-brightness_mode'));
+assert(editorHtml.includes('picker-generic-brightness-brightness_value'));
 assert(editorHtml.includes('picker-generic-system-system_command'));
 assert(editorHtml.includes('picker-generic-music-music_command'));
 assert(!editorHtml.includes('picker-system-command'));
@@ -163,6 +174,11 @@ const volumeAction = context.actionEditorBuild(prefix);
 assert.strictEqual(volumeAction.type, 'volume');
 assert.strictEqual(volumeAction.volume_mode, 'adjust');
 assert.strictEqual(volumeAction.volume_value, '{step}');
+context.actionEditorLoad(prefix, { type: 'brightness', brightness_mode: 'adjust', brightness_value: '-10' });
+const brightnessAction = context.actionEditorBuild(prefix);
+assert.strictEqual(brightnessAction.type, 'brightness');
+assert.strictEqual(brightnessAction.brightness_mode, 'adjust');
+assert.strictEqual(brightnessAction.brightness_value, '-10');
 context.actionEditorLoad(prefix, { type: 'system', system_command: 'wifi_reconnect' });
 const systemAction = context.actionEditorBuild(prefix);
 assert.strictEqual(systemAction.type, 'system');

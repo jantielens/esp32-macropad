@@ -18,7 +18,8 @@ cd "$(dirname "$0")/.."
 
 SRC_DIR="src/app"
 CATALOG="$SRC_DIR/action_catalog.cpp"
-BUILTIN_TYPES="$SRC_DIR/action_builtin_types.cpp"
+ACTION_MANIFEST="$SRC_DIR/actions/action_modules.inc"
+ACTION_MODULES="$SRC_DIR/actions"
 BUILTIN_CONFIG="$SRC_DIR/pad_config.h"
 
 fail=0
@@ -45,7 +46,34 @@ fi
 
 catalog_types="$(grep -ohE 'add_action\(actions, *"[a-z_]+"' "$CATALOG" 2>/dev/null \
     | sed -E 's/.*"([a-z_]+)"/\1/' | sort -u)"
-registered_builtin_macros="$(grep -ohE 'ACTION_TYPE_[A-Z_]+' "$BUILTIN_TYPES" 2>/dev/null | sort -u)"
+if [ ! -f "$ACTION_MANIFEST" ]; then
+    echo "FAIL: missing built-in action module manifest: $ACTION_MANIFEST" >&2
+    exit 1
+fi
+
+manifest_modules="$(grep -oE '"[a-z_]+_action\.cpp"' "$ACTION_MANIFEST" | tr -d '"')"
+if [ -z "$manifest_modules" ]; then
+    echo "FAIL: found no action modules in $ACTION_MANIFEST" >&2
+    exit 1
+fi
+
+registered_builtin_macros=""
+for module in $manifest_modules; do
+    module_path="$ACTION_MODULES/$module"
+    if [ ! -f "$module_path" ]; then
+        fail=1
+        echo "FAIL: action manifest references missing module: $module_path" >&2
+        continue
+    fi
+    if ! grep -q 'DEFINE_AND_REGISTER_ACTION_TYPE(' "$module_path"; then
+        fail=1
+        echo "FAIL: action module does not self-register: $module_path" >&2
+        continue
+    fi
+    registered_builtin_macros="$(printf '%s\n%s' "$registered_builtin_macros" \
+        "$(grep -ohE 'ACTION_TYPE_[A-Z_]+' "$module_path")")"
+done
+registered_builtin_macros="$(printf '%s\n' "$registered_builtin_macros" | sort -u)"
 for macro in $registered_builtin_macros; do
     value="${MACRO_VALUE[$macro]:-}"
     [ -n "$value" ] && catalog_types="$(printf '%s\n%s\n' "$catalog_types" "$value" | sort -u)"
@@ -79,7 +107,8 @@ fi
 # ---------------------------------------------------------------------------
 
 files_with_registration="$(grep -rl 'REGISTER_ACTION_TYPE(' "$SRC_DIR" 2>/dev/null \
-    | grep -v '/action_registry\.h$' || true)"
+    | grep -v '/action_registry\.h$' \
+    | grep -v "^$ACTION_MODULES/" || true)"
 if [ -z "$files_with_registration" ]; then
     echo "FAIL: found no REGISTER_ACTION_TYPE(...) calls under $SRC_DIR" >&2
     exit 1

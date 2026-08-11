@@ -7,10 +7,6 @@
 #include "action_result.h"
 #include "pad_config.h"  // ButtonAction, ACTION_TYPE_* constants
 
-#if HAS_DISPLAY
-#include "timer_command.h"
-#endif
-
 // Execute a ButtonAction — shared dispatch used by both pad button taps
 // and swipe gesture actions. Existing actions return ACTION_COMPLETE even when
 // they log an operational warning, preserving historical action-array behavior.
@@ -18,39 +14,6 @@
 // resume the copied suffix on the task that dispatched the action list.
 ActionResult action_dispatch(const ButtonAction& act, const char* label,
 							 uint32_t continuation_token = 0);
-
-ActionResult action_dispatch_back(const ButtonAction& act, const char* label,
-								  uint32_t continuation_token);
-ActionResult action_dispatch_volume(const ButtonAction& act, const char* label,
-									uint32_t continuation_token);
-ActionResult action_dispatch_brightness(const ButtonAction& act, const char* label,
-										uint32_t continuation_token);
-ActionResult action_dispatch_system(const ButtonAction& act, const char* label,
-									 uint32_t continuation_token);
-ActionResult action_dispatch_music(const ButtonAction& act, const char* label,
-									uint32_t continuation_token);
-ActionResult action_dispatch_screen(const ButtonAction& act, const char* label,
-									 uint32_t continuation_token);
-ActionResult action_dispatch_key(const ButtonAction& act, const char* label,
-								  uint32_t continuation_token);
-ActionResult action_dispatch_ble_pair(const ButtonAction& act, const char* label,
-									   uint32_t continuation_token);
-ActionResult action_dispatch_delay(const ButtonAction& act, const char* label,
-									uint32_t continuation_token);
-ActionResult action_dispatch_mqtt(const ButtonAction& act, const char* label,
-								  uint32_t continuation_token);
-ActionResult action_dispatch_timer(const ButtonAction& act, const char* label,
-								   uint32_t continuation_token);
-ActionResult action_dispatch_sound_alert(const ButtonAction& act, const char* label,
-										 uint32_t continuation_token);
-ActionResult action_dispatch_notify(const ButtonAction& act, const char* label,
-									uint32_t continuation_token);
-ActionResult action_dispatch_ha_service(const ButtonAction& act, const char* label,
-										uint32_t continuation_token);
-ActionResult action_dispatch_visual_alert(const ButtonAction& act, const char* label,
-										  uint32_t continuation_token);
-ActionResult action_dispatch_cycle_pad(const ButtonAction& act, const char* label,
-									   uint32_t continuation_token);
 
 // Process deferred action work and loop-owned action continuations — call from loop().
 void action_dispatch_loop();
