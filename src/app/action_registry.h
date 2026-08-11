@@ -33,6 +33,20 @@
 // pass a valid pointer) and returns the field.
 
 struct ActionTypeDef {
+    ActionTypeDef(
+        const char* type_name,
+        void (*parse)(const JsonObject& a, ButtonAction& act),
+        void (*serialize)(const ButtonAction& act, JsonObject obj),
+        ActionResult (*dispatch)(const ButtonAction& act, const char* label,
+                                 uint32_t continuation_token),
+        char* (*value_field)(ButtonAction& act, size_t* out_size),
+        void (*describe)(JsonObject& out),
+        bool (*available)() = nullptr,
+        const char* (*validate)(JsonObjectConst action) = nullptr)
+        : type_name(type_name), parse(parse), serialize(serialize), dispatch(dispatch),
+          value_field(value_field), describe(describe), available(available),
+          validate(validate) {}
+
     const char* type_name;                                                  // matches ButtonAction::type
     void (*parse)(const JsonObject& a, ButtonAction& act);                  // flat JSON -> payload arm
     void (*serialize)(const ButtonAction& act, JsonObject obj);             // payload arm -> flat JSON
@@ -43,6 +57,8 @@ struct ActionTypeDef {
                              uint32_t continuation_token);                  // execute side effects
     char* (*value_field)(ButtonAction& act, size_t* out_size);              // &payload.value (+ buffer size), or nullptr
     void (*describe)(JsonObject& out);                                       // optional: list flat JSON fields for the MCP manifest (nullptr = none)
+    bool (*available)();                                                      // optional: false hides and rejects the type on this build
+    const char* (*validate)(JsonObjectConst action);                         // optional: authoring validation; nullptr = valid
 };
 
 void action_type_register(const ActionTypeDef* type);
@@ -52,6 +68,13 @@ const ActionTypeDef* action_type_find(const char* type_name);
 // types self-register, so the manifest can list them generated, not hand-coded.
 uint8_t action_type_count();
 const ActionTypeDef* action_type_at(uint8_t index);
+
+// Returns true only when a registered type is available in this build. Use
+// this shared decision for authoring validation and catalog discovery.
+bool action_type_is_supported(const char* type_name);
+
+// Invoke an action type's optional authoring validator. nullptr means valid.
+const char* action_type_validate(const ActionTypeDef* type, JsonObjectConst action);
 
 // Replace every "{step}" token in a char buffer with the signed step value.
 // Canonical helper shared by the numeric rocker and device-class action types

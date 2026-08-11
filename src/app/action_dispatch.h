@@ -19,6 +19,13 @@
 ActionResult action_dispatch(const ButtonAction& act, const char* label,
 							 uint32_t continuation_token = 0);
 
+ActionResult action_dispatch_back(const ButtonAction& act, const char* label,
+								  uint32_t continuation_token);
+ActionResult action_dispatch_volume(const ButtonAction& act, const char* label,
+									uint32_t continuation_token);
+ActionResult action_dispatch_brightness(const ButtonAction& act, const char* label,
+										uint32_t continuation_token);
+
 // Process deferred action work and loop-owned action continuations — call from loop().
 void action_dispatch_loop();
 

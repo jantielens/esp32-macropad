@@ -481,6 +481,11 @@ async function padLoadPage(page) {
         console.error('padLoadPage error:', err);
         showMessage('Failed to load Pad ' + (page + 1), 'error');
         padRenderGrid();
+    } finally {
+        // Loading action lists, bindings, and template buttons can update
+        // controls after the initial reset. A settled page is the clean
+        // baseline; only user edits after this point should trigger a prompt.
+        padClearDirty();
     }
 }
 

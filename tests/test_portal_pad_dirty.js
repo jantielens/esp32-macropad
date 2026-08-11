@@ -21,4 +21,7 @@ context.padDirty = false;
 context.padMarkDirty({ isTrusted: true });
 assert.strictEqual(context.padDirty, true);
 
+assert(source.includes('} finally {\n        // Loading action lists, bindings, and template buttons can update'));
+assert(source.includes('        padClearDirty();\n    }\n}\n\nfunction padCloneJson'));
+
 console.log('portal_pad_dirty: PASS');

@@ -42,6 +42,47 @@ static uint8_t compute_clamped_percent(const char* value_str, uint8_t current, b
 }
 #endif
 
+ActionResult action_dispatch_back(const ButtonAction&, const char* label, uint32_t) {
+#if HAS_DISPLAY
+    if (!display_manager_go_back()) {
+        LOGW(TAG, "%s back: no previous screen", label);
+    }
+#else
+    LOGW(TAG, "%s back: no display", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_volume(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_AUDIO
+    const auto& volume = act.payload.volume;
+    bool is_adjust = strcmp(volume.volume_mode, "adjust") == 0;
+    uint8_t result = compute_clamped_percent(volume.volume_value, audio_get_volume(), is_adjust, 0);
+    audio_set_volume(result);
+    LOGI(TAG, "%s volume %s %s -> %u%%", label, is_adjust ? "adjust" : "set",
+         volume.volume_value, result);
+#else
+    LOGW(TAG, "%s volume: not compiled", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
+ActionResult action_dispatch_brightness(const ButtonAction& act, const char* label, uint32_t) {
+#if HAS_DISPLAY
+    const auto& brightness = act.payload.brightness;
+    bool is_adjust = strcmp(brightness.brightness_mode, "adjust") == 0;
+    uint8_t result = compute_clamped_percent(brightness.brightness_value,
+                                               display_manager_get_backlight_brightness(),
+                                               is_adjust, MIN_USER_BRIGHTNESS);
+    screen_saver_manager_set_brightness(result);
+    LOGI(TAG, "%s brightness %s %s -> %u%%", label, is_adjust ? "adjust" : "set",
+         brightness.brightness_value, result);
+#else
+    LOGW(TAG, "%s brightness: no display", label);
+#endif
+    return ACTION_COMPLETE;
+}
+
 #if HAS_MQTT
 // Resolve binding templates in the active payload arm's resolvable fields.
 // Structural fields (commands, modes, ids) are excluded — only fields that
@@ -199,6 +240,11 @@ ActionResult action_dispatch(const ButtonAction& act_in, const char* label,
 static ActionResult action_dispatch_resolved(const ButtonAction& act, const char* label,
                                              uint32_t continuation_token) {
 
+    const ActionTypeDef* registered_type = action_type_find(act.type);
+    if (registered_type && registered_type->dispatch) {
+        return registered_type->dispatch(act, label, continuation_token);
+    }
+
     if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
 #if HAS_DISPLAY
         const char* screen_id = act.payload.screen.screen_id;
@@ -211,14 +257,6 @@ static ActionResult action_dispatch_resolved(const ButtonAction& act, const char
         }
 #else
         LOGW(TAG, "%s screen: no display", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_BACK) == 0) {
-#if HAS_DISPLAY
-        if (!display_manager_go_back()) {
-            LOGW(TAG, "%s back: no previous screen", label);
-        }
-#else
-        LOGW(TAG, "%s back: no display", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_CYCLE_PAD) == 0) {
 #if HAS_DISPLAY
@@ -314,26 +352,6 @@ static ActionResult action_dispatch_resolved(const ButtonAction& act, const char
         }
 #else
         LOGW(TAG, "%s sound_alert: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
-#if HAS_AUDIO
-        const auto& v = act.payload.volume;
-        bool adj = strcmp(v.volume_mode, "adjust") == 0;
-        uint8_t nv = compute_clamped_percent(v.volume_value, audio_get_volume(), adj, 0);
-        audio_set_volume(nv);
-        LOGI(TAG, "%s volume %s %s -> %u%%", label, adj ? "adjust" : "set", v.volume_value, nv);
-#else
-        LOGW(TAG, "%s volume: not compiled", label);
-#endif
-    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-#if HAS_DISPLAY
-        const auto& br = act.payload.brightness;
-        bool adj = strcmp(br.brightness_mode, "adjust") == 0;
-        uint8_t nv = compute_clamped_percent(br.brightness_value, display_manager_get_backlight_brightness(), adj, MIN_USER_BRIGHTNESS);
-        screen_saver_manager_set_brightness(nv);
-        LOGI(TAG, "%s brightness %s %s -> %u%%", label, adj ? "adjust" : "set", br.brightness_value, nv);
-#else
-        LOGW(TAG, "%s brightness: no display", label);
 #endif
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
 #if HAS_DISPLAY

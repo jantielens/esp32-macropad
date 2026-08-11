@@ -47,6 +47,16 @@ static char* fake_value_field(ButtonAction& act, size_t* out_size) {
     return p.value;
 }
 
+static bool s_fake_available = true;
+
+static bool fake_available() {
+    return s_fake_available;
+}
+
+static const char* fake_validate(JsonObjectConst) {
+    return "fake validation failed";
+}
+
 static const ActionTypeDef fake_action_type = {
     /* type_name   */ ACTION_TYPE_FAKE,
     /* parse       */ nullptr,
@@ -54,6 +64,8 @@ static const ActionTypeDef fake_action_type = {
     /* dispatch    */ nullptr,
     /* value_field */ fake_value_field,
     /* describe    */ nullptr,
+    /* available   */ fake_available,
+    /* validate    */ fake_validate,
 };
 
 // ---------------------------------------------------------------------------
@@ -110,6 +122,20 @@ static void test_lookup_returns_registered_def() {
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
     check_true(def != nullptr, "fake type is registered");
     check_true(def && def->value_field != nullptr, "value_field accessor present");
+}
+
+static void test_support_and_validation_hooks() {
+    printf("--- support and validation hooks ---\n");
+    s_fake_available = true;
+    check_true(action_type_is_supported(ACTION_TYPE_FAKE), "available type is supported");
+    s_fake_available = false;
+    check_true(!action_type_is_supported(ACTION_TYPE_FAKE), "unavailable type is rejected");
+    s_fake_available = true;
+
+    JsonDocument doc;
+    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
+    check_str(action_type_validate(def, doc.to<JsonObject>()), "fake validation failed",
+              "validation hook result is returned");
 }
 
 static void test_substitute_step_via_registry() {
@@ -193,6 +219,7 @@ int main() {
     action_type_register(&fake_action_type);
 
     test_lookup_returns_registered_def();
+    test_support_and_validation_hooks();
     test_substitute_step_via_registry();
     test_has_binding_via_registry();
     test_resolve_bindings_via_registry();

@@ -32,17 +32,15 @@ void add_field(JsonObject action, bool include_field_docs, const char* name, con
 
 } // namespace
 
-// Built-in entries mirror the action_parse.cpp / action_dispatch.cpp strcmp
-// ladder exactly: same types, same #if guards. Device-class entries below are
-// enumerated from the live registry, so a new class or type appears here as
-// soon as it registers a describe hook — nothing to update in this file.
+// Legacy built-ins remain listed below while they are incrementally migrated.
+// Registered built-ins and device-class actions are emitted from the live
+// registry, so their metadata and availability share one definition.
 void action_catalog_emit(JsonArray actions, bool include_field_docs) {
 #if HAS_DISPLAY
     {
         JsonObject a = add_action(actions, "screen", "Navigation", "Navigate to screen");
         add_field(a, include_field_docs, "target", "screen id to navigate to");
     }
-    add_action(actions, "back", "Navigation", "Navigate back");
     {
         JsonObject a = add_action(actions, "cycle_pad", "Navigation", "Navigate pad sequence");
         add_field(a, include_field_docs, "direction", "next or previous (default next)");
@@ -96,24 +94,8 @@ void action_catalog_emit(JsonArray actions, bool include_field_docs) {
         add_field(a, include_field_docs, "sound_alert_file", "sound filename; mp3 alerts only");
         add_field(a, include_field_docs, "sound_alert_volume", "0-100, optional");
     }
-    {
-        JsonObject a = add_action(actions, "volume", "Audio", "Volume");
-        JsonArray commands = a.createNestedArray("commands");
-        add_command(commands, "set", "Set volume");
-        add_command(commands, "adjust", "Adjust volume");
-        add_field(a, include_field_docs, "volume_mode", "set or adjust; matches the selected command");
-        add_field(a, include_field_docs, "volume_value", "percentage for set; signed delta for adjust");
-    }
 #endif
 #if HAS_DISPLAY
-    {
-        JsonObject a = add_action(actions, "brightness", "Display", "Brightness");
-        JsonArray commands = a.createNestedArray("commands");
-        add_command(commands, "set", "Set brightness");
-        add_command(commands, "adjust", "Adjust brightness");
-        add_field(a, include_field_docs, "brightness_mode", "set or adjust; matches the selected command");
-        add_field(a, include_field_docs, "brightness_value", "percentage for set; signed delta for adjust");
-    }
     {
         JsonObject a = add_action(actions, "notify", "Display", "Show notification");
         add_field(a, include_field_docs, "notify_text", "message text, bindable");
@@ -174,11 +156,12 @@ void action_catalog_emit(JsonArray actions, bool include_field_docs) {
                   "reboot, wifi_reconnect, or screensaver; matches the selected command");
     }
 
-    // Device-class action types self-register via REGISTER_ACTION_TYPE and
-    // supply their own describe hook; a new class or type needs no change here.
+    // Registered built-ins and device-class action types self-register and
+    // supply their own description. A type absent from this build is not
+    // catalog-visible, matching authoring validation.
     for (uint8_t i = 0; i < action_type_count(); ++i) {
         const ActionTypeDef* type = action_type_at(i);
-        if (!type || !type->type_name) continue;
+        if (!type || !type->type_name || !action_type_is_supported(type->type_name)) continue;
         JsonObject action = actions.createNestedObject();
         action["type"] = type->type_name;
         if (type->describe) {

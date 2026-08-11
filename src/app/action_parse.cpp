@@ -16,10 +16,40 @@
 // migration; the mapping from flat key → union arm field is centralized
 // in this file.
 
+void action_parse_volume(const JsonObject& a, ButtonAction& act) {
+    strlcpy(act.payload.volume.volume_mode, a["volume_mode"] | "",
+            sizeof(act.payload.volume.volume_mode));
+    strlcpy(act.payload.volume.volume_value, a["volume_value"] | "",
+            sizeof(act.payload.volume.volume_value));
+}
+
+void action_serialize_volume(const ButtonAction& act, JsonObject obj) {
+    if (act.payload.volume.volume_mode[0]) obj["volume_mode"] = act.payload.volume.volume_mode;
+    if (act.payload.volume.volume_value[0]) obj["volume_value"] = act.payload.volume.volume_value;
+}
+
+void action_parse_brightness(const JsonObject& a, ButtonAction& act) {
+    strlcpy(act.payload.brightness.brightness_mode, a["brightness_mode"] | "",
+            sizeof(act.payload.brightness.brightness_mode));
+    strlcpy(act.payload.brightness.brightness_value, a["brightness_value"] | "",
+            sizeof(act.payload.brightness.brightness_value));
+}
+
+void action_serialize_brightness(const ButtonAction& act, JsonObject obj) {
+    if (act.payload.brightness.brightness_mode[0]) obj["brightness_mode"] = act.payload.brightness.brightness_mode;
+    if (act.payload.brightness.brightness_value[0]) obj["brightness_value"] = act.payload.brightness.brightness_value;
+}
+
 void action_parse(const JsonObject& a, ButtonAction& act) {
     memset(&act, 0, sizeof(ButtonAction));
     strlcpy(act.type, a["type"] | "", sizeof(act.type));
     if (!act.type[0]) return;
+
+    const ActionTypeDef* registered_type = action_type_find(act.type);
+    if (registered_type && registered_type->parse) {
+        registered_type->parse(a, act);
+        return;
+    }
 
     if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
         strlcpy(act.payload.screen.screen_id, a["target"] | "", sizeof(act.payload.screen.screen_id));
@@ -28,6 +58,10 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
         strlcpy(act.payload.mqtt.mqtt_payload, a["payload"] | "", sizeof(act.payload.mqtt.mqtt_payload));
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
         strlcpy(act.payload.key.key_sequence, a["sequence"] | "", sizeof(act.payload.key.key_sequence));
+    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
+        action_parse_volume(a, act);
+    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
+        action_parse_brightness(a, act);
     } else if (strcmp(act.type, ACTION_TYPE_MUSIC) == 0) {
         const char* command = a["music_command"] | "";
         if (strcmp(command, "play_pause") != 0 && strcmp(command, "next") != 0 &&
@@ -36,12 +70,6 @@ void action_parse(const JsonObject& a, ButtonAction& act) {
             return;
         }
         strlcpy(act.payload.music.music_command, command, sizeof(act.payload.music.music_command));
-    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
-        strlcpy(act.payload.volume.volume_mode,  a["volume_mode"]  | "", sizeof(act.payload.volume.volume_mode));
-        strlcpy(act.payload.volume.volume_value, a["volume_value"] | "", sizeof(act.payload.volume.volume_value));
-    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        strlcpy(act.payload.brightness.brightness_mode,  a["brightness_mode"]  | "", sizeof(act.payload.brightness.brightness_mode));
-        strlcpy(act.payload.brightness.brightness_value, a["brightness_value"] | "", sizeof(act.payload.brightness.brightness_value));
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
         const char* command = a["timer_command"] | "";
         const char* mode = a["timer_mode"] | "";
@@ -138,6 +166,12 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
     if (!act.type[0]) return;  // empty action → empty object
     obj["type"] = act.type;
 
+    const ActionTypeDef* registered_type = action_type_find(act.type);
+    if (registered_type && registered_type->serialize) {
+        registered_type->serialize(act, obj);
+        return;
+    }
+
     if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
         if (act.payload.screen.screen_id[0]) obj["target"] = act.payload.screen.screen_id;
     } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
@@ -145,14 +179,12 @@ void action_to_json(const ButtonAction& act, JsonObject obj) {
         if (act.payload.mqtt.mqtt_payload[0]) obj["payload"] = act.payload.mqtt.mqtt_payload;
     } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
         if (act.payload.key.key_sequence[0]) obj["sequence"] = act.payload.key.key_sequence;
+    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
+        action_serialize_volume(act, obj);
+    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
+        action_serialize_brightness(act, obj);
     } else if (strcmp(act.type, ACTION_TYPE_MUSIC) == 0) {
         if (act.payload.music.music_command[0]) obj["music_command"] = act.payload.music.music_command;
-    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
-        if (act.payload.volume.volume_mode[0])  obj["volume_mode"]  = act.payload.volume.volume_mode;
-        if (act.payload.volume.volume_value[0]) obj["volume_value"] = act.payload.volume.volume_value;
-    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        if (act.payload.brightness.brightness_mode[0])  obj["brightness_mode"]  = act.payload.brightness.brightness_mode;
-        if (act.payload.brightness.brightness_value[0]) obj["brightness_value"] = act.payload.brightness.brightness_value;
     } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
         if (act.payload.timer.timer_id > 0)     obj["timer_id"]      = act.payload.timer.timer_id;
         if (act.payload.timer.timer_command[0]) obj["timer_command"] = act.payload.timer.timer_command;

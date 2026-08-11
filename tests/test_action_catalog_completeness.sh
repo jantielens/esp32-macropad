@@ -21,14 +21,15 @@ SRC_DIR="src/app"
 CATALOG="$SRC_DIR/action_catalog.cpp"
 PARSE="$SRC_DIR/action_parse.cpp"
 DISPATCH="$SRC_DIR/action_dispatch.cpp"
+BUILTIN_TYPES="$SRC_DIR/action_builtin_types.cpp"
 
 fail=0
 
 # ---------------------------------------------------------------------------
 # 1. Built-in types: every ACTION_TYPE_* used in the parse/dispatch ladders
-#    must have a matching add_action(actions, "value", ...) call in the
-#    catalog. ACTION_TYPE_NONE ("") is the empty-action sentinel, not a real
-#    type, and is excluded.
+#    must have handwritten catalog metadata or a registered builtin definition.
+#    ACTION_TYPE_NONE ("") is the empty-action sentinel, not a real type, and
+#    is excluded.
 # ---------------------------------------------------------------------------
 
 # Macro name -> string value, from every "#define ACTION_TYPE_X "value"" in src/app.
@@ -52,10 +53,11 @@ fi
 
 catalog_types="$(grep -ohE 'add_action\(actions, *"[a-z_]+"' "$CATALOG" 2>/dev/null \
     | sed -E 's/.*"([a-z_]+)"/\1/' | sort -u)"
-if [ -z "$catalog_types" ]; then
-    echo "FAIL: found no add_action(...) calls in $CATALOG" >&2
-    exit 1
-fi
+registered_builtin_macros="$(grep -ohE 'ACTION_TYPE_[A-Z_]+' "$BUILTIN_TYPES" 2>/dev/null | sort -u)"
+for macro in $registered_builtin_macros; do
+    value="${MACRO_VALUE[$macro]:-}"
+    [ -n "$value" ] && catalog_types="$(printf '%s\n%s\n' "$catalog_types" "$value" | sort -u)"
+done
 
 missing_builtins=""
 for macro in $ladder_macros; do
@@ -74,13 +76,12 @@ if [ -n "$missing_builtins" ]; then
     fail=1
     echo "FAIL: built-in action type(s) in the parse/dispatch ladder have no catalog entry:" >&2
     for t in $missing_builtins; do
-        echo "  - $t  -> add add_action(actions, \"$t\", <group>, <label>) in $CATALOG" >&2
+        echo "  - $t  -> add catalog metadata or register a builtin ActionTypeDef" >&2
     done
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Device-class types: every REGISTER_ACTION_TYPE(...) must sit in a file
-#    that also assigns a non-null describe hook, so action_catalog_emit's
+# 2. Every registered type must have a describe hook so action_catalog_emit's
 #    registry loop can present it.
 # ---------------------------------------------------------------------------
 
@@ -93,13 +94,14 @@ fi
 
 missing_describe=""
 for f in $files_with_registration; do
-    if ! grep -qE '/\*[[:space:]]*describe[[:space:]]*\*/[[:space:]]*[A-Za-z_][A-Za-z0-9_]*,' "$f"; then
+    if ! grep -qE '[A-Za-z_][A-Za-z0-9_]*_describe\(' "$f" \
+            && ! grep -qE 'describe_[A-Za-z0-9_]*\(' "$f"; then
         missing_describe="$missing_describe $f"
     fi
 done
 if [ -n "$missing_describe" ]; then
     fail=1
-    echo "FAIL: device-class action type(s) registered without a describe hook:" >&2
+    echo "FAIL: registered action type(s) without a describe hook:" >&2
     for f in $missing_describe; do
         echo "  - $f  -> add a '<type>_describe(JsonObject&)' function and wire it into" >&2
         echo "           the ActionTypeDef's '/* describe    */' field" >&2

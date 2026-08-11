@@ -9,15 +9,15 @@
 #include "binding_template.h"
 #endif
 
-// Small fixed-size registry. Sized for the largest device class today
-// (darkroom-timer registers 5: expose, strip, meter, print, shelly). Bump
-// MAX_ACTION_TYPES if a future device class registers more.
-static constexpr int MAX_ACTION_TYPES = 8;
+// Small fixed-size registry. Built-ins and device classes share this table;
+// 16 leaves room beyond the largest current device-class configuration.
+static constexpr int MAX_ACTION_TYPES = 16;
 static const ActionTypeDef* s_types[MAX_ACTION_TYPES] = {};
 static int s_count = 0;
 
 void action_type_register(const ActionTypeDef* type) {
-    if (!type || s_count >= MAX_ACTION_TYPES) return;
+    if (!type || !type->type_name || action_type_find(type->type_name)
+            || s_count >= MAX_ACTION_TYPES) return;
     s_types[s_count++] = type;
 }
 
@@ -33,6 +33,16 @@ uint8_t action_type_count() { return (uint8_t)s_count; }
 
 const ActionTypeDef* action_type_at(uint8_t index) {
     return (index < s_count) ? s_types[index] : nullptr;
+}
+
+bool action_type_is_supported(const char* type_name) {
+    const ActionTypeDef* type = action_type_find(type_name);
+    return type && (!type->available || type->available());
+}
+
+const char* action_type_validate(const ActionTypeDef* type, JsonObjectConst action) {
+    if (!type || !type->validate) return nullptr;
+    return type->validate(action);
 }
 
 void action_substitute_step_field(char* field, size_t field_size, float step) {

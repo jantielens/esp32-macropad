@@ -81,6 +81,64 @@ function actionEditorCommandOptionsHTML(type) {
     }).join('');
 }
 
+// Render only the small common field vocabulary. Actions that need conditional
+// controls or visual previews keep their explicit editor extension.
+function actionEditorGenericFieldsHTML(prefix) {
+    var html = '';
+    actionEditorCatalog().forEach(function(entry) {
+        if (!entry.editor_fields || !entry.editor_fields.length) return;
+        html += '<div id="' + prefix + '-generic-' + entry.type + '-group" style="display:none;">';
+        entry.editor_fields.forEach(function(field) {
+            var id = prefix + '-generic-' + entry.type + '-' + field.name;
+            html += '<div class="form-group">';
+            if (field.type === 'toggle') {
+                html += '<label><input type="checkbox" id="' + id + '"> ' + field.label + '</label>';
+            } else {
+                html += '<label class="form-label" for="' + id + '">' + field.label;
+                if (field.bindable) html += ' <span class="fx-hint" onclick="showBindingHelp()">fx</span>';
+                html += '</label>';
+                if (field.type === 'select') {
+                    html += '<select class="form-select form-select-sm" id="' + id + '">';
+                    html += field.command_options ? actionEditorCommandOptionsHTML(entry.type) : '';
+                    html += '</select>';
+                } else {
+                    var inputType = field.type === 'number' ? 'number' : 'text';
+                    html += '<input type="' + inputType + '" class="form-control form-control-sm" id="' + id + '">';
+                }
+            }
+            html += '</div>';
+        });
+        html += '</div>';
+    });
+    return html;
+}
+
+function actionEditorGenericFields(type) {
+    var entry = actionEditorCatalogEntry(type);
+    return entry && entry.editor_fields ? entry.editor_fields : [];
+}
+
+function actionEditorSetGenericFields(prefix, type, action) {
+    actionEditorGenericFields(type).forEach(function(field) {
+        var el = document.getElementById(prefix + '-generic-' + type + '-' + field.name);
+        if (!el) return;
+        if (field.type === 'toggle') el.checked = !!action[field.name];
+        else el.value = action[field.name] === undefined ? '' : action[field.name];
+    });
+}
+
+function actionEditorBuildGenericFields(prefix, type, action) {
+    actionEditorGenericFields(type).forEach(function(field) {
+        var el = document.getElementById(prefix + '-generic-' + type + '-' + field.name);
+        if (!el) return;
+        if (field.type === 'toggle') {
+            action[field.name] = el.checked;
+        } else if (el.value !== '') {
+            action[field.name] = field.type === 'number' ? Number(el.value) : el.value.trim();
+        }
+    });
+}
+
 // Timer's Command selector is per-instance ("T1: Toggle", "T2: Start", ...);
 // labels still come from the catalog's single 'timer' entry so the text
 // shown for each command has one source regardless of which instance it's for.
@@ -365,42 +423,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += actionEditorCommandOptionsHTML('system');
     h += '</select>';
     h += '</div></div>';
-    // Volume
-    h += '<div id="' + prefix + '-volume-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-volume-command">Command</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-volume-command" onchange="actionEditorVolumeBrightnessChanged(\'' + prefix + '\', \'volume\')">';
-    h += actionEditorCommandOptionsHTML('volume');
-    h += '</select>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-volume-set-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-volume-set-value">Volume (%)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-volume-set-value" min="0" max="100" placeholder="e.g. 50">';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-volume-adjust-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-volume-adjust-value">Adjust Volume (%)</label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-volume-adjust-value" placeholder="e.g. 10, -10, or {step}">';
-    h += '<small>Positive increases, negative decreases. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
-    h += '</div>';
-    h += '</div>';
-    // Brightness
-    h += '<div id="' + prefix + '-brightness-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-brightness-command">Command</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-brightness-command" onchange="actionEditorVolumeBrightnessChanged(\'' + prefix + '\', \'brightness\')">';
-    h += actionEditorCommandOptionsHTML('brightness');
-    h += '</select>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-brightness-set-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-brightness-set-value">Brightness (%)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-brightness-set-value" min="5" max="100" placeholder="e.g. 50">';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-brightness-adjust-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-brightness-adjust-value">Adjust Brightness (%)</label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-brightness-adjust-value" placeholder="e.g. 10, -10, or {step}">';
-    h += '<small>Positive increases, negative decreases. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
-    h += '</div>';
-    h += '</div>';
+    h += actionEditorGenericFieldsHTML(prefix);
     // Extension-contributed groups (e.g. shutter command UI on shutter-tester builds)
     _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
     return h;
@@ -465,14 +488,20 @@ function actionEditorTypeChanged(prefix) {
     if (delayGrp) delayGrp.style.display = (type === 'delay') ? '' : 'none';
     var systemGrp = document.getElementById(prefix + '-system-group');
     if (systemGrp) systemGrp.style.display = (type === 'system') ? '' : 'none';
-    var volumeGrp = document.getElementById(prefix + '-volume-group');
-    if (volumeGrp) volumeGrp.style.display = (type === 'volume') ? '' : 'none';
-    var brightnessGrp = document.getElementById(prefix + '-brightness-group');
-    if (brightnessGrp) brightnessGrp.style.display = (type === 'brightness') ? '' : 'none';
+    actionEditorCatalog().forEach(function(entry) {
+        var group = document.getElementById(prefix + '-generic-' + entry.type + '-group');
+        if (group) group.style.display = entry.type === type ? '' : 'none';
+    });
     if (['notify', 'visual_alert', 'mqtt', 'key', 'sound_alert', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
     if (type === 'timer') actionEditorTimerChanged(prefix);
-    if (type === 'volume') actionEditorVolumeBrightnessChanged(prefix, 'volume');
-    if (type === 'brightness') actionEditorVolumeBrightnessChanged(prefix, 'brightness');
+    actionEditorGenericFields(type).forEach(function(field) {
+        if (!field.bindable) return;
+        var input = document.getElementById(prefix + '-generic-' + type + '-' + field.name);
+        if (input && !input.dataset.bcBind) {
+            input.dataset.bcBind = '1';
+            if (typeof bindingAttachValidation === 'function') bindingAttachValidation(input);
+        }
+    });
     // Extension-contributed type-change hooks (e.g. shutter group visibility)
     _actionEditorExtensions.forEach(function(ext) { if (ext.typeChanged) ext.typeChanged(prefix, type); });
 }
@@ -498,18 +527,6 @@ function actionEditorSoundAlertChanged(prefix) {
     var isMp3 = kind && kind.value === 'mp3';
     if (tone) tone.style.display = isMp3 ? 'none' : '';
     if (mp3) mp3.style.display = isMp3 ? '' : 'none';
-}
-
-// Show/hide system command sub-fields based on the command dropdown.
-// Show/hide the volume/brightness set-vs-adjust value field for the given kind.
-function actionEditorVolumeBrightnessChanged(prefix, kind) {
-    var sel = document.getElementById(prefix + '-' + kind + '-command');
-    if (!sel) return;
-    var cmd = sel.value;
-    var setGrp = document.getElementById(prefix + '-' + kind + '-set-group');
-    var adjustGrp = document.getElementById(prefix + '-' + kind + '-adjust-group');
-    if (setGrp) setGrp.style.display = (cmd === 'set') ? '' : 'none';
-    if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
 }
 
 // Show/hide the visual-alert config fields based on the op dropdown.
@@ -678,20 +695,7 @@ function actionEditorLoad(prefix, action) {
     // Device command (reboot / Wi-Fi / screensaver)
     el = document.getElementById(prefix + '-system-command');
     if (el) el.value = action.system_command || 'reboot';
-    // Volume / Brightness — first-class types, each with its own Command
-    // (set/adjust) select and set/adjust value inputs.
-    el = document.getElementById(prefix + '-volume-command');
-    if (el) el.value = action.volume_mode || 'set';
-    el = document.getElementById(prefix + '-volume-set-value');
-    if (el) el.value = (action.type === 'volume' && action.volume_mode !== 'adjust') ? (action.volume_value || '') : '';
-    el = document.getElementById(prefix + '-volume-adjust-value');
-    if (el) el.value = (action.type === 'volume' && action.volume_mode === 'adjust') ? (action.volume_value || '') : '';
-    el = document.getElementById(prefix + '-brightness-command');
-    if (el) el.value = action.brightness_mode || 'set';
-    el = document.getElementById(prefix + '-brightness-set-value');
-    if (el) el.value = (action.type === 'brightness' && action.brightness_mode !== 'adjust') ? (action.brightness_value || '') : '';
-    el = document.getElementById(prefix + '-brightness-adjust-value');
-    if (el) el.value = (action.type === 'brightness' && action.brightness_mode === 'adjust') ? (action.brightness_value || '') : '';
+    actionEditorSetGenericFields(prefix, action.type || '', action);
     // Extension-contributed load hooks (e.g. shutter field population)
     _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
     actionEditorTypeChanged(prefix);
@@ -709,6 +713,7 @@ function actionEditorBuild(prefix) {
         return _actionEditorUnsupported[prefix];
     }
     var act = { type: type };
+    actionEditorBuildGenericFields(prefix, type, act);
     if (type === 'screen') {
         var t = document.getElementById(prefix + '-target');
         if (t) act.target = t.value;
@@ -851,13 +856,6 @@ function actionEditorBuild(prefix) {
     if (type === 'system') {
         var sc = document.getElementById(prefix + '-system-command');
         if (sc) act.system_command = sc.value;
-    }
-    if (type === 'volume' || type === 'brightness') {
-        var vbCmd = document.getElementById(prefix + '-' + type + '-command');
-        var mode = vbCmd ? vbCmd.value : 'set';
-        act[type + '_mode'] = mode;
-        var vbInput = document.getElementById(prefix + '-' + type + '-' + mode + '-value');
-        if (vbInput && vbInput.value !== '') act[type + '_value'] = (vbInput.value || '').trim();
     }
     // Extension-contributed build hooks (e.g. shutter merges shutter_command/shutter_value).
     _actionEditorExtensions.forEach(function(ext) {

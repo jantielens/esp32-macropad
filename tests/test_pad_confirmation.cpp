@@ -52,6 +52,14 @@ const ActionTypeDef* action_type_find(const char* type) {
     return nullptr;
 }
 
+bool action_type_is_supported(const char* type) {
+    return action_type_find(type) != nullptr;
+}
+
+const char* action_type_validate(const ActionTypeDef*, JsonObjectConst) {
+    return nullptr;
+}
+
 static JsonObject make_button(JsonDocument& doc) {
     doc["cols"] = 1;
     doc["rows"] = 1;

@@ -55,7 +55,11 @@ const FIXTURE_CATALOG = [
     { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
     {
         type: 'volume', group: 'Audio', label: 'Volume',
-        commands: [{ id: 'set', label: 'Set volume' }, { id: 'adjust', label: 'Adjust volume' }]
+        commands: [{ id: 'set', label: 'Set volume' }, { id: 'adjust', label: 'Adjust volume' }],
+        editor_fields: [
+            { name: 'volume_mode', label: 'Command', type: 'select', command_options: true },
+            { name: 'volume_value', label: 'Value (%)', type: 'text', bindable: true }
+        ]
     },
     {
         type: 'timer', group: 'Timer', label: 'Timer',
@@ -139,6 +143,12 @@ assert.strictEqual(context.actionEditorFamilyForCommand('shutter', 'toggle_lock'
 const prefix = 'picker';
 const editorHtml = context.actionEditorHTML(prefix, '', {});
 assert(editorHtml.includes('Up to 3 pausable actions can be pending device-wide at a time'));
+assert(editorHtml.includes('picker-generic-volume-volume_mode'));
+context.actionEditorLoad(prefix, { type: 'volume', volume_mode: 'adjust', volume_value: '{step}' });
+const volumeAction = context.actionEditorBuild(prefix);
+assert.strictEqual(volumeAction.type, 'volume');
+assert.strictEqual(volumeAction.volume_mode, 'adjust');
+assert.strictEqual(volumeAction.volume_value, '{step}');
 const familyEl = document.getElementById(prefix + '-shutter-family');
 familyEl.value = 'session';
 context.actionEditorShutterFamilyChanged(prefix);

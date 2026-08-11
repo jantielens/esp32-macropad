@@ -17,4 +17,9 @@ void action_parse(const JsonObject& obj, ButtonAction& act);
 // Only writes non-default fields to keep the JSON compact.
 void action_to_json(const ButtonAction& act, JsonObject obj);
 
+void action_parse_volume(const JsonObject& obj, ButtonAction& act);
+void action_serialize_volume(const ButtonAction& act, JsonObject obj);
+void action_parse_brightness(const JsonObject& obj, ButtonAction& act);
+void action_serialize_brightness(const ButtonAction& act, JsonObject obj);
+
 #endif // HAS_DISPLAY || HAS_BUTTON

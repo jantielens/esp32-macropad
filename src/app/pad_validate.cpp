@@ -102,6 +102,11 @@ static const char* validate_exact_binding_token(const char* value) {
 // Validate action-specific authoring contracts. Other action types are a no-op.
 static const char* validate_action(JsonObjectConst action) {
     const char* type = action["type"] | "";
+    const ActionTypeDef* registered_type = action_type_find(type);
+    if (registered_type) {
+        if (!action_type_is_supported(type)) return "action is unavailable on this board";
+        return action_type_validate(registered_type, action);
+    }
     if (strcmp(type, ACTION_TYPE_MUSIC) == 0) {
 #if HAS_SOUND_PLAYER
         if (!action.containsKey("music_command")) return "music missing music_command";
@@ -194,9 +199,9 @@ static const char* validate_action(JsonObjectConst action) {
 static bool action_type_known(const char* type) {
     if (!type || !type[0] || strcmp(type, "none") == 0) return true;
     static const char* const builtins[] = {
-        ACTION_TYPE_SCREEN, ACTION_TYPE_MQTT, ACTION_TYPE_BACK,
+        ACTION_TYPE_SCREEN, ACTION_TYPE_MQTT,
         ACTION_TYPE_KEY, ACTION_TYPE_BLE_PAIR, ACTION_TYPE_MUSIC,
-        ACTION_TYPE_VOLUME, ACTION_TYPE_BRIGHTNESS, ACTION_TYPE_TIMER,
+        ACTION_TYPE_TIMER,
         ACTION_TYPE_SOUND_ALERT, ACTION_TYPE_NOTIFY, ACTION_TYPE_SYSTEM,
         ACTION_TYPE_HA_SERVICE, ACTION_TYPE_VISUAL_ALERT, ACTION_TYPE_CYCLE_PAD,
         ACTION_TYPE_DELAY,
@@ -204,7 +209,7 @@ static bool action_type_known(const char* type) {
     for (const char* builtin : builtins) {
         if (strcmp(type, builtin) == 0) return true;
     }
-    return action_type_find(type) != nullptr;
+    return action_type_is_supported(type);
 }
 
 static const char* validate_action_array(JsonArrayConst arr, bool require_known_type = true) {

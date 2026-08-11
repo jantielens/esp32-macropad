@@ -8,8 +8,8 @@
 
 // Single source of action-authoring presentation metadata, shared by the web
 // portal (GET /api/info?catalog=1) and the MCP capability manifest
-// (get_capabilities). Gating mirrors the #if structure in action_dispatch.cpp,
-// so an entry appears here exactly when the running build can execute it.
+// (get_capabilities). Registered types use the same availability predicate as
+// authoring validation, so an entry appears exactly when this build supports it.
 //
 // Each emitted entry carries "type", "group", "label", an optional
 // "commands" array of {id, label} for multi-command types, an optional
