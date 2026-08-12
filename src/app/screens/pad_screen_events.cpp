@@ -6,6 +6,7 @@
 #include "../swipe_actions.h"
 #if HAS_NATIVE_EXTENSIONS
 #include "../native_extension.h"
+#include "../widgets/external_widget.h"
 #endif
 #if HAS_AUDIO
 #include "../audio.h"
@@ -197,9 +198,8 @@ void PadScreen::onTap(lv_event_t* e) {
 
 #if HAS_NATIVE_EXTENSIONS
     if (strcmp(tile->widget_cfg.type, "external") == 0) {
-        const uint32_t instance_id = (static_cast<uint32_t>(tile->page) << 16) |
-                         (static_cast<uint32_t>(tile->col) << 8) | tile->row;
-        if (native_extension_on_tap(tile->widget_cfg.extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
+        const uint32_t instance_id = external_widget_instance_id(tile->page, tile->col, tile->row);
+        if (native_extension_on_tap(external_widget_config(&tile->widget_cfg)->extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
     }
 #endif
 
@@ -350,9 +350,8 @@ void PadScreen::onLongPress(lv_event_t* e) {
 
 #if HAS_NATIVE_EXTENSIONS
     if (strcmp(tile->widget_cfg.type, "external") == 0) {
-        const uint32_t instance_id = (static_cast<uint32_t>(tile->page) << 16) |
-                         (static_cast<uint32_t>(tile->col) << 8) | tile->row;
-        if (native_extension_on_long_press(tile->widget_cfg.extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
+        const uint32_t instance_id = external_widget_instance_id(tile->page, tile->col, tile->row);
+        if (native_extension_on_long_press(external_widget_config(&tile->widget_cfg)->extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
     }
 #endif
 

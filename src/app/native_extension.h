@@ -46,7 +46,7 @@ struct NativeExtensionSlotHeader {
 bool native_extension_init();
 uint8_t native_extension_slot_count();
 bool native_extension_get_slot(uint8_t slot, NativeExtensionSlotInfo* out);
-bool native_extension_stage(uint8_t slot, const char* filename, const uint8_t* elf, size_t elf_size);
+bool native_extension_stage_file(uint8_t slot, const char* filename, const char* source_path);
 bool native_extension_set_enabled(uint8_t slot, bool enabled);
 bool native_extension_delete(uint8_t slot);
 

@@ -313,8 +313,6 @@ static_assert(sizeof(ButtonAction) <= 420,
 // Widget type-specific config blob (parsed by widget implementations)
 struct WidgetConfig {
     char type[CONFIG_WIDGET_TYPE_MAX_LEN];     // "" = normal button (default)
-    char extension_id[CONFIG_EXTENSION_ID_MAX_LEN];
-    char extension_config[CONFIG_EXTENSION_CONFIG_MAX_LEN];
     char data_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN]; // Binding templates (0=primary, 1-3=extra)
     uint8_t data[WIDGET_CONFIG_MAX_BYTES];     // type-specific config, opaque to pad_config
 };

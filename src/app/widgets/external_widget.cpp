@@ -2,6 +2,7 @@
 
 #if HAS_NATIVE_EXTENSIONS
 
+#include "external_widget.h"
 #include "../native_extension.h"
 #include "../screens/pad_screen.h"
 #include <stddef.h>
@@ -10,15 +11,17 @@
 struct ExternalWidgetState {
     lv_obj_t* root;
     uint32_t instance_id;
-    char extension_id[CONFIG_EXTENSION_ID_MAX_LEN];
+    uint32_t last_tick_ms;
+    const ExternalWidgetConfig* config;
 };
 
 static_assert(sizeof(ExternalWidgetState) <= WIDGET_STATE_MAX_BYTES,
               "ExternalWidgetState exceeds WIDGET_STATE_MAX_BYTES");
 
 static void external_parse(const JsonObject& btn, uint8_t* data) {
-    (void)btn;
-    (void)data;
+    auto* config = reinterpret_cast<ExternalWidgetConfig*>(data);
+    strlcpy(config->extension_id, btn["extension_id"] | "", sizeof(config->extension_id));
+    strlcpy(config->config, btn["extension_config"] | "", sizeof(config->config));
 }
 
 static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
@@ -46,11 +49,11 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
 
     const ButtonTile* button = reinterpret_cast<const ButtonTile*>(
         reinterpret_cast<const uint8_t*>(state) - offsetof(ButtonTile, widget_state));
-    external->instance_id = (static_cast<uint32_t>(button->page) << 16) |
-                            (static_cast<uint32_t>(btn->col) << 8) | btn->row;
-    strlcpy(external->extension_id, cfg->extension_id, sizeof(external->extension_id));
-    if (!native_extension_create_instance(external->extension_id, external->instance_id,
-                                          external->root, cfg->extension_config)) {
+    const ExternalWidgetConfig* config = external_widget_config(cfg);
+    external->config = config;
+    external->instance_id = external_widget_instance_id(button->page, btn->col, btn->row);
+    if (!native_extension_create_instance(config->extension_id, external->instance_id,
+                                          external->root, config->config)) {
         lv_obj_t* label = lv_label_create(external->root);
         lv_label_set_text(label, "Extension unavailable");
         lv_obj_center(label);
@@ -67,14 +70,19 @@ static void external_update(lv_obj_t* tile, const WidgetConfig* cfg,
 
 static void external_destroy(WidgetState* state) {
     auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
-    native_extension_destroy_instance(external->extension_id, external->instance_id);
+    if (external->config) {
+        native_extension_destroy_instance(external->config->extension_id, external->instance_id);
+    }
     external->root = nullptr;
 }
 
 static void external_tick(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* state) {
     (void)tile;
     auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
-    native_extension_tick_instance(cfg->extension_id, external->instance_id);
+    const uint32_t now = millis();
+    if (now - external->last_tick_ms < 250) return;
+    external->last_tick_ms = now;
+    native_extension_tick_instance(external_widget_config(cfg)->extension_id, external->instance_id);
 }
 
 REGISTER_WIDGET(external, nullptr, false);

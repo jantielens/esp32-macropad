@@ -24,14 +24,18 @@ constexpr uint32_t SLOT_SIZE[NATIVE_EXTENSION_SLOT_COUNT] = {0x10000, 0x10000, 0
 constexpr uint32_t SLOT_CAPACITY[NATIVE_EXTENSION_SLOT_COUNT] = {0xE000, 0xE000, 0x1E000};
 constexpr uint16_t ELF_TYPE_DYN = 3;
 constexpr uint16_t ELF_MACHINE_RISCV = 243;
+constexpr uint32_t ELF_PT_LOAD = 1;
+constexpr uint32_t ELF_PF_X = 1;
 constexpr uint32_t ELF_SHT_DYNSYM = 11;
 constexpr uint32_t ELF_SHT_RELA = 4;
+constexpr size_t STAGING_CHUNK_SIZE = 4096;
 
 struct ElfHeader { uint8_t ident[16]; uint16_t type, machine; uint32_t version, entry, phoff, shoff, flags; uint16_t ehsize, phentsize, phnum, shentsize, shnum, shstrndx; };
+struct ElfProgram { uint32_t type, offset, vaddr, paddr, filesz, memsz, flags, align; };
 struct ElfSection { uint32_t name, type, flags, addr, offset, size, link, info, align, entsize; };
 struct ElfSymbol { uint32_t name, value, size; uint8_t info, other; uint16_t shndx; };
 struct StageHeader { uint32_t magic; NativeExtensionSlotHeader slot; };
-static_assert(sizeof(ElfHeader) == 52 && sizeof(ElfSection) == 40 && sizeof(ElfSymbol) == 16, "Unexpected ELF layout");
+static_assert(sizeof(ElfHeader) == 52 && sizeof(ElfProgram) == 32 && sizeof(ElfSection) == 40 && sizeof(ElfSymbol) == 16, "Unexpected ELF layout");
 
 struct LoadedSlot {
     void* mapping;
@@ -43,11 +47,51 @@ struct LoadedSlot {
     NativeExtensionTickFn tick;
 };
 LoadedSlot s_slots[NATIVE_EXTENSION_SLOT_COUNT] = {};
-bool s_pending_delete[NATIVE_EXTENSION_SLOT_COUNT] = {};
 
 bool valid_slot(uint8_t slot) { return slot < NATIVE_EXTENSION_SLOT_COUNT; }
 bool range_valid(size_t offset, size_t size, size_t total) { return offset <= total && size <= total - offset; }
 void stage_path(uint8_t slot, char* path, size_t len) { snprintf(path, len, "/extensions/slot%u.stage", slot); }
+void delete_path(uint8_t slot, char* path, size_t len) { snprintf(path, len, "/extensions/slot%u.delete", slot); }
+void enabled_path(uint8_t slot, char* path, size_t len) { snprintf(path, len, "/extensions/slot%u.enabled", slot); }
+
+bool delete_pending(uint8_t slot) {
+    char path[32];
+    delete_path(slot, path, sizeof(path));
+    return Storage.exists(path);
+}
+
+bool set_delete_pending(uint8_t slot) {
+    char path[32];
+    delete_path(slot, path, sizeof(path));
+    File marker = Storage.open(path, "w");
+    if (!marker) return false;
+    const bool written = marker.write(static_cast<uint8_t>(1)) == 1;
+    marker.close();
+    return written;
+}
+
+bool pending_enabled(uint8_t slot, bool* enabled) {
+    char path[32];
+    enabled_path(slot, path, sizeof(path));
+    File marker = Storage.open(path, "r");
+    char value = 0;
+    const bool valid = marker && marker.read(reinterpret_cast<uint8_t*>(&value), 1) == 1 &&
+                       (value == '0' || value == '1');
+    if (marker) marker.close();
+    if (valid && enabled) *enabled = value == '1';
+    return valid;
+}
+
+bool set_pending_enabled(uint8_t slot, bool enabled) {
+    char path[32];
+    enabled_path(slot, path, sizeof(path));
+    File marker = Storage.open(path, "w");
+    if (!marker) return false;
+    const char value = enabled ? '1' : '0';
+    const bool written = marker.write(reinterpret_cast<const uint8_t*>(&value), 1) == 1;
+    marker.close();
+    return written;
+}
 
 void host_set_text(char* out, size_t len, const char* text) { if (out && len) strlcpy(out, text ? text : "", len); }
 void* host_label_create(void* parent) { return parent ? lv_label_create(static_cast<lv_obj_t*>(parent)) : nullptr; }
@@ -105,7 +149,25 @@ bool parse_filename(const char* filename, NativeExtensionSlotHeader* header) {
     return header->version[0];
 }
 
-bool find_symbol(const uint8_t* file, size_t len, const ElfHeader* elf, const ElfSection* sections, uintptr_t bias, const char* target, uintptr_t* result) {
+bool symbol_is_executable(const ElfProgram* programs, uint16_t count, uint32_t value) {
+    for (uint16_t index = 0; index < count; ++index) {
+        const ElfProgram& program = programs[index];
+        if (program.type != ELF_PT_LOAD || (program.flags & ELF_PF_X) == 0 ||
+            program.vaddr > UINT32_MAX - program.filesz) continue;
+        if (value >= program.vaddr && value < program.vaddr + program.filesz) return true;
+    }
+    return false;
+}
+
+bool symbol_name_matches(const char* name, size_t available, const char* target) {
+    const size_t target_len = strlen(target);
+    return target_len < available && name[target_len] == '\0' &&
+           memcmp(name, target, target_len) == 0;
+}
+
+bool find_symbol(const uint8_t* file, size_t len, const ElfHeader* elf,
+                 const ElfProgram* programs, const ElfSection* sections,
+                 uintptr_t bias, const char* target, uintptr_t* result) {
     for (uint16_t section_index = 0; section_index < elf->shnum; ++section_index) {
         const ElfSection& section = sections[section_index];
         if (section.type != ELF_SHT_DYNSYM || section.entsize != sizeof(ElfSymbol) || section.link >= elf->shnum || !range_valid(section.offset, section.size, len)) continue;
@@ -114,7 +176,13 @@ bool find_symbol(const uint8_t* file, size_t len, const ElfHeader* elf, const El
         const ElfSymbol* symbols = reinterpret_cast<const ElfSymbol*>(file + section.offset);
         const char* names = reinterpret_cast<const char*>(file + strings.offset);
         for (size_t index = 0; index < section.size / sizeof(ElfSymbol); ++index) {
-            if (symbols[index].shndx && symbols[index].name < strings.size && strcmp(names + symbols[index].name, target) == 0) { *result = bias + symbols[index].value; return true; }
+            if (!symbols[index].shndx || symbols[index].name >= strings.size ||
+                !symbol_is_executable(programs, elf->phnum, symbols[index].value)) continue;
+            const size_t available = strings.size - symbols[index].name;
+            if (symbol_name_matches(names + symbols[index].name, available, target)) {
+                *result = bias + symbols[index].value;
+                return true;
+            }
         }
     }
     return false;
@@ -124,9 +192,17 @@ bool valid_elf(const uint8_t* elf_data, size_t elf_size) {
     if (!elf_data || elf_size < sizeof(ElfHeader)) return false;
     const ElfHeader* elf = reinterpret_cast<const ElfHeader*>(elf_data);
     if (memcmp(elf->ident, "\x7f" "ELF", 4) || elf->type != ELF_TYPE_DYN ||
-        elf->machine != ELF_MACHINE_RISCV || elf->shentsize != sizeof(ElfSection) ||
+        elf->machine != ELF_MACHINE_RISCV || elf->phentsize != sizeof(ElfProgram) ||
+        elf->shentsize != sizeof(ElfSection) ||
+        !range_valid(elf->phoff, static_cast<size_t>(elf->phnum) * elf->phentsize, elf_size) ||
         !range_valid(elf->shoff, static_cast<size_t>(elf->shnum) * elf->shentsize, elf_size)) return false;
     const ElfSection* sections = reinterpret_cast<const ElfSection*>(elf_data + elf->shoff);
+    const ElfProgram* programs = reinterpret_cast<const ElfProgram*>(elf_data + elf->phoff);
+    for (uint16_t index = 0; index < elf->phnum; ++index) {
+        if (programs[index].type == ELF_PT_LOAD &&
+            (!range_valid(programs[index].offset, programs[index].filesz, elf_size) ||
+             programs[index].vaddr > UINT32_MAX - programs[index].filesz)) return false;
+    }
     for (uint16_t index = 0; index < elf->shnum; ++index) {
         if (sections[index].type == ELF_SHT_RELA && sections[index].size) return false;
     }
@@ -138,17 +214,18 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     if (!metadata) metadata = static_cast<uint8_t*>(malloc(header.elf_size));
     if (!metadata || esp_partition_read(partition, SLOT_OFFSET[slot] + ELF_OFFSET, metadata, header.elf_size) != ESP_OK) { if (metadata) heap_caps_free(metadata); return false; }
     const ElfHeader* elf = reinterpret_cast<const ElfHeader*>(metadata);
-    if (header.elf_size < sizeof(*elf) || memcmp(elf->ident, "\x7f" "ELF", 4) || elf->type != ELF_TYPE_DYN || elf->machine != ELF_MACHINE_RISCV || elf->shentsize != sizeof(ElfSection) || !range_valid(elf->shoff, (size_t)elf->shnum * elf->shentsize, header.elf_size)) { heap_caps_free(metadata); return false; }
+    if (!valid_elf(metadata, header.elf_size)) { heap_caps_free(metadata); return false; }
+    const ElfProgram* programs = reinterpret_cast<const ElfProgram*>(metadata + elf->phoff);
     const ElfSection* sections = reinterpret_cast<const ElfSection*>(metadata + elf->shoff);
     for (uint16_t index = 0; index < elf->shnum; ++index) if (sections[index].type == ELF_SHT_RELA && sections[index].size) { heap_caps_free(metadata); return false; }
     void* mapping = nullptr;
     if (esp_mmu_map(partition->address + SLOT_OFFSET[slot], ELF_OFFSET + header.elf_size, MMU_TARGET_FLASH0, static_cast<mmu_mem_caps_t>(MMU_MEM_CAP_EXEC | MMU_MEM_CAP_READ), 0, &mapping) != ESP_OK || !mapping) { heap_caps_free(metadata); return false; }
     uintptr_t create = 0, destroy = 0, tap = 0, long_press = 0, tick = 0;
     const uintptr_t bias = reinterpret_cast<uintptr_t>(mapping) + ELF_OFFSET;
-    const bool required = find_symbol(metadata, header.elf_size, elf, sections, bias, "native_extension_create_instance", &create) && find_symbol(metadata, header.elf_size, elf, sections, bias, "native_extension_destroy_instance", &destroy);
-    find_symbol(metadata, header.elf_size, elf, sections, bias, "native_extension_on_tap", &tap);
-    find_symbol(metadata, header.elf_size, elf, sections, bias, "native_extension_on_long_press", &long_press);
-    find_symbol(metadata, header.elf_size, elf, sections, bias, "native_extension_tick", &tick);
+    const bool required = find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_create_instance", &create) && find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_destroy_instance", &destroy);
+    find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_on_tap", &tap);
+    find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_on_long_press", &long_press);
+    find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_tick", &tick);
     heap_caps_free(metadata);
     if (!required) { esp_mmu_unmap(mapping); return false; }
     LoadedSlot& loaded = s_slots[slot];
@@ -165,19 +242,42 @@ void install_stage(const esp_partition_t* partition, uint8_t slot) {
     File file = Storage.open(path, "r"); StageHeader stage = {};
     if (!file || file.read(reinterpret_cast<uint8_t*>(&stage), sizeof(stage)) != sizeof(stage) || stage.magic != STAGE_MAGIC || stage.slot.elf_size > SLOT_CAPACITY[slot]) { if (file) file.close(); return; }
     if (esp_partition_erase_range(partition, SLOT_OFFSET[slot], SLOT_SIZE[slot]) != ESP_OK) { file.close(); return; }
-    uint8_t* buffer = static_cast<uint8_t*>(heap_caps_malloc(4096, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (!buffer) buffer = static_cast<uint8_t*>(malloc(4096));
+    uint8_t* buffer = static_cast<uint8_t*>(heap_caps_malloc(STAGING_CHUNK_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!buffer) buffer = static_cast<uint8_t*>(malloc(STAGING_CHUNK_SIZE));
     if (!buffer) { file.close(); return; }
     size_t offset = 0;
     bool written = true;
     while (offset < stage.slot.elf_size) {
-        const size_t count = (stage.slot.elf_size - offset < 4096) ? stage.slot.elf_size - offset : 4096;
+        const size_t count = (stage.slot.elf_size - offset < STAGING_CHUNK_SIZE) ? stage.slot.elf_size - offset : STAGING_CHUNK_SIZE;
         if (file.read(buffer, count) != count || esp_partition_write(partition, SLOT_OFFSET[slot] + ELF_OFFSET + offset, buffer, count) != ESP_OK) { written = false; break; }
         offset += count;
     }
     heap_caps_free(buffer);
     file.close(); stage.slot.magic = SLOT_MAGIC;
     if (written && esp_partition_write(partition, SLOT_OFFSET[slot], &stage.slot, sizeof(stage.slot)) == ESP_OK) { Storage.remove(path); LOGI(TAG, "Installed slot %u: %s", slot, stage.slot.id); }
+}
+
+void process_pending_delete(const esp_partition_t* partition, uint8_t slot) {
+    if (!delete_pending(slot)) return;
+    if (esp_partition_erase_range(partition, SLOT_OFFSET[slot], SLOT_SIZE[slot]) != ESP_OK) return;
+    char path[32];
+    delete_path(slot, path, sizeof(path));
+    Storage.remove(path);
+    LOGI(TAG, "Erased pending-delete slot %u", slot);
+}
+
+void process_pending_enabled(const esp_partition_t* partition, uint8_t slot) {
+    bool enabled = false;
+    if (!pending_enabled(slot, &enabled)) return;
+    NativeExtensionSlotHeader header = {};
+    if (!read_raw_header(partition, slot, &header)) return;
+    header.enabled = enabled ? 1 : 0;
+    if (esp_partition_erase_range(partition, SLOT_OFFSET[slot], ELF_OFFSET) != ESP_OK ||
+        esp_partition_write(partition, SLOT_OFFSET[slot], &header, sizeof(header)) != ESP_OK) return;
+    char path[32];
+    enabled_path(slot, path, sizeof(path));
+    Storage.remove(path);
+    LOGI(TAG, "Applied pending enabled=%u for slot %u", enabled, slot);
 }
 
 LoadedSlot* loaded_by_id(const char* id) { for (auto& slot : s_slots) if (slot.mapping && strcmp(slot.info.id, id) == 0) return &slot; return nullptr; }
@@ -187,7 +287,9 @@ LoadedSlot* loaded_by_id(const char* id) { for (auto& slot : s_slots) if (slot.m
 bool native_extension_init() {
     const esp_partition_t* partition = extension_partition();
     if (!partition) return false;
+    for (uint8_t slot = 0; slot < NATIVE_EXTENSION_SLOT_COUNT; ++slot) process_pending_delete(partition, slot);
     for (uint8_t slot = 0; slot < NATIVE_EXTENSION_SLOT_COUNT; ++slot) install_stage(partition, slot);
+    for (uint8_t slot = 0; slot < NATIVE_EXTENSION_SLOT_COUNT; ++slot) process_pending_enabled(partition, slot);
     for (uint8_t slot = 0; slot < NATIVE_EXTENSION_SLOT_COUNT; ++slot) { NativeExtensionSlotHeader header = {}; if (read_header(partition, slot, &header) && header.enabled) load_slot(partition, slot, header); }
     return true;
 }
@@ -196,7 +298,7 @@ uint8_t native_extension_slot_count() { return NATIVE_EXTENSION_SLOT_COUNT; }
 bool native_extension_get_slot(uint8_t slot, NativeExtensionSlotInfo* out) {
     if (!out || !valid_slot(slot)) return false;
     *out = s_slots[slot].info; out->slot = slot; out->capacity = SLOT_CAPACITY[slot];
-    out->pending_delete = s_pending_delete[slot];
+    out->pending_delete = delete_pending(slot);
     NativeExtensionSlotHeader header = {};
     const esp_partition_t* partition = extension_partition();
     if (read_raw_header(partition, slot, &header)) {
@@ -205,6 +307,8 @@ bool native_extension_get_slot(uint8_t slot, NativeExtensionSlotInfo* out) {
         out->incompatible_abi = header.abi_version != NATIVE_EXTENSION_ABI_VERSION;
         strlcpy(out->id, header.id, sizeof(out->id)); strlcpy(out->version, header.version, sizeof(out->version));
     }
+    bool desired_enabled = false;
+    if (pending_enabled(slot, &desired_enabled)) out->enabled = desired_enabled;
     StageHeader stage = {};
     if (read_stage(slot, &stage)) {
         out->staged = true;
@@ -216,19 +320,47 @@ bool native_extension_get_slot(uint8_t slot, NativeExtensionSlotInfo* out) {
     }
     return true;
 }
-bool native_extension_stage(uint8_t slot, const char* filename, const uint8_t* elf, size_t elf_size) {
-    if (!valid_slot(slot) || elf_size == 0 || elf_size > SLOT_CAPACITY[slot] || !valid_elf(elf, elf_size)) return false;
+bool native_extension_stage_file(uint8_t slot, const char* filename, const char* source_path) {
+    if (!valid_slot(slot) || !source_path) return false;
+    File source = Storage.open(source_path, "r");
+    const size_t elf_size = source ? source.size() : 0;
+    if (!source || elf_size == 0 || elf_size > SLOT_CAPACITY[slot]) {
+        if (source) source.close();
+        return false;
+    }
+    uint8_t* elf = static_cast<uint8_t*>(heap_caps_malloc(elf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!elf || source.read(elf, elf_size) != elf_size || !valid_elf(elf, elf_size)) {
+        if (elf) heap_caps_free(elf);
+        source.close();
+        return false;
+    }
+    source.close();
     NativeExtensionSlotHeader slot_header = {};
-    if (!parse_filename(filename, &slot_header)) return false;
+    if (!parse_filename(filename, &slot_header)) {
+        heap_caps_free(elf);
+        return false;
+    }
     slot_header.elf_size = elf_size;
-    if (!Storage.exists("/extensions") && !Storage.mkdir("/extensions")) return false;
+    if (!Storage.exists("/extensions") && !Storage.mkdir("/extensions")) {
+        heap_caps_free(elf);
+        return false;
+    }
     char path[32]; stage_path(slot, path, sizeof(path));
     File file = Storage.open(path, "w");
     const StageHeader stage = {STAGE_MAGIC, slot_header};
     const bool written = file && file.write(reinterpret_cast<const uint8_t*>(&stage), sizeof(stage)) == sizeof(stage) &&
                          file.write(elf, elf_size) == elf_size;
     if (file) file.close();
+    heap_caps_free(elf);
     if (!written) Storage.remove(path);
+    if (written) {
+        char delete_marker[32];
+        delete_path(slot, delete_marker, sizeof(delete_marker));
+        Storage.remove(delete_marker);
+        char enabled_marker[32];
+        enabled_path(slot, enabled_marker, sizeof(enabled_marker));
+        Storage.remove(enabled_marker);
+    }
     if (written) LOGI(TAG, "Staged slot %u: %s@%s (%u bytes)", slot, slot_header.id,
                       slot_header.version, static_cast<unsigned>(elf_size));
     return written;
@@ -236,16 +368,11 @@ bool native_extension_stage(uint8_t slot, const char* filename, const uint8_t* e
 bool native_extension_set_enabled(uint8_t slot, bool enabled) {
     const esp_partition_t* partition = extension_partition();
     NativeExtensionSlotHeader header = {};
-    if (!read_header(partition, slot, &header)) return false;
-    header.enabled = enabled ? 1 : 0;
-    if (esp_partition_erase_range(partition, SLOT_OFFSET[slot], ELF_OFFSET) != ESP_OK) return false;
-    return esp_partition_write(partition, SLOT_OFFSET[slot], &header, sizeof(header)) == ESP_OK;
+    return read_raw_header(partition, slot, &header) && set_pending_enabled(slot, enabled);
 }
 bool native_extension_delete(uint8_t slot) {
-    const esp_partition_t* partition = extension_partition();
-    if (!valid_slot(slot) || !partition || esp_partition_erase_range(partition, SLOT_OFFSET[slot], SLOT_SIZE[slot]) != ESP_OK) return false;
-    s_pending_delete[slot] = s_slots[slot].mapping != nullptr;
-    LOGI(TAG, "Deleted slot %u%s", slot, s_pending_delete[slot] ? "; reboot required to unload" : "");
+    if (!valid_slot(slot) || !extension_partition() || !set_delete_pending(slot)) return false;
+    LOGI(TAG, "Delete pending for slot %u; reboot required", slot);
     return true;
 }
 bool native_extension_create_instance(const char* id, uint32_t instance_id, void* root, const char* config) {

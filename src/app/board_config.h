@@ -93,6 +93,10 @@ struct HwButtonDef {
 #  define HAS_NATIVE_EXTENSIONS false
 #endif
 
+#if HAS_NATIVE_EXTENSIONS && !HAS_DISPLAY
+#  error "HAS_NATIVE_EXTENSIONS requires HAS_DISPLAY."
+#endif
+
 // Enable the portal and MCP browser for a filesystem partition or SD card.
 #ifndef HAS_STORAGE_BROWSER
 #define HAS_STORAGE_BROWSER true

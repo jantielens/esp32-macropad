@@ -175,11 +175,14 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     if ((e = check_max(b, "widget_data_binding_2", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "widget_data_binding_3", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "widget_data_binding_4", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
+    if (b.containsKey("extension_config") && !b["extension_config"].is<const char*>()) return "extension_config must be a string";
+    if ((e = check_max(b, "extension_config", CONFIG_EXTENSION_CONFIG_MAX_LEN, "extension_config is too long"))) return e;
     if (b["actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["actions"]); if (ae) return ae; }
     if (b["lp_actions"].is<JsonArrayConst>()) { const char* ae = validate_action_array(b["lp_actions"]); if (ae) return ae; }
     // Reject invalid binding tokens (unknown scheme, bad health key / list
     // provider / timer id) in any string field (labels, widget bindings...).
     for (JsonPairConst kv : b) {
+        if (strcmp(kv.key().c_str(), "extension_config") == 0) continue;
         if (kv.value().is<const char*>()) {
             const char* he = action_validate_binding_tokens(kv.value().as<const char*>());
             if (he) return he;

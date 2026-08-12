@@ -26,8 +26,9 @@ The extension partition contains three fixed slots:
 | Large | 120 KiB |
 
 Upload a relocation-free ELF named `<extension-id>@<version>.elf`. The ID uses
-lowercase letters, digits, and hyphens. The portal stages the upload on SD; the
-next boot validates and commits it into the selected executable flash slot.
+lowercase letters, digits, and hyphens. The portal stages the upload on the
+configured storage backend; the next boot validates and commits it into the
+selected executable flash slot.
 
 ## Build
 
@@ -78,6 +79,10 @@ extern "C" NativeExtensionEventResult native_extension_on_long_press(
 Return `NATIVE_EXTENSION_HANDLED` to suppress the normal button action list, or
 `NATIVE_EXTENSION_PASS_THROUGH` to allow it. The advanced sample demonstrates
 both policies.
+
+An Extension may also export `native_extension_tick(host, instance_id)`. The
+firmware calls it no more than once every 250 ms for an active Extension widget.
+Use it only for lightweight periodic UI updates; do not perform blocking I/O.
 
 ## Host API
 
