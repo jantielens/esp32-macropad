@@ -2,6 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+PROJECT_DIR=$PWD
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -22,8 +23,9 @@ build_package() {
         grep -q 'contains [1-9]'
 }
 
-build_package extensions/hello-world/hello_world.cpp "$TMP_DIR/hello-world@1.0.0.elf"
-build_package extensions/advanced-sample/advanced_sample.cpp "$TMP_DIR/advanced-sample@1.0.0.elf"
-build_package extensions/flight-radar/flight_radar.cpp "$TMP_DIR/flight-radar@1.4.1.elf"
+while IFS= read -r source; do
+    package_name=$(python3 tools/extension_package_name.py "$source")
+    build_package "$source" "$TMP_DIR/$package_name"
+done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$PROJECT_DIR/extensions"/*/)
 
 echo "Native extension packages passed ABI, target, descriptor, and relocation checks"

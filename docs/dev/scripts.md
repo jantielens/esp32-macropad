@@ -155,6 +155,9 @@ position-independent RISC-V ELF.
 **Usage:**
 ```bash
 bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
+
+# Discover and build every extension package into build/extensions/
+bash tools/build-p4-extensions.sh
 ```
 
 **Requirements:** `setup.sh` must have installed the ESP32 Arduino platform.
@@ -166,21 +169,14 @@ Name the resulting file using `<extension-id>@<package-semver>.elf`, for example
 to a chosen slot. The upload stages on storage and becomes active after the
 next boot installs it into executable flash.
 
-Two source examples are provided:
-
-```bash
-bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
-bash tools/build-p4-extension.sh extensions/advanced-sample/advanced_sample.cpp build/extensions/advanced-sample@1.0.0.elf
-bash tools/build-p4-extension.sh extensions/flight-radar/flight_radar.cpp build/extensions/flight-radar@1.4.1.elf
-```
-
-`hello-world` only renders `hello world`. `advanced-sample` renders its
-per-button configuration, handles tap events, passes long-press events through
-to normal button actions, and writes lifecycle/event messages to the device log.
-`flight-radar` polls ADSB.lol and renders nearby aircraft using the native
-extension worker, HTTP, and canvas APIs. The builder also links the shared
-freestanding `memcpy`/`memset` runtime required by stateful packages, derives
-the ESP32-P4 ABI flags, and requires an ABI descriptor export.
+Each extension source exports a descriptor declaring its ID and package semver.
+Use those values in the output filename; the builder rejects a mismatch. The
+package guard discovers every descriptor-exporting source under `extensions/`
+and builds it automatically, so adding an extension requires no test or
+documentation list update. `build-p4-extensions.sh` uses the same discovery
+rule and accepts an optional output-directory argument. The builder links the shared freestanding
+`memcpy`/`memset` runtime, derives ESP32-P4 ABI flags, and requires the
+descriptor and shutdown exports.
 
 ---
 
