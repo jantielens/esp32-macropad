@@ -808,6 +808,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_sub_store.h
   - src/app/mqtt_wake.cpp
   - src/app/mqtt_wake.h
+  - src/app/native_extension.cpp
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
   - src/app/pad_resolve_request.cpp

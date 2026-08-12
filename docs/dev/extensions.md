@@ -38,7 +38,7 @@ bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/ex
 
 The build script rejects ELF files containing relocations. Rebuild and upload
 every Extension after a firmware update that changes
-`NATIVE_EXTENSION_ABI_VERSION`. ABI 8 is greenfield: older Extension packages
+`NATIVE_EXTENSION_ABI_VERSION`. ABI 9 is greenfield: older Extension packages
 are intentionally unsupported.
 
 The extension build links a tiny freestanding runtime that provides `memcpy`
@@ -158,10 +158,27 @@ directly import firmware symbols, so it provides grouped C-style service views:
 * `host->http` — bounded HTTP GET
 * `host->ui` — opaque LVGL objects, labels, layout, styling, and events
 * `host->canvas` — RGB565 canvas allocation and drawing
+* `host->binding` — on-demand read-only binding-template resolution
 
-The direct fields remain as ABI 8 source-compatibility helpers for early
+The direct fields remain as ABI 9 source-compatibility helpers for early
 packages, but new extensions should use grouped services. The portal displays
 the descriptor title, target ABI, and package runtime status.
+
+### Binding Resolution
+
+Call `host->binding->resolve(extension_context, instance_id, template, out,
+out_size)` from `create`, event callbacks, or `tick` to resolve the current
+value of any existing binding template. The resolver uses the widget instance's
+own pad context, so `[pad:name]` works as well as `[mqtt:...]`,
+`[health:...]`, `[time:...]`, `[expr:...]`, `[timer:...]`, `[list:...]`, and
+`[net:...]`.
+
+Resolution is on demand, not a one-time substitution. Resolve in `tick` at an
+extension-chosen cadence, cache the previous result, and update LVGL only when
+it changes. The service must never be called from an extension worker; resolve
+on the LVGL task and copy values into synchronized extension state when a
+worker needs them. A true return means the call context was valid; normal
+binding output such as `---` or `ERR:...` is still written to `out`.
 
 The host's HTTP helper supports plain HTTP and HTTPS. HTTPS currently calls
 `setInsecure()` and does not verify certificates. Use it only for trusted,
@@ -203,8 +220,9 @@ still crash the device.
 ## Samples
 
 `extensions/hello-world` is the minimum create/destroy implementation.
-`extensions/advanced-sample` demonstrates configuration rendering, lifecycle
-logging, a visible handled-tap notification, and pass-through long press.
+`extensions/advanced-sample` demonstrates lifecycle logging, a visible
+handled-tap notification, pass-through long press, and on-demand
+`[health:cpu]` resolution in `tick` to display live device CPU usage.
 `extensions/flight-radar` is a stateful example: it shares one fixed-buffer
 ADSB.lol polling worker across active widgets, uses `config_json` for location
 and range, and renders a radar canvas plus labels. `interval` is an optional

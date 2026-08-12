@@ -5,7 +5,7 @@
 
 // The extension ABI is intentionally C-shaped. Native packages are built
 // separately from the firmware, so this remains the compatibility boundary.
-#define NATIVE_EXTENSION_ABI_VERSION 8u
+#define NATIVE_EXTENSION_ABI_VERSION 9u
 #define NATIVE_EXTENSION_TARGET_ABI "rv32imafc-ilp32f"
 #define NATIVE_EXTENSION_DESCRIPTOR_MAGIC 0x3744584Eu
 
@@ -138,6 +138,16 @@ struct NativeExtensionCanvasApi {
                                int32_t radius, uint32_t rgb, uint8_t width);
 };
 
+// Resolve an existing binding template on demand. Available only while a
+// package callback runs on the LVGL task. `instance_id` selects that widget's
+// pad context, so [pad:...] tokens resolve against its owning pad. The caller
+// owns `out`; a true return means arguments and context were valid, regardless
+// of whether the binding output is a placeholder such as "---".
+struct NativeExtensionBindingApi {
+    bool (*resolve)(void* extension_context, uint32_t instance_id,
+                    const char* template_text, char* out, size_t out_size);
+};
+
 struct NativeExtensionHostApi {
     uint32_t abi_version;
     void (*set_text)(char* out, size_t out_len, const char* text);
@@ -222,6 +232,7 @@ struct NativeExtensionHostApi {
     const NativeExtensionHttpApi* http;
     const NativeExtensionUiApi* ui;
     const NativeExtensionCanvasApi* canvas;
+    const NativeExtensionBindingApi* binding;
 };
 
 typedef void (*NativeExtensionCreateFn)(const NativeExtensionHostApi* host,

@@ -77,6 +77,8 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
     const ExternalWidgetConfig* config = external_widget_config(cfg);
     external->config = config;
     external->instance_id = external_widget_instance_id(button->page, btn->col, btn->row);
+    native_extension_set_instance_binding_context(config->extension_id, external->instance_id,
+                                                  button->pad_bindings, button->pad_binding_count);
         LOGI("Extensions", "Create %s instance=%08lx root=%dx%d rect=%ux%u",
             config->extension_id, static_cast<unsigned long>(external->instance_id),
             lv_obj_get_width(external->root), lv_obj_get_height(external->root), rect->w, rect->h);
@@ -96,6 +98,9 @@ static void external_destroy(WidgetState* state) {
     auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
     if (external->config && external->created) {
         native_extension_destroy_instance(external->config->extension_id, external->instance_id);
+    }
+    if (external->config) {
+        native_extension_clear_instance_binding_context(external->config->extension_id, external->instance_id);
     }
     external->root = nullptr;
 }

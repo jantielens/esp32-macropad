@@ -322,6 +322,8 @@ void PadScreen::buildTiles() {
         tile.icon_img = icon_img;
         // icon_is_mono is set inside the icon block above; default false via clearTiles() memset
         tile.page = pageIndex;
+        tile.pad_bindings = pageBindings;
+        tile.pad_binding_count = pageBindingCount;
         tile.col = bcfg.col;
         tile.row = bcfg.row;
         tile.action_count = bcfg.action_count;

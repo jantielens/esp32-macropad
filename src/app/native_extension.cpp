@@ -4,7 +4,12 @@
 
 #include "log_manager.h"
 #include "message_bubble.h"
+#include "pad_config.h"
 #include "storage.h"
+#if HAS_MQTT
+#include "binding_template.h"
+#include "pad_binding.h"
+#endif
 
 #include <esp_heap_caps.h>
 #include <esp_partition.h>
@@ -38,6 +43,7 @@ constexpr uint32_t ELF_SHT_DYNSYM = 11;
 constexpr uint32_t ELF_SHT_RELA = 4;
 constexpr size_t STAGING_CHUNK_SIZE = 4096;
 constexpr uint32_t WORKER_JOIN_TIMEOUT_MS = 20000;
+constexpr uint8_t MAX_EXTENSION_INSTANCE_BINDINGS = MAX_PAD_BUTTONS;
 
 struct ElfHeader { uint8_t ident[16]; uint16_t type, machine; uint32_t version, entry, phoff, shoff, flags; uint16_t ehsize, phentsize, phnum, shentsize, shnum, shstrndx; };
 struct ElfProgram { uint32_t type, offset, vaddr, paddr, filesz, memsz, flags, align; };
@@ -59,6 +65,11 @@ struct LoadedSlot {
     bool worker_join_pending;
     bool worker_join_failed;
     uint32_t worker_cancelled_at_ms;
+    struct InstanceBindingContext {
+        uint32_t instance_id;
+        const PadBinding* bindings;
+        uint8_t binding_count;
+    } instance_bindings[MAX_EXTENSION_INSTANCE_BINDINGS];
     NativeExtensionSlotInfo info;
     NativeExtensionCreateFn create;
     NativeExtensionDestroyFn destroy;
@@ -69,6 +80,7 @@ struct LoadedSlot {
 };
 LoadedSlot s_slots[NATIVE_EXTENSION_SLOT_COUNT] = {};
 portMUX_TYPE s_worker_lock = portMUX_INITIALIZER_UNLOCKED;
+TaskHandle_t s_lvgl_task = nullptr;
 
 bool valid_slot(uint8_t slot) { return slot < NATIVE_EXTENSION_SLOT_COUNT; }
 bool range_valid(size_t offset, size_t size, size_t total) { return offset <= total && size <= total - offset; }
@@ -143,6 +155,34 @@ void host_status_set(void* extension_context, NativeExtensionRuntimeState state,
     LoadedSlot* slot = static_cast<LoadedSlot*>(extension_context);
     slot->info.runtime_state = state;
     strlcpy(slot->info.runtime_detail, detail ? detail : "", sizeof(slot->info.runtime_detail));
+}
+
+bool host_binding_resolve(void* extension_context, uint32_t instance_id,
+                          const char* template_text, char* out, size_t out_size) {
+    if (out && out_size) out[0] = '\0';
+    LoadedSlot* slot = static_cast<LoadedSlot*>(extension_context);
+    if (!slot || !template_text || !out || out_size == 0 ||
+        !s_lvgl_task || xTaskGetCurrentTaskHandle() != s_lvgl_task) return false;
+#if HAS_MQTT
+    const PadBinding* bindings = nullptr;
+    uint8_t binding_count = 0;
+    for (const auto& context : slot->instance_bindings) {
+        if (context.instance_id == instance_id && context.bindings) {
+            bindings = context.bindings;
+            binding_count = context.binding_count;
+            break;
+        }
+    }
+    const PadBinding* previous_bindings = nullptr;
+    uint8_t previous_count = 0;
+    pad_binding_get_bindings(&previous_bindings, &previous_count);
+    pad_binding_set_bindings(bindings, binding_count);
+    binding_template_resolve(template_text, out, out_size);
+    pad_binding_set_bindings(previous_bindings, previous_count);
+    return true;
+#else
+    return false;
+#endif
 }
 float host_math_sin(float radians) { return sinf(radians); }
 float host_math_cos(float radians) { return cosf(radians); }
@@ -408,6 +448,7 @@ const NativeExtensionCanvasApi CANVAS_API = {
     host_canvas_clear, host_canvas_set_pixel, host_canvas_draw_line,
     host_canvas_draw_circle,
 };
+const NativeExtensionBindingApi BINDING_API = {host_binding_resolve};
 
 const NativeExtensionHostApi HOST_API = {
     NATIVE_EXTENSION_ABI_VERSION,
@@ -426,7 +467,7 @@ const NativeExtensionHostApi HOST_API = {
     host_spinner_create, host_table_create, host_table_set_size,
     host_table_set_cell_text, host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer, host_canvas_clear,
     host_canvas_set_pixel, host_canvas_draw_line, host_canvas_draw_circle,
-    &CORE_API, &TASK_API, &HTTP_API, &UI_API, &CANVAS_API,
+    &CORE_API, &TASK_API, &HTTP_API, &UI_API, &CANVAS_API, &BINDING_API,
 };
 
 const esp_partition_t* extension_partition() {
@@ -796,11 +837,36 @@ bool native_extension_create_instance(const char* id, uint32_t instance_id, void
         LOGW(TAG, "Create unavailable while worker stops: %s", id ? id : "");
         return false;
     }
+    s_lvgl_task = xTaskGetCurrentTaskHandle();
     LOGI(TAG, "Create %s instance=%08lx", id, static_cast<unsigned long>(instance_id));
     slot->create(&HOST_API, slot, instance_id, root, config ? config : "");
     ++slot->active_instances;
     host_status_set(slot, NATIVE_EXTENSION_RUNTIME_RUNNING, "Widget instance active");
     return true;
+}
+void native_extension_set_instance_binding_context(const char* id, uint32_t instance_id,
+                                                   const PadBinding* bindings, uint8_t binding_count) {
+    LoadedSlot* slot = loaded_by_id(id);
+    if (!slot) return;
+    for (auto& context : slot->instance_bindings) {
+        if (context.instance_id == instance_id || context.instance_id == 0) {
+            context.instance_id = instance_id;
+            context.bindings = bindings;
+            context.binding_count = bindings ? binding_count : 0;
+            return;
+        }
+    }
+    LOGW(TAG, "Binding context limit reached: %s", id ? id : "");
+}
+void native_extension_clear_instance_binding_context(const char* id, uint32_t instance_id) {
+    LoadedSlot* slot = loaded_by_id(id);
+    if (!slot) return;
+    for (auto& context : slot->instance_bindings) {
+        if (context.instance_id == instance_id) {
+            context = {};
+            return;
+        }
+    }
 }
 bool native_extension_is_stopping(const char* id) {
     LoadedSlot* slot = loaded_by_id(id);
@@ -815,17 +881,24 @@ void native_extension_destroy_instance(const char* id, uint32_t instance_id) {
 }
 NativeExtensionEventResult native_extension_on_tap(const char* id, uint32_t instance_id) {
     LoadedSlot* slot = loaded_by_id(id);
+    s_lvgl_task = xTaskGetCurrentTaskHandle();
     const NativeExtensionEventResult result = (slot && slot->tap) ? slot->tap(&HOST_API, slot, instance_id) : NATIVE_EXTENSION_PASS_THROUGH;
     LOGI(TAG, "Tap %s instance=%08lx: %s", id ? id : "", static_cast<unsigned long>(instance_id), result == NATIVE_EXTENSION_HANDLED ? "handled" : "pass-through");
     return result;
 }
 NativeExtensionEventResult native_extension_on_long_press(const char* id, uint32_t instance_id) {
     LoadedSlot* slot = loaded_by_id(id);
+    s_lvgl_task = xTaskGetCurrentTaskHandle();
     const NativeExtensionEventResult result = (slot && slot->long_press) ? slot->long_press(&HOST_API, slot, instance_id) : NATIVE_EXTENSION_PASS_THROUGH;
     LOGI(TAG, "Long press %s instance=%08lx: %s", id ? id : "", static_cast<unsigned long>(instance_id), result == NATIVE_EXTENSION_HANDLED ? "handled" : "pass-through");
     return result;
 }
-void native_extension_tick_instance(const char* id, uint32_t instance_id) { if (LoadedSlot* slot = loaded_by_id(id); slot && slot->tick) slot->tick(&HOST_API, slot, instance_id); }
+void native_extension_tick_instance(const char* id, uint32_t instance_id) {
+    if (LoadedSlot* slot = loaded_by_id(id); slot && slot->tick) {
+        s_lvgl_task = xTaskGetCurrentTaskHandle();
+        slot->tick(&HOST_API, slot, instance_id);
+    }
+}
 
 void native_extension_loop() {
     for (auto& slot : s_slots) {

@@ -1,5 +1,9 @@
 #include "native_extension_api.h"
 
+// Flight Radar is a complete stateful extension example. One host-managed
+// worker polls a fixed set of configuration-keyed ADS-B scans sequentially;
+// every widget renders only the snapshot for its assigned scan slot.
+
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
     NATIVE_EXTENSION_DESCRIPTOR_MAGIC, NATIVE_EXTENSION_ABI_VERSION,
     NATIVE_EXTENSION_TARGET_ABI, "flight-radar", "1.4.1", "Flight Radar",
@@ -51,6 +55,7 @@ struct Plane {
 };
 
 struct RadarView {
+    // Per-widget LVGL and canvas state. The view selects one shared scan slot.
     uint8_t active;
     uint8_t scan_index;
     uint32_t instance_id;
@@ -65,6 +70,7 @@ struct RadarView {
 };
 
 struct RadarScan {
+    // One configuration, snapshot, and refresh schedule shared by matching views.
     uint8_t active;
     uint8_t view_count;
     RadarConfig config;
@@ -78,6 +84,7 @@ struct RadarScan {
 };
 
 struct RadarService {
+    // Package-owned state shared by every radar widget and its single worker.
     const NativeExtensionHostApi* host;
     void* extension_context;
     void* mutex;
@@ -222,6 +229,7 @@ void copy_config_token(char* out, size_t capacity, const char* value, const char
 }
 
 bool parse_config(const char* json, RadarConfig* config) {
+    // Defaults keep a widget usable when its extension_config is empty.
     if (!config) return false;
     const char* end = json;
     while (end && *end) ++end;
@@ -312,6 +320,7 @@ uint16_t parse_response(const NativeExtensionHostApi* host, const char* response
     if (!array || *array != '[') return 0;
     uint16_t count = 0;
     *in_range = 0;
+    // Retain only the nearest configured number of positioned aircraft.
     for (const char* cursor = array + 1; cursor < end;) {
         while (cursor < end && *cursor != '{' && *cursor != ']') ++cursor;
         if (cursor >= end || *cursor == ']') break;
@@ -384,6 +393,7 @@ void refresh(RadarService* service, uint8_t scan_index) {
     config = service->scans[scan_index].config;
     host->mutex_unlock(service->mutex);
 
+    // ADSB.lol accepts nautical miles; local Haversine filtering remains exact.
     char url[112] = "https://api.adsb.lol/v2/point/";
     append_text(url, sizeof(url), config.latitude_text);
     append_text(url, sizeof(url), "/");
@@ -456,6 +466,8 @@ void radar_worker(void* context) {
     service->host->log(NATIVE_EXTENSION_LOG_INFO, "flight radar: worker started");
     service->host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_RUNNING,
                                     "Radar worker started");
+    // The worker never calls LVGL. It cooperatively exits when the final radar
+    // widget disappears, allowing host shutdown to free package state safely.
     while (!service->host->task->task_cancel_requested(service->extension_context)) {
         uint32_t now = service->host->millis();
         uint32_t next_due_ms = 500;
@@ -466,6 +478,7 @@ void radar_worker(void* context) {
                 if (!scan.active) continue;
                 const uint32_t interval_ms = static_cast<uint32_t>(scan.config.refresh_interval_secs) * 1000;
                 const uint32_t elapsed = now - scan.last_refresh_ms;
+                // One due scan is fetched at a time to avoid parallel TLS work.
                 if (scan.last_refresh_ms == 0 || elapsed >= interval_ms) { due_scan = index; break; }
                 const uint32_t remaining = interval_ms - elapsed;
                 if (remaining < next_due_ms) next_due_ms = remaining;
@@ -480,6 +493,7 @@ void radar_worker(void* context) {
 }
 
 RadarService* get_service(const NativeExtensionHostApi* host, void* extension_context) {
+    // Allocate once per package. The host invokes shutdown after worker exit.
     RadarService* service = static_cast<RadarService*>(host->context_get_data(extension_context));
     if (service) return service;
     service = static_cast<RadarService*>(host->alloc(sizeof(RadarService)));
@@ -519,6 +533,8 @@ bool configs_match(const RadarConfig& left, const RadarConfig& right) {
 }
 
 int8_t find_or_create_scan(RadarService* service, const RadarConfig& config) {
+    // Equal configurations share one request stream; distinct configurations
+    // receive independent fixed scan slots, up to MAX_SCANS.
     for (uint8_t index = 0; index < MAX_SCANS; ++index) {
         if (service->scans[index].active && configs_match(service->scans[index].config, config)) return index;
     }
@@ -562,6 +578,7 @@ void render_view(RadarService* service, RadarView* view) {
     char status[72] = {};
     uint32_t refresh_ms = 0;
     if (view->scan_index >= MAX_SCANS) return;
+    // Copy a scan snapshot quickly, then render without holding the worker lock.
     if (!host->mutex_lock(service->mutex, 20)) return;
     const RadarScan& scan = service->scans[view->scan_index];
     if (!scan.active) { host->mutex_unlock(service->mutex); return; }
@@ -640,6 +657,8 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
                                                   void* root, const char* config_json) {
     if (!host || host->abi_version != NATIVE_EXTENSION_ABI_VERSION || !root) return;
     host->log(NATIVE_EXTENSION_LOG_INFO, "flight radar: creating view");
+    // Instance creation is LVGL-task-only. It attaches this view to a scan and
+    // starts the one package worker on the first successful view.
     RadarService* service = get_service(host, extension_context);
     if (!service) {
         host->notify("Flight radar allocation failed");
@@ -731,6 +750,8 @@ extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* 
         if (!view.active || view.instance_id != instance_id) continue;
         if (view.canvas_buffer) host->free(view.canvas_buffer);
         clear_bytes(&view, sizeof(view));
+        // Drop an unreferenced scan; the worker stops when the package loses
+        // its final widget and the host requests cancellation.
         if (view.scan_index < MAX_SCANS) {
             RadarScan& scan = service->scans[view.scan_index];
             if (scan.view_count) --scan.view_count;
@@ -746,6 +767,7 @@ extern "C" void native_extension_shutdown(const NativeExtensionHostApi* host,
     RadarService* service = host ? static_cast<RadarService*>(host->core->context_get_data(extension_context)) : nullptr;
     if (!service) return;
     host->core->status_set(extension_context, NATIVE_EXTENSION_RUNTIME_IDLE, "Radar stopped");
+    // This runs after the cooperative worker joined, never from the LVGL task.
     if (service->response) host->core->free(service->response);
     if (service->mutex) host->core->mutex_destroy(service->mutex);
     host->core->context_set_data(extension_context, nullptr);
@@ -756,6 +778,7 @@ extern "C" void native_extension_tick(const NativeExtensionHostApi* host,
                                        void* extension_context, uint32_t instance_id) {
     RadarService* service = host ? static_cast<RadarService*>(host->context_get_data(extension_context)) : nullptr;
     if (!service) return;
+    // Tick renders only the matching widget's assigned scan snapshot.
     for (uint8_t index = 0; index < MAX_VIEWS; ++index) {
         RadarView* view = &service->views[index];
         if (view->active && view->instance_id == instance_id) render_view(service, view);
