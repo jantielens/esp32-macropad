@@ -2,7 +2,7 @@
 
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
     NATIVE_EXTENSION_DESCRIPTOR_MAGIC, NATIVE_EXTENSION_ABI_VERSION,
-    NATIVE_EXTENSION_TARGET_ABI, "flight-radar", "1.1.0", "Flight Radar",
+    NATIVE_EXTENSION_TARGET_ABI, "flight-radar", "1.2.0", "Flight Radar",
 };
 
 namespace {
@@ -438,7 +438,7 @@ void radar_worker(void* context) {
     service->host->log(NATIVE_EXTENSION_LOG_INFO, "flight radar: worker started");
     service->host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_RUNNING,
                                     "Radar worker started");
-    while (true) {
+    while (!service->host->task->task_cancel_requested(service->extension_context)) {
         bool active = false;
         uint32_t interval_ms = 500;
         if (service->host->mutex_lock(service->mutex, 100)) {
@@ -449,8 +449,11 @@ void radar_worker(void* context) {
         const uint32_t started = service->host->millis();
         if (active) refresh(service);
         const uint32_t elapsed = service->host->millis() - started;
-        service->host->delay_ms(active && elapsed < interval_ms ? interval_ms - elapsed : 500);
+        const uint32_t wait_ms = active && elapsed < interval_ms ? interval_ms - elapsed : 500;
+        if (!service->host->task->task_wait_or_cancel(service->extension_context, wait_ms)) break;
     }
+    service->host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_STOPPING,
+                                    "Radar worker stopped");
 }
 
 RadarService* get_service(const NativeExtensionHostApi* host, void* extension_context) {
@@ -635,7 +638,8 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
         }
         ++service->active_views;
         if (!service->worker_started) {
-            service->worker_started = host->task_create(radar_worker, "FlightRadar", 8192, service, 1, &service->worker_task) ? 1 : 0;
+            service->worker_started = host->task->task_create(extension_context, radar_worker, "FlightRadar",
+                                                               8192, service, 1, &service->worker_task) ? 1 : 0;
             if (!service->worker_started) {
                 set_status(service, "Flight radar worker failed");
                 host->log(NATIVE_EXTENSION_LOG_ERROR, "flight radar: worker creation failed");
@@ -661,6 +665,17 @@ extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* 
         break;
     }
     host->mutex_unlock(service->mutex);
+}
+
+extern "C" void native_extension_shutdown(const NativeExtensionHostApi* host,
+                                           void* extension_context) {
+    RadarService* service = host ? static_cast<RadarService*>(host->core->context_get_data(extension_context)) : nullptr;
+    if (!service) return;
+    host->core->status_set(extension_context, NATIVE_EXTENSION_RUNTIME_IDLE, "Radar stopped");
+    if (service->response) host->core->free(service->response);
+    if (service->mutex) host->core->mutex_destroy(service->mutex);
+    host->core->context_set_data(extension_context, nullptr);
+    host->core->free(service);
 }
 
 extern "C" void native_extension_tick(const NativeExtensionHostApi* host,

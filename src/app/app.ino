@@ -614,6 +614,10 @@ void loop()
 	// Handle web portal (DNS for captive portal)
 	web_portal_handle();
 
+	#if HAS_NATIVE_EXTENSIONS
+	native_extension_loop();
+	#endif
+
 	#if HAS_MQTT
 	mqtt_manager.loop();
 	mqtt_screen_loop();

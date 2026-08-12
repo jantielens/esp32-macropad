@@ -60,6 +60,12 @@ extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* 
     if (host && host->core) host->core->log(NATIVE_EXTENSION_LOG_INFO, "advanced sample destroyed");
 }
 
+extern "C" void native_extension_shutdown(const NativeExtensionHostApi* host,
+                                           void* extension_context) {
+    (void)extension_context;
+    if (host && host->core) host->core->log(NATIVE_EXTENSION_LOG_INFO, "advanced sample shutdown");
+}
+
 extern "C" NativeExtensionEventResult native_extension_on_tap(const NativeExtensionHostApi* host,
                                                                 void* extension_context, uint32_t instance_id) {
     (void)extension_context;

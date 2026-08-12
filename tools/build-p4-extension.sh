@@ -48,6 +48,7 @@ mkdir -p "$(dirname "$OUTPUT")"
     -shared -Wl,-Bsymbolic -Wl,--gc-sections \
     -Wl,--undefined=native_extension_create_instance \
     -Wl,--undefined=native_extension_destroy_instance \
+    -Wl,--undefined=native_extension_shutdown \
     -Wl,--undefined=native_extension_descriptor \
     "$SOURCE" "$PROJECT_DIR/extensions/extension_runtime.cpp" -o "$OUTPUT"
 
@@ -57,10 +58,13 @@ if "$READELF" -r "$OUTPUT" | grep -q 'contains [1-9]'; then
     exit 1
 fi
 
-if ! "$READELF" -sW "$OUTPUT" | grep -q '[[:space:]]native_extension_descriptor$'; then
-    echo "Extension package is missing native_extension_descriptor" >&2
+if ! "$READELF" -sW "$OUTPUT" | grep -q '[[:space:]]native_extension_descriptor$' ||
+   ! "$READELF" -sW "$OUTPUT" | grep -q '[[:space:]]native_extension_shutdown$'; then
+    echo "Extension package is missing required ABI exports" >&2
     rm -f "$OUTPUT"
     exit 1
 fi
+
+python3 "$SCRIPT_DIR/verify_extension_descriptor.py" "$API_HEADER" "$OUTPUT"
 
 echo "Built $OUTPUT (ABI $ABI_VERSION, target $TARGET_ABI)"

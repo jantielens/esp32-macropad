@@ -30,3 +30,9 @@ extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* 
     (void)extension_context;
     (void)instance_id;
 }
+
+extern "C" void native_extension_shutdown(const NativeExtensionHostApi* host,
+                                           void* extension_context) {
+    (void)host;
+    (void)extension_context;
+}

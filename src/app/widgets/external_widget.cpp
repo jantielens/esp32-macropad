@@ -10,9 +10,12 @@
 
 struct ExternalWidgetState {
     lv_obj_t* root;
+    lv_obj_t* status_label;
     uint32_t instance_id;
     uint32_t last_tick_ms;
     const ExternalWidgetConfig* config;
+    bool created;
+    bool retry_after_stop;
 };
 
 static_assert(sizeof(ExternalWidgetState) <= WIDGET_STATE_MAX_BYTES,
@@ -22,6 +25,27 @@ static void external_parse(const JsonObject& btn, uint8_t* data) {
     auto* config = reinterpret_cast<ExternalWidgetConfig*>(data);
     strlcpy(config->extension_id, btn["extension_id"] | "", sizeof(config->extension_id));
     strlcpy(config->config, btn["extension_config"] | "", sizeof(config->config));
+}
+
+static bool external_create_instance(ExternalWidgetState* external) {
+    if (!external || !external->config || !external->root) return false;
+    if (!native_extension_create_instance(external->config->extension_id, external->instance_id,
+                                          external->root, external->config->config)) {
+        external->retry_after_stop = native_extension_is_stopping(external->config->extension_id);
+        if (external->status_label) {
+            lv_label_set_text(external->status_label,
+                              external->retry_after_stop ? "Extension restarting" : "Extension unavailable");
+            lv_obj_center(external->status_label);
+        }
+        return false;
+    }
+    external->created = true;
+    external->retry_after_stop = false;
+    if (external->status_label) {
+        lv_obj_delete(external->status_label);
+        external->status_label = nullptr;
+    }
+    return true;
 }
 
 static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
@@ -56,12 +80,8 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
         LOGI("Extensions", "Create %s instance=%08lx root=%dx%d rect=%ux%u",
             config->extension_id, static_cast<unsigned long>(external->instance_id),
             lv_obj_get_width(external->root), lv_obj_get_height(external->root), rect->w, rect->h);
-    if (!native_extension_create_instance(config->extension_id, external->instance_id,
-                                          external->root, config->config)) {
-        lv_obj_t* label = lv_label_create(external->root);
-        lv_label_set_text(label, "Extension unavailable");
-        lv_obj_center(label);
-    }
+    external->status_label = lv_label_create(external->root);
+    external_create_instance(external);
 }
 
 static void external_update(lv_obj_t* tile, const WidgetConfig* cfg,
@@ -74,7 +94,7 @@ static void external_update(lv_obj_t* tile, const WidgetConfig* cfg,
 
 static void external_destroy(WidgetState* state) {
     auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
-    if (external->config) {
+    if (external->config && external->created) {
         native_extension_destroy_instance(external->config->extension_id, external->instance_id);
     }
     external->root = nullptr;
@@ -86,6 +106,10 @@ static void external_tick(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* 
     const uint32_t now = millis();
     if (now - external->last_tick_ms < 250) return;
     external->last_tick_ms = now;
+    if (!external->created) {
+        if (external->retry_after_stop) external_create_instance(external);
+        return;
+    }
     native_extension_tick_instance(external_widget_config(cfg)->extension_id, external->instance_id);
 }
 

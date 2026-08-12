@@ -62,9 +62,13 @@ bool native_extension_delete(uint8_t slot);
 // These APIs must only be called from the LVGL task.
 bool native_extension_create_instance(const char* extension_id, uint32_t instance_id,
 									  void* root, const char* config_json);
+bool native_extension_is_stopping(const char* extension_id);
 void native_extension_destroy_instance(const char* extension_id, uint32_t instance_id);
 NativeExtensionEventResult native_extension_on_tap(const char* extension_id, uint32_t instance_id);
 NativeExtensionEventResult native_extension_on_long_press(const char* extension_id, uint32_t instance_id);
 void native_extension_tick_instance(const char* extension_id, uint32_t instance_id);
+// Called from Arduino loop(), not the LVGL task. Reaps cooperative workers and
+// runs package shutdown after the bounded join completes.
+void native_extension_loop();
 
 #endif

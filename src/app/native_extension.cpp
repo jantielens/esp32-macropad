@@ -22,10 +22,10 @@
 
 namespace {
 
-// ABI 7 extends the persisted header with descriptor metadata. New magics keep
+// ABI 8 extends the persisted header with lifecycle metadata. New magics keep
 // older, shorter records from being misread as valid target/title strings.
-constexpr uint32_t SLOT_MAGIC = 0x32545845u;
-constexpr uint32_t STAGE_MAGIC = 0x32544753u;
+constexpr uint32_t SLOT_MAGIC = 0x33545845u;
+constexpr uint32_t STAGE_MAGIC = 0x33544753u;
 constexpr uint32_t ELF_OFFSET = 0x2000;
 constexpr uint32_t SLOT_OFFSET[NATIVE_EXTENSION_SLOT_COUNT] = {0x00000, 0x10000, 0x20000};
 constexpr uint32_t SLOT_SIZE[NATIVE_EXTENSION_SLOT_COUNT] = {0x10000, 0x10000, 0x20000};
@@ -37,6 +37,7 @@ constexpr uint32_t ELF_PF_X = 1;
 constexpr uint32_t ELF_SHT_DYNSYM = 11;
 constexpr uint32_t ELF_SHT_RELA = 4;
 constexpr size_t STAGING_CHUNK_SIZE = 4096;
+constexpr uint32_t WORKER_JOIN_TIMEOUT_MS = 20000;
 
 struct ElfHeader { uint8_t ident[16]; uint16_t type, machine; uint32_t version, entry, phoff, shoff, flags; uint16_t ehsize, phentsize, phnum, shentsize, shnum, shstrndx; };
 struct ElfProgram { uint32_t type, offset, vaddr, paddr, filesz, memsz, flags, align; };
@@ -50,14 +51,24 @@ struct LoadedSlot {
     esp_partition_mmap_handle_t mapping_handle;
     void* extension_data;
     uint8_t active_instances;
+    TaskHandle_t worker_task;
+    NativeExtensionTaskFn worker_entry;
+    void* worker_context;
+    volatile bool worker_cancel_requested;
+    volatile bool worker_completed;
+    bool worker_join_pending;
+    bool worker_join_failed;
+    uint32_t worker_cancelled_at_ms;
     NativeExtensionSlotInfo info;
     NativeExtensionCreateFn create;
     NativeExtensionDestroyFn destroy;
+    NativeExtensionShutdownFn shutdown;
     NativeExtensionEventFn tap;
     NativeExtensionEventFn long_press;
     NativeExtensionTickFn tick;
 };
 LoadedSlot s_slots[NATIVE_EXTENSION_SLOT_COUNT] = {};
+portMUX_TYPE s_worker_lock = portMUX_INITIALIZER_UNLOCKED;
 
 bool valid_slot(uint8_t slot) { return slot < NATIVE_EXTENSION_SLOT_COUNT; }
 bool range_valid(size_t offset, size_t size, size_t total) { return offset <= total && size <= total - offset; }
@@ -142,6 +153,7 @@ bool host_mutex_lock(void* mutex, uint32_t timeout_ms) {
     return mutex && xSemaphoreTake(static_cast<SemaphoreHandle_t>(mutex), pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
 }
 void host_mutex_unlock(void* mutex) { if (mutex) xSemaphoreGive(static_cast<SemaphoreHandle_t>(mutex)); }
+void host_mutex_destroy(void* mutex) { if (mutex) vSemaphoreDelete(static_cast<SemaphoreHandle_t>(mutex)); }
 void* host_label_create(void* parent) { return parent ? lv_label_create(as_obj(parent)) : nullptr; }
 void host_label_set_text(void* label, const char* text) { if (label) lv_label_set_text(as_obj(label), text ? text : ""); }
 void host_obj_center(void* obj) { if (obj) lv_obj_center(as_obj(obj)); }
@@ -153,14 +165,62 @@ void host_notify(const char* message) {
     message_bubble_show(&params);
 }
 
-bool host_task_create(NativeExtensionTaskFn entry, const char* name, uint32_t stack_bytes,
+void extension_worker_entry(void* raw_slot) {
+    LoadedSlot* slot = static_cast<LoadedSlot*>(raw_slot);
+    NativeExtensionTaskFn entry = nullptr;
+    void* context = nullptr;
+    portENTER_CRITICAL(&s_worker_lock);
+    entry = slot->worker_entry;
+    context = slot->worker_context;
+    portEXIT_CRITICAL(&s_worker_lock);
+    if (entry) entry(context);
+    portENTER_CRITICAL(&s_worker_lock);
+    slot->worker_completed = true;
+    portEXIT_CRITICAL(&s_worker_lock);
+    vTaskDelete(nullptr);
+}
+
+bool host_task_create(void* extension_context, NativeExtensionTaskFn entry, const char* name, uint32_t stack_bytes,
                       void* context, uint32_t priority, void** out_handle) {
-    if (!entry || !out_handle || stack_bytes == 0) return false;
+    LoadedSlot* slot = static_cast<LoadedSlot*>(extension_context);
+    if (!slot || !entry || !out_handle || stack_bytes == 0) return false;
+    portENTER_CRITICAL(&s_worker_lock);
+    const bool unavailable = slot->worker_task || slot->worker_join_pending || slot->worker_join_failed;
+    if (!unavailable) {
+        slot->worker_entry = entry;
+        slot->worker_context = context;
+        slot->worker_cancel_requested = false;
+        slot->worker_completed = false;
+    }
+    portEXIT_CRITICAL(&s_worker_lock);
+    if (unavailable) return false;
     TaskHandle_t handle = nullptr;
-    const BaseType_t created = xTaskCreate(reinterpret_cast<TaskFunction_t>(entry), name ? name : "Extension",
-                                           stack_bytes, context, priority, &handle);
+    const BaseType_t created = xTaskCreate(extension_worker_entry, name ? name : "Extension",
+                                           stack_bytes, slot, priority, &handle);
+    if (created != pdPASS) {
+        portENTER_CRITICAL(&s_worker_lock);
+        slot->worker_entry = nullptr;
+        slot->worker_context = nullptr;
+        portEXIT_CRITICAL(&s_worker_lock);
+    } else {
+        portENTER_CRITICAL(&s_worker_lock);
+        slot->worker_task = handle;
+        portEXIT_CRITICAL(&s_worker_lock);
+    }
     *out_handle = handle;
     return created == pdPASS;
+}
+
+bool host_task_cancel_requested(void* extension_context) {
+    LoadedSlot* slot = static_cast<LoadedSlot*>(extension_context);
+    return slot && slot->worker_cancel_requested;
+}
+
+bool host_task_wait_or_cancel(void* extension_context, uint32_t timeout_ms) {
+    LoadedSlot* slot = static_cast<LoadedSlot*>(extension_context);
+    if (!slot || slot->worker_cancel_requested) return false;
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(timeout_ms));
+    return !slot->worker_cancel_requested;
 }
 
 bool host_http_get(const char* url, uint8_t* response, size_t capacity,
@@ -331,10 +391,10 @@ const NativeExtensionCoreApi CORE_API = {
     host_millis, host_delay_ms, host_log, host_alloc, host_free,
     host_context_get_data, host_context_set_data,
     host_math_sin, host_math_cos, host_math_sqrt, host_math_atan2,
-    host_mutex_create, host_mutex_lock, host_mutex_unlock,
+    host_mutex_create, host_mutex_lock, host_mutex_unlock, host_mutex_destroy,
     host_notify, host_status_set,
 };
-const NativeExtensionTaskApi TASK_API = {host_task_create};
+const NativeExtensionTaskApi TASK_API = {host_task_create, host_task_cancel_requested, host_task_wait_or_cancel};
 const NativeExtensionHttpApi HTTP_API = {host_http_get};
 const NativeExtensionUiApi UI_API = {
     host_label_create, host_label_set_text, host_obj_center,
@@ -536,9 +596,11 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
         heap_caps_free(metadata);
         return false;
     }
-    uintptr_t create = 0, destroy = 0, tap = 0, long_press = 0, tick = 0;
+    uintptr_t create = 0, destroy = 0, shutdown = 0, tap = 0, long_press = 0, tick = 0;
     const uintptr_t bias = reinterpret_cast<uintptr_t>(mapping);
-    const bool required = find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_create_instance", &create) && find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_destroy_instance", &destroy);
+    const bool required = find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_create_instance", &create) &&
+                          find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_destroy_instance", &destroy) &&
+                          find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_shutdown", &shutdown);
     find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_on_tap", &tap);
     find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_on_long_press", &long_press);
     find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_tick", &tick);
@@ -546,7 +608,7 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     if (!required) { esp_partition_munmap(mapping_handle); return false; }
     LoadedSlot& loaded = s_slots[slot];
     loaded.mapping = const_cast<void*>(mapping); loaded.mapping_handle = mapping_handle;
-    loaded.create = reinterpret_cast<NativeExtensionCreateFn>(create); loaded.destroy = reinterpret_cast<NativeExtensionDestroyFn>(destroy); loaded.tap = reinterpret_cast<NativeExtensionEventFn>(tap); loaded.long_press = reinterpret_cast<NativeExtensionEventFn>(long_press); loaded.tick = reinterpret_cast<NativeExtensionTickFn>(tick);
+    loaded.create = reinterpret_cast<NativeExtensionCreateFn>(create); loaded.destroy = reinterpret_cast<NativeExtensionDestroyFn>(destroy); loaded.shutdown = reinterpret_cast<NativeExtensionShutdownFn>(shutdown); loaded.tap = reinterpret_cast<NativeExtensionEventFn>(tap); loaded.long_press = reinterpret_cast<NativeExtensionEventFn>(long_press); loaded.tick = reinterpret_cast<NativeExtensionTickFn>(tick);
     loaded.info = {slot, true, false, false, false, true, true, SLOT_CAPACITY[slot], header.elf_size, 0, header.abi_version, {}, {}, {}, {}, NATIVE_EXTENSION_RUNTIME_IDLE, {}};
     strlcpy(loaded.info.id, header.id, sizeof(loaded.info.id)); strlcpy(loaded.info.version, header.version, sizeof(loaded.info.version));
     strlcpy(loaded.info.target_abi, header.target_abi, sizeof(loaded.info.target_abi));
@@ -601,6 +663,19 @@ void process_pending_enabled(const esp_partition_t* partition, uint8_t slot) {
 }
 
 LoadedSlot* loaded_by_id(const char* id) { for (auto& slot : s_slots) if (slot.mapping && strcmp(slot.info.id, id) == 0) return &slot; return nullptr; }
+
+void request_worker_stop(LoadedSlot* slot) {
+    if (!slot) return;
+    TaskHandle_t worker = nullptr;
+    portENTER_CRITICAL(&s_worker_lock);
+    slot->worker_cancel_requested = true;
+    slot->worker_join_pending = true;
+    slot->worker_cancelled_at_ms = millis();
+    worker = slot->worker_task;
+    portEXIT_CRITICAL(&s_worker_lock);
+    if (worker) xTaskNotifyGive(worker);
+    host_status_set(slot, NATIVE_EXTENSION_RUNTIME_STOPPING, worker ? "Stopping worker" : "Stopping package");
+}
 
 } // namespace
 
@@ -717,17 +792,25 @@ bool native_extension_delete(uint8_t slot) {
 bool native_extension_create_instance(const char* id, uint32_t instance_id, void* root, const char* config) {
     LoadedSlot* slot = loaded_by_id(id);
     if (!slot || !root) { LOGW(TAG, "Create unavailable: %s", id ? id : ""); return false; }
+    if (slot->worker_join_pending || slot->worker_join_failed) {
+        LOGW(TAG, "Create unavailable while worker stops: %s", id ? id : "");
+        return false;
+    }
     LOGI(TAG, "Create %s instance=%08lx", id, static_cast<unsigned long>(instance_id));
     slot->create(&HOST_API, slot, instance_id, root, config ? config : "");
     ++slot->active_instances;
     host_status_set(slot, NATIVE_EXTENSION_RUNTIME_RUNNING, "Widget instance active");
     return true;
 }
+bool native_extension_is_stopping(const char* id) {
+    LoadedSlot* slot = loaded_by_id(id);
+    return slot && slot->worker_join_pending && !slot->worker_join_failed;
+}
 void native_extension_destroy_instance(const char* id, uint32_t instance_id) {
     if (LoadedSlot* slot = loaded_by_id(id)) {
         slot->destroy(&HOST_API, slot, instance_id);
         if (slot->active_instances) --slot->active_instances;
-        if (!slot->active_instances) host_status_set(slot, NATIVE_EXTENSION_RUNTIME_IDLE, "No active widgets");
+        if (!slot->active_instances) request_worker_stop(slot);
     }
 }
 NativeExtensionEventResult native_extension_on_tap(const char* id, uint32_t instance_id) {
@@ -743,5 +826,34 @@ NativeExtensionEventResult native_extension_on_long_press(const char* id, uint32
     return result;
 }
 void native_extension_tick_instance(const char* id, uint32_t instance_id) { if (LoadedSlot* slot = loaded_by_id(id); slot && slot->tick) slot->tick(&HOST_API, slot, instance_id); }
+
+void native_extension_loop() {
+    for (auto& slot : s_slots) {
+        if (!slot.mapping || !slot.worker_join_pending) continue;
+        bool completed = false;
+        uint32_t cancelled_at = 0;
+        portENTER_CRITICAL(&s_worker_lock);
+        completed = slot.worker_completed || !slot.worker_task;
+        cancelled_at = slot.worker_cancelled_at_ms;
+        portEXIT_CRITICAL(&s_worker_lock);
+        if (completed) {
+            slot.shutdown(&HOST_API, &slot);
+            portENTER_CRITICAL(&s_worker_lock);
+            slot.worker_task = nullptr;
+            slot.worker_entry = nullptr;
+            slot.worker_context = nullptr;
+            slot.worker_cancel_requested = false;
+            slot.worker_completed = false;
+            slot.worker_join_pending = false;
+            portEXIT_CRITICAL(&s_worker_lock);
+            host_status_set(&slot, NATIVE_EXTENSION_RUNTIME_IDLE, "Worker stopped");
+        } else if (millis() - cancelled_at >= WORKER_JOIN_TIMEOUT_MS) {
+            slot.worker_join_pending = false;
+            slot.worker_join_failed = true;
+            host_status_set(&slot, NATIVE_EXTENSION_RUNTIME_ERROR, "Worker stop timed out");
+            LOGW(TAG, "Worker stop timed out: %s", slot.info.id);
+        }
+    }
+}
 
 #endif

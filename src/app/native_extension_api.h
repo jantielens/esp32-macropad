@@ -5,7 +5,7 @@
 
 // The extension ABI is intentionally C-shaped. Native packages are built
 // separately from the firmware, so this remains the compatibility boundary.
-#define NATIVE_EXTENSION_ABI_VERSION 7u
+#define NATIVE_EXTENSION_ABI_VERSION 8u
 #define NATIVE_EXTENSION_TARGET_ABI "rv32imafc-ilp32f"
 #define NATIVE_EXTENSION_DESCRIPTOR_MAGIC 0x3744584Eu
 
@@ -23,6 +23,7 @@ enum NativeExtensionLogLevel : uint8_t {
 enum NativeExtensionRuntimeState : uint8_t {
     NATIVE_EXTENSION_RUNTIME_IDLE = 0,
     NATIVE_EXTENSION_RUNTIME_RUNNING,
+    NATIVE_EXTENSION_RUNTIME_STOPPING,
     NATIVE_EXTENSION_RUNTIME_ERROR,
 };
 
@@ -54,7 +55,7 @@ struct NativeExtensionHttpResult {
     uint8_t truncated;
 };
 
-// Required ABI 7 data export. It is fixed-layout and pointer-free so the host
+// Required ABI 8 data export. It is fixed-layout and pointer-free so the host
 // can inspect it before executing a package.
 struct NativeExtensionDescriptor {
     uint32_t magic;
@@ -70,7 +71,7 @@ typedef void (*NativeExtensionLvglEventFn)(void* event);
 
 // Grouped source-level service views. New extensions should prefer these over
 // the direct fields in NativeExtensionHostApi; direct fields remain during the
-// ABI 7 transition so ABI 6 sample source stays readable.
+// ABI 8 transition so early sample source stays readable.
 struct NativeExtensionCoreApi {
     uint32_t (*millis)();
     void (*delay_ms)(uint32_t delay_ms);
@@ -86,15 +87,18 @@ struct NativeExtensionCoreApi {
     void* (*mutex_create)();
     bool (*mutex_lock)(void* mutex, uint32_t timeout_ms);
     void (*mutex_unlock)(void* mutex);
+    void (*mutex_destroy)(void* mutex);
     void (*notify)(const char* message);
     void (*status_set)(void* extension_context, NativeExtensionRuntimeState state,
                        const char* detail);
 };
 
 struct NativeExtensionTaskApi {
-    bool (*task_create)(NativeExtensionTaskFn entry, const char* name,
+    bool (*task_create)(void* extension_context, NativeExtensionTaskFn entry, const char* name,
                         uint32_t stack_bytes, void* context,
                         uint32_t priority, void** out_handle);
+    bool (*task_cancel_requested)(void* extension_context);
+    bool (*task_wait_or_cancel)(void* extension_context, uint32_t timeout_ms);
 };
 
 struct NativeExtensionHttpApi {
@@ -161,7 +165,7 @@ struct NativeExtensionHostApi {
 
     // Worker tasks and bounded, deliberately insecure HTTP GET. These may be
     // called only from an extension worker, never an LVGL callback.
-    bool (*task_create)(NativeExtensionTaskFn entry, const char* name,
+    bool (*task_create)(void* extension_context, NativeExtensionTaskFn entry, const char* name,
                         uint32_t stack_bytes, void* context,
                         uint32_t priority, void** out_handle);
     bool (*http_get)(const char* url, uint8_t* response, size_t capacity,
@@ -212,7 +216,7 @@ struct NativeExtensionHostApi {
     void (*canvas_draw_circle)(void* canvas, int32_t x, int32_t y,
                                int32_t radius, uint32_t rgb, uint8_t width);
 
-    // ABI 7 grouped service views. New package code should use these.
+    // ABI 8 grouped service views. New package code should use these.
     const NativeExtensionCoreApi* core;
     const NativeExtensionTaskApi* task;
     const NativeExtensionHttpApi* http;
@@ -225,6 +229,8 @@ typedef void (*NativeExtensionCreateFn)(const NativeExtensionHostApi* host,
                                         const char* config_json);
 typedef void (*NativeExtensionDestroyFn)(const NativeExtensionHostApi* host,
                                          void* extension_context, uint32_t instance_id);
+typedef void (*NativeExtensionShutdownFn)(const NativeExtensionHostApi* host,
+                                          void* extension_context);
 typedef NativeExtensionEventResult (*NativeExtensionEventFn)(const NativeExtensionHostApi* host,
                                                              void* extension_context, uint32_t instance_id);
 typedef void (*NativeExtensionTickFn)(const NativeExtensionHostApi* host,

@@ -38,7 +38,7 @@ bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/ex
 
 The build script rejects ELF files containing relocations. Rebuild and upload
 every Extension after a firmware update that changes
-`NATIVE_EXTENSION_ABI_VERSION`. ABI 7 is greenfield: older Extension packages
+`NATIVE_EXTENSION_ABI_VERSION`. ABI 8 is greenfield: older Extension packages
 are intentionally unsupported.
 
 The extension build links a tiny freestanding runtime that provides `memcpy`
@@ -48,7 +48,7 @@ that exchange `float` values. The builder derives target flags and ABI metadata
 from the installed ESP32-P4 SDK and `native_extension_api.h`; do not supply
 your own `-march` or `-mabi` flags.
 
-Every ABI 7 package must export this fixed, pointer-free descriptor:
+Every ABI 8 package must export this fixed, pointer-free descriptor:
 
 ```cpp
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
@@ -64,7 +64,7 @@ extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
 The loader requires the descriptor, then verifies its ID and package version
 against the filename as well as its ABI and target ABI against firmware. Package
 semantic versioning is independent from the firmware ABI: use
-`flight-radar@1.1.0.elf`, not `flight-radar@7.0.0.elf`, when an ABI 7 rebuild
+`flight-radar@1.2.0.elf`, not `flight-radar@8.0.0.elf`, when an ABI 8 rebuild
 does not itself introduce a major package behavior change.
 
 ## Lifecycle
@@ -83,6 +83,10 @@ extern "C" void native_extension_destroy_instance(
     const NativeExtensionHostApi* host,
   void* extension_context,
     uint32_t instance_id);
+
+  extern "C" void native_extension_shutdown(
+    const NativeExtensionHostApi* host,
+    void* extension_context);
 ```
 
 `create_instance` runs on the LVGL task. `root` is an LVGL object confined to
@@ -99,6 +103,12 @@ of a package. Use `context_get_data` and `context_set_data` to associate one
 host-allocated service state with the package. This is the supported location
 for mutable state because a native ELF is flash-mapped and should not rely on
 writable globals.
+
+`shutdown` is required in ABI 8. It runs on the Arduino main loop after the
+final widget is destroyed and every package worker has returned. Release
+package-owned service state here, then clear it with
+`host->core->context_set_data(extension_context, nullptr)`. It must not call
+LVGL.
 
 ## Events
 
@@ -127,13 +137,20 @@ host API. An Extension worker task may block and make network requests, but it
 must never call an LVGL helper. Copy worker results into fixed state, then read
 that state from `tick` to update the UI.
 
-ABI 7 does not yet provide worker cancellation or join. A package must keep
-worker state valid after its final widget is destroyed and make the worker idle
-until a future lifecycle API adds host-managed stop/join semantics.
+ABI 8 permits one host-managed worker per package. When the final widget is
+destroyed, firmware requests cancellation and wakes an interruptible worker
+wait. Use `host->task->task_cancel_requested(extension_context)` in worker
+loops and `host->task->task_wait_or_cancel(extension_context, timeout_ms)` for
+delays. The main loop waits up to 20 seconds for return, accommodating the
+current 15-second HTTP limit. A worker that misses the deadline is marked as an
+error and remains mapped; firmware never force-deletes it or frees its state.
+When a pad save immediately recreates the same extension widget, the widget
+shows `Extension restarting` and retries automatically after the prior worker
+has joined. Keep worker waits cancellation-aware so this transition is prompt.
 
 ## Host API
 
-`NativeExtensionHostApi` is the ABI 7 surface. Extension packages cannot
+`NativeExtensionHostApi` is the ABI 8 surface. Extension packages cannot
 directly import firmware symbols, so it provides grouped C-style service views:
 
 * `host->core` — time, allocation, math, mutexes, logging, notifications, status
@@ -142,7 +159,7 @@ directly import firmware symbols, so it provides grouped C-style service views:
 * `host->ui` — opaque LVGL objects, labels, layout, styling, and events
 * `host->canvas` — RGB565 canvas allocation and drawing
 
-The direct fields remain as ABI 7 source-compatibility helpers for early
+The direct fields remain as ABI 8 source-compatibility helpers for early
 packages, but new extensions should use grouped services. The portal displays
 the descriptor title, target ABI, and package runtime status.
 
