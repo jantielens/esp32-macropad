@@ -1,0 +1,4 @@
+{
+  "summary": "Demonstrates Extension lifecycle callbacks, button events, and live binding resolution.",
+  "usage": "No configuration required. It displays the current [health:cpu] binding value."
+}

@@ -30,6 +30,23 @@ lowercase letters, digits, and hyphens. The portal stages the upload on the
 configured storage backend; the next boot validates and commits it into the
 selected executable flash slot.
 
+## Catalog Metadata
+
+Every extension published in the GitHub Pages catalog has an adjacent
+`metadata.json` file. This catalog-only file does not change the package ABI or
+ship to the device.
+
+```json
+{
+  "summary": "Shows nearby aircraft from ADSB.lol in a live radar widget.",
+  "usage": "Set Extension configuration to:\n{\"lat\":51.2189473,\"lon\":5.4216694,\"range_km\":25,\"max_planes\":20,\"interval\":5}"
+}
+```
+
+`summary` and `usage` are required non-empty strings. The catalog renders
+`usage` as pre-wrapped text. Describe the required Extension configuration or
+state that no configuration is required.
+
 ## Build
 
 ```bash

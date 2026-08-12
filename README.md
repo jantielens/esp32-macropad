@@ -64,7 +64,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status
 - **Optional HTTP Basic Auth** for portal access
 - **SD card support** — use a FAT32 MicroSD card for pad configurations, icons, sounds, and indexed data on supported boards
-- **Native Extensions** — install trusted, flash-mapped RISC-V ELF modules in explicit slots; place an Extension on one or more buttons with per-button configuration and controlled tap/long-press behavior. See the [Extension developer guide](docs/dev/extensions.md).
+- **Native Extensions** — install trusted, flash-mapped RISC-V ELF modules in explicit slots; place an Extension on one or more buttons with per-button configuration and controlled tap/long-press behavior. Download published packages from the [Firmware Installer](https://jantielens.github.io/esp32-macropad/), then upload them through the device portal. See the [Extension developer guide](docs/dev/extensions.md).
 
 ## 💡 What Can You Build?
 

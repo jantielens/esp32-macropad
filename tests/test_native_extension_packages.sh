@@ -25,7 +25,13 @@ build_package() {
 
 while IFS= read -r source; do
     package_name=$(python3 tools/extension_package_name.py "$source")
+    metadata="$(dirname "$source")/metadata.json"
+    if [[ ! -f "$metadata" ]]; then
+        echo "Missing catalog metadata: $metadata" >&2
+        exit 1
+    fi
+    jq -e 'type == "object" and ((keys | sort) == ["summary", "usage"]) and (.summary | type == "string" and length > 0) and (.usage | type == "string" and length > 0)' "$metadata" >/dev/null
     build_package "$source" "$TMP_DIR/$package_name"
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$PROJECT_DIR/extensions"/*/)
 
-echo "Native extension packages passed ABI, target, descriptor, and relocation checks"
+echo "Native extension packages passed catalog metadata, ABI, target, descriptor, and relocation checks"

@@ -426,6 +426,8 @@ These are replaced at build time with actual values from `config.sh`.
 ### Overview
 
 The project uses an automated release workflow that triggers on version tags. Releases are created through GitHub Actions, which builds firmware for all board variants and publishes them to GitHub Releases with branded filenames.
+It also builds every discovered native Extension package and publishes its ELF
+file with the release.
 
 ### Workflow Components
 
@@ -435,6 +437,7 @@ The project uses an automated release workflow that triggers on version tags. Re
 - **`tools/extract-changelog.sh`** - Parses CHANGELOG.md for version-specific notes
 - **`create-release.sh`** - Helper script to automate release preparation
 - **`tools/build-esp-web-tools-site.sh`** - Builds the static installer site (HTML + manifests + firmware copies)
+- **`extensions/*/metadata.json`** - Catalog summary and usage text for each published Extension
 - **`src/version.h`** - Firmware version tracking
 - **`CHANGELOG.md`** - Release notes in Keep a Changelog format
 
@@ -471,7 +474,8 @@ To avoid CORS issues in browsers, the **installer page**, **manifest JSON**, and
     - `app.ino.bootloader.bin`
     - `app.ino.partitions.bin`
     - `boot_app0.bin`
-- **Output**: `tools/build-esp-web-tools-site.sh` generates `site/` (HTML, `manifests/*.json`, `firmware/<board>/*.bin`) which is deployed via GitHub Pages “Source: GitHub Actions”.
+  - Copies Extension ELFs into `build/extensions/`.
+- **Output**: `tools/build-esp-web-tools-site.sh` generates `site/` (HTML, `manifests/*.json`, `firmware/<board>/*.bin`, and `extensions/*.elf`) which is deployed via GitHub Pages “Source: GitHub Actions”.
 
 ---
 
@@ -526,6 +530,7 @@ git push origin v0.0.5
   - `esp32-template-esp32-nodisplay-v0.0.5-partitions.bin`
   - `esp32-template-esp32-nodisplay-v0.0.5-boot_app0.bin`
   - `esp32-template-esp32-nodisplay-v0.0.5-merged.bin` (legacy; may overwrite NVS)
+  - Native Extension packages named `<extension-id>@<package-semver>.elf`
   - `SHA256SUMS.txt`
 - Release notes populated from CHANGELOG.md (no auto-generated “What’s Changed” section)
 - Debug symbols (`.elf`) and build metadata available in workflow artifacts
@@ -884,10 +889,11 @@ Follow [Semantic Versioning](https://semver.org/):
 **Process**:
 1. Extract version from tag
 2. Build firmware for all boards (matrix)
-3. Extract changelog section
-4. Create GitHub Release
-5. Upload firmware binaries
-6. Generate checksums
+3. Build discovered native Extension packages
+4. Extract changelog section
+5. Create GitHub Release
+6. Upload firmware and Extension binaries
+7. Generate checksums
 
 ### Pages Installer Deploy Workflow (`.github/workflows/pages-from-release.yml`)
 
@@ -900,8 +906,8 @@ Follow [Semantic Versioning](https://semver.org/):
 **Note**: If GitHub Pages is not configured for the repository, the workflow will skip Pages configuration/upload/deploy steps and log a clear notice in the summary.
 
 **Process**:
-1. Download app + multi-part assets from the release
-2. Rehydrate `build/<board>/` with app/bootloader/partitions/boot_app0 binaries
+1. Download app, multi-part, and Extension ELF assets from the release
+2. Rehydrate `build/<board>/` and `build/extensions/`
 3. Run `tools/build-esp-web-tools-site.sh` to produce `site/`
 4. Deploy `site/` to GitHub Pages via GitHub Actions artifacts
 
