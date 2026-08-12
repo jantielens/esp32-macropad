@@ -56,11 +56,12 @@ async function extensionRenderSlots() {
         slots.forEach(function (slot) {
             const card = document.createElement('div');
             card.style.cssText = 'border:1px solid #d2d2d7;border-radius:8px;padding:12px;';
-            const title = (slot.installed || slot.staged || slot.pending_delete) ? slot.id + ' @ ' + slot.version : 'Empty';
+            const title = (slot.installed || slot.staged || slot.pending_delete) ? (slot.title || slot.id) + ' @ ' + slot.version : 'Empty';
             const state = slot.pending_delete ? ' - delete pending, reboot required' : slot.staged ? ' - uploaded, reboot pending' : slot.incompatible_abi ? ' - ABI ' + slot.abi_version + ' incompatible, rebuild and re-upload' : slot.loaded ? ' - loaded' : '';
+            const runtime = slot.runtime_detail ? '<div><small>Runtime: ' + slot.runtime_detail + '</small></div>' : '';
             card.innerHTML = '<strong>' + extensionSlotName(slot) + ' ' + (slot.slot + 1) + '</strong>' +
                 '<div style="margin:6px 0">' + title + '</div>' +
-                '<small>' + Math.floor((slot.staged ? slot.staged_size : slot.size) / 1024) + ' / ' + Math.floor(slot.capacity / 1024) + ' KiB' + state + '</small>';
+                '<small>' + Math.floor((slot.staged ? slot.staged_size : slot.size) / 1024) + ' / ' + Math.floor(slot.capacity / 1024) + ' KiB | ABI ' + slot.abi_version + ' | ' + (slot.target_abi || 'unknown target') + state + '</small>' + runtime;
             const input = document.createElement('input'); input.type = 'file'; input.accept = '.elf,application/x-elf'; input.style.display = 'none';
             const upload = document.createElement('button'); upload.type = 'button'; upload.className = 'btn btn-small'; upload.textContent = slot.installed ? 'Replace' : 'Upload'; upload.onclick = function () { input.click(); };
             input.onchange = function () { extensionUpload(slot, input); };

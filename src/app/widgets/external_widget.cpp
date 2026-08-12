@@ -30,7 +30,6 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
                             lv_obj_t* center_label, WidgetState* state) {
     (void)cfg;
     (void)btn;
-    (void)rect;
     (void)scale;
     auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
     memset(external, 0, sizeof(ExternalWidgetState));
@@ -38,20 +37,25 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
     if (icon_img) lv_obj_add_flag(icon_img, LV_OBJ_FLAG_HIDDEN);
     if (center_label) lv_obj_add_flag(center_label, LV_OBJ_FLAG_HIDDEN);
 
+    lv_obj_update_layout(tile);
     external->root = lv_obj_create(tile);
-    lv_obj_set_size(external->root, LV_PCT(100), LV_PCT(100));
-    lv_obj_center(external->root);
+    lv_obj_set_size(external->root, lv_obj_get_content_width(tile), lv_obj_get_content_height(tile));
+    lv_obj_set_pos(external->root, 0, 0);
     lv_obj_set_style_bg_opa(external->root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(external->root, 0, 0);
     lv_obj_set_style_pad_all(external->root, 0, 0);
     lv_obj_remove_flag(external->root, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(external->root, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_update_layout(external->root);
 
     const ButtonTile* button = reinterpret_cast<const ButtonTile*>(
         reinterpret_cast<const uint8_t*>(state) - offsetof(ButtonTile, widget_state));
     const ExternalWidgetConfig* config = external_widget_config(cfg);
     external->config = config;
     external->instance_id = external_widget_instance_id(button->page, btn->col, btn->row);
+        LOGI("Extensions", "Create %s instance=%08lx root=%dx%d rect=%ux%u",
+            config->extension_id, static_cast<unsigned long>(external->instance_id),
+            lv_obj_get_width(external->root), lv_obj_get_height(external->root), rect->w, rect->h);
     if (!native_extension_create_instance(config->extension_id, external->instance_id,
                                           external->root, config->config)) {
         lv_obj_t* label = lv_label_create(external->root);

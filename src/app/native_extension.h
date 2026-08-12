@@ -15,6 +15,9 @@
 #define NATIVE_EXTENSION_SLOT_COUNT 3
 #define NATIVE_EXTENSION_ID_MAX_LEN 32
 #define NATIVE_EXTENSION_VERSION_MAX_LEN 16
+#define NATIVE_EXTENSION_TARGET_ABI_MAX_LEN 24
+#define NATIVE_EXTENSION_TITLE_MAX_LEN 40
+#define NATIVE_EXTENSION_STATUS_MAX_LEN 64
 #define NATIVE_EXTENSION_CONFIG_MAX_LEN 512
 
 struct NativeExtensionSlotInfo {
@@ -31,6 +34,10 @@ struct NativeExtensionSlotInfo {
 	uint32_t abi_version;
 	char id[NATIVE_EXTENSION_ID_MAX_LEN];
 	char version[NATIVE_EXTENSION_VERSION_MAX_LEN];
+	char target_abi[NATIVE_EXTENSION_TARGET_ABI_MAX_LEN];
+	char title[NATIVE_EXTENSION_TITLE_MAX_LEN];
+	uint8_t runtime_state;
+	char runtime_detail[NATIVE_EXTENSION_STATUS_MAX_LEN];
 };
 
 struct NativeExtensionSlotHeader {
@@ -41,6 +48,8 @@ struct NativeExtensionSlotHeader {
 	uint8_t reserved[3];
 	char id[NATIVE_EXTENSION_ID_MAX_LEN];
 	char version[NATIVE_EXTENSION_VERSION_MAX_LEN];
+	char target_abi[NATIVE_EXTENSION_TARGET_ABI_MAX_LEN];
+	char title[NATIVE_EXTENSION_TITLE_MAX_LEN];
 };
 
 bool native_extension_init();

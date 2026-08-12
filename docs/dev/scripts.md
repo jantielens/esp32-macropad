@@ -161,7 +161,7 @@ bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/ex
 The script locates its bundled RISC-V compiler automatically; set
 `ESP32_P4_TOOLCHAIN_DIR` only to override that location.
 
-Name the resulting file using `<extension-id>@<version>.elf`, for example
+Name the resulting file using `<extension-id>@<package-semver>.elf`, for example
 `build/extensions/hello-world@1.0.0.elf`. Upload it through the Extensions page
 to a chosen slot. The upload stages on storage and becomes active after the
 next boot installs it into executable flash.
@@ -171,11 +171,16 @@ Two source examples are provided:
 ```bash
 bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
 bash tools/build-p4-extension.sh extensions/advanced-sample/advanced_sample.cpp build/extensions/advanced-sample@1.0.0.elf
+bash tools/build-p4-extension.sh extensions/flight-radar/flight_radar.cpp build/extensions/flight-radar@1.1.0.elf
 ```
 
 `hello-world` only renders `hello world`. `advanced-sample` renders its
 per-button configuration, handles tap events, passes long-press events through
 to normal button actions, and writes lifecycle/event messages to the device log.
+`flight-radar` polls ADSB.lol and renders nearby aircraft using the native
+extension worker, HTTP, and canvas APIs. The builder also links the shared
+freestanding `memcpy`/`memset` runtime required by stateful packages, derives
+the ESP32-P4 ABI flags, and requires an ABI descriptor export.
 
 ---
 

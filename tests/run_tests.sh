@@ -937,4 +937,8 @@ echo "=== Running guard: photoframe conformance-vector producer drift ==="
 ./tests/test_photoframe_vector_drift.sh
 echo
 
+echo "=== Running guard: native extension package ABI and descriptor validation ==="
+./tests/test_native_extension_packages.sh
+echo
+
 echo "=== All tests passed ==="
