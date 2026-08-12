@@ -171,7 +171,7 @@ Two source examples are provided:
 ```bash
 bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
 bash tools/build-p4-extension.sh extensions/advanced-sample/advanced_sample.cpp build/extensions/advanced-sample@1.0.0.elf
-bash tools/build-p4-extension.sh extensions/flight-radar/flight_radar.cpp build/extensions/flight-radar@1.2.0.elf
+bash tools/build-p4-extension.sh extensions/flight-radar/flight_radar.cpp build/extensions/flight-radar@1.4.1.elf
 ```
 
 `hello-world` only renders `hello world`. `advanced-sample` renders its

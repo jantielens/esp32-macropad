@@ -24,6 +24,6 @@ build_package() {
 
 build_package extensions/hello-world/hello_world.cpp "$TMP_DIR/hello-world@1.0.0.elf"
 build_package extensions/advanced-sample/advanced_sample.cpp "$TMP_DIR/advanced-sample@1.0.0.elf"
-build_package extensions/flight-radar/flight_radar.cpp "$TMP_DIR/flight-radar@1.2.0.elf"
+build_package extensions/flight-radar/flight_radar.cpp "$TMP_DIR/flight-radar@1.4.1.elf"
 
 echo "Native extension packages passed ABI, target, descriptor, and relocation checks"

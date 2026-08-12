@@ -211,6 +211,19 @@ and range, and renders a radar canvas plus labels. `interval` is an optional
 refresh period in seconds (1-3600, default 10). Its HTTPS requests are insecure
 under the current ABI policy.
 
+The radar worker supports up to four distinct scan configurations at once. A
+widget attaches to a scan slot by its complete normalized configuration; widgets
+with identical values share a snapshot, while different values receive separate
+snapshots. Due scans are fetched sequentially by the one package worker. The
+configuration must be valid JSON: use commas between every property, not
+semicolon-delimited settings.
+
 ```json
 {"lat":51.2189473,"lon":5.4216694,"range_km":25,"max_planes":20,"interval":5}
+```
+
+For example, a second widget can independently scan Brussels:
+
+```json
+{"lat":50.9014,"lon":4.4844,"range_km":15,"max_planes":20,"interval":2}
 ```
