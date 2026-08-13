@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Coffee Scale calibration weight accepts Numeric Rocker step values**: the **Adjust calibration weight** action editor now accepts `{step}` placeholders so the same numeric-rocker workflow works for calibration deltas as it does for other adjustment actions.
 * **Timer actions are available in the Pad editor again**: the action catalog once again exposes the Timer command choices required by the editor, including Toggle, Start, Stop, Pause, Resume, Reset, Set countdown, and Adjust countdown.
 * **Coffee Scale brews now save reliably**: brew logs lazily create their Coffee Scale-owned `/brews` directory on the selected storage backend, initialize and persist their NVS log-ID counter, and report storage write failures accurately instead of claiming every save succeeded. Starting a brew now waits for its deferred tare to complete before accepting the first-pour weight threshold, preventing an existing cup weight from immediately starting the timer.
 * **Portal navigation no longer silently omits late-registered fragments**: the fixed component registry capacity increases from 32 to 64 entries, restoring the Coffee Scale **Brew Templates** page on feature-rich boards. A board-matrix test now evaluates every configured board's active portal registrations and fails if any exceed the registry limit.

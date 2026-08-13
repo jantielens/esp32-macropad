@@ -22,8 +22,8 @@
             h += '</div>';
             h += '<div class="form-group" id="' + prefix + '-scale-delta-group" style="display:none;">';
             h += '<label for="' + prefix + '-scale-delta">Weight Change (g)</label>';
-            h += '<input type="number" id="' + prefix + '-scale-delta" step="0.1" placeholder="e.g. 10, -10, 0.5, -0.5">';
-            h += '<small>Grams to add or subtract from the calibration reference weight each tap.</small>';
+            h += '<input type="text" id="' + prefix + '-scale-delta" placeholder="e.g. 10, -10, 0.5, -0.5, or {step}">';
+            h += '<small>Grams to add or subtract from the calibration reference weight. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
             h += '</div>';
             h += '<div class="form-group" id="' + prefix + '-scale-set-group" style="display:none;">';
             h += '<label for="' + prefix + '-scale-set-value">Calibration Weight (g)</label>';
